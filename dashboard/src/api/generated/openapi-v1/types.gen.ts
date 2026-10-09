@@ -67,6 +67,12 @@ export type BotRegistrationRequest = {
 
 export type action = 'start' | 'poll';
 
+export type ChatChunkUploadRequest = {
+    upload_id: string;
+    chunk_index: number;
+    chunk: (Blob | File);
+};
+
 /**
  * Per-request ChatUI feature flags. A value here takes priority over its legacy top-level field, followed by the documented default.
  */
@@ -83,6 +89,10 @@ export type ChatFlags = {
      * Enable streaming model output for this request. This value takes priority over the legacy top-level enable_streaming field.
      */
     enable_streaming?: boolean;
+    /**
+     * Display reasoning content for this WebChat request independently of the global display_reasoning_text setting.
+     */
+    enable_reasoning?: boolean;
 };
 
 export type ChatMessagePatchRequest = {
@@ -184,6 +194,16 @@ export type ChatThreadMessageRequest = {
      */
     enable_streaming?: boolean;
     flags?: ChatFlags;
+};
+
+export type ChatUploadInitRequest = {
+    filename: string;
+    total_size: number;
+    content_type?: string;
+};
+
+export type ChatUploadSessionRequest = {
+    upload_id: string;
 };
 
 export type CommandPatchRequest = {
@@ -591,6 +611,41 @@ export type ReorderRequest = {
         sort_order: number;
     }>;
 };
+
+/**
+ * The AstrBot backend runtime, including when running inside a container. Values are captured at application startup.
+ */
+export type RuntimeInfo = {
+    /**
+     * Lowercase platform.system() value, commonly linux, darwin, or windows.
+     */
+    os: string;
+    /**
+     * Unmodified platform.machine() value, such as x86_64, AMD64, arm64, or aarch64. May be empty if unknown.
+     */
+    arch: string;
+    /**
+     * Local process sandbox startup check, captured when AstrBot starts. It does not verify DNS resolution or every permitted operation.
+     */
+    sandbox: {
+        backend: ('bubblewrap' | 'seatbelt') | null;
+        /**
+         * detected means the executable was found and a minimal workspace sandbox launched successfully; missing means the corresponding executable was not found; unavailable means it was found but sandbox startup failed; unsupported means this platform has no Local process sandbox backend. These identifiers are independent of the UI language.
+         */
+        status: 'detected' | 'missing' | 'unavailable' | 'unsupported';
+        /**
+         * Bounded startup error detail, included when status is unavailable. Restart AstrBot after fixing the environment to refresh the check.
+         */
+        error?: string;
+    };
+};
+
+export type backend = 'bubblewrap' | 'seatbelt';
+
+/**
+ * detected means the executable was found and a minimal workspace sandbox launched successfully; missing means the corresponding executable was not found; unavailable means it was found but sandbox startup failed; unsupported means this platform has no Local process sandbox backend. These identifiers are independent of the UI language.
+ */
+export type status = 'detected' | 'missing' | 'unavailable' | 'unsupported';
 
 export type SessionGroupRequest = {
     name?: string;
@@ -1376,6 +1431,10 @@ export type GetChatSessionData = {
     path: {
         session_id: string;
     };
+    query?: {
+        page?: number;
+        page_size?: number;
+    };
 };
 
 export type GetChatSessionResponse = (SuccessEnvelope);
@@ -1623,6 +1682,46 @@ export type UploadFileResponse = (SuccessEnvelope);
 
 export type UploadFileError = unknown;
 
+export type InitFileUploadData = {
+    body: ChatUploadInitRequest;
+};
+
+export type InitFileUploadResponse = (SuccessEnvelope);
+
+export type InitFileUploadError = unknown;
+
+export type UploadFileChunkData = {
+    body: ChatChunkUploadRequest;
+};
+
+export type UploadFileChunkResponse = (SuccessEnvelope);
+
+export type UploadFileChunkError = unknown;
+
+export type CompleteFileUploadData = {
+    body: ChatUploadSessionRequest;
+};
+
+export type CompleteFileUploadResponse = (SuccessEnvelope);
+
+export type CompleteFileUploadError = unknown;
+
+export type AbortFileUploadData = {
+    body: ChatUploadSessionRequest;
+};
+
+export type AbortFileUploadResponse = (SuccessEnvelope);
+
+export type AbortFileUploadError = unknown;
+
+export type StatusFileUploadData = {
+    body: ChatUploadSessionRequest;
+};
+
+export type StatusFileUploadResponse = (SuccessEnvelope);
+
+export type StatusFileUploadError = unknown;
+
 export type UploadOpenApiFileData = {
     body: FileUploadRequest;
 };
@@ -1834,39 +1933,6 @@ export type SetPluginEnabledByIdData = {
 export type SetPluginEnabledByIdResponse = (SuccessEnvelope);
 
 export type SetPluginEnabledByIdError = unknown;
-
-export type ListPluginPagesByIdData = {
-    query: {
-        plugin_id: string;
-    };
-};
-
-export type ListPluginPagesByIdResponse = (SuccessEnvelope);
-
-export type ListPluginPagesByIdError = unknown;
-
-export type GetPluginPageByIdData = {
-    query: {
-        page_name: string;
-        plugin_id: string;
-    };
-};
-
-export type GetPluginPageByIdResponse = (string);
-
-export type GetPluginPageByIdError = unknown;
-
-export type GetPluginPageAssetByIdData = {
-    query: {
-        asset_path: string;
-        page_name: string;
-        plugin_id: string;
-    };
-};
-
-export type GetPluginPageAssetByIdResponse = (unknown);
-
-export type GetPluginPageAssetByIdError = unknown;
 
 export type GetPluginData = {
     body?: {
@@ -2198,6 +2264,58 @@ export type DeletePluginSourceByIdResponse = (SuccessEnvelope);
 
 export type DeletePluginSourceByIdError = unknown;
 
+export type ListPluginViewsByIdData = {
+    query: {
+        plugin_id: string;
+    };
+};
+
+export type ListPluginViewsByIdResponse = (SuccessEnvelope);
+
+export type ListPluginViewsByIdError = unknown;
+
+export type ListPluginPagesByIdData = {
+    query: {
+        plugin_id: string;
+    };
+};
+
+export type ListPluginPagesByIdResponse = (SuccessEnvelope);
+
+export type ListPluginPagesByIdError = unknown;
+
+export type GetPluginViewByIdData = {
+    query: {
+        page_name: string;
+        plugin_id: string;
+    };
+};
+
+export type GetPluginViewByIdResponse = (string);
+
+export type GetPluginViewByIdError = unknown;
+
+export type GetPluginPageByIdData = {
+    query: {
+        page_name: string;
+        plugin_id: string;
+    };
+};
+
+export type GetPluginPageByIdResponse = (string);
+
+export type GetPluginPageByIdError = unknown;
+
+export type ListPluginViewsData = {
+    path: {
+        plugin_id: string;
+    };
+};
+
+export type ListPluginViewsResponse = (SuccessEnvelope);
+
+export type ListPluginViewsError = unknown;
+
 export type ListPluginPagesData = {
     path: {
         plugin_id: string;
@@ -2208,10 +2326,21 @@ export type ListPluginPagesResponse = (SuccessEnvelope);
 
 export type ListPluginPagesError = unknown;
 
+export type GetPluginViewData = {
+    path: {
+        plugin_id: string;
+        view_name: string;
+    };
+};
+
+export type GetPluginViewResponse = (string);
+
+export type GetPluginViewError = unknown;
+
 export type GetPluginPageData = {
     path: {
-        page_name: string;
         plugin_id: string;
+        view_name: string;
     };
 };
 
@@ -2219,20 +2348,24 @@ export type GetPluginPageResponse = (string);
 
 export type GetPluginPageError = unknown;
 
-export type GetPluginPageAssetData = {
+export type GetPluginViewTokenAssetData = {
     path: {
         /**
          * URL-encoded relative asset path.
          */
         asset_path: string;
-        page_name: string;
         plugin_id: string;
+        /**
+         * Scoped plugin page asset token.
+         */
+        token: string;
+        view_name: string;
     };
 };
 
-export type GetPluginPageAssetResponse = (unknown);
+export type GetPluginViewTokenAssetResponse = (unknown);
 
-export type GetPluginPageAssetError = unknown;
+export type GetPluginViewTokenAssetError = (unknown);
 
 export type GetPluginPageBridgeSdkResponse = (string);
 
@@ -3151,9 +3284,17 @@ export type ListConversationsData = {
          */
         exclude_platforms?: string;
         /**
+         * Paginate by UMO and return all conversation summaries for each selected session.
+         */
+        group_by_session?: boolean;
+        /**
          * Include full message history in each conversation.
          */
         include_history?: boolean;
+        /**
+         * Match conversation titles or message content.
+         */
+        keyword?: string;
         /**
          * Comma-separated message types.
          */
@@ -3166,6 +3307,12 @@ export type ListConversationsData = {
          */
         platforms?: string;
         search?: string;
+        sort_by?: 'created_at' | 'updated_at';
+        sort_order?: 'asc' | 'desc';
+        /**
+         * Match the unified message origin.
+         */
+        umo?: string;
         user_id?: string;
     };
 };
@@ -3173,6 +3320,10 @@ export type ListConversationsData = {
 export type ListConversationsResponse = (SuccessEnvelope);
 
 export type ListConversationsError = unknown;
+
+export type GetConversationFilterOptionsResponse = (SuccessEnvelope);
+
+export type GetConversationFilterOptionsError = unknown;
 
 export type BatchDeleteConversationsData = {
     body: ConversationBatchDeleteRequest;
@@ -3264,7 +3415,11 @@ export type GetProviderTokenStatsResponse = (SuccessEnvelope);
 
 export type GetProviderTokenStatsError = unknown;
 
-export type GetVersionResponse = (SuccessEnvelope);
+export type GetVersionResponse = ((SuccessEnvelope & {
+    data?: {
+        runtime: RuntimeInfo;
+    };
+}));
 
 export type GetVersionError = unknown;
 
@@ -3382,6 +3537,14 @@ export type AbortBackupUploadData = {
 export type AbortBackupUploadResponse = (SuccessEnvelope);
 
 export type AbortBackupUploadError = unknown;
+
+export type StatusBackupUploadData = {
+    body: BackupUploadSessionRequest;
+};
+
+export type StatusBackupUploadResponse = (SuccessEnvelope);
+
+export type StatusBackupUploadError = unknown;
 
 export type GetBackupProgressData = {
     path: {

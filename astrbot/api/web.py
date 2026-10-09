@@ -12,6 +12,8 @@ from starlette.datastructures import Headers
 from starlette.datastructures import UploadFile as StarletteUploadFile
 from starlette.responses import StreamingResponse
 
+from astrbot.core.utils.upload import save_upload_stream
+
 ValueT = TypeVar("ValueT")
 DefaultT = TypeVar("DefaultT")
 ConvertedT = TypeVar("ConvertedT")
@@ -109,23 +111,22 @@ class PluginUploadFile:
         except (TypeError, ValueError):
             return None
 
-    async def save(self, destination: str | Path) -> None:
+    async def save(
+        self, destination: str | Path, *, max_bytes: int | None = None
+    ) -> int:
         """Save the uploaded file to disk.
 
         Args:
             destination: Destination file path.
+            max_bytes: Optional hard limit; the partial file is removed and
+                UploadTooLargeError is raised when the upload exceeds it.
+
+        Returns:
+            Number of bytes written.
         """
-        path = Path(destination)
-        try:
-            await self._upload_file.seek(0)
-        except Exception:
-            pass
-        with path.open("wb") as output:
-            while True:
-                chunk = await self._upload_file.read(1024 * 1024)
-                if not chunk:
-                    break
-                output.write(chunk)
+        return await save_upload_stream(
+            self._upload_file, destination, max_bytes=max_bytes
+        )
 
     async def read(self, size: int = -1) -> bytes:
         """Read bytes from the uploaded file.

@@ -9,7 +9,7 @@ export const head: HeadConfig[] = [
     ["link", { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap" }],
 
     // --- 基础和SEO元数据 ---
-    ["link", { rel: "icon", href: "/logo.png" }],
+    ["link", { rel: "icon", href: "/favicon.svg" }],
     ["meta", { name: "description", content: "AstrBot" }],
     [
         "meta",

@@ -35,18 +35,24 @@ Platforms like Dify, Coze, Bailian Application, and DeerFlow have this loop buil
 
 ## Usage
 
-By default, the AstrBot Built-in Agent Runner is the default runner. Using the default runner can already meet most needs, and you can use AstrBot's MCP, knowledge base, web search, and other features.
+AstrBot uses its built-in AI by default. Select a chat model under **Config → AI → Model**, and configure personas, knowledge bases, and tools as needed.
 
-If you need to use the capabilities of platforms like Dify, Coze, Bailian Application, or DeerFlow, you can create an Agent Runner and select the corresponding provider.
+To connect an external application, select the execution mode and enter its connection settings directly in the current configuration profile:
 
-## Creating an Agent Runner
+1. Open **Config** in the WebUI sidebar, select the profile to edit, and open **AI**.
+2. Click **More actions** (`…`) beside the AI heading, then **Change Execution Mode**.
+3. Choose Dify, Coze, Alibaba Cloud Bailian, or DeerFlow, read and check the configuration reset acknowledgement, then click **Use This Mode**.
+4. Make sure **Enable AI** is on. Enter the API key, application ID, API endpoint, and other settings shown for that mode. See the integration guides below for the fields.
+5. Click **Save Configuration** at the bottom right to apply the changes.
 
-![image](https://files.astrbot.app/docs/source/images/use/agent-runner/image-1.png)
+> [!IMPORTANT]
+> Switching modes replaces the current execution mode's settings with the new mode's defaults. Switching back requires configuring it again. To preserve the original settings, copy the profile through **Manage Configurations...** before switching.
 
-In the WebUI, click "Model Provider" -> "Add Provider", select "Agent Runner", choose the platform or runner type you want to connect to, and fill in the relevant information.
+The current WebUI does not require creating an Agent Runner under **Providers** or selecting a runner provider ID. Each profile stores its own execution mode and connection settings. Use separate profiles when different bots need different applications.
 
-## Changing the Default Agent Runner
+## Integration Guides
 
-![image](https://files.astrbot.app/docs/source/images/use/agent-runner/image.png)
-
-In the WebUI, click "Configuration" -> "Agent Execution Method", change the runner type to the Agent Runner type you just created, then select `XX Agent Runner Provider ID` as the ID of the Agent Runner provider you just created, and click save.
+- [Dify](../providers/agent-runners/dify.md)
+- [Coze](../providers/agent-runners/coze.md)
+- [Alibaba Cloud Bailian Application](../providers/agent-runners/dashscope.md)
+- [DeerFlow](../providers/agent-runners/deerflow.md)

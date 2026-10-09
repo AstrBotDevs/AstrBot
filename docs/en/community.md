@@ -8,6 +8,12 @@ This documentation may not cover all features comprehensively. If you have any q
 
 <https://discord.gg/hAVk6tgV36>
 
+### Email
+
+For formal inquiries, please reach out to us via email first:
+
+- <community@astrbot.app>
+
 ### GitHub
 
 Welcome to submit Issues or Pull Requests:
@@ -31,7 +37,7 @@ Welcome to submit Issues or Pull Requests:
 - Group 14: 1103419483
 - Group 15: 258637629
 - Group 16: 1044542496
-- **AstrBot Core Development Group: 975206796** (AstrBot development members are usually active here. Welcome to anyone interested in programming/AI technology~)
+- Chit-chat Group: 975206796
 
 ## Become an AstrBot Organization Member
 

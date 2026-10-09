@@ -17,30 +17,34 @@ AstrBot 支持以插件的形式接入平台适配器，你可以自行接入 As
 ```py
 import asyncio
 
-class FakeClient():
-    '''模拟一个消息平台，这里 5 秒钟下发一个消息'''
+
+class FakeClient:
+    """模拟一个消息平台，这里 5 秒钟下发一个消息"""
+
     def __init__(self, token: str, username: str):
         self.token = token
         self.username = username
         # ...
-                
+
     async def start_polling(self):
         while True:
             await asyncio.sleep(5)
-            await getattr(self, 'on_message_received')({
-                'bot_id': '123',
-                'content': '新消息',
-                'username': 'zhangsan',
-                'userid': '123',
-                'message_id': 'asdhoashd',
-                'group_id': 'group123',
-            })
-            
+            await getattr(self, "on_message_received")(
+                {
+                    "bot_id": "123",
+                    "content": "新消息",
+                    "username": "zhangsan",
+                    "userid": "123",
+                    "message_id": "asdhoashd",
+                    "group_id": "group123",
+                }
+            )
+
     async def send_text(self, to: str, message: str):
-        print('发了消息:', to, message)
-        
+        print("发了消息:", to, message)
+
     async def send_image(self, to: str, image_path: str):
-        print('发了消息:', to, image_path)
+        print("发了消息:", to, image_path)
 ```
 
 我们创建  `fake_platform_adapter.py`：
@@ -48,31 +52,46 @@ class FakeClient():
 ```py
 import asyncio
 
-from astrbot.api.platform import Platform, AstrBotMessage, MessageMember, PlatformMetadata, MessageType
+from astrbot.api.platform import (
+    Platform,
+    AstrBotMessage,
+    MessageMember,
+    PlatformMetadata,
+    MessageType,
+)
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import Plain, Image, Record # 消息链中的组件，可以根据需要导入
+from astrbot.api.message_components import (
+    Plain,
+    Image,
+    Record,
+)  # 消息链中的组件，可以根据需要导入
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.api.platform import register_platform_adapter
 from astrbot import logger
 from .client import FakeClient
 from .fake_platform_event import FakePlatformEvent
-            
-# 注册平台适配器。第一个参数为平台名，第二个为描述。第三个为默认配置。
-@register_platform_adapter("fake", "fake 适配器", default_config_tmpl={
-    "token": "your_token",
-    "username": "bot_username"
-})
-class FakePlatformAdapter(Platform):
 
-    def __init__(self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue) -> None:
+
+# 注册平台适配器。第一个参数为平台名，第二个为描述。第三个为默认配置。
+@register_platform_adapter(
+    "fake",
+    "fake 适配器",
+    default_config_tmpl={"token": "your_token", "username": "bot_username"},
+)
+class FakePlatformAdapter(Platform):
+    def __init__(
+        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue
+    ) -> None:
         super().__init__(event_queue)
-        self.config = platform_config # 上面的默认配置，用户填写后会传到这里
-        self.settings = platform_settings # platform_settings 平台设置。
-    
-    async def send_by_session(self, session: MessageSesion, message_chain: MessageChain):
+        self.config = platform_config  # 上面的默认配置，用户填写后会传到这里
+        self.settings = platform_settings  # platform_settings 平台设置。
+
+    async def send_by_session(
+        self, session: MessageSesion, message_chain: MessageChain
+    ):
         # 必须实现
         await super().send_by_session(session, message_chain)
-    
+
     def meta(self) -> PlatformMetadata:
         # 必须实现，直接像下面一样返回即可。
         return PlatformMetadata(
@@ -86,30 +105,36 @@ class FakePlatformAdapter(Platform):
         # FakeClient 是我们自己定义的，这里只是示例。这个是其回调函数
         async def on_received(data):
             logger.info(data)
-            abm = await self.convert_message(data=data) # 转换成 AstrBotMessage
-            await self.handle_msg(abm) 
-        
+            abm = await self.convert_message(data=data)  # 转换成 AstrBotMessage
+            await self.handle_msg(abm)
+
         # 初始化 FakeClient
-        self.client = FakeClient(self.config['token'], self.config['username'])
+        self.client = FakeClient(self.config["token"], self.config["username"])
         self.client.on_message_received = on_received
-        await self.client.start_polling() # 持续监听消息，这是个堵塞方法。
+        await self.client.start_polling()  # 持续监听消息，这是个堵塞方法。
 
     async def convert_message(self, data: dict) -> AstrBotMessage:
         # 将平台消息转换成 AstrBotMessage
         # 这里就体现了适配程度，不同平台的消息结构不一样，这里需要根据实际情况进行转换。
         abm = AstrBotMessage()
-        abm.type = MessageType.GROUP_MESSAGE # 还有 friend_message，对应私聊。具体平台具体分析。重要！
-        abm.group_id = data['group_id'] # 如果是私聊，这里可以不填
-        abm.message_str = data['content'] # 纯文本消息。重要！
-        abm.sender = MessageMember(user_id=data['userid'], nickname=data['username']) # 发送者。重要！
-        abm.message = [Plain(text=data['content'])] # 消息链。如果有其他类型的消息，直接 append 即可。重要！
-        abm.raw_message = data # 原始消息。
-        abm.self_id = data['bot_id']
-        abm.session_id = data['userid'] # 会话 ID。重要！
-        abm.message_id = data['message_id'] # 消息 ID。
-        
+        abm.type = (
+            MessageType.GROUP_MESSAGE
+        )  # 还有 friend_message，对应私聊。具体平台具体分析。重要！
+        abm.group_id = data["group_id"]  # 如果是私聊，这里可以不填
+        abm.message_str = data["content"]  # 纯文本消息。重要！
+        abm.sender = MessageMember(
+            user_id=data["userid"], nickname=data["username"]
+        )  # 发送者。重要！
+        abm.message = [
+            Plain(text=data["content"])
+        ]  # 消息链。如果有其他类型的消息，直接 append 即可。重要！
+        abm.raw_message = data  # 原始消息。
+        abm.self_id = data["bot_id"]
+        abm.session_id = data["userid"]  # 会话 ID。重要！
+        abm.message_id = data["message_id"]  # 消息 ID。
+
         return abm
-    
+
     async def handle_msg(self, message: AstrBotMessage):
         # 处理消息
         message_event = FakePlatformEvent(
@@ -117,9 +142,9 @@ class FakePlatformAdapter(Platform):
             message_obj=message,
             platform_meta=self.meta(),
             session_id=message.session_id,
-            client=self.client
+            client=self.client,
         )
-        self.commit_event(message_event) # 提交事件到事件队列。不要忘记！
+        self.commit_event(message_event)  # 提交事件到事件队列。不要忘记！
 ```
 
 
@@ -131,22 +156,32 @@ from astrbot.api.platform import AstrBotMessage, PlatformMetadata
 from astrbot.api.message_components import Plain, Image
 from .client import FakeClient
 
+
 class FakePlatformEvent(AstrMessageEvent):
-    def __init__(self, message_str: str, message_obj: AstrBotMessage, platform_meta: PlatformMetadata, session_id: str, client: FakeClient):
+    def __init__(
+        self,
+        message_str: str,
+        message_obj: AstrBotMessage,
+        platform_meta: PlatformMetadata,
+        session_id: str,
+        client: FakeClient,
+    ):
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.client = client
-        
+
     async def send(self, message: MessageChain):
-        for i in message.chain: # 遍历消息链
-            if isinstance(i, Plain): # 如果是文字类型的
+        for i in message.chain:  # 遍历消息链
+            if isinstance(i, Plain):  # 如果是文字类型的
                 await self.client.send_text(to=self.get_sender_id(), message=i.text)
-            elif isinstance(i, Image): # 如果是图片类型的 
+            elif isinstance(i, Image):  # 如果是图片类型的
                 # convert_to_file_path() resolves supported media refs through
                 # the shared media utilities.
                 img_path = await i.convert_to_file_path()
-                await self.client.send_image(to=self.get_sender_id(), image_path=img_path)
+                await self.client.send_image(
+                    to=self.get_sender_id(), image_path=img_path
+                )
 
-        await super().send(message) # 需要最后加上这一段，执行父类的 send 方法。
+        await super().send(message)  # 需要最后加上这一段，执行父类的 send 方法。
 ```
 
 ## 媒体消息处理
@@ -210,9 +245,10 @@ message_event.track_temporary_local_file(temp_media_path)
 ```py
 from astrbot.api.star import Context, Star
 
+
 class MyPlugin(Star):
     def __init__(self, context: Context):
-        from .fake_platform_adapter import FakePlatformAdapter # noqa
+        from .fake_platform_adapter import FakePlatformAdapter  # noqa
 ```
 
 搞好后，运行 AstrBot：

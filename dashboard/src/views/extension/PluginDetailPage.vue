@@ -40,8 +40,8 @@ const { locale } = useI18n();
 const {
   pluginName,
   pluginDesc: resolvePluginDesc,
-  pluginPageTitle,
-  pluginPageDescription,
+  pluginViewTitle,
+  pluginViewDescription,
 } = usePluginI18n();
 
 const markdown = new MarkdownIt({
@@ -463,7 +463,7 @@ const getHandlerCommand = (handler) =>
 
 const getHandlerDisplayName = (handler, groupKey) => {
   if (groupKey === "page") {
-    return pluginPageTitle(
+    return pluginViewTitle(
       pluginData.value,
       handler,
       handler?.title ||
@@ -501,7 +501,7 @@ const getComponentDescription = (component) => {
     component?.description || component?.desc || tm("status.unknown");
   if (getComponentGroupKey(component) === "page") {
     return String(
-      pluginPageDescription(pluginData.value, component, fallback),
+      pluginViewDescription(pluginData.value, component, fallback),
     ).trim();
   }
   return String(fallback).trim();
@@ -512,7 +512,7 @@ const openComponentPage = (component) => {
   const targetPageName = component?.page_name || component?.name;
   if (!targetPluginName || !targetPageName) return;
   router.push({
-    name: "PluginPage",
+    name: "PluginView",
     params: {
       pluginName: targetPluginName,
       pageName: targetPageName,
@@ -577,6 +577,36 @@ const renderMarkdown = (source) => {
   const container = document.createElement("div");
   container.innerHTML = cleanHtml;
 
+  // Generate heading ids so README table-of-contents anchors can resolve.
+  const usedIds = new Set();
+  container.querySelectorAll("h1, h2, h3, h4, h5, h6").forEach((heading) => {
+    if (heading.id) {
+      usedIds.add(heading.id);
+      return;
+    }
+
+    const base = (heading.textContent || "")
+      .trim()
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^\p{Letter}\p{Number}\s-]/gu, "")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-");
+    if (!base) return;
+
+    // Increment the suffix until the candidate no longer collides with any
+    // previously assigned id (including ids coming from raw HTML headings).
+    let slug = base;
+    let suffix = 1;
+    while (usedIds.has(slug)) {
+      slug = `${base}-${suffix}`;
+      suffix += 1;
+    }
+    usedIds.add(slug);
+    heading.id = slug;
+  });
+
   container.querySelectorAll("a").forEach((link) => {
     const href = link.getAttribute("href") || "";
     if (href.startsWith("http") || href.startsWith("//")) {
@@ -586,6 +616,33 @@ const renderMarkdown = (source) => {
   });
 
   return container.innerHTML;
+};
+
+const handleDocsClick = (event) => {
+  const target = event.target instanceof Element ? event.target : null;
+  const anchor = target?.closest('a[href^="#"]');
+  if (!anchor) return;
+
+  // Never let a local hash link reach the hash-mode router, even when the
+  // fragment is empty, malformed, or has no matching heading.
+  event.preventDefault();
+
+  const rawHref = anchor.getAttribute("href") || "";
+  let targetId = "";
+  try {
+    targetId = decodeURIComponent(rawHref.slice(1));
+  } catch {
+    return;
+  }
+  if (!targetId) return;
+
+  // Scope lookup to the rendered container so the hash router is never touched.
+  const scrollTarget = event.currentTarget.querySelector(
+    `#${CSS.escape(targetId)}`,
+  );
+  if (!scrollTarget) return;
+
+  scrollTarget.scrollIntoView({ behavior: "smooth", block: "start" });
 };
 
 const updateHeaderStuckState = () => {
@@ -1040,7 +1097,12 @@ onBeforeUnmount(() => {
           <div v-else-if="readmeEmpty" class="text-medium-emphasis">
             {{ tm("detail.docsEmpty") }}
           </div>
-          <div v-else class="docs-markdown" v-html="renderedReadme"></div>
+          <div
+            v-else
+            class="docs-markdown"
+            v-html="renderedReadme"
+            @click="handleDocsClick"
+          ></div>
         </v-card-text>
       </v-card>
     </section>
@@ -1060,7 +1122,12 @@ onBeforeUnmount(() => {
           <div v-else-if="changelogEmpty" class="text-medium-emphasis">
             {{ tm("detail.changelogEmpty") }}
           </div>
-          <div v-else class="docs-markdown" v-html="renderedChangelog"></div>
+          <div
+            v-else
+            class="docs-markdown"
+            v-html="renderedChangelog"
+            @click="handleDocsClick"
+          ></div>
         </v-card-text>
       </v-card>
     </section>
@@ -1325,6 +1392,7 @@ onBeforeUnmount(() => {
   font-weight: 700;
   line-height: 1.3;
   margin: 1.4em 0 0.6em;
+  scroll-margin-top: calc(var(--v-layout-top, 64px) + 24px);
 }
 
 .docs-markdown :deep(h1:first-child),
