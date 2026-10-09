@@ -204,6 +204,143 @@ async def test_native_managed_shell(native_sandbox, tmp_path, monkeypatch, legac
         await component.shutdown_sessions()
 
 
+def test_native_async_sessions_leave_executor_available(native_sandbox, tmp_path):
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+
+    from astrbot.core.computer.process_sandbox import SandboxSpec
+
+    async def exercise():
+        # Each old blocking process waiter alone could exhaust this executor.
+        asyncio.get_running_loop().set_default_executor(ThreadPoolExecutor(1))
+        processes, readers, waiters = [], [], []
+
+        async def capture(process):
+            output = bytearray()
+            while chunk := await process.stdout.read(8192):
+                output.extend(chunk)
+            return output.decode("utf-8", errors="replace")
+
+        try:
+            for index in range(2):
+                workspace = tmp_path / str(index)
+                workspace.mkdir()
+                processes.append(
+                    await native_sandbox.spawn_shell(
+                        'python -u -c "from pathlib import Path; '
+                        "Path('ready').touch(); print(input())\"",
+                        SandboxSpec(workspace),
+                    )
+                )
+            readers = [asyncio.create_task(capture(p)) for p in processes]
+            waiters = [asyncio.create_task(p.wait()) for p in processes]
+            for _ in range(100):
+                if all((tmp_path / str(i) / "ready").exists() for i in range(2)):
+                    break
+                await asyncio.sleep(0.05)
+            assert all((tmp_path / str(i) / "ready").exists() for i in range(2))
+            assert await asyncio.wait_for(asyncio.to_thread(lambda: True), 2)
+            # Cancelling one consumer must not close the pipe or shared wait.
+            readers[0].cancel()
+            waiters[0].cancel()
+            for task in (readers[0], waiters[0]):
+                with pytest.raises(asyncio.CancelledError):
+                    await task
+            readers[0] = asyncio.create_task(capture(processes[0]))
+            waiters[0] = asyncio.create_task(processes[0].wait())
+            # Exceed the pipe buffer and preserve Unicode through async writes.
+            message = "hello 中文" * 4096
+            for process in processes:
+                process.stdin.write((message + "\n").encode("utf-8"))
+            await asyncio.wait_for(
+                asyncio.gather(*(p.stdin.drain() for p in processes)), 10
+            )
+            assert await asyncio.wait_for(asyncio.gather(*waiters), 10) == [0, 0]
+            output = await asyncio.wait_for(asyncio.gather(*readers), 10)
+            assert all(message in text for text in output)
+        finally:
+            for process in processes:
+                process.kill()
+            await asyncio.gather(*waiters, *readers, return_exceptions=True)
+            for process in processes:
+                await asyncio.to_thread(process.close)
+
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(exercise())
+    finally:
+        loop.run_until_complete(loop.shutdown_asyncgens())
+        loop.run_until_complete(loop.shutdown_default_executor())
+        loop.close()
+
+
+@pytest.mark.asyncio
+async def test_native_close_after_cancelled_wait(native_sandbox, tmp_path):
+    import asyncio
+
+    import psutil
+
+    from astrbot.core.computer.process_sandbox import SandboxSpec
+
+    process = await native_sandbox.spawn_shell(
+        "Start-Sleep -Seconds 60", SandboxSpec(tmp_path)
+    )
+    try:
+        waiter = asyncio.create_task(process.wait())
+        process.stdin.write(b"pending input" * 16384)
+        writer = asyncio.create_task(process.stdin.drain())
+        await asyncio.sleep(0)
+        assert not writer.done()
+        waiter.cancel()
+        writer.cancel()
+        for task in (waiter, writer):
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        # Close before the event loop can deliver the process completion. The
+        # registered wait must retain its own handle until that delivery.
+        process.close()
+        assert await asyncio.wait_for(asyncio.shield(process._waiter), 5)
+        assert await process.wait() is not None
+        assert not psutil.pid_exists(process.pid)
+    finally:
+        process.close()
+
+
+@pytest.mark.asyncio
+async def test_native_managed_timeout(native_sandbox, tmp_path):
+    import asyncio
+
+    from astrbot.core.computer.booters.local import LocalShellComponent
+
+    component = LocalShellComponent()
+    try:
+        result = await component.exec_managed(
+            "Start-Sleep -Seconds 60",
+            owner_id="timeout-test",
+            creator_id="tester",
+            creator_is_admin=False,
+            sandboxed=True,
+            permission_check=lambda: True,
+            cwd=str(tmp_path),
+            yield_time_ms=0,
+            timeout=1,
+        )
+        while not result["session_closed"]:
+            result = await asyncio.wait_for(
+                component.poll_session(
+                    owner_id="timeout-test",
+                    requester_id="tester",
+                    requester_is_admin=False,
+                    session_id=result["session_id"],
+                    yield_time_ms=5000,
+                ),
+                10,
+            )
+        assert result["status"] == "timed_out"
+    finally:
+        await component.shutdown_sessions()
+
+
 @pytest.mark.asyncio
 async def test_native_file_search(native_sandbox, tmp_path):
     from astrbot.core.computer.booters.local import LocalFileSystemComponent

@@ -12,6 +12,7 @@ import subprocess
 import sys
 import threading
 import uuid
+from asyncio import windows_utils
 from contextlib import ExitStack, contextmanager
 from ctypes import wintypes as wt
 from pathlib import Path
@@ -278,26 +279,29 @@ def _appcontainer_access(roots: dict[Path, int], runtimes: tuple[Path, ...]):
 
 
 class _Pipe:
-    """Adapt blocking anonymous pipes to the existing async stream protocol."""
+    """Keep synchronous files or expose overlapped pipes through the IOCP loop."""
 
-    def __init__(self, fd: int, mode: str) -> None:
-        self.file = os.fdopen(fd, mode, buffering=0)
+    def __init__(self, file, proactor=None) -> None:
+        self.file = file
+        self.proactor = proactor
         self.pending = bytearray()
+        self._write_lock = asyncio.Lock()
 
     def write(self, data: bytes) -> None:
         self.pending.extend(data)
 
     async def drain(self) -> None:
-        data = bytes(self.pending)
-        self.pending.clear()
-        while data:
-            written = await asyncio.to_thread(self.file.write, data)
-            if not written:
-                raise BrokenPipeError("Sandbox standard input is closed.")
-            data = data[written:]
+        async with self._write_lock:
+            data = bytes(self.pending)
+            self.pending.clear()
+            while data:
+                written = await self.proactor.send(self.file, data)
+                if not written:
+                    raise BrokenPipeError("Sandbox standard input is closed.")
+                data = data[written:]
 
-    async def read(self, n: int = -1) -> bytes:
-        return await asyncio.to_thread(self.file.read, n)
+    async def read(self, n: int = 8192) -> bytes:
+        return await self.proactor.recv(self.file, n)
 
 
 class WindowsSandboxProcess:
@@ -314,6 +318,7 @@ class WindowsSandboxProcess:
         self._returncode = None
         self._closed = False
         self._handle_lock = threading.RLock()
+        self._waiter = None
 
     @property
     def returncode(self) -> int | None:
@@ -336,9 +341,26 @@ class WindowsSandboxProcess:
         Returns:
             The leader's exit code.
         """
-        await asyncio.to_thread(
-            win32event.WaitForSingleObject, self.process, win32event.INFINITE
-        )
+        with self._handle_lock:
+            if self._closed:
+                return self._returncode
+            if self._waiter is None:
+                # Keep the registered handle alive even if a caller cancels its
+                # wait and closes the process before IOCP delivers completion.
+                current = win32api.GetCurrentProcess()
+                handle = win32api.DuplicateHandle(
+                    current, self.process, current, 0, False, 2
+                )
+                try:
+                    # The same IOCP primitive backs asyncio's Windows subprocesses.
+                    self._waiter = asyncio.get_running_loop()._proactor.wait_for_handle(
+                        int(handle)
+                    )
+                except BaseException:
+                    handle.Close()
+                    raise
+                self._waiter.add_done_callback(lambda _: handle.Close())
+        await asyncio.shield(self._waiter)
         result = self.returncode
         # Detached descendants must not retain the pipes or outlive their leader.
         self.kill()
@@ -388,6 +410,7 @@ class AppContainerProcessSandbox(ProcessSandbox):
         env: dict[str, str] | None = None,
         *,
         merge_output: bool = False,
+        proactor=None,
     ) -> WindowsSandboxProcess:
         """Create an isolated process, granting only the supplied filesystem roots.
 
@@ -396,6 +419,7 @@ class AppContainerProcessSandbox(ProcessSandbox):
             spec: Workspace, network permission, roots, and job limits.
             env: Explicit child environment additions.
             merge_output: Whether stderr shares the stdout pipe.
+            proactor: IOCP implementation for managed pipes, or None for sync I/O.
 
         Returns:
             An owned Windows process adapter.
@@ -447,15 +471,33 @@ class AppContainerProcessSandbox(ProcessSandbox):
 
             pipes, inherited = [], []
             for index in range(2 if merge_output else 3):
-                read_fd, write_fd = os.pipe()
-                parent_fd, child_fd = (
-                    (write_fd, read_fd) if index == 0 else (read_fd, write_fd)
-                )
-                launch.callback(os.close, child_fd)
-                pipe = _Pipe(parent_fd, "wb" if index == 0 else "rb")
+                if proactor is None:
+                    read_fd, write_fd = os.pipe()
+                    parent_fd, child_fd = (
+                        (write_fd, read_fd) if index == 0 else (read_fd, write_fd)
+                    )
+                    launch.callback(os.close, child_fd)
+                    file = os.fdopen(
+                        parent_fd, "wb" if index == 0 else "rb", buffering=0
+                    )
+                    child_handle = msvcrt.get_osfhandle(child_fd)
+                else:
+                    # Only the parent end uses overlapped I/O. PowerShell and
+                    # Python inherit ordinary synchronous standard handles.
+                    read_handle, write_handle = windows_utils.pipe(
+                        overlapped=(index != 0, index == 0), duplex=index == 0
+                    )
+                    parent_handle, child_handle = (
+                        (write_handle, read_handle)
+                        if index == 0
+                        else (read_handle, write_handle)
+                    )
+                    launch.callback(win32api.CloseHandle, child_handle)
+                    file = windows_utils.PipeHandle(parent_handle)
+                pipe = _Pipe(file, proactor)
                 resources.callback(pipe.file.close)
                 pipes.append(pipe)
-                inherited.append(msvcrt.get_osfhandle(child_fd))
+                inherited.append(child_handle)
             stdin, stdout = pipes[:2]
             stderr = None if merge_output else pipes[2]
             for handle in inherited:
@@ -664,6 +706,10 @@ class AppContainerProcessSandbox(ProcessSandbox):
         """
         from .windows_setup import shell_path
 
+        loop = asyncio.get_running_loop()
+        if not isinstance(loop, asyncio.ProactorEventLoop):
+            raise RuntimeError("Windows sandbox sessions require a ProactorEventLoop.")
+
         # PowerShell's normal Set-Location walks unauthorized ancestors. A
         # provider drive rooted at the workspace needs no ancestor ACL grants.
         script = (
@@ -694,6 +740,7 @@ class AppContainerProcessSandbox(ProcessSandbox):
                 spec,
                 env,
                 merge_output=True,
+                proactor=loop._proactor,
             )
         )
         try:
