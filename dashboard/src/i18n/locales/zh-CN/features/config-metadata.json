@@ -1,6 +1,6 @@
 {
   "ai_group": {
-    "name": "AI 配置",
+    "name": "AI",
     "agent_runner": {
       "description": "Agent 执行方式",
       "hint": "选择 AI 对话的执行器。切换执行器会使用新类型的默认配置，不保留上一类型的参数。",
@@ -253,7 +253,7 @@
         },
         "computer_use_require_admin": {
           "description": "沙箱能力需要 AstrBot 管理员权限",
-          "hint": "开启后，需要 AstrBot 管理员权限才能调用远程沙箱能力。在平台配置->管理员中可添加管理员。使用 /sid 指令查看管理员 ID。"
+          "hint": "开启后，需要 AstrBot 管理员权限才能调用远程沙箱能力。在配置文件 -> 访问控制 -> 管理员 -> 管理员 ID 中可添加管理员。给机器人发送 /sid 指令以获取 ID。"
         },
         "sandbox": {
           "booter": {
@@ -527,7 +527,7 @@
     }
   },
   "platform_group": {
-    "name": "平台配置",
+    "name": "平台与消息",
     "platform": {
       "description": "消息平台适配器",
       "app_id": {
@@ -948,9 +948,6 @@
     },
     "general": {
       "description": "基本",
-      "admins_id": {
-        "description": "管理员 ID"
-      },
       "platform_settings": {
         "unique_session": {
           "description": "隔离对话",
@@ -981,29 +978,6 @@
       "disable_builtin_commands": {
         "description": "禁用自带指令",
         "hint": "禁用所有 AstrBot 自带指令,如 help, sid, new 等"
-      }
-    },
-    "whitelist": {
-      "description": "白名单",
-      "platform_settings": {
-        "enable_id_white_list": {
-          "description": "启用白名单",
-          "hint": "启用后,只有在白名单内的会话会被响应，白名单列表为空时代表不启用白名单（所有 ID 都会被放行）。"
-        },
-        "id_whitelist": {
-          "description": "白名单 ID 列表",
-          "hint": "使用 /sid 获取 ID。列表为空时表示该白名单不启用（即所有 ID 都在白名单内）。"
-        },
-        "id_whitelist_log": {
-          "description": "输出日志",
-          "hint": "启用后,当一条消息没通过白名单时,会输出 INFO 级别的日志。"
-        },
-        "wl_ignore_admin_on_group": {
-          "description": "管理员群组消息无视 ID 白名单"
-        },
-        "wl_ignore_admin_on_friend": {
-          "description": "管理员私聊消息无视 ID 白名单"
-        }
       }
     },
     "rate_limit": {
@@ -1104,8 +1078,41 @@
       }
     }
   },
+  "access_group": {
+    "name": "访问控制",
+    "admins": {
+      "description": "管理员",
+      "admins_id": {
+        "description": "管理员 ID",
+        "hint": "给机器人发送 /sid 指令以获取 ID。"
+      }
+    },
+    "whitelist": {
+      "description": "白名单",
+      "platform_settings": {
+        "enable_id_white_list": {
+          "description": "启用白名单",
+          "hint": "启用后,只有在白名单内的会话会被响应。"
+        },
+        "id_whitelist": {
+          "description": "白名单 ID 列表",
+          "hint": "给机器人发送 /sid 指令以获取 ID。为空时代表不启用白名单功能。"
+        },
+        "id_whitelist_log": {
+          "description": "输出拦截日志",
+          "hint": "输出未通过白名单校验的消息的日志。"
+        },
+        "wl_ignore_admin_on_group": {
+          "description": "管理员群组消息无视 ID 白名单"
+        },
+        "wl_ignore_admin_on_friend": {
+          "description": "管理员私聊消息无视 ID 白名单"
+        }
+      }
+    }
+  },
   "plugin_group": {
-    "name": "插件配置",
+    "name": "插件",
     "plugin": {
       "description": "插件",
       "plugin_set": {

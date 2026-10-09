@@ -1,20 +1,21 @@
 import asyncio
 import base64
-from io import BytesIO
+from io import BufferedReader, BytesIO
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, MagicMock, Mock
 
 import aiohttp
 import discord
 import pytest
 
-from astrbot.api.message_components import Image, Plain, Record, Reply
+from astrbot.api.message_components import File, Image, Plain, Record, Reply, Video
 from astrbot.api.platform import Group, MessageType
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.sources.discord import (
     discord_platform_adapter,
     discord_platform_event,
 )
+from astrbot.core.platform.sources.discord.client import DiscordBotClient
 from astrbot.core.platform.sources.discord.discord_platform_adapter import (
     DiscordPlatformAdapter,
 )
@@ -133,6 +134,124 @@ async def test_discord_unavailable_reply_preserves_current_message(case):
         channel.fetch_message.assert_awaited_once_with(41)
     else:
         channel.fetch_message.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("allow_bot_messages", [False, True])
+@pytest.mark.parametrize(("author_id", "is_bot"), [(1, True), (2, True), (3, False)])
+async def test_discord_filters_self_messages(allow_bot_messages, author_id, is_bot):
+    """Reject self messages while preserving the other-bot setting.
+
+    Args:
+        allow_bot_messages: Whether messages from other bots are enabled.
+        author_id: The sender ID; 1 is the connected bot.
+        is_bot: Whether the sender is a bot.
+    """
+    client = DiscordBotClient(token="test", allow_bot_messages=allow_bot_messages)
+    client._connection.user = SimpleNamespace(id=1)
+    client.on_message_received = AsyncMock()
+    message = SimpleNamespace(
+        id=42,
+        author=SimpleNamespace(
+            id=author_id, bot=is_bot, name="tester", display_name="tester"
+        ),
+        content="hello",
+        clean_content="hello",
+        channel=SimpleNamespace(id=123),
+        guild=None,
+        mentions=[],
+    )
+
+    await client.on_message(message)
+
+    if author_id == 1 or (is_bot and not allow_bot_messages):
+        client.on_message_received.assert_not_awaited()
+    else:
+        client.on_message_received.assert_awaited_once()
+        assert client.on_message_received.call_args.args[0]["message"] is message
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("component_type", ["video", "video_url", "file"])
+@pytest.mark.parametrize("with_text", [False, True])
+async def test_discord_sends_video_attachment(
+    tmp_path, monkeypatch, component_type, with_text
+):
+    video_path = tmp_path / (
+        "media_video_test.mp4" if component_type == "video_url" else "repro.mp4"
+    )
+    video_bytes = b"video attachment payload"
+    video_path.write_bytes(video_bytes)
+    if component_type == "video":
+        component = Video.fromFileSystem(str(video_path))
+    elif component_type == "video_url":
+        component = Video.fromURL("https://example.com/repro.mp4")
+        monkeypatch.setattr(
+            Video,
+            "convert_to_file_path",
+            AsyncMock(return_value=str(video_path)),
+        )
+    else:
+        component = File(name=video_path.name, file=str(video_path))
+
+    channel = MagicMock(spec=discord_platform_event.discord.abc.Messageable)
+    channel.send = AsyncMock()
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+    event.interaction_followup_webhook = None
+    event._get_channel = AsyncMock(return_value=channel)
+    monkeypatch.setattr(discord_platform_event.AstrMessageEvent, "send", AsyncMock())
+    chain = [Plain("Video test"), component] if with_text else [component]
+
+    await event.send(MessageChain(chain=chain))
+
+    channel.send.assert_awaited_once()
+    kwargs = channel.send.call_args.kwargs
+    assert kwargs.get("content", "") == ("Video test" if with_text else "")
+    assert len(kwargs["files"]) == 1
+    attachment = kwargs["files"][0]
+    try:
+        assert attachment.filename == "repro.mp4"
+        if component_type != "file":
+            assert isinstance(attachment.fp, BufferedReader)
+            assert attachment.fp.tell() == 0
+        assert attachment.fp.read() == video_bytes
+    finally:
+        attachment.close()
+    if component_type != "file":
+        assert attachment.fp.closed
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("url", "expected_name"),
+    [
+        ("https://example.com/clips/demo.mp4", "demo.mp4"),
+        ("https://example.com/demo.mp4?token=test#preview", "demo.mp4"),
+        ("https://example.com/%E6%B5%8B%E8%AF%95%20video.mp4", "测试 video.mp4"),
+        ("https://example.com", "media_video_test.mp4"),
+        ("https://example.com/clips/?token=test", "media_video_test.mp4"),
+    ],
+)
+async def test_discord_video_url_attachment_filename(
+    tmp_path, monkeypatch, url, expected_name
+):
+    video_path = tmp_path / "media_video_test.mp4"
+    video_path.write_bytes(b"video attachment payload")
+    monkeypatch.setattr(
+        Video, "convert_to_file_path", AsyncMock(return_value=str(video_path))
+    )
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+
+    _, files, _, _, _ = await event._parse_to_discord(
+        MessageChain(chain=[Video.fromURL(url)])
+    )
+
+    assert len(files) == 1
+    try:
+        assert files[0].filename == expected_name
+        assert files[0].fp.name == str(video_path)
+    finally:
+        files[0].close()
 
 
 @pytest.mark.asyncio

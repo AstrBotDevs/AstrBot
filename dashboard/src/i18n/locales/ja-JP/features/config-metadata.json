@@ -1,6 +1,6 @@
 {
   "ai_group": {
-    "name": "AI 設定",
+    "name": "AI",
     "agent_runner": {
       "description": "エージェントの実行方式",
       "hint": "AI 会話のランナーを選択します。ランナーを切り替えると、新しい種類のデフォルト設定が適用され、以前の種類のパラメーターは引き継がれません。",
@@ -325,7 +325,7 @@
         },
         "computer_use_require_admin": {
           "description": "サンドボックスに管理者権限を必須にする",
-          "hint": "有効にすると、外部サンドボックスの利用に AstrBot 管理者権限が必要になります。管理者は「プラットフォーム設定 -> 管理者」で追加できます。/sid コマンドで管理者 ID を確認できます。"
+          "hint": "有効にすると、外部サンドボックスの利用に AstrBot 管理者権限が必要になります。「設定ファイル -> アクセス制御 -> 管理者 -> 管理者 ID」で管理者を追加できます。ボットに /sid コマンドを送信して ID を取得します。"
         },
         "sandbox": {
           "booter": {
@@ -607,7 +607,7 @@
     }
   },
   "platform_group": {
-    "name": "プラットフォーム設定",
+    "name": "プラットフォームとメッセージ",
     "platform": {
       "description": "メッセージプラットフォームアダプター",
       "app_id": {
@@ -1024,9 +1024,6 @@
     },
     "general": {
       "description": "基本設定",
-      "admins_id": {
-        "description": "管理者 ID"
-      },
       "platform_settings": {
         "unique_session": {
           "description": "会話を分離",
@@ -1057,29 +1054,6 @@
       "disable_builtin_commands": {
         "description": "組み込みコマンドを無効化",
         "hint": "help、sid、new など、AstrBot のすべての組み込みコマンドを無効にします。"
-      }
-    },
-    "whitelist": {
-      "description": "ホワイトリスト",
-      "platform_settings": {
-        "enable_id_white_list": {
-          "description": "ホワイトリストを有効化",
-          "hint": "有効にすると、ホワイトリストに登録されたセッションにのみ応答します。ホワイトリストが空の場合は無効とみなし、すべての ID を許可します。"
-        },
-        "id_whitelist": {
-          "description": "ホワイトリスト ID 一覧",
-          "hint": "/sid で ID を取得できます。一覧が空の場合、このホワイトリストは無効です（すべての ID が許可されます）。"
-        },
-        "id_whitelist_log": {
-          "description": "ログを出力",
-          "hint": "有効にすると、メッセージがホワイトリストを通過しなかった場合に INFO レベルのログを出力します。"
-        },
-        "wl_ignore_admin_on_group": {
-          "description": "管理者のグループメッセージは ID ホワイトリストを無視"
-        },
-        "wl_ignore_admin_on_friend": {
-          "description": "管理者のダイレクトメッセージは ID ホワイトリストを無視"
-        }
       }
     },
     "rate_limit": {
@@ -1180,8 +1154,41 @@
       }
     }
   },
+  "access_group": {
+    "name": "アクセス制御",
+    "admins": {
+      "description": "管理者",
+      "admins_id": {
+        "description": "管理者 ID",
+        "hint": "ボットに /sid コマンドを送信して ID を取得します。"
+      }
+    },
+    "whitelist": {
+      "description": "ホワイトリスト",
+      "platform_settings": {
+        "enable_id_white_list": {
+          "description": "ホワイトリストを有効化",
+          "hint": "有効にすると、ホワイトリスト内のセッションにのみ応答します。"
+        },
+        "id_whitelist": {
+          "description": "ホワイトリスト ID 一覧",
+          "hint": "ボットに /sid コマンドを送信して ID を取得します。空の場合、ホワイトリスト機能は無効になります。"
+        },
+        "id_whitelist_log": {
+          "description": "ブロックしたメッセージをログに出力",
+          "hint": "ホワイトリストの検証に通らなかったメッセージをログに出力します。"
+        },
+        "wl_ignore_admin_on_group": {
+          "description": "管理者のグループメッセージは ID ホワイトリストを無視"
+        },
+        "wl_ignore_admin_on_friend": {
+          "description": "管理者のダイレクトメッセージは ID ホワイトリストを無視"
+        }
+      }
+    }
+  },
   "plugin_group": {
-    "name": "プラグイン設定",
+    "name": "プラグイン",
     "plugin": {
       "description": "プラグイン",
       "plugin_set": {

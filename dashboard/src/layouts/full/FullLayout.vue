@@ -32,7 +32,9 @@ const isViewportLockedRoute = computed(
   () =>
     isCurrentChatRoute.value ||
     isProviderPageRoute.value ||
-    isPlatformPageRoute.value,
+    isPlatformPageRoute.value ||
+    route.path === "/config" ||
+    route.path === "/settings",
 );
 const isFullScreenRoute = computed(
   () => isCurrentChatRoute.value || isPluginViewRoute.value,
@@ -127,13 +129,7 @@ onMounted(() => {
       />
       <VerticalSidebarVue v-if="showSidebar" />
       <VerticalHeaderVue />
-      <v-main
-        :class="{ 'chat-main': isCurrentChatRoute }"
-        :style="{
-          height: isViewportLockedRoute ? '100vh' : undefined,
-          overflow: isViewportLockedRoute ? 'hidden' : undefined,
-        }"
-      >
+      <v-main :class="{ 'chat-main': isCurrentChatRoute }">
         <v-container
           fluid
           class="page-wrapper"
@@ -143,23 +139,14 @@ onMounted(() => {
               isProviderPageRoute || isPlatformPageRoute,
             'fullscreen-container': isFullScreenRoute,
           }"
-          :style="{
-            height:
-              isFullScreenRoute || isProviderPageRoute || isPlatformPageRoute
-                ? '100%'
-                : 'calc(100% - 8px)',
-            padding: isFullScreenRoute ? '0' : undefined,
-            minHeight:
-              isFullScreenRoute || isProviderPageRoute || isPlatformPageRoute
-                ? 'unset'
-                : undefined,
-          }"
         >
           <div
+            class="page-content"
+            :class="{
+              'page-content--locked': isViewportLockedRoute || isPluginViewRoute,
+            }"
             :style="{
-              height: '100%',
-              width: '100%',
-              overflow: isViewportLockedRoute ? 'hidden' : undefined,
+              padding: isFullScreenRoute ? '0' : undefined,
               position: isPluginViewRoute ? 'relative' : undefined,
             }"
           >
@@ -185,18 +172,6 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.chat-mode-container {
-  min-height: unset !important;
-  height: 100% !important;
-  overflow: hidden !important;
-}
-
-.viewport-locked-container {
-  min-height: unset !important;
-  height: 100% !important;
-  overflow: hidden !important;
-}
-
 .chat-main {
   padding-top: 0 !important;
 }
@@ -219,31 +194,36 @@ onMounted(() => {
 :global(.v-main) {
   height: calc(100vh - var(--astrbot-toolbar-height, 40px)) !important;
   padding-top: 0 !important;
-  overflow-x: hidden !important;
-  overflow-y: auto !important;
-  scrollbar-width: none;
+  overflow: hidden !important;
   /* The document no longer scrolls; the content area does. Sticky offsets that were
      written for the document layout must be measured from the content area's own top. */
   --v-layout-top: 0px !important;
 }
 
-:global(.v-main::-webkit-scrollbar) {
-  width: 0;
-  background: transparent;
-}
-
-/* The content area is the opaque card next to the sidebar. */
+/* Keep the card frame fixed while its content scrolls inside the rounded edges. */
 :global(.page-wrapper) {
+  --astrbot-content-gap: 6px;
+  height: calc(100vh - var(--astrbot-toolbar-height, 40px) - var(--astrbot-content-gap)) !important;
+  width: calc(100% - var(--astrbot-content-gap));
+  min-height: 0;
+  margin: 0;
+  padding: 0 !important;
+  overflow: hidden;
   border-left: 1px solid rgba(var(--v-theme-on-surface), 0.1);
-  border-top-left-radius: 12px;
+  border-right: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+  border-radius: 12px;
 }
 
 /* On small screens there is no permanent sidebar to separate from, so the
-   card's left edge treatments would only read as stray lines. */
+   card's edge treatments would only read as stray lines. */
 @media (max-width: 959.98px) {
   :global(.page-wrapper) {
+    --astrbot-content-gap: 0px;
     border-left: 0;
-    border-top-left-radius: 0;
+    border-right: 0;
+    border-bottom: 0;
+    border-radius: 0;
   }
 }
 
@@ -253,19 +233,23 @@ onMounted(() => {
   border-top: 1px solid rgba(var(--v-theme-on-surface), 0.1);
 }
 
-/* Normal pages grow with their content so the main area has something to scroll. */
-:global(.page-wrapper:not(.viewport-locked-container):not(.chat-mode-container):not(.fullscreen-container)) {
-  height: auto !important;
-  min-height: calc(100vh - var(--astrbot-toolbar-height, 40px));
+.page-content {
+  height: 100%;
+  width: 100%;
+  padding: 8px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
 }
 
-/* Viewport-locked and full-screen pages keep a fixed height and scroll internally.
-   Clipping them keeps full-bleed children from painting outside the rounded corner. */
-:global(.viewport-locked-container),
-:global(.chat-mode-container),
-:global(.fullscreen-container) {
-  height: calc(100vh - var(--astrbot-toolbar-height, 40px)) !important;
-  overflow: hidden !important;
+.page-content::-webkit-scrollbar {
+  width: 0;
+  background: transparent;
+}
+
+/* Chat, workspace and plugin pages manage their own internal scrolling. */
+.page-content--locked {
+  overflow: hidden;
 }
 
 /* macOS desktop vibrancy: the window material shows through wherever the UI stays
@@ -290,14 +274,9 @@ onMounted(() => {
   --astrbot-vibrancy-tint: rgba(26, 26, 26, 0.92);
 }
 
-/* Off macOS the sidebar column is opaque; extend its color behind the content
-   card's rounded corner so the notch does not contrast with the sidebar. */
+/* Extend the sidebar surface behind every corner and the right/bottom gaps. */
 :global(html:not([data-astrbot-desktop-platform='macos']) .v-main) {
-  background-image: linear-gradient(
-    to right,
-    rgb(var(--v-theme-surface)) 0 calc(var(--v-layout-left) + 12px),
-    transparent calc(var(--v-layout-left) + 12px) 100%
-  ) !important;
+  background: rgb(var(--v-theme-surface)) !important;
 }
 
 :global(html[data-astrbot-desktop-platform='macos']),
@@ -307,14 +286,9 @@ onMounted(() => {
   background: transparent !important;
 }
 
-/* The sidebar tint lives on the main area's own background (behind everything), covering
-   the sidebar column plus a small overhang that reaches the content corner. */
+/* Keep the macOS tint continuous behind the sidebar and the card gaps. */
 :global(html[data-astrbot-desktop-platform='macos'] .v-main) {
-  background: linear-gradient(
-    to right,
-    var(--astrbot-vibrancy-tint, transparent) 0 calc(var(--v-layout-left) + 12px),
-    transparent calc(var(--v-layout-left) + 12px) 100%
-  ) !important;
+  background: var(--astrbot-vibrancy-tint, transparent) !important;
 }
 
 /* Vuetify paints its own surface behind every list, which would sit on top of the

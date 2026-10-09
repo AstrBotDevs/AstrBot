@@ -684,6 +684,36 @@ async def test_failed_images_keep_valid_input(harness, tmp_path, text, good):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("origin", ["component", "plugin"])
+async def test_unresolved_image_ref_is_reported_not_faked(harness, origin):
+    ref = "/api/v1/files/tokens/ddbb1afd-84d9-4b1d-9b0e-5c7e6fe75684"
+    event = make_event(text="")
+    if origin == "component":
+        event.message_obj.message = [Image(file=ref)]
+    else:
+        event.set_extra("provider_request", ProviderRequest(prompt="", image_urls=[ref]))
+
+    await process_event(harness, event, preprocess_first=True)
+
+    req = harness.captured[0].req
+    payload = harness.provider.text_chat.await_args.kwargs["contexts"][-1]["content"]
+    joined = "\n".join(
+        part["text"] for part in payload if part["type"] == "text"
+    )
+
+    assert req.image_urls == []
+    assert str(Path(ref).resolve()) not in joined
+    assert "local media path" not in joined
+    if origin == "component":
+        # The component keeps its own reference instead of a fabricated path.
+        assert event.message_obj.message[0].file == ref
+        assert "[Image unavailable]" in joined
+    else:
+        assert "unresolved media ref" in joined
+        assert "skipped: image unavailable" in joined
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("origin", ["ordinary", "quote", "plugin", "hook"])
 @pytest.mark.parametrize("with_valid_image", [False, True])
 async def test_oversized_images_explain_omission_and_keep_original_path(
