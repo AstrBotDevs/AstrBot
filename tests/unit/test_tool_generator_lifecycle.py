@@ -217,7 +217,9 @@ async def test_runner_repeated_cancel_waits_for_real_cleanup():
     )
     runner = ToolLoopAgentRunner()
     runner._abort_signal = asyncio.Event()
-    results = runner._iter_tool_executor_results(FunctionToolExecutor.execute(tool, context))
+    results = runner._iter_tool_executor_results(
+        FunctionToolExecutor.execute(tool, context)
+    )
     pending = asyncio.create_task(anext(results))
     try:
         await asyncio.wait_for(started.wait(), 1)
@@ -255,7 +257,9 @@ async def test_runner_reports_real_handler_cleanup_error():
     )
     runner = ToolLoopAgentRunner()
     runner._abort_signal = asyncio.Event()
-    results = runner._iter_tool_executor_results(FunctionToolExecutor.execute(tool, context))
+    results = runner._iter_tool_executor_results(
+        FunctionToolExecutor.execute(tool, context)
+    )
     assert (await anext(results)).content[0].text == "first"
     with pytest.raises(OSError) as caught:
         await results.aclose()
@@ -280,7 +284,9 @@ async def test_background_real_generator_cancel_closes_before_return(monkeypatch
     async def wake(**kwargs):
         wakeups.append(kwargs)
 
-    monkeypatch.setattr(FunctionToolExecutor, "_wake_main_agent_for_background_result", wake)
+    monkeypatch.setattr(
+        FunctionToolExecutor, "_wake_main_agent_for_background_result", wake
+    )
     context = ContextWrapper(context=SimpleNamespace(event=SimpleNamespace()))
     tool = FunctionTool(
         name="background_cleanup_probe",
@@ -288,7 +294,9 @@ async def test_background_real_generator_cancel_closes_before_return(monkeypatch
         parameters={"type": "object", "properties": {}},
         handler=handler,
     )
-    pending = asyncio.create_task(FunctionToolExecutor._execute_background(tool, context, "task"))
+    pending = asyncio.create_task(
+        FunctionToolExecutor._execute_background(tool, context, "task")
+    )
     try:
         await asyncio.wait_for(started.wait(), 1)
         pending.cancel()
