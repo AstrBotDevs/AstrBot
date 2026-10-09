@@ -313,7 +313,9 @@ import { useProviderSources } from '@/composables/useProviderSources'
 const props = defineProps({
   defaultTab: {
     type: String,
-    default: 'chat_completion'
+    // Leave undefined when opened from the sidebar so useProviderSources
+    // falls back to the customized provider sub-route order.
+    default: undefined
   }
 })
 

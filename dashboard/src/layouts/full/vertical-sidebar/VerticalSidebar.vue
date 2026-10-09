@@ -1,10 +1,11 @@
 <script setup>
-import { ref, shallowRef, computed, watch } from 'vue';
+import { ref, shallowRef, computed, watch, onUnmounted } from 'vue';
 import { useCustomizerStore } from '../../../stores/customizer';
 import { useMobileDrawerStore } from '@/stores/mobileDrawer';
 import { useI18n } from '@/i18n/composables';
 import sidebarItems, { EXTENSION_GROUP_KEY } from './sidebarItem';
 import NavItem from './NavItem.vue';
+import { applySidebarCustomization } from '@/utils/sidebarCustomization';
 import { usePluginSidebarItems } from '@/composables/usePluginSidebarItems';
 import { useDisplay } from 'vuetify';
 import { ChevronDown, ChevronRight, PanelLeft, Settings } from '@lucide/vue';
@@ -18,13 +19,27 @@ const mobileDrawer = useMobileDrawerStore();
 const commonStore = useCommonStore();
 const { pluginItems, pluginGroups } = usePluginSidebarItems();
 
+// User-defined ordering (main/more lists) is applied on top of the default
+// items; group headers stay in place.
+const customizedSidebarItems = computed(() => applySidebarCustomization(sidebarItems));
+
 function buildSidebarMenu() {
   // Plugin pages are flattened into the extension group section.
   const tail = groupByPlugin.value
     ? pluginGroups.value
     : (pluginItems.value?.children ?? []);
-  return [...sidebarItems, ...tail];
+  return [...customizedSidebarItems.value, ...tail];
 }
+
+// Rebuild the menu when the user saves sidebar customization in Settings.
+function handleCustomizationChanged() {
+  sidebarMenu.value = buildSidebarMenu();
+  openedItems.value = sanitizeOpenedItems(openedItems.value, sidebarMenu.value);
+}
+window.addEventListener('sidebar-customization-changed', handleCustomizationChanged);
+onUnmounted(() => {
+  window.removeEventListener('sidebar-customization-changed', handleCustomizationChanged);
+});
 
 // Group plugin views by plugin under the extensions group; off by default.
 const groupByPlugin = ref(localStorage.getItem('sidebar_group_by_plugin') === '1');

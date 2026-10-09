@@ -1,43 +1,28 @@
 <script setup lang="ts">
 import { computed, watch } from "vue";
 import { RouterLink, RouterView, useRoute } from "vue-router";
-import {
-  ChartNoAxesColumnIncreasing,
-  Logs,
-  MessageSquareText,
-  Waypoints,
-} from "@lucide/vue";
 import { useI18n } from "@/i18n/composables";
+import { SIDEBAR_SUB_ITEMS } from "@/utils/sidebarSubItems";
+import {
+  getSidebarCustomization,
+  resolveSubItemOrder,
+} from "@/utils/sidebarCustomization";
 
 const { t } = useI18n();
 const route = useRoute();
 
-const tabs = computed(() => [
-  {
-    value: "statistics",
-    label: t("core.navigation.dataTabs.statistics"),
-    routeName: "Stats",
-    icon: ChartNoAxesColumnIncreasing,
-  },
-  {
-    value: "conversations",
-    label: t("core.navigation.dataTabs.conversations"),
-    routeName: "Conversation",
-    icon: MessageSquareText,
-  },
-  {
-    value: "logs",
-    label: t("core.navigation.dataTabs.logs"),
-    routeName: "Console",
-    icon: Logs,
-  },
-  {
-    value: "trace",
-    label: t("core.navigation.dataTabs.trace"),
-    routeName: "Trace",
-    icon: Waypoints,
-  },
-]);
+const tabs = computed(() =>
+  resolveSubItemOrder(
+    "core.navigation.data",
+    SIDEBAR_SUB_ITEMS["core.navigation.data"],
+    getSidebarCustomization(),
+  ).map((tab) => ({
+    value: tab.value,
+    label: t(tab.labelKey),
+    routeName: tab.routeName,
+    icon: tab.icon,
+  })),
+);
 
 const activeTab = computed(() => String(route.meta.dataTab || "statistics"));
 

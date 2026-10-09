@@ -2,8 +2,15 @@
 const STORAGE_KEY = 'astrbot_sidebar_customization';
 
 /**
+ * @typedef {Object} SidebarCustomization
+ * @property {string[]} [mainItems] - Ordered titles of the main sidebar items
+ * @property {string[]} [moreItems] - Ordered titles of the "more" group items
+ * @property {Object<string, string[]>} [subItems] - Ordered sub-route values per parent title
+ */
+
+/**
  * Get the customized sidebar configuration from localStorage
- * @returns {Object|null} The customization config or null if not set
+ * @returns {SidebarCustomization|null} The customization config or null if not set
  */
 export function getSidebarCustomization() {
   try {
@@ -43,7 +50,7 @@ export function clearSidebarCustomization() {
 /**
  * 解析侧边栏默认项与用户定制，返回主区/更多区及可选的合并结果
  * @param {Array} defaultItems - 默认侧边栏结构
- * @param {Object|null} customization - 用户定制（mainItems/moreItems）
+ * @param {Object|null} customization - 用户定制（mainItems/moreItems/subItems）
  * @param {Object} options
  * @param {boolean} [options.cloneItems=false] - 是否克隆条目以避免外部引用被修改
  * @param {boolean} [options.assembleMoreGroup=false] - 是否组装带更多分组的整体数组
@@ -74,8 +81,9 @@ export function resolveSidebarItems(defaultItems, customization, options = {}) {
   const defaultMore = [];
   const defaultMoreGroup = defaultItems.find(item => item.children && item.title === MORE_GROUP_KEY);
 
-  // 收集所有条目，按 title 建索引
+  // 收集所有条目，按 title 建索引；header 项不参与排序
   defaultItems.forEach(item => {
+    if (item.header) return;
     if (item.children && item.title === MORE_GROUP_KEY) {
       item.children.forEach(child => {
         all.set(child.title, cloneItems ? { ...child } : child);
@@ -136,19 +144,43 @@ export function resolveSidebarItems(defaultItems, customization, options = {}) {
 
   let merged;
   if (assembleMoreGroup) {
+    // Rebuild the array in default order so group headers keep their original
+    // positions, while non-header items follow the customized ordering.
+    // mainItems always covers every default non-header item (customized ones
+    // first, untouched defaults appended), so each segment stays complete.
+    const result = [];
+    let segmentTitles = [];
+    const placed = new Set();
+
+    const flushSegment = () => {
+      mainItems.forEach(item => {
+        if (!placed.has(item.title) && segmentTitles.includes(item.title)) {
+          result.push(item);
+          placed.add(item.title);
+        }
+      });
+      segmentTitles = [];
+    };
+
+    defaultItems.forEach(item => {
+      if (item.header) {
+        flushSegment();
+        result.push(cloneItems ? { ...item } : item);
+      } else {
+        segmentTitles.push(item.title);
+      }
+    });
+    flushSegment();
+
     const children = cloneItems ? moreItems.map(item => ({ ...item })) : [...moreItems];
     if (children.length > 0) {
-      merged = [
-        ...mainItems,
-        {
-          title: MORE_GROUP_KEY,
-          icon: defaultMoreGroup?.icon || 'mdi-dots-horizontal',
-          children
-        }
-      ];
-    } else {
-      merged = [...mainItems];
+      result.push({
+        title: MORE_GROUP_KEY,
+        icon: defaultMoreGroup?.icon || 'mdi-dots-horizontal',
+        children
+      });
     }
+    merged = result;
   }
 
   return {
@@ -186,10 +218,47 @@ export function applySidebarCustomization(defaultItems) {
     if (hasChanged) {
       setSidebarCustomization({
         mainItems: normalizedMainKeys,
-        moreItems: normalizedMoreKeys
+        moreItems: normalizedMoreKeys,
+        subItems: customization.subItems
       });
     }
   }
 
   return merged || defaultItems;
+}
+
+/**
+ * 解析父菜单项二级条目的顺序：用户定制的 value 顺序优先，未知/未列出项按默认顺序补尾
+ * @param {string} parentTitle - 父菜单项 title（i18n key）
+ * @param {Array} defaultSubItems - 默认子项列表（来自 SIDEBAR_SUB_ITEMS）
+ * @param {Object|null} customization - 用户定制（subItems）
+ * @returns {Array} 按定制排序的子项数组（不修改入参）
+ */
+export function resolveSubItemOrder(parentTitle, defaultSubItems, customization) {
+  const custom = customization?.subItems?.[parentTitle];
+  if (!Array.isArray(custom) || custom.length === 0) {
+    return [...defaultSubItems];
+  }
+
+  const byValue = new Map(defaultSubItems.map(item => [item.value, item]));
+  const ordered = [];
+  const seen = new Set();
+
+  custom.forEach(value => {
+    if (typeof value !== 'string' || seen.has(value)) return;
+    const item = byValue.get(value);
+    if (item) {
+      ordered.push(item);
+      seen.add(value);
+    }
+  });
+
+  defaultSubItems.forEach(item => {
+    if (!seen.has(item.value)) {
+      ordered.push(item);
+      seen.add(item.value);
+    }
+  });
+
+  return ordered;
 }

@@ -3,6 +3,11 @@ import {
   EXTENSION_ROUTE_NAME
 } from './routeConstants.mjs';
 import type { RouteLocationNormalized } from 'vue-router';
+import { SIDEBAR_SUB_ITEMS } from '@/utils/sidebarSubItems';
+import {
+  getSidebarCustomization,
+  resolveSubItemOrder
+} from '@/utils/sidebarCustomization';
 
 const redirectToDataTab = (name: string) => (to: RouteLocationNormalized) => ({
   name,
@@ -35,6 +40,20 @@ const MainRoutes = {
         {
           path: '',
           redirect: (to: RouteLocationNormalized) => {
+            // When the user customized the sub-route order, opening /extension
+            // lands on the first tab in that order.
+            const customization = getSidebarCustomization();
+            const customOrder = customization?.subItems?.['core.navigation.extension'];
+            if (Array.isArray(customOrder) && customOrder.length > 0) {
+              const first = resolveSubItemOrder(
+                'core.navigation.extension',
+                SIDEBAR_SUB_ITEMS['core.navigation.extension'],
+                customization
+              )[0];
+              if (first?.routeName) {
+                return { name: first.routeName, query: to.query };
+              }
+            }
             const legacyTab = String(to.hash || '').replace(/^#/, '');
             const routeNames: Record<string, string> = {
               market: 'ExtensionMarketplace',
@@ -175,8 +194,19 @@ const MainRoutes = {
       name: 'Data',
       path: '/data',
       component: () => import('@/views/DataPage.vue'),
-      // Reopen the last visited tab, falling back to Statistics by default.
+      // Reopen the last visited tab, or the first customized tab when the user
+      // reordered the data sub-routes in the sidebar customizer.
       redirect: (to: RouteLocationNormalized) => {
+        const customization = getSidebarCustomization();
+        const customOrder = customization?.subItems?.['core.navigation.data'];
+        if (Array.isArray(customOrder) && customOrder.length > 0) {
+          const first = resolveSubItemOrder(
+            'core.navigation.data',
+            SIDEBAR_SUB_ITEMS['core.navigation.data'],
+            customization
+          )[0];
+          if (first?.routeName) return redirectToDataTab(first.routeName)(to);
+        }
         const lastTab = localStorage.getItem('data_last_tab');
         return redirectToDataTab(
           lastTab && ['Stats', 'Conversation', 'Console', 'Trace'].includes(lastTab) ? lastTab : 'Stats'

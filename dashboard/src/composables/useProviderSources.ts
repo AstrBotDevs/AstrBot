@@ -4,6 +4,11 @@ import { getProviderIcon, isMonochromeProviderIcon } from '@/utils/providerUtils
 import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from '@/utils/confirmDialog'
 import { normalizeTextInput } from '@/utils/inputValue'
 import { sponsorCatalog, loadSponsorCatalog } from '@/utils/sponsorCatalog'
+import { SIDEBAR_SUB_ITEMS } from '@/utils/sidebarSubItems'
+import {
+  getSidebarCustomization,
+  resolveSubItemOrder,
+} from '@/utils/sidebarCustomization'
 import { useI18n } from '@/i18n/composables'
 
 export interface UseProviderSourcesOptions {
@@ -50,7 +55,7 @@ export function resolveDefaultTab(value?: string) {
 
 export function useProviderSources(options: UseProviderSourcesOptions) {
   const { tm, showMessage } = options
-  const { locale } = useI18n()
+  const { locale, t } = useI18n()
 
   const confirmDialog = useConfirmDialog()
 
@@ -63,7 +68,17 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const metadata = ref<Record<string, any>>({})
   const providerSources = ref<any[]>([])
   const providers = ref<any[]>([])
-  const selectedProviderType = ref<string>(resolveDefaultTab(options.defaultTab))
+  // Without an explicit defaultTab, open the first provider tab from the
+  // customized sub-route order (falls back to chat_completion by default).
+  const selectedProviderType = ref<string>(
+    options.defaultTab
+      ? resolveDefaultTab(options.defaultTab)
+      : (resolveSubItemOrder(
+          'core.navigation.providers',
+          SIDEBAR_SUB_ITEMS['core.navigation.providers'],
+          getSidebarCustomization(),
+        )[0]?.value ?? resolveDefaultTab(options.defaultTab)),
+  )
   const selectedProviderSource = ref<any | null>(null)
   const selectedProviderSourceOriginalId = ref<string | null>(null)
   const editableProviderSource = ref<any | null>(null)
@@ -83,13 +98,17 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   let suppressSourceWatch = false
   const unsavedProviderSourceMarker = Symbol('unsavedProviderSource')
 
-  const providerTypes = computed(() => [
-    { value: 'chat_completion', label: tm('providers.tabs.chatCompletion'), icon: 'mdi-message-text' },
-    { value: 'speech_to_text', label: tm('providers.tabs.speechToText'), icon: 'mdi-microphone-message' },
-    { value: 'text_to_speech', label: tm('providers.tabs.textToSpeech'), icon: 'mdi-volume-high' },
-    { value: 'embedding', label: tm('providers.tabs.embedding'), icon: 'mdi-code-json' },
-    { value: 'rerank', label: tm('providers.tabs.rerank'), icon: 'mdi-compare-vertical' }
-  ])
+  const providerTypes = computed(() =>
+    resolveSubItemOrder(
+      'core.navigation.providers',
+      SIDEBAR_SUB_ITEMS['core.navigation.providers'],
+      getSidebarCustomization(),
+    ).map((tab) => ({
+      value: tab.value,
+      label: t(tab.labelKey),
+      icon: tab.icon,
+    })),
+  )
 
   // ===== Computed =====
   const availableSourceTypes = computed(() => {

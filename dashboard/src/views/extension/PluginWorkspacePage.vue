@@ -2,36 +2,27 @@
 import { computed } from "vue";
 import { RouterLink, RouterView, useRoute } from "vue-router";
 import { useI18n } from "@/i18n/composables";
+import { SIDEBAR_SUB_ITEMS } from "@/utils/sidebarSubItems";
+import {
+  getSidebarCustomization,
+  resolveSubItemOrder,
+} from "@/utils/sidebarCustomization";
 
 const { t } = useI18n();
 const route = useRoute();
 
-const tabs = computed(() => [
-  {
-    value: "installed",
-    label: t("core.navigation.extensionTabs.installed"),
-    icon: "mdi-puzzle-outline",
-    routeName: "Extensions",
-  },
-  {
-    value: "skills",
-    label: t("core.navigation.extensionTabs.skills"),
-    icon: "mdi-lightning-bolt-outline",
-    routeName: "ExtensionSkills",
-  },
-  {
-    value: "mcp",
-    label: t("core.navigation.extensionTabs.mcp"),
-    icon: "mdi-server-network",
-    routeName: "ExtensionMcp",
-  },
-  {
-    value: "components",
-    label: t("core.navigation.extensionTabs.components"),
-    icon: "mdi-wrench-outline",
-    routeName: "ExtensionComponents",
-  },
-]);
+const tabs = computed(() =>
+  resolveSubItemOrder(
+    "core.navigation.extension",
+    SIDEBAR_SUB_ITEMS["core.navigation.extension"],
+    getSidebarCustomization(),
+  ).map((tab) => ({
+    value: tab.value,
+    label: t(tab.labelKey),
+    routeName: tab.routeName,
+    icon: tab.icon,
+  })),
+);
 
 const activeTab = computed(() =>
   String(route.meta.extensionTab || "installed"),

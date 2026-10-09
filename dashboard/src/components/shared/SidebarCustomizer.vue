@@ -33,29 +33,52 @@
                 @dragover.prevent
                 @drop="handleDropToList($event, 'main')"
               >
-                <v-list-item
-                  v-for="(item, index) in mainItems"
-                  :key="item.title"
-                  class="mb-1 draggable-item"
-                  draggable="true"
-                  @dragstart="handleDragStart($event, 'main', index)"
-                  @dragover.prevent
-                  @drop.stop="handleDrop($event, 'main', index)"
-                >
-                  <template v-slot:prepend>
-                    <v-icon v-if="typeof item.icon === 'string'" :icon="item.icon" size="small" class="mr-2" />
-                    <component :is="item.icon" v-else-if="item.icon" :size="18" class="mr-2" />
-                  </template>
-                  <v-list-item-title>{{ t(item.title) }}</v-list-item-title>
-                  <template v-slot:append>
-                    <v-btn
-                      icon="mdi-arrow-right"
-                      variant="text"
-                      size="x-small"
-                      @click="moveToMore(index)"
-                    ></v-btn>
-                  </template>
-                </v-list-item>
+                <template v-for="(item, index) in mainItems" :key="item.title">
+                  <v-list-item
+                    class="mb-1 draggable-item"
+                    draggable="true"
+                    @dragstart="handleDragStart($event, 'main', index)"
+                    @dragover.prevent
+                    @drop.stop="handleDrop($event, 'main', index)"
+                  >
+                    <template v-slot:prepend>
+                      <v-icon v-if="typeof item.icon === 'string'" :icon="item.icon" size="small" class="mr-2" />
+                      <component :is="item.icon" v-else-if="item.icon" :size="18" class="mr-2" />
+                    </template>
+                    <v-list-item-title>{{ t(item.title) }}</v-list-item-title>
+                    <template v-slot:append>
+                      <v-btn
+                        icon="mdi-arrow-right"
+                        variant="text"
+                        size="x-small"
+                        @click="moveToMore(index)"
+                      ></v-btn>
+                    </template>
+                  </v-list-item>
+                  <v-list
+                    v-if="getSubItems(item.title)"
+                    density="compact"
+                    class="custom-sub-list"
+                    @dragover.prevent
+                    @drop="handleSubDrop($event, getSubItems(item.title).length - 1)"
+                  >
+                    <v-list-item
+                      v-for="(sub, subIndex) in getSubItems(item.title)"
+                      :key="sub.value"
+                      class="mb-1 draggable-item sub-item"
+                      draggable="true"
+                      @dragstart="handleSubDragStart($event, item.title, subIndex)"
+                      @dragover.prevent
+                      @drop.stop="handleSubDrop($event, subIndex)"
+                    >
+                      <template v-slot:prepend>
+                        <v-icon v-if="typeof sub.icon === 'string'" :icon="sub.icon" size="small" class="mr-2" />
+                        <component :is="sub.icon" v-else-if="sub.icon" :size="16" class="mr-2" />
+                      </template>
+                      <v-list-item-title class="sub-item-title">{{ t(sub.labelKey) }}</v-list-item-title>
+                    </v-list-item>
+                  </v-list>
+                </template>
               </v-list>
             </v-col>
             
@@ -67,29 +90,52 @@
                 @dragover.prevent
                 @drop="handleDropToList($event, 'more')"
               >
-                <v-list-item
-                  v-for="(item, index) in moreItems"
-                  :key="item.title"
-                  class="mb-1 draggable-item"
-                  draggable="true"
-                  @dragstart="handleDragStart($event, 'more', index)"
-                  @dragover.prevent
-                  @drop.stop="handleDrop($event, 'more', index)"
-                >
-                  <template v-slot:prepend>
-                    <v-icon v-if="typeof item.icon === 'string'" :icon="item.icon" size="small" class="mr-2" />
-                    <component :is="item.icon" v-else-if="item.icon" :size="18" class="mr-2" />
-                  </template>
-                  <v-list-item-title>{{ t(item.title) }}</v-list-item-title>
-                  <template v-slot:append>
-                    <v-btn
-                      icon="mdi-arrow-left"
-                      variant="text"
-                      size="x-small"
-                      @click="moveToMain(index)"
-                    ></v-btn>
-                  </template>
-                </v-list-item>
+                <template v-for="(item, index) in moreItems" :key="item.title">
+                  <v-list-item
+                    class="mb-1 draggable-item"
+                    draggable="true"
+                    @dragstart="handleDragStart($event, 'more', index)"
+                    @dragover.prevent
+                    @drop.stop="handleDrop($event, 'more', index)"
+                  >
+                    <template v-slot:prepend>
+                      <v-icon v-if="typeof item.icon === 'string'" :icon="item.icon" size="small" class="mr-2" />
+                      <component :is="item.icon" v-else-if="item.icon" :size="18" class="mr-2" />
+                    </template>
+                    <v-list-item-title>{{ t(item.title) }}</v-list-item-title>
+                    <template v-slot:append>
+                      <v-btn
+                        icon="mdi-arrow-left"
+                        variant="text"
+                        size="x-small"
+                        @click="moveToMain(index)"
+                      ></v-btn>
+                    </template>
+                  </v-list-item>
+                  <v-list
+                    v-if="getSubItems(item.title)"
+                    density="compact"
+                    class="custom-sub-list"
+                    @dragover.prevent
+                    @drop="handleSubDrop($event, getSubItems(item.title).length - 1)"
+                  >
+                    <v-list-item
+                      v-for="(sub, subIndex) in getSubItems(item.title)"
+                      :key="sub.value"
+                      class="mb-1 draggable-item sub-item"
+                      draggable="true"
+                      @dragstart="handleSubDragStart($event, item.title, subIndex)"
+                      @dragover.prevent
+                      @drop.stop="handleSubDrop($event, subIndex)"
+                    >
+                      <template v-slot:prepend>
+                        <v-icon v-if="typeof sub.icon === 'string'" :icon="sub.icon" size="small" class="mr-2" />
+                        <component :is="sub.icon" v-else-if="sub.icon" :size="16" class="mr-2" />
+                      </template>
+                      <v-list-item-title class="sub-item-title">{{ t(sub.labelKey) }}</v-list-item-title>
+                    </v-list-item>
+                  </v-list>
+                </template>
               </v-list>
             </v-col>
           </v-row>
@@ -127,6 +173,7 @@ import {
   clearSidebarCustomization,
   resolveSidebarItems
 } from '@/utils/sidebarCustomization';
+import { SIDEBAR_SUB_ITEMS } from '@/utils/sidebarSubItems';
 
 const { t } = useI18n();
 
@@ -134,6 +181,17 @@ const dialog = ref(false);
 const mainItems = ref([]);
 const moreItems = ref([]);
 const draggedItem = ref(null);
+// Ordered sub-route values per parent title (only for parents in SIDEBAR_SUB_ITEMS).
+const subItemOrder = ref({});
+const draggedSubItem = ref(null);
+
+function getSubItems(parentTitle) {
+  const defaults = SIDEBAR_SUB_ITEMS[parentTitle];
+  if (!defaults) return null;
+  const order = subItemOrder.value[parentTitle] || defaults.map((item) => item.value);
+  const byValue = new Map(defaults.map((item) => [item.value, item]));
+  return order.map((value) => byValue.get(value)).filter(Boolean);
+}
 
 function initializeItems() {
   const customization = getSidebarCustomization();
@@ -143,6 +201,16 @@ function initializeItems() {
   );
   mainItems.value = resolvedMain;
   moreItems.value = resolvedMore;
+
+  const nextOrder = {};
+  Object.keys(SIDEBAR_SUB_ITEMS).forEach((parentTitle) => {
+    const custom = customization?.subItems?.[parentTitle];
+    nextOrder[parentTitle] =
+      Array.isArray(custom) && custom.length > 0
+        ? [...custom]
+        : SIDEBAR_SUB_ITEMS[parentTitle].map((item) => item.value);
+  });
+  subItemOrder.value = nextOrder;
 }
 
 function openDialog() {
@@ -211,6 +279,28 @@ function handleDropToList(event, targetListType) {
   draggedItem.value = null;
 }
 
+function handleSubDragStart(event, parentTitle, index) {
+  draggedSubItem.value = { parentTitle, index };
+  event.dataTransfer.effectAllowed = 'move';
+}
+
+function handleSubDrop(event, targetIndex) {
+  event.preventDefault();
+
+  if (!draggedSubItem.value) return;
+
+  const { parentTitle, index: fromIndex } = draggedSubItem.value;
+  const order = subItemOrder.value[parentTitle];
+  if (!order || fromIndex === targetIndex) {
+    draggedSubItem.value = null;
+    return;
+  }
+
+  const [moved] = order.splice(fromIndex, 1);
+  order.splice(targetIndex, 0, moved);
+  draggedSubItem.value = null;
+}
+
 function moveToMore(index) {
   const item = mainItems.value.splice(index, 1)[0];
   moreItems.value.push(item);
@@ -224,7 +314,8 @@ function moveToMain(index) {
 function saveCustomization() {
   const config = {
     mainItems: mainItems.value.map(item => item.title),
-    moreItems: moreItems.value.map(item => item.title)
+    moreItems: moreItems.value.map(item => item.title),
+    subItems: { ...subItemOrder.value }
   };
   
   setSidebarCustomization(config);
@@ -267,5 +358,27 @@ onMounted(() => {
   border: 1px dashed rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 4px;
   padding: 8px;
+}
+
+/* Nested sub-route lists (e.g. the four /data tabs) sit indented under their
+   parent item and stay inside the parent's column. */
+.custom-sub-list {
+  min-height: 0;
+  margin-bottom: 6px;
+  padding: 0 0 2px 22px;
+  border: 0;
+  border-left: 2px dashed rgba(var(--v-border-color), var(--v-border-opacity));
+}
+
+.sub-item {
+  background: rgba(var(--v-theme-on-surface), 0.035);
+}
+
+.sub-item:hover {
+  background: rgba(var(--v-theme-primary), 0.08);
+}
+
+.sub-item-title {
+  font-size: 0.8125rem;
 }
 </style>
