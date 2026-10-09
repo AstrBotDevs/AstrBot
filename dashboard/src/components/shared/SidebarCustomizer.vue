@@ -48,6 +48,13 @@
                     <v-list-item-title>{{ t(item.title) }}</v-list-item-title>
                     <template v-slot:append>
                       <v-btn
+                        v-if="getSubItems(item.title)"
+                        :icon="expandedParents[item.title] ? 'mdi-chevron-down' : 'mdi-chevron-right'"
+                        variant="text"
+                        size="x-small"
+                        @click="toggleParentExpanded(item.title)"
+                      ></v-btn>
+                      <v-btn
                         icon="mdi-arrow-right"
                         variant="text"
                         size="x-small"
@@ -56,7 +63,7 @@
                     </template>
                   </v-list-item>
                   <v-list
-                    v-if="getSubItems(item.title)"
+                    v-if="expandedParents[item.title] && getSubItems(item.title)"
                     density="compact"
                     class="custom-sub-list"
                     @dragover.prevent
@@ -105,6 +112,13 @@
                     <v-list-item-title>{{ t(item.title) }}</v-list-item-title>
                     <template v-slot:append>
                       <v-btn
+                        v-if="getSubItems(item.title)"
+                        :icon="expandedParents[item.title] ? 'mdi-chevron-down' : 'mdi-chevron-right'"
+                        variant="text"
+                        size="x-small"
+                        @click="toggleParentExpanded(item.title)"
+                      ></v-btn>
+                      <v-btn
                         icon="mdi-arrow-left"
                         variant="text"
                         size="x-small"
@@ -113,7 +127,7 @@
                     </template>
                   </v-list-item>
                   <v-list
-                    v-if="getSubItems(item.title)"
+                    v-if="expandedParents[item.title] && getSubItems(item.title)"
                     density="compact"
                     class="custom-sub-list"
                     @dragover.prevent
@@ -183,7 +197,13 @@ const moreItems = ref([]);
 const draggedItem = ref(null);
 // Ordered sub-route values per parent title (only for parents in SIDEBAR_SUB_ITEMS).
 const subItemOrder = ref({});
+// Expanded/collapsed state per parent title; sub-route lists are collapsed by default.
+const expandedParents = ref({});
 const draggedSubItem = ref(null);
+
+function toggleParentExpanded(parentTitle) {
+  expandedParents.value[parentTitle] = !expandedParents.value[parentTitle];
+}
 
 function getSubItems(parentTitle) {
   const defaults = SIDEBAR_SUB_ITEMS[parentTitle];
@@ -211,6 +231,8 @@ function initializeItems() {
         : SIDEBAR_SUB_ITEMS[parentTitle].map((item) => item.value);
   });
   subItemOrder.value = nextOrder;
+  // Start collapsed whenever the dialog opens.
+  expandedParents.value = {};
 }
 
 function openDialog() {
