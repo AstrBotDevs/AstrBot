@@ -43,6 +43,9 @@ class SupervisorTiming:
     ping_interval: float = 15.0
     ping_timeout: float = 5.0
     ping_max_misses: int = 3
+    # Heavy plugins (large static datasets, dataset downloads at import) can
+    # exceed a minute before answering the initialize handshake.
+    start_timeout: float = 180.0
 
 
 class RunnerSupervisor:
@@ -112,7 +115,7 @@ class RunnerSupervisor:
             logger=self.logger,
             legacy=self.legacy,
             env=self.env,
-            start_timeout=60.0,
+            start_timeout=self.timing.start_timeout,
         )
 
     async def start(self) -> Any:
@@ -312,5 +315,5 @@ class ExternalRunnerSupervisor(RunnerSupervisor):
             capability_handler=self.capability_handler,
             logger=self.logger,
             legacy=self.legacy,
-            start_timeout=60.0,
+            start_timeout=self.timing.start_timeout,
         )

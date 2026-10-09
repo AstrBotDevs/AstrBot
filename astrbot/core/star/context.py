@@ -719,6 +719,13 @@ class Context:
         tool_name = {tool.name for tool in self.provider_manager.llm_tools.func_list}
         module_path = ""
         for tool in tools:
+            if not isinstance(tool, FunctionTool):
+                # A non-FunctionTool object (e.g. the plugin instance itself)
+                # would corrupt the shared registry and crash later plugin loads.
+                logger.error(
+                    f"add_llm_tools received a non-FunctionTool object: {type(tool)!r}; skipped"
+                )
+                continue
             if not module_path:
                 tool.handler_module_path = _resolve_tool_handler_module_path(tool)
                 module_path = tool.handler_module_path

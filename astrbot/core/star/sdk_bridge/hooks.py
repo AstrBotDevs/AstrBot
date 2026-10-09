@@ -54,8 +54,21 @@ def is_metadata_stage(stage: str) -> bool:
     return stage in _METADATA_STAGES
 
 
-def snapshot_stage(stage: str, event: Any, args: tuple) -> dict[str, Any]:
-    """Build the stage DTO snapshot from the core hook arguments."""
+def snapshot_stage(
+    stage: str,
+    event: Any,
+    args: tuple,
+    *,
+    store: AssetStore | None = None,
+) -> dict[str, Any]:
+    """Build the stage DTO snapshot from the core hook arguments.
+
+    Args:
+        stage: Hook stage name.
+        event: Core event (None for metadata stages).
+        args: Stage-specific core hook arguments.
+        store: Optional AssetStore for local media registration.
+    """
     if stage == "llm_request":
         (req,) = args
         return {
@@ -89,7 +102,9 @@ def snapshot_stage(stage: str, event: Any, args: tuple) -> dict[str, Any]:
         }
     if stage == "message_result":
         result = event.get_result()
-        return {"chain": to_sdk_chain(result.chain if result else [])}
+        return {
+            "chain": to_sdk_chain(result.chain if result else [], asset_store=store)
+        }
     if stage == "plugin_error":
         plugin_name, handler_name, error, tb = args
         return {

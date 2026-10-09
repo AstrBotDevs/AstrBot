@@ -20,7 +20,9 @@ def is_sdk_plugin_dir(dir_path: str | Path) -> bool:
     if not metadata_path.is_file():
         return False
     try:
-        data = yaml.safe_load(metadata_path.read_text(encoding="utf-8"))
+        # Pass raw bytes so PyYAML detects BOM-marked encodings (e.g. UTF-16)
+        # instead of crashing on non-UTF-8 metadata files.
+        data = yaml.safe_load(metadata_path.read_bytes())
     except yaml.YAMLError:
         return False
     if not isinstance(data, dict):
@@ -54,7 +56,9 @@ def is_isolated_legacy_dir(
     if not metadata_path.is_file():
         return False
     try:
-        data = yaml.safe_load(metadata_path.read_text(encoding="utf-8"))
+        # Pass raw bytes so PyYAML detects BOM-marked encodings (e.g. UTF-16)
+        # instead of crashing on non-UTF-8 metadata files.
+        data = yaml.safe_load(metadata_path.read_bytes())
     except yaml.YAMLError:
         return False
     if not isinstance(data, dict) or "schema_version" in data:

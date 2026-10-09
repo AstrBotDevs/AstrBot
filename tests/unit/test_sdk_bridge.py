@@ -7,7 +7,15 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import yaml
-from astrbot_sdk.message_components import At, AtAll, Plain, Reply
+from astrbot_sdk.assets import AssetRef
+from astrbot_sdk.message_components import (
+    At,
+    AtAll,
+    Image,
+    Plain,
+    Reply,
+    UnknownSegment,
+)
 from astrbot_sdk.messages import MessageChain
 from astrbot_sdk.results import Propagation, message_result
 
@@ -23,8 +31,10 @@ from astrbot.core.star.sdk_bridge import SDKPluginBridge, is_sdk_plugin_dir
 from astrbot.core.star.sdk_bridge.convert import (
     apply_sdk_result,
     to_core_chain,
+    to_sdk_chain,
     to_sdk_event,
 )
+from astrbot.core.star.sdk_bridge.services.assets import AssetStore
 from astrbot.core.star.star import star_map, star_registry
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
 
@@ -155,6 +165,38 @@ def test_to_sdk_event_converts_core_event() -> None:
     assert isinstance(chain[0], Plain) and chain[0].text == "hello "
     assert isinstance(chain[1], At) and chain[1].user_id == "123"
     assert isinstance(chain[2], AtAll)
+
+
+def test_to_sdk_chain_registers_local_media(tmp_path: Path) -> None:
+    store = AssetStore(tmp_path / "assets", "plugin.test")
+    image_file = tmp_path / "pic.png"
+    image_file.write_bytes(b"\x89png")
+
+    chain = to_sdk_chain(
+        [core_comp.Image.fromFileSystem(str(image_file))],
+        asset_store=store,
+    )
+    segment = chain[0]
+    assert isinstance(segment, Image)
+    assert isinstance(segment.source, AssetRef)
+
+    # The plugin can echo the AssetRef back; the bridge resolves it through
+    # the same store into a local-file core component.
+    components = to_core_chain(chain, resolve_asset=store.resolve)
+    assert isinstance(components[0], core_comp.Image)
+    # core's fromFileSystem wraps the resolved path in a file:// URL.
+    assert components[0].file == f"file://{store.resolve(segment.source)}"
+
+    # Without a store, local media still degrades to an inert segment.
+    degraded = to_sdk_chain([core_comp.Image.fromFileSystem(str(image_file))])
+    assert isinstance(degraded[0], UnknownSegment)
+
+    # Unreadable paths degrade even with a store present.
+    missing = to_sdk_chain(
+        [core_comp.Image.fromFileSystem(str(tmp_path / "missing.png"))],
+        asset_store=store,
+    )
+    assert isinstance(missing[0], UnknownSegment)
 
 
 def test_to_core_chain_converts_outbound() -> None:

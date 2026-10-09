@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import base64
+import mimetypes
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -68,6 +71,22 @@ def _json_safe(value: Any) -> Any:
     return str(value)
 
 
+def _raw_message_safe(raw: Any) -> Any:
+    """Serialize message_obj.raw_message for the wire.
+
+    Legacy plugins introspect the platform-native payload (e.g. a telegram
+    Update or an aiocqhttp event dict). Prefer the object's own to_dict()
+    when present, then strip non-JSON values.
+    """
+    to_dict = getattr(raw, "to_dict", None)
+    if callable(to_dict):
+        try:
+            raw = to_dict()
+        except Exception:
+            pass
+    return _json_safe(raw)
+
+
 def _http_source(*candidates: Any) -> str | None:
     """Return the first public URL among candidate media references."""
     for candidate in candidates:
@@ -76,8 +95,45 @@ def _http_source(*candidates: Any) -> str | None:
     return None
 
 
-def to_sdk_chain(components: list) -> MessageChain:
-    """Convert core inbound components into an SDK message chain."""
+def _local_media_payload(component: Any) -> tuple[bytes, str | None] | None:
+    """Read a local media component's bytes for asset registration.
+
+    Args:
+        component: Core media component (Image/Record/Video/File).
+
+    Returns:
+        ``(data, filename)`` when the component points at a readable local
+        file or carries ``base64://`` content, else None.
+    """
+    candidates = (
+        getattr(component, "file", None),
+        getattr(component, "url", None),
+        getattr(component, "path", None),
+    )
+    for candidate in candidates:
+        if isinstance(candidate, str) and candidate.startswith("base64://"):
+            try:
+                return base64.b64decode(candidate[len("base64://") :]), None
+            except Exception:
+                continue
+        if isinstance(candidate, str | Path) and candidate:
+            path = Path(candidate)
+            if path.is_file():
+                try:
+                    return path.read_bytes(), path.name
+                except OSError:
+                    continue
+    return None
+
+
+def to_sdk_chain(components: list, *, asset_store: Any = None) -> MessageChain:
+    """Convert core inbound components into an SDK message chain.
+
+    Args:
+        components: Core message components.
+        asset_store: Optional AssetStore; local media is registered into it
+            and surfaces as an AssetRef the plugin can echo back or download.
+    """
     segments = []
     for component in components:
         if isinstance(component, core_comp.AtAll):
@@ -106,7 +162,10 @@ def to_sdk_chain(components: list) -> MessageChain:
                 Node(
                     sender_id=str(getattr(node, "uin", "") or ""),
                     sender_name=getattr(node, "name", "") or None,
-                    content=to_sdk_chain(getattr(node, "content", []) or []),
+                    content=to_sdk_chain(
+                        getattr(node, "content", []) or [],
+                        asset_store=asset_store,
+                    ),
                 )
                 for node in component.nodes
             ]
@@ -116,20 +175,37 @@ def to_sdk_chain(components: list) -> MessageChain:
                 Node(
                     sender_id=str(component.uin or ""),
                     sender_name=component.name or None,
-                    content=to_sdk_chain(component.content or []),
+                    content=to_sdk_chain(
+                        component.content or [],
+                        asset_store=asset_store,
+                    ),
                 ),
             )
         elif isinstance(
             component,
             core_comp.Image | core_comp.Record | core_comp.Video | core_comp.File,
         ):
-            url = _http_source(
+            source: Any = _http_source(
                 getattr(component, "url", None),
                 getattr(component, "file", None),
             )
-            if url is None:
-                # Local media requires the asset service, which is not part of
-                # this slice; keep the segment visible but inert.
+            if source is None and asset_store is not None:
+                payload = _local_media_payload(component)
+                if payload is not None:
+                    data, filename = payload
+                    if isinstance(component, core_comp.File) and component.name:
+                        filename = component.name
+                    media_type = mimetypes.guess_type(filename)[0] if filename else None
+                    try:
+                        source = asset_store.put(
+                            data,
+                            filename=filename,
+                            media_type=media_type,
+                        )
+                    except Exception:
+                        source = None
+            if source is None:
+                # Unreadable local media: keep the segment visible but inert.
                 segments.append(
                     UnknownSegment(
                         segment_type=component.type.name,
@@ -138,15 +214,15 @@ def to_sdk_chain(components: list) -> MessageChain:
                 )
                 continue
             if isinstance(component, core_comp.Image):
-                segments.append(Image(source=url))
+                segments.append(Image(source=source))
             elif isinstance(component, core_comp.Record):
-                segments.append(Record(source=url))
+                segments.append(Record(source=source))
             elif isinstance(component, core_comp.Video):
-                segments.append(Video(source=url))
+                segments.append(Video(source=source))
             else:
                 segments.append(
                     File(
-                        source=url,
+                        source=source,
                         filename=component.name or None,
                     ),
                 )
@@ -174,6 +250,7 @@ def to_sdk_event(
     *,
     command_path: str | None = None,
     arguments: dict[str, Any] | None = None,
+    asset_store: Any = None,
 ) -> MessageEvent:
     """Convert a core message event into the immutable SDK event DTO."""
     platform_id, message_type_value, session_id = event.unified_msg_origin.split(
@@ -209,7 +286,7 @@ def to_sdk_event(
         umo=UMO(platform_id, sdk_message_type, session_id),
         platform_type=event.get_platform_name(),
         message_ref=MessageRef(message_id),
-        message=to_sdk_chain(event.get_messages()),
+        message=to_sdk_chain(event.get_messages(), asset_store=asset_store),
         sender=Sender(
             id=event.get_sender_id(),
             name=event.get_sender_name(),
@@ -219,8 +296,19 @@ def to_sdk_event(
         command=command,
         is_wake=event.is_wake,
         # waking_check fills plugins_name before handlers run; legacy plugins
-        # read it off the event, so carry it through the wire extras.
-        extras={"plugins_name": getattr(event, "plugins_name", None)},
+        # read it off the event, so carry it through the wire extras. Same
+        # for message_obj.self_id (bot account id on the platform).
+        extras={
+            "plugins_name": getattr(event, "plugins_name", None),
+            "self_id": getattr(event.message_obj, "self_id", "") or "",
+            # waking_check strips the wake prefix from event.message_str
+            # before handlers run; legacy plugins read the stripped text
+            # (e.g. for slicing off the command name), so carry it through.
+            "message_str": event.message_str,
+            "raw_message": _raw_message_safe(
+                getattr(event.message_obj, "raw_message", None)
+            ),
+        },
     )
 
 

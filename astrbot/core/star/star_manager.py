@@ -1589,9 +1589,12 @@ class PluginManager:
         if not specified_module_path:
             sdk_dirs = []
             if os.path.isdir(self.plugin_store_path):
+                # Iterate in raw os.listdir order to match the in-process
+                # loader (_get_modules): handler registration order follows
+                # plugin load order, so both runtimes must agree.
                 sdk_dirs = [
                     d
-                    for d in sorted(os.listdir(self.plugin_store_path))
+                    for d in os.listdir(self.plugin_store_path)
                     if is_sdk_plugin_dir(
                         os.path.join(self.plugin_store_path, d),
                     )

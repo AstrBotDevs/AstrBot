@@ -28,17 +28,35 @@ class FakeConversationManager:
         self._store: dict[str, Any] = {}
         self._current: dict[str, str] = {}
         self._seq = 0
+        self.session_conversations: dict[str, str] = {}
+        self.db = self._Db(self)
+
+    class _Db:
+        """Raw db helper stand-in used by the legacy db facade ops."""
+
+        def __init__(self, manager: FakeConversationManager) -> None:
+            self._manager = manager
+
+        async def get_conversation_by_id(self, cid):
+            return self._manager._store.get(cid)
+
+        async def get_all_conversations(self, page=1, page_size=20):
+            items = list(self._manager._store.values())
+            return items[(page - 1) * page_size : page * page_size]
 
     class _PO:
         def __init__(self, cid, user_id, title, persona_id, content):
             self.cid = cid
+            self.conversation_id = cid
             self.platform_id = user_id.split(":")[0]
             self.user_id = user_id
             self.title = title
             self.persona_id = persona_id
             self.history = json.dumps(content)
-            self.created_at = 1
-            self.updated_at = 2
+            self.content = content
+            self.token_usage = 0
+            self.created_at = None
+            self.updated_at = None
 
     async def get_curr_conversation_id(self, umo):
         return self._current.get(umo)
@@ -143,6 +161,21 @@ async def test_read_service_operations() -> None:
     )
     assert result["conversation"] is None
 
+    # Legacy conversation_manager.db reads (cross-session, no umo).
+    result = await service.handle("get_by_id_global", {"conversation_id": cid})
+    assert result["record"]["conversation_id"] == cid
+    assert result["record"]["user_id"] == UMO_STR
+    assert result["record"]["title"] == "t"
+
+    result = await service.handle("list_all", {"page": 1, "page_size": 10})
+    assert [r["conversation_id"] for r in result["records"]] == [cid]
+
+    result = await service.handle(
+        "get_by_id_global",
+        {"conversation_id": "missing"},
+    )
+    assert result["record"] is None
+
 
 @pytest.mark.asyncio
 async def test_write_service_operations() -> None:
@@ -197,6 +230,20 @@ async def test_write_service_operations() -> None:
         {"umo": SDK_UMO, "conversation_id": conversation.id},
     )
     assert await manager.get_conversation(UMO_STR, conversation.id) is None
+
+
+@pytest.mark.asyncio
+async def test_write_service_evict_session() -> None:
+    context = make_context()
+    manager = context.conversation_manager
+    manager.session_conversations[UMO_STR] = "conv-1"
+    service = ConversationWriteService(context)
+
+    result = await service.handle("evict_session", {"umo": SDK_UMO})
+    assert result == {}
+    assert UMO_STR not in manager.session_conversations
+    # Evicting an unknown session is a no-op, mirroring dict.pop default.
+    assert await service.handle("evict_session", {"umo": SDK_UMO}) == {}
 
 
 def write_conv_plugin(plugin_root: Path) -> None:

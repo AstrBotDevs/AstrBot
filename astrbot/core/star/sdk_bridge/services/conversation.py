@@ -174,6 +174,49 @@ class ConversationReadService(ConversationServiceBase):
                     ),
                 ),
             }
+        if operation == "list_filtered":
+            convs, total = await self._manager.get_filtered_conversations(
+                page=int(payload.get("page") or 1),
+                page_size=int(payload.get("page_size") or 20),
+                platform_ids=payload.get("platform_ids"),
+                search_query=str(payload.get("search_query") or ""),
+                include_history=bool(payload.get("include_history", True)),
+            )
+            return {
+                "page": ConversationPage(
+                    items=tuple(to_sdk_conversation(conv) for conv in convs),
+                    next_cursor=None,
+                ),
+                "total": total,
+            }
+        if operation == "get_by_id_global":
+            # Legacy conversation_manager.db read: cross-session lookup by
+            # conversation id, granted under conversation.read like the
+            # in-process db handle plugins already reach.
+            record = await self._manager.db.get_conversation_by_id(
+                self._cid(payload),
+            )
+            return {
+                "record": (
+                    _serialize_conversation_v2(record) if record is not None else None
+                ),
+            }
+        if operation == "list_all":
+            records = await self._manager.db.get_all_conversations(
+                page=int(payload.get("page") or 1),
+                page_size=int(payload.get("page_size") or 20),
+            )
+            return {
+                "records": [_serialize_conversation_v2(record) for record in records],
+            }
+        if operation == "human_readable_context":
+            contexts, total_pages = await self._manager.get_human_readable_context(
+                self._umo(payload),
+                self._cid(payload),
+                page=int(payload.get("page") or 1),
+                page_size=int(payload.get("page_size") or 10),
+            )
+            return {"contexts": contexts, "total_pages": total_pages}
         raise NotFound(f"unknown conversation operation: {operation}")
 
 
@@ -240,7 +283,31 @@ class ConversationWriteService(ConversationServiceBase):
                 self._cid(payload),
             )
             return {}
+        if operation == "evict_session":
+            # Mirror the in-process dict pop: drop the cached session ->
+            # conversation binding so the next message re-resolves it.
+            self._manager.session_conversations.pop(self._umo(payload), None)
+            return {}
         raise NotFound(f"unknown conversation operation: {operation}")
+
+
+def _serialize_conversation_v2(record: Any) -> dict[str, Any]:
+    """Serialize one ConversationV2 row to a JSON-safe dict."""
+    return {
+        "conversation_id": record.conversation_id,
+        "platform_id": record.platform_id,
+        "user_id": record.user_id,
+        "content": record.content,
+        "title": record.title,
+        "persona_id": record.persona_id,
+        "token_usage": record.token_usage,
+        "created_at": (
+            record.created_at.isoformat() if record.created_at is not None else None
+        ),
+        "updated_at": (
+            record.updated_at.isoformat() if record.updated_at is not None else None
+        ),
+    }
 
 
 def _serialize_history(record: Any) -> dict[str, Any]:

@@ -11,13 +11,16 @@ from uuid import uuid4
 
 from astrbot_sdk.capabilities import CapabilityGrant, CapabilitySet
 from astrbot_sdk.errors import InvalidRequest
+from astrbot_sdk.results import GroupUsage
 from astrbot_sdk.runtime.metadata import load_metadata
 from astrbot_sdk.runtime.stdio_client import StdioPluginClient
 from astrbot_sdk.tools import ToolCallContext
 
 from astrbot.core import logger, sp
 from astrbot.core.config.astrbot_config import AstrBotConfig
+from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.provider.register import llm_tools
+from astrbot.core.star.filter import HandlerFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.star import StarMetadata, star_map, star_registry
 from astrbot.core.star.star_handler import (
@@ -44,7 +47,11 @@ from .services import (
     ConversationReadService,
     ConversationWriteService,
     CronScheduleService,
+    DbService,
+    EventInjectService,
     EventStateService,
+    FileTokenService,
+    HandlerRegisterService,
     HostService,
     KnowledgeBaseService,
     LLMEmbedService,
@@ -54,11 +61,15 @@ from .services import (
     PersonaWriteService,
     PlatformRawService,
     PluginInspectService,
+    PluginLifecycleService,
+    ProviderWriteService,
     RenderImageService,
     SessionWaitService,
     SpeechSynthesizeService,
     SpeechTranscribeService,
+    SpStoreService,
     StorageService,
+    SubagentReloadService,
     ToolRegisterService,
     WebRouteService,
     dispatch_capability,
@@ -88,7 +99,17 @@ def _metadata_views(metadata: Any) -> list[dict]:
     return [dict(item) for item in views if isinstance(item, dict | Mapping)]
 
 
-_PARAM_TYPES = {"str": str, "int": int, "float": float, "bool": bool}
+def _param_types() -> dict[str, type]:
+    from astrbot.core.star.filter.command import GreedyStr
+
+    return {
+        "str": str,
+        "int": int,
+        "float": float,
+        "bool": bool,
+        "GreedyStr": GreedyStr,
+    }
+
 
 # Capabilities granted to isolated legacy plugins. Legacy plugins declare no
 # capability set; the compat facade is constrained by this fixed set so the
@@ -117,9 +138,17 @@ _LEGACY_GRANT_IDS = (
     "event.state",
     "config.write",
     "persona.write",
+    "provider.write",
+    "plugin.lifecycle",
+    "subagents.reload",
     "cron.schedule",
     "kb.manage",
     "message.history",
+    "file.token",
+    "handler.register",
+    "event.inject",
+    "db.read",
+    "sp.store",
 )
 
 
@@ -141,6 +170,45 @@ def _load_legacy_plugin_config(plugin_root: Path, root_dir_name: str) -> Any:
         ),
         schema=PluginManager._load_plugin_config_schema(str(schema_path)),
     )
+
+
+class _DeferringCommandGroupFilter(CommandGroupFilter):
+    """Command group filter that defers the bare-message reply to the Runner.
+
+    In-process, a bare group-name message raises the usage-tree reply after
+    the group's custom filters pass. Those custom filters live in the plugin
+    Runner and cannot be evaluated synchronously by waking_check, so a bare
+    message falls through to the synthetic bare-group handler instead of
+    raising here. Sub-command matching is unchanged.
+    """
+
+    def filter(self, event, cfg) -> bool:
+        if not event.is_at_or_wake_command:
+            return False
+        if not self.custom_filter_ok(event, cfg):
+            return False
+        if self.equals(event.message_str.strip()):
+            return False
+        return self.startswith(event.message_str)
+
+
+class _BareGroupHandlerFilter(HandlerFilter):
+    """Matches exactly the bare group-name message of one command group.
+
+    Registered on the synthetic handler that asks the plugin Runner to
+    evaluate group-level custom filters and answer with a usage-tree
+    request. Must not be a CommandGroupFilter, or waking_check would exclude
+    the handler from activation like any group anchor.
+    """
+
+    def __init__(self, group_filter: CommandGroupFilter) -> None:
+        self._group_filter = group_filter
+
+    def filter(self, event, cfg) -> bool:
+        return bool(
+            event.is_at_or_wake_command
+            and self._group_filter.equals(event.message_str.strip())
+        )
 
 
 class SDKPluginBridge:
@@ -270,6 +338,21 @@ class SDKPluginBridge:
                     f"runtime.language={language}; only Python runners are "
                     "supported yet",
                 )
+        # Mirror the in-process loader: reject plugins whose declared
+        # astrbot_version range excludes the running core version.
+        from astrbot.core.star.star_manager import (
+            PluginManager,
+            PluginVersionUnsupportedError,
+        )
+
+        is_valid, error_message = PluginManager._validate_astrbot_version_specifier(
+            getattr(metadata, "astrbot_version", None),
+        )
+        if not is_valid:
+            raise PluginVersionUnsupportedError(
+                error_message
+                or "The plugin does not support the current AstrBot version."
+            )
         self._grants = grants
         python_executable = None
         if self._external is None:
@@ -418,8 +501,8 @@ class SDKPluginBridge:
             full_name = registrar(descriptor)
             self._handler_full_names.append(full_name)
         # Command-group filters are referenced by their sub-commands for the
-        # usage tree; descriptor order is alphabetical, so link them only
-        # after every handler has been registered.
+        # usage tree; link them only after every handler has been registered
+        # so a sub-command declared before its group still resolves.
         for parent_path, sub_filter in self._pending_command_links:
             parent = self._command_group_filters.get(parent_path)
             if parent is None:
@@ -494,6 +577,7 @@ class SDKPluginBridge:
             aliases.add(alias_parts[-1])
 
         is_group = bool(descriptor.details.get("group"))
+        group_custom_filters = bool(descriptor.details.get("group_custom_filters"))
         stub = self._make_command_stub(descriptor.id, command_path)
         stub.__signature__ = self._build_stub_signature(descriptor)
 
@@ -506,18 +590,73 @@ class SDKPluginBridge:
             handler=stub,
             event_filters=[],
             desc=descriptor.description or "",
-            extras_configs={"priority": descriptor.priority},
+            extras_configs={
+                "priority": descriptor.priority,
+                # Mirror the in-process quirk: a sub-command handler nests
+                # under its group in list_commands() only when the command
+                # decorator created the handler metadata (bottom-most
+                # decorator); otherwise it lists flat at root level.
+                **(
+                    {"sub_command": True}
+                    if descriptor.details.get("sub_command")
+                    else {}
+                ),
+            },
         )
         command_filter = self._build_command_filter(
             parts,
             aliases,
             handler_md,
             group=is_group,
+            defer_bare=group_custom_filters,
         )
         handler_md.event_filters.append(command_filter)
+        roles = set(descriptor.details.get("roles", []))
+        if roles == {"admin"}:
+            from astrbot.core.star.filter.permission import (
+                PermissionType,
+                PermissionTypeFilter,
+            )
+
+            # Runs after the command filter, mirroring in-process decorator
+            # order: the usage reply wins over a silent permission skip.
+            handler_md.event_filters.append(
+                PermissionTypeFilter(PermissionType.ADMIN),
+            )
+        elif roles:
+            logger.warning(
+                "member-only role filtering is not supported yet; "
+                f"handler {descriptor.id} ignores roles {sorted(roles)}",
+            )
         star_handlers_registry.append(handler_md)
         if is_group:
             self._command_group_filters[command_path] = command_filter
+            if group_custom_filters:
+                # Group-level custom filters live in the Runner and cannot be
+                # evaluated synchronously by waking_check. A synthetic handler
+                # matching exactly the bare group-name message activates
+                # instead, letting the plugin decide between the usage tree
+                # and a silent fall-through to the LLM stage.
+                bare_filters: list = [_BareGroupHandlerFilter(command_filter)]
+                if roles == {"admin"}:
+                    bare_filters.append(PermissionTypeFilter(PermissionType.ADMIN))
+                star_handlers_registry.append(
+                    StarHandlerMetadata(
+                        event_type=EventType.AdapterMessageEvent,
+                        handler_full_name=f"{full_name}__bare",
+                        handler_name=f"{descriptor.id}__bare",
+                        handler_module_path=self.module_path,
+                        handler=self._make_command_stub(
+                            descriptor.id,
+                            command_path,
+                            group_filter=command_filter,
+                        ),
+                        event_filters=bare_filters,
+                        desc=descriptor.description or "",
+                        extras_configs={"priority": descriptor.priority},
+                    ),
+                )
+                self._handler_full_names.append(f"{full_name}__bare")
         if parts[:-1]:
             self._pending_command_links.append(
                 (" ".join(parts[:-1]), command_filter),
@@ -532,7 +671,7 @@ class SDKPluginBridge:
         ]
         for entry in descriptor.details.get("params", []):
             name = str(entry["name"])
-            param_type = _PARAM_TYPES[str(entry["type"])]
+            param_type = _param_types()[str(entry["type"])]
             if entry.get("required", True):
                 parameters.append(
                     inspect.Parameter(
@@ -558,13 +697,16 @@ class SDKPluginBridge:
         handler_md: StarHandlerMetadata,
         *,
         group: bool = False,
+        defer_bare: bool = False,
     ) -> Any:
         """Build the core command filter matching the SDK command path."""
         if group:
             # Group anchors replicate the in-process CommandGroupFilter: a
             # bare group-name message raises the usage-tree reply instead of
-            # running the (usually empty) fallback handler.
-            return CommandGroupFilter(
+            # running the (usually empty) fallback handler. With Runner-side
+            # custom filters, the bare reply is deferred to the plugin.
+            cls = _DeferringCommandGroupFilter if defer_bare else CommandGroupFilter
+            return cls(
                 group_name=parts[-1],
                 alias=aliases,
             )
@@ -676,7 +818,7 @@ class SDKPluginBridge:
 
         async def stub(event, **_kwargs):
             client = bridge._require_client()
-            sdk_event = to_sdk_event(event)
+            sdk_event = to_sdk_event(event, asset_store=bridge._asset_store)
             key = to_umo_string(sdk_event.umo)
             bridge._inflight_events.setdefault(key, []).append(event)
             try:
@@ -798,8 +940,8 @@ class SDKPluginBridge:
                 payload = snapshot_stage(stage, None, (event,))
                 sdk_event = None
             else:
-                payload = snapshot_stage(stage, event, args)
-                sdk_event = to_sdk_event(event)
+                payload = snapshot_stage(stage, event, args, store=bridge._asset_store)
+                sdk_event = to_sdk_event(event, asset_store=bridge._asset_store)
             result = await client.invoke_hook(
                 handler_id,
                 sdk_event,
@@ -837,7 +979,7 @@ class SDKPluginBridge:
             sdk_event = None
             unified = getattr(event, "unified_msg_origin", None)
             if isinstance(unified, str):
-                sdk_event = to_sdk_event(event)
+                sdk_event = to_sdk_event(event, asset_store=bridge._asset_store)
             call = ToolCallContext(
                 id=f"call_{uuid4().hex[:12]}",
                 umo=sdk_event.umo if sdk_event is not None else None,
@@ -858,12 +1000,21 @@ class SDKPluginBridge:
 
         return stub
 
-    def _make_command_stub(self, handler_id: str, command_path: str) -> Any:
+    def _make_command_stub(
+        self,
+        handler_id: str,
+        command_path: str,
+        *,
+        group_filter: CommandGroupFilter | None = None,
+    ) -> Any:
         """Create the async generator bridging pipeline and Runner invocation.
 
         Args:
             handler_id: Remote handler ID.
             command_path: Full command path used for the invocation DTO.
+            group_filter: Set for the synthetic bare-group handler: the Runner
+                is told the message is the bare group name and its GroupUsage
+                marker is rendered into the in-process usage-tree reply.
 
         Returns:
             Async generator function compatible with call_handler.
@@ -872,21 +1023,48 @@ class SDKPluginBridge:
 
         async def stub(event, **kwargs):
             client = bridge._require_client()
+            if group_filter is not None:
+                kwargs = {**kwargs, "bare_group": True}
             sdk_event = to_sdk_event(
                 event,
                 command_path=command_path,
                 arguments=kwargs,
+                asset_store=bridge._asset_store,
             )
             key = to_umo_string(sdk_event.umo)
             bridge._inflight_events.setdefault(key, []).append(event)
             try:
                 async for result in client.invoke(handler_id, sdk_event, **kwargs):
                     if result is not None:
-                        apply_sdk_result(
-                            event,
-                            result,
-                            resolve_asset=bridge._require_asset_store().resolve,
-                        )
+                        if group_filter is not None and isinstance(result, GroupUsage):
+                            # Mirror the waking_check ValueError reply
+                            # byte-for-byte: the group's custom filters
+                            # accepted the bare group-name message.
+                            tree = (
+                                group_filter.group_name
+                                + "\n"
+                                + (
+                                    group_filter.print_cmd_tree(
+                                        group_filter.sub_command_filters,
+                                    )
+                                )
+                            )
+                            await event.send(
+                                MessageEventResult()
+                                .message(
+                                    f"插件 {bridge.plugin_name}: 参数不足。"
+                                    f"{group_filter.group_name} 指令组下有如下指令，"
+                                    f"请参考：\n{tree}",
+                                )
+                                .use_markdown(False),
+                            )
+                            event.stop_event()
+                        else:
+                            apply_sdk_result(
+                                event,
+                                result,
+                                resolve_asset=bridge._require_asset_store().resolve,
+                            )
                     # Each resume of this generator advances the client stream,
                     # which acknowledges the previous plugin yield.
                     yield
@@ -929,18 +1107,25 @@ class SDKPluginBridge:
         store = self._require_asset_store()
         services: tuple[HostService, ...] = (
             StorageService(self.plugin_id),
+            SpStoreService(),
             MessageSendService(self.context, store, mark_sent=self._mark_event_sent),
             ConversationReadService(self.context),
             ConversationWriteService(self.context),
             AssetTransferService(store),
+            FileTokenService(store),
             PluginInspectService(),
+            PluginLifecycleService(self.context),
+            ProviderWriteService(self.context),
             PlatformRawService(self.context),
             EventStateService(self._inflight_events),
+            EventInjectService(self.context),
+            DbService(self.context),
             ConfigWriteService(
                 lambda: self._plugin_config,
                 lambda: self.context.astrbot_config_mgr.ucr,
             ),
             PersonaWriteService(self.context),
+            SubagentReloadService(self.context),
             CronScheduleService(self),
             KnowledgeBaseService(self.context),
             MessageHistoryService(self.context),
@@ -952,10 +1137,12 @@ class SDKPluginBridge:
             ToolRegisterService(
                 self._make_tool_stub,
                 self._tool_names.append,
+                self.module_path,
             ),
             AgentRunService(self.context, self._tool_names, store),
             SessionWaitService(self),
             WebRouteService(self),
+            HandlerRegisterService(self),
         )
         return {service.capability_id: service for service in services}
 
@@ -1079,7 +1266,10 @@ class SDKPluginManager:
         loaded: list[str] = []
         if not self.plugin_store_path.is_dir():
             return loaded
-        for entry in sorted(self.plugin_store_path.iterdir()):
+        # Iterate in raw directory order to match the in-process loader
+        # (_get_modules): handler registration order follows plugin load
+        # order, so both runtimes must agree.
+        for entry in self.plugin_store_path.iterdir():
             if not entry.is_dir():
                 continue
             if specified_dir_name and entry.name != specified_dir_name:

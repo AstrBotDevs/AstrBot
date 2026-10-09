@@ -54,6 +54,24 @@ def _provider_entries(providers: Any) -> list[dict[str, Any]]:
     return entries
 
 
+def _tool_entries(func_list: Any) -> list[dict[str, Any]]:
+    """Serialize registered function tools to JSON-safe dicts."""
+    entries = []
+    for tool in func_list or []:
+        try:
+            entries.append(
+                {
+                    "name": str(tool.name),
+                    "description": str(tool.description),
+                    "parameters": copy.deepcopy(dict(tool.parameters or {})),
+                    "active": bool(getattr(tool, "active", True)),
+                }
+            )
+        except Exception:  # a broken tool must not break plugin loading
+            continue
+    return entries
+
+
 def _platform_entries(instances: Any) -> list[dict[str, Any]]:
     """Serialize running platform adapters to metadata dicts."""
     entries = []
@@ -76,6 +94,110 @@ def _platform_entries(instances: Any) -> list[dict[str, Any]]:
     return entries
 
 
+def handoff_entries(orchestrator: Any) -> list[dict[str, Any]]:
+    """Serialize SubAgentOrchestrator handoffs into JSON-safe entries.
+
+    Args:
+        orchestrator: Core SubAgentOrchestrator, or None when unconfigured.
+
+    Returns:
+        List of handoff records with the fields legacy plugins read.
+    """
+    return [
+        {
+            "name": handoff.name,
+            "description": handoff.description,
+            "provider_id": handoff.provider_id,
+            "agent_name": getattr(getattr(handoff, "agent", None), "name", ""),
+        }
+        for handoff in (getattr(orchestrator, "handoffs", None) or [])
+    ]
+
+
+def _handler_entries() -> list[dict[str, Any]]:
+    """Serialize the global handler registry into JSON-safe entries.
+
+    Help-panel style legacy plugins enumerate ``star_handlers_registry``
+    directly; the compat facade rebuilds it from this list. Filter payloads
+    keep only the fields those plugins read (isinstance checks plus command
+    names/aliases/regex text); enum values are shipped as ints aligned with
+    the facade's own Flag enums.
+
+    Returns:
+        List of handler records for the legacy handshake snapshot.
+    """
+    from astrbot.core.star.filter.command import CommandFilter
+    from astrbot.core.star.filter.command_group import CommandGroupFilter
+    from astrbot.core.star.filter.event_message_type import EventMessageTypeFilter
+    from astrbot.core.star.filter.permission import PermissionTypeFilter
+    from astrbot.core.star.filter.platform_adapter_type import (
+        PlatformAdapterTypeFilter,
+    )
+    from astrbot.core.star.filter.regex import RegexFilter
+    from astrbot.core.star.star import star_map
+    from astrbot.core.star.star_handler import star_handlers_registry
+
+    entries: list[dict[str, Any]] = []
+    for handler in star_handlers_registry:
+        plugin = star_map.get(handler.handler_module_path)
+        filters: list[dict[str, Any]] = []
+        for event_filter in handler.event_filters:
+            payload: dict[str, Any] | None = None
+            if isinstance(event_filter, CommandGroupFilter):
+                payload = {
+                    "type": "command_group",
+                    "name": event_filter.group_name,
+                    "alias": sorted(event_filter.alias),
+                }
+            elif isinstance(event_filter, CommandFilter):
+                payload = {
+                    "type": "command",
+                    "name": event_filter.command_name,
+                    "alias": sorted(event_filter.alias),
+                }
+            elif isinstance(event_filter, RegexFilter):
+                payload = {"type": "regex", "regex": event_filter.regex_str}
+            elif isinstance(event_filter, PermissionTypeFilter):
+                payload = {
+                    "type": "permission",
+                    "permission_type": event_filter.permission_type.value,
+                }
+            elif isinstance(event_filter, PlatformAdapterTypeFilter):
+                payload = {
+                    "type": "platform_adapter",
+                    "platform_type": (
+                        event_filter.platform_type.value
+                        if event_filter.platform_type is not None
+                        else None
+                    ),
+                }
+            elif isinstance(event_filter, EventMessageTypeFilter):
+                payload = {
+                    "type": "event_message_type",
+                    "message_type": event_filter.event_message_type.value,
+                }
+            if payload is not None:
+                filters.append(payload)
+        entries.append(
+            {
+                "event_type": (handler.event_type.name if handler.event_type else None),
+                "handler_full_name": handler.handler_full_name,
+                "handler_name": handler.handler_name,
+                "handler_module_path": handler.handler_module_path,
+                "desc": handler.desc,
+                "enabled": handler.enabled,
+                "priority": handler.extras_configs.get("priority", 0),
+                # Core resolves plugin ownership lazily via star_map at query
+                # time; precompute it so the facade can answer synchronously.
+                "plugin_name": plugin.name if plugin else None,
+                "plugin_activated": plugin.activated if plugin else True,
+                "plugin_reserved": plugin.reserved if plugin else False,
+                "filters": filters,
+            }
+        )
+    return entries
+
+
 async def build_legacy_snapshot(context: Context) -> dict[str, Any]:
     """Capture the host state legacy plugins read synchronously.
 
@@ -88,6 +210,9 @@ async def build_legacy_snapshot(context: Context) -> dict[str, Any]:
     from astrbot.core import sp
     from astrbot.core.persona_mgr import DEFAULT_PERSONALITY
     from astrbot.core.provider.entities import ProviderType
+    from astrbot.core.provider.register import llm_tools
+
+    from .services.kb import serialize_kb
 
     pm = context.provider_manager
     persona_mgr = context.persona_manager
@@ -98,6 +223,7 @@ async def build_legacy_snapshot(context: Context) -> dict[str, Any]:
         "speech_to_text": _provider_entries(pm.stt_provider_insts),
         "text_to_speech": _provider_entries(pm.tts_provider_insts),
         "embedding": _provider_entries(pm.embedding_provider_insts),
+        "rerank": _provider_entries(pm.rerank_provider_insts),
     }
 
     # Defaults resolved against the default config profile, mirroring
@@ -143,6 +269,9 @@ async def build_legacy_snapshot(context: Context) -> dict[str, Any]:
 
     return {
         "providers": providers,
+        "providers_config": _redact(copy.deepcopy(pm.providers_config)),
+        "provider_sources_config": _redact(copy.deepcopy(pm.provider_sources_config)),
+        "tools": _tool_entries(llm_tools.func_list),
         "provider_defaults": defaults,
         "provider_umo_prefs": umo_prefs,
         "personas_v3": copy.deepcopy(persona_mgr.personas_v3),
@@ -157,5 +286,23 @@ async def build_legacy_snapshot(context: Context) -> dict[str, Any]:
         "config_profiles": profiles,
         "config_routes": dict(acm.ucr.umop_to_conf_id),
         "config_list": config_list,
+        "session_conversations": dict(
+            context.conversation_manager.session_conversations
+        ),
+        "persona_folder_tree": await persona_mgr.get_folder_tree(),
+        "kbs": [serialize_kb(kb) for kb in await context.kb_manager.list_kbs()],
         "platforms": _platform_entries(context.platform_manager.platform_insts),
+        "subagent_handoffs": handoff_entries(context.subagent_orchestrator),
+        "handlers": _handler_entries(),
+        "sp": [
+            {
+                "scope": pref.scope,
+                "scope_id": pref.scope_id,
+                "key": pref.key,
+                "value": pref.value.get("val")
+                if isinstance(pref.value, dict)
+                else pref.value,
+            }
+            for pref in await sp.range_get_async(scope=None)
+        ],
     }

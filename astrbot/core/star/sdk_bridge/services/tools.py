@@ -14,15 +14,18 @@ class ToolRegisterService:
 
     capability_id = "llm.tool.register"
 
-    def __init__(self, make_stub: Any, track: Any) -> None:
+    def __init__(self, make_stub: Any, track: Any, module_path: str) -> None:
         """Initialize the service.
 
         Args:
             make_stub: Factory building the executor stub for a handler ID.
             track: Callback recording tool names for cleanup on unload.
+            module_path: Bridge module path of the owning plugin, used to
+                attribute registered tools to the plugin in star_map.
         """
         self._make_stub = make_stub
         self._track = track
+        self._module_path = module_path
 
     async def handle(self, operation: str, payload: dict[str, Any]) -> Any:
         """Serve register/unregister operations."""
@@ -47,6 +50,12 @@ class ToolRegisterService:
                 definition.description,
                 self._make_stub(handler_id),
             )
+            func_tool = llm_tools.get_func(definition.name)
+            if func_tool is not None:
+                # Attribute the tool to this plugin so plugin-level tool
+                # listing, activation, and toggles apply (same as static
+                # handshake tools and in-process context.add_llm_tools).
+                func_tool.handler_module_path = self._module_path
             self._track(definition.name)
             return {}
         if operation == "unregister":

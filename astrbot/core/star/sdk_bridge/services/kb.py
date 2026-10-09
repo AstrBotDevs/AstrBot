@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from astrbot.core.star.context import Context
 
 
-def _serialize_kb(kb: Any) -> dict[str, Any]:
+def serialize_kb(kb: Any) -> dict[str, Any]:
     """Serialize one KnowledgeBase row to a JSON-safe dict."""
     return {
         "kb_id": kb.kb_id,
@@ -49,15 +49,15 @@ class KnowledgeBaseService:
         """Serve one kb operation."""
         manager = self._context.kb_manager
         if operation == "list_kbs":
-            return {"kbs": [_serialize_kb(kb) for kb in await manager.list_kbs()]}
+            return {"kbs": [serialize_kb(kb) for kb in await manager.list_kbs()]}
         if operation == "get_kb_by_name":
             helper = await manager.get_kb_by_name(str(payload.get("kb_name") or ""))
-            return {"kb": _serialize_kb(helper.kb) if helper else None}
+            return {"kb": serialize_kb(helper.kb) if helper else None}
         if operation == "get_kb":
             helper = await manager.get_kb(str(payload.get("kb_id") or ""))
-            return {"kb": _serialize_kb(helper.kb) if helper else None}
+            return {"kb": serialize_kb(helper.kb) if helper else None}
         if operation == "create_kb":
-            return {"kb": _serialize_kb(await self._create_kb(payload))}
+            return {"kb": serialize_kb(await self._create_kb(payload))}
         if operation == "delete_kb":
             kb_id = str(payload.get("kb_id") or "")
             if not kb_id:
@@ -65,6 +65,11 @@ class KnowledgeBaseService:
             return {"deleted": await manager.delete_kb(kb_id)}
         if operation == "retrieve":
             return {"result": await self._retrieve(payload)}
+        if operation == "load_kbs":
+            await manager.load_kbs()
+            return {
+                "kbs": [serialize_kb(kb) for kb in await manager.list_kbs()],
+            }
         raise NotFound(f"unknown kb operation: {operation}")
 
     async def _create_kb(self, payload: dict[str, Any]) -> Any:

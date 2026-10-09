@@ -79,8 +79,11 @@ class WebRouteService(HostService):
         if operation == "register":
             route = payload.get("route")
             methods = payload.get("methods")
-            if not isinstance(route, str) or not route.startswith("/"):
-                raise InvalidRequest("register requires a route starting with '/'")
+            # Match core behavior: routes without a leading '/' are accepted
+            # and normalized at match time (dashboard prepends '/').
+            if not isinstance(route, str) or not route.strip():
+                raise InvalidRequest("register requires a non-empty route")
+            route = route.strip()
             if not isinstance(methods, list) or not all(
                 isinstance(method, str) for method in methods
             ):
