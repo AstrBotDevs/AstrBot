@@ -295,17 +295,32 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             return None
 
         toolset = ToolSet()
+        unavailable_names: list[str] = []
         for tool_name_or_obj in tools:
             if isinstance(tool_name_or_obj, str):
-                registered_tool = llm_tools.get_func(tool_name_or_obj)
+                registered_tool = tool_mgr.get_func(tool_name_or_obj)
                 if registered_tool and registered_tool.active:
                     toolset.add_tool(registered_tool)
                     continue
                 runtime_tool = runtime_computer_tools.get(tool_name_or_obj)
                 if runtime_tool:
                     toolset.add_tool(runtime_tool)
+                    continue
+                unavailable_names.append(tool_name_or_obj)
             elif isinstance(tool_name_or_obj, FunctionTool):
                 toolset.add_tool(tool_name_or_obj)
+
+        if unavailable_names:
+            logger.warning(
+                "Subagent requested unavailable or inactive tools: %s",
+                ", ".join(unavailable_names),
+            )
+
+        # Explicit persona selections only describe plugin/MCP tools in the
+        # dashboard. Keep enabled runtime tools available for the subagent.
+        for runtime_tool in runtime_computer_tools.values():
+            toolset.add_tool(runtime_tool)
+
         return None if toolset.empty() else toolset
 
     @classmethod
