@@ -11,6 +11,7 @@
 
 import asyncio
 import os
+import sys
 import threading
 import time
 import traceback
@@ -187,6 +188,18 @@ class AstrBotCoreLifecycle:
             sp=sp,
         )
         await self.astrbot_config_mgr.initialize()
+        if sys.platform == "win32" and any(
+            config.get("provider_settings", {}).get("computer_use_runtime") == "local"
+            for config in self.astrbot_config_mgr.confs.values()
+        ):
+            try:
+                from astrbot.core.computer.process_sandbox.windows_setup import (
+                    initialize_windows_sandbox,
+                )
+
+                await asyncio.to_thread(initialize_windows_sandbox)
+            except Exception as exc:
+                logger.warning(f"Windows Local sandbox is unavailable: {exc}")
         self.temp_dir_cleaner = TempDirCleaner(
             max_size_getter=lambda: self.astrbot_config_mgr.default_conf.get(
                 TempDirCleaner.CONFIG_KEY,

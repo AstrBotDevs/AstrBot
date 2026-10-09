@@ -227,7 +227,8 @@ class LocalExecuteShellTool(ExecuteShellTool):
     description: str = (
         "Execute a command in the shell. If it is still running after "
         "yield_time_ms, the tool returns a managed shell session ID. "
-        "Restricted Linux and macOS calls run inside an operating-system sandbox."
+        "Restricted calls run inside an operating-system sandbox. "
+        "On Windows, commands use PowerShell; restricted commands start on the Workspace: drive."
     )
     parameters: dict = field(
         default_factory=lambda: {

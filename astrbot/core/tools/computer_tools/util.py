@@ -1,3 +1,4 @@
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -198,6 +199,11 @@ def check_local_execution_permission(
             "Agent Computer Use -> Local Permission Policies."
         )
     if policy.requires_sandbox:
+        if sys.platform == "win32" and policy.filesystem_scope == "host":
+            return policy, (
+                "error: Windows Local isolation supports workspace scope only. "
+                "Host access with networking disabled is unavailable."
+            )
         try:
             create_process_sandbox()
         except RuntimeError as exc:

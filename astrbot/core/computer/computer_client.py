@@ -15,9 +15,10 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_skills_path,
     get_astrbot_temp_path,
 )
+from astrbot.core.utils.runtime_env import resolve_windows_shell
 
 from .booters.base import ComputerBooter
-from .booters.local import LocalBooter, resolve_windows_shell
+from .booters.local import LocalBooter
 
 session_booter: dict[str, ComputerBooter] = {}
 local_booter: ComputerBooter | None = None

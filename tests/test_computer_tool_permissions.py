@@ -248,11 +248,19 @@ def test_local_permission_policy_denies_disabled_execution():
     ("allow_network", "filesystem_scope"),
     [(False, "host"), (False, "workspace"), (True, "workspace")],
 )
-def test_windows_local_execution_requires_a_full_trust_policy(
+def test_windows_local_execution_requires_startup_preparation(
     monkeypatch, role, allow_network, filesystem_scope
 ):
-    """Windows rejects restricted policies and allows explicit full trust."""
+    """Unprepared Windows execution fails closed, while full trust still works."""
     monkeypatch.setattr(process_sandbox, "sys", SimpleNamespace(platform="win32"))
+    from astrbot.core.tools.computer_tools import util
+
+    monkeypatch.setattr(util, "sys", SimpleNamespace(platform="win32"))
+
+    def unprepared():
+        raise RuntimeError("Windows sandbox initialization has not run")
+
+    monkeypatch.setattr(util, "create_process_sandbox", unprepared)
     restricted = {
         role: {
             "allow_execution": True,
@@ -278,9 +286,10 @@ def test_windows_local_execution_requires_a_full_trust_policy(
     )
 
     assert restricted_error is not None
-    assert "No Local process sandbox backend" in restricted_error
-    assert "Third-party sandbox" in restricted_error
-    assert "Computer Use Runtime" in restricted_error
+    assert (
+        "workspace scope only" if filesystem_scope == "host"
+        else "initialization has not run"
+    ) in restricted_error
     assert full_error is None
     assert full_policy is not None
     assert full_policy.requires_sandbox is False
