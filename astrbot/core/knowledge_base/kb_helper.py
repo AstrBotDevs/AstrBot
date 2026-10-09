@@ -494,7 +494,13 @@ class KBHelper:
                     details={"file_name": file_name, "doc_id": doc_id},
                 ) from exc
             return doc
-        except asyncio.CancelledError:
+        except (Exception, asyncio.CancelledError) as e:
+            cancellation = e if isinstance(e, asyncio.CancelledError) else None
+            if isinstance(e, KnowledgeBaseUploadError):
+                logger.warning(f"上传文档失败: {e}", extra={"details": e.details})
+            elif cancellation is None:
+                logger.error(f"上传文档失败: {e}", exc_info=True)
+
             if not metadata_committed:
                 # Keep a strong reference and shield compensation from repeated
                 # cancellation. The caller must not finish before rollback does.
@@ -504,27 +510,19 @@ class KBHelper:
                 while not cleanup_task.done():
                     try:
                         await asyncio.shield(cleanup_task)
-                    except asyncio.CancelledError:
-                        continue
+                    except asyncio.CancelledError as cancelled:
+                        cancellation = cancelled
                     except Exception:
                         break
                 if not cleanup_task.cancelled():
                     try:
                         cleanup_task.result()
                     except Exception:
+                        if cancellation is None:
+                            raise
                         logger.exception("Failed to roll back a cancelled KB upload")
-            raise
-        except Exception as e:
-            if isinstance(e, KnowledgeBaseUploadError):
-                logger.warning(f"上传文档失败: {e}", extra={"details": e.details})
-            else:
-                logger.error(f"上传文档失败: {e}", exc_info=True)
-
-            if not metadata_committed:
-                await self._cleanup_failed_upload(
-                    doc_id=doc_id, media_paths=media_paths
-                )
-
+            if cancellation is not None:
+                raise cancellation
             raise
 
     async def _cleanup_failed_upload(

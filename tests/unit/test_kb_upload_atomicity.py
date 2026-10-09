@@ -161,13 +161,18 @@ async def test_upload_cancellation_respects_metadata_commit(
 
 
 @pytest.mark.asyncio
-async def test_repeated_cancel_waits_for_rollback(stub_provider_manager_module) -> None:
+@pytest.mark.parametrize("ordinary_error", [False, True])
+async def test_repeated_cancel_waits_for_rollback(
+    stub_provider_manager_module, ordinary_error: bool
+) -> None:
     """A second cancellation must not abandon the compensating cleanup task."""
     cls = _import_kb_helper()
     helper = cls.__new__(cls)
     helper.kb = KnowledgeBase(kb_name="Cancellation", embedding_provider_id="emb")
     helper.vec_db = AsyncMock()
-    helper.vec_db.insert_batch.side_effect = asyncio.CancelledError()
+    helper.vec_db.insert_batch.side_effect = (
+        RuntimeError("storage failed") if ordinary_error else asyncio.CancelledError()
+    )
     entered = asyncio.Event()
     release = asyncio.Event()
     finished = asyncio.Event()
@@ -188,6 +193,8 @@ async def test_repeated_cancel_waits_for_rollback(stub_provider_manager_module) 
         )
         try:
             await asyncio.wait_for(entered.wait(), 2)
+            task.cancel()
+            await asyncio.sleep(0)
             task.cancel()
             await asyncio.sleep(0)
             assert not task.done()
