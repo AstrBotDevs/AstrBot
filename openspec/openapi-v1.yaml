@@ -1557,7 +1557,7 @@ paths:
     get:
       tags: [Chat]
       summary: List sessions in a ChatUI project
-      description: Without pagination parameters, returns the legacy list of up to 100 sessions. With page or page_size, returns sessions, page, page_size, and has_more. A full final page may require an additional empty request.
+      description: Without pagination parameters, returns the legacy list of up to 100 sessions. With page or page_size, returns sessions, total, page, and page_size.
       operationId: listChatProjectSessions
       x-astrbot-scope: chat
       parameters:

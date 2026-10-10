@@ -63,6 +63,7 @@
           <div
             v-if="isProjectExpanded(project.project_id)"
             class="project-session-list"
+            :data-project-id="project.project_id"
           >
             <div
               v-if="
@@ -151,19 +152,6 @@
                   pagination[project.project_id].append,
                 )
               "
-            />
-            <div
-              v-if="
-                pagination[project.project_id]?.hasMore &&
-                !pagination[project.project_id]?.loading &&
-                !pagination[project.project_id]?.error
-              "
-              v-intersect="
-                (visible: boolean) =>
-                  visible && $emit('loadSessions', project.project_id, true)
-              "
-              style="height: 1px"
-              aria-hidden="true"
             />
           </div>
         </Transition>
@@ -258,6 +246,28 @@ watch(
   },
   { immediate: true },
 );
+
+function loadMoreSessions(container: HTMLElement) {
+  const top = container.getBoundingClientRect().top;
+  const bottom = top + container.clientHeight;
+  for (const list of container.querySelectorAll<HTMLElement>("[data-project-id]")) {
+    const projectId = list.dataset.projectId!;
+    const pagination = props.pagination[projectId];
+    const listBottom = list.getBoundingClientRect().bottom;
+    if (
+      !isProjectExpanded(projectId) ||
+      !pagination?.hasMore ||
+      pagination.loading ||
+      pagination.error ||
+      listBottom <= top ||
+      listBottom - bottom > 120
+    )
+      continue;
+    emit("loadSessions", projectId, true);
+  }
+}
+
+defineExpose({ loadMoreSessions });
 
 function readExpandedProjectIds() {
   try {

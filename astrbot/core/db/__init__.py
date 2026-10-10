@@ -968,6 +968,25 @@ class BaseDatabase(abc.ABC):
         ...
 
     @abc.abstractmethod
+    async def get_project_sessions_paginated(
+        self,
+        project_id: str,
+        page: int = 1,
+        page_size: int = 100,
+    ) -> tuple[list[PlatformSession], int]:
+        """Get a page of project sessions and its total count.
+
+        Args:
+            project_id: Project whose sessions should be listed.
+            page: One-based page number.
+            page_size: Maximum number of sessions to return.
+
+        Returns:
+            The requested sessions and total number of sessions in the project.
+        """
+        ...
+
+    @abc.abstractmethod
     async def get_project_by_session(
         self, session_id: str, creator: str
     ) -> ChatUIProject | None:

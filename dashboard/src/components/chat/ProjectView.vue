@@ -22,7 +22,11 @@
       </div>
     </section>
 
-    <section class="project-sessions-list">
+    <section
+      ref="sessionsContainer"
+      class="project-sessions-list"
+      @scroll.passive="loadMoreSessions"
+    >
       <div v-if="sessions.length > 0" class="project-session-list">
         <button
           v-for="session in sessions"
@@ -85,15 +89,6 @@
         :loading="pagination.loading"
         @retry="$emit('loadSessions', pagination.append)"
       />
-      <div
-        v-if="pagination?.hasMore && !pagination.loading && !pagination.error"
-        :key="project?.project_id"
-        v-intersect="
-          (visible: boolean) => visible && $emit('loadSessions', true)
-        "
-        style="height: 1px"
-        aria-hidden="true"
-      />
     </section>
 
     <div class="project-input-slot">
@@ -103,7 +98,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import ChatLoadError from "@/components/chat/ChatLoadError.vue";
 import type { ProjectSessionsPagination } from "@/composables/useProjects";
 import { FolderCog, MessageSquare, Pencil, Trash2 } from "@lucide/vue";
@@ -131,6 +126,37 @@ const emit = defineEmits<{
   editSessionTitle: [sessionId: string, title: string];
   deleteSession: [sessionId: string];
 }>();
+
+const sessionsContainer = ref<HTMLElement | null>(null);
+let resizeObserver: ResizeObserver | null = null;
+
+function loadMoreSessions() {
+  const container = sessionsContainer.value;
+  if (
+    !container ||
+    container.clientHeight === 0 ||
+    !props.pagination?.hasMore ||
+    props.pagination.loading ||
+    props.pagination.error
+  )
+    return;
+  if (container.scrollHeight - container.scrollTop - container.clientHeight > 120)
+    return;
+  emit("loadSessions", true);
+}
+
+watch(
+  [() => props.pagination?.loading, () => props.project?.project_id],
+  () => loadMoreSessions(),
+  { flush: "post" },
+);
+
+onMounted(() => {
+  resizeObserver = new ResizeObserver(() => loadMoreSessions());
+  if (sessionsContainer.value) resizeObserver.observe(sessionsContainer.value);
+  loadMoreSessions();
+});
+onBeforeUnmount(() => resizeObserver?.disconnect());
 
 const { tm } = useModuleI18n("features/chat");
 

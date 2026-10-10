@@ -1174,7 +1174,13 @@ watch(
 );
 
 watch(
-  [() => sessionsPagination.loading, () => mobileDrawer.open],
+  [
+    () => sessionsPagination.loading,
+    () => Object.values(projectSessionsPagination).map(
+      (pagination) => pagination.loading,
+    ),
+    () => mobileDrawer.open,
+  ],
   () => loadMoreSessions(),
   { flush: "post" },
 );
@@ -2028,7 +2034,11 @@ function loadMoreSessions() {
   if (
     !container ||
     container.clientHeight === 0 ||
-    (isMobile.value && !mobileDrawer.open) ||
+    (isMobile.value && !mobileDrawer.open)
+  )
+    return;
+  sidebarProjects.value?.loadMoreSessions(container);
+  if (
     !sessionsPagination.hasMore ||
     sessionsPagination.loading ||
     sessionsPagination.error

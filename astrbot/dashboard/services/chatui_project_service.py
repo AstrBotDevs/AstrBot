@@ -172,7 +172,6 @@ class ChatUIProjectService:
 
         Returns:
             A legacy list when pagination is omitted, otherwise a page envelope.
-            A full page may require one more request to establish the end.
 
         Raises:
             ChatUIProjectServiceError: If the project is missing or inaccessible.
@@ -184,17 +183,18 @@ class ChatUIProjectService:
         paginated = page is not None or page_size is not None
         page = max(1, page or 1)
         page_size = min(100, max(1, page_size or 100))
-        sessions = await self.db.get_project_sessions(
+        if not paginated:
+            sessions = await self.db.get_project_sessions(project_id)
+            return [self._serialize_session(session) for session in sessions]
+        sessions, total = await self.db.get_project_sessions_paginated(
             project_id, page=page, page_size=page_size
         )
         data = [self._serialize_session(session) for session in sessions]
-        if not paginated:
-            return data
         return {
             "sessions": data,
             "page": page,
             "page_size": page_size,
-            "has_more": len(sessions) == page_size,
+            "total": total,
         }
 
     async def get_project_sessions_from_query(

@@ -153,10 +153,11 @@ export function useProjects() {
                 }
                 const payload = res.data.data;
                 loaded.push(...payload.sessions);
-                if (page === lastPage || !payload.has_more) {
+                const hasMore = page * payload.page_size < payload.total;
+                if (page === lastPage || !hasMore) {
                     projectSessionsById.value[projectId] = [...new Map(loaded.map(session => [session.session_id, session])).values()];
                     pagination.page = page;
-                    pagination.hasMore = payload.has_more;
+                    pagination.hasMore = hasMore;
                     break;
                 }
             }

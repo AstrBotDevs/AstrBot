@@ -60,7 +60,7 @@ async def test_project_session_pages_reach_older_sessions_and_preserve_scope(tmp
                 data = response.json()["data"]
                 assert data["page"] == page
                 assert data["page_size"] == 30
-                assert data["has_more"] is (page < 5)
+                assert data["total"] == 125
                 ids.extend(item["session_id"] for item in data["sessions"])
             assert ids == [f"session-{i:03}" for i in reversed(range(125))]
             legacy = (await client.get(url)).json()["data"]
@@ -70,7 +70,12 @@ async def test_project_session_pages_reach_older_sessions_and_preserve_scope(tmp
                 "data"
             ]
             assert empty["sessions"] == []
-            assert empty["has_more"] is False
+            assert empty["total"] == 125
+            full_page = (
+                await client.get(url, params={"page": 5, "page_size": 25})
+            ).json()["data"]
+            assert len(full_page["sessions"]) == 25
+            assert full_page["page"] * full_page["page_size"] == full_page["total"]
             size_only = (await client.get(url, params={"page_size": 30})).json()["data"]
             assert size_only["page"] == 1
             assert len(size_only["sessions"]) == 30
