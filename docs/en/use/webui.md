@@ -66,6 +66,7 @@ ChatUI supports these common workflows:
 
 - The sidebar initially loads the 30 most recent conversations. Scroll near the bottom to automatically load older conversations, with a progress bar while loading. Automatic requests pause after a failure; select **Retry** to continue.
   If the list does not fill the sidebar, more pages load automatically. Opening an older conversation by URL keeps its title and selected sidebar entry visible before its page loads.
+  Project conversations also load in batches of 30 as you scroll to the bottom, both in expanded sidebar projects and on the project page, with the same loading and retry behavior.
 - Create, rename, and delete conversations, and switch previous conversations from the sidebar.
 - Select the config profile, model provider, and model on the chat page; if Provider session separation is enabled, you can also choose a model for the current session only.
 - Send text, images, files, and voice input; uploaded attachments show previews and use file signature checks to help identify file types.

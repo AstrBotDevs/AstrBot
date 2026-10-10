@@ -65,7 +65,10 @@
             class="project-session-list"
           >
             <div
-              v-if="loadingProjectIds.includes(project.project_id)"
+              v-if="
+                pagination[project.project_id]?.loading &&
+                !projectSessionList(project.project_id).length
+              "
               class="project-session-empty"
             >
               {{ tm("project.loadingSessions") }}
@@ -80,7 +83,9 @@
                 tabindex="0"
                 @click="$emit('selectSession', session.session_id)"
                 @keydown.enter="$emit('selectSession', session.session_id)"
-                @keydown.space.prevent="$emit('selectSession', session.session_id)"
+                @keydown.space.prevent="
+                  $emit('selectSession', session.session_id)
+                "
               >
                 <span class="project-session-title">
                   {{ sessionTitle(session) }}
@@ -122,9 +127,44 @@
                 />
               </div>
             </template>
-            <div v-else class="project-session-empty">
+            <div
+              v-else-if="!pagination[project.project_id]?.error"
+              class="project-session-empty"
+            >
               {{ tm("project.noSessions") }}
             </div>
+            <v-progress-linear
+              v-if="pagination[project.project_id]?.loading"
+              color="primary"
+              height="2"
+              indeterminate
+              :aria-label="tm('conversation.loading')"
+            />
+            <ChatLoadError
+              v-if="pagination[project.project_id]?.error"
+              :message="tm('conversation.loadFailed')"
+              :loading="pagination[project.project_id]?.loading"
+              @retry="
+                $emit(
+                  'loadSessions',
+                  project.project_id,
+                  pagination[project.project_id].append,
+                )
+              "
+            />
+            <div
+              v-if="
+                pagination[project.project_id]?.hasMore &&
+                !pagination[project.project_id]?.loading &&
+                !pagination[project.project_id]?.error
+              "
+              v-intersect="
+                (visible: boolean) =>
+                  visible && $emit('loadSessions', project.project_id, true)
+              "
+              style="height: 1px"
+              aria-hidden="true"
+            />
           </div>
         </Transition>
       </div>
@@ -134,6 +174,8 @@
 
 <script setup lang="ts">
 import { ref, watch } from "vue";
+import ChatLoadError from "@/components/chat/ChatLoadError.vue";
+import type { ProjectSessionsPagination } from "@/composables/useProjects";
 import {
   ChevronDown,
   ChevronRight,
@@ -165,7 +207,7 @@ export interface ProjectSession {
 interface Props {
   projects: Project[];
   projectSessions: Record<string, ProjectSession[]>;
-  loadingProjectIds: string[];
+  pagination: Record<string, ProjectSessionsPagination>;
   selectedProjectId?: string | null;
   activeSessionId?: string | null;
   isSessionRunning?: (sessionId: string) => boolean;
@@ -182,6 +224,7 @@ const emit = defineEmits<{
   editProject: [project: Project];
   deleteProject: [projectId: string];
   toggleProject: [projectId: string, expanded: boolean];
+  loadSessions: [projectId: string, append: boolean];
   selectSession: [sessionId: string];
   editSessionTitle: [sessionId: string, title: string];
   deleteSession: [sessionId: string, projectId: string];

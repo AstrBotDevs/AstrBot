@@ -1557,6 +1557,7 @@ paths:
     get:
       tags: [Chat]
       summary: List sessions in a ChatUI project
+      description: Without pagination parameters, returns the legacy list of up to 100 sessions. With page or page_size, returns sessions, page, page_size, and has_more. A full final page may require an additional empty request.
       operationId: listChatProjectSessions
       x-astrbot-scope: chat
       parameters:
@@ -1565,6 +1566,21 @@ paths:
           required: true
           schema:
             type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: page_size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 100
       responses:
         "200":
           $ref: "#/components/responses/Ok"

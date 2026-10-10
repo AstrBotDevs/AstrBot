@@ -1596,6 +1596,10 @@ export type ListChatProjectSessionsData = {
     path: {
         project_id: string;
     };
+    query?: {
+        page?: number;
+        page_size?: number;
+    };
 };
 
 export type ListChatProjectSessionsResponse = (SuccessEnvelope);

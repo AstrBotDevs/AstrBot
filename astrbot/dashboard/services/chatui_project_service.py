@@ -158,13 +158,44 @@ class ChatUIProjectService:
         self,
         username: str,
         project_id: str | None,
-    ) -> list[dict]:
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+    ) -> list[dict] | dict:
+        """List owned project sessions, optionally in pages.
+
+        Args:
+            username: Authenticated project owner.
+            project_id: Project whose sessions should be listed.
+            page: One-based page number; defaults to 1 for paginated requests.
+            page_size: Number of sessions per page, between 1 and 100.
+
+        Returns:
+            A legacy list when pagination is omitted, otherwise a page envelope.
+            A full page may require one more request to establish the end.
+
+        Raises:
+            ChatUIProjectServiceError: If the project is missing or inaccessible.
+        """
         if not project_id:
             raise ChatUIProjectServiceError("Missing key: project_id")
 
         await self._get_owned_project(username, project_id)
-        sessions = await self.db.get_project_sessions(project_id)
-        return [self._serialize_session(session) for session in sessions]
+        paginated = page is not None or page_size is not None
+        page = max(1, page or 1)
+        page_size = min(100, max(1, page_size or 100))
+        sessions = await self.db.get_project_sessions(
+            project_id, page=page, page_size=page_size
+        )
+        data = [self._serialize_session(session) for session in sessions]
+        if not paginated:
+            return data
+        return {
+            "sessions": data,
+            "page": page,
+            "page_size": page_size,
+            "has_more": len(sessions) == page_size,
+        }
 
     async def get_project_sessions_from_query(
         self,

@@ -65,10 +65,35 @@
           </span>
         </button>
       </div>
-      <div v-else class="no-sessions-in-project">
+      <div
+        v-else-if="!pagination?.loading && !pagination?.error"
+        class="no-sessions-in-project"
+      >
         <MessageSquare :size="22" />
         <p>{{ tm("project.noSessions") }}</p>
       </div>
+      <v-progress-linear
+        v-if="pagination?.loading"
+        color="primary"
+        height="2"
+        indeterminate
+        :aria-label="tm('conversation.loading')"
+      />
+      <ChatLoadError
+        v-if="pagination?.error"
+        :message="tm('conversation.loadFailed')"
+        :loading="pagination.loading"
+        @retry="$emit('loadSessions', pagination.append)"
+      />
+      <div
+        v-if="pagination?.hasMore && !pagination.loading && !pagination.error"
+        :key="project?.project_id"
+        v-intersect="
+          (visible: boolean) => visible && $emit('loadSessions', true)
+        "
+        style="height: 1px"
+        aria-hidden="true"
+      />
     </section>
 
     <div class="project-input-slot">
@@ -79,6 +104,8 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
+import ChatLoadError from "@/components/chat/ChatLoadError.vue";
+import type { ProjectSessionsPagination } from "@/composables/useProjects";
 import { FolderCog, MessageSquare, Pencil, Trash2 } from "@lucide/vue";
 import { useModuleI18n } from "@/i18n/composables";
 import type { Project } from "@/components/chat/ProjectList.vue";
@@ -93,12 +120,14 @@ interface Session {
 interface Props {
   project?: Project | null;
   sessions: Session[];
+  pagination?: ProjectSessionsPagination;
 }
 
 const props = defineProps<Props>();
 
 const emit = defineEmits<{
   selectSession: [sessionId: string];
+  loadSessions: [append: boolean];
   editSessionTitle: [sessionId: string, title: string];
   deleteSession: [sessionId: string];
 }>();

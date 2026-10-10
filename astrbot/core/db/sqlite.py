@@ -2494,7 +2494,9 @@ class SQLiteDatabase(BaseDatabase):
                     == col(SessionProjectRelation.session_id),
                 )
                 .where(col(SessionProjectRelation.project_id) == project_id)
-                .order_by(desc(PlatformSession.updated_at))
+                .order_by(
+                    desc(PlatformSession.updated_at), desc(PlatformSession.session_id)
+                )
                 .limit(page_size)
                 .offset(offset),
             )
