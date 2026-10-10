@@ -366,12 +366,13 @@
                 </div>
 
                 <v-autocomplete
-                  v-model="newJob.session"
+                  v-model="newJob.sessions"
                   :items="availableUmos"
                   :loading="loadingUmos"
                   :label="tm('form.session')"
                   variant="outlined"
                   density="comfortable"
+                  multiple
                   clearable
                   hide-details
                   :no-data-text="tm('form.noUmos')"
@@ -408,6 +409,8 @@
                       variant="tonal"
                       color="primary"
                       class="umo-selection-chip"
+                      closable
+                      @click:close="removeSession(item.raw)"
                     >
                       {{ getUmoSelectionText(item.raw) }}
                     </v-chip>
@@ -495,7 +498,7 @@ const newJob = ref({
   weekly_time: "09:00",
   monthly_day: 1,
   monthly_time: "09:00",
-  session: "",
+  sessions: [] as string[],
   timezone: "",
   enabled: true,
 });
@@ -503,7 +506,7 @@ const newJob = ref({
 const snackbar = ref({ show: false, message: "", color: "success" });
 
 const jobUmoFilterOptions = computed(() => [
-  ...(jobs.value.some((job) => !getJobSession(job))
+  ...(jobs.value.some((job) => !getJobSessions(job).length)
     ? [
         {
           label: tm("filters.noDeliveryTarget"),
@@ -511,7 +514,7 @@ const jobUmoFilterOptions = computed(() => [
         },
       ]
     : []),
-  ...Array.from(new Set(jobs.value.map(getJobSession).filter(Boolean)))
+  ...Array.from(new Set(jobs.value.flatMap((job) => getJobSessions(job))))
     .sort((a, b) => a.localeCompare(b))
     .map((umo) => ({ label: umo, value: umo })),
 ]);
@@ -520,11 +523,11 @@ const filteredJobs = computed(() => {
   const query = taskSearch.value.trim().toLowerCase();
   const umo = selectedUmoFilter.value;
   return jobs.value.filter((job) => {
-    const session = getJobSession(job);
-    if (umo === NO_DELIVERY_TARGET_FILTER && session) {
+    const sessions = getJobSessions(job);
+    if (umo === NO_DELIVERY_TARGET_FILTER && sessions.length) {
       return false;
     }
-    if (umo && umo !== NO_DELIVERY_TARGET_FILTER && session !== umo) {
+    if (umo && umo !== NO_DELIVERY_TARGET_FILTER && !sessions.includes(umo)) {
       return false;
     }
 
@@ -616,12 +619,33 @@ function taskPreview(item: any): string {
   return text.length > 86 ? `${text.slice(0, 86)}...` : text;
 }
 
-function getJobSession(job: any): string {
-  return String(job.session || job?.payload?.session || "").trim();
+function getJobSessions(job: any): string[] {
+  const raw: any[] = Array.isArray(job?.payload?.sessions)
+    ? job.payload.sessions
+    : Array.isArray(job?.sessions)
+      ? job.sessions
+      : [];
+  const cleaned = raw
+    .map((s: any) => String(s || "").trim())
+    .filter(Boolean);
+  const sessions = cleaned.filter((s, i) => cleaned.indexOf(s) === i);
+  if (sessions.length) {
+    return sessions;
+  }
+  const single = String(job?.payload?.session || job?.session || "").trim();
+  return single ? [single] : [];
 }
 
 function deliveryTargetText(item: any): string {
-  return getJobSession(item) || tm("card.noDeliveryTarget");
+  const sessions = getJobSessions(item);
+  if (!sessions.length) {
+    return tm("card.noDeliveryTarget");
+  }
+  return sessions.map((s) => getUmoSelectionText(s) || s).join(", ");
+}
+
+function removeSession(umo: string) {
+  newJob.value.sessions = newJob.value.sessions.filter((s) => s !== umo);
 }
 
 function nextRunText(item: any): string {
@@ -827,10 +851,10 @@ async function loadJobs() {
       const data = Array.isArray(res.data.data) ? res.data.data : [];
       jobs.value = data.map((job: any) => ({
         ...job,
-        session: job?.payload?.session || job?.session || "",
+        sessions: getJobSessions(job),
       }));
       mergeUmoInfos(
-        jobs.value.map(getJobSession).filter(Boolean).map(parseUmoInfo),
+        jobs.value.flatMap((job) => getJobSessions(job)).map(parseUmoInfo),
       );
     } else {
       toast(res.data.message || tm("messages.loadFailed"), "error");
@@ -945,7 +969,7 @@ function resetNewJob() {
     weekly_time: "09:00",
     monthly_day: 1,
     monthly_time: "09:00",
-    session: "",
+    sessions: [],
     timezone: "",
     enabled: true,
   };
@@ -954,9 +978,12 @@ function resetNewJob() {
 function openEdit(job: any) {
   editingJobId.value = job.job_id;
   const schedule = readScheduleFromJob(job);
-  if (job.session && !availableUmos.value.includes(job.session)) {
-    availableUmos.value = [job.session, ...availableUmos.value];
-    mergeUmoInfos([parseUmoInfo(job.session)]);
+  const sessions = getJobSessions(job);
+  for (const umo of sessions) {
+    if (!availableUmos.value.includes(umo)) {
+      availableUmos.value = [umo, ...availableUmos.value];
+      mergeUmoInfos([parseUmoInfo(umo)]);
+    }
   }
   newJob.value = {
     schedule_mode: schedule.schedule_mode,
@@ -971,7 +998,7 @@ function openEdit(job: any) {
     weekly_time: schedule.weekly_time,
     monthly_day: schedule.monthly_day,
     monthly_time: schedule.monthly_time,
-    session: job.session || job?.payload?.session || "",
+    sessions,
     timezone: job.timezone || "",
     enabled: job.enabled !== false,
   };
@@ -1172,7 +1199,9 @@ function buildPayload() {
     note: newJob.value.note.trim(),
     cron_expression: cronExpression,
     run_at: runOnce ? toIsoDatetime(newJob.value.run_at) : "",
-    session: newJob.value.session,
+    sessions: newJob.value.sessions
+      .map((s) => String(s || "").trim())
+      .filter(Boolean),
     timezone: newJob.value.timezone,
     enabled: newJob.value.enabled,
   };

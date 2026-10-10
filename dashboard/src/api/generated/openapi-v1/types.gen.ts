@@ -276,7 +276,14 @@ export type CronJobRequest = {
     name?: string;
     cron_expression?: string;
     timezone?: string;
+    /**
+     * Legacy single delivery session. Ignored when "sessions" is provided and non-empty.
+     */
     session?: string;
+    /**
+     * Delivery sessions for the job. The job wakes the agent once per session and delivers the result to each of them. Takes precedence over "session".
+     */
+    sessions?: Array<(string)>;
     note?: string;
     description?: string;
     persona_id?: string;

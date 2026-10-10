@@ -30,6 +30,11 @@ if TYPE_CHECKING:
 _CRONTAB_WEEKDAY_NAMES = ("sun", "mon", "tue", "wed", "thu", "fri", "sat")
 _CRONTAB_WEEKDAY_PATTERN = re.compile(r"^(?:(\*)|(\d+)(?:-(\d+))?)(?:/(\d+))?$")
 
+# A multi-target cron job runs one agent per delivery session. They run with
+# bounded concurrency so a slow or hung session cannot block the remaining
+# deliveries, while still limiting load on providers and the event loop.
+_MAX_CONCURRENT_DELIVERIES = 3
+
 
 def _normalize_crontab_day_of_week(day_of_week: str) -> str:
     """Normalize standard crontab weekdays for APScheduler.
@@ -300,6 +305,9 @@ class CronJobManager:
                 args=[job.job_id],
                 replace_existing=True,
                 misfire_grace_time=300,
+                # A fan-out may still be running for a job with many delivery
+                # sessions; never start an overlapping run for the same job.
+                max_instances=1,
             )
             asyncio.create_task(
                 self.db.update_cron_job(
@@ -388,39 +396,90 @@ class CronJobManager:
 
     async def _run_active_agent_job(self, job: CronJob, start_time: datetime) -> None:
         payload = job.payload or {}
-        delivery_session_str = str(payload.get("session") or "").strip()
-        session_str = delivery_session_str or str(
-            MessageSession(
-                platform_name="cron",
-                message_type=MessageType.OTHER_MESSAGE,
-                session_id=job.job_id,
-            )
-        )
+        delivery_sessions: list[str] = []
+        for raw in payload.get("sessions") or []:
+            text = str(raw or "").strip()
+            if text and text not in delivery_sessions:
+                delivery_sessions.append(text)
+        if not delivery_sessions:
+            # Legacy rows only carry a single payload["session"].
+            session_fallback = str(payload.get("session") or "").strip()
+            if session_fallback:
+                delivery_sessions = [session_fallback]
         note = payload.get("note") or job.description or job.name
 
-        extras = {
-            "cron_job": {
-                "id": job.job_id,
-                "name": job.name,
-                "type": job.job_type,
-                "run_once": job.run_once,
-                "description": job.description,
-                "note": note,
-                "run_started_at": start_time.isoformat(),
-                "run_at": (
-                    job.payload.get("run_at") if isinstance(job.payload, dict) else None
-                ),
-                "session": delivery_session_str,
-            },
-            "cron_payload": payload,
-        }
+        # Multi-target jobs wake the agent once per delivery session so each
+        # target keeps its own conversation history and receives its own
+        # delivery. Jobs without a delivery session still run once against a
+        # synthetic cron session.
+        #
+        # Targets run with bounded concurrency so one slow or hung session
+        # cannot delay the remaining deliveries. A single failing session must
+        # not stop the others; only a total failure marks the job as failed.
+        # APScheduler's max_instances=1 (set when scheduling) means a recurring
+        # firing that becomes due while this fan-out is still running is
+        # skipped instead of overlapping it.
+        targets = delivery_sessions or [""]
+        semaphore = asyncio.Semaphore(_MAX_CONCURRENT_DELIVERIES)
 
-        await self._woke_main_agent(
-            message=note,
-            session_str=session_str,
-            extras=extras,
-            delivery_session_str=delivery_session_str,
+        async def _deliver(delivery_session_str: str) -> None:
+            session_str = delivery_session_str or str(
+                MessageSession(
+                    platform_name="cron",
+                    message_type=MessageType.OTHER_MESSAGE,
+                    session_id=job.job_id,
+                )
+            )
+            extras = {
+                "cron_job": {
+                    "id": job.job_id,
+                    "name": job.name,
+                    "type": job.job_type,
+                    "run_once": job.run_once,
+                    "description": job.description,
+                    "note": note,
+                    "run_started_at": start_time.isoformat(),
+                    "run_at": (
+                        job.payload.get("run_at")
+                        if isinstance(job.payload, dict)
+                        else None
+                    ),
+                    "session": delivery_session_str,
+                },
+                "cron_payload": payload,
+            }
+            async with semaphore:
+                await self._woke_main_agent(
+                    message=note,
+                    session_str=session_str,
+                    extras=extras,
+                    delivery_session_str=delivery_session_str,
+                )
+
+        results = await asyncio.gather(
+            *(_deliver(target) for target in targets),
+            return_exceptions=True,
         )
+        errors: list[tuple[str, BaseException]] = [
+            (target, result)
+            for target, result in zip(targets, results)
+            if isinstance(result, BaseException)
+        ]
+        for target, error in errors:
+            logger.error(
+                f"Cron job {job.job_id} failed for delivery session "
+                f"{target or 'internal session'}: {error!s}",
+                exc_info=error,
+            )
+        if errors and len(errors) == len(targets):
+            first_exc = errors[0][1]
+            if len(targets) == 1:
+                # Single-target jobs keep their original error message.
+                raise first_exc
+            raise RuntimeError(
+                f"Cron job {job.job_id} failed for all "
+                f"{len(targets)} delivery sessions. First error: {first_exc!s}"
+            ) from first_exc
 
     async def _woke_main_agent(
         self,
@@ -448,8 +507,9 @@ class CronJobManager:
                 else MessageSession.from_str(session_str)
             )
         except Exception as e:  # noqa: BLE001
-            logger.error(f"Invalid session for cron job: {e}")
-            return
+            # Propagate so the fan-out records this target as failed instead
+            # of counting a delivery that never happened as successful.
+            raise ValueError(f"Invalid session for cron job: {session_str}") from e
 
         cron_event = CronMessageEvent(
             context=self.ctx,
