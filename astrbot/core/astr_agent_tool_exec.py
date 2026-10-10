@@ -623,16 +623,18 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         req.contexts = json.loads(conv.history)
 
         bg = json.dumps(extras["background_task_result"], ensure_ascii=False)
-        req.system_prompt += BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT.format(
-            background_task_result=bg
-        )
+        # Keep changing task data after the stable system prompt and history.
+        req.system_prompt += BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT
         req.prompt = (
             "Proceed according to your system instructions. "
             "Output using same language as previous conversation. "
             "If you need to deliver the result to the user immediately, "
             "you MUST use `send_message_to_user` tool to send the message directly to the user, "
             "otherwise the user will not see the result. "
-            "After completing your task, summarize and output your actions and results. "
+            "After completing your task, summarize and output your actions and results.\n\n"
+            "# BACKGROUND TASK CONTEXT\n"
+            "The following object describes the background task that completed:\n"
+            f"{bg}"
         )
         if not req.func_tool:
             req.func_tool = ToolSet()

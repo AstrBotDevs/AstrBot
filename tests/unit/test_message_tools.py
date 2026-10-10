@@ -1,5 +1,6 @@
-"""Tests for send_message_to_user session handling."""
+"""Tests for send_message_to_user session handling and delivery."""
 
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -285,6 +286,202 @@ async def test_send_message_empty_messages_returns_error():
     result = await tool.call(ctx, messages=[], session="oc_xxx")
     assert "error:" in result
     assert "messages" in result.lower()
+
+
+@pytest.mark.asyncio
+async def test_repeated_text_delivery_is_sent_once_per_event():
+    """Repeated model calls reuse successful delivery even with session aliases."""
+    ctx = _make_context(role="member")
+    for index in range(30):
+        result = await SendMessageToUserTool().call(
+            ctx,
+            messages=[{"type": "PLAIN", "text": " hello "}],
+            session=[None, "oc_xxx", "feishu:GroupMessage:oc_xxx"][index % 3],
+        )
+        if index == 0:
+            assert "Message sent" in result
+        else:
+            assert "already sent" in result
+
+    ctx.context.context.send_message.assert_awaited_once()
+    assert ctx.context.event.get_extra(
+        "_send_message_to_user_current_session_plain_texts"
+    ) == ["hello"]
+
+
+@pytest.mark.asyncio
+async def test_concurrent_duplicate_delivery_is_sent_once():
+    """A second call cannot send while the first delivery is still in flight."""
+    ctx = _make_context()
+    tool = SendMessageToUserTool()
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def send(*args):
+        started.set()
+        await release.wait()
+        return True
+
+    ctx.context.context.send_message.side_effect = send
+    first = asyncio.create_task(
+        tool.call(ctx, messages=[{"type": "plain", "text": "hello"}])
+    )
+    await asyncio.wait_for(started.wait(), timeout=1)
+    second = asyncio.create_task(
+        tool.call(ctx, messages=[{"type": "plain", "text": "hello"}])
+    )
+    release.set()
+    results = await asyncio.wait_for(asyncio.gather(first, second), timeout=1)
+
+    assert "Message sent" in results[0]
+    assert "already sent" in results[1]
+    ctx.context.context.send_message.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", [False, RuntimeError("temporary failure")])
+async def test_failed_delivery_can_be_retried(failure):
+    """Only confirmed deliveries enter the event cache."""
+    ctx = _make_context()
+    ctx.context.context.send_message.side_effect = [failure, True]
+    tool = SendMessageToUserTool()
+    messages = [{"type": "plain", "text": "hello"}]
+
+    assert (await tool.call(ctx, messages=messages)).startswith("error:")
+    assert ctx.context.event._has_send_oper is False
+    assert "Message sent" in await tool.call(ctx, messages=messages)
+    assert "already sent" in await tool.call(ctx, messages=messages)
+    assert ctx.context.context.send_message.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_cancelled_delivery_does_not_block_retry():
+    """Cancellation releases the send lock without caching success."""
+    ctx = _make_context()
+    tool = SendMessageToUserTool()
+    started = asyncio.Event()
+
+    async def send(*args):
+        started.set()
+        await asyncio.Event().wait()
+
+    ctx.context.context.send_message.side_effect = send
+    messages = [{"type": "plain", "text": "hello"}]
+    task = asyncio.create_task(tool.call(ctx, messages=messages))
+    await asyncio.wait_for(started.wait(), timeout=1)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    ctx.context.context.send_message.side_effect = None
+    ctx.context.context.send_message.return_value = True
+    result = await asyncio.wait_for(tool.call(ctx, messages=messages), timeout=1)
+    assert "Message sent" in result
+    assert ctx.context.context.send_message.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_delivery_cache_preserves_distinct_messages_and_sessions():
+    """Changing text, mentions, component order or target keeps a send distinct."""
+    ctx = _make_context()
+    tool = SendMessageToUserTool()
+    plain = {"type": "plain", "text": "hello"}
+    mention = {"type": "mention_user", "mention_user_id": "one"}
+    calls = [
+        ([plain], None),
+        ([{"type": "plain", "text": "world"}], None),
+        ([mention, plain], None),
+        ([plain, mention], None),
+        ([{"type": "mention_user", "mention_user_id": "two"}, plain], None),
+        ([plain], "feishu:GroupMessage:other"),
+    ]
+    for messages, session in calls:
+        assert "Message sent" in await tool.call(
+            ctx, messages=messages, session=session
+        )
+        assert "already sent" in await tool.call(
+            ctx, messages=messages, session=session
+        )
+    assert ctx.context.context.send_message.await_count == len(calls)
+
+
+@pytest.mark.asyncio
+async def test_delivery_cache_does_not_leak_to_a_new_event():
+    """A new chat turn or cron wakeup may legitimately repeat a prior message."""
+    tool = SendMessageToUserTool()
+    first, second = _make_context(), _make_context()
+    for ctx in (first, second):
+        assert "Message sent" in await tool.call(
+            ctx, messages=[{"type": "plain", "text": "hello"}]
+        )
+        ctx.context.context.send_message.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_cached_delivery_does_not_bypass_session_permission():
+    """Permissions are checked even when an identical delivery is cached."""
+    ctx = _make_context()
+    tool = SendMessageToUserTool()
+    kwargs = {
+        "messages": [{"type": "plain", "text": "hello"}],
+        "session": "other",
+    }
+    assert "Message sent" in await tool.call(ctx, **kwargs)
+    ctx.context.event.role = "member"
+    assert "Permission denied" in await tool.call(ctx, **kwargs)
+    ctx.context.context.send_message.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_invalid_session_is_rejected_before_resolving_media(monkeypatch):
+    """Malformed targets must not trigger sandbox downloads."""
+    resolve = AsyncMock()
+    monkeypatch.setattr(SendMessageToUserTool, "_resolve_path_from_sandbox", resolve)
+    ctx = _make_context()
+    result = await SendMessageToUserTool().call(
+        ctx,
+        messages=[{"type": "image", "path": "/sandbox/report.png"}],
+        session="feishu:invalid:session",
+    )
+    assert "invalid session" in result
+    resolve.assert_not_awaited()
+    ctx.context.context.send_message.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_media_paths_are_resolved_once_per_call_only(tmp_path, monkeypatch):
+    """Reuse a download within a batch, but resolve mutable files again next call."""
+    local_file = tmp_path / "report.png"
+    local_file.write_bytes(b"first version")
+    resolve = AsyncMock(return_value=(str(local_file), True))
+    monkeypatch.setattr(SendMessageToUserTool, "_resolve_path_from_sandbox", resolve)
+    ctx = _make_context(runtime="sandbox")
+    tool = SendMessageToUserTool()
+    messages = [
+        {"type": kind, "path": "/sandbox/report.png"}
+        for kind in ("image", "record", "video", "file")
+    ]
+    for index in range(2):
+        local_file.write_bytes(f"version {index}".encode())
+        assert "Message sent" in await tool.call(ctx, messages=messages)
+        assert resolve.await_count == index + 1
+
+    assert ctx.context.context.send_message.await_count == 2
+    chain = ctx.context.context.send_message.await_args.args[1].chain
+    assert len(chain) == 4
+    assert chain[-1].name == "report.png"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["image", "record", "video", "file"])
+async def test_media_urls_are_not_deduplicated(kind):
+    """A URL may return new content on a subsequent call."""
+    ctx = _make_context()
+    tool = SendMessageToUserTool()
+    messages = [{"type": kind, "url": "https://example.com/latest"}]
+    for _ in range(2):
+        assert "Message sent" in await tool.call(ctx, messages=messages)
+    assert ctx.context.context.send_message.await_count == 2
 
 
 @pytest.mark.asyncio
