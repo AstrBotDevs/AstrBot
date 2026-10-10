@@ -27,7 +27,7 @@ from tenacity import (
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import At, File, Image, Plain, Record, Video
+from astrbot.api.message_components import At, File, Image, Plain, Record, Reply, Video
 from astrbot.api.platform import AstrBotMessage, Group, PlatformMetadata
 from astrbot.core.platform.sources.qqofficial.qqofficial_chunked_upload import (
     QQOFFICIAL_CHUNKED_UPLOAD_THRESHOLD,
@@ -405,6 +405,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             video_file_source,
             file_source,
             file_name,
+            reply_message_id,
         ) = await QQOfficialMessageEvent._parse_to_qqofficial(message_to_send)
 
         # C2C 流式仅用于文本分片，富媒体时降级为普通发送，避免平台侧流式校验报错。
@@ -452,6 +453,11 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         if not isinstance(source, botpy.message.Message | botpy.message.DirectMessage):
             payload["msg_seq"] = random.randint(1, 10000)
+
+        # 插件通过 Reply 组件给出的引用 id，四个发送接口（群/C2C/频道/频道私信）
+        # 都以 message_reference 接受；拿不到 id 时保持原样，不影响正文发送
+        if reply_message_id:
+            payload["message_reference"] = {"message_id": reply_message_id}
 
         ret = None
 
@@ -634,13 +640,30 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             if payload.get("msg_id"):
                 fallback_payload = payload.copy()
                 fallback_payload.pop("msg_id", None)
+                # 转主动发送时先保留引用：失败若与引用无关（如 markdown 校验），
+                # 引用上下文仍然有效，不应一并丢弃
                 try:
                     ret = await send_func(fallback_payload)
                     logger.info("[QQOfficial] 使用主动发送接口发送成功。")
                     return ret
                 except _QQOFFICIAL_SEND_API_ERRORS as fallback_err:
-                    err = fallback_err
-                    payload = fallback_payload
+                    if not fallback_payload.get("message_reference"):
+                        err = fallback_err
+                        payload = fallback_payload
+                    else:
+                        # 主动发送仍失败，引用 id 可能已失效；去掉引用最后重试一次，
+                        # 失效引用不应阻断正文送达
+                        retry_payload = fallback_payload.copy()
+                        retry_payload.pop("message_reference", None)
+                        try:
+                            ret = await send_func(retry_payload)
+                            logger.info(
+                                "[QQOfficial] 引用已失效，去掉引用后主动发送成功。"
+                            )
+                            return ret
+                        except _QQOFFICIAL_SEND_API_ERRORS as retry_err:
+                            err = retry_err
+                            payload = retry_payload
 
             if not isinstance(err, botpy.errors.ServerError):
                 raise
@@ -916,6 +939,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         video_file_source = None
         file_source = None
         file_name = None
+        reply_message_id = None
         for i in message.chain:
             if isinstance(i, Plain):
                 plain_text += i.text
@@ -967,6 +991,11 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     file_source = file_path
                 elif i.url:
                     file_source = i.url
+            elif isinstance(i, Reply) and not reply_message_id:
+                # 出站引用回复：取第一个带被引用消息 id 的 Reply 组件
+                quoted_id = str(i.id).strip()
+                if quoted_id:
+                    reply_message_id = quoted_id
             else:
                 logger.debug(f"qq_official 忽略 {i.type}")
         return (
@@ -977,4 +1006,5 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             video_file_source,
             file_source,
             file_name,
+            reply_message_id,
         )

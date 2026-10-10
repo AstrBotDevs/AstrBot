@@ -252,6 +252,47 @@ async def test_parse_to_qqofficial_ignores_empty_at_component(qq: str | None):
 
 
 @pytest.mark.asyncio
+async def test_parse_to_qqofficial_extracts_reply_reference():
+    parsed = await QQOfficialMessageEvent._parse_to_qqofficial(
+        MessageChain(chain=[Reply(id="quoted-1"), Plain("hello")])
+    )
+
+    assert parsed[7] == "quoted-1"
+
+
+@pytest.mark.asyncio
+async def test_parse_to_qqofficial_extracts_reply_reference_after_text():
+    parsed = await QQOfficialMessageEvent._parse_to_qqofficial(
+        MessageChain(chain=[Plain("hello"), Reply(id="quoted-1")])
+    )
+
+    assert parsed[7] == "quoted-1"
+
+
+@pytest.mark.parametrize(
+    "chain",
+    [
+        MessageChain(chain=[Plain("hello")]),
+        MessageChain(chain=[Reply(id=""), Plain("hello")]),
+    ],
+)
+@pytest.mark.asyncio
+async def test_parse_to_qqofficial_reply_reference_defaults_to_none(chain):
+    parsed = await QQOfficialMessageEvent._parse_to_qqofficial(chain)
+
+    assert parsed[7] is None
+
+
+@pytest.mark.asyncio
+async def test_parse_to_qqofficial_keeps_first_reply_reference():
+    parsed = await QQOfficialMessageEvent._parse_to_qqofficial(
+        MessageChain(chain=[Reply(id="quoted-1"), Reply(id="quoted-2")])
+    )
+
+    assert parsed[7] == "quoted-1"
+
+
+@pytest.mark.asyncio
 async def test_legacy_group_at_path_forces_bot_mention_when_mentions_missing():
     message = botpy.message.GroupMessage(
         None,
@@ -757,7 +798,7 @@ async def test_ws_group_send_by_session_with_media_uses_msg_type_7(monkeypatch):
     adapter._session_scene["group-1"] = "group"
 
     async def fake_parse(message_chain):
-        return ("caption", "fake-base64", None, None, None, None, None)
+        return ("caption", "fake-base64", None, None, None, None, None, None)
 
     async def fake_upload_image(self_, image_base64, file_type, **kwargs):
         return {"file_uuid": "u-1", "file_info": "i-1", "ttl": 0}
@@ -777,6 +818,140 @@ async def test_ws_group_send_by_session_with_media_uses_msg_type_7(monkeypatch):
     assert "markdown" not in kwargs
     assert kwargs["content"] == "caption"
     assert kwargs["media"]["file_uuid"] == "u-1"
+
+
+@pytest.mark.asyncio
+async def test_ws_group_send_by_session_attaches_message_reference():
+    adapter = QQOfficialPlatformAdapter(
+        {
+            "id": "qq-official-test",
+            "appid": "123",
+            "secret": "secret",
+            "enable_group_c2c": True,
+            "enable_guild_direct_message": False,
+        },
+        {},
+        asyncio.Queue(),
+    )
+    adapter.client.api = SimpleNamespace(
+        post_group_message=AsyncMock(return_value={"id": "sent-quote"}),
+        post_message=AsyncMock(),
+    )
+    adapter._session_scene["group-1"] = "group"
+
+    await adapter.send_by_session(
+        MessageSession("qq_official", MessageType.GROUP_MESSAGE, "group-1"),
+        MessageChain(chain=[Reply(id="quoted-1"), Plain("reply text")]),
+    )
+
+    kwargs = adapter.client.api.post_group_message.await_args.kwargs
+    assert kwargs["message_reference"] == {"message_id": "quoted-1"}
+
+
+@pytest.mark.asyncio
+async def test_friend_send_by_session_attaches_message_reference():
+    adapter = QQOfficialPlatformAdapter(
+        {
+            "id": "qq-official-test",
+            "appid": "123",
+            "secret": "secret",
+            "enable_group_c2c": True,
+            "enable_guild_direct_message": False,
+        },
+        {},
+        asyncio.Queue(),
+    )
+    request = AsyncMock(return_value={"id": "sent-c2c-quote"})
+    adapter.client.api = SimpleNamespace(_http=SimpleNamespace(request=request))
+
+    await adapter.send_by_session(
+        MessageSession("qq_official", MessageType.FRIEND_MESSAGE, "user-1"),
+        MessageChain(chain=[Reply(id="quoted-2"), Plain("reply text")]),
+    )
+
+    request.assert_awaited_once()
+    json_payload = request.await_args.kwargs["json"]
+    assert json_payload["message_reference"] == {"message_id": "quoted-2"}
+
+
+@pytest.mark.asyncio
+async def test_send_by_session_without_reply_adds_no_message_reference():
+    adapter = QQOfficialPlatformAdapter(
+        {
+            "id": "qq-official-test",
+            "appid": "123",
+            "secret": "secret",
+            "enable_group_c2c": True,
+            "enable_guild_direct_message": False,
+        },
+        {},
+        asyncio.Queue(),
+    )
+    adapter.client.api = SimpleNamespace(
+        post_group_message=AsyncMock(return_value={"id": "sent-plain"}),
+        post_message=AsyncMock(),
+    )
+    adapter._session_scene["group-1"] = "group"
+
+    await adapter.send_by_session(
+        MessageSession("qq_official", MessageType.GROUP_MESSAGE, "group-1"),
+        MessageChain(chain=[Plain("plain text")]),
+    )
+
+    kwargs = adapter.client.api.post_group_message.await_args.kwargs
+    assert "message_reference" not in kwargs
+
+
+@pytest.mark.asyncio
+async def test_active_send_fallback_keeps_valid_message_reference():
+    calls = []
+
+    async def fake_send(payload):
+        calls.append(dict(payload))
+        if len(calls) == 1:
+            raise botpy.errors.ServerError("passive msg_id expired")
+        return {"id": "sent-active"}
+
+    payload = {
+        "content": "reply text",
+        "msg_type": 0,
+        "msg_id": "passive-1",
+        "message_reference": {"message_id": "quoted-1"},
+    }
+    ret = await QQOfficialMessageEvent._send_with_markdown_fallback(
+        fake_send, payload, "reply text"
+    )
+
+    assert ret == {"id": "sent-active"}
+    assert len(calls) == 2
+    assert "msg_id" not in calls[1]
+    assert calls[1]["message_reference"] == {"message_id": "quoted-1"}
+
+
+@pytest.mark.asyncio
+async def test_active_send_fallback_strips_reference_only_when_retry_fails():
+    calls = []
+
+    async def fake_send(payload):
+        calls.append(dict(payload))
+        if len(calls) < 3:
+            raise botpy.errors.ServerError("reference rejected")
+        return {"id": "sent-no-ref"}
+
+    payload = {
+        "content": "reply text",
+        "msg_type": 0,
+        "msg_id": "passive-1",
+        "message_reference": {"message_id": "quoted-1"},
+    }
+    ret = await QQOfficialMessageEvent._send_with_markdown_fallback(
+        fake_send, payload, "reply text"
+    )
+
+    assert ret == {"id": "sent-no-ref"}
+    assert len(calls) == 3
+    assert calls[1]["message_reference"] == {"message_id": "quoted-1"}
+    assert "message_reference" not in calls[2]
 
 
 @pytest.mark.asyncio
