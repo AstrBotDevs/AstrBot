@@ -199,13 +199,16 @@ def _chain_with_at(qq: str) -> MessageChain:
 
 
 @pytest.mark.asyncio
-async def test_at_component_becomes_inline_mention_marker() -> None:
-    """QQ 官方群消息用内容中的 <@openid> 标记表示 @（没有独立字段）。"""
+async def test_at_component_becomes_qqbot_at_user_protocol() -> None:
+    """QQ 官方 @ 采用嵌入文本协议 <qqbot-at-user id="..." />。
+
+    旧格式 <@userid> 官方已标记「即将弃用」，部分客户端会原样显示为文本，因此不使用。
+    """
     parsed = await QQOfficialMessageEvent._parse_to_qqofficial(
         _chain_with_at("CF54030E8F7EA4C70D977EEB5330F435")
     )
 
-    assert parsed[0] == "<@CF54030E8F7EA4C70D977EEB5330F435> hi"
+    assert parsed[0] == '<qqbot-at-user id="CF54030E8F7EA4C70D977EEB5330F435" /> hi'
 
 
 @pytest.mark.asyncio
@@ -214,4 +217,5 @@ async def test_at_all_component_is_skipped() -> None:
     parsed = await QQOfficialMessageEvent._parse_to_qqofficial(_chain_with_at("all"))
 
     assert parsed[0] == " hi"
-    assert "<@all>" not in parsed[0]
+    assert "qqbot-at-everyone" not in parsed[0]
+    assert "qqbot-at-user" not in parsed[0]
