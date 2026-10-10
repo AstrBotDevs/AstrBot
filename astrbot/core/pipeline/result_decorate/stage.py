@@ -123,15 +123,50 @@ class ResultDecorateStage(Stage):
                 result.append(seg)
         return result if result else [text]
 
+    def _stash_streaming_decorations(self, event: AstrMessageEvent) -> None:
+        """记录本次流式发送所需的发送期装饰（引用 / at）。
+
+        流式正文由 result.async_stream 逐段发出，result.chain 在 respond 阶段被忽略，
+        因此这里不做任何链修改，只把决策结果交给平台适配器，保持共享阶段的平台无关性。
+        """
+        try:
+            event.set_extra(
+                "_streaming_decorations",
+                {
+                    "quote": bool(self.reply_with_quote),
+                    "mention": bool(
+                        self.reply_with_mention
+                        and event.get_message_type() != MessageType.FRIEND_MESSAGE
+                    ),
+                },
+            )
+        except Exception:
+            logger.debug("stash streaming decorations failed", exc_info=True)
+
     async def process(
         self,
         event: AstrMessageEvent,
     ) -> None | AsyncGenerator[None, None]:
         result = event.get_result()
-        if result is None or not result.chain:
+        if result is None:
             return
 
-        if result.result_content_type == ResultContentType.STREAMING_RESULT:
+        # 流式结果的正文在 result.async_stream 中逐段发出，result.chain 在 respond
+        # 阶段会被忽略（respond 直接使用 async_stream），因此这里修改 chain 不会生效。
+        # 为了不改动共享阶段的接口、也不替各平台决定发送细节，只把「本次需要哪些
+        # 发送期装饰」记录到事件扩展字段上，由平台自身的 send_streaming 按需应用。
+        #
+        # 注意必须放在下面的 chain 判空之前：流式场景下 chain 恒为空，否则会提前返回，
+        # 装饰决策就无处安放（这也正是此前流式输出丢失引用 / @ 的原因）。
+        if result.result_content_type in (
+            ResultContentType.STREAMING_RESULT,
+            ResultContentType.STREAMING_FINISH,
+        ):
+            self._stash_streaming_decorations(event)
+            if result.result_content_type == ResultContentType.STREAMING_RESULT:
+                return
+
+        if not result.chain:
             return
 
         is_stream = result.result_content_type == ResultContentType.STREAMING_FINISH
