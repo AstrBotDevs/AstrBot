@@ -27,7 +27,7 @@ from tenacity import (
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import At, File, Image, Plain, Record, Video
+from astrbot.api.message_components import At, File, Image, Plain, Record, Reply, Video
 from astrbot.api.platform import AstrBotMessage, Group, PlatformMetadata
 from astrbot.core.platform.sources.qqofficial.qqofficial_chunked_upload import (
     QQOFFICIAL_CHUNKED_UPLOAD_THRESHOLD,
@@ -236,6 +236,31 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 return None
             self.send_buffer = MessageChain(chain=[Plain(text="\n")])
         return await self._post_send(stream=stream_payload)
+
+    @staticmethod
+    def _extract_self_ref_idx(message: object) -> str:
+        """取本条消息自身的引用 ID（REFIDX_...），用于出站引用回复。
+
+        QQ 官方文档：message_reference.message_id 对「非机器人发的消息」需从
+        消息事件的 message_scene.ext 数组的 msg_idx 字段获取；它与 message.id
+        （ROBOT1.0_...）不是同一个值，格式也不同。
+        """
+        try:
+            raw = getattr(message, "raw_data", None)
+            if not isinstance(raw, dict):
+                return ""
+            scene = raw.get("message_scene")
+            if not isinstance(scene, dict):
+                return ""
+            for item in scene.get("ext") or []:
+                text = str(item)
+                if text.startswith("msg_idx="):
+                    value = text[len("msg_idx="):].strip()
+                    if value:
+                        return value
+        except Exception:
+            return ""
+        return ""
 
     async def send_streaming(self, generator, use_fallback: bool = False):
         """流式输出仅支持消息列表私聊（C2C），其他消息源退化为普通发送"""
@@ -452,6 +477,18 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         if not isinstance(source, botpy.message.Message | botpy.message.DirectMessage):
             payload["msg_seq"] = random.randint(1, 10000)
+
+        # 出站引用回复：消息链里存在 Reply 组件时填 message_reference。
+        # 注意 botpy 在同时传 message_reference 与 file_image 时会主动去除前者（SDK 限制）。
+        if any(
+            isinstance(_component, Reply)
+            for _component in (getattr(message_to_send, "chain", None) or [])
+        ):
+            _ref_idx = QQOfficialMessageEvent._extract_self_ref_idx(
+                self.message_obj.raw_message
+            )
+            if _ref_idx:
+                payload["message_reference"] = {"message_id": _ref_idx}
 
         ret = None
 
