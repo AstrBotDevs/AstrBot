@@ -1,4 +1,6 @@
+import asyncio
 import base64
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -65,7 +67,8 @@ async def test_speech_synthesizer_route_preserves_parameters(monkeypatch, model)
     assert path.read_bytes() == b"speech audio"
     sdk.assert_called_once_with(
         headers={
-            name.lower(): value for name, value in provider.request_headers.items()
+            **{name.lower(): value for name, value in provider.request_headers.items()},
+            "Authorization": "Bearer sk-test",
         },
         model=model,
         voice=voice,
@@ -162,6 +165,85 @@ async def test_endpoint_resolution_is_instance_local(monkeypatch, endpoint):
     assert instances[0].url == (expected_url or default_url)
     assert instances[1].url == default_url
     assert mod.dashscope.base_websocket_api_url == default_url
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model", ["qwen-audio-3.0-tts-plus", "cosyvoice-v1"])
+@pytest.mark.parametrize("concurrent", [False, True])
+@pytest.mark.parametrize(
+    "custom_auth",
+    [
+        {},
+        {"Authorization": "Bearer wrong"},
+        {"authorization": "Bearer wrong", "AUTHORIZATION": "Bearer also-wrong"},
+    ],
+)
+async def test_instance_api_keys_override_global_and_custom_auth(
+    monkeypatch, model, concurrent, custom_auth
+):
+    providers = [
+        mod.ProviderDashscopeTTSAPI(
+            {
+                "api_key": key,
+                "model": model,
+                "custom_headers": {
+                    **custom_auth,
+                    "X-Test": "retained",
+                    "User-Agent": "custom-agent",
+                },
+            },
+            {},
+        )
+        for key in ["sk-provider-A", "sk-provider-B"]
+    ]
+    assert mod.dashscope.api_key == "sk-provider-B"
+    barrier = threading.Barrier(2, timeout=5) if concurrent else None
+    captured_headers = {}
+
+    def capture_headers(instance, text, timeout):
+        """Generate real SDK headers without opening a WebSocket connection.
+
+        Args:
+            instance: Real SDK synthesizer created by the provider.
+            text: Unique text identifying the provider invocation.
+            timeout: Synthesis timeout passed by the provider.
+
+        Returns:
+            Dummy audio bytes for the synthesis result.
+        """
+        if barrier is not None:
+            barrier.wait()
+        captured_headers[text] = instance.request.get_websocket_headers(
+            instance.headers, instance.workspace
+        )
+        return b"audio"
+
+    monkeypatch.setattr(mod.SpeechSynthesizer, "call", capture_headers)
+    if concurrent:
+        await asyncio.gather(
+            providers[0]._synthesize_with_cosyvoice(model, "A"),
+            providers[1]._synthesize_with_cosyvoice(model, "B"),
+        )
+    else:
+        await providers[0]._synthesize_with_cosyvoice(model, "A")
+        await providers[1]._synthesize_with_cosyvoice(model, "B")
+
+    for label, provider in zip(["A", "B"], providers):
+        headers = captured_headers[label]
+        auth_headers = [
+            (name, value)
+            for name, value in headers.items()
+            if name.lower() == "authorization"
+        ]
+        assert auth_headers == [("Authorization", f"Bearer sk-provider-{label}")]
+        assert headers["x-test"] == "retained"
+        assert headers["user-agent"] == "custom-agent"
+        assert provider.request_headers == {
+            "User-Agent": "custom-agent",
+            "X-Test": "retained",
+            **custom_auth,
+        }
+    assert mod.dashscope.api_key == "sk-provider-B"
 
 
 @pytest.mark.asyncio
