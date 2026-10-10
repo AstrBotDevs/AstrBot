@@ -163,6 +163,35 @@ async def _gen_without_reply():
     yield MessageChain(chain=[Plain("hi")])
 
 
+@pytest.mark.asyncio
+async def test_explicit_refidx_in_reply_id_is_used_verbatim() -> None:
+    """插件直接给出 REFIDX_... 时应原样使用，而不是回退到当前消息。"""
+    event = _make_group_event()
+    event.bot.api.post_group_message = AsyncMock(return_value={"id": "out-1"})
+    other = "REFIDX_targetmessage+/=="
+
+    await event.send_streaming(_gen_with_reply_id(other))
+
+    kwargs = event.bot.api.post_group_message.await_args.kwargs
+    assert kwargs["message_reference"] == {"message_id": other}
+
+
+@pytest.mark.asyncio
+async def test_message_id_style_reply_id_falls_back_to_msg_idx() -> None:
+    """框架插入的 Reply.id 是 ROBOT1.0_...，不可直接使用，应回退到 msg_idx。"""
+    event = _make_group_event()
+    event.bot.api.post_group_message = AsyncMock(return_value={"id": "out-1"})
+
+    await event.send_streaming(_gen_with_reply_id("ROBOT1.0_message-id"))
+
+    kwargs = event.bot.api.post_group_message.await_args.kwargs
+    assert kwargs["message_reference"] == {"message_id": REF_IDX}
+
+
+async def _gen_with_reply_id(reply_id: str):
+    yield MessageChain(chain=[Reply(id=reply_id), Plain("hi")])
+
+
 def _chain_with_at(qq: str) -> MessageChain:
     from astrbot.api.message_components import At
 
