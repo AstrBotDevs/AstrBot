@@ -182,12 +182,12 @@ async def test_native_managed_shell(native_sandbox, tmp_path, monkeypatch, legac
         yield_time_ms=0,
         timeout=20,
     )
-    identity = dict(
-        owner_id="windows-test",
-        requester_id="tester",
-        requester_is_admin=False,
-        session_id=result["session_id"],
-    )
+    identity = {
+        "owner_id": "windows-test",
+        "requester_id": "tester",
+        "requester_is_admin": False,
+        "session_id": result["session_id"],
+    }
     try:
         await component.write_session(**identity, chars="hello\n")
         output = result["stdout"]
@@ -590,6 +590,89 @@ def test_runtime_subdirectory_cannot_be_writable(native_sandbox, tmp_path, monke
     with pytest.raises(RuntimeError, match="inside a runtime"):
         native_sandbox.run(
             [sys.executable, "-c", "pass"], SandboxSpec(tmp_path), timeout=5
+        )
+
+
+def test_conditional_runtime_acl_is_preserved(tmp_path, monkeypatch):
+    """Prepare and revoke runtime grants without removing conditional ACEs."""
+    from unittest.mock import Mock
+
+    import win32security
+
+    from astrbot.core.computer.process_sandbox import SandboxRunResult, windows
+    from astrbot.core.computer.process_sandbox import windows_setup as setup
+
+    info = win32security.DACL_SECURITY_INFORMATION
+    original = win32security.GetNamedSecurityInfo(
+        str(tmp_path), win32security.SE_FILE_OBJECT, info
+    )
+    sddl = win32security.ConvertSecurityDescriptorToStringSecurityDescriptor(
+        original, 1, info
+    )
+    descriptor = win32security.ConvertStringSecurityDescriptorToSecurityDescriptor(
+        sddl + "(XA;OICI;GRGX;;;WD;(Exists WIN://SYSAPPID))", 1
+    )
+    sid = win32security.ConvertStringSidToSid("S-1-5-21-1-2-3-12345")
+    monkeypatch.setattr(setup, "_attempted", False)
+    monkeypatch.setattr(setup, "_ready", False)
+    monkeypatch.setattr(setup, "_error", "not prepared")
+    monkeypatch.setattr(setup, "runtime_paths", lambda: (tmp_path,))
+    monkeypatch.setattr(setup, "get_astrbot_temp_path", lambda: str(tmp_path))
+    monkeypatch.setattr(windows, "runtime_capability", lambda: sid)
+    grant = Mock(wraps=windows.set_directory_access)
+    monkeypatch.setattr(windows, "set_directory_access", grant)
+    probe = Mock(return_value=SandboxRunResult(returncode=0))
+    monkeypatch.setattr(windows.AppContainerProcessSandbox, "run", probe)
+    elevate = Mock(side_effect=AssertionError("Unexpected UAC request"))
+    monkeypatch.setattr(setup, "_prepare_runtime_acl_elevated", elevate)
+    try:
+        win32security.SetNamedSecurityInfo(
+            str(tmp_path),
+            win32security.SE_FILE_OBJECT,
+            info,
+            None,
+            None,
+            descriptor.GetSecurityDescriptorDacl(),
+            None,
+        )
+        expected = win32security.ConvertSecurityDescriptorToStringSecurityDescriptor(
+            win32security.GetNamedSecurityInfo(
+                str(tmp_path), win32security.SE_FILE_OBJECT, info
+            ),
+            1,
+            info,
+        )
+        assert "(XA;" in expected
+        setup.initialize_windows_sandbox()
+        setup.require_windows_sandbox_ready()
+        grant.assert_called_once_with(tmp_path, sid, windows._READ)
+
+        # A later startup must reuse the persisted grant without elevation.
+        monkeypatch.setattr(setup, "_attempted", False)
+        setup.initialize_windows_sandbox()
+        assert grant.call_count == 1
+        assert probe.call_count == 2
+        elevate.assert_not_called()
+        windows.set_directory_access(tmp_path, sid, windows._READ)
+        windows.set_directory_access(tmp_path, sid, None)
+        restored = win32security.GetNamedSecurityInfo(
+            str(tmp_path), win32security.SE_FILE_OBJECT, info
+        )
+        assert (
+            win32security.ConvertSecurityDescriptorToStringSecurityDescriptor(
+                restored, 1, info
+            )
+            == expected
+        )
+    finally:
+        win32security.SetNamedSecurityInfo(
+            str(tmp_path),
+            win32security.SE_FILE_OBJECT,
+            info,
+            None,
+            None,
+            original.GetSecurityDescriptorDacl(),
+            None,
         )
 
 

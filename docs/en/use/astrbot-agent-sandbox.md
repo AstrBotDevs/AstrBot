@@ -27,6 +27,16 @@ Native integration tests are opt-in: after startup preparation, set `ASTRBOT_TES
 
 ![Windows host networking explanation](/windows-sandbox/network-zh.png)
 
+When testing from source, `bubblewrap` or Linux troubleshooting advice on Windows indicates an older Dashboard build. Build and serve the frontend from the same branch, starting at the repository root:
+
+```powershell
+pnpm --dir dashboard install --frozen-lockfile
+pnpm --dir dashboard build
+uv run main.py --webui-dir dashboard/dist
+```
+
+Refresh the browser; local isolation should show `AppContainer`. Native Windows execution does not detect or use bubblewrap inside WSL.
+
 ## Enabling the Sandbox Environment
 
 AstrBot currently supports the following sandbox drivers:

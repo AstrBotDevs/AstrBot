@@ -27,6 +27,16 @@ Shell 优先使用 PowerShell 7，未安装时使用 Windows PowerShell 5.1。�
 
 ![Windows Local 工作区模式（关闭联网）](/windows-sandbox/workspace-en.png)
 
+源码测试时，如果 Windows 页面仍显示 `bubblewrap` 或 Linux 排障提示，说明正在使用旧版 Dashboard。在仓库根目录构建并指定本分支的前端：
+
+```powershell
+pnpm --dir dashboard install --frozen-lockfile
+pnpm --dir dashboard build
+uv run main.py --webui-dir dashboard/dist
+```
+
+刷新浏览器后，本地隔离应显示 `AppContainer`。Windows 原生运行不会探测或使用 WSL 中的 bubblewrap。
+
 ## 启用沙盒环境
 
 目前，AstrBot 的沙盒环境驱动器支持：

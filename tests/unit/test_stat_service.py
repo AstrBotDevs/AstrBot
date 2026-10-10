@@ -30,6 +30,7 @@ def _make_service(db) -> StatService:
         ("Darwin", "arm64", "/opt/bin/sandbox-exec", "seatbelt", "missing"),
         ("Windows", "AMD64", None, "appcontainer", "detected"),
         ("Windows", "ARM64", None, "appcontainer", "detected"),
+        ("Windows", "AMD64", "/usr/bin/bwrap", "appcontainer", "detected"),
         ("FreeBSD", "", None, None, "unsupported"),
     ],
 )
@@ -80,7 +81,7 @@ def test_runtime_detects_platform_dependencies(
         factory.assert_not_called()
 
 
-@pytest.mark.parametrize("system", ["Linux", "Darwin"])
+@pytest.mark.parametrize("system", ["Linux", "Darwin", "Windows"])
 @pytest.mark.parametrize(
     ("outcome", "error"),
     [
@@ -124,7 +125,11 @@ def test_runtime_reports_sandbox_startup_failure(
     service = _make_service(MagicMock())
 
     assert service.runtime["sandbox"] == {
-        "backend": "bubblewrap" if system == "Linux" else "seatbelt",
+        "backend": {
+            "Linux": "bubblewrap",
+            "Darwin": "seatbelt",
+            "Windows": "appcontainer",
+        }[system],
         "status": "unavailable",
         "error": error,
     }

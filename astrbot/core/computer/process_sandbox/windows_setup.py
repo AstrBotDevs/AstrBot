@@ -161,13 +161,22 @@ def initialize_windows_sandbox(*, allow_elevation: bool = True) -> None:
                     win32security.DACL_SECURITY_INFORMATION,
                 ).GetSecurityDescriptorDacl()
                 # Persistent grants avoid repeated elevation on later starts.
-                if dacl is not None and any(
-                    ace[0][0] == win32security.ACCESS_ALLOWED_ACE_TYPE
-                    and ace[-1] == sid
-                    and ace[1] & _READ == _READ
-                    and ace[0][1] & 3 == 3
-                    for ace in (dacl.GetAce(i) for i in range(dacl.GetAceCount()))
-                ):
+                granted = False
+                for index in range(dacl.GetAceCount() if dacl is not None else 0):
+                    try:
+                        ace = dacl.GetAce(index)
+                    except NotImplementedError:
+                        # Unparsed conditional ACEs do not prove runtime access.
+                        continue
+                    if (
+                        ace[0][0] == win32security.ACCESS_ALLOWED_ACE_TYPE
+                        and ace[-1] == sid
+                        and ace[1] & _READ == _READ
+                        and ace[0][1] & 3 == 3
+                    ):
+                        granted = True
+                        break
+                if granted:
                     continue
                 try:
                     set_directory_access(path, sid, _READ)

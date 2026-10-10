@@ -187,7 +187,11 @@ def set_directory_access(path: Path, sid, rights: int | None) -> None:
         if acl is None:
             raise PermissionError(f"Sandbox roots must have an explicit DACL: {path}")
         for index in reversed(range(acl.GetAceCount())):
-            ace = acl.GetAce(index)
+            try:
+                ace = acl.GetAce(index)
+            except NotImplementedError:
+                # Preserve callback/conditional ACEs that pywin32 cannot decode.
+                continue
             if ace[-1] == sid and not ace[0][1] & 0x10:  # INHERITED_ACE
                 acl.DeleteAce(index)
         if rights is not None:
