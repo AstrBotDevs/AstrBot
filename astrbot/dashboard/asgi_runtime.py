@@ -189,13 +189,36 @@ class DashboardRequest:
         assert self._files_cache is not None
         return self._files_cache
 
-    async def get_data(self) -> bytes:
-        """Return the raw request body as bytes.
+    async def get_data(self, max_size: int | None = None) -> bytes:
+        """Read the body with an optional bound independent of Content-Length.
+
+        Args:
+            max_size: Maximum body bytes, or None for the existing unbounded read.
 
         Returns:
-            The raw body bytes of the request.
+            Raw body bytes, cached for subsequent body/JSON/form readers.
+
+        Raises:
+            ValueError: The limit is invalid or the body exceeds it. An oversized
+                stream is left partially consumed; callers should reject the request.
         """
-        return await self._request.body()
+        if max_size is None:
+            return await self._request.body()
+        if type(max_size) is not int or max_size < 0:
+            raise ValueError("max_size must be a non-negative integer")
+        if hasattr(self._request, "_body"):
+            body = await self._request.body()
+            if len(body) > max_size:
+                raise ValueError("Request body exceeds the size limit")
+            return body
+        body = bytearray()
+        async for chunk in self._request.stream():
+            if len(body) + len(chunk) > max_size:
+                raise ValueError("Request body exceeds the size limit")
+            body.extend(chunk)
+        # Match Starlette Request.body's cache so JSON/form reads still work.
+        self._request._body = bytes(body)
+        return self._request._body
 
 
 class DashboardWebSocket:
