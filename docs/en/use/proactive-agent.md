@@ -1,61 +1,133 @@
 # Proactive Capabilities
 
-AstrBot introduces a Proactive Agent system, enabling AstrBot to not only respond passively to users but also schedule future tasks and proactively execute them at specified times, delivering results (text, images, files, etc.) to users.
+Proactive capabilities let AstrBot run tasks at scheduled times without waiting for another user message. For example: “Remind me to take a break in ten minutes,” or “Search for technology news every morning and send a summary to this group.” When triggered, the Agent follows the task instructions, calls its model and tools, and attempts to send results to the target conversation.
 
-![](https://files.astrbot.app/docs/source/images/proactive-agent/image.png)
+This is not continuous autonomous monitoring. Create a task first and keep AstrBot running. Search, file access, and other capabilities need their own configuration. Introduced in v4.14.0, this feature is still **experimental**.
 
-Introduced in v4.14.0, this is currently an **experimental feature** and not yet stable.
+<span id="how-to-use"></span>
 
-## Future Tasks (FutureTask)
+## Configure the prerequisites
 
-The Main Agent can now manage a global **Cron Job List**, setting tasks for its future self.
+1. In **Config**, choose the profile used by the target conversation. Open **AI**, enable AI, and select **AstrBot Built-in AI**.
+2. Confirm that the chat model works and supports tool calling.
+3. Open **AI → Capabilities → Proactive Agent**, enable it, and click **Save Configuration**. This provides the `future_task` tool for managing tasks through chat.
+4. Under **Extensions → Future Tasks**, click **Supported platforms** to check that the receiving platform is configured and supports proactive messaging.
 
-### Features
+![Proactive Agent configuration](./images/proactive-agent-settings-en.png)
 
-- **Self-Wakeup**: AstrBot automatically wakes up at the scheduled time to execute tasks.
-- **Task Feedback**: After execution, AstrBot reports the results back to the task creator.
-- **WebUI Management**: You can view, edit, or delete scheduled tasks in the WebUI under **Extensions → Future Tasks**.
+Each profile can control whether its chat Agent receives the scheduling tool. **Turning this setting off does not delete or pause existing tasks.** Disable or delete those tasks on the Future Tasks page.
 
-### How to Use
+## Create tasks through chat {#future-tasks-futuretask}
 
-> [!TIP]
-> First, select the relevant profile on the `Config` page, open `AI → Capabilities → Proactive Agent`, enable the feature, and click `Save Configuration` at the bottom right.
+<span id="features"></span>
 
-The Main Agent has the ability to manage scheduled tasks. You can tell it:
-- "Remind me to have a meeting at 8 AM tomorrow."
-- "Summarize this week's work log every Friday at 5 PM."
-- "Set a timer for 10 minutes."
+In the private or group conversation that should receive the result, tell AstrBot:
 
-The Main Agent will call built-in scheduling tools to arrange these plans.
+```text
+Remind me to take a break in ten minutes, just once.
+```
 
-You can view and manage all future tasks under **Extensions → Future Tasks** (`/cron`) in the left sidebar of the AstrBot WebUI.
+For a recurring task:
+
+```text
+Every day at 9 AM Asia/Shanghai time, search for three technology news items. Send their titles, brief summaries, and source links to this group.
+```
+
+The model calls `future_task` to create a schedule. Do not rely only on “OK, scheduled”: open Future Tasks and verify the instructions, execution time, next run, and delivery target. A news task also requires [Web Search](./websearch.md).
+
+You can also ask it to:
+
+- “List the future tasks I created in this conversation.”
+- “Move my break reminder to 3 PM tomorrow.”
+- “Delete the news task I just created.”
+
+Chat-based listing, editing, and deletion are limited to tasks created by **the current sender in the current conversation**. Group members cannot edit or delete each other's tasks. Tasks created in the WebUI do not belong to a chat sender; administrators should manage them in the WebUI.
+
+## Create and manage tasks in the WebUI
+
+Open **Extensions → Future Tasks** and click **New Task**. You do not need to ask the model to create it first.
+
+![Current future task creation dialog](./images/proactive-agent-task-en.png)
+
+| Field | Meaning and example |
+| --- | --- |
+| Task name | A recognizable name, such as “Daily technology briefing.” |
+| Task requirements | Instructions the Agent executes when woken. Specify sources, steps, result format, and whether to send the result. |
+| Schedule | Choose one-off, interval, daily, weekly, monthly, or custom. |
+| Deliver to (optional) | Select an existing conversation. Leaving it empty allows execution but does not automatically deliver results to a user or group. |
+
+If no conversations appear, talk to AstrBot on the target platform first, then return to select it. The target is identified by a UMO (unified message origin), which includes the platform, message type, and conversation identifier.
+
+The list shows each schedule, delivery target, and next run. Search by name or content, or filter by target. Click a task to edit it, use its switch to disable scheduled execution, and use **More actions** for **Run now** or **Delete**. Hover over its timing information to see the last execution time and any recorded error.
+
+- **Disabling** preserves the task while pausing scheduled triggers.
+- **Run now** really executes the task. It may call paid models or external services and send messages. It also works for disabled tasks.
+- Running a one-off task manually does not delete it or replace its scheduled run. After a test, check whether you still need the schedule.
+- One-off tasks are deleted after their scheduled execution, **even if execution fails**. Recurring tasks remain and continue on their schedule.
+
+## Schedules and time zones
+
+Start with daily or weekly time selectors. A custom schedule uses a five-field Cron expression:
+
+```text
+minute hour day-of-month month day-of-week
+```
+
+| Expression | Meaning |
+| --- | --- |
+| `0 9 * * *` | Every day at 09:00. |
+| `0 17 * * fri` | Every Friday at 17:00. |
+| `0 9 1 * *` | The first day of each month at 09:00. |
+
+Recurring schedules use the task's time zone. New WebUI tasks default to the target conversation's configuration time zone, or the system time zone if none is specified. The one-off date/time picker uses the browser's local time and converts it to an absolute timestamp. Verify the resulting schedule when browser, server, and container time zones differ.
+
+Monthly tasks on the 29th, 30th, or 31st do not run in months without that date.
+
+AstrBot must be online to execute tasks. Saved schedules are reloaded after a restart, but do not depend on it replaying every missed reminder. Start with a one-off task a few minutes ahead to check timing and delivery.
 
 ### Fixed-interval tasks
 
-Under **Extensions → Future Tasks**, create or edit a task, select **Interval** for **Execution time**, enter a positive integer and a unit (minutes, hours, or days), and save. Every 40 minutes always means 40 elapsed minutes; every 24 hours always means 24 elapsed hours, including across hour and day boundaries.
+Select **Interval** for **Execution time**, enter a positive integer and a unit (minutes, hours, or days), and save. Every 40 minutes always means 40 elapsed minutes; every 24 hours always means 24 elapsed hours, including across hour and day boundaries.
 
 - The first run occurs one full interval after saving. Changing the interval starts a new timing period at the time of saving.
-- Restarting, disabling and re-enabling, or editing other fields such as the name or note preserves the original timing anchor. Missed periods during downtime are skipped; execution resumes at the next time on the original schedule.
+- Restarting, disabling and re-enabling, or editing other fields such as the name or task requirements preserves the original timing anchor. Missed periods during downtime are skipped; execution resumes at the next time on the original schedule.
 - A day means 24 elapsed hours. The local clock time can change across daylight saving transitions. Choose **Daily** for a fixed local time each day.
 - Older interval tasks only contain a Cron expression, so their original input cannot be recovered. After upgrading, they appear as **Custom Cron** and retain their existing Cron schedule. To use a true fixed interval, edit the task, select **Interval**, and enter the intended value again; saving starts a new timing period.
 
 The API represents intervals as `interval_seconds`, accepting positive multiples of 60 up to 2147483647 seconds. The server manages `interval_anchor_at`. An interval cannot be combined with Cron or a one-shot execution time.
 
+## What a scheduled task can use
+
+Tasks use the target conversation's configuration and conversation context. Later changes to models, Personas, and tools can affect subsequent runs. Put required details in the task instructions instead of writing only “do what we discussed.” Tasks without a delivery target use a separate scheduling conversation and the default configuration.
+
+Scheduling does not grant extra capabilities:
+
+- For current information, configure [Web Search](./websearch.md).
+- For file operations or code execution, configure [Agent Sandbox](./astrbot-agent-sandbox.md).
+- For a business service, configure its [plugin](./plugin.md) or [MCP](./mcp.md).
+
 ### Supported Platforms
 
-Scheduling tasks is supported on all platforms. However, due to some platforms not providing APIs for proactive message pushing, only the following platforms support AstrBot proactively pushing results to users:
-- Telegram
-- OneBot (QQ)
-- Slack
-- Feishu (Lark)
-- Discord
-- Misskey
-- Satori
+Execution and delivery are separate. Successful execution does not guarantee that a platform will accept a message. Platform permissions, conversation identifiers, connection state, proactive-message windows, and media formats all affect delivery. Check **Supported platforms** on the page and your platform's documentation; an old fixed platform list is not a complete support reference.
 
-## Sending Multimedia Messages
+## Sending multimedia messages
 
-To make it easier for Agents to send images, audio, video, and other files directly to users, AstrBot provides a `send_message_to_user` tool by default.
+<span id="features-1"></span>
 
-### Features
-- **Direct Sending**: Agents can send generated or retrieved multimedia files directly to users without complex text conversions.
-- **Multiple Formats**: Supports images, files, audio, video, etc.
+AstrBot includes the `send_message_to_user` tool for text, images, voice recordings, videos, files, and mentions. The Agent can use it to send content it has generated or retrieved, including scheduled task results.
+
+The tool does not itself generate images or audio. Generation requires the appropriate model or tool. Files must be accessible to the Agent, and supported media types depend on the platform.
+
+## Verification and troubleshooting
+
+Create a one-off task a few minutes ahead that sends a short test reminder. Confirm it appears in the list, verify the time, and keep AstrBot running until delivery. Test complex tasks in an ordinary conversation before scheduling them.
+
+| Problem | What to check |
+| --- | --- |
+| Agent says “scheduled” but the list is empty | Check the conversation's profile, Proactive Agent setting, tool-capable model, and whether `future_task` was actually called. |
+| Task exists at the wrong time | Check the profile, server/container, and browser time zones, then verify the displayed next run. |
+| Nothing runs at the scheduled time | Check the task switch, AstrBot uptime, model, and services. Look for task errors under **Data & Logs → Logs**. |
+| Task ran but no message arrived | Check the delivery target, platform support, connection, and send permissions. No target means no automatic delivery. |
+| Search or file operations fail | Test those tools' configuration, dependencies, and permissions separately. Scheduling only wakes the Agent. |
+| A one-off task disappeared | Scheduled execution deletes it even on failure. Inspect logs for the outcome. |
+| Chat cannot find an existing task | Query as the original sender in the original conversation. Use the WebUI for tasks created by others or by the dashboard. |

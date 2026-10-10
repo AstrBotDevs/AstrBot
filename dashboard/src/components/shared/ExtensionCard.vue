@@ -38,7 +38,7 @@ const emit = defineEmits([
   "view-readme",
   "view-changelog",
   "toggle-pin",
-  "open-webui",
+  "open-view",
   "change-source",
 ]);
 
@@ -179,8 +179,8 @@ const togglePin = () => {
   emit("toggle-pin", props.extension);
 };
 
-const openWebui = () => {
-  emit("open-webui", props.extension);
+const openView = () => {
+  emit("open-view", props.extension);
 };
 </script>
 
@@ -403,7 +403,7 @@ const openWebui = () => {
         <v-tooltip
           v-if="hasPages"
           location="top"
-          :text="tm('buttons.openWebui')"
+          :text="tm('buttons.openView')"
         >
           <template v-slot:activator="{ props: actionProps }">
             <v-btn
@@ -413,7 +413,7 @@ const openWebui = () => {
               variant="tonal"
               color="primary"
               :disabled="!extension.activated"
-              @click.stop="openWebui"
+              @click.stop="openView"
             ></v-btn>
           </template>
         </v-tooltip>

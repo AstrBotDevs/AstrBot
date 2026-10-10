@@ -114,6 +114,7 @@ from astrbot.core.utils.file_extract import extract_file_moonshotai
 from astrbot.core.utils.image_input import prepare_request_images
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
 from astrbot.core.utils.media_utils import (
+    describe_media_ref,
     is_file_uri,
     is_recoverable_image_error,
     normalize_model_image_max_size,
@@ -1503,7 +1504,9 @@ async def collect_initial_request(
                         if not is_recoverable_image_error(exc):
                             raise
                         logger.warning(
-                            "Image attachment is unavailable (%s).", type(exc).__name__
+                            "Image attachment is unavailable (%s): %s",
+                            type(exc).__name__,
+                            describe_media_ref(comp.url or comp.file),
                         )
                         req.extra_user_content_parts.append(
                             TextPart(text="[Image unavailable]")
@@ -1567,8 +1570,11 @@ async def collect_initial_request(
                                 if not is_recoverable_image_error(exc):
                                     raise
                                 logger.warning(
-                                    "Quoted image is unavailable (%s).",
+                                    "Quoted image is unavailable (%s): %s",
                                     type(exc).__name__,
+                                    describe_media_ref(
+                                        reply_comp.url or reply_comp.file
+                                    ),
                                 )
                                 req.extra_user_content_parts.append(
                                     TextPart(text="[Image unavailable]")

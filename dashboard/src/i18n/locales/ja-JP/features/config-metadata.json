@@ -1,6 +1,6 @@
 {
   "ai_group": {
-    "name": "AI 設定",
+    "name": "AI",
     "agent_runner": {
       "description": "エージェントの実行方式",
       "hint": "AI 会話のランナーを選択します。ランナーを切り替えると、新しい種類のデフォルト設定が適用され、以前の種類のパラメーターは引き継がれません。",
@@ -313,7 +313,7 @@
     },
     "agent_computer_use": {
       "description": "コンピューター操作機能",
-      "hint": "AstrBot がローカル環境または隔離されたサンドボックス環境へアクセスし、より複雑なタスクを実行できるようにします。詳細：[コンピューター操作](https://docs.astrbot.app/en/use/computer.html)。",
+      "hint": "AstrBot がローカル環境または隔離されたサンドボックス環境へアクセスし、より複雑なタスクを実行できるようにします。詳細：[Agent サンドボックス環境](https://docs.astrbot.app/en/use/astrbot-agent-sandbox.html)。",
       "provider_settings": {
         "computer_use_runtime": {
           "description": "実行環境",
@@ -325,7 +325,7 @@
         },
         "computer_use_require_admin": {
           "description": "サンドボックスに管理者権限を必須にする",
-          "hint": "有効にすると、外部サンドボックスの利用に AstrBot 管理者権限が必要になります。管理者は「プラットフォーム設定 -> 管理者」で追加できます。/sid コマンドで管理者 ID を確認できます。"
+          "hint": "有効にすると、外部サンドボックスの利用に AstrBot 管理者権限が必要になります。「設定ファイル -> アクセス制御 -> 管理者 -> 管理者 ID」で管理者を追加できます。ボットに /sid コマンドを送信して ID を取得します。"
         },
         "sandbox": {
           "booter": {
@@ -401,6 +401,7 @@
         "scopeHints": {
           "none": "すべてのファイルへのアクセスを禁止",
           "workspace": "制限されたワークスペース、一時ディレクトリ、スキルファイル。",
+          "workspaceUnsupported": "このプラットフォームでは制限付きワークスペースのファイルアクセスを利用できません。",
           "host": "AstrBot が動作する環境内のすべてのファイル。"
         },
         "scopeDetails": {
@@ -411,13 +412,9 @@
           "member": "一般メンバー",
           "admin": "管理者"
         },
-        "accessMode": "ローカルコンピューターへのアクセス",
         "modes": {
-          "none": "無効",
-          "files": "ファイルアクセスのみ",
-          "full": "制限なし"
+          "none": "無効"
         },
-        "unsupportedSelection": "現在のポリシーはサポートされていません",
         "runtimeUnknown": "実行環境の情報を取得できません。",
         "memberWarning": "一般メンバーにネットワーク接続または環境全体へのアクセスが許可されています。",
         "runtime": {
@@ -425,8 +422,24 @@
           "arch": "アーキテクチャ",
           "sandbox": "ローカル隔離",
           "unavailableHint": "サンドボックスの起動に失敗したため、制限付きの Shell/Python 実行とワークスペース内のファイル検索に影響があります。以下のエラーを参考に、システムのセキュリティポリシー（Linux の AppArmor やユーザー名前空間の制限など）またはコンテナの制限を確認し、修正後に AstrBot を再起動して再検査してください。",
+          "dialog": {
+            "intro": "macOS の Seatbelt または Linux の bubblewrap（bwrap）を利用して、AstrBot Agent の実行環境を安全に隔離し、AstrBot Agent を利用する各ユーザーのファイルアクセス範囲とネットワーク権限を制限することで、安全性を高めます。",
+            "startupError": "起動エラーを確認",
+            "documentation": "詳しい設定ドキュメントを見る"
+          },
+          "close": "閉じる",
+          "setupHint": {
+            "missing": "{dependency} をインストールして、すべてのローカル隔離機能を有効にします。",
+            "unavailable": "{backend} を設定して、すべてのローカル隔離機能を有効にします。",
+            "unsupported": "ローカル隔離の対応状況を確認します。"
+          },
+          "executionUnavailable": {
+            "missing": "{dependency} が見つからないため、「ファイルアクセス範囲」で「ワークスペース」を選択している場合、コード実行を有効にできません。",
+            "unavailable": "{backend} を起動できないため、「ファイルアクセス範囲」で「ワークスペース」を選択している場合、コード実行を有効にできません。",
+            "unsupported": "このプラットフォームではローカル隔離がサポートされていないため、「ファイルアクセス範囲」で「ワークスペース」を選択している場合、コード実行を有効にできません。"
+          },
           "status": {
-            "detected": "{backend} · 起動確認済み",
+            "detected": "{backend}",
             "missing": "{dependency} が見つかりません",
             "unavailable": "{backend} · インストール済みですが起動できません",
             "unsupported": "未対応"
@@ -603,7 +616,7 @@
     }
   },
   "platform_group": {
-    "name": "プラットフォーム設定",
+    "name": "プラットフォームとメッセージ",
     "platform": {
       "description": "メッセージプラットフォームアダプター",
       "app_id": {
@@ -1020,9 +1033,6 @@
     },
     "general": {
       "description": "基本設定",
-      "admins_id": {
-        "description": "管理者 ID"
-      },
       "platform_settings": {
         "unique_session": {
           "description": "会話を分離",
@@ -1053,29 +1063,6 @@
       "disable_builtin_commands": {
         "description": "組み込みコマンドを無効化",
         "hint": "help、sid、new など、AstrBot のすべての組み込みコマンドを無効にします。"
-      }
-    },
-    "whitelist": {
-      "description": "ホワイトリスト",
-      "platform_settings": {
-        "enable_id_white_list": {
-          "description": "ホワイトリストを有効化",
-          "hint": "有効にすると、ホワイトリストに登録されたセッションにのみ応答します。ホワイトリストが空の場合は無効とみなし、すべての ID を許可します。"
-        },
-        "id_whitelist": {
-          "description": "ホワイトリスト ID 一覧",
-          "hint": "/sid で ID を取得できます。一覧が空の場合、このホワイトリストは無効です（すべての ID が許可されます）。"
-        },
-        "id_whitelist_log": {
-          "description": "ログを出力",
-          "hint": "有効にすると、メッセージがホワイトリストを通過しなかった場合に INFO レベルのログを出力します。"
-        },
-        "wl_ignore_admin_on_group": {
-          "description": "管理者のグループメッセージは ID ホワイトリストを無視"
-        },
-        "wl_ignore_admin_on_friend": {
-          "description": "管理者のダイレクトメッセージは ID ホワイトリストを無視"
-        }
       }
     },
     "rate_limit": {
@@ -1176,8 +1163,41 @@
       }
     }
   },
+  "access_group": {
+    "name": "アクセス制御",
+    "admins": {
+      "description": "管理者",
+      "admins_id": {
+        "description": "管理者 ID",
+        "hint": "ボットに /sid コマンドを送信して ID を取得します。"
+      }
+    },
+    "whitelist": {
+      "description": "ホワイトリスト",
+      "platform_settings": {
+        "enable_id_white_list": {
+          "description": "ホワイトリストを有効化",
+          "hint": "有効にすると、ホワイトリスト内のセッションにのみ応答します。"
+        },
+        "id_whitelist": {
+          "description": "ホワイトリスト ID 一覧",
+          "hint": "ボットに /sid コマンドを送信して ID を取得します。空の場合、ホワイトリスト機能は無効になります。"
+        },
+        "id_whitelist_log": {
+          "description": "ブロックしたメッセージをログに出力",
+          "hint": "ホワイトリストの検証に通らなかったメッセージをログに出力します。"
+        },
+        "wl_ignore_admin_on_group": {
+          "description": "管理者のグループメッセージは ID ホワイトリストを無視"
+        },
+        "wl_ignore_admin_on_friend": {
+          "description": "管理者のダイレクトメッセージは ID ホワイトリストを無視"
+        }
+      }
+    }
+  },
   "plugin_group": {
-    "name": "プラグイン設定",
+    "name": "プラグイン",
     "plugin": {
       "description": "プラグイン",
       "plugin_set": {
