@@ -27,7 +27,7 @@ from tenacity import (
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import At, File, Image, Plain, Record, Video
+from astrbot.api.message_components import At, File, Image, Plain, Record, Reply, Video
 from astrbot.api.platform import AstrBotMessage, Group, PlatformMetadata
 from astrbot.core.platform.sources.qqofficial.qqofficial_chunked_upload import (
     QQOFFICIAL_CHUNKED_UPLOAD_THRESHOLD,
@@ -405,6 +405,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             video_file_source,
             file_source,
             file_name,
+            reply_message_id,
         ) = await QQOfficialMessageEvent._parse_to_qqofficial(message_to_send)
 
         # C2C 流式仅用于文本分片，富媒体时降级为普通发送，避免平台侧流式校验报错。
@@ -452,6 +453,11 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         if not isinstance(source, botpy.message.Message | botpy.message.DirectMessage):
             payload["msg_seq"] = random.randint(1, 10000)
+
+        # 插件通过 Reply 组件给出的引用 id，四个发送接口（群/C2C/频道/频道私信）
+        # 都以 message_reference 接受；拿不到 id 时保持原样，不影响正文发送
+        if reply_message_id:
+            payload["message_reference"] = {"message_id": reply_message_id}
 
         ret = None
 
@@ -630,25 +636,36 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         try:
             return await send_func(payload)
         except _QQOFFICIAL_SEND_API_ERRORS as err:
-            logger.info("[QQOfficial] 回复消息失败: %s, 尝试使用主动发送接口。", err)
-            if payload.get("msg_id"):
+            # markdown 被服务端拒绝（50056）时，保留 msg_id 退化为纯 content
+            # 被动回复。先去掉 msg_id 会把被动回复变成主动消息，既烧主动
+            # 配额也可能直接失败（如 304049 主动消息限频）。
+            if (
+                isinstance(err, botpy.errors.ServerError)
+                and QQOfficialMessageEvent.MARKDOWN_NOT_ALLOWED_ERROR in str(err)
+                and payload.get("markdown")
+                and plain_text
+            ):
+                logger.warning(
+                    "[QQOfficial] markdown 发送被拒绝，回退到 content 模式重试。"
+                )
                 fallback_payload = payload.copy()
-                fallback_payload.pop("msg_id", None)
-                try:
-                    ret = await send_func(fallback_payload)
-                    logger.info("[QQOfficial] 使用主动发送接口发送成功。")
-                    return ret
-                except _QQOFFICIAL_SEND_API_ERRORS as fallback_err:
-                    err = fallback_err
-                    payload = fallback_payload
-
-            if not isinstance(err, botpy.errors.ServerError):
-                raise
+                fallback_payload.pop("markdown", None)
+                fallback_payload["content"] = plain_text
+                if fallback_payload.get("msg_type") == 2:
+                    fallback_payload["msg_type"] = 0
+                if stream:
+                    fallback_content = cast(str, fallback_payload.get("content") or "")
+                    if fallback_content and not fallback_content.endswith("\n"):
+                        fallback_payload["content"] = fallback_content + "\n"
+                return await send_func(fallback_payload)
 
             # QQ 流式 markdown 分片校验：内容必须以换行结尾。
             # 某些边界场景服务端仍可能判定失败，这里做一次修正重试。
-            if stream and QQOfficialMessageEvent.STREAM_MARKDOWN_NEWLINE_ERROR in str(
-                err
+            # 与消息 id 无关，保留 msg_id 继续走被动回复。
+            if (
+                stream
+                and isinstance(err, botpy.errors.ServerError)
+                and QQOfficialMessageEvent.STREAM_MARKDOWN_NEWLINE_ERROR in str(err)
             ):
                 retry_payload = payload.copy()
 
@@ -667,26 +684,60 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 )
                 return await send_func(retry_payload)
 
-            if (
-                QQOfficialMessageEvent.MARKDOWN_NOT_ALLOWED_ERROR not in str(err)
-                or not payload.get("markdown")
-                or not plain_text
-            ):
-                raise
+            # 其余发送错误（如 msg_id 过期）才去 msg_id 走主动接口兜底。
+            logger.info("[QQOfficial] 回复消息失败: %s, 尝试使用主动发送接口。", err)
+            if payload.get("msg_id"):
+                fallback_payload = payload.copy()
+                fallback_payload.pop("msg_id", None)
+                # 转主动发送时先保留引用：失败若与引用无关（如 markdown 校验），
+                # 引用上下文仍然有效，不应一并丢弃
+                try:
+                    ret = await send_func(fallback_payload)
+                    logger.info("[QQOfficial] 使用主动发送接口发送成功。")
+                    return ret
+                except _QQOFFICIAL_SEND_API_ERRORS as fallback_err:
+                    # The passive send may have failed for a non-markdown reason
+                    # (e.g. expired msg_id), so the active retry can still hit the
+                    # markdown rejection. Downgrade to plain content here too,
+                    # otherwise the message is lost entirely.
+                    if (
+                        isinstance(fallback_err, botpy.errors.ServerError)
+                        and QQOfficialMessageEvent.MARKDOWN_NOT_ALLOWED_ERROR
+                        in str(fallback_err)
+                        and fallback_payload.get("markdown")
+                        and plain_text
+                    ):
+                        logger.warning(
+                            "[QQOfficial] Active send markdown rejected, falling back to plain content."
+                        )
+                        downgrade_payload = fallback_payload.copy()
+                        downgrade_payload.pop("markdown", None)
+                        downgrade_payload["content"] = plain_text
+                        if downgrade_payload.get("msg_type") == 2:
+                            downgrade_payload["msg_type"] = 0
+                        if stream:
+                            downgrade_content = cast(
+                                str, downgrade_payload.get("content") or ""
+                            )
+                            if downgrade_content and not downgrade_content.endswith(
+                                "\n"
+                            ):
+                                downgrade_payload["content"] = downgrade_content + "\n"
+                        return await send_func(downgrade_payload)
+                    if not fallback_payload.get("message_reference"):
+                        raise fallback_err from err
+                    # 主动发送仍失败，引用 id 可能已失效；去掉引用最后重试一次，
+                    # 失效引用不应阻断正文送达
+                    retry_payload = fallback_payload.copy()
+                    retry_payload.pop("message_reference", None)
+                    try:
+                        ret = await send_func(retry_payload)
+                        logger.info("[QQOfficial] 引用已失效，去掉引用后主动发送成功。")
+                        return ret
+                    except _QQOFFICIAL_SEND_API_ERRORS as retry_err:
+                        raise retry_err from fallback_err
 
-            logger.warning(
-                "[QQOfficial] markdown 发送被拒绝，回退到 content 模式重试。"
-            )
-            fallback_payload = payload.copy()
-            fallback_payload.pop("markdown", None)
-            fallback_payload["content"] = plain_text
-            if fallback_payload.get("msg_type") == 2:
-                fallback_payload["msg_type"] = 0
-            if stream:
-                fallback_content = cast(str, fallback_payload.get("content") or "")
-                if fallback_content and not fallback_content.endswith("\n"):
-                    fallback_payload["content"] = fallback_content + "\n"
-            return await send_func(fallback_payload)
+            raise
 
     async def upload_group_and_c2c_image(
         self,
@@ -916,6 +967,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         video_file_source = None
         file_source = None
         file_name = None
+        reply_message_id = None
         for i in message.chain:
             if isinstance(i, Plain):
                 plain_text += i.text
@@ -967,6 +1019,11 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     file_source = file_path
                 elif i.url:
                     file_source = i.url
+            elif isinstance(i, Reply) and not reply_message_id:
+                # 出站引用回复：取第一个带被引用消息 id 的 Reply 组件
+                quoted_id = str(i.id).strip()
+                if quoted_id:
+                    reply_message_id = quoted_id
             else:
                 logger.debug(f"qq_official 忽略 {i.type}")
         return (
@@ -977,4 +1034,5 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             video_file_source,
             file_source,
             file_name,
+            reply_message_id,
         )
