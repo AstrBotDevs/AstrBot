@@ -225,7 +225,7 @@
     },
     "agent_computer_use": {
       "description": "Agent Computer Use",
-      "hint": "Allows the AstrBot to access and use your computer or an sandbox environment to perform more complex tasks. See: [Computer Use](https://docs.astrbot.app/use/computer.html).",
+      "hint": "Allows the AstrBot to access and use your computer or an sandbox environment to perform more complex tasks. See: [Agent Sandbox Environment](https://docs.astrbot.app/en/use/astrbot-agent-sandbox.html).",
       "provider_settings": {
         "computer_use_runtime": {
           "description": "Computer Use Runtime",
@@ -313,6 +313,7 @@
         "scopeHints": {
           "none": "No file access allowed",
           "workspace": "Restricted workspace, temporary directories, and skill files.",
+          "workspaceUnsupported": "Restricted workspace file access is unavailable on this platform.",
           "host": "All files in the environment where AstrBot runs."
         },
         "scopeDetails": {
@@ -323,17 +324,9 @@
           "member": "Member",
           "admin": "Administrator"
         },
-        "accessMode": "Local computer access",
         "modes": {
-          "none": "Disabled",
-          "files": "File access only",
-          "full": "Unrestricted access"
+          "none": "Disabled"
         },
-        "modeHints": {
-          "files": "Read and write all files in the environment, without Shell/Python execution or network access.",
-          "full": "Read and write all files in the environment, with Shell/Python execution and network access."
-        },
-        "unsupportedSelection": "Current policy is unsupported",
         "runtimeUnknown": "Runtime information is unavailable.",
         "memberWarning": "Members have network access or file access across the entire environment.",
         "runtime": {
@@ -341,8 +334,24 @@
           "arch": "Architecture",
           "sandbox": "Local isolation",
           "unavailableHint": "Sandbox startup failed, affecting restricted Shell/Python execution and workspace file search. Use the error below to check system security policies (such as Linux AppArmor and user namespace restrictions) or container restrictions, then restart AstrBot to check again.",
+          "dialog": {
+            "intro": "Using Seatbelt on macOS or bubblewrap (bwrap) on Linux, AstrBot provides security isolation for Agent execution, restricting file access scope and network permissions for different users of AstrBot Agent to improve security.",
+            "startupError": "View startup error",
+            "documentation": "View detailed setup documentation"
+          },
+          "close": "Close",
+          "setupHint": {
+            "missing": "Install {dependency} to enable all local isolation features.",
+            "unavailable": "Configure {backend} to enable all local isolation features.",
+            "unsupported": "Learn about local isolation support."
+          },
+          "executionUnavailable": {
+            "missing": "Missing {dependency}; code execution cannot be enabled when File access scope is set to Workspace.",
+            "unavailable": "{backend} cannot start; code execution cannot be enabled when File access scope is set to Workspace.",
+            "unsupported": "Local isolation is unsupported on this platform; code execution cannot be enabled when File access scope is set to Workspace."
+          },
           "status": {
-            "detected": "{backend} · Startup check passed",
+            "detected": "{backend}",
             "missing": "Missing {dependency}",
             "unavailable": "{backend} · Installed but cannot start",
             "unsupported": "Unsupported"

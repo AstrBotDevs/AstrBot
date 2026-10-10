@@ -166,7 +166,7 @@ export default defineConfig({
               { text: "内置指令", link: "/command" },
               { text: "工具使用 Tools", link: "/function-calling" },
               { text: "技能 Skills", link: "/skills" },
-              { text: "使用电脑能力", link: "/computer" },
+              { text: "Agent 沙盒环境", link: "/astrbot-agent-sandbox" },
               { text: "SubAgent 编排", link: "/subagent" },
               { text: "主动型 Agent 能力", link: "/proactive-agent" },
               { text: "MCP", link: "/mcp" },
@@ -176,7 +176,6 @@ export default defineConfig({
               { text: "Agent 执行器", link: "/agent-runner" },
               { text: "统一 Webhook 模式", link: "/unified-webhook" },
               { text: "自动上下文压缩", link: "/context-compress" },
-              { text: "Agent 沙箱环境", link: "/astrbot-agent-sandbox" },
             ],
           },
           {
@@ -428,7 +427,7 @@ export default defineConfig({
               { text: "Built-in Commands", link: "/command" },
               { text: "Tool Use", link: "/function-calling" },
               { text: "Anthropic Skills", link: "/skills" },
-              { text: "Computer Use", link: "/computer" },
+              { text: "Agent Sandbox", link: "/astrbot-agent-sandbox" },
               { text: "SubAgent Orchestration", link: "/subagent" },
               { text: "Proactive Tasks", link: "/proactive-agent" },
               { text: "MCP", link: "/mcp" },
@@ -438,7 +437,6 @@ export default defineConfig({
               { text: "Agent Runner", link: "/agent-runner" },
               { text: "Unified Webhook Mode", link: "/unified-webhook" },
               { text: "Auto Context Compression", link: "/context-compress" },
-              { text: "Agent Sandbox", link: "/astrbot-agent-sandbox" },
             ],
           },
           {
