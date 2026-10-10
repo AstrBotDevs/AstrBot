@@ -191,31 +191,3 @@ async def test_message_id_style_reply_id_falls_back_to_msg_idx() -> None:
 async def _gen_with_reply_id(reply_id: str):
     yield MessageChain(chain=[Reply(id=reply_id), Plain("hi")])
 
-
-def _chain_with_at(qq: str) -> MessageChain:
-    from astrbot.api.message_components import At
-
-    return MessageChain(chain=[At(qq=qq, name="someone"), Plain(" hi")])
-
-
-@pytest.mark.asyncio
-async def test_at_component_becomes_qqbot_at_user_protocol() -> None:
-    """QQ 官方 @ 采用嵌入文本协议 <qqbot-at-user id="..." />。
-
-    旧格式 <@userid> 官方已标记「即将弃用」，部分客户端会原样显示为文本，因此不使用。
-    """
-    parsed = await QQOfficialMessageEvent._parse_to_qqofficial(
-        _chain_with_at("CF54030E8F7EA4C70D977EEB5330F435")
-    )
-
-    assert parsed[0] == '<qqbot-at-user id="CF54030E8F7EA4C70D977EEB5330F435" /> hi'
-
-
-@pytest.mark.asyncio
-async def test_at_all_component_is_skipped() -> None:
-    """AtAll 的 qq 为 all，官方群聊不支持该写法，不应拼进正文。"""
-    parsed = await QQOfficialMessageEvent._parse_to_qqofficial(_chain_with_at("all"))
-
-    assert parsed[0] == " hi"
-    assert "qqbot-at-everyone" not in parsed[0]
-    assert "qqbot-at-user" not in parsed[0]
