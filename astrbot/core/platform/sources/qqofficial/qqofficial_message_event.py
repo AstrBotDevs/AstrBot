@@ -29,6 +29,9 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import At, File, Image, Plain, Record, Video
 from astrbot.api.platform import AstrBotMessage, Group, PlatformMetadata
+from astrbot.core.platform.sources.qqofficial.qq_markdown_math import (
+    QQMarkdownMathState,
+)
 from astrbot.core.platform.sources.qqofficial.qqofficial_chunked_upload import (
     QQOFFICIAL_CHUNKED_UPLOAD_THRESHOLD,
     QQOfficialChunkedUploader,
@@ -95,6 +98,9 @@ class QQOfficialMessageEvent(AstrMessageEvent):
     VOICE_FILE_TYPE = 3
     FILE_FILE_TYPE = 4
     STREAM_MARKDOWN_NEWLINE_ERROR = "流式消息md分片需要\\n结束"
+    # QQ rejects a C2C stream frame larger than about 4 KB of UTF-8
+    # ("流式消息分片过长，请拆分发送"); keep a safety margin below it.
+    STREAM_FRAME_MAX_BYTES = 3000
 
     def __init__(
         self,
@@ -437,6 +443,24 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         # 根据消息链的 use_markdown_ 标记决定发送模式
         use_md = getattr(self.send_buffer, "use_markdown_", None)
+        math_state = getattr(self, "_qq_markdown_math_state", None)
+        if math_state is None:
+            math_state = QQMarkdownMathState()
+            self._qq_markdown_math_state = math_state
+        if use_md is False:
+            math_state.clear()
+        else:
+            # QQ clips the right edge of display equations inside lists.
+            # Keep streaming deltas intact; relayout the complete final card.
+            plain_text, stream = math_state.prepare(plain_text, stream)
+            # The final frame must still end with "\n" after relayout.
+            if (
+                stream
+                and stream.get("state") == 10
+                and plain_text
+                and not plain_text.endswith("\n")
+            ):
+                plain_text = plain_text + "\n"
         if use_md is False:
             payload: dict = {
                 "content": plain_text,
@@ -561,12 +585,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         payload.pop("markdown", None)
                         payload["content"] = plain_text or None
                 if stream:
-                    ret = await self._send_with_markdown_fallback(
-                        send_func=lambda retry_payload: self.post_c2c_message(
-                            openid=source.author.user_openid,
-                            **retry_payload,
-                            stream=stream,
-                        ),
+                    ret = await self._send_c2c_stream_frames(
+                        openid=source.author.user_openid,
                         payload=payload,
                         plain_text=plain_text,
                         stream=stream,
@@ -618,6 +638,91 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         await super().send(message_to_send)
 
+        return ret
+
+    @staticmethod
+    def _split_stream_text(text: str, max_bytes: int) -> list[str]:
+        """Split text into frames of at most ``max_bytes`` UTF-8 bytes.
+
+        Frames break on line boundaries where possible so markdown blocks and
+        display math stay intact; an over-long single line is split by
+        character as a last resort.
+        """
+        if len(text.encode("utf-8")) <= max_bytes:
+            return [text]
+        pieces: list[str] = []
+        current = ""
+        current_size = 0
+        for line in text.splitlines(keepends=True):
+            line_size = len(line.encode("utf-8"))
+            if current and current_size + line_size > max_bytes:
+                pieces.append(current)
+                current, current_size = "", 0
+            if line_size <= max_bytes:
+                current += line
+                current_size += line_size
+                continue
+            for char in line:
+                char_size = len(char.encode("utf-8"))
+                if current and current_size + char_size > max_bytes:
+                    pieces.append(current)
+                    current, current_size = "", 0
+                current += char
+                current_size += char_size
+        if current:
+            pieces.append(current)
+        return pieces
+
+    async def _send_c2c_stream_frames(
+        self,
+        openid: str,
+        payload: dict,
+        plain_text: str,
+        stream: dict,
+    ):
+        """Send one logical C2C stream frame, splitting it if QQ would reject it.
+
+        A long delta, or the full snapshot sent with ``reset`` after a final
+        relayout, can exceed QQ's per-frame limit. The first piece keeps the
+        incoming cursor (and ``reset``); later pieces append with increasing
+        ``index``, and only the last piece carries the original ``state``.
+        """
+        pieces = self._split_stream_text(plain_text, self.STREAM_FRAME_MAX_BYTES)
+        final_state = stream.get("state")
+        if final_state == 10 and not pieces[-1].endswith("\n"):
+            pieces[-1] += "\n"
+        frame = dict(stream)
+        ret = None
+        for position, piece in enumerate(pieces):
+            frame["state"] = final_state if position == len(pieces) - 1 else 1
+            piece_payload = dict(payload)
+            if piece_payload.get("markdown") is not None:
+                piece_payload["markdown"] = MarkdownPayload(content=piece)
+            else:
+                piece_payload["content"] = piece
+            if position and "msg_seq" in piece_payload:
+                piece_payload["msg_seq"] = random.randint(1, 10000)
+            frame_stream = dict(frame)
+            ret = await self._send_with_markdown_fallback(
+                send_func=lambda retry_payload, s=frame_stream: self.post_c2c_message(
+                    openid=openid,
+                    **retry_payload,
+                    stream=s,
+                ),
+                payload=piece_payload,
+                plain_text=piece,
+                stream=frame_stream,
+            )
+            ret_id = self._extract_response_message_id(ret)
+            if ret_id is not None:
+                frame["id"] = ret_id
+            frame["reset"] = False
+            frame["index"] = frame.get("index", 0) + 1
+        if len(pieces) > 1:
+            # The caller advances the cursor by one after each logical frame.
+            stream["index"] = frame["index"] - 1
+            if frame.get("id") is not None:
+                stream["id"] = frame["id"]
         return ret
 
     @staticmethod
