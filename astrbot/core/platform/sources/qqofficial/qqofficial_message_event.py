@@ -237,38 +237,45 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             self.send_buffer = MessageChain(chain=[Plain(text="\n")])
         return await self._post_send(stream=stream_payload)
 
-    def _apply_streaming_decorations(self, chain: MessageChain) -> None:
-        """把 result_decorate 暂存的发送期装饰应用到流式输出的首个分片。
+    def _apply_streaming_decorations(self, chain: MessageChain) -> MessageChain:
+        """为流式输出的首个分片返回一个带发送期装饰的新消息链。
 
         流式正文由 result.async_stream 逐段发出，共享阶段无法修改 result.chain，
-        因此由平台在这里按需应用，避免改动共享阶段接口。装饰只会应用一次
-        （取走决策后立即清空），因此后续分片不会重复引用。
+        因此由平台在这里按需应用，避免改动共享阶段接口。
+
+        注意：传入的 chain 由上游生成器拥有，且可能在多个分片间复用，
+        因此这里**不修改它**，而是复制后再插入装饰；否则已插入的 Reply / At
+        会在后续分片被再次累积，导致重复引用。装饰只会应用一次
+        （取走决策后立即清空）。
         """
         try:
             decorations = self.get_extra("_streaming_decorations")
         except Exception:
-            return
+            return chain
         if not isinstance(decorations, dict):
-            return
+            return chain
         try:
             self.set_extra("_streaming_decorations", None)
         except Exception:
             pass
         # 与 result_decorate 的非流式路径保持一致：仅纯文本 / 图文消息可装饰。
         if not all(isinstance(c, (Plain, Image)) for c in chain.chain):
-            return
+            return chain
         try:
+            decorated = copy.deepcopy(chain)
             if decorations.get("mention"):
-                chain.chain.insert(
+                decorated.chain.insert(
                     0,
                     At(qq=self.get_sender_id(), name=self.get_sender_name()),
                 )
-                if len(chain.chain) > 1 and isinstance(chain.chain[1], Plain):
-                    chain.chain[1].text = chr(10) + chain.chain[1].text
+                if len(decorated.chain) > 1 and isinstance(decorated.chain[1], Plain):
+                    decorated.chain[1].text = chr(10) + decorated.chain[1].text
             if decorations.get("quote"):
-                chain.chain.insert(0, Reply(id=self.message_obj.message_id))
+                decorated.chain.insert(0, Reply(id=self.message_obj.message_id))
+            return decorated
         except Exception:
             logger.debug("apply streaming decorations failed", exc_info=True)
+            return chain
 
     async def send_streaming(self, generator, use_fallback: bool = False):
         """流式输出仅支持消息列表私聊（C2C），其他消息源退化为普通发送"""
@@ -285,7 +292,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         try:
             async for chain in generator:
                 source = self.message_obj.raw_message
-                self._apply_streaming_decorations(chain)
+                chain = self._apply_streaming_decorations(chain)
 
                 if not isinstance(source, botpy.message.C2CMessage):
                     # 非 C2C 场景：直接累积，最后统一发（拷贝 delta，避免引用丢首字）
