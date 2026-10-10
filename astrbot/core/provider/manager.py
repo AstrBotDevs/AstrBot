@@ -3,6 +3,7 @@ import copy
 import os
 import traceback
 from collections.abc import Callable
+from importlib import import_module
 from typing import Protocol, runtime_checkable
 
 from deprecated import deprecated
@@ -23,6 +24,71 @@ from .provider import (
     TTSProvider,
 )
 from .register import llm_tools, provider_cls_map
+
+# Explicit module names keep lazy imports separate from user configuration.
+_PROVIDER_MODULES = {
+    "openai_chat_completion": "sources.openai_source",
+    "openai_responses": "sources.openai_responses_source",
+    "longcat_chat_completion": "sources.longcat_source",
+    "minimax_token_plan": "sources.minimax_token_plan_source",
+    "xiaomi_chat_completion": "sources.xiaomi_source",
+    "xiaomi_token_plan": "sources.xiaomi_token_plan_source",
+    "zhipu_chat_completion": "sources.zhipu_source",
+    "groq_chat_completion": "sources.groq_source",
+    "xai_chat_completion": "sources.xai_source",
+    "aihubmix_chat_completion": "sources.oai_aihubmix_source",
+    "mirarouter_chat_completion": "sources.mirarouter_source",
+    "openrouter_chat_completion": "sources.openrouter_source",
+    "ssycloud_chat_completion": "sources.ssycloud_source",
+    "anthropic_chat_completion": "sources.anthropic_source",
+    "kimi_code_chat_completion": "sources.kimi_code_source",
+    "googlegenai_chat_completion": "sources.gemini_source",
+    "sensevoice_stt_selfhost": "sources.sensevoice_selfhosted_source",
+    "openai_whisper_api": "sources.whisper_api_source",
+    "mimo_stt_api": "sources.mimo_stt_api_source",
+    "openai_whisper_selfhost": "sources.whisper_selfhosted_source",
+    "xinference_stt": "sources.xinference_stt_provider",
+    "openai_tts_api": "sources.openai_tts_api_source",
+    "mimo_tts_api": "sources.mimo_tts_api_source",
+    "genie_tts": "sources.genie_tts",
+    "edge_tts": "sources.edge_tts_source",
+    "gsv_tts_selfhost": "sources.gsv_selfhosted_source",
+    "gsvi_tts_api": "sources.gsvi_tts_source",
+    "fishaudio_tts_api": "sources.fishaudio_tts_api_source",
+    "dashscope_tts": "sources.dashscope_tts",
+    "azure_tts": "sources.azure_tts_source",
+    "minimax_tts_api": "sources.minimax_tts_api_source",
+    "volcengine_tts": "sources.volcengine_tts",
+    "gemini_tts": "sources.gemini_tts_source",
+    "elevenlabs_tts_api": "sources.elevenlabs_tts_source",
+    "openai_embedding": "sources.openai_embedding_source",
+    "gemini_embedding": "sources.gemini_embedding_source",
+    "nvidia_embedding": "sources.nvidia_embedding_source",
+    "ollama_embedding": "sources.ollama_embedding_source",
+    "dashscope_embedding": "sources.dashscope_embedding_source",
+    "vllm_rerank": "sources.vllm_rerank_source",
+    "xinference_rerank": "sources.xinference_rerank_source",
+    "bailian_rerank": "sources.bailian_rerank_source",
+    "nvidia_rerank": "sources.nvidia_rerank_source",
+    "tei_rerank": "sources.tei_rerank_source",
+}
+
+# Keep the public instance lists and legacy current-provider fields in sync.
+_PROVIDER_TYPES = {
+    ProviderType.CHAT_COMPLETION: (Provider, "provider_insts", "curr_provider_inst"),
+    ProviderType.SPEECH_TO_TEXT: (
+        STTProvider,
+        "stt_provider_insts",
+        "curr_stt_provider_inst",
+    ),
+    ProviderType.TEXT_TO_SPEECH: (
+        TTSProvider,
+        "tts_provider_insts",
+        "curr_tts_provider_inst",
+    ),
+    ProviderType.EMBEDDING: (EmbeddingProvider, "embedding_provider_insts", None),
+    ProviderType.RERANK: (RerankProvider, "rerank_provider_insts", None),
+}
 
 
 @runtime_checkable
@@ -412,204 +478,35 @@ class ProviderManager:
             )
 
     def dynamic_import_provider(self, type: str) -> None:
-        """动态导入提供商适配器模块
+        """Import a built-in adapter only when requested.
 
         Args:
-            type (str): 提供商请求类型。
+            type: Adapter type. Plugin types are registered separately.
 
         Raises:
-            ImportError: 如果提供商类型未知或无法导入对应模块，则抛出异常。
+            ImportError: If a built-in adapter or its dependencies cannot load.
         """
-        match type:
-            case "openai_chat_completion":
-                from .sources.openai_source import (
-                    ProviderOpenAIOfficial as ProviderOpenAIOfficial,
-                )
-            case "openai_responses":
-                from .sources.openai_responses_source import (
-                    ProviderOpenAIResponses as ProviderOpenAIResponses,
-                )
-            case "longcat_chat_completion":
-                from .sources.longcat_source import ProviderLongCat as ProviderLongCat
-            case "minimax_token_plan":
-                from .sources.minimax_token_plan_source import (
-                    ProviderMiniMaxTokenPlan as ProviderMiniMaxTokenPlan,
-                )
-            case "xiaomi_chat_completion":
-                from .sources.xiaomi_source import ProviderXiaomi as ProviderXiaomi
-            case "xiaomi_token_plan":
-                from .sources.xiaomi_token_plan_source import (
-                    ProviderXiaomiTokenPlan as ProviderXiaomiTokenPlan,
-                )
-            case "zhipu_chat_completion":
-                from .sources.zhipu_source import ProviderZhipu as ProviderZhipu
-            case "groq_chat_completion":
-                from .sources.groq_source import ProviderGroq as ProviderGroq
-            case "xai_chat_completion":
-                from .sources.xai_source import ProviderXAI as ProviderXAI
-            case "aihubmix_chat_completion":
-                from .sources.oai_aihubmix_source import (
-                    ProviderAIHubMix as ProviderAIHubMix,
-                )
-            case "mirarouter_chat_completion":
-                from .sources.mirarouter_source import (
-                    ProviderMiraRouter as ProviderMiraRouter,
-                )
-            case "openrouter_chat_completion":
-                from .sources.openrouter_source import (
-                    ProviderOpenRouter as ProviderOpenRouter,
-                )
-            case "ssycloud_chat_completion":
-                from .sources.ssycloud_source import (
-                    ProviderSSYCloud as ProviderSSYCloud,
-                )
-            case "anthropic_chat_completion":
-                from .sources.anthropic_source import (
-                    ProviderAnthropic as ProviderAnthropic,
-                )
-            case "kimi_code_chat_completion":
-                from .sources.kimi_code_source import (
-                    ProviderKimiCode as ProviderKimiCode,
-                )
-            case "googlegenai_chat_completion":
-                from .sources.gemini_source import (
-                    ProviderGoogleGenAI as ProviderGoogleGenAI,
-                )
-            case "sensevoice_stt_selfhost":
-                from .sources.sensevoice_selfhosted_source import (
-                    ProviderSenseVoiceSTTSelfHost as ProviderSenseVoiceSTTSelfHost,
-                )
-            case "openai_whisper_api":
-                from .sources.whisper_api_source import (
-                    ProviderOpenAIWhisperAPI as ProviderOpenAIWhisperAPI,
-                )
-            case "mimo_stt_api":
-                from .sources.mimo_stt_api_source import (
-                    ProviderMiMoSTTAPI as ProviderMiMoSTTAPI,
-                )
-            case "openai_whisper_selfhost":
-                from .sources.whisper_selfhosted_source import (
-                    ProviderOpenAIWhisperSelfHost as ProviderOpenAIWhisperSelfHost,
-                )
-            case "xinference_stt":
-                from .sources.xinference_stt_provider import (
-                    ProviderXinferenceSTT as ProviderXinferenceSTT,
-                )
-            case "openai_tts_api":
-                from .sources.openai_tts_api_source import (
-                    ProviderOpenAITTSAPI as ProviderOpenAITTSAPI,
-                )
-            case "mimo_tts_api":
-                from .sources.mimo_tts_api_source import (
-                    ProviderMiMoTTSAPI as ProviderMiMoTTSAPI,
-                )
-            case "genie_tts":
-                from .sources.genie_tts import (
-                    GenieTTSProvider as GenieTTSProvider,
-                )
-            case "edge_tts":
-                from .sources.edge_tts_source import (
-                    ProviderEdgeTTS as ProviderEdgeTTS,
-                )
-            case "gsv_tts_selfhost":
-                from .sources.gsv_selfhosted_source import (
-                    ProviderGSVTTS as ProviderGSVTTS,
-                )
-            case "gsvi_tts_api":
-                from .sources.gsvi_tts_source import (
-                    ProviderGSVITTS as ProviderGSVITTS,
-                )
-            case "fishaudio_tts_api":
-                from .sources.fishaudio_tts_api_source import (
-                    ProviderFishAudioTTSAPI as ProviderFishAudioTTSAPI,
-                )
-            case "dashscope_tts":
-                from .sources.dashscope_tts import (
-                    ProviderDashscopeTTSAPI as ProviderDashscopeTTSAPI,
-                )
-            case "azure_tts":
-                from .sources.azure_tts_source import (
-                    AzureTTSProvider as AzureTTSProvider,
-                )
-            case "minimax_tts_api":
-                from .sources.minimax_tts_api_source import (
-                    ProviderMiniMaxTTSAPI as ProviderMiniMaxTTSAPI,
-                )
-            case "volcengine_tts":
-                from .sources.volcengine_tts import (
-                    ProviderVolcengineTTS as ProviderVolcengineTTS,
-                )
-            case "gemini_tts":
-                from .sources.gemini_tts_source import (
-                    ProviderGeminiTTSAPI as ProviderGeminiTTSAPI,
-                )
-            case "elevenlabs_tts_api":
-                from .sources.elevenlabs_tts_source import (
-                    ProviderElevenLabsTTSAPI as ProviderElevenLabsTTSAPI,
-                )
-            case "openai_embedding":
-                from .sources.openai_embedding_source import (
-                    OpenAIEmbeddingProvider as OpenAIEmbeddingProvider,
-                )
-            case "gemini_embedding":
-                from .sources.gemini_embedding_source import (
-                    GeminiEmbeddingProvider as GeminiEmbeddingProvider,
-                )
-            case "nvidia_embedding":
-                from .sources.nvidia_embedding_source import (
-                    NvidiaEmbeddingProvider as NvidiaEmbeddingProvider,
-                )
-            case "ollama_embedding":
-                from .sources.ollama_embedding_source import (
-                    OllamaEmbeddingProvider as OllamaEmbeddingProvider,
-                )
-            case "dashscope_embedding":
-                from .sources.dashscope_embedding_source import (
-                    DashScopeEmbeddingProvider as DashScopeEmbeddingProvider,
-                )
-            case "vllm_rerank":
-                from .sources.vllm_rerank_source import (
-                    VLLMRerankProvider as VLLMRerankProvider,
-                )
-            case "xinference_rerank":
-                from .sources.xinference_rerank_source import (
-                    XinferenceRerankProvider as XinferenceRerankProvider,
-                )
-            case "bailian_rerank":
-                from .sources.bailian_rerank_source import (
-                    BailianRerankProvider as BailianRerankProvider,
-                )
-            case "nvidia_rerank":
-                from .sources.nvidia_rerank_source import (
-                    NvidiaRerankProvider as NvidiaRerankProvider,
-                )
-            case "tei_rerank":
-                from .sources.tei_rerank_source import (
-                    TEIRerankProvider as TEIRerankProvider,
-                )
+        module = _PROVIDER_MODULES.get(type)
+        if module is not None:
+            import_module(f".{module}", package=__package__)
 
     def get_merged_provider_config(self, provider_config: dict) -> dict:
-        """获取 provider 配置和 provider_source 配置合并后的结果
+        """Merge settings without sharing mutable values between providers.
+
+        Args:
+            provider_config: Model settings, which override its source settings.
 
         Returns:
-            dict: 合并后的 provider 配置，key 为 provider id，value 为合并后的配置字典
+            Independent settings retaining the model's ID.
         """
-        pc = copy.deepcopy(provider_config)
-        provider_source_id = pc.get("provider_source_id", "")
-        if provider_source_id:
-            provider_source = None
-            for ps in self.provider_sources_config:
-                if ps.get("id") == provider_source_id:
-                    provider_source = ps
+        merged = provider_config
+        source_id = provider_config.get("provider_source_id")
+        if source_id:
+            for source in self.provider_sources_config:
+                if source.get("id") == source_id:
+                    merged = {**source, **provider_config, "id": provider_config["id"]}
                     break
-
-            if provider_source:
-                # 合并配置，provider 的配置优先级更高
-                merged_config = {**provider_source, **pc}
-                # 保持 id 为 provider 的 id，而不是 source 的 id
-                merged_config["id"] = pc["id"]
-                pc = merged_config
-        return pc
+        return copy.deepcopy(merged)
 
     def get_provider_config_by_id(
         self,
@@ -682,7 +579,7 @@ class ProviderManager:
         # 动态导入
         try:
             self.dynamic_import_provider(provider_config["type"])
-        except (ImportError, ModuleNotFoundError) as e:
+        except ImportError as e:
             logger.critical(
                 f"Failed to load provider adapter {provider_config['type']}"
                 f"({provider_config['id']}): {e}. A dependency may be missing.",
@@ -714,100 +611,50 @@ class ProviderManager:
 
             provider_metadata.id = provider_config["id"]
 
-            match provider_metadata.provider_type:
-                case ProviderType.SPEECH_TO_TEXT:
-                    # STT 任务
-                    if not issubclass(cls_type, STTProvider):
-                        raise TypeError(
-                            f"Provider class {cls_type} is not a subclass of STTProvider"
+            provider_type = provider_metadata.provider_type
+            if provider_type not in _PROVIDER_TYPES:
+                raise ValueError(f"Unknown provider type: {provider_type}")
+            base_class, instances_attr, current_attr = _PROVIDER_TYPES[provider_type]
+            if not issubclass(cls_type, base_class):
+                raise TypeError(
+                    f"Provider class {cls_type} is not a subclass of {base_class.__name__}"
+                )
+            inst = cls_type(provider_config, self.provider_settings)
+            try:
+                if isinstance(inst, HasInitialize):
+                    await inst.initialize()
+            except BaseException:
+                # An unpublished instance still owns resources if initialization fails.
+                if terminate := getattr(inst, "terminate", None):
+                    try:
+                        await terminate()
+                    except Exception as e:
+                        logger.error(
+                            safe_error("Provider initialization cleanup failed: ", e)
                         )
-                    inst = cls_type(provider_config, self.provider_settings)
+                raise
 
-                    if isinstance(inst, HasInitialize):
-                        await inst.initialize()
-
-                    self.stt_provider_insts.append(inst)
-                    if (
-                        self.provider_stt_settings.get("provider_id")
-                        == provider_config["id"]
-                    ):
-                        self.curr_stt_provider_inst = inst
-                        logger.info(
-                            f"Selected {provider_config['type']}({provider_config['id']}) as default STT provider",
-                        )
-                    if not self.curr_stt_provider_inst:
-                        self.curr_stt_provider_inst = inst
-
-                case ProviderType.TEXT_TO_SPEECH:
-                    # TTS 任务
-                    if not issubclass(cls_type, TTSProvider):
-                        raise TypeError(
-                            f"Provider class {cls_type} is not a subclass of TTSProvider"
-                        )
-                    inst = cls_type(provider_config, self.provider_settings)
-
-                    if isinstance(inst, HasInitialize):
-                        await inst.initialize()
-
-                    self.tts_provider_insts.append(inst)
-                    if (
-                        self.provider_settings.get("provider_id")
-                        == provider_config["id"]
-                    ):
-                        self.curr_tts_provider_inst = inst
-                        logger.info(
-                            f"Selected {provider_config['type']}({provider_config['id']}) as default TTS provider",
-                        )
-                    if not self.curr_tts_provider_inst:
-                        self.curr_tts_provider_inst = inst
-
-                case ProviderType.CHAT_COMPLETION:
-                    # 文本生成任务
-                    if not issubclass(cls_type, Provider):
-                        raise TypeError(
-                            f"Provider class {cls_type} is not a subclass of Provider"
-                        )
-                    inst = cls_type(
-                        provider_config,
-                        self.provider_settings,
+            getattr(self, instances_attr).append(inst)
+            if current_attr is not None:
+                preferred_id = {
+                    ProviderType.CHAT_COMPLETION: self.default_chat_provider_id,
+                    ProviderType.SPEECH_TO_TEXT: self.provider_stt_settings.get(
+                        "provider_id"
+                    ),
+                    ProviderType.TEXT_TO_SPEECH: self.provider_tts_settings.get(
+                        "provider_id"
+                    ),
+                }[provider_type]
+                if preferred_id == provider_config["id"]:
+                    setattr(self, current_attr, inst)
+                    logger.info(
+                        "Selected %s(%s) as default %s provider",
+                        provider_config["type"],
+                        provider_config["id"],
+                        provider_type.value,
                     )
-
-                    if isinstance(inst, HasInitialize):
-                        await inst.initialize()
-
-                    self.provider_insts.append(inst)
-                    if self.default_chat_provider_id == provider_config["id"]:
-                        self.curr_provider_inst = inst
-                        logger.info(
-                            f"Selected {provider_config['type']}({provider_config['id']}) as default chat model provider",
-                        )
-                    if not self.curr_provider_inst:
-                        self.curr_provider_inst = inst
-
-                case ProviderType.EMBEDDING:
-                    if not issubclass(cls_type, EmbeddingProvider):
-                        raise TypeError(
-                            f"Provider class {cls_type} is not a subclass of EmbeddingProvider"
-                        )
-                    inst = cls_type(provider_config, self.provider_settings)
-                    if isinstance(inst, HasInitialize):
-                        await inst.initialize()
-                    self.embedding_provider_insts.append(inst)
-                case ProviderType.RERANK:
-                    if not issubclass(cls_type, RerankProvider):
-                        raise TypeError(
-                            f"Provider class {cls_type} is not a subclass of RerankProvider"
-                        )
-                    inst = cls_type(provider_config, self.provider_settings)
-                    if isinstance(inst, HasInitialize):
-                        await inst.initialize()
-                    self.rerank_provider_insts.append(inst)
-                case _:
-                    # 未知供应商抛出异常，确保inst初始化
-                    # Should be unreachable
-                    raise Exception(
-                        f"Unknown provider type: {provider_metadata.provider_type}"
-                    )
+                elif not getattr(self, current_attr):
+                    setattr(self, current_attr, inst)
 
             self.inst_map[provider_config["id"]] = inst
         except Exception as e:
@@ -835,77 +682,46 @@ class ProviderManager:
                 if key not in config_ids:
                     await self.terminate_provider(key)
 
-            if len(self.provider_insts) == 0:
-                self.curr_provider_inst = None
-            elif self.curr_provider_inst is None and len(self.provider_insts) > 0:
-                self.curr_provider_inst = self.provider_insts[0]
-                logger.info(
-                    f"Automatically selected {self.curr_provider_inst.meta().id} "
-                    "as the current provider adapter.",
-                )
-
-            if len(self.stt_provider_insts) == 0:
-                self.curr_stt_provider_inst = None
-            elif (
-                self.curr_stt_provider_inst is None and len(self.stt_provider_insts) > 0
-            ):
-                self.curr_stt_provider_inst = self.stt_provider_insts[0]
-                logger.info(
-                    f"Automatically selected {self.curr_stt_provider_inst.meta().id} "
-                    "as the current speech-to-text provider adapter.",
-                )
-
-            if len(self.tts_provider_insts) == 0:
-                self.curr_tts_provider_inst = None
-            elif (
-                self.curr_tts_provider_inst is None and len(self.tts_provider_insts) > 0
-            ):
-                self.curr_tts_provider_inst = self.tts_provider_insts[0]
-                logger.info(
-                    f"Automatically selected {self.curr_tts_provider_inst.meta().id} "
-                    "as the current text-to-speech provider adapter.",
-                )
+            for _, instances_attr, current_attr in _PROVIDER_TYPES.values():
+                if current_attr is None:
+                    continue
+                instances = getattr(self, instances_attr)
+                if not instances:
+                    setattr(self, current_attr, None)
+                elif getattr(self, current_attr) is None:
+                    setattr(self, current_attr, instances[0])
+                    logger.info(
+                        "Automatically selected %s as %s.",
+                        instances[0].meta().id,
+                        current_attr,
+                    )
 
     def get_insts(self):
         return self.provider_insts
 
     async def terminate_provider(self, provider_id: str) -> None:
-        if provider_id in self.inst_map:
-            logger.info(
-                f"Terminating provider adapter {provider_id} "
-                f"({len(self.provider_insts)}, {len(self.stt_provider_insts)}, "
-                f"{len(self.tts_provider_insts)}) ...",
-            )
+        """Detach one instance before closing its resources.
 
-            if self.inst_map[provider_id] in self.provider_insts:
-                prov_inst = self.inst_map[provider_id]
-                if isinstance(prov_inst, Provider):
-                    self.provider_insts.remove(prov_inst)
-            if self.inst_map[provider_id] in self.stt_provider_insts:
-                prov_inst = self.inst_map[provider_id]
-                if isinstance(prov_inst, STTProvider):
-                    self.stt_provider_insts.remove(prov_inst)
-            if self.inst_map[provider_id] in self.tts_provider_insts:
-                prov_inst = self.inst_map[provider_id]
-                if isinstance(prov_inst, TTSProvider):
-                    self.tts_provider_insts.remove(prov_inst)
+        Args:
+            provider_id: Instance to remove. Missing IDs are ignored.
 
-            if self.inst_map[provider_id] == self.curr_provider_inst:
-                self.curr_provider_inst = None
-            if self.inst_map[provider_id] == self.curr_stt_provider_inst:
-                self.curr_stt_provider_inst = None
-            if self.inst_map[provider_id] == self.curr_tts_provider_inst:
-                self.curr_tts_provider_inst = None
-
-            if getattr(self.inst_map[provider_id], "terminate", None):
-                await self.inst_map[provider_id].terminate()  # type: ignore
-
-            logger.info(
-                f"Provider adapter {provider_id} terminated "
-                f"({len(self.provider_insts)}, {len(self.stt_provider_insts)}, "
-                f"{len(self.tts_provider_insts)})",
-            )
-            del self.inst_map[provider_id]
+        Raises:
+            Exception: If the adapter fails to close, after detaching it.
+        """
+        inst = self.inst_map.pop(provider_id, None)
+        if inst is None:
+            return
+        # Detach before awaiting: failure or cancellation must not leave a stale
+        # instance, and a replacement registered during close must remain intact.
+        for _, instances_attr, current_attr in _PROVIDER_TYPES.values():
+            instances = getattr(self, instances_attr)
+            instances[:] = [item for item in instances if item is not inst]
+            if current_attr is not None and getattr(self, current_attr) is inst:
+                setattr(self, current_attr, None)
+        logger.info("Terminating provider adapter %s ...", provider_id)
+        if terminate := getattr(inst, "terminate", None):
+            await terminate()
+        logger.info("Provider adapter %s terminated", provider_id)
 
     async def delete_provider(
         self, provider_id: str | None = None, provider_source_id: str | None = None
@@ -981,9 +797,13 @@ class ProviderManager:
             except asyncio.CancelledError:
                 pass
 
-        for provider_inst in self.provider_insts:
-            if hasattr(provider_inst, "terminate"):
-                await provider_inst.terminate()  # type: ignore
+        for provider_id in list(self.inst_map):
+            try:
+                await self.terminate_provider(provider_id)
+            except Exception as e:
+                logger.error(
+                    safe_error(f"Failed to terminate provider {provider_id}: ", e)
+                )
         try:
             await self.llm_tools.disable_mcp_server()
         except Exception:
