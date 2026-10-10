@@ -20,7 +20,21 @@ These paths use the current default sidebar with a fixed menu order. Extension i
 | System Settings → Appearance → Customize Sidebar | Removed; the sidebar uses the default menu layout |
 | Custom Rules / Future Tasks / SubAgents | Custom Rules is under the sidebar `System` group; Future Tasks and SubAgents are under the `Extensions` group |
 
-Old log, trace, conversation, and statistics URLs still redirect to the corresponding tabs. Agent runners are now saved in each profile; they are no longer created as model providers. See [Agent Runners](./agent-runner.md) for the setup steps.
+Old log, trace, conversation, and statistics URLs still redirect to the corresponding tabs. Agent runners are now saved in each profile; they are no longer created as model providers. See [Agent Execution Mode](./agent-runner.md) for the setup steps.
+
+## Documentation Navigation
+
+The **Usage → Plugins** documentation group contains Plugins, MCP, and Skills. **Usage → AstrBot Built-in AI** contains Agent Sandbox, SubAgent Orchestration, Proactive Capabilities, Web Search, Knowledge Base, and Context Compression. Their URLs remain unchanged.
+
+The Usage sidebar order is WebUI, AstrBot CLI, Built-in Commands, Plugins, AstrBot Built-in AI, Custom Rules, Agent Execution Mode, and Unified Webhook Mode.
+
+| Previous documentation entry | Current documentation entry |
+| --- | --- |
+| Usage → Plugins, MCP, Skills | Usage → Plugins → Corresponding guide |
+| Usage → Agent Sandbox, SubAgent Orchestration, Proactive Tasks, Web Search, Knowledge Base, Auto Context Compression | Usage → AstrBot Built-in AI → Corresponding guide |
+| Usage → Tool Use / Function Calling | Removed; the Web Search guide explains the required function-calling capability directly |
+| Usage → Agent Runner | Usage → Agent Execution Mode (URL unchanged) |
+| Usage → CLI Commands | Usage → AstrBot CLI (URL unchanged) |
 
 ## Accessing the Admin Panel
 
