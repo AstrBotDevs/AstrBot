@@ -350,12 +350,16 @@
           "full": "可读写整个环境的文件，并可执行 Shell/Python 代码和联网。"
         },
         "unsupportedSelection": "当前策略不受支持",
+        "windowsHostNetworkHint": "Windows 暂不支持在“整个环境”执行代码时单独禁网。切换到“工作区”后可关闭联网。",
         "runtimeUnknown": "运行环境信息不可用。",
         "memberWarning": "普通成员已获得联网或整个环境访问权限。",
         "runtime": {
           "os": "操作系统",
           "arch": "架构",
           "sandbox": "本地隔离",
+          "windowsUnavailable": "{backend} · 尚未就绪",
+          "windowsSetupHint": "请保存配置并重启 AstrBot；如出现管理员授权提示，请允许以完成沙盒初始化。",
+          "errorDetails": "查看诊断详情",
           "unavailableHint": "沙箱启动失败，受限 Shell/Python 执行及工作区文件搜索会受到影响。请根据下方错误检查系统安全策略（如 Linux 的 AppArmor、用户命名空间限制）或容器限制，修复后重启 AstrBot 重新检测。",
           "status": {
             "detected": "{backend} · 启动检测通过",

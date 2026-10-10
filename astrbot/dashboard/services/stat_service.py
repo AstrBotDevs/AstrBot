@@ -5,6 +5,7 @@ import asyncio
 import platform
 import re
 import shutil
+import sys
 import tempfile
 import threading
 import time
@@ -85,6 +86,8 @@ class StatService:
                     else "missing"
                 ),
             }
+        elif system == "windows":
+            sandbox = {"backend": "appcontainer", "status": "detected"}
         if sandbox["status"] == "detected":
             try:
                 temp_root = Path(get_astrbot_temp_path())
@@ -93,7 +96,9 @@ class StatService:
                     prefix="sandbox-probe-", dir=temp_root
                 ) as workspace:
                     result = create_process_sandbox().run(
-                        ["/bin/sh", "-c", ":"],
+                        [sys.executable, "-I", "-c", "pass"]
+                        if system == "windows"
+                        else ["/bin/sh", "-c", ":"],
                         SandboxSpec(workspace=Path(workspace)),
                         timeout=5,
                         output_limit=1024,

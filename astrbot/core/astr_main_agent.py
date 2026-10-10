@@ -29,7 +29,6 @@ from astrbot.core.astr_main_agent_resources import (
     TOOL_CALL_PROMPT,
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
 )
-from astrbot.core.computer.booters.local import resolve_windows_shell
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.db import BaseDatabase
 from astrbot.core.message.components import File, Image, Record, Reply, Video
@@ -129,6 +128,7 @@ from astrbot.core.utils.quoted_message_parser import (
     extract_quoted_message_images,
     extract_quoted_message_text,
 )
+from astrbot.core.utils.runtime_env import resolve_windows_shell
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 from astrbot.core.workspace import (
     normalize_umo_for_workspace,
@@ -502,6 +502,26 @@ def _build_local_mode_prompt() -> str:
         "Use its `write_line` action for line-oriented programs so the session receives "
         "a real line feed. Do not add `&`, `nohup`, or another detachment wrapper for "
         "ordinary long-running commands."
+        + (
+            " Restricted Windows execution uses AppContainer. "
+            "PowerShell starts at Workspace:\\, a PSDrive mapped to the real workspace. "
+            "Use relative paths or Workspace:\\ paths with cmdlets; native programs "
+            "need relative or actual filesystem paths, not PSDrive paths. "
+            "An InitializeDefaultDrives warning can occur because ancestor directories "
+            "are inaccessible; it does not imply the workspace command failed. "
+            "Access-denied errors on absolute paths can be retried with a workspace-relative "
+            "path or astrbot_execute_python. Python/runtime files "
+            "are read-only; use the workspace for temporary files and caches. "
+            "Network capabilities do not guarantee localhost access, including local "
+            "proxy ports. Host proxy environment variables are not inherited. Console "
+            "interrupts are unavailable; use session terminate when needed. "
+            "Job limits cover CPU time, process count and committed memory; "
+            "per-file size and open-handle limits are unavailable. "
+            "Missing startup authorization requires restarting AstrBot; tool calls "
+            "never request administrator access or retry without isolation."
+            if system_name.lower() == "windows"
+            else ""
+        )
     )
 
 

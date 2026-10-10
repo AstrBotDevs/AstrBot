@@ -334,12 +334,16 @@
           "full": "Read and write all files in the environment, with Shell/Python execution and network access."
         },
         "unsupportedSelection": "Current policy is unsupported",
+        "windowsHostNetworkHint": "Windows cannot disable networking while executing code with entire-environment access. Switch to workspace access to disable networking.",
         "runtimeUnknown": "Runtime information is unavailable.",
         "memberWarning": "Members have network access or file access across the entire environment.",
         "runtime": {
           "os": "OS",
           "arch": "Architecture",
           "sandbox": "Local isolation",
+          "windowsUnavailable": "{backend} · Not ready",
+          "windowsSetupHint": "Save the configuration and restart AstrBot. If prompted for administrator approval, allow it to initialize the sandbox.",
+          "errorDetails": "View diagnostic details",
           "unavailableHint": "Sandbox startup failed, affecting restricted Shell/Python execution and workspace file search. Use the error below to check system security policies (such as Linux AppArmor and user namespace restrictions) or container restrictions, then restart AstrBot to check again.",
           "status": {
             "detected": "{backend} · Startup check passed",

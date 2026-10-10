@@ -591,19 +591,19 @@ async def test_restricted_local_member_rejects_workspace_hardlink_alias(
         ),
     ],
 )
-async def test_windows_restricted_file_access_fails_closed(
+async def test_unavailable_restricted_file_access_fails_closed(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
     role,
     tool_type,
     arguments,
 ):
-    """Windows rejects restricted reads, creates, writes, and edits without side effects."""
+    """Missing safe file primitives reject access without side effects."""
     workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
     existing_file = workspace / "existing.txt"
     existing_file.write_text("original secret\n", encoding="utf-8")
-    # Select the real Windows rejection branch without changing pathlib's OS view.
-    monkeypatch.setattr(local_file_security, "os", SimpleNamespace(name="nt"))
+    # Simulate missing POSIX primitives without changing pathlib's OS view.
+    monkeypatch.setattr(local_file_security, "os", SimpleNamespace(name="posix"))
 
     result = await tool_type().call(
         _make_context(

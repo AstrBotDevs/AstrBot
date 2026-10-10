@@ -5506,7 +5506,7 @@ components:
           properties:
             backend:
               type: [string, "null"]
-              enum: [bubblewrap, seatbelt, null]
+              enum: [bubblewrap, seatbelt, appcontainer, null]
             status:
               type: string
               enum: [detected, missing, unavailable, unsupported]

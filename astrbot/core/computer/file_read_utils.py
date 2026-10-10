@@ -292,11 +292,15 @@ async def _probe_local_file(
 ) -> dict[str, str | int]:
     def _run() -> dict[str, str | int]:
         if file_descriptor is not None:
+            if os.name == "nt":
+                with os.fdopen(os.dup(file_descriptor), "rb") as file_obj:
+                    file_obj.seek(0)
+                    sample = file_obj.read(_FILE_SNIFF_BYTES)
+            else:
+                sample = os.pread(file_descriptor, _FILE_SNIFF_BYTES, 0)
             return {
                 "size_bytes": os.fstat(file_descriptor).st_size,
-                "sample_b64": base64.b64encode(
-                    os.pread(file_descriptor, _FILE_SNIFF_BYTES, 0)
-                ).decode("utf-8"),
+                "sample_b64": base64.b64encode(sample).decode("utf-8"),
             }
         file_path = Path(path)
         with file_path.open("rb") as file_obj:

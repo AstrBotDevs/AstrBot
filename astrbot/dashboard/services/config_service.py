@@ -366,6 +366,17 @@ def validate_config(
                     is False
                 ):
                     policy["allow_network"] = False
+                if (
+                    runtime is not None
+                    and runtime["os"] == "windows"
+                    and scope == "host"
+                    and policy.get("allow_execution", defaults[role]["allow_execution"])
+                    and not policy.get("allow_network", defaults[role]["allow_network"])
+                ):
+                    errors.append(
+                        f"Local permission {role}: Windows Local isolation supports workspace scope only; "
+                        "host access with networking disabled is unavailable."
+                    )
 
         if (
             not errors
@@ -373,6 +384,9 @@ def validate_config(
             and isinstance(provider_settings, dict)
             and provider_settings.get("computer_use_runtime") == "local"
             and runtime["sandbox"]["status"] != "detected"
+            # AppContainer authorization is prepared only at the next startup.
+            # Saving Local/workspace must remain possible before that startup.
+            and runtime["sandbox"].get("backend") != "appcontainer"
         ):
             old_settings = (current_config or {}).get("provider_settings", {})
             old_permissions = old_settings.get("computer_use_local_permissions", {})

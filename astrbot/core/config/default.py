@@ -17,8 +17,8 @@ def get_local_permission_defaults(system: str | None = None) -> dict:
         system: Operating system name, or None to use the current system.
 
     Returns:
-        Per-role policies. Windows disables member access and gives admins
-        unrestricted access because workspace isolation is unavailable.
+        Per-role policies. Windows retains its existing disabled-member and
+        full-trust-admin defaults; workspace isolation is an explicit choice.
     """
     windows = (system or platform.system()).lower() == "windows"
     return {

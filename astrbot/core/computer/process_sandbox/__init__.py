@@ -16,7 +16,7 @@ def create_process_sandbox() -> ProcessSandbox:
     """Select the restricted-process launcher for the current system.
 
     Returns:
-        Bubblewrap on Linux or Seatbelt on macOS.
+        Bubblewrap on Linux, Seatbelt on macOS, or AppContainer on Windows.
 
     Raises:
         RuntimeError: If the current system has no Local sandbox implementation.
@@ -29,6 +29,17 @@ def create_process_sandbox() -> ProcessSandbox:
         from .seatbelt import SeatbeltProcessSandbox
 
         return SeatbeltProcessSandbox()
+    if sys.platform == "win32":
+        try:
+            from .windows import AppContainerProcessSandbox
+            from .windows_setup import require_windows_sandbox_ready
+        except ImportError as exc:
+            raise RuntimeError(
+                "Windows sandbox requires pywin32; run uv sync and restart AstrBot."
+            ) from exc
+
+        require_windows_sandbox_ready()
+        return AppContainerProcessSandbox()
     raise RuntimeError("No Local process sandbox backend is available.")
 
 
