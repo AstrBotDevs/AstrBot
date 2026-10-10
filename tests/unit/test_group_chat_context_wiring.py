@@ -1,10 +1,11 @@
+import asyncio
 import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from astrbot.api.message_components import Json, Plain
+from astrbot.api.message_components import Image, Json, Plain
 from astrbot.api.provider import LLMResponse
 from astrbot.builtin_stars.astrbot.group_chat_context import GroupChatContext
 from astrbot.builtin_stars.astrbot.main import Main
@@ -37,6 +38,7 @@ def make_event(
     umo: str = "aiocqhttp:GroupMessage:user_123_group_456",
     *,
     handlers_parsed_params: dict | None = None,
+    is_at_or_wake_command: bool = False,
 ):
     event = MagicMock()
     event.unified_msg_origin = umo
@@ -44,6 +46,7 @@ def make_event(
     event.message_obj = SimpleNamespace(message=[Plain("hello")])
     event.message_str = "hello"
     event.session_id = "session-1"
+    event.is_at_or_wake_command = is_at_or_wake_command
 
     store, get_extra, set_extra = _make_extras_store()
     # Simulate WakingCheckStage output: an empty dict means no command matched.
@@ -147,7 +150,10 @@ async def test_on_message_does_not_clear_group_context_on_first_enabled_message(
         pass
 
     main.group_chat_context.need_active_reply.assert_awaited_once_with(event)
-    main.group_chat_context.handle_message.assert_awaited_once_with(event)
+    main.group_chat_context.handle_message.assert_awaited_once_with(
+        event,
+        caption_images=True,
+    )
     main.group_chat_context.remove_session.assert_not_called()
 
 
@@ -172,7 +178,10 @@ async def test_on_message_records_json_card_and_checks_active_reply():
         pass
 
     main.group_chat_context.need_active_reply.assert_awaited_once_with(event)
-    main.group_chat_context.handle_message.assert_awaited_once_with(event)
+    main.group_chat_context.handle_message.assert_awaited_once_with(
+        event,
+        caption_images=True,
+    )
 
 
 @pytest.mark.asyncio
@@ -279,9 +288,15 @@ async def test_format_message_summarizes_json_card(card_data, expected):
     event.message_obj = SimpleNamespace(sender=SimpleNamespace(nickname="Alice"))
     event.get_messages.return_value = [Json(data=card_data)]
 
-    formatted = await context._format_message(event, {})
+    formatted, template, pending = context._format_message(
+        event,
+        {},
+        caption_images=True,
+    )
 
     assert formatted.endswith(expected)
+    assert template == formatted
+    assert pending == []
 
 
 @pytest.mark.asyncio
@@ -297,6 +312,160 @@ async def test_format_message_truncates_long_json_card_fields():
         )
     ]
 
-    formatted = await context._format_message(event, {})
+    formatted, template, pending = context._format_message(
+        event,
+        {},
+        caption_images=True,
+    )
 
     assert f"Description: {'a' * 200}...]" in formatted
+    assert template == formatted
+    assert pending == []
+
+
+@pytest.mark.asyncio
+async def test_on_message_skips_duplicate_caption_for_reply_triggering_image():
+    main = Main.__new__(Main)
+    main.context = MagicMock()
+    main.context.get_config.return_value = {
+        "provider_ltm_settings": {
+            "group_icl_enable": True,
+            "active_reply": {"enable": False},
+        },
+    }
+    main.group_chat_context = SimpleNamespace(
+        need_active_reply=AsyncMock(return_value=False),
+        handle_message=AsyncMock(),
+    )
+    event = make_event(is_at_or_wake_command=True)
+    event.message_obj.message = [Image(file="https://example.com/cat.png")]
+
+    async for _ in main.on_message(event):
+        pass
+
+    main.group_chat_context.handle_message.assert_awaited_once_with(
+        event,
+        caption_images=False,
+    )
+
+
+@pytest.mark.asyncio
+async def test_group_image_caption_runs_after_message_is_recorded():
+    context = MagicMock()
+    group_context = GroupChatContext(MagicMock(), context)
+    group_context.cfg = MagicMock(
+        return_value={
+            "group_message_max_cnt": 100,
+            "image_caption": True,
+            "image_caption_prompt": "describe",
+            "image_caption_provider_id": "vision-provider",
+        }
+    )
+    caption_started = asyncio.Event()
+    release_caption = asyncio.Event()
+
+    async def delayed_caption(*_args, **_kwargs):
+        caption_started.set()
+        await release_caption.wait()
+        return "a cat"
+
+    group_context.get_image_caption = AsyncMock(side_effect=delayed_caption)
+    event = MagicMock()
+    event.unified_msg_origin = "aiocqhttp:GroupMessage:user_1_group_1"
+    event.get_message_type.return_value = MessageType.GROUP_MESSAGE
+    event.message_obj = SimpleNamespace(sender=SimpleNamespace(nickname="alice"))
+    event.get_messages.return_value = [Image(file="https://example.com/cat.png")]
+
+    await asyncio.wait_for(group_context.handle_message(event), timeout=1.0)
+    await asyncio.wait_for(caption_started.wait(), timeout=1.0)
+
+    assert "[Image]" in group_context.raw_records[event.unified_msg_origin][0]
+    tasks = tuple(group_context._caption_tasks)
+    assert len(tasks) == 1
+
+    release_caption.set()
+    await asyncio.gather(*tasks)
+
+    assert "[Image: a cat]" in group_context.raw_records[event.unified_msg_origin][0]
+
+
+@pytest.mark.asyncio
+async def test_reply_triggering_image_does_not_start_group_caption_task():
+    context = MagicMock()
+    group_context = GroupChatContext(MagicMock(), context)
+    group_context.cfg = MagicMock(
+        return_value={
+            "group_message_max_cnt": 100,
+            "image_caption": True,
+            "image_caption_prompt": "describe",
+            "image_caption_provider_id": "vision-provider",
+        }
+    )
+    group_context.get_image_caption = AsyncMock(return_value="unused")
+    event = MagicMock()
+    event.unified_msg_origin = "aiocqhttp:GroupMessage:user_1_group_1"
+    event.get_message_type.return_value = MessageType.GROUP_MESSAGE
+    event.message_obj = SimpleNamespace(sender=SimpleNamespace(nickname="alice"))
+    event.get_messages.return_value = [Image(file="https://example.com/cat.png")]
+
+    await group_context.handle_message(event, caption_images=False)
+
+    group_context.get_image_caption.assert_not_awaited()
+    assert not group_context._caption_tasks
+    assert "[Image]" in group_context.raw_records[event.unified_msg_origin][0]
+
+
+@pytest.mark.asyncio
+async def test_group_image_captions_start_concurrently_across_groups():
+    context = MagicMock()
+    group_context = GroupChatContext(MagicMock(), context)
+    group_context.cfg = MagicMock(
+        return_value={
+            "group_message_max_cnt": 100,
+            "image_caption": True,
+            "image_caption_prompt": "describe",
+            "image_caption_provider_id": "vision-provider",
+        }
+    )
+    started_urls: list[str] = []
+    both_started = asyncio.Event()
+    release_captions = asyncio.Event()
+
+    async def delayed_caption(image_url, *_args, **_kwargs):
+        started_urls.append(image_url)
+        if len(started_urls) == 2:
+            both_started.set()
+        await release_captions.wait()
+        return image_url
+
+    group_context.get_image_caption = AsyncMock(side_effect=delayed_caption)
+
+    def make_image_event(umo: str, image_url: str):
+        event = MagicMock()
+        event.unified_msg_origin = umo
+        event.get_message_type.return_value = MessageType.GROUP_MESSAGE
+        event.message_obj = SimpleNamespace(sender=SimpleNamespace(nickname="alice"))
+        event.get_messages.return_value = [Image(file=image_url)]
+        return event
+
+    event_one = make_image_event("group-1", "https://example.com/one.png")
+    event_two = make_image_event("group-2", "https://example.com/two.png")
+
+    await asyncio.wait_for(
+        asyncio.gather(
+            group_context.handle_message(event_one),
+            group_context.handle_message(event_two),
+        ),
+        timeout=1.0,
+    )
+    await asyncio.wait_for(both_started.wait(), timeout=1.0)
+
+    tasks = tuple(group_context._caption_tasks)
+    assert len(tasks) == 2
+    release_captions.set()
+    await asyncio.gather(*tasks)
+
+    assert set(started_urls) == {
+        "https://example.com/one.png",
+        "https://example.com/two.png",
+    }
