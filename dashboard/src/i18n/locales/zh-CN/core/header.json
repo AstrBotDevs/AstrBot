@@ -55,6 +55,9 @@
       "latestLabel": "最新版本"
     },
     "progress": {
+      "restartUnconfirmed": "无法确认重启结果",
+      "restartRecovery": "90 秒内未能确认重启。请检查服务端日志，必要时使用部署工具重启 AstrBot。可重新检查或手动刷新；这不代表更新已成功。",
+      "checkAgain": "重新检查",
       "target": "目标版本：",
       "preparing": "正在准备更新...",
       "dashboard": "下载 WebUI",
