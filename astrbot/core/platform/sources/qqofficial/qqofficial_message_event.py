@@ -480,12 +480,24 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         # 出站引用回复：消息链里存在 Reply 组件时填 message_reference。
         # 注意 botpy 在同时传 message_reference 与 file_image 时会主动去除前者（SDK 限制）。
-        if any(
-            isinstance(_component, Reply)
-            for _component in (getattr(message_to_send, "chain", None) or [])
-        ):
-            _ref_idx = QQOfficialMessageEvent._extract_self_ref_idx(
-                self.message_obj.raw_message
+        _reply_id = next(
+            (
+                str(_component.id).strip()
+                for _component in (getattr(message_to_send, "chain", None) or [])
+                if isinstance(_component, Reply) and str(_component.id or "").strip()
+            ),
+            "",
+        )
+        if _reply_id:
+            # 调用方已经给出 REFIDX_... 时直接使用（插件可借此引用任意消息）；
+            # 否则回退到本条消息自身的 msg_idx。注意 message.id（ROBOT1.0_...）
+            # 不可直接用作 message_reference.message_id。
+            _ref_idx = (
+                _reply_id
+                if _reply_id.startswith("REFIDX_")
+                else QQOfficialMessageEvent._extract_self_ref_idx(
+                    self.message_obj.raw_message
+                )
             )
             if _ref_idx:
                 payload["message_reference"] = {"message_id": _ref_idx}
