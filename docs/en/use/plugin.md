@@ -36,8 +36,8 @@ For your first plugin, use the plugin market and follow the complete workflow be
 
 In the AstrBot WebUI, select **Extensions** in the sidebar, open the **Plugins** tab, and switch to **AstrBot Plugin Market**.
 
-- **Installed**: manage plugins installed in this AstrBot instance, at `/extension/plugins`.
-- **AstrBot Plugin Market**: browse, search for, and install plugins, at `/extension/plugins/market`.
+- **Installed**: manage plugins installed in this AstrBot instance.
+- **AstrBot Plugin Market**: browse, search for, and install plugins.
 
 The same workspace has **Skills**, **MCP Servers**, and **Handlers** tabs for skills, MCP servers, and registered commands, tools, and other handlers.
 

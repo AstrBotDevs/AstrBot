@@ -14,7 +14,7 @@ MCP 与[插件](/use/plugin)和[技能 Skills](/use/skills)可以一起使用：
 
 ## 选择连接方式 {#初始状态配置}
 
-在 WebUI 打开 `插件 → MCP`（`/extension/mcp`）。旧版文档中的独立工具页面入口，现在统一放在插件工作区的 MCP 标签页。
+在 WebUI 打开 `插件 → MCP`。旧版文档中的独立工具页面入口，现在统一放在插件工作区的 MCP 标签页。
 
 AstrBot 支持以下三种连接方式。**如果服务商提供远程地址，可以先使用 Streamable HTTP，无需为它额外安装 Node.js 或 uv。**
 

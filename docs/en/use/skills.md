@@ -20,7 +20,7 @@ AstrBot first provides Skill names, descriptions, and file paths to the Agent. T
 ## Upload Your First Skill {#uploading-skills-to-astrbot}
 
 1. Prepare a `.zip` Skill package from a trusted source.
-2. Open `Extensions → Skills` (`/extension/skills`) in WebUI and click the **+** button at the bottom right. The former standalone Skills entry is now in the Extensions workspace.
+2. Open `Extensions → Skills` in WebUI and click the **+** button at the bottom right. The former standalone Skills entry is now in the Extensions workspace.
 3. Select files or drag ZIP files into the dialog. Multiple ZIP files are supported.
 4. Click **Start Upload** and inspect each file's result. Return to the list and confirm the installed Skill is enabled.
 

@@ -14,7 +14,7 @@ MCP works alongside [plugins](/en/use/plugin) and [Skills](/en/use/skills): plug
 
 ## Choose a Connection Method
 
-Open `Extensions → MCP Servers` (`/extension/mcp`) in WebUI. The entry previously shown on the standalone tools page is now in the MCP tab of the Extensions workspace.
+Open `Extensions → MCP Servers` in WebUI. The entry previously shown on the standalone tools page is now in the MCP tab of the Extensions workspace.
 
 AstrBot supports these three transports. **If a provider gives you a remote endpoint, start with Streamable HTTP. It does not require a local Node.js or uv installation.**
 

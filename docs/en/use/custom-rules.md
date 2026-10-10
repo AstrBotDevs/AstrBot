@@ -21,7 +21,7 @@ Send `/sid` in the group or private chat you want to configure, then compare its
 ## Add Your First Rule
 
 1. Have a conversation with the bot in the target group or private chat so AstrBot records the source.
-2. Open **Custom Rules** in the WebUI sidebar (`/session-management`).
+2. Open **Custom Rules** in the WebUI sidebar.
 3. Click **Add Rule**, select the target under **Select Session**, and click **Next**. If the session already has rules, use its edit button in the list instead.
 4. Change the settings in **Edit Custom Rules**, for example the chat model under **Provider Configuration**.
 5. Click **Save beneath the section you changed**. Service, provider, persona, plugin, and knowledge base sections save separately. Save each changed section.
@@ -29,7 +29,7 @@ Send `/sid` in the group or private chat you want to configure, then compare its
 
 ![Editing custom rules](./images/custom-rules-edit-en.png)
 
-Saved rules take effect without restarting AstrBot. The older **Session Management** and **More Features → Custom Rules** entry points now correspond to **Custom Rules** directly in the sidebar. The page address remains `/session-management`.
+Saved rules take effect without restarting AstrBot. The older **Session Management** and **More Features → Custom Rules** entry points now correspond to **Custom Rules** directly in the sidebar.
 
 ## Available Settings
 

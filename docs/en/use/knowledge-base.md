@@ -20,7 +20,7 @@ This page covers AstrBot's current built-in knowledge base, available since 4.5.
 
 ## Step 1: Configure an embedding model {#configuring-embedding-model}
 
-1. Open `Providers` (`/providers`) in the sidebar.
+1. Open `Providers` in the sidebar.
 2. Select the `Embedding` tab, click `Add`, and choose a provider.
 3. Enter the service's API endpoint, API key, model name, vector dimensions, and other required settings.
 4. Save and make sure the provider is available.
@@ -41,7 +41,7 @@ With a remote embedding service, document text and retrieval queries are sent to
 
 ## Step 2: Create a knowledge base {#creating-a-knowledge-base}
 
-1. Open `Knowledge Base` (`/knowledge-base`) in the sidebar and click `Create Knowledge Base`.
+1. Open `Knowledge Base` in the sidebar and click `Create Knowledge Base`.
 2. Enter a recognizable name, such as “Community Onboarding,” and a description.
 3. Select the provider you configured under `Embedding Model`.
 4. Optionally select a `Rerank Model`; otherwise leave it empty.
@@ -132,7 +132,7 @@ Too few results can miss an answer; too many increase input length and noise. St
 
 ### Choose a knowledge base for one group or private chat
 
-Under `Custom Rules` (`/session-management`), assign knowledge bases and a retrieval count to a specific message source. Session selections override the profile. Clearing the selection and saving removes the override and restores the profile's knowledge bases. See [Custom Rules](./custom-rules.md).
+Under `Custom Rules`, assign knowledge bases and a retrieval count to a specific message source. Session selections override the profile. Clearing the selection and saving removes the override and restores the profile's knowledge bases. See [Custom Rules](./custom-rules.md).
 
 ## Maintain a knowledge base
 

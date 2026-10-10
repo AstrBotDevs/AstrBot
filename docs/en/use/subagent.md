@@ -35,7 +35,7 @@ The Persona describes **how the assistant works**. The public description explai
 
 ### 2. Add the SubAgent
 
-Open **Extensions → SubAgents** (`/subagent`), click **Add SubAgent**, then click **Expand** on the new card.
+Open **Extensions → SubAgents**, click **Add SubAgent**, then click **Expand** on the new card.
 
 ![Current SubAgent configuration page](./images/subagent-create-en.png)
 
