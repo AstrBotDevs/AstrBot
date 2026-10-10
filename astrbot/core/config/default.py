@@ -458,6 +458,16 @@ CONFIG_METADATA_2 = {
                         "client_secret": "",
                         "card_template_id": "",
                     },
+                    "中国移动新消息(5G消息)": {
+                        "id": "cmcc_newmsg",
+                        "type": "cmcc_newmsg",
+                        "enable": True,
+                        "hint": "中国移动新消息(5G消息)通道，API Key 请从管理员处获取，格式为 ak_ 或 app_ 开头",
+                        "api_key": "",
+                        "server_url": "wss://5gvas01.cmicmaap.com/gtw-ai/openclaw/ws/msg",
+                        "upload_url": "https://5gvas01.cmicmaap.com/gtw-ai/openclaw/api",
+                        "version": "2.0",
+                    },
                     "Telegram": {
                         "id": "telegram",
                         "type": "telegram",
@@ -623,6 +633,25 @@ CONFIG_METADATA_2 = {
                         "description": "客户端 ID",
                         "type": "string",
                         "hint": "消息平台开放平台中的客户端 ID。",
+                        "show_key": True,
+                    },
+                    "api_key": {
+                        "description": "API Key",
+                        "type": "string",
+                        "hint": "中国移动新消息(5G消息)通道的 API Key，请从管理员处获取，格式为 ak_ 或 app_ 开头。",
+                        "show_key": True,
+                        "secret": True,
+                    },
+                    "server_url": {
+                        "description": "WebSocket 地址",
+                        "type": "string",
+                        "hint": "中国移动新消息服务的 WebSocket 长连接地址，使用默认官方服务时无需修改。",
+                        "show_key": True,
+                    },
+                    "upload_url": {
+                        "description": "上传接口地址",
+                        "type": "string",
+                        "hint": "中国移动新消息服务的富媒体上传接口地址，使用默认官方服务时无需修改。",
                         "show_key": True,
                     },
                     "client_secret": {
