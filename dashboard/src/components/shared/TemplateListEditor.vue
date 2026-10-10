@@ -164,6 +164,7 @@ import { computed, ref, watch } from 'vue'
 import ConfigItemRenderer from './ConfigItemRenderer.vue'
 import { useI18n } from '@/i18n/composables'
 import { useConfigTextResolver } from '@/composables/useConfigTextResolver'
+import { evaluateCondition } from '@/utils/configCondition.mjs'
 
 const props = defineProps({
   modelValue: {
@@ -409,16 +410,7 @@ function getValueBySelector(obj, selector) {
 }
 
 function shouldShowItem(itemMeta, entry) {
-  if (!itemMeta?.condition) {
-    return true
-  }
-  for (const [conditionKey, expectedValue] of Object.entries(itemMeta.condition)) {
-    const actualValue = getValueBySelector(entry, conditionKey)
-    if (actualValue !== expectedValue) {
-      return false
-    }
-  }
-  return true
+  return evaluateCondition(itemMeta?.condition, (key) => getValueBySelector(entry, key))
 }
 
 function hasVisibleItemsAfter(entries, currentIndex, entry) {

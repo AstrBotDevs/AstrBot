@@ -7,6 +7,7 @@ import TemplateListEditor from './TemplateListEditor.vue'
 import PersonaQuickPreview from './PersonaQuickPreview.vue'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
 import { useConfigTextResolver } from '@/composables/useConfigTextResolver'
+import { evaluateCondition } from '@/utils/configCondition.mjs'
 
 
 const props = defineProps({
@@ -150,14 +151,13 @@ function saveEditedContent() {
   dialog.value = false
 }
 
+function conditionSatisfied(condition) {
+  return evaluateCondition(condition, (key) => getValueBySelector(props.iterable, key))
+}
+
 function shouldShowItem(itemMeta, itemKey) {
-  if (itemMeta?.condition) {
-    for (const [conditionKey, expectedValue] of Object.entries(itemMeta.condition)) {
-      const actualValue = getValueBySelector(props.iterable, conditionKey)
-      if (actualValue !== expectedValue) {
-        return false
-      }
-    }
+  if (!conditionSatisfied(itemMeta?.condition)) {
+    return false
   }
 
   const keyword = String(props.searchKeyword || '').trim().toLowerCase()
@@ -207,14 +207,8 @@ function toggleCollapsedItems() {
 // 检查最外层的 object 是否应该显示
 function shouldShowSection() {
   const sectionMeta = props.metadata[props.metadataKey]
-  if (!sectionMeta?.condition) {
-    return true
-  }
-  for (const [conditionKey, expectedValue] of Object.entries(sectionMeta.condition)) {
-    const actualValue = getValueBySelector(props.iterable, conditionKey)
-    if (actualValue !== expectedValue) {
-      return false
-    }
+  if (!conditionSatisfied(sectionMeta?.condition)) {
+    return false
   }
 
   const sectionItems = props.metadata?.[props.metadataKey]?.items || {}
