@@ -374,7 +374,7 @@ class AstrBotCoreLifecycle:
                     f"hook(on_astrbot_loaded) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
                 )
                 await handler.handler()
-            except BaseException:
+            except Exception:
                 logger.error(traceback.format_exc())
 
         # 同时运行curr_tasks中的所有任务

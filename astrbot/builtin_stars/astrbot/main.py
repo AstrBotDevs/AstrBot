@@ -223,7 +223,7 @@ class Main(star.Star):
                 if not event.get_extra("handlers_parsed_params", {}):
                     try:
                         await self.group_chat_context.handle_message(event)
-                    except BaseException as e:
+                    except Exception as e:
                         logger.error(e)
 
             if need_active:
@@ -270,7 +270,7 @@ class Main(star.Star):
                         image_urls=image_urls,
                         conversation=conv,
                     )
-                except BaseException as e:
+                except Exception as e:
                     logger.error(traceback.format_exc())
                     logger.error(f"主动回复失败: {e}")
 
@@ -334,7 +334,7 @@ class Main(star.Star):
         if self.group_chat_context and self.group_context_enabled(event):
             try:
                 await self.group_chat_context.on_req_llm(event, req)
-            except BaseException as e:
+            except Exception as e:
                 logger.error(f"group chat context: {e}")
 
     @filter.after_message_sent()
