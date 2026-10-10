@@ -98,6 +98,12 @@ class SQLiteDatabase(BaseDatabase):
             await self._ensure_platform_message_history_checkpoint_column(conn)
             await self._ensure_chatui_project_workspace_columns(conn)
             await self._ensure_conversation_indexes(conn)
+            await conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_session_project_relations_project_id "
+                    "ON session_project_relations (project_id)"
+                )
+            )
             # The table-level unique constraint already provides an index for UMO
             # lookups. Older schemas also created this redundant explicit index.
             await conn.execute(text("DROP INDEX IF EXISTS ix_umo_aliases_umo"))

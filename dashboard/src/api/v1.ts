@@ -939,7 +939,7 @@ export const chatApi = {
       openApiV1.deleteChatProject({ path: { project_id: projectId } }),
     );
   },
-  listProjectSessions(projectId: string, params?: { page: number; page_size: number }) {
+  listProjectSessions(projectId: string, params?: { page?: number; page_size?: number }) {
     return typed<any>(
       openApiV1.listChatProjectSessions({ path: { project_id: projectId }, query: params }),
     );

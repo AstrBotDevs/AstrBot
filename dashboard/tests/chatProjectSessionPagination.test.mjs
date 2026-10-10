@@ -358,3 +358,65 @@ test("project page fills after rendering, uses 120px threshold and ignores hidde
     stop();
   }
 });
+
+test("project API wrapper accepts either pagination parameter without weakening their types", () => {
+  const source = readFileSync(
+    new URL("../src/api/v1.ts", import.meta.url),
+    "utf8",
+  );
+  const ast = ts.createSourceFile(
+    "api.ts",
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  const statement = ast.statements.find(
+    (node) =>
+      ts.isVariableStatement(node) &&
+      node.declarationList.declarations.some(
+        (declaration) => declaration.name.getText(ast) === "chatApi",
+      ),
+  );
+  const api = statement.declarationList.declarations.find(
+    (node) => node.name.getText(ast) === "chatApi",
+  );
+  const method = api.initializer.properties.find(
+    (node) => node.name.getText(ast) === "listProjectSessions",
+  );
+  const filename = "project-pagination-types.ts";
+  const fixture = `
+    declare function typed<T>(value: unknown): T;
+    declare const openApiV1: any;
+    const chatApi = { ${method.getText(ast)} };
+    chatApi.listProjectSessions("p");
+    chatApi.listProjectSessions("p", {});
+    chatApi.listProjectSessions("p", { page: 2 });
+    chatApi.listProjectSessions("p", { page_size: 30 });
+    chatApi.listProjectSessions("p", { page: 2, page_size: 30 });
+    // @ts-expect-error Pagination parameters must remain numeric.
+    chatApi.listProjectSessions("p", { page: "2" });
+    // @ts-expect-error Pagination parameters must remain numeric.
+    chatApi.listProjectSessions("p", { page_size: "30" });
+  `;
+  const options = {
+    noEmit: true,
+    strict: true,
+    skipLibCheck: true,
+    types: [],
+    target: ts.ScriptTarget.ES2020,
+  };
+  const host = ts.createCompilerHost(options);
+  const getSourceFile = host.getSourceFile.bind(host);
+  host.getSourceFile = (name, ...args) =>
+    name === filename
+      ? ts.createSourceFile(name, fixture, ts.ScriptTarget.ES2020, true)
+      : getSourceFile(name, ...args);
+  const program = ts.createProgram([filename], options, host);
+  const diagnostics = ts.getPreEmitDiagnostics(program);
+  assert.deepEqual(
+    diagnostics.map((d) =>
+      ts.flattenDiagnosticMessageText(d.messageText, "\n"),
+    ),
+    [],
+  );
+});

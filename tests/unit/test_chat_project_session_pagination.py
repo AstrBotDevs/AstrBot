@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import httpx
 import pytest
 from fastapi import FastAPI
+from sqlalchemy import text
 
 from astrbot.core.db.po import ChatUIProject, PlatformSession, SessionProjectRelation
 from astrbot.core.db.sqlite import SQLiteDatabase
@@ -83,5 +84,56 @@ async def test_project_session_pages_reach_older_sessions_and_preserve_scope(tmp
                 assert (await client.get(f"{url}?{query}")).status_code == 422
             denied = await client.get("/api/v1/chat/projects/foreign/sessions?page=1")
             assert denied.json()["status"] == "error"
+    finally:
+        await db.engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("existing_table", [False, True])
+async def test_project_relation_index_created_for_new_and_existing_databases(
+    tmp_path, existing_table
+):
+    """Initialize an indexed relation table without losing existing relations."""
+    db = SQLiteDatabase(str(tmp_path / "project-index.db"))
+    try:
+        if existing_table:
+            async with db.engine.begin() as conn:
+                await conn.execute(
+                    text(
+                        "CREATE TABLE session_project_relations ("
+                        "id INTEGER PRIMARY KEY, session_id VARCHAR(100) NOT NULL UNIQUE, "
+                        "project_id VARCHAR(36) NOT NULL)"
+                    )
+                )
+                await conn.execute(
+                    text(
+                        "INSERT INTO session_project_relations (session_id, project_id) "
+                        "VALUES ('legacy-session', 'legacy-project')"
+                    )
+                )
+        await db.initialize()
+        await db.initialize()
+        async with db.engine.connect() as conn:
+            columns = await conn.execute(
+                text("PRAGMA index_info('ix_session_project_relations_project_id')")
+            )
+            assert [row[2] for row in columns] == ["project_id"]
+            plan = await conn.execute(
+                text(
+                    "EXPLAIN QUERY PLAN SELECT count(*) FROM session_project_relations "
+                    "WHERE project_id = 'legacy-project'"
+                )
+            )
+            assert any(
+                "SEARCH" in row[3]
+                and "ix_session_project_relations_project_id" in row[3]
+                for row in plan
+            )
+            rows = await conn.execute(
+                text("SELECT session_id, project_id FROM session_project_relations")
+            )
+            assert list(rows) == (
+                [("legacy-session", "legacy-project")] if existing_table else []
+            )
     finally:
         await db.engine.dispose()
