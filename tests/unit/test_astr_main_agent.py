@@ -397,6 +397,27 @@ def test_append_system_reminders_includes_weekday(mock_event):
     ]
 
 
+def test_append_system_reminders_marks_parts_temp(mock_event):
+    """System reminders are per-request only and must not persist into history.
+
+    Without ``mark_as_temp()`` the reminder text is saved with the
+    conversation, so every later turn re-sends a stale datetime reminder and
+    history grows linearly (#10033). Knowledge-base injection in the same
+    module already marks its injected part temp.
+    """
+    req = ProviderRequest(prompt="Hello")
+
+    ama._append_system_reminders(
+        mock_event,
+        req,
+        {"identifier": True, "datetime_system_prompt": True},
+        "UTC",
+    )
+
+    assert req.extra_user_content_parts
+    assert all(part._no_save for part in req.extra_user_content_parts)
+
+
 def test_local_mode_prompt_uses_windows_powershell_51():
     with (
         patch("astrbot.core.astr_main_agent.platform.system", return_value="Windows"),
