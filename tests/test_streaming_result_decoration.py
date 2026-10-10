@@ -11,6 +11,7 @@ send_streaming 的首个分片上按需应用。
 from __future__ import annotations
 
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -124,25 +125,44 @@ async def test_decoration_flags_follow_config() -> None:
     assert decorations == {"quote": False, "mention": False}
 
 
-def test_apply_inserts_reply_at_chain_head() -> None:
+def test_apply_returns_decorated_copy() -> None:
     """首个分片应被插入 Reply；决策被取走，避免后续分片重复引用。"""
     event = _make_event()
     event.set_extra("_streaming_decorations", {"quote": True, "mention": False})
     chain = MessageChain(chain=[Plain("hi")])
 
-    event._apply_streaming_decorations(chain)
+    decorated = event._apply_streaming_decorations(chain)
 
-    assert isinstance(chain.chain[0], Reply)
-    assert chain.chain[0].id == "ROBOT1.0_message-id"
+    assert isinstance(decorated.chain[0], Reply)
+    assert decorated.chain[0].id == "ROBOT1.0_message-id"
     assert event.get_extra("_streaming_decorations") is None
+
+
+def test_apply_does_not_mutate_source_chain() -> None:
+    """上游可能跨分片复用 chain，因此必须返回副本、不改动传入对象。"""
+    event = _make_event()
+    event.set_extra("_streaming_decorations", {"quote": True, "mention": False})
+    chain = MessageChain(chain=[Plain("hi")])
+
+    decorated = event._apply_streaming_decorations(chain)
+
+    assert decorated is not chain
+    assert len(chain.chain) == 1
+    assert isinstance(chain.chain[0], Plain)
+
+    # 复用同一个 chain 再走一遍：决策已被取走，不应再次装饰
+    again = event._apply_streaming_decorations(chain)
+    assert again is chain
+    assert len(again.chain) == 1
 
 
 def test_apply_is_noop_without_stashed_decorations() -> None:
     event = _make_event()
     chain = MessageChain(chain=[Plain("hi")])
 
-    event._apply_streaming_decorations(chain)
+    result = event._apply_streaming_decorations(chain)
 
+    assert result is chain
     assert len(chain.chain) == 1
     assert isinstance(chain.chain[0], Plain)
 
@@ -154,7 +174,8 @@ def test_apply_skips_chain_with_non_plain_components() -> None:
     event.set_extra("_streaming_decorations", {"quote": True, "mention": False})
     chain = MessageChain(chain=[Reply(id="ROBOT1.0_other"), Plain("hi")])
 
-    event._apply_streaming_decorations(chain)
+    result = event._apply_streaming_decorations(chain)
 
+    assert result is chain
     assert len(chain.chain) == 2
     assert chain.chain[0].id == "ROBOT1.0_other"
