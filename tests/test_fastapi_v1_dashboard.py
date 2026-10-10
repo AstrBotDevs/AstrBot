@@ -1,6 +1,10 @@
 import asyncio
 import copy
+import io
 import json
+import os
+import stat
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -4312,3 +4316,180 @@ async def test_v1_platform_webhook_preserves_tuple_response(
     assert response.status_code == 202
     assert response.headers["content-type"] == "text/plain"
     assert response.text == "accepted"
+
+
+@pytest.mark.asyncio
+async def test_v1_log_export_packs_log_files_and_memory_logs(
+    monkeypatch, tmp_path: Path, asgi_app, asgi_client: httpx.AsyncClient
+):
+    """The archive covers data/logs, configured log files elsewhere and memory logs."""
+    monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
+    logs_dir = tmp_path / "data" / "logs"
+    logs_dir.mkdir(parents=True)
+    (logs_dir / "event_loop_watchdog.log").write_text("watchdog", encoding="utf-8")
+    external_dir = tmp_path / "external"
+    external_dir.mkdir()
+    (external_dir / "custom.log").write_text("current", encoding="utf-8")
+    (external_dir / "custom.1.log").write_text("rotated", encoding="utf-8")
+    other_dir = tmp_path / "other"
+    other_dir.mkdir()
+    (other_dir / "custom.log").write_text("same name", encoding="utf-8")
+    service = asgi_app.state.services.logs
+    service.config["log_file_enable"] = True
+    service.config["log_file_path"] = str(external_dir / "custom.log")
+    service.config["trace_log_path"] = str(other_dir / "custom.log")
+    service.log_broker.publish(
+        {"level": "INFO", "time": 1.0, "data": "[INFO] hello", "category": "system"}
+    )
+    service.log_broker.publish(
+        {
+            "type": "trace",
+            "level": "TRACE",
+            "time": 2.0,
+            "span_id": "span-1",
+            "action": "start",
+            "fields": {},
+        }
+    )
+
+    response = await asgi_client.get("/api/v1/logs/export", headers=_jwt_headers())
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/zip"
+    assert "astrbot-logs-" in response.headers["content-disposition"]
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        assert sorted(archive.namelist()) == [
+            "external/2/custom.log",
+            "external/custom.1.log",
+            "external/custom.log",
+            "logs/event_loop_watchdog.log",
+            "manifest.json",
+            "memory/logs.txt",
+            "memory/traces.jsonl",
+        ]
+        assert archive.read("external/custom.log") == b"current"
+        assert archive.read("external/custom.1.log") == b"rotated"
+        assert archive.read("external/2/custom.log") == b"same name"
+        assert archive.read("logs/event_loop_watchdog.log") == b"watchdog"
+        assert archive.read("memory/logs.txt").decode() == "[INFO] hello\n"
+        traces = archive.read("memory/traces.jsonl").decode().splitlines()
+        assert [json.loads(line)["span_id"] for line in traces] == ["span-1"]
+        manifest = json.loads(archive.read("manifest.json"))
+    assert sorted(manifest["files"]) == [
+        "external/2/custom.log",
+        "external/custom.1.log",
+        "external/custom.log",
+        "logs/event_loop_watchdog.log",
+    ]
+    assert manifest["skipped"] == []
+    assert (manifest["memory_logs"], manifest["memory_traces"]) == (1, 1)
+    assert str(tmp_path) not in json.dumps(manifest)
+    assert not any((tmp_path / "data" / "temp" / "log_exports").iterdir())
+
+
+@pytest.mark.asyncio
+async def test_v1_log_export_skips_files_that_are_not_regular(
+    monkeypatch, tmp_path: Path, asgi_client: httpx.AsyncClient
+):
+    """A symlink in the log directory must not pull in a file from elsewhere."""
+    monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
+    logs_dir = tmp_path / "data" / "logs"
+    logs_dir.mkdir(parents=True)
+    (logs_dir / "astrbot.log").write_text("ok", encoding="utf-8")
+    outside = tmp_path / "outside.txt"
+    outside.write_text("not a log", encoding="utf-8")
+    link = logs_dir / "link.log"
+    try:
+        link.symlink_to(outside)
+    except OSError:
+        # No symlink privilege (e.g. Windows without developer mode): report a
+        # regular file as a symlink instead, which takes the same code path.
+        link.write_text("not a log", encoding="utf-8")
+        real_lstat = Path.lstat
+
+        def fake_lstat(self, *args, **kwargs):
+            if self.name == "link.log":
+                return os.stat_result((stat.S_IFLNK | 0o777, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+            return real_lstat(self, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "lstat", fake_lstat)
+
+    response = await asgi_client.get("/api/v1/logs/export", headers=_jwt_headers())
+
+    assert response.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        assert "logs/link.log" not in archive.namelist()
+        assert archive.read("logs/astrbot.log") == b"ok"
+        manifest = json.loads(archive.read("manifest.json"))
+    assert manifest["skipped"] == [
+        {"name": "logs/link.log", "reason": "not a regular file"}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_v1_log_export_keeps_archive_names_unique(
+    monkeypatch, tmp_path: Path, asgi_app, asgi_client: httpx.AsyncClient
+):
+    """Log files never take the names of the generated entries."""
+    monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
+    data_dir = tmp_path / "data"
+    (data_dir / "memory").mkdir(parents=True)
+    (data_dir / "memory" / "logs.txt").write_text("file log", encoding="utf-8")
+    (data_dir / "manifest.json").write_text("trace log", encoding="utf-8")
+    service = asgi_app.state.services.logs
+    service.config["log_file_path"] = "memory/logs.txt"
+    service.config["trace_log_path"] = "manifest.json"
+
+    response = await asgi_client.get("/api/v1/logs/export", headers=_jwt_headers())
+
+    assert response.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        names = archive.namelist()
+        assert len(names) == len(set(names))
+        assert archive.read("memory/2/logs.txt") == b"file log"
+        assert archive.read("2/manifest.json") == b"trace log"
+        manifest = json.loads(archive.read("manifest.json"))
+    assert sorted(manifest["files"]) == ["2/manifest.json", "memory/2/logs.txt"]
+
+
+@pytest.mark.asyncio
+async def test_v1_log_export_refuses_when_disk_space_is_short(
+    monkeypatch, tmp_path: Path, asgi_client: httpx.AsyncClient
+):
+    monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
+    logs_dir = tmp_path / "data" / "logs"
+    logs_dir.mkdir(parents=True)
+    (logs_dir / "astrbot.log").write_text("x" * 1024, encoding="utf-8")
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.log_service.shutil.disk_usage",
+        lambda _path: SimpleNamespace(total=2048, used=2048, free=0),
+    )
+
+    response = await asgi_client.get("/api/v1/logs/export", headers=_jwt_headers())
+
+    assert response.status_code == 400
+    assert "disk space" in response.json()["message"]
+    assert not any((tmp_path / "data" / "temp" / "log_exports").iterdir())
+
+
+@pytest.mark.asyncio
+async def test_v1_log_export_runs_one_export_at_a_time(
+    monkeypatch, tmp_path: Path, asgi_app, asgi_client: httpx.AsyncClient
+):
+    monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
+    lock = asgi_app.state.services.logs._export_lock
+    lock.acquire()
+    try:
+        response = await asgi_client.get("/api/v1/logs/export", headers=_jwt_headers())
+    finally:
+        lock.release()
+
+    assert response.status_code == 400
+    assert "already running" in response.json()["message"]
+
+
+@pytest.mark.asyncio
+async def test_v1_log_export_requires_authentication(asgi_client: httpx.AsyncClient):
+    response = await asgi_client.get("/api/v1/logs/export")
+
+    assert response.status_code == 401

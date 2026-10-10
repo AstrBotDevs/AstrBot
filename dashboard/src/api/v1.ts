@@ -1234,6 +1234,11 @@ export const logApi = {
   history() {
     return typed<{ logs?: OpenConfig[] }>(openApiV1.getLogHistory());
   },
+  exportArchive() {
+    return openApiV1.exportLogs({
+      responseType: 'blob',
+    }) as Promise<AxiosResponse<Blob>>;
+  },
   liveUrl() {
     return '/api/v1/logs/live';
   },
