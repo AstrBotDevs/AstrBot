@@ -4,8 +4,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from astrbot.api.message_components import Json, Plain
-from astrbot.api.provider import LLMResponse
+from astrbot.api.message_components import At, Json, Plain
+from astrbot.api.provider import LLMResponse, ProviderRequest
 from astrbot.builtin_stars.astrbot.group_chat_context import GroupChatContext
 from astrbot.builtin_stars.astrbot.main import Main
 from astrbot.core.message.message_event_result import MessageChain
@@ -300,3 +300,65 @@ async def test_format_message_truncates_long_json_card_fields():
     formatted = await context._format_message(event, {})
 
     assert f"Description: {'a' * 200}...]" in formatted
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("targets", [["bot"], ["other-bot", "bot"]])
+async def test_mention_only_request_receives_pending_group_context(targets):
+    """A mention-only trigger must consume earlier messages, not later ones."""
+    main = Main.__new__(Main)
+    main.context = MagicMock()
+    main.context.get_config.return_value = {
+        "provider_ltm_settings": {"group_icl_enable": True},
+    }
+    group = GroupChatContext(MagicMock(), main.context)
+    group.cfg = lambda event: {
+        "group_message_max_cnt": 50, "image_caption": False,
+        "enable_active_reply": False,
+    }
+    main.group_chat_context = group
+    events = []
+    for components in (
+        [Plain("Earlier topic")],
+        [Plain("When did we last say this was AGI?")],
+        [At(qq=target, name=target) for target in targets],
+        [Plain("A later message")],
+    ):
+        event = make_event()
+        event.message_obj.message = components
+        event.message_obj.sender = SimpleNamespace(nickname="Alice")
+        event.get_messages.return_value = components
+        event.get_message_type.return_value = MessageType.GROUP_MESSAGE
+        event.get_self_id.return_value = "bot"
+        event.message_str = "" if isinstance(components[0], At) else components[0].text
+        event.is_at_or_wake_command = isinstance(components[0], At)
+        assert [item async for item in main.on_message(event)] == []
+        events.append(event)
+
+    request = ProviderRequest(prompt="@bot")
+    await main.decorate_llm_req(events[2], request)
+    text = "\n".join(part.text for part in request.extra_user_content_parts)
+    assert "Earlier topic" in text
+    assert "When did we last say this was AGI?" in text
+    assert "A later message" not in text
+    assert len(group.raw_records[events[2].unified_msg_origin]) == 1
+    assert "A later message" in group.raw_records[events[2].unified_msg_origin][0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("enabled,command", [(False, {}), (True, {"command": {}})])
+async def test_mention_recording_respects_context_toggle_and_commands(enabled, command):
+    main = Main.__new__(Main)
+    main.context = MagicMock()
+    main.context.get_config.return_value = {
+        "provider_ltm_settings": {"group_icl_enable": enabled,
+                                  "active_reply": {"enable": False}},
+    }
+    main.group_chat_context = SimpleNamespace(
+        need_active_reply=AsyncMock(return_value=False),
+        handle_message=AsyncMock(),
+    )
+    event = make_event(handlers_parsed_params=command)
+    event.message_obj.message = [At(qq="bot")]
+    assert [item async for item in main.on_message(event)] == []
+    main.group_chat_context.handle_message.assert_not_awaited()
