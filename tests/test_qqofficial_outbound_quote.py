@@ -10,6 +10,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import botpy.message
 import pytest
 
 from astrbot.api.event import MessageChain
@@ -160,3 +161,28 @@ async def _gen_with_reply():
 
 async def _gen_without_reply():
     yield MessageChain(chain=[Plain("hi")])
+
+
+def _chain_with_at(qq: str) -> MessageChain:
+    from astrbot.api.message_components import At
+
+    return MessageChain(chain=[At(qq=qq, name="someone"), Plain(" hi")])
+
+
+@pytest.mark.asyncio
+async def test_at_component_becomes_inline_mention_marker() -> None:
+    """QQ 官方群消息用内容中的 <@openid> 标记表示 @（没有独立字段）。"""
+    parsed = await QQOfficialMessageEvent._parse_to_qqofficial(
+        _chain_with_at("CF54030E8F7EA4C70D977EEB5330F435")
+    )
+
+    assert parsed[0] == "<@CF54030E8F7EA4C70D977EEB5330F435> hi"
+
+
+@pytest.mark.asyncio
+async def test_at_all_component_is_skipped() -> None:
+    """AtAll 的 qq 为 all，官方群聊不支持该写法，不应拼进正文。"""
+    parsed = await QQOfficialMessageEvent._parse_to_qqofficial(_chain_with_at("all"))
+
+    assert parsed[0] == " hi"
+    assert "<@all>" not in parsed[0]
