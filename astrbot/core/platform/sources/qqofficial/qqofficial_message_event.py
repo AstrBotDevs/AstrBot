@@ -1004,6 +1004,12 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     file_source = file_path
                 elif i.url:
                     file_source = i.url
+            elif isinstance(i, At):
+                # QQ 官方群消息用内容中的 <@openid> 标记表示 @（无独立字段），
+                # 与入站方向的解析互逆；AtAll 的 qq 为 "all"，官方群聊不支持该写法，
+                # 跳过以免向平台发送非法内容。
+                if str(i.qq) != "all":
+                    plain_text += f"<@{i.qq}>"
             else:
                 logger.debug(f"qq_official 忽略 {i.type}")
         return (
