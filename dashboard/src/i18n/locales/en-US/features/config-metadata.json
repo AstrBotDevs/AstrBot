@@ -1667,6 +1667,10 @@
       "dashscope_tts_voice": {
         "description": "Voice"
       },
+      "dashscope_tts_websocket_url": {
+        "description": "WebSocket Endpoint",
+        "hint": "Optional. Only used for SpeechSynthesizer calls with Qwen-Audio-TTS and CosyVoice. Leave blank to use the DashScope SDK default endpoint. Enter a complete WebSocket URL, such as wss://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference, replacing {WorkspaceId} with your actual workspace ID."
+      },
       "gm_resp_image_modal": {
         "description": "Enable image modality",
         "hint": "When enabled, responses can include images. Requires model support or it will error. See the Google Gemini website for supported models. Tip: if you need image generation, disable the `Enable member recognition` setting for better results."

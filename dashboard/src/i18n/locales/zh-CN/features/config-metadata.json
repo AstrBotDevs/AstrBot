@@ -1688,6 +1688,10 @@
       "dashscope_tts_voice": {
         "description": "音色"
       },
+      "dashscope_tts_websocket_url": {
+        "description": "WebSocket 接口地址",
+        "hint": "可选，仅用于 Qwen-Audio-TTS 和 CosyVoice 的 SpeechSynthesizer 调用。留空使用 DashScope SDK 默认地址。请填写完整 WebSocket 地址，例如 wss://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference，并将 {WorkspaceId} 替换为实际业务空间 ID。"
+      },
       "gm_resp_image_modal": {
         "description": "启用图片模态",
         "hint": "启用后，将支持返回图片内容。需要模型支持，否则会报错。具体支持模型请查看 Google Gemini 官方网站。温馨提示，如果您需要生成图片，请关闭 `启用群员识别` 配置获得更好的效果。"

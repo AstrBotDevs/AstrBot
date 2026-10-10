@@ -1820,6 +1820,10 @@
             "dashscope_tts_voice": {
                 "description": "Голос"
             },
+            "dashscope_tts_websocket_url": {
+                "description": "Адрес WebSocket API",
+                "hint": "Необязательно. Используется только для вызовов SpeechSynthesizer с Qwen-Audio-TTS и CosyVoice. Оставьте пустым, чтобы использовать адрес DashScope SDK по умолчанию. Укажите полный URL WebSocket, например wss://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference, заменив {WorkspaceId} фактическим ID рабочего пространства."
+            },
             "gm_resp_image_modal": {
                 "description": "Включить визуальную модальность",
                 "hint": "Если включено, ответы могут содержать изображения. Требует поддержки моделью. Совет: для генерации изображений отключите 'Распознавание участников'."
