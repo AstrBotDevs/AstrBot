@@ -237,6 +237,39 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             self.send_buffer = MessageChain(chain=[Plain(text="\n")])
         return await self._post_send(stream=stream_payload)
 
+    def _apply_streaming_decorations(self, chain: MessageChain) -> None:
+        """把 result_decorate 暂存的发送期装饰应用到流式输出的首个分片。
+
+        流式正文由 result.async_stream 逐段发出，共享阶段无法修改 result.chain，
+        因此由平台在这里按需应用，避免改动共享阶段接口。装饰只会应用一次
+        （取走决策后立即清空），因此后续分片不会重复引用。
+        """
+        try:
+            decorations = self.get_extra("_streaming_decorations")
+        except Exception:
+            return
+        if not isinstance(decorations, dict):
+            return
+        try:
+            self.set_extra("_streaming_decorations", None)
+        except Exception:
+            pass
+        # 与 result_decorate 的非流式路径保持一致：仅纯文本 / 图文消息可装饰。
+        if not all(isinstance(c, (Plain, Image)) for c in chain.chain):
+            return
+        try:
+            if decorations.get("mention"):
+                chain.chain.insert(
+                    0,
+                    At(qq=self.get_sender_id(), name=self.get_sender_name()),
+                )
+                if len(chain.chain) > 1 and isinstance(chain.chain[1], Plain):
+                    chain.chain[1].text = chr(10) + chain.chain[1].text
+            if decorations.get("quote"):
+                chain.chain.insert(0, Reply(id=self.message_obj.message_id))
+        except Exception:
+            logger.debug("apply streaming decorations failed", exc_info=True)
+
     async def send_streaming(self, generator, use_fallback: bool = False):
         """流式输出仅支持消息列表私聊（C2C），其他消息源退化为普通发送"""
         # 先标记事件层“已执行发送操作”，避免异常路径遗漏
@@ -252,6 +285,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         try:
             async for chain in generator:
                 source = self.message_obj.raw_message
+                self._apply_streaming_decorations(chain)
 
                 if not isinstance(source, botpy.message.C2CMessage):
                     # 非 C2C 场景：直接累积，最后统一发（拷贝 delta，避免引用丢首字）
