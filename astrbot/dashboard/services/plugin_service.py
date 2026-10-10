@@ -995,46 +995,44 @@ class PluginService:
         ssl_context = ssl.create_default_context(cafile=certifi.where())
         connector = aiohttp.TCPConnector(ssl=ssl_context)
 
-        for url in source.urls:
-            try:
-                async with (
-                    aiohttp.ClientSession(
-                        trust_env=True,
-                        connector=connector,
-                    ) as session,
-                    session.get(url) as response,
-                ):
-                    if response.status == 200:
-                        try:
-                            remote_data = await response.json()
-                        except aiohttp.ContentTypeError:
-                            remote_text = await response.text()
-                            remote_data = json.loads(remote_text)
+        async with aiohttp.ClientSession(
+            trust_env=True,
+            connector=connector,
+        ) as session:
+            for url in source.urls:
+                try:
+                    async with session.get(url) as response:
+                        if response.status == 200:
+                            try:
+                                remote_data = await response.json()
+                            except aiohttp.ContentTypeError:
+                                remote_text = await response.text()
+                                remote_data = json.loads(remote_text)
 
-                        if not remote_data or (
-                            isinstance(remote_data, dict) and len(remote_data) == 0
-                        ):
-                            logger.warning(
-                                f"Remote plugin marketplace data is empty: {url}"
+                            if not remote_data or (
+                                isinstance(remote_data, dict) and len(remote_data) == 0
+                            ):
+                                logger.warning(
+                                    f"Remote plugin marketplace data is empty: {url}"
+                                )
+                                continue
+
+                            logger.info(
+                                "Fetched remote plugin marketplace data successfully; "
+                                f"received {len(remote_data)} plugins."
                             )
-                            continue
-
-                        logger.info(
-                            "Fetched remote plugin marketplace data successfully; "
-                            f"received {len(remote_data)} plugins."
+                            current_md5 = await self.fetch_remote_md5(source.md5_url)
+                            self.save_plugin_cache(
+                                source.cache_file,
+                                remote_data,
+                                current_md5,
+                            )
+                            return remote_data, None
+                        logger.error(
+                            f"Request to {url} failed with status {response.status}."
                         )
-                        current_md5 = await self.fetch_remote_md5(source.md5_url)
-                        self.save_plugin_cache(
-                            source.cache_file,
-                            remote_data,
-                            current_md5,
-                        )
-                        return remote_data, None
-                    logger.error(
-                        f"Request to {url} failed with status {response.status}."
-                    )
-            except Exception as exc:
-                logger.error(f"Request to {url} failed: {exc}")
+                except Exception as exc:
+                    logger.error(f"Request to {url} failed: {exc}")
 
         if not cached_data:
             cached_data = self.load_plugin_cache(source.cache_file)
