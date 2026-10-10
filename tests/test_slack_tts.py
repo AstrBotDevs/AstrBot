@@ -1,4 +1,5 @@
 import wave
+from functools import partial
 from unittest.mock import AsyncMock
 
 import pytest
@@ -9,10 +10,13 @@ from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
     MessageType,
+    Platform,
     PlatformMetadata,
 )
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.pipeline.respond.stage import RespondStage
+from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.sources.slack.slack_adapter import SlackAdapter
 from astrbot.core.platform.sources.slack.slack_event import SlackMessageEvent
 
 
@@ -46,12 +50,27 @@ def slack_event(monkeypatch):
     )
 
 
+@pytest.fixture(params=["event", "session"])
+def slack_sender(request, slack_event, monkeypatch):
+    if request.param == "event":
+        return slack_event.send, slack_event.web_client
+    monkeypatch.setattr(Platform, "send_by_session", AsyncMock())
+    adapter = object.__new__(SlackAdapter)
+    adapter.web_client = slack_event.web_client
+    session = MessageSesion(
+        platform_name="slack",
+        message_type=MessageType.GROUP_MESSAGE,
+        session_id="C123",
+    )
+    return partial(adapter.send_by_session, session), adapter.web_client
+
+
 @pytest.mark.asyncio
-async def test_slack_tts_uploads_audio_without_empty_messages(slack_event, audio_path):
-    client = slack_event.web_client
+async def test_slack_tts_uploads_audio_without_empty_messages(slack_sender, audio_path):
+    send, client = slack_sender
     original = audio_path.read_bytes()
 
-    await slack_event.send(
+    await send(
         MessageChain([Record(file=str(audio_path), text="Speech test.")])
     )
 
@@ -91,21 +110,66 @@ async def test_slack_tts_upload_failure_preserves_source_text(
 
 
 @pytest.mark.asyncio
-async def test_slack_tts_block_failure_retries_source_text(slack_event, audio_path):
-    client = slack_event.web_client
+async def test_slack_tts_block_failure_retries_source_text(slack_sender, audio_path):
+    send, client = slack_sender
     client.files_upload_v2.side_effect = RuntimeError("upload failed")
     client.chat_postMessage.side_effect = [
         RuntimeError("blocks rejected"),
         {"ok": True},
     ]
 
-    await slack_event.send(
+    await send(
         MessageChain([Record(file=str(audio_path), text="Speech test.")])
     )
 
     client.files_upload_v2.assert_awaited_once()
     assert client.chat_postMessage.await_count == 2
+    assert client.chat_postMessage.await_args_list[0].kwargs == {
+        "channel": "C123",
+        "text": "",
+        "blocks": [
+            {"type": "section", "text": {"type": "mrkdwn", "text": "Speech test."}}
+        ],
+    }
     assert client.chat_postMessage.await_args.kwargs == {
         "channel": "C123",
         "text": "Speech test.",
     }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", [None, "upload", "blocks"])
+async def test_slack_tts_preserves_mixed_message_order(
+    slack_sender, audio_path, failure
+):
+    send, client = slack_sender
+    if failure == "upload":
+        client.files_upload_v2.side_effect = RuntimeError("upload failed")
+    elif failure == "blocks":
+        client.chat_postMessage.side_effect = [
+            {"ok": True},
+            RuntimeError("blocks rejected"),
+            {"ok": True},
+        ]
+
+    await send(
+        MessageChain(
+            [
+                Plain("Speech test."),
+                Record(file=str(audio_path), text="Speech test."),
+                Plain("After."),
+            ]
+        )
+    )
+
+    expected_calls = ["chat_postMessage", "files_upload_v2", "chat_postMessage"]
+    if failure == "blocks":
+        expected_calls.append("chat_postMessage")
+        assert client.chat_postMessage.await_args.kwargs == {
+            "channel": "C123", "text": "After."
+        }
+    assert [call[0] for call in client.mock_calls] == expected_calls
+    assert [
+        call.kwargs["blocks"][0]["text"]["text"]
+        for call in client.chat_postMessage.await_args_list[:2]
+    ] == ["Speech test.", "After."]

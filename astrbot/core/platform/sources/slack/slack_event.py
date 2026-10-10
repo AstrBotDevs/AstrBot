@@ -192,66 +192,87 @@ class SlackMessageEvent(AstrMessageEvent):
 
         return blocks, "" if blocks else text_content
 
+    @staticmethod
+    async def _send_message(
+        message: MessageChain,
+        web_client: AsyncWebClient,
+        channel_id: str,
+        plain_texts: set[str] | None = None,
+    ) -> None:
+        """Send ordered Slack message parts with a plain-text retry.
+
+        Args:
+            message: Message components in delivery order.
+            web_client: Slack client used to deliver messages.
+            channel_id: Destination channel or user ID.
+            plain_texts: Text also delivered separately by the response pipeline.
+        """
+        plain_texts = (plain_texts or set()) | {
+            segment.text for segment in message.chain if isinstance(segment, Plain)
+        }
+        # Upload each audio segment only after delivering preceding components.
+        chains = []
+        start = 0
+        for index, segment in enumerate(message.chain):
+            if isinstance(segment, Record):
+                if start < index:
+                    chains.append(message.derive(message.chain[start:index]))
+                chains.append(message.derive([segment]))
+                start = index + 1
+        if start < len(message.chain):
+            chains.append(message.derive(message.chain[start:]))
+
+        for chain in chains:
+            blocks, text = await SlackMessageEvent._parse_slack_blocks(
+                chain,
+                web_client,
+                channel_id=channel_id,
+                plain_texts=plain_texts,
+            )
+            if not blocks and not text.strip():
+                continue
+
+            try:
+                await web_client.chat_postMessage(
+                    channel=channel_id,
+                    text=text,
+                    blocks=blocks or None,
+                )
+            except Exception:
+                # Retry only this part so already delivered parts are not repeated.
+                parts = []
+                for segment in chain.chain:
+                    if isinstance(segment, Plain):
+                        parts.append(segment.text)
+                    elif isinstance(segment, At):
+                        parts.append(f"<@{segment.qq}>")
+                    elif isinstance(segment, File):
+                        parts.append(f" [文件: {segment.name}] ")
+                    elif isinstance(segment, Image):
+                        parts.append(" [图片] ")
+                    elif (
+                        isinstance(segment, Record) and segment.text not in plain_texts
+                    ):
+                        parts.append(segment.text or "[Audio]")
+                await web_client.chat_postMessage(
+                    channel=channel_id,
+                    text="".join(parts),
+                )
+
     async def send(self, message: MessageChain) -> None:
         # RespondStage sends audio separately from the remaining dual-output text.
         result = self.get_result()
         plain_texts = {
             segment.text
-            for segment in message.chain + (result.chain if result else [])
+            for segment in (result.chain if result else [])
             if isinstance(segment, Plain)
         }
-        blocks, text = await SlackMessageEvent._parse_slack_blocks(
+        await self._send_message(
             message,
             self.web_client,
             channel_id=self.get_group_id() or self.get_sender_id(),
             plain_texts=plain_texts,
         )
-        if not blocks and not text.strip():
-            await super().send(message)
-            return
-
-        try:
-            if self.get_group_id():
-                # 发送到频道
-                await self.web_client.chat_postMessage(
-                    channel=self.get_group_id(),
-                    text=text,
-                    blocks=blocks or None,
-                )
-            else:
-                # 发送私信
-                await self.web_client.chat_postMessage(
-                    channel=self.get_sender_id(),
-                    text=text,
-                    blocks=blocks or None,
-                )
-        except Exception:
-            # 如果块发送失败，尝试只发送文本
-            parts = []
-            for segment in message.chain:
-                if isinstance(segment, Plain):
-                    parts.append(segment.text)
-                elif isinstance(segment, At):
-                    parts.append(f"<@{segment.qq}>")
-                elif isinstance(segment, File):
-                    parts.append(f" [文件: {segment.name}] ")
-                elif isinstance(segment, Image):
-                    parts.append(" [图片] ")
-                elif isinstance(segment, Record) and segment.text not in plain_texts:
-                    parts.append(segment.text or "[Audio]")
-            fallback_text = "".join(parts)
-
-            if self.get_group_id():
-                await self.web_client.chat_postMessage(
-                    channel=self.get_group_id(),
-                    text=fallback_text,
-                )
-            else:
-                await self.web_client.chat_postMessage(
-                    channel=self.get_sender_id(),
-                    text=fallback_text,
-                )
-
         await super().send(message)
 
     async def send_streaming(
