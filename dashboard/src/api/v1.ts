@@ -782,11 +782,11 @@ export const backupApi = {
       openApiV1.checkBackup({ path: { filename } }),
     );
   },
-  import(filename: string, confirmed = true) {
+  import(filename: string, confirmed = true, components?: string[]) {
     return typed<any>(
       openApiV1.importBackup({
         path: { filename },
-        body: { confirmed } as any,
+        body: { confirmed, components } as any,
       }),
     );
   },
