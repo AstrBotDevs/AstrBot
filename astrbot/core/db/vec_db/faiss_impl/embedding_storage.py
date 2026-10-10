@@ -16,6 +16,24 @@ if TYPE_CHECKING:
 # 本模块通过"纯 ASCII 临时文件桥接"规避此问题。
 
 
+def _l2_normalize(vectors: np.ndarray) -> np.ndarray:
+    """Scale each row to unit length so L2 distance ranks by cosine similarity.
+
+    Some embedding providers (e.g. Gemini below 3072 dimensions) return vectors
+    that are not normalized, which breaks the ``1 - distance / 2`` similarity.
+
+    Args:
+        vectors: A 2D array of embeddings, one per row.
+
+    Returns:
+        A new float32 array with unit-length rows. All-zero rows stay zero.
+    """
+    vectors = np.array(vectors, dtype=np.float32)
+    norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+    norms[norms == 0] = 1
+    return vectors / norms
+
+
 def _needs_bridge(path: str) -> bool:
     """判断是否需要 ASCII 临时文件桥接。"""
     return os.name == "nt" and not path.isascii()
@@ -134,7 +152,9 @@ class EmbeddingStorage:
             raise ValueError(
                 f"向量维度不匹配, 期望: {self.dimension}, 实际: {vector.shape[0]}",
             )
-        self.index.add_with_ids(vector.reshape(1, -1), np.array([id], dtype=np.int64))
+        self.index.add_with_ids(
+            _l2_normalize(vector.reshape(1, -1)), np.array([id], dtype=np.int64)
+        )
         await self.save_index()
 
     async def insert_batch(self, vectors: np.ndarray, ids: list[int]) -> None:
@@ -148,7 +168,7 @@ class EmbeddingStorage:
             raise ValueError(
                 f"向量维度不匹配, 期望: {self.dimension}, 实际: {vectors.shape[1]}",
             )
-        self.index.add_with_ids(vectors, np.array(ids, dtype=np.int64))
+        self.index.add_with_ids(_l2_normalize(vectors), np.array(ids, dtype=np.int64))
         await self.save_index()
 
     async def search(self, vector: np.ndarray, k: int) -> tuple:
@@ -162,7 +182,7 @@ class EmbeddingStorage:
             raise ValueError(
                 f"向量维度不匹配, 期望: {self.dimension}, 实际: {vector.shape[0]}",
             )
-        distances, indices = self.index.search(vector.reshape(1, -1), k)
+        distances, indices = self.index.search(_l2_normalize(vector.reshape(1, -1)), k)
         return distances, indices
 
     async def delete(self, ids: list[int]) -> None:

@@ -1,6 +1,7 @@
 import asyncio
 from unittest.mock import AsyncMock
 
+import numpy as np
 import pytest
 
 from astrbot.core.db.vec_db.faiss_impl.embedding_storage import EmbeddingStorage
@@ -165,3 +166,19 @@ async def test_get_embeddings_batch_preserves_input_order_when_batches_finish_ou
     )
 
     assert embeddings == [[0.0], [1.0], [2.0], [3.0]]
+
+
+@pytest.mark.asyncio
+async def test_embedding_storage_ranks_unnormalized_vectors_by_cosine() -> None:
+    storage = EmbeddingStorage(2)
+    same_direction = [3.0, 0.0]
+    sixty_degrees_off = [0.5, 0.8660254]
+    await storage.insert_batch(
+        np.array([same_direction, sixty_degrees_off], dtype=np.float32), [1, 2]
+    )
+
+    distances, indices = await storage.search(np.array([1.0, 0.0]), 2)
+
+    assert indices[0].tolist() == [1, 2]
+    similarities = 1.0 - distances[0] / 2.0
+    assert similarities == pytest.approx([1.0, 0.5], abs=1e-5)
