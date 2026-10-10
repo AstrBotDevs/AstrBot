@@ -1017,11 +1017,12 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 elif i.url:
                     file_source = i.url
             elif isinstance(i, At):
-                # QQ 官方群消息用内容中的 <@openid> 标记表示 @（无独立字段），
-                # 与入站方向的解析互逆；AtAll 的 qq 为 "all"，官方群聊不支持该写法，
-                # 跳过以免向平台发送非法内容。
+                # QQ 官方 @ 能力通过嵌入文本协议实现，当前格式为 <qqbot-at-user id="..." />
+                # （旧格式 <@userid> 官方已标记「即将弃用」，部分客户端会原样显示为文本）。
+                # AtAll 对应 <qqbot-at-everyone />，官方文档限定「仅在文字子频道可用」，
+                # 群聊场景跳过以免发送不被支持的内容。
                 if str(i.qq) != "all":
-                    plain_text += f"<@{i.qq}>"
+                    plain_text += f'<qqbot-at-user id="{i.qq}" />'
             else:
                 logger.debug(f"qq_official 忽略 {i.type}")
         return (
