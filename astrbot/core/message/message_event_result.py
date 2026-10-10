@@ -240,6 +240,9 @@ class MessageEventResult(MessageChain):
         default_factory=lambda: ResultContentType.GENERAL_RESULT,
     )
 
+    skip_segmentation: bool = False
+    """Preserve an agent's final response as one message."""
+
     async_stream: AsyncGenerator | None = None
     """异步流"""
 
