@@ -4,7 +4,7 @@ The AstrBot admin panel features plugin management, log viewing, visual configur
 
 ## Navigation and Previous Entry Points
 
-These paths use the current default sidebar. If you customized it, open `System Settings → Appearance → Customize Sidebar` at the bottom of the sidebar to review or reset the layout.
+These paths use the current default sidebar with a fixed menu order. Extension items still support collapsing, pinning, and grouping by plugin.
 
 | Previous entry point or name | Current entry point |
 | --- | --- |
@@ -17,9 +17,24 @@ These paths use the current default sidebar. If you customized it, open `System 
 | Config → System Config | System Settings → General, Appearance, Network, or Security, depending on the setting |
 | Commands / Command Management | Extensions → Handlers → Command |
 | Standalone MCP / Skills entries | Extensions → MCP Servers / Skills |
+| System Settings → Appearance → Customize Sidebar | Removed; the sidebar uses the default menu layout |
 | Custom Rules / Future Tasks / SubAgents | Custom Rules is under the sidebar `System` group; Future Tasks and SubAgents are under the `Extensions` group |
 
-Old log, trace, conversation, and statistics URLs still redirect to the corresponding tabs. Agent runners are now saved in each profile; they are no longer created as model providers. See [Agent Runners](./agent-runner.md) for the setup steps.
+Old log, trace, conversation, and statistics URLs still redirect to the corresponding tabs. Agent runners are now saved in each profile; they are no longer created as model providers. See [Agent Execution Mode](./agent-runner.md) for the setup steps.
+
+## Documentation Navigation
+
+The **Usage → Plugins** documentation group contains Plugins, MCP, and Skills. **Usage → AstrBot Built-in AI** contains Agent Sandbox, SubAgent Orchestration, Proactive Capabilities, Web Search, Knowledge Base, and Context Compression. Their URLs remain unchanged.
+
+The Usage sidebar order is WebUI, AstrBot CLI, Built-in Commands, Plugins, AstrBot Built-in AI, Custom Rules, Agent Execution Mode, and Unified Webhook Mode.
+
+| Previous documentation entry | Current documentation entry |
+| --- | --- |
+| Usage → Plugins, MCP, Skills | Usage → Plugins → Corresponding guide |
+| Usage → Agent Sandbox, SubAgent Orchestration, Proactive Tasks, Web Search, Knowledge Base, Auto Context Compression | Usage → AstrBot Built-in AI → Corresponding guide |
+| Usage → Tool Use / Function Calling | Removed; the Web Search guide explains the required function-calling capability directly |
+| Usage → Agent Runner | Usage → Agent Execution Mode (URL unchanged) |
+| Usage → CLI Commands | Usage → AstrBot CLI (URL unchanged) |
 
 ## Accessing the Admin Panel
 
@@ -78,12 +93,25 @@ ChatUI supports these common workflows:
 
 ## Visual Configuration
 
-Select `Config` in the sidebar, then choose the profile to edit from the selector at the top. Settings are grouped into sections such as `AI`, `Platform`, and `Plugin`. Use the search control at the top to find a setting.
+Select `Config` in the sidebar, then choose the profile to edit from the selector at the top. Sections appear in this order: `AI`, `Platforms & Messages`, `Access Control`, `Plugin`, and `Ext.`. Use the search control at the top to find a setting. The profile selector, search button, and section navigation stay fixed while only the configuration pane on the right scrolls.
 
 - In `AI`, built-in AI settings have `Model`, `Persona`, `Capabilities`, and `Advanced` tabs. Use `… → Change execution mode` beside the AI heading to connect a third-party agent.
-- `Platform` contains administrator and message-trigger settings.
+- `Access Control` contains administrator IDs and the session whitelist, including whitelist logs and administrator exemptions.
+- `Platforms & Messages` contains message-trigger, session-isolation, and delivery settings.
 - `Plugin` selects the plugins enabled for this profile. To edit an individual plugin's parameters, open `Extensions` and click that plugin's gear icon (`Extension Config`).
 - `Ext.` contains segmented reply, group chat context, and text-to-image settings (output toggle, word count threshold, rendering strategy, service endpoint, and custom templates).
+
+| Previous location | Current location |
+| --- | --- |
+| Platform | Platforms & Messages |
+| Platform → General → Administrator IDs | Access Control → Administrators → Administrator IDs |
+| Platform → Whitelist | Access Control → Whitelist |
+
+![Access Control](./images/config-access-control-en.jpg)
+
+After selecting an explicit model, click the gear beside the selector to open its settings dialog. Gears are also available in model and fallback-model menus. Clicking a gear does not change the selection or fallback order. Saving model settings immediately affects every profile using that model; the current profile's model selection still requires `Save Configuration`. Automatic selection has no gear beside the selector.
+
+![Model settings shortcut](./images/config-model-settings-en.jpg)
 
 After editing, click the disk icon labeled `Save Configuration` in the lower-right corner and check for a successful save message.
 
@@ -93,8 +121,10 @@ Use the `{}` icon labeled `Edit Configuration File` to edit the current profile 
 
 Global settings are under `System Settings` at the bottom of the sidebar:
 
+The page title and section navigation stay fixed while only the settings pane on the right scrolls.
+
 - `General`: timezone, external callback address, logs, and cache.
-- `Appearance`: sidebar and theme.
+- `Appearance`: theme colors.
 - `Network`: HTTP proxy, Python package sources, and GitHub proxy. For the address to use when AstrBot runs in Docker, see [Deploy with Docker](/en/deploy/astrbot/docker.md).
 - `Security`: WebUI HTTPS, login rate limits, and TOTP.
 - `Maintenance`: backup, restore, and restart.

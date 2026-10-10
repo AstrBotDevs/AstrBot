@@ -37,6 +37,7 @@ from astrbot.core.provider.entities import (
 )
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.config_number import coerce_int_config
+from astrbot.core.utils.media_utils import describe_media_ref
 from astrbot.core.utils.metrics import Metric
 
 from .....astr_agent_context import AgentContextWrapper, AstrAgentContext
@@ -299,8 +300,9 @@ class ThirdPartyAgentSubStage(Stage):
                     image_path = await comp.convert_to_base64()
                 except Exception as exc:  # noqa: BLE001
                     logger.warning(
-                        "Image attachment is unavailable (%s).",
+                        "Image attachment is unavailable (%s): %s",
                         type(exc).__name__,
+                        describe_media_ref(comp.url or comp.file),
                     )
                     continue
                 req.image_urls.append(image_path)

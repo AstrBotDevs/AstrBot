@@ -297,15 +297,25 @@ class SlackAdapter(Platform):
                         list_text = ""
                         for item in list_items:
                             if item.get("type") == "rich_text_section":
-                                item_elements = item.get("elements", [])
-                                item_text = ""
-                                for item_element in item_elements:
-                                    if item_element.get("type") == "text":
-                                        item_text += item_element.get("text", "")
-                                list_text += f"• {item_text}\n"
+                                # Reuse section parsing to preserve inline components.
+                                item_components = self._parse_blocks(
+                                    [{"type": "rich_text", "elements": [item]}]
+                                )
+                                list_text += "• "
+                                for component in item_components:
+                                    if isinstance(component, Plain):
+                                        list_text += component.text
+                                    else:
+                                        if list_text:
+                                            message_components.append(
+                                                Plain(text=list_text)
+                                            )
+                                            list_text = ""
+                                        message_components.append(component)
+                                list_text += "\n"
 
                         if list_text.strip():
-                            message_components.append(Plain(text=list_text.strip()))
+                            message_components.append(Plain(text=list_text.rstrip()))
 
             elif block_type == "section":
                 # 处理段落块

@@ -1,6 +1,6 @@
 {
   "ai_group": {
-    "name": "AI 配置",
+    "name": "AI",
     "agent_runner": {
       "description": "Agent 执行方式",
       "hint": "选择 AI 对话的执行器。切换执行器会使用新类型的默认配置，不保留上一类型的参数。",
@@ -241,7 +241,7 @@
     },
     "agent_computer_use": {
       "description": "使用电脑能力",
-      "hint": "让 AstrBot 访问和使用本机环境或者隔离的沙盒环境，以执行更复杂的任务。详见: [电脑使用](https://docs.astrbot.app/use/computer.html)。",
+      "hint": "让 AstrBot 访问和使用本机环境或者隔离的沙盒环境，以执行更复杂的任务。详见: [Agent 沙盒环境](https://docs.astrbot.app/use/astrbot-agent-sandbox.html)。",
       "provider_settings": {
         "computer_use_runtime": {
           "description": "运行环境",
@@ -253,7 +253,7 @@
         },
         "computer_use_require_admin": {
           "description": "沙箱能力需要 AstrBot 管理员权限",
-          "hint": "开启后，需要 AstrBot 管理员权限才能调用远程沙箱能力。在平台配置->管理员中可添加管理员。使用 /sid 指令查看管理员 ID。"
+          "hint": "开启后，需要 AstrBot 管理员权限才能调用远程沙箱能力。在配置文件 -> 访问控制 -> 管理员 -> 管理员 ID 中可添加管理员。给机器人发送 /sid 指令以获取 ID。"
         },
         "sandbox": {
           "booter": {
@@ -329,6 +329,7 @@
         "scopeHints": {
           "none": "不允许访问任何文件",
           "workspace": "受限的工作区、临时目录和技能文件。",
+          "workspaceUnsupported": "当前系统不支持受限工作区文件访问。",
           "host": "AstrBot 所在运行环境的所有文件。"
         },
         "scopeDetails": {
@@ -339,13 +340,9 @@
           "member": "普通成员",
           "admin": "管理员"
         },
-        "accessMode": "本地电脑访问",
         "modes": {
-          "none": "关闭",
-          "files": "仅文件访问",
-          "full": "不受限访问"
+          "none": "关闭"
         },
-        "unsupportedSelection": "当前策略不受支持",
         "runtimeUnknown": "运行环境信息不可用。",
         "memberWarning": "普通成员已获得联网或整个环境访问权限。",
         "runtime": {
@@ -353,8 +350,24 @@
           "arch": "架构",
           "sandbox": "本地隔离",
           "unavailableHint": "沙箱启动失败，受限 Shell/Python 执行及工作区文件搜索会受到影响。请根据下方错误检查系统安全策略（如 Linux 的 AppArmor、用户命名空间限制）或容器限制，修复后重启 AstrBot 重新检测。",
+          "dialog": {
+            "intro": "利用 macOS 的 Seatbelt 或 Linux 的 bubblewrap（bwrap）技术，为 AstrBot Agent 的执行提供安全隔离，以限制不同用户使用 AstrBot Agent 时的文件访问范围和联网权限，获得更高的安全性。",
+            "startupError": "查看启动错误",
+            "documentation": "查看详细配置文档"
+          },
+          "close": "关闭",
+          "setupHint": {
+            "missing": "安装 {dependency} 以获得完整的本地隔离功能。",
+            "unavailable": "配置 {backend}，启用完整的本地隔离功能。",
+            "unsupported": "了解本地隔离支持情况。"
+          },
+          "executionUnavailable": {
+            "missing": "缺少 {dependency}，无法在“文件访问范围”选择“工作区”时允许执行代码。",
+            "unavailable": "{backend} 无法启动，无法在“文件访问范围”选择“工作区”时允许执行代码。",
+            "unsupported": "当前系统不支持本地隔离，无法在“文件访问范围”选择“工作区”时允许执行代码。"
+          },
           "status": {
-            "detected": "{backend} · 启动检测通过",
+            "detected": "{backend}",
             "missing": "缺少 {dependency}",
             "unavailable": "{backend} · 已安装但无法启动",
             "unsupported": "暂不支持"
@@ -523,7 +536,7 @@
     }
   },
   "platform_group": {
-    "name": "平台配置",
+    "name": "平台与消息",
     "platform": {
       "description": "消息平台适配器",
       "app_id": {
@@ -944,9 +957,6 @@
     },
     "general": {
       "description": "基本",
-      "admins_id": {
-        "description": "管理员 ID"
-      },
       "platform_settings": {
         "unique_session": {
           "description": "隔离对话",
@@ -977,29 +987,6 @@
       "disable_builtin_commands": {
         "description": "禁用自带指令",
         "hint": "禁用所有 AstrBot 自带指令,如 help, sid, new 等"
-      }
-    },
-    "whitelist": {
-      "description": "白名单",
-      "platform_settings": {
-        "enable_id_white_list": {
-          "description": "启用白名单",
-          "hint": "启用后,只有在白名单内的会话会被响应，白名单列表为空时代表不启用白名单（所有 ID 都会被放行）。"
-        },
-        "id_whitelist": {
-          "description": "白名单 ID 列表",
-          "hint": "使用 /sid 获取 ID。列表为空时表示该白名单不启用（即所有 ID 都在白名单内）。"
-        },
-        "id_whitelist_log": {
-          "description": "输出日志",
-          "hint": "启用后,当一条消息没通过白名单时,会输出 INFO 级别的日志。"
-        },
-        "wl_ignore_admin_on_group": {
-          "description": "管理员群组消息无视 ID 白名单"
-        },
-        "wl_ignore_admin_on_friend": {
-          "description": "管理员私聊消息无视 ID 白名单"
-        }
       }
     },
     "rate_limit": {
@@ -1100,8 +1087,41 @@
       }
     }
   },
+  "access_group": {
+    "name": "访问控制",
+    "admins": {
+      "description": "管理员",
+      "admins_id": {
+        "description": "管理员 ID",
+        "hint": "给机器人发送 /sid 指令以获取 ID。"
+      }
+    },
+    "whitelist": {
+      "description": "白名单",
+      "platform_settings": {
+        "enable_id_white_list": {
+          "description": "启用白名单",
+          "hint": "启用后,只有在白名单内的会话会被响应。"
+        },
+        "id_whitelist": {
+          "description": "白名单 ID 列表",
+          "hint": "给机器人发送 /sid 指令以获取 ID。为空时代表不启用白名单功能。"
+        },
+        "id_whitelist_log": {
+          "description": "输出拦截日志",
+          "hint": "输出未通过白名单校验的消息的日志。"
+        },
+        "wl_ignore_admin_on_group": {
+          "description": "管理员群组消息无视 ID 白名单"
+        },
+        "wl_ignore_admin_on_friend": {
+          "description": "管理员私聊消息无视 ID 白名单"
+        }
+      }
+    }
+  },
   "plugin_group": {
-    "name": "插件配置",
+    "name": "插件",
     "plugin": {
       "description": "插件",
       "plugin_set": {
