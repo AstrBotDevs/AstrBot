@@ -1,5 +1,5 @@
 from astrbot import logger
-from astrbot.api import sp
+from astrbot.core import sp
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import Persona, PersonaFolder, Personality
