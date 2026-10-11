@@ -81,9 +81,20 @@ minute hour day-of-month month day-of-week
 
 Recurring schedules use the task's time zone. New WebUI tasks default to the target conversation's configuration time zone, or the system time zone if none is specified. The one-off date/time picker uses the browser's local time and converts it to an absolute timestamp. Verify the resulting schedule when browser, server, and container time zones differ.
 
-The interval selector currently creates Cron calendar steps, rather than a timer measured from creation. For example, every two hours runs at even-numbered hours. Minute, hour, and day steps are capped at 59, 23, and 31 respectively; day steps across months are not a fixed elapsed duration. Monthly tasks on the 29th, 30th, or 31st do not run in months without that date.
+Monthly tasks on the 29th, 30th, or 31st do not run in months without that date.
 
 AstrBot must be online to execute tasks. Saved schedules are reloaded after a restart, but do not depend on it replaying every missed reminder. Start with a one-off task a few minutes ahead to check timing and delivery.
+
+### Fixed-interval tasks
+
+Select **Interval** for **Execution time**, enter a positive integer and a unit (minutes, hours, or days), and save. Every 40 minutes always means 40 elapsed minutes; every 24 hours always means 24 elapsed hours, including across hour and day boundaries.
+
+- The first run occurs one full interval after saving. Changing the interval starts a new timing period at the time of saving.
+- Restarting, disabling and re-enabling, or editing other fields such as the name or task requirements preserves the original timing anchor. Missed periods during downtime are skipped; execution resumes at the next time on the original schedule.
+- A day means 24 elapsed hours. The local clock time can change across daylight saving transitions. Choose **Daily** for a fixed local time each day.
+- Older interval tasks only contain a Cron expression, so their original input cannot be recovered. After upgrading, they appear as **Custom Cron** and retain their existing Cron schedule. To use a true fixed interval, edit the task, select **Interval**, and enter the intended value again; saving starts a new timing period.
+
+The API represents intervals as `interval_seconds`, accepting positive multiples of 60 up to 2147483647 seconds. The server manages `interval_anchor_at`. An interval cannot be combined with Cron or a one-shot execution time.
 
 ## What a scheduled task can use
 

@@ -203,6 +203,10 @@ class CronJob(TimestampMixin, SQLModel, table=True):
     description: str | None = Field(default=None, sa_type=Text)
     job_type: str = Field(max_length=32, nullable=False)  # basic | active_agent
     cron_expression: str | None = Field(default=None, max_length=255)
+    interval_seconds: int | None = Field(default=None)
+    interval_anchor_at: datetime | None = Field(
+        default=None, sa_type=DateTime(timezone=False)
+    )
     timezone: str | None = Field(default=None, max_length=64)
     payload: dict = Field(default_factory=dict, sa_type=JSON)
     enabled: bool = Field(default=True)
