@@ -43,7 +43,7 @@ class MattermostMessageEvent(AstrMessageEvent):
                 else:
                     message_buffer.chain.extend(chain.chain)
             if not message_buffer:
-                return None
+                return False
             message_buffer.squash_plain()
             await self.send(message_buffer)
             return None

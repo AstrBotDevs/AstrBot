@@ -622,6 +622,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
             Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name),
         )
         self._has_send_oper = True
+        return True
 
     async def _send_streaming_draft(
         self,

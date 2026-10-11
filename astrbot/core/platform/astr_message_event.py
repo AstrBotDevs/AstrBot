@@ -286,7 +286,7 @@ class AstrMessageEvent(abc.ABC):
         self,
         generator: AsyncGenerator[MessageChain, None],
         use_fallback: bool = False,
-    ) -> None:
+    ) -> bool:
         """发送流式消息到消息平台，使用异步生成器。
         目前仅支持: telegram，qq official 私聊。
         Fallback仅支持 aiocqhttp。
@@ -295,6 +295,7 @@ class AstrMessageEvent(abc.ABC):
             Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name),
         )
         self._has_send_oper = True
+        return True
 
     async def send_typing(self) -> None:
         """发送输入中状态。
