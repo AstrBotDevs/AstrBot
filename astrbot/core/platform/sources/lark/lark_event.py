@@ -790,13 +790,20 @@ class LarkMessageEvent(AstrMessageEvent):
         """
         try:
             source = file_comp.file_ or ""
-            if is_file_uri(source):
-                source = file_uri_to_path(source)
-            local_path = Path(source)
-            # Keep local paths out of the resolver's bare-base64 fallback.
-            source = local_path.absolute().as_uri()
-            if not file_comp.file_ or not local_path.exists():
-                source = file_comp.url or source
+            if not source.lower().startswith(("http://", "https://")):
+                if is_file_uri(source):
+                    source = file_uri_to_path(source)
+                local_path = Path(source)
+                # Keep local paths out of the resolver's bare-base64 fallback.
+                source = local_path.absolute().as_uri()
+                if (not file_comp.file_ or not local_path.exists()) and file_comp.url:
+                    if not file_comp.url.lower().startswith(("http://", "https://")):
+                        raise ValueError("Lark file URLs must use HTTP or HTTPS.")
+                    source = file_comp.url
+            if source.lower().startswith(("http://", "https://")):
+                # MediaResolver expects lowercase HTTP(S) schemes.
+                scheme, separator, remainder = source.partition(":")
+                source = scheme.lower() + separator + remainder
             async with MediaResolver(source).as_path() as resolved:
                 file_key = await LarkMessageEvent._upload_lark_file(
                     lark_client,
