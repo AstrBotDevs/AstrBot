@@ -92,6 +92,19 @@
     "title": "提供商类型"
   },
   "providerSources": {
+    "website": "官网",
+    "setupGuide": "接入帮助",
+    "selector": {
+      "ssycloud": "SSYCloud 胜算云",
+      "title": "新建模型提供商",
+      "sponsors": "赞助商",
+      "sponsorInfoTitle": "AstrBot 赞助商",
+      "sponsorInfoBody": "AstrBot 是免费开源项目，我们通过赞助支持维持项目运转。使用赞助商渠道接入模型资源时，我们可能获得少量收益。欢迎通过这些渠道支持我们。",
+      "providers": "提供商",
+      "search": "搜索",
+      "clearSearch": "清除搜索",
+      "noResults": "没有找到匹配的提供商"
+    },
     "title": "提供商源",
     "add": "新增",
     "delete": "删除提供商源",

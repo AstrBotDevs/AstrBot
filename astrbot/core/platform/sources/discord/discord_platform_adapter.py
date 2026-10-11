@@ -3,13 +3,14 @@ import re
 import sys
 from typing import Any, cast
 
+import aiohttp
 import discord
 from discord.abc import GuildChannel, Messageable, PrivateChannel
 from discord.channel import DMChannel
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import File, Image, Plain, Record
+from astrbot.api.message_components import File, Image, Plain, Record, Reply
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
@@ -83,7 +84,11 @@ class DiscordPlatformAdapter(Platform):
 
         if channel:
             message_obj.type = self._get_message_type(channel)
-            message_obj.group_id = self._get_channel_id(channel)
+            if message_obj.type == MessageType.GROUP_MESSAGE:
+                message_obj.group_id = self._get_channel_id(channel)
+                group_name = self._get_group_name(channel)
+                if message_obj.group and group_name:
+                    message_obj.group.group_name = group_name
         else:
             logger.warning(
                 f"[Discord] Can't get channel info for {channel_id_str}, will guess message type.",
@@ -189,6 +194,27 @@ class DiscordPlatformAdapter(Platform):
         """根据 channel 对象获取ID"""
         return str(getattr(channel, "id", None))
 
+    @staticmethod
+    def _get_group_name(
+        channel: Messageable | GuildChannel | PrivateChannel,
+    ) -> str | None:
+        """Build the AstrBot group name for a Discord guild channel.
+
+        Args:
+            channel: Discord channel or thread associated with the message.
+
+        Returns:
+            ``<guild name>-<channel name>`` when both are available, otherwise the
+            available name, or ``None`` when neither has a name.
+        """
+        channel_name = getattr(channel, "name", None)
+        guild_name = getattr(getattr(channel, "guild", None), "name", None)
+        if isinstance(guild_name, str) and isinstance(channel_name, str):
+            return f"{guild_name}-{channel_name}"
+        if isinstance(channel_name, str):
+            return channel_name
+        return guild_name if isinstance(guild_name, str) else None
+
     def _convert_message_to_abm(self, data: dict) -> AstrBotMessage:
         """将普通消息转换为 AstrBotMessage"""
         message = data["message"]
@@ -225,7 +251,11 @@ class DiscordPlatformAdapter(Platform):
 
         abm = AstrBotMessage()
         abm.type = self._get_message_type(message.channel)
-        abm.group_id = self._get_channel_id(message.channel)
+        if abm.type == MessageType.GROUP_MESSAGE:
+            abm.group_id = self._get_channel_id(message.channel)
+            group_name = self._get_group_name(message.channel)
+            if abm.group and group_name:
+                abm.group.group_name = group_name
         abm.message_str = content
         abm.sender = MessageMember(
             user_id=str(message.author.id),
@@ -263,6 +293,38 @@ class DiscordPlatformAdapter(Platform):
         """将平台消息转换成 AstrBotMessage"""
         # 由于 on_interaction 已被禁用，我们只处理普通消息
         abm = self._convert_message_to_abm(data)
+        message = data["message"]
+        reference = getattr(message, "reference", None)
+        if reference and message.type == discord.MessageType.reply:
+            quoted = reference.resolved
+            if quoted is None:
+                quoted = reference.cached_message
+            if quoted is None and reference.message_id is not None:
+                try:
+                    quoted = await message.channel.fetch_message(reference.message_id)
+                except (
+                    discord.HTTPException,
+                    aiohttp.ClientError,
+                    asyncio.TimeoutError,
+                    OSError,
+                ) as e:
+                    logger.warning(
+                        "[Discord] Could not fetch replied-to message %s: %s",
+                        reference.message_id,
+                        e,
+                    )
+            # Deleted references are sentinels without message content.
+            if isinstance(quoted, discord.Message):
+                abm.message.insert(
+                    0,
+                    Reply(
+                        id=str(quoted.id),
+                        chain=[Plain(text=quoted.content)] if quoted.content else [],
+                        message_str=quoted.content,
+                        sender_id=str(quoted.author.id),
+                        sender_nickname=quoted.author.display_name,
+                    ),
+                )
         for component in abm.message:
             if isinstance(component, Record):
                 audio_ref = component.url or component.file
@@ -511,7 +573,11 @@ class DiscordPlatformAdapter(Platform):
             abm = AstrBotMessage()
             if channel is not None:
                 abm.type = self._get_message_type(channel, ctx.guild_id)
-                abm.group_id = self._get_channel_id(channel)
+                if abm.type == MessageType.GROUP_MESSAGE:
+                    abm.group_id = self._get_channel_id(channel)
+                    group_name = self._get_group_name(channel)
+                    if abm.group and group_name:
+                        abm.group.group_name = group_name
             else:
                 # 防守式兜底：channel 取不到时，仍能根据 guild_id/channel_id 推断会话信息
                 abm.type = (
@@ -519,7 +585,8 @@ class DiscordPlatformAdapter(Platform):
                     if ctx.guild_id is not None
                     else MessageType.FRIEND_MESSAGE
                 )
-                abm.group_id = str(ctx.channel_id)
+                if abm.type == MessageType.GROUP_MESSAGE:
+                    abm.group_id = str(ctx.channel_id)
 
             abm.message_str = message_str_for_filter
             abm.sender = MessageMember(

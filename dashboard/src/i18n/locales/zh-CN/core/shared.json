@@ -1,4 +1,9 @@
 {
+  "configProfileDrawer": {
+      "title": "编辑配置文件",
+      "loadFailed": "加载配置文件失败",
+      "close": "关闭"
+    },
   "knowledgeBaseSelector": {
     "notSelected": "未选择",
     "buttonText": "选择知识库...",
@@ -34,11 +39,13 @@
     "cancelSelection": "取消",
     "noDescription": "无描述",
     "notActivated": "未激活",
-    "note": "*不显示系统插件和已经在插件页禁用的插件。",
+    "note": "*不显示系统插件和已经在插件管理页禁用的插件。",
     "selectedPluginsLabel": "已选择的插件：",
     "allPluginsLabel": "所有插件"
   },
   "providerSelector": {
+    "allSources": "全部源",
+    "filterSource": "筛选提供商源",
     "notSelected": "未选择",
     "defaultModel": "默认模型",
     "model": "模型",

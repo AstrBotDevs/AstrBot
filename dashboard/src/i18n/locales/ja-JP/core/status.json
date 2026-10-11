@@ -1,0 +1,22 @@
+{
+  "loading": "読み込み中",
+  "success": "成功",
+  "error": "エラー",
+  "warning": "警告",
+  "info": "情報",
+  "pending": "待機中",
+  "processing": "処理中",
+  "completed": "完了",
+  "failed": "失敗",
+  "cancelled": "キャンセル済み",
+  "timeout": "タイムアウト",
+  "connecting": "接続中",
+  "connected": "接続済み",
+  "disconnected": "切断済み",
+  "online": "オンライン",
+  "offline": "オフライン",
+  "active": "アクティブ",
+  "inactive": "非アクティブ",
+  "ready": "準備完了",
+  "busy": "処理中"
+}

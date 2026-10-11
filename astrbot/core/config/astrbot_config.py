@@ -89,8 +89,28 @@ class AstrBotConfig(dict):
         config_migrated = False
         if default_config is DEFAULT_CONFIG:
             config_migrated = migrate_config_on_load(conf, Path(config_path))
+        provider_settings = conf.get("provider_settings")
+        default_provider_settings = default_config.get("provider_settings")
+        if (
+            isinstance(provider_settings, dict)
+            and isinstance(default_provider_settings, dict)
+            and "computer_use_local_permissions" in default_provider_settings
+            and "computer_use_local_permissions" not in provider_settings
+        ):
+            # Preserve legacy POSIX access; Windows uses its supported defaults.
+            permissions = copy.deepcopy(
+                default_provider_settings["computer_use_local_permissions"]
+            )
+            permissions["member"]["allow_execution"] = permissions["member"][
+                "filesystem_scope"
+            ] != "none" and not provider_settings.get(
+                "computer_use_require_admin", True
+            )
+            permissions["admin"]["filesystem_scope"] = "host"
+            provider_settings["computer_use_local_permissions"] = permissions
+            config_migrated = True
         # 检查配置完整性，并插入
-        has_new = self.check_config_integrity(default_config, conf)
+        has_new = self.check_config_integrity(default_config, conf, schema=schema)
         has_new |= config_migrated
         reset_dashboard_password = self._consume_reset_dashboard_password_flag()
         if reset_dashboard_password and "dashboard" in conf:
@@ -169,8 +189,22 @@ class AstrBotConfig(dict):
 
         return conf
 
-    def check_config_integrity(self, refer_conf: dict, conf: dict, path=""):
-        """检查配置完整性，如果有新的配置项或顺序不一致则返回 True"""
+    def check_config_integrity(
+        self, refer_conf: dict, conf: dict, path="", schema: dict | None = None
+    ):
+        """Check the integrity of a user config against its reference defaults.
+
+        Args:
+            refer_conf: Reference configuration holding default values.
+            conf: User configuration, checked and normalized in place.
+            path: Dot-separated path of the current level, used for logging.
+            schema: Schema nodes parallel to ``refer_conf`` at this level. Entries
+                declared as ``"type": "dict"`` are free-form mappings, so their
+                user-added keys are preserved instead of being treated as stale.
+
+        Returns:
+            True if any items were added or the key order was fixed.
+        """
         has_new = False
 
         # 创建一个新的有序字典以保持参考配置的顺序
@@ -178,6 +212,7 @@ class AstrBotConfig(dict):
 
         # 先按照参考配置的顺序添加配置项
         for key, value in refer_conf.items():
+            child_schema = schema.get(key) if schema else None
             if key not in conf:
                 # 配置项不存在，插入默认值
                 path_ = path + "." + key if path else key
@@ -194,15 +229,28 @@ class AstrBotConfig(dict):
                     # 类型不匹配，使用默认值
                     new_conf[key] = value
                     has_new = True
+                elif (
+                    isinstance(child_schema, dict)
+                    and child_schema.get("type") == "dict"
+                ):
+                    # Free-form mapping declared as "type": "dict": user-added
+                    # keys are data instead of stale entries, keep them as-is.
+                    new_conf[key] = conf[key]
                 elif (path + "." + key if path else key) == "agent_runner.config":
                     # Runner config is normalized according to runner_type when saved.
                     new_conf[key] = conf[key]
                 else:
                     # 递归检查并同步顺序
+                    child_items = (
+                        child_schema.get("items")
+                        if isinstance(child_schema, dict)
+                        else None
+                    )
                     child_has_new = self.check_config_integrity(
                         value,
                         conf[key],
                         path + "." + key if path else key,
+                        schema=child_items if isinstance(child_items, dict) else None,
                     )
                     new_conf[key] = conf[key]
                     has_new |= child_has_new

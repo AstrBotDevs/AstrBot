@@ -1287,18 +1287,46 @@ async def _anysearch_search(
             ) as response:
                 if response.status == 200:
                     data = await response.json()
-                    # Results live under `data.results`; fall back to the
-                    # top-level `results` field for forward compatibility.
-                    body = data.get("data") or data
-                    return [
-                        SearchResult(
-                            title=item.get("title", ""),
-                            url=item.get("url", ""),
-                            snippet=item.get("snippet") or item.get("content", ""),
+                    # AnySearch reports business errors (e.g. missing required vertical params)
+                    # with HTTP 200 and a non-zero code; surface the message to the LLM.
+                    code = data.get("code")
+                    if code not in (None, 0):
+                        raise Exception(
+                            f"AnySearch web search failed: {data.get('message') or code}"
                         )
-                        for item in body.get("results", [])
-                        if item.get("url")
-                    ]
+                    body = data.get("data") or data
+                    results = []
+                    for item in body.get("results", []):
+                        if not item.get("url"):
+                            continue
+                        snippet = item.get("snippet") or item.get("content") or ""
+                        # Vertical searches (finance.quote, security.vuln, ...) return structured
+                        # fields instead of snippet/content; append them as text so they are not lost.
+                        extras = []
+                        for key, value in item.items():
+                            if (
+                                key in {"title", "url", "snippet", "content", "favicon"}
+                                or value is None
+                            ):
+                                continue
+                            if isinstance(value, dict | list):
+                                # Nested structures (e.g. security.vuln affected_products,
+                                # travel.flight segments) are serialized as JSON text
+                                # so no structured data is dropped.
+                                value = json.dumps(value, ensure_ascii=False)
+                            elif not isinstance(value, str | int | float | bool):
+                                continue
+                            extras.append(f"{key}: {value}")
+                        if extras:
+                            snippet = "\n".join([snippet, *extras]).strip()
+                        results.append(
+                            SearchResult(
+                                title=item.get("title", ""),
+                                url=item["url"],
+                                snippet=snippet,
+                            )
+                        )
+                    return results
                 reason = await response.text()
                 if response.status in _ANYSEARCH_RETRYABLE_HTTP_STATUSES:
                     last_error = Exception(
@@ -1322,7 +1350,14 @@ class AnySearchWebSearchTool(FunctionTool[AstrAgentContext]):
     name: str = "web_search_anysearch"
     description: str = (
         "A web search tool powered by AnySearch. Supports general web search and "
-        "domain-specific search over academic, code, finance, legal and security sources."
+        "16 vertical domains: academic(search/biomedical/citation/preprint/dataset), "
+        "business(company/jobs/people/trade), code(doc/snippet), "
+        "energy(production/electricity), environment(aqi), "
+        "finance(quote/fundamental/news/calendar/screen/macro), film(torrent), "
+        "gaming(esports/store), health(drug/stats/trial), ip(global), "
+        "legal(case/statute/legislation), resource(image), "
+        "security(vuln/noise/intel/scan), social_media, "
+        "travel(flight/flight_status), agriculture(fao), and general web search."
     )
     parameters: dict = Field(
         default_factory=lambda: {
@@ -1331,22 +1366,39 @@ class AnySearchWebSearchTool(FunctionTool[AstrAgentContext]):
                 "query": {"type": "string", "description": "Required. Search query."},
                 "max_results": {
                     "type": "integer",
-                    "description": "Optional. The maximum number of results to return. Default is 10. Range is 1-20.",
+                    "description": "Optional. The maximum number of results to return. Default is 10. Range is 1-10.",
                 },
                 "tag": {
                     "type": "string",
                     "description": (
                         'Optional. Domain capability tag in "{domain}.{subdomain}" form, '
-                        'for example "academic.paper" or "finance.news". Omit it for general web search.'
+                        'for example "finance.quote" or "academic.search". '
+                        "Available domains: general, resource, social_media, finance(quote/fundamental/news/calendar/screen/macro), "
+                        "academic(search/biomedical/citation/preprint/dataset), legal(case/statute/legislation), "
+                        "health(drug/stats/trial), business(company/jobs/people/trade), "
+                        "security(vuln/noise/intel/scan), ip(global), code(doc/snippet), "
+                        "energy(production/electricity), environment(aqi), agriculture(fao), "
+                        "travel(flight/flight_status), film(torrent), gaming(esports/store). "
+                        "Omit for general web search."
                     ),
                 },
                 "zone": {
                     "type": "string",
-                    "description": 'Optional. Result region, must be one of "cn", "intl".',
+                    "description": 'Optional. Result region, must be one of "cn", "intl", "global".',
                 },
                 "language": {
                     "type": "string",
                     "description": 'Optional. Preferred result language, for example "zh-CN" or "en".',
+                },
+                "params": {
+                    "type": "object",
+                    "description": (
+                        "Optional. Extra parameters required by specific vertical tags. "
+                        'Examples: {"symbol": "AAPL", "type": "stock"} for finance.quote, '
+                        '{"type": "cve", "value": "CVE-2021-44228"} for security.vuln, '
+                        '{"doi": "10.1038/s41586-021-03819-2"} for academic.search, '
+                        '{"departure": "SHA", "arrival": "PEK", "date": "2026-09-10"} for travel.flight.'
+                    ),
                 },
             },
             "required": ["query"],
@@ -1360,7 +1412,7 @@ class AnySearchWebSearchTool(FunctionTool[AstrAgentContext]):
             max_results = int(kwargs.get("max_results", 10))
         except (TypeError, ValueError):
             max_results = 10
-        max_results = min(max(max_results, 1), 20)
+        max_results = min(max(max_results, 1), 10)
 
         payload: dict = {
             "query": kwargs["query"],
@@ -1373,12 +1425,16 @@ class AnySearchWebSearchTool(FunctionTool[AstrAgentContext]):
             payload["tag"] = tag
 
         zone = kwargs.get("zone", "")
-        if zone in ("cn", "intl"):
+        if zone in ("cn", "intl", "global"):
             payload["zone"] = zone
 
         language = str(kwargs.get("language", "")).strip()
         if language:
             payload["language"] = language
+
+        params = kwargs.get("params")
+        if isinstance(params, dict):
+            payload["params"] = params
 
         results = await _anysearch_search(provider_settings, payload)
         if not results:

@@ -146,6 +146,7 @@
     },
     "knowledgebase": {
       "description": "Knowledge Base",
+      "hint": "AstrBot's \"external brain\".",
       "kb_names": {
         "description": "Knowledge Base List",
         "hint": "Supports multiple selections"
@@ -165,6 +166,7 @@
     },
     "websearch": {
       "description": "Web Search",
+      "hint": "Enables AstrBot to access the internet and stay up to date.",
       "provider_settings": {
         "web_search": {
           "description": "Enable Web Search"
@@ -223,15 +225,19 @@
     },
     "agent_computer_use": {
       "description": "Agent Computer Use",
-      "hint": "Allows the AstrBot to access and use your computer or an sandbox environment to perform more complex tasks. See: [Computer Use](https://docs.astrbot.app/use/computer.html).",
+      "hint": "Allows the AstrBot to access and use your computer or an sandbox environment to perform more complex tasks. See: [Agent Sandbox Environment](https://docs.astrbot.app/en/use/astrbot-agent-sandbox.html).",
       "provider_settings": {
         "computer_use_runtime": {
           "description": "Computer Use Runtime",
-          "hint": "Environment allowed for Agent usage. `local` means the local machine environment, `sandbox` means the sandbox environment, and `none` means no environment is allowed."
+          "hint": "Environment the Agent is allowed to access.",
+          "labels": ["No environment", "Local machine", "Third-party sandbox"]
+        },
+        "computer_use_local_permissions": {
+          "description": "Local Permission Policies"
         },
         "computer_use_require_admin": {
-          "description": "Require AstrBot Admin Permission",
-          "hint": "When enabled, AstrBot admin permission is required to use computer capabilities. Admins can be added in Platform Config. Use the /sid command to view admin IDs."
+          "description": "Require Admin Permission for Sandbox",
+          "hint": "When enabled, AstrBot admin permission is required to use remote sandbox capabilities. Add admins under Config -> Access Control -> Administrators -> Administrator IDs. Send /sid to the bot to get the ID."
         },
         "sandbox": {
           "booter": {
@@ -292,6 +298,63 @@
           "shipyard_max_sessions": {
             "description": "Shipyard Max Sessions",
             "hint": "Maximum number of Shipyard sessions an instance can handle."
+          }
+        }
+      },
+      "local_permissions": {
+        "role": "Role",
+        "execution": "Allow code execution",
+        "network": "Allow execution network access",
+        "filesystem": "File access scope",
+        "scopes": {
+          "workspace": "Workspace",
+          "host": "Entire environment"
+        },
+        "scopeHints": {
+          "none": "No file access allowed",
+          "workspace": "Restricted workspace, temporary directories, and skill files.",
+          "workspaceUnsupported": "Restricted workspace file access is unavailable on this platform.",
+          "host": "All files in the environment where AstrBot runs."
+        },
+        "scopeDetails": {
+          "account": "1. Access is limited to files permitted by the account running AstrBot.",
+          "docker": "2. If deployed through Docker, only files inside the container and mounted files are accessible, not all files on the Docker host."
+        },
+        "roles": {
+          "member": "Member",
+          "admin": "Administrator"
+        },
+        "modes": {
+          "none": "Disabled"
+        },
+        "runtimeUnknown": "Runtime information is unavailable.",
+        "memberWarning": "Members have network access or file access across the entire environment.",
+        "runtime": {
+          "os": "OS",
+          "arch": "Architecture",
+          "sandbox": "Local isolation",
+          "unavailableHint": "Sandbox startup failed, affecting restricted Shell/Python execution and workspace file search. Use the error below to check system security policies (such as Linux AppArmor and user namespace restrictions) or container restrictions, then restart AstrBot to check again.",
+          "dialog": {
+            "intro": "Using Seatbelt on macOS or bubblewrap (bwrap) on Linux, AstrBot provides security isolation for Agent execution, restricting file access scope and network permissions for different users of AstrBot Agent to improve security.",
+            "startupError": "View startup error",
+            "documentation": "View detailed setup documentation"
+          },
+          "close": "Close",
+          "setupHint": {
+            "missing": "Install {dependency} to enable all local isolation features.",
+            "unavailable": "Configure {backend} to enable all local isolation features.",
+            "unsupported": "Learn about local isolation support."
+          },
+          "executionUnavailable": {
+            "missing": "Missing {dependency}; code execution cannot be enabled when File access scope is set to Workspace.",
+            "unavailable": "{backend} cannot start; code execution cannot be enabled when File access scope is set to Workspace.",
+            "unsupported": "Local isolation is unsupported on this platform; code execution cannot be enabled when File access scope is set to Workspace."
+          },
+          "status": {
+            "detected": "{backend}",
+            "missing": "Missing {dependency}",
+            "unavailable": "{backend} · Installed but cannot start",
+            "unsupported": "Unsupported"
           }
         }
       }
@@ -431,20 +494,12 @@
           "description": "User Prompt",
           "hint": "You can use {{prompt}} as a placeholder for user input. If no placeholder is provided, it will be added before the user input."
         },
-        "image_compress_enabled": {
-          "description": "Enable image compression",
-          "hint": "When enabled, large local images are compressed before being sent to multimodal models."
-        },
         "image_compress_options": {
-          "description": "Image compression settings",
-          "hint": "Control image resize limits, JPEG quality, and the minimum size threshold for compression.",
+          "description": "Model input image settings",
+          "hint": "Images are always prepared as JPEG/PNG below 512 KiB. Original attachments are preserved.",
           "max_size": {
-            "description": "Maximum edge length",
-            "hint": "Longest edge of the compressed image in pixels. Images larger than this are resized proportionally."
-          },
-          "quality": {
-            "description": "JPEG quality",
-            "hint": "JPEG output quality from 1 to 100. Higher values preserve more detail but produce larger files."
+            "description": "Input image maximum edge length",
+            "hint": "Longest edge sent to the model, in pixels. Images may be reduced further to stay below 512 KiB; original attachment paths are unchanged."
           }
         },
         "reachability_check": {
@@ -460,7 +515,7 @@
     }
   },
   "platform_group": {
-    "name": "Platform",
+    "name": "Platforms & Messages",
     "platform": {
       "description": "Message Platform Adapters",
       "app_id": {
@@ -739,6 +794,10 @@
         "description": "Unified Webhook Mode",
         "hint": "When enabled, use AstrBot unified webhook entry without opening a separate port. Callback URL is /api/v1/webhooks/platforms/{webhook_uuid}."
       },
+      "use_markdown": {
+        "description": "Use Markdown for Proactive Messages",
+        "hint": "When enabled, proactive messages are sent in Markdown mode by default; an explicit use_markdown() call from a plugin takes precedence over this option."
+      },
       "webhook_uuid": {
         "description": "Webhook UUID",
         "hint": "Unique identifier for unified webhook mode; generated when creating the platform."
@@ -877,13 +936,10 @@
     },
     "general": {
       "description": "General",
-      "admins_id": {
-        "description": "Administrator IDs"
-      },
       "platform_settings": {
         "unique_session": {
-          "description": "Isolate Sessions",
-          "hint": "When enabled, group members have independent contexts."
+          "description": "Isolate Conversation",
+          "hint": "On supported platforms, each group member has a separate conversation context when enabled. Manage command permissions under Handlers → Command."
         },
         "friend_message_needs_wake_prefix": {
           "description": "Private Messages Require Wake Word"
@@ -910,29 +966,6 @@
       "disable_builtin_commands": {
         "description": "Disable Built-in Commands",
         "hint": "Disable all built-in AstrBot commands such as help, sid, new, etc."
-      }
-    },
-    "whitelist": {
-      "description": "Whitelist",
-      "platform_settings": {
-        "enable_id_white_list": {
-          "description": "Enable Whitelist",
-          "hint": "When enabled, only sessions in the whitelist will be responded to. If the whitelist is empty, the whitelist is disabled and all IDs are allowed."
-        },
-        "id_whitelist": {
-          "description": "Whitelist ID List",
-          "hint": "Use /sid to get IDs. If the list is empty, it means whitelist is disabled (all IDs are in the whitelist)."
-        },
-        "id_whitelist_log": {
-          "description": "Output Logs",
-          "hint": "When enabled, INFO level logs will be output when a message doesn't pass the whitelist."
-        },
-        "wl_ignore_admin_on_group": {
-          "description": "Administrator Group Messages Bypass ID Whitelist"
-        },
-        "wl_ignore_admin_on_friend": {
-          "description": "Administrator Private Messages Bypass ID Whitelist"
-        }
       }
     },
     "rate_limit": {
@@ -983,15 +1016,6 @@
         }
       }
     },
-    "t2i": {
-      "description": "Text-to-Image",
-      "t2i": {
-        "description": "Text-to-Image Output"
-      },
-      "t2i_word_threshold": {
-        "description": "Text-to-Image Word Count Threshold"
-      }
-    },
     "others": {
       "description": "Other Settings",
       "platform_settings": {
@@ -1038,6 +1062,39 @@
               "hint": "Enter Unicode emoji symbols, e.g., 👍, 🤔, ⏳"
             }
           }
+        }
+      }
+    }
+  },
+  "access_group": {
+    "name": "Access Control",
+    "admins": {
+      "description": "Administrators",
+      "admins_id": {
+        "description": "Administrator IDs",
+        "hint": "Send the /sid command to the bot to get the ID."
+      }
+    },
+    "whitelist": {
+      "description": "Whitelist",
+      "platform_settings": {
+        "enable_id_white_list": {
+          "description": "Enable Whitelist",
+          "hint": "When enabled, only sessions in the whitelist will be responded to."
+        },
+        "id_whitelist": {
+          "description": "Whitelist ID List",
+          "hint": "Send the /sid command to the bot to get the ID. An empty list disables the whitelist."
+        },
+        "id_whitelist_log": {
+          "description": "Log Blocked Messages",
+          "hint": "Log messages that fail whitelist checks."
+        },
+        "wl_ignore_admin_on_group": {
+          "description": "Administrator Group Messages Bypass ID Whitelist"
+        },
+        "wl_ignore_admin_on_friend": {
+          "description": "Administrator Private Messages Bypass ID Whitelist"
         }
       }
     }
@@ -1144,12 +1201,15 @@
           }
         }
       }
-    }
-  },
-  "system_group": {
-    "name": "System",
-    "system": {
-      "description": "System Settings",
+    },
+    "t2i": {
+      "description": "Text-to-Image",
+      "t2i": {
+        "description": "Text-to-Image Output"
+      },
+      "t2i_word_threshold": {
+        "description": "Text-to-Image Word Count Threshold"
+      },
       "t2i_strategy": {
         "description": "Text-to-Image Strategy",
         "hint": "Text-to-image strategy. `remote` uses a remote HTML-based rendering service, `local` uses PIL for local rendering. When using local, place a TTF font named 'font.ttf' in the data/ directory to customize the font."
@@ -1165,7 +1225,13 @@
       "t2i_active_template": {
         "description": "Currently Active Text-to-Image Rendering Template",
         "hint": "This value is maintained by the text-to-image template management page."
-      },
+      }
+    }
+  },
+  "system_group": {
+    "name": "System",
+    "system": {
+      "description": "System Settings",
       "log_level": {
         "description": "Console Log Level",
         "hint": "Log level for console output."
@@ -1404,6 +1470,7 @@
           "Tool use"
         ]
       },
+
       "custom_headers": {
         "description": "Custom request headers",
         "hint": "Key/value pairs added here are merged into the OpenAI SDK default_headers for custom HTTP headers. Values must be strings."

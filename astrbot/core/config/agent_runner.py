@@ -28,7 +28,7 @@ AGENT_RUNNER_CONFIG_DEFAULTS: dict[str, dict[str, Any]] = {
             "fallback_max_tokens": 128000,
         },
         "misc": {
-            "max_steps": 30,
+            "max_steps": 128,
             "tool_schema_mode": "full",
             "tool_call_timeout": 120,
             "sanitize_context_by_modalities": False,
@@ -97,6 +97,41 @@ def get_agent_runner_config_default(runner_type: str) -> dict[str, Any]:
     if runner_type not in AGENT_RUNNER_CONFIG_DEFAULTS:
         raise ValueError(f"Unsupported Agent Runner type: {runner_type}")
     return copy.deepcopy(AGENT_RUNNER_CONFIG_DEFAULTS[runner_type])
+
+
+def resolve_context_compression_config(
+    compression_config: dict[str, Any],
+) -> dict[str, Any]:
+    """Map session compression settings to main agent build arguments.
+
+    Args:
+        compression_config: The ``agent_runner.config.compression`` section.
+            An empty mapping preserves the ordinary chat parser's defaults.
+
+    Returns:
+        Build arguments shared by chat, Cron and background-result wakeups.
+        The input mapping is not modified.
+    """
+    max_turns = compression_config.get("max_turns", -1)
+    trim_turns = compression_config.get("trim_turns", 1)
+    dequeue_turns = min(
+        max(1, trim_turns), max_turns - 1 if max_turns > 0 else trim_turns
+    )
+    return {
+        "context_limit_reached_strategy": compression_config.get(
+            "overflow_strategy", "truncate_by_turns"
+        ),
+        "llm_compress_instruction": compression_config.get("instruction", ""),
+        "llm_compress_keep_recent_ratio": compression_config.get(
+            "keep_recent_ratio", 0.15
+        ),
+        "llm_compress_provider_id": compression_config.get("provider_id", ""),
+        "max_context_length": max_turns,
+        "dequeue_context_length": max(1, dequeue_turns),
+        "fallback_max_context_tokens": compression_config.get(
+            "fallback_max_tokens", 128000
+        ),
+    }
 
 
 def _normalize_value(value: Any, default: Any) -> Any:
