@@ -367,7 +367,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         ret_id = getattr(ret, "id", None)
         return str(ret_id) if ret_id is not None else None
 
-    # QQ 官方单条消息文本长度上限，超出会被平台截断（错误码 40054007）
+    # QQ rejects text exceeding this limit with error code 40054007.
     QQ_MAX_LENGTH = 4000
 
     _SPLIT_PATTERNS = {
@@ -378,20 +378,32 @@ class QQOfficialMessageEvent(AstrMessageEvent):
     }
 
     @classmethod
-    def _split_message(cls, text: str) -> list[str]:
-        """按段落 → 行 → 句子 → 词回退切分超长文本，对齐 Telegram 的 _split_message。"""
-        if len(text) <= cls.QQ_MAX_LENGTH:
+    def _split_message(
+        cls, text: str, *, first_chunk_limit: int | None = None
+    ) -> list[str]:
+        """Split text at paragraph, line, sentence, or word boundaries.
+
+        Args:
+            text: Text to split without dropping whitespace.
+            first_chunk_limit: Space left in an existing chunk, including zero.
+                Later chunks use the full QQ message limit.
+
+        Returns:
+            Ordered text chunks. The first may be empty when no space remains.
+        """
+        limit = cls.QQ_MAX_LENGTH if first_chunk_limit is None else first_chunk_limit
+        if len(text) <= limit:
             return [text]
 
         chunks = []
         remaining = text
         while remaining:
-            if len(remaining) <= cls.QQ_MAX_LENGTH:
+            if len(remaining) <= limit:
                 chunks.append(remaining)
                 break
 
-            split_point = cls.QQ_MAX_LENGTH
-            segment = remaining[: cls.QQ_MAX_LENGTH]
+            split_point = limit
+            segment = remaining[:limit]
             for _, pattern in cls._SPLIT_PATTERNS.items():
                 if matches := list(pattern.finditer(segment)):
                     split_point = matches[-1].end()
@@ -399,6 +411,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
             chunks.append(remaining[:split_point])
             remaining = remaining[split_point:]
+            limit = cls.QQ_MAX_LENGTH
 
         return chunks
 
@@ -406,18 +419,63 @@ class QQOfficialMessageEvent(AstrMessageEvent):
     def _split_message_chain_by_length(
         cls, message_chains: list[MessageChain]
     ) -> list[MessageChain]:
-        """按 QQ 单条消息长度限制拆分消息链，防止长文本被平台截断。"""
+        """Split serialized text while keeping mentions intact and ordered.
+
+        Args:
+            message_chains: Media-separated chains to fit within the QQ limit.
+
+        Returns:
+            Chains retaining media in the first chunk and the original send flags.
+
+        Raises:
+            ValueError: A single mention exceeds the entire message limit.
+        """
         result: list[MessageChain] = []
         for chain in message_chains:
-            text = "".join(c.text for c in chain.chain if isinstance(c, Plain))
-            if len(text) <= cls.QQ_MAX_LENGTH:
+            text_components = []
+            for component in chain.chain:
+                if isinstance(component, Plain):
+                    text_components.append((component, component.text))
+                elif isinstance(component, At):
+                    mention_id = str(component.qq) if component.qq else ""
+                    # Match the mention serialization in _parse_to_qqofficial.
+                    text = (
+                        f'<qqbot-at-user id="{mention_id}" />'
+                        if mention_id and mention_id != "all"
+                        else ""
+                    )
+                    if len(text) > cls.QQ_MAX_LENGTH:
+                        raise ValueError("QQ mention exceeds the message length limit")
+                    text_components.append((component, text))
+            if sum(len(text) for _, text in text_components) <= cls.QQ_MAX_LENGTH:
                 result.append(chain)
                 continue
-            parts = cls._split_message(text)
-            non_plain = [c for c in chain.chain if not isinstance(c, Plain)]
-            # 首个分片保留非 Plain 组件（如图片），保证含媒体消息的超长文本也被拆分
-            result.append(chain.derive([*non_plain, Plain(parts[0])]))
-            result.extend(chain.derive([Plain(part)]) for part in parts[1:])
+
+            # Media stays in the first chunk; text and mentions keep their order.
+            current = [c for c in chain.chain if not isinstance(c, Plain | At)]
+            current_length = 0
+            for component, text in text_components:
+                if isinstance(component, At):
+                    if current_length + len(text) > cls.QQ_MAX_LENGTH:
+                        result.append(chain.derive(current))
+                        current = []
+                        current_length = 0
+                    current.append(component)
+                    current_length += len(text)
+                    continue
+                parts = cls._split_message(
+                    text, first_chunk_limit=cls.QQ_MAX_LENGTH - current_length
+                )
+                for index, part in enumerate(parts):
+                    if index:
+                        result.append(chain.derive(current))
+                        current = []
+                        current_length = 0
+                    if part:
+                        current.append(Plain(part))
+                        current_length += len(part)
+            if current:
+                result.append(chain.derive(current))
         return result
 
     @staticmethod

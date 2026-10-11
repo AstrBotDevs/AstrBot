@@ -14,7 +14,7 @@ import botpy.message
 import pytest
 
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import Image, Plain
+from astrbot.api.message_components import At, Image, Plain
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
@@ -147,6 +147,127 @@ def test_split_message_chain_by_length_splits_long_text() -> None:
         len(c.chain[0].text) <= QQOfficialMessageEvent.QQ_MAX_LENGTH for c in result
     )
     assert "".join(c.chain[0].text for c in result) == chain.chain[0].text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "components",
+    [
+        [At(qq="member-1"), Plain("x" * 3990)],
+        [At(qq="member-1"), Plain("x" * 5000)],
+        [Plain("x" * 3990), At(qq="member-1"), Plain("tail")],
+        [Plain("x" * 4000), At(qq="member-1")],
+        [Plain("x" * 4000), Plain("tail"), At(qq="member-1")],
+        [At(qq="member-1") for _ in range(150)],
+        [At(qq="all"), Plain("x" * 5000), At(qq="")],
+    ],
+)
+async def test_split_message_chain_counts_mentions_and_preserves_order(
+    components: list,
+) -> None:
+    """Keep serialized mentions intact and in order across message boundaries.
+
+    Args:
+        components: Text and mention components spanning a length boundary.
+    """
+    chain = MessageChain(chain=components)
+    expected, *_ = await QQOfficialMessageEvent._parse_to_qqofficial(chain)
+    chunks = QQOfficialMessageEvent._split_message_chain_by_length([chain])
+    texts = [
+        (await QQOfficialMessageEvent._parse_to_qqofficial(chunk))[0]
+        for chunk in chunks
+    ]
+
+    assert len(chunks) > 1
+    assert all(0 < len(text) <= QQOfficialMessageEvent.QQ_MAX_LENGTH for text in texts)
+    assert "".join(texts) == expected
+    assert [c for chunk in chunks for c in chunk.chain if isinstance(c, At)] == [
+        c for c in components if isinstance(c, At)
+    ]
+
+
+@pytest.mark.asyncio
+async def test_split_message_chain_keeps_exact_mention_boundary_unchanged() -> None:
+    mention = At(qq="member-1")
+    markup, *_ = await QQOfficialMessageEvent._parse_to_qqofficial(
+        MessageChain(chain=[mention])
+    )
+    chain = MessageChain(chain=[mention, Plain("x" * (4000 - len(markup)))])
+
+    assert QQOfficialMessageEvent._split_message_chain_by_length([chain]) == [chain]
+
+
+def test_split_message_chain_rejects_oversized_mention() -> None:
+    chain = MessageChain(chain=[At(qq="x" * 4000)])
+
+    with pytest.raises(ValueError, match="mention exceeds"):
+        QQOfficialMessageEvent._split_message_chain_by_length([chain])
+
+
+@pytest.mark.asyncio
+async def test_split_mention_caption_preserves_media_and_send_flags() -> None:
+    image = Image(file="unused.png")
+    chain = MessageChain(
+        chain=[At(qq="member-1"), Plain("x" * 5000), image],
+        use_markdown_=True,
+        use_t2i_=False,
+    )
+    chunks = QQOfficialMessageEvent._split_message_chain_by_length([chain])
+
+    assert chunks[0].chain[0] == image
+    assert sum(isinstance(c, Image) for chunk in chunks for c in chunk.chain) == 1
+    assert all(chunk.use_markdown_ is True for chunk in chunks)
+    assert all(chunk.use_t2i_ is False for chunk in chunks)
+    texts = [
+        (
+            await QQOfficialMessageEvent._parse_to_qqofficial(
+                chunk.derive([c for c in chunk.chain if isinstance(c, Plain | At)])
+            )
+        )[0]
+        for chunk in chunks
+    ]
+    assert all(0 < len(text) <= QQOfficialMessageEvent.QQ_MAX_LENGTH for text in texts)
+    assert "".join(texts) == '<qqbot-at-user id="member-1" />' + "x" * 5000
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("proactive", [False, True])
+async def test_send_splits_near_limit_text_with_mentions(proactive: bool) -> None:
+    """Bound the actual payloads of replies and proactive group messages.
+
+    Args:
+        proactive: Whether to send through the adapter's session API.
+    """
+    chain = MessageChain(chain=[At(qq="member-1"), Plain("x" * 3990)])
+    expected, *_ = await QQOfficialMessageEvent._parse_to_qqofficial(chain)
+    send = AsyncMock(return_value={"id": "sent-1"})
+    if proactive:
+        adapter = QQOfficialPlatformAdapter(
+            {
+                "id": "qq-official-test",
+                "appid": "123",
+                "secret": "secret",
+                "enable_group_c2c": True,
+                "enable_guild_direct_message": False,
+            },
+            {},
+            asyncio.Queue(),
+        )
+        adapter.client.api = SimpleNamespace(post_group_message=send)
+        adapter._session_scene["group-1"] = "group"
+        await adapter.send_by_session(
+            MessageSession("qq_official", MessageType.GROUP_MESSAGE, "group-1"),
+            chain,
+        )
+    else:
+        event = _make_group_event()
+        event.bot.api.post_group_message = send
+        await event.send(chain)
+
+    texts = [_extract_send_text(call.kwargs) for call in send.await_args_list]
+    assert len(texts) > 1
+    assert all(0 < len(text) <= QQOfficialMessageEvent.QQ_MAX_LENGTH for text in texts)
+    assert "".join(texts) == expected
 
 
 @pytest.mark.asyncio
