@@ -313,7 +313,7 @@
     },
     "agent_computer_use": {
       "description": "コンピューター操作機能",
-      "hint": "AstrBot がローカル環境または隔離されたサンドボックス環境へアクセスし、より複雑なタスクを実行できるようにします。詳細：[コンピューター操作](https://docs.astrbot.app/en/use/computer.html)。",
+      "hint": "AstrBot がローカル環境または隔離されたサンドボックス環境へアクセスし、より複雑なタスクを実行できるようにします。詳細：[Agent サンドボックス環境](https://docs.astrbot.app/en/use/astrbot-agent-sandbox.html)。",
       "provider_settings": {
         "computer_use_runtime": {
           "description": "実行環境",
@@ -401,6 +401,7 @@
         "scopeHints": {
           "none": "すべてのファイルへのアクセスを禁止",
           "workspace": "制限されたワークスペース、一時ディレクトリ、スキルファイル。",
+          "workspaceUnsupported": "このプラットフォームでは制限付きワークスペースのファイルアクセスを利用できません。",
           "host": "AstrBot が動作する環境内のすべてのファイル。"
         },
         "scopeDetails": {
@@ -411,17 +412,9 @@
           "member": "一般メンバー",
           "admin": "管理者"
         },
-        "accessMode": "ローカルコンピューターへのアクセス",
         "modes": {
-          "none": "無効",
-          "files": "ファイルアクセスのみ",
-          "full": "制限なし"
+          "none": "無効"
         },
-        "modeHints": {
-          "files": "環境内のすべてのファイルを読み書きできますが、Shell/Python の実行とネットワークアクセスはできません。",
-          "full": "環境内のすべてのファイルを読み書きでき、Shell/Python の実行とネットワークアクセスが可能です。"
-        },
-        "unsupportedSelection": "現在のポリシーはサポートされていません",
         "runtimeUnknown": "実行環境の情報を取得できません。",
         "memberWarning": "一般メンバーにネットワーク接続または環境全体へのアクセスが許可されています。",
         "runtime": {
@@ -429,8 +422,24 @@
           "arch": "アーキテクチャ",
           "sandbox": "ローカル隔離",
           "unavailableHint": "サンドボックスの起動に失敗したため、制限付きの Shell/Python 実行とワークスペース内のファイル検索に影響があります。以下のエラーを参考に、システムのセキュリティポリシー（Linux の AppArmor やユーザー名前空間の制限など）またはコンテナの制限を確認し、修正後に AstrBot を再起動して再検査してください。",
+          "dialog": {
+            "intro": "macOS の Seatbelt または Linux の bubblewrap（bwrap）を利用して、AstrBot Agent の実行環境を安全に隔離し、AstrBot Agent を利用する各ユーザーのファイルアクセス範囲とネットワーク権限を制限することで、安全性を高めます。",
+            "startupError": "起動エラーを確認",
+            "documentation": "詳しい設定ドキュメントを見る"
+          },
+          "close": "閉じる",
+          "setupHint": {
+            "missing": "{dependency} をインストールして、すべてのローカル隔離機能を有効にします。",
+            "unavailable": "{backend} を設定して、すべてのローカル隔離機能を有効にします。",
+            "unsupported": "ローカル隔離の対応状況を確認します。"
+          },
+          "executionUnavailable": {
+            "missing": "{dependency} が見つからないため、「ファイルアクセス範囲」で「ワークスペース」を選択している場合、コード実行を有効にできません。",
+            "unavailable": "{backend} を起動できないため、「ファイルアクセス範囲」で「ワークスペース」を選択している場合、コード実行を有効にできません。",
+            "unsupported": "このプラットフォームではローカル隔離がサポートされていないため、「ファイルアクセス範囲」で「ワークスペース」を選択している場合、コード実行を有効にできません。"
+          },
           "status": {
-            "detected": "{backend} · 起動確認済み",
+            "detected": "{backend}",
             "missing": "{dependency} が見つかりません",
             "unavailable": "{backend} · インストール済みですが起動できません",
             "unsupported": "未対応"

@@ -241,7 +241,7 @@
     },
     "agent_computer_use": {
       "description": "使用电脑能力",
-      "hint": "让 AstrBot 访问和使用本机环境或者隔离的沙盒环境，以执行更复杂的任务。详见: [电脑使用](https://docs.astrbot.app/use/computer.html)。",
+      "hint": "让 AstrBot 访问和使用本机环境或者隔离的沙盒环境，以执行更复杂的任务。详见: [Agent 沙盒环境](https://docs.astrbot.app/use/astrbot-agent-sandbox.html)。",
       "provider_settings": {
         "computer_use_runtime": {
           "description": "运行环境",
@@ -329,6 +329,7 @@
         "scopeHints": {
           "none": "不允许访问任何文件",
           "workspace": "受限的工作区、临时目录和技能文件。",
+          "workspaceUnsupported": "当前系统不支持受限工作区文件访问。",
           "host": "AstrBot 所在运行环境的所有文件。"
         },
         "scopeDetails": {
@@ -339,17 +340,9 @@
           "member": "普通成员",
           "admin": "管理员"
         },
-        "accessMode": "本地电脑访问",
         "modes": {
-          "none": "关闭",
-          "files": "仅文件访问",
-          "full": "不受限访问"
+          "none": "关闭"
         },
-        "modeHints": {
-          "files": "可读写整个环境的文件，但不能执行 Shell/Python 代码或联网。",
-          "full": "可读写整个环境的文件，并可执行 Shell/Python 代码和联网。"
-        },
-        "unsupportedSelection": "当前策略不受支持",
         "runtimeUnknown": "运行环境信息不可用。",
         "memberWarning": "普通成员已获得联网或整个环境访问权限。",
         "runtime": {
@@ -357,8 +350,24 @@
           "arch": "架构",
           "sandbox": "本地隔离",
           "unavailableHint": "沙箱启动失败，受限 Shell/Python 执行及工作区文件搜索会受到影响。请根据下方错误检查系统安全策略（如 Linux 的 AppArmor、用户命名空间限制）或容器限制，修复后重启 AstrBot 重新检测。",
+          "dialog": {
+            "intro": "利用 macOS 的 Seatbelt 或 Linux 的 bubblewrap（bwrap）技术，为 AstrBot Agent 的执行提供安全隔离，以限制不同用户使用 AstrBot Agent 时的文件访问范围和联网权限，获得更高的安全性。",
+            "startupError": "查看启动错误",
+            "documentation": "查看详细配置文档"
+          },
+          "close": "关闭",
+          "setupHint": {
+            "missing": "安装 {dependency} 以获得完整的本地隔离功能。",
+            "unavailable": "配置 {backend}，启用完整的本地隔离功能。",
+            "unsupported": "了解本地隔离支持情况。"
+          },
+          "executionUnavailable": {
+            "missing": "缺少 {dependency}，无法在“文件访问范围”选择“工作区”时允许执行代码。",
+            "unavailable": "{backend} 无法启动，无法在“文件访问范围”选择“工作区”时允许执行代码。",
+            "unsupported": "当前系统不支持本地隔离，无法在“文件访问范围”选择“工作区”时允许执行代码。"
+          },
           "status": {
-            "detected": "{backend} · 启动检测通过",
+            "detected": "{backend}",
             "missing": "缺少 {dependency}",
             "unavailable": "{backend} · 已安装但无法启动",
             "unsupported": "暂不支持"

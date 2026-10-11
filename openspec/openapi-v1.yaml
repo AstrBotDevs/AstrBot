@@ -5792,6 +5792,9 @@ components:
       type: object
       required: [message]
       properties:
+        locale:
+          type: string
+          description: UI locale for built-in LLM error messages. Omitted or unsupported locales fall back to zh-CN.
         username:
           type: string
           description: Caller-declared WebChat sender/session owner. Configured AstrBot administrator IDs require the chat:admin API key sub-scope.
@@ -5864,6 +5867,9 @@ components:
     ChatMessageRegenerateRequest:
       type: object
       properties:
+        locale:
+          type: string
+          description: UI locale for built-in LLM error messages. Omitted or unsupported locales fall back to zh-CN.
         selected_provider:
           type: string
         selected_model:
@@ -5895,6 +5901,9 @@ components:
       type: object
       required: [message]
       properties:
+        locale:
+          type: string
+          description: UI locale for built-in LLM error messages. Omitted or unsupported locales fall back to zh-CN.
         message:
           oneOf:
             - type: string
