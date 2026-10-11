@@ -244,10 +244,12 @@ watch(viewMode, async (mode) => {
                   v-model="toolSearch"
                   prepend-inner-icon="mdi-magnify"
                   :label="tmTool('functionTools.search')"
-                  variant="outlined"
+                  variant="solo-filled"
+                  flat
                   density="compact"
                   hide-details
                   clearable
+                  single-line
                 />
               </div>
 

@@ -92,7 +92,7 @@ const getPermissionLabel = (permission?: string): string => {
 </script>
 
 <template>
-  <v-card class="rounded-lg overflow-hidden elevation-1">
+  <v-card class="rounded-lg overflow-hidden" variant="outlined">
     <v-data-table
       :headers="toolHeaders"
       :items="items"
@@ -275,6 +275,19 @@ const getPermissionLabel = (permission?: string): string => {
 .tool-name {
   font-size: 0.9rem;
   line-height: 1.35;
+}
+
+:deep(.v-data-table-footer__items-per-page .v-field) {
+  background-color: rgba(var(--v-theme-on-surface), 0.04);
+  border-radius: 8px;
+}
+
+:deep(.v-data-table-footer__items-per-page .v-field__outline) {
+  opacity: 0;
+}
+
+:deep(.v-data-table-footer__items-per-page .v-field--focused .v-field__outline) {
+  opacity: 1;
 }
 
 .tool-config-tooltip {
