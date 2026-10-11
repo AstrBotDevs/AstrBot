@@ -540,7 +540,7 @@ window.addEventListener("beforeunload", () => {
 
 ## 视图元数据与国际化
 
-视图不使用单独的 `metadata.json`。标题、描述等元数据写在插件目录的 `.astrbot-plugin/i18n/<locale>.json` 中，并按 `views.<view_name>` 组织；`views` 是 locale JSON 的顶层字段，与 `metadata`、`config` 并列，不要写进 `metadata.yaml` 或视图目录。`<view_name>` 必须与 `views/` 下的目录名完全一致。
+视图的标题、描述等元数据写在插件目录的 `.astrbot-plugin/i18n/<locale>.json` 中，并按 `views.<view_name>` 组织。`views` 是 locale JSON 的顶层字段，与 `metadata`、`config` 并列；`<view_name>` 必须与 `views/` 下的目录名完全一致。
 
 例如 `bridge-demo` 视图的中文元数据位于：
 

@@ -540,7 +540,7 @@ window.addEventListener("beforeunload", () => {
 
 ## View Metadata and Internationalization
 
-Views do not use a separate `metadata.json`. Put metadata such as the title and description in `.astrbot-plugin/i18n/<locale>.json` inside the plugin directory, nested under `views.<view_name>`. `views` is a top-level locale JSON field alongside `metadata` and `config`; do not put it in `metadata.yaml` or in the View directory. `<view_name>` must exactly match the directory name under `views/`.
+Put View metadata such as the title and description in `.astrbot-plugin/i18n/<locale>.json` inside the plugin directory, nested under `views.<view_name>`. `views` is a top-level locale JSON field alongside `metadata` and `config`; `<view_name>` must exactly match the directory name under `views/`.
 
 For example, localized metadata for the `bridge-demo` View is stored as follows:
 
