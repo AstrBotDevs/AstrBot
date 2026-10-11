@@ -114,7 +114,7 @@ class ProviderCommands:
         idx: str | int | None = None,
         idx2: int | None = None,
     ) -> None:
-        """查看或者切换 LLM Provider"""
+        """View or switch the session provider (LLM, `/provider tts <idx>`, `/provider stt <idx>`)."""
         umo = event.unified_msg_origin
         cfg = self.context.get_config(umo).get("provider_settings", {})
         reachability_check_enabled = cfg.get("reachability_check", True)
