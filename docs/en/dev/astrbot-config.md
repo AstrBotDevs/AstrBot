@@ -177,6 +177,8 @@ Fixed prefix string when replying to messages. Default is empty.
 
 Message forwarding threshold. When the reply content exceeds a certain number of characters, the bot will fold the message into a QQ group "forwarded message" to prevent spamming.
 
+In WebUI, select the profile used by your bot and open `Access Control → Whitelist` to manage the following whitelist settings.
+
 #### `platform_settings.enable_id_white_list`
 
 Whether to enable the ID whitelist. Default is `true`. When enabled, only messages from IDs in the whitelist will be processed.
@@ -463,6 +465,8 @@ Baidu AI content moderation settings.
 ### `admins_id`
 
 List of administrator IDs. Additionally, you can use `/op` and `/deop` commands to add or remove admins.
+
+In WebUI, select the profile used by your bot under `Config`, then open `Access Control → Administrators → Administrator IDs`. Send `/sid` to the bot to get your `UID`.
 
 ### `t2i`
 
