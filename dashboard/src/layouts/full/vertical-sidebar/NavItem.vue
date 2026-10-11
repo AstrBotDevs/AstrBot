@@ -51,7 +51,11 @@ const isVuetifyIcon = computed(() => typeof props.item?.icon === 'string');
 </script>
 
 <template>
-  <v-list-group v-if="item.children" :value="item.title" :class="{ 'rail-group': rail }">
+  <v-list-group
+    v-if="item.children"
+    :value="item.value || item.title"
+    :class="{ 'rail-group': rail }"
+  >
     <template v-slot:activator="{ props: groupProps }">
       <v-tooltip
         v-if="rail"
@@ -86,7 +90,10 @@ const isVuetifyIcon = computed(() => typeof props.item?.icon === 'string');
     </template>
 
     <!-- children -->
-    <template v-for="(child, index) in item.children" :key="child.title || child.to || `child-${index}`">
+    <template
+      v-for="(child, index) in item.children"
+      :key="child.to || child.value || child.title || `child-${index}`"
+    >
       <NavItem
         :item="child"
         :level="(level || 0) + 1"

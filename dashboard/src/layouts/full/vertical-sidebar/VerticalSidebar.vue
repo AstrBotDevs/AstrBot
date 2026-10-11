@@ -41,7 +41,7 @@ function toggleGroupByPlugin() {
 function collectGroupValues(items, values = new Set()) {
   items.forEach((item) => {
     if (item?.children && item.title) {
-      values.add(item.title);
+      values.add(item.value || item.title);
       collectGroupValues(item.children, values);
     }
   });
@@ -245,7 +245,10 @@ function toggleSidebar() {
       </div>
 
       <v-list :class="['dashboard-sidebar-list', 'listitem', 'flex-grow-1', { 'hidden-scrollbar': isRailSidebar }]" v-model:opened="openedItems" :open-strategy="'multiple'">
-        <template v-for="(item, i) in visibleMenu" :key="item.header || item.title || item.to || `sidebar-item-${i}`">
+        <template
+          v-for="(item, i) in visibleMenu"
+          :key="item.to || item.value || item.header || item.title || `sidebar-item-${i}`"
+        >
           <div
             v-if="item.header"
             v-show="!isRailSidebar"

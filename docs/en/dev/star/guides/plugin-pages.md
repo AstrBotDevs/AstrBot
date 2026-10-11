@@ -555,7 +555,7 @@ Plugin Views reuse plugin i18n resource files. Add `views.<view_name>` to `.astr
 }
 ```
 
-`title` is used by the WebUI shell title and the view component name on the plugin detail page. `description` is used by the view component description. Inside the view, render text with `bridge.t()` and react to locale changes with `onContext()`.
+`title` is used by the sidebar, the WebUI shell title, and the view component name on the plugin detail page. Without a localized `title`, the ungrouped sidebar uses the plugin display name; the grouped sidebar uses the view name because the plugin name is already shown by the group. `description` is used by the view component description. Inside the view, render text with `bridge.t()` and react to locale changes with `onContext()`.
 
 ```js
 function render() {

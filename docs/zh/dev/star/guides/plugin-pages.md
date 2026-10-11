@@ -555,7 +555,7 @@ window.addEventListener("beforeunload", () => {
 }
 ```
 
-`title` 用于 WebUI 外壳标题和插件详情页的视图组件名称；`description` 用于插件详情页的视图组件描述。视图内部使用 `bridge.t()` 渲染文案，并通过 `onContext()` 响应语言切换。
+`title` 用于侧边栏、WebUI 外壳标题和插件详情页的视图组件名称。未提供本地化 `title` 时，未分组的侧边栏显示插件名称；按插件分组后则显示视图名称，因为分组标题已经显示了插件名称。`description` 用于插件详情页的视图组件描述。视图内部使用 `bridge.t()` 渲染文案，并通过 `onContext()` 响应语言切换。
 
 ```js
 function render() {
