@@ -11,6 +11,7 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.cron.manager import CronJobSchedulingError
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core.tools.registry import builtin_tool
 
 _CRON_TOOL_CONFIG = {
@@ -206,7 +207,29 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
             if not job:
                 return f"error: cron job {job_id} not found."
             if not _job_belongs_to_current_sender(job, current_umo, current_sender_id):
-                return "error: you can only edit your own future tasks."
+                same_session = _extract_job_session(job) == current_umo
+                if same_session and not _extract_job_sender(job):
+                    # Dashboard / legacy rows have a session but no member as
+                    # their creator, so blaming another member would be wrong.
+                    return (
+                        f"error: cron job {job_id} has no chat member as its creator "
+                        "(it was created outside this chat, e.g. from the dashboard), "
+                        "so you cannot edit it here."
+                    )
+                if (
+                    same_session
+                    and context.context.event.get_message_type()
+                    == MessageType.GROUP_MESSAGE
+                ):
+                    return (
+                        f"error: cron job {job_id} was created by another member of "
+                        "this group chat, so you cannot edit it. Only the member who "
+                        "created it can edit it; tell the user to ask that member."
+                    )
+                return (
+                    f"error: cron job {job_id} was not created by you, so you cannot "
+                    "edit it. Only whoever created it can edit it."
+                )
 
             payload = dict(job.payload) if isinstance(job.payload, dict) else {}
 
@@ -274,18 +297,56 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
             if not job:
                 return f"error: cron job {job_id} not found."
             if not _job_belongs_to_current_sender(job, current_umo, current_sender_id):
-                return "error: you can only delete your own future tasks."
+                same_session = _extract_job_session(job) == current_umo
+                if same_session and not _extract_job_sender(job):
+                    # Dashboard / legacy rows have a session but no member as
+                    # their creator, so blaming another member would be wrong.
+                    return (
+                        f"error: cron job {job_id} has no chat member as its creator "
+                        "(it was created outside this chat, e.g. from the dashboard), "
+                        "so you cannot delete it here."
+                    )
+                if (
+                    same_session
+                    and context.context.event.get_message_type()
+                    == MessageType.GROUP_MESSAGE
+                ):
+                    return (
+                        f"error: cron job {job_id} was created by another member of "
+                        "this group chat, so you cannot delete it. Only the member who "
+                        "created it can delete it; tell the user to ask that member."
+                    )
+                return (
+                    f"error: cron job {job_id} was not created by you, so you cannot "
+                    "delete it. Only whoever created it can delete it."
+                )
             await cron_mgr.delete_job(str(job_id))
             return f"Deleted cron job {job_id}."
 
         if action == "list":
+            all_jobs = await cron_mgr.list_jobs()
             jobs = [
                 job
-                for job in await cron_mgr.list_jobs()
+                for job in all_jobs
                 if _job_belongs_to_current_sender(job, current_umo, current_sender_id)
             ]
+            # Tasks in this session that were created by somebody else stay
+            # out of the result. Saying so stops an agent from reading "No cron
+            # jobs found." as "the task no longer exists".
+            hidden_note = ""
+            for job in all_jobs:
+                if _extract_job_session(job) != current_umo:
+                    continue
+                if _job_belongs_to_current_sender(job, current_umo, current_sender_id):
+                    continue
+                hidden_note = (
+                    "\n\nNote: tasks in this chat that were not created by you "
+                    "are not listed here, and can only be edited or deleted by "
+                    "whoever created them."
+                )
+                break
             if not jobs:
-                return "No cron jobs found."
+                return "No cron jobs found." + hidden_note
             tz_name = str(
                 context.context.context.get_config(
                     umo=context.context.event.unified_msg_origin
@@ -316,7 +377,7 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
                 lines.append(
                     f"{j.job_id} | {j.name} | {j.job_type} | run_once={getattr(j, 'run_once', False)} | enabled={j.enabled} | next={next_run}"
                 )
-            return "\n".join(lines)
+            return "\n".join(lines) + hidden_note
 
         return "error: action must be one of create, edit, delete, or list."
 

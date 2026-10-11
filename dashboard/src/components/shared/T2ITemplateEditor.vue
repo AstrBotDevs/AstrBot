@@ -246,7 +246,7 @@
 
 <script setup>
 import { ref, computed, nextTick, watch } from 'vue'
-import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
+import { LazyMonacoEditor as VueMonacoEditor } from '@/components/shared/LazyMonacoEditor';
 import { useI18n, useModuleI18n } from '@/i18n/composables'
 import { useToast } from '@/utils/toast'
 import { statsApi, t2iApi } from '@/api/v1'

@@ -1,40 +1,87 @@
 # Context Compression
 
-Starting from v4.11.0, AstrBot introduced an automatic context compression feature.
+As a conversation grows, AstrBot sends more previous messages and tool results to the model. This material forms the model's **context**, consumes its context window, and increases the number of input tokens.
 
-![alt text](https://files.astrbot.app/docs/source/images/context-compress/image.png)
-
-AstrBot automatically compresses the context when the conversation context **reaches 82% of the maximum context window length of the conversation model being used**, ensuring that as much conversation content as possible is retained without losing key information.
-
-## Compression Strategies
-
-There are currently two compression strategies:
-
-1. Truncate by conversation rounds. This strategy simply removes the earliest conversation content until the context length meets the requirements. You can specify the number of conversation rounds to discard at once, with a default of 1 round. This is the **default strategy**.
-2. LLM-based context compression. This strategy calls the model itself to summarize and compress the conversation content, thereby retaining more key information. You can specify the conversation model to use for compression; if not selected, it will automatically fall back to the "truncate by conversation rounds" strategy. You can set the number of recent conversation rounds to retain during compression, with a default of 4. You can also customize the prompt used during compression. The default prompt is:
-
-```
-Based on our full conversation history, produce a concise summary of key takeaways and/or project progress.
-1. Systematically cover all core topics discussed and the final conclusion/outcome for each; clearly highlight the latest primary focus.
-2. If any tools were used, summarize tool usage (total call count) and extract the most valuable insights from tool outputs.
-3. If there was an initial user goal, state it first and describe the current progress/status.
-4. Write the summary in the user's language.
-```
-
-After one round of compression, AstrBot will perform a secondary check to verify if the current context length meets the requirements. If it still doesn't meet the requirements, it will adopt a halving strategy, cutting the current context content in half until the requirements are met.
-
-- AstrBot will invoke the compressor for checking before each conversation request.
-- In the current version, AstrBot does not perform context compression during tool invocations. We will support this feature in the future, so stay tuned.
-
-## ‼️ Important: Model Context Window Settings
-
-By default, when you add a model, AstrBot automatically retrieves the model's context window size from the API provided by [MODELS.DEV](https://models.dev/) based on the model's ID. However, due to the wide variety of models and the fact that some providers even modify the model IDs, AstrBot cannot automatically infer the context window size for all models you add.
-
-You can manually set the model's context window size in the model configuration, as shown in the image below:
-
-![alt text](https://files.astrbot.app/docs/source/images/context-compress/image1.png)
+Context compression reduces older material so a conversation can continue. AstrBot can remove earlier turns or ask a model to summarize them. These settings apply to **AstrBot Built-in AI**; third-party execution modes such as Dify and Coze manage context on their own platforms.
 
 > [!NOTE]
-> If you don't see the configuration option shown in the image above, please delete the model and re-add it.
+> Compression helps with long conversations but cannot preserve every detail. Store long-term reference material in a [knowledge base](./knowledge-base.md) or files rather than relying only on chat history.
 
-When the model context window size is set to 0, AstrBot will still automatically retrieve the model's context window size from MODELS.DEV for each request. If it remains 0, context compression will not be enabled for that request.
+## Quick Setup
+
+1. Open **Config** in the WebUI sidebar and select the profile your bot uses.
+2. Go to **AI → Advanced → Context Management Strategy**. If this section is missing, confirm that you are using AstrBot Built-in AI and that **Enable AI** is on. See [Agent Execution Mode](./agent-runner.md) for switching modes.
+3. Choose a strategy under **Handling for History Limits or Context Window Pressure**. New profiles default to **Compress by LLM**.
+4. To get started, keep the recent context ratio at `0.15` and leave the compression model empty to use the current chat model. Keep **Max Turns Before Compression** at `-1` to avoid an additional turn-based history limit.
+5. Click **Save Configuration** at the bottom right.
+
+![Context management settings](./images/context-compress-settings-en.png)
+
+These settings belong to the selected profile. Check each profile separately if your bots use different ones.
+
+## Two Strategies {#compression-strategies}
+
+| Strategy | What happens to older material | Suitable for |
+| --- | --- | --- |
+| Truncate by Turns | Removes earlier turns without producing a summary | Lower latency and cost when earlier topics are no longer needed |
+| Compress by LLM | Asks a model to summarize older material and keeps some recent context unchanged | Long discussions or Agent tasks that need to continue unfinished work |
+
+LLM compression adds a model request, which takes time and may incur a charge. Summaries can omit details; truncation discards the removed material entirely.
+
+### LLM Compression Settings
+
+| Setting | Meaning and recommendation |
+| --- | --- |
+| Model Provider ID for Context Compression | Leave empty to use the current session's chat model, or choose a configured chat model. Its context window must be large enough for the material being summarized. |
+| Recent Context Token Ratio to Keep | Defaults to `0.15`: a budget of 15% of the current context's tokens is used to retain recent content unchanged. The range is `0–0.3`. AstrBot keeps whole turns rather than cutting at an exact token boundary; a positive ratio keeps at least the latest turn. |
+| Context Compression Instruction | Leave empty for the default prompt. A custom prompt can ask the summary to preserve the task goal, completed steps, key conclusions, file paths, and next actions. |
+
+The default summary focuses on the user's goal, task progress, conclusions, useful tool results, and materials already read so work can continue. If the selected compression model is unavailable, AstrBot tries the current chat model. If it cannot generate a summary, it falls back to removing older turns.
+
+## When Context Is Processed
+
+### 1. A Request Approaches the Model's Context Limit
+
+AstrBot checks context **before every model request**, including follow-up requests after an Agent calls tools. The selected strategy is triggered when context usage exceeds approximately **82%** of the model's context window.
+
+AstrBot checks again after processing. If the context is still too long, it removes complete turns from the oldest first while keeping the latest turn. Tool calls and their results are handled together to avoid leaving incomplete call records.
+
+If the latest turn alone is too large, automatic compression may still be unable to fit the request into the model's window. Reduce the size of the input or tool output, or choose a model with a larger context window.
+
+### 2. A Configured Turn Limit Is Reached
+
+**Max Turns Before Compression** adds a history length limit. Its default, `-1`, means no turn-based limit. With a positive value, AstrBot also truncates earlier material to enforce this limit before checking token usage. **Turns to Discard When Limit Exceeded** controls how many turns are removed at once and defaults to `1`.
+
+To favor summarizing older information over early turn-based removal, keep the limit at `-1` and use LLM compression. `-1` does not disable automatic token-based compression.
+
+## Set the Model's Context Window Correctly {#️-important-model-context-window-settings}
+
+Compression depends on the actual chat model's context window. A value that is too large can allow requests to fail before compression starts; a value that is too small triggers compression unnecessarily early.
+
+1. Open **Providers → Chat Completion**.
+2. Select the provider on the left and edit the configured model on the right.
+3. Set **Model context window size** (`max_context_tokens`) to the window size published by the provider and save.
+
+See [Chat Models](../providers/llm.md) for model setup.
+
+When `max_context_tokens` is `0`, AstrBot tries to look up the model ID in its built-in [MODELS.DEV](https://models.dev/) metadata. If the model is unknown, it uses **Fallback context window size**, which defaults to `128000`. Setting the value to `0` therefore does not disable compression, nor does it guarantee recognition of custom model names.
+
+For an unrecognized model, set an accurate `max_context_tokens` value instead of relying on the default fallback.
+
+## Common Questions
+
+### Why Are Earlier Details Missing After Compression?
+
+A summary does not retain every word, and truncation removes older content altogether. You can specify important information in the compression instruction, increase the recent context ratio, or put long-term reference material in a knowledge base. Increasing the ratio leaves less room to release through compression.
+
+### Why Has Compression Not Started?
+
+Check that you edited the profile used by the current session and saved it. Token compression normally waits until usage exceeds approximately 82% of the context window. An oversized window setting can delay it.
+
+### Why Do I Still Get a Context Limit Error?
+
+Check the window sizes of both the chat model and the compression model. One large message, file, or tool result can make the latest turn exceed the limit on its own. Compression does not discard the current task indefinitely; reduce the input size and try again.
+
+### How Do I Start Fresh?
+
+Send `/reset` to clear the current conversation context or `/new` to create a new conversation. See [Built-in Commands](./command.md) for commands and wake-prefix settings.

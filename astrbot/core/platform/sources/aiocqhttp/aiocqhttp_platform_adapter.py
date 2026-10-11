@@ -216,7 +216,7 @@ class AiocqhttpAdapter(Platform):
             abm.type = MessageType.GROUP_MESSAGE
             abm.group_id = str(event.group_id)
             abm.group = Group(str(event.group_id))
-            abm.group.group_name = event.get("group_name", "N/A")
+            abm.group.group_name = event.get("group_name")
         elif event["message_type"] == "private":
             abm.type = MessageType.FRIEND_MESSAGE
         abm.session_id = (
@@ -271,14 +271,14 @@ class AiocqhttpAdapter(Platform):
                             if abm.type == MessageType.GROUP_MESSAGE:
                                 ret = await self.bot.call_action(
                                     action="get_group_file_url",
-                                    file_id=event.message[0]["data"]["file_id"],
+                                    file_id=m["data"]["file_id"],
                                     group_id=event.group_id,
                                     **routing_params,
                                 )
                             elif abm.type == MessageType.FRIEND_MESSAGE:
                                 ret = await self.bot.call_action(
                                     action="get_private_file_url",
-                                    file_id=event.message[0]["data"]["file_id"],
+                                    file_id=m["data"]["file_id"],
                                     **routing_params,
                                 )
                             if ret and "url" in ret:
