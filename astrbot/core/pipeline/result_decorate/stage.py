@@ -297,7 +297,10 @@ class ResultDecorateStage(Stage):
             ):
                 # inject reasoning content to chain
                 reasoning_content = str(event.get_extra("_llm_reasoning_content"))
-                if event.get_platform_name() == "lark":
+                if event.get_platform_name() == "webchat":
+                    # Keep reasoning out of body segmentation and text-to-image.
+                    event.set_extra("_webchat_pending_reasoning", reasoning_content)
+                elif event.get_platform_name() == "lark":
                     result.chain.insert(
                         0,
                         Json(

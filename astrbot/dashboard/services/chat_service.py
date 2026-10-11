@@ -191,7 +191,9 @@ class BotMessageAccumulator:
         if streaming:
             self.pending_text += result_text
         else:
-            self.pending_text = result_text
+            self._flush_pending_text()
+            if result_text:
+                self.parts.append({"type": "plain", "text": result_text})
 
     def add_attachment(self, part: dict | None) -> None:
         if not part:
@@ -536,6 +538,7 @@ class ChatRunState:
     back_queue: asyncio.Queue
     subscribers: set[asyncio.Queue] = field(default_factory=set)
     message_parts: list[dict] = field(default_factory=list)
+    messages: list[dict] = field(default_factory=list)
     agent_stats: dict = field(default_factory=dict)
     refs: dict = field(default_factory=dict)
     revision: int = 0
@@ -935,6 +938,7 @@ class ChatService:
                     "llm_checkpoint_id": run.llm_checkpoint_id,
                     "status": run.status,
                     "revision": run.revision,
+                    "messages": deepcopy(run.messages),
                     "content": build_bot_history_content(
                         deepcopy(run.message_parts),
                         agent_stats=deepcopy(run.agent_stats),
@@ -993,6 +997,7 @@ class ChatService:
                 "llm_checkpoint_id": run.llm_checkpoint_id,
                 "status": run.status,
                 "revision": run.revision,
+                "messages": deepcopy(run.messages),
                 "content": build_bot_history_content(
                     deepcopy(run.message_parts),
                     agent_stats=deepcopy(run.agent_stats),
@@ -1110,6 +1115,20 @@ class ChatService:
                 run.llm_checkpoint_id,
                 run.platform_history_id,
             )
+            saved_message = {
+                "id": saved_record.id,
+                "created_at": to_utc_isoformat(saved_record.created_at),
+                "llm_checkpoint_id": run.llm_checkpoint_id,
+                "content": build_bot_history_content(
+                    deepcopy(message_parts_to_save),
+                    agent_stats=deepcopy(pending_agent_stats),
+                    refs=deepcopy(extracted_refs),
+                ),
+            }
+            if run.messages and "id" not in run.messages[-1]:
+                run.messages[-1] = saved_message
+            else:
+                run.messages.append(saved_message)
             pending_accumulator = BotMessageAccumulator()
             pending_agent_stats = {}
             pending_refs = {}
@@ -1181,20 +1200,30 @@ class ChatService:
                 run.message_parts = snapshot_accumulator.build_message_parts(
                     include_pending_tool_calls=True
                 )
+                if pending_accumulator.has_content():
+                    pending_message = {
+                        "llm_checkpoint_id": run.llm_checkpoint_id,
+                        "content": build_bot_history_content(
+                            deepcopy(pending_accumulator).build_message_parts(
+                                include_pending_tool_calls=True
+                            ),
+                            agent_stats=deepcopy(pending_agent_stats),
+                            refs=deepcopy(pending_refs),
+                        ),
+                    }
+                    if run.messages and "id" not in run.messages[-1]:
+                        run.messages[-1] = pending_message
+                    else:
+                        run.messages.append(pending_message)
                 self._publish_chat_run(run, result)
                 if attachment_saved_payload:
                     self._publish_chat_run(run, attachment_saved_payload)
 
-                should_save = False
-                if msg_type == "end":
-                    should_save = bool(
-                        pending_accumulator.has_content()
-                        or pending_refs
-                        or pending_agent_stats
-                    )
-                elif (streaming and msg_type == "complete") or not streaming:
-                    if chain_type not in ("tool_call", "tool_call_result"):
-                        should_save = True
+                # Persist reasoning with the next body segment, or at run end.
+                should_save = msg_type == "end" or (
+                    msg_type == "complete"
+                    and chain_type not in ("reasoning", "tool_call", "tool_call_result")
+                )
 
                 if should_save:
                     saved_record = await flush_pending_bot_message()
