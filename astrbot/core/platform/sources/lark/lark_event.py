@@ -792,7 +792,10 @@ class LarkMessageEvent(AstrMessageEvent):
             source = file_comp.file_ or ""
             if is_file_uri(source):
                 source = file_uri_to_path(source)
-            if not source or not Path(source).exists():
+            local_path = Path(source)
+            # Keep local paths out of the resolver's bare-base64 fallback.
+            source = local_path.absolute().as_uri()
+            if not file_comp.file_ or not local_path.exists():
                 source = file_comp.url or source
             async with MediaResolver(source).as_path() as resolved:
                 file_key = await LarkMessageEvent._upload_lark_file(
