@@ -305,6 +305,7 @@ class LarkMessageEvent(AstrMessageEvent):
         path: str,
         file_type: str,
         duration: int | None = None,
+        file_name: str | None = None,
     ) -> str | None:
         """上传文件到飞书的通用辅助函数
 
@@ -313,6 +314,7 @@ class LarkMessageEvent(AstrMessageEvent):
             path: 文件路径
             file_type: 文件类型（stream/opus/mp4等）
             duration: 媒体时长（毫秒），可选
+            file_name: Display filename. Defaults to the local path's basename.
 
         Returns:
             成功返回file_key，失败返回None
@@ -330,7 +332,7 @@ class LarkMessageEvent(AstrMessageEvent):
                 body_builder = (
                     CreateFileRequestBody.builder()
                     .file_type(file_type)
-                    .file_name(os.path.basename(path))
+                    .file_name(file_name or os.path.basename(path))
                     .file(file_obj)
                 )
                 if duration is not None:
@@ -783,9 +785,18 @@ class LarkMessageEvent(AstrMessageEvent):
         Raises:
             RuntimeError: A proactive message cannot be delivered.
         """
-        file_path = await file_comp.get_file()
+        try:
+            file_path = await file_comp.get_file()
+        except Exception as exc:
+            logger.error("[Lark] Failed to download attachment: %s", exc)
+            if not reply_message_id:
+                raise RuntimeError("[Lark] Attachment download failed") from exc
+            return
         file_key = await LarkMessageEvent._upload_lark_file(
-            lark_client, path=file_path, file_type="stream"
+            lark_client,
+            path=file_path,
+            file_type="stream",
+            file_name=file_comp.name,
         )
         if not file_key:
             if not reply_message_id:
