@@ -723,7 +723,7 @@ function partUrl(part: MessagePart) {
 }
 
 function plainTextFromMessage(message: ChatRecord) {
-  return messageParts(message)
+  return displayMessageParts(messageContent(message))
     .filter((part) => part.type === "plain" && part.text)
     .map((part) => part.text)
     .join("\n");

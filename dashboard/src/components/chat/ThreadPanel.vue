@@ -270,8 +270,9 @@ function processPayload(
     markMessageStarted(botRecord);
     botRecord.id = data?.id || botRecord.id;
     botRecord.created_at = data?.created_at || botRecord.created_at;
-    botRecord.llm_checkpoint_id =
-      data?.llm_checkpoint_id || botRecord.llm_checkpoint_id;
+    if (data?.llm_checkpoint_id !== undefined) {
+      botRecord.llm_checkpoint_id = data.llm_checkpoint_id;
+    }
     if (data?.refs) {
       botRecord.content.refs = data.refs;
     }
@@ -286,7 +287,11 @@ function processPayload(
 
   if (type === "error") {
     markMessageStarted(botRecord);
-    appendPlain(botRecord, `\n\n${String(data)}`);
+    botRecord.content.message.push({
+      type: "plain",
+      text: String(data),
+      error_code: payload.error_code,
+    });
     return;
   }
 

@@ -172,7 +172,15 @@ class BotMessageAccumulator:
         *,
         chain_type: str | None,
         streaming: bool,
+        error_code: str | None = None,
     ) -> None:
+        if error_code:
+            self._flush_pending_text()
+            self.parts.append(
+                {"type": "plain", "text": result_text, "error_code": error_code}
+            )
+            return
+
         if chain_type == "tool_call":
             self._flush_pending_text()
             self._store_tool_call(result_text)
@@ -219,7 +227,11 @@ class BotMessageAccumulator:
         if not self.pending_text:
             return
 
-        if self.parts and self.parts[-1].get("type") == "plain":
+        if (
+            self.parts
+            and self.parts[-1].get("type") == "plain"
+            and not self.parts[-1].get("error_code")
+        ):
             last_text = self.parts[-1].get("text")
             self.parts[-1]["text"] = f"{last_text or ''}{self.pending_text}"
         else:
@@ -531,7 +543,7 @@ class ChatRunState:
     run_id: str
     username: str
     session_id: str
-    llm_checkpoint_id: str
+    llm_checkpoint_id: str | None
     platform_history_id: str
     back_queue: asyncio.Queue
     subscribers: set[asyncio.Queue] = field(default_factory=set)
@@ -1143,12 +1155,18 @@ class ChatService:
                     continue
 
                 attachment_saved_payload = None
-                if msg_type == "plain":
+                if msg_type in ("plain", "error"):
+                    if msg_type == "error":
+                        run.status = "failed"
+                        run.llm_checkpoint_id = None
                     for accumulator in (pending_accumulator, display_accumulator):
                         accumulator.add_plain(
                             result_text,
                             chain_type=chain_type,
                             streaming=streaming,
+                            error_code=result.get("error_code")
+                            if msg_type == "error"
+                            else None,
                         )
                 elif msg_type in {"image", "record", "file", "video"}:
                     prefix = {
@@ -1213,7 +1231,8 @@ class ChatService:
                             },
                         )
                 if msg_type == "end":
-                    run.status = "completed"
+                    if run.status != "failed":
+                        run.status = "completed"
                     break
         except asyncio.CancelledError:
             run.status = "stopped"
@@ -1255,7 +1274,8 @@ class ChatService:
                     self.chat_runs_by_session.pop(run.session_id, None)
                     self.running_convs.pop(run.session_id, None)
             for subscriber in list(run.subscribers):
-                while not subscriber.empty():
+                # Keep pending output, especially errors, ahead of stream closure.
+                if subscriber.full():
                     subscriber.get_nowait()
                 subscriber.put_nowait(None)
             run.subscribers.clear()
@@ -1890,17 +1910,30 @@ class ChatService:
         conversation_id, history = await self.load_current_conversation_history(session)
         turn_range = find_turn_range(history, checkpoint_id)
         if not conversation_id or not turn_range:
-            raise ChatServiceError("Linked checkpoint not found")
-        if not is_latest_checkpoint(history, checkpoint_id):
-            raise ChatServiceError("Only the latest turn can be edited")
+            # Preprocessing failures have a saved reply but no LLM history to rewind.
+            last_record = platform_history[-1]
+            if not (
+                last_record.llm_checkpoint_id is None
+                and isinstance(last_record.content, dict)
+                and last_record.content.get("type") == "bot"
+                and any(
+                    isinstance(part, dict)
+                    and part.get("error_code")
+                    in {"ffmpegNotFound", "messageProcessingFailed"}
+                    for part in last_record.content.get("message", [])
+                )
+            ):
+                raise ChatServiceError("Linked checkpoint not found")
+        else:
+            if not is_latest_checkpoint(history, checkpoint_id):
+                raise ChatServiceError("Only the latest turn can be edited")
 
-        start, end = turn_range
-        target_index = find_turn_user_index(history, start, end)
-        if target_index is None:
-            raise ChatServiceError("Linked user message not found")
+            start, end = turn_range
+            target_index = find_turn_user_index(history, start, end)
+            if target_index is None:
+                raise ChatServiceError("Linked user message not found")
 
         new_checkpoint_id = str(uuid.uuid4())
-        truncated_history = history[:start]
         await self.platform_history_mgr.update(
             message_id=message_id,
             content=content,
@@ -1914,11 +1947,12 @@ class ChatService:
             deleted_message_ids,
         )
         await self.delete_threads_by_ids(thread_ids, username)
-        await self.conv_mgr.update_conversation(
-            unified_msg_origin=build_webchat_unified_msg_origin(session),
-            conversation_id=conversation_id,
-            history=truncated_history,
-        )
+        if conversation_id and turn_range:
+            await self.conv_mgr.update_conversation(
+                unified_msg_origin=build_webchat_unified_msg_origin(session),
+                conversation_id=conversation_id,
+                history=history[:start],
+            )
         await self.db.update_platform_session(session_id=session_id)
         updated = await self.db.get_platform_message_history_by_id(message_id)
         return {

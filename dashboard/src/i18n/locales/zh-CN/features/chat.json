@@ -239,6 +239,8 @@
     "close": "关闭"
   },
   "errors": {
+    "messageProcessingFailed": "消息处理失败，请查看 AstrBot 日志后重试。",
+    "ffmpegNotFound": "音频处理失败：AstrBot 运行环境中未找到 FFmpeg。请安装 FFmpeg 并确保它在 PATH 中，然后重试。",
     "sendMessageFailed": "发送消息失败，请重试",
     "createSessionFailed": "创建会话失败，请刷新页面重试"
   },
