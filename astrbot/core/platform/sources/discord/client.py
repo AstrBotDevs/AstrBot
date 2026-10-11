@@ -98,6 +98,9 @@ class DiscordBotClient(discord.Bot):
 
     async def on_message(self, message: discord.Message) -> None:
         """当接收到消息时触发"""
+        if self.user is not None and message.author.id == self.user.id:
+            return
+
         if message.author.bot and not self.allow_bot_messages:
             return
 

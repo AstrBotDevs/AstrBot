@@ -380,13 +380,15 @@ async function syncDefaultConfigProviderIfNeeded() {
   if (!targetProviderId) return;
 
   const configData = await fetchDefaultConfig();
-  if (!configData.provider_settings) {
-    configData.provider_settings = {};
+  if (configData?.agent_runner?.runner_type !== 'local') {
+    return;
   }
+  const modelConfig = configData.agent_runner.config?.model;
+  if (!modelConfig) return;
 
-  if (configData.provider_settings.default_provider_id === targetProviderId) return;
+  if (modelConfig.provider_id === targetProviderId) return;
 
-  configData.provider_settings.default_provider_id = targetProviderId;
+  modelConfig.provider_id = targetProviderId;
 
   const updateRes = await configProfileApi.update('default', configData);
   if (updateRes.data.status !== 'ok') {

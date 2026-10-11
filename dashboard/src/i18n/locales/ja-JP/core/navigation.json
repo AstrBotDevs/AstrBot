@@ -1,0 +1,68 @@
+{
+  "welcome": "ようこそ",
+  "dashboard": "ダッシュボード",
+  "platforms": "ボット",
+  "providers": "モデルプロバイダー",
+  "commands": "コマンド管理",
+  "persona": "ペルソナ設定",
+  "data": "データとログ",
+  "dataTabs": {
+    "statistics": "統計",
+    "conversations": "会話",
+    "logs": "ログ",
+    "trace": "トレース"
+  },
+  "subagent": "サブエージェント編成",
+  "toolUse": "MCP",
+  "extension": "プラグイン",
+  "extensionTabs": {
+    "installed": "プラグイン",
+    "market": "プラグインマーケット",
+    "mcp": "MCP",
+    "skills": "スキル",
+    "components": "ハンドラー管理"
+  },
+  "config": "設定ファイル",
+  "chat": "チャット",
+  "botMode": "ボット",
+  "options": "オプション",
+  "cron": "スケジュールタスク",
+  "conversation": "会話データ",
+  "sessionManagement": "カスタムルール",
+  "console": "プラットフォームログ",
+  "trace": "トレース",
+  "alkaid": "Alkaid",
+  "knowledgeBase": "ナレッジベース",
+  "about": "概要",
+  "settings": "システム設定",
+  "pin": "トップに固定",
+  "unpin": "固定を解除",
+  "groupByPlugin": "プラグイン別にグループ化",
+  "ungroupByPlugin": "グループ化を解除",
+  "expandSidebar": "サイドバーを展開",
+  "collapseSidebar": "サイドバーを折りたたむ",
+  "changelog": "変更履歴",
+  "documentation": "公式ドキュメント",
+  "faq": "FAQ",
+  "github": "GitHub",
+  "drag": "ドラッグ",
+  "groups": {
+    "more": "その他の機能",
+    "system": "システム",
+    "extension": "拡張機能"
+  },
+  "changelogDialog": {
+    "title": "変更履歴",
+    "loading": "読み込み中…",
+    "error": "読み込みに失敗しました",
+    "notFound": "このバージョンの変更履歴が見つかりません",
+    "selectVersion": "バージョンを選択",
+    "current": "現在"
+  },
+  "configTabs": {
+    "normal": "一般設定",
+    "system": "システム設定"
+  },
+  "pluginView": "プラグインビュー",
+  "pluginViewType": "プラグインビュー"
+}

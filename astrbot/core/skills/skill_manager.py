@@ -199,8 +199,10 @@ def _build_skill_read_command_example(path: str) -> str:
     if path == "<skills_root>/<skill_name>/SKILL.md":
         return f"cat {path}"
     if _is_windows_prompt_path(path):
+        # Prompt examples always use forward slashes regardless of the host
+        # OS (os.path.normpath would emit backslashes on Windows).
         command = "type"
-        path_arg = f'"{os.path.normpath(path)}"'
+        path_arg = '"' + path.replace("\\", "/") + '"'
     else:
         command = "cat"
         path_arg = shlex.quote(path)
