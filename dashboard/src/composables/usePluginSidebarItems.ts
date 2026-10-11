@@ -1,5 +1,6 @@
 import { reactive, shallowRef, onMounted, watch } from "vue";
 import { pluginApi } from "@/api/v1";
+import { usePluginI18n } from "@/utils/pluginI18n";
 import type { menu } from "@/layouts/full/vertical-sidebar/sidebarItem";
 
 const DEFAULT_ICON = "mdi-puzzle";
@@ -13,6 +14,13 @@ interface PluginEntry {
   version?: string;
   activated: boolean;
   pages: string[];
+  i18n?: Record<string, Record<string, unknown>> | null;
+}
+
+/** Localized labels resolved from the plugin i18n payload. */
+interface PluginLabels {
+  plugin: (plugin: PluginEntry) => string;
+  view: (plugin: PluginEntry, viewName: string) => string;
 }
 
 /** 模块级共享状态，由 useExtensionPage.getExtensions() 更新 */
@@ -22,7 +30,10 @@ export const pluginSidebarState = reactive<{
   plugins: [],
 });
 
-function buildPluginItems(plugins: PluginEntry[]): menu | null {
+function buildPluginItems(
+  plugins: PluginEntry[],
+  labels: PluginLabels,
+): menu | null {
   const activeWithPages = plugins.filter(
     (p) => p.activated && Array.isArray(p.pages) && p.pages.length > 0,
   );
@@ -30,7 +41,7 @@ function buildPluginItems(plugins: PluginEntry[]): menu | null {
   if (activeWithPages.length === 0) return null;
 
   const children: menu[] = activeWithPages.map((p) => {
-    return buildPageItem(p, p.pages[0]);
+    return buildPageItem(p, p.pages[0], labels);
   });
 
   return {
@@ -40,32 +51,39 @@ function buildPluginItems(plugins: PluginEntry[]): menu | null {
   };
 }
 
-function buildPageItem(p: PluginEntry, page: string): menu {
-  const displayName = p.display_name || p.name || "Unknown Plugin";
+function buildPageItem(
+  p: PluginEntry,
+  page: string,
+  labels: PluginLabels,
+): menu {
+  const viewLabel = labels.view(p, page);
   return {
-    title: page,
+    title: viewLabel,
     icon: DEFAULT_ICON,
     to: `/plugin-view/${encodeURIComponent(p.name)}/${encodeURIComponent(page)}`,
     isRawTitle: true,
     pluginInfo: {
       id: p.name,
-      displayName,
+      displayName: labels.plugin(p),
+      viewTitle: viewLabel,
       author: p.author,
       version: p.version,
     },
   };
 }
 
-function buildPluginGroups(plugins: PluginEntry[]): menu[] {
+function buildPluginGroups(
+  plugins: PluginEntry[],
+  labels: PluginLabels,
+): menu[] {
   return plugins
     .filter((p) => p.activated && Array.isArray(p.pages) && p.pages.length > 0)
     .map((p) => {
-      const displayName = p.display_name || p.name || "Unknown Plugin";
       return {
-        title: displayName,
+        title: labels.plugin(p),
         icon: GROUP_ICON,
         isRawTitle: true,
-        children: p.pages.map((page) => buildPageItem(p, page)),
+        children: p.pages.map((page) => buildPageItem(p, page, labels)),
       };
     });
 }
@@ -86,12 +104,27 @@ async function initPluginState() {
 }
 
 export function usePluginSidebarItems() {
+  const { locale, pluginName, pluginViewTitle } = usePluginI18n();
+
   const pluginItems = shallowRef<menu | null>(null);
   const pluginGroups = shallowRef<menu[]>([]);
 
+  // Plugin i18n ships with the plugin list payload, so labels are resolved on
+  // the client: the view title first, then the plugin display name, then the
+  // raw view directory name.
+  const labels: PluginLabels = {
+    plugin: (plugin) => pluginName(plugin) || plugin.name || "",
+    view: (plugin, viewName) =>
+      pluginViewTitle(
+        plugin,
+        viewName,
+        pluginName(plugin) || plugin.name || viewName,
+      ),
+  };
+
   function refreshItems() {
-    pluginItems.value = buildPluginItems(pluginSidebarState.plugins);
-    pluginGroups.value = buildPluginGroups(pluginSidebarState.plugins);
+    pluginItems.value = buildPluginItems(pluginSidebarState.plugins, labels);
+    pluginGroups.value = buildPluginGroups(pluginSidebarState.plugins, labels);
   }
 
   onMounted(async () => {
@@ -105,6 +138,12 @@ export function usePluginSidebarItems() {
       refreshItems();
     },
   );
+
+  // The list payload is locale independent, so switching the WebUI language
+  // only needs the labels rebuilt.
+  watch(locale, () => {
+    refreshItems();
+  });
 
   return { pluginItems, pluginGroups };
 }

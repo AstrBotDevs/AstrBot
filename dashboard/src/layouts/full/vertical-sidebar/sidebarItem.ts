@@ -32,6 +32,7 @@ export interface menu {
   pluginInfo?: {
     id: string;
     displayName?: string;
+    viewTitle?: string;
     author?: string | null;
     version?: string;
   };

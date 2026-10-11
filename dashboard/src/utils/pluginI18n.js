@@ -25,16 +25,23 @@ export function resolvePluginI18n(i18n, locale, key, fallback = "") {
   return value === undefined || value === null ? fallback : value;
 }
 
-function getPluginPageI18nBase(page) {
+// "views" is the canonical i18n namespace; "pages" stays as a compatibility
+// alias so plugins written before the rename keep resolving.
+const PLUGIN_VIEW_I18N_NAMESPACES = ["views", "pages"];
+
+function getPluginViewName(page) {
   if (page && typeof page === "object") {
-    if (typeof page.i18n_key === "string" && page.i18n_key.trim()) {
-      return page.i18n_key.trim();
+    const i18nKey = typeof page.i18n_key === "string" ? page.i18n_key.trim() : "";
+    if (i18nKey) {
+      // Drop whichever namespace prefix the API reported, so both namespaces
+      // are always tried even when talking to an older backend.
+      const separator = i18nKey.indexOf(".");
+      return separator === -1 ? i18nKey : i18nKey.slice(separator + 1);
     }
-    const pageName = page.page_name || page.name;
-    return pageName ? `pages.${pageName}` : "";
+    return page.page_name || page.name || "";
   }
 
-  return page ? `pages.${page}` : "";
+  return page || "";
 }
 
 export function usePluginI18n() {
@@ -72,11 +79,18 @@ export function usePluginI18n() {
   };
 
   const pluginPageText = (plugin, page, attr, fallback = "") => {
-    const base = getPluginPageI18nBase(page);
-    if (!base || !attr) {
+    const viewName = getPluginViewName(page);
+    if (!viewName || !attr) {
       return fallback;
     }
-    return resolve(plugin?.i18n, `${base}.${attr}`, fallback);
+    const localeData = getLocaleData(plugin?.i18n, locale.value);
+    for (const namespace of PLUGIN_VIEW_I18N_NAMESPACES) {
+      const value = getByPath(localeData, `${namespace}.${viewName}.${attr}`);
+      if (value !== undefined && value !== null) {
+        return value;
+      }
+    }
+    return fallback;
   };
 
   const pluginViewTitle = (plugin, page, fallback = "") => {

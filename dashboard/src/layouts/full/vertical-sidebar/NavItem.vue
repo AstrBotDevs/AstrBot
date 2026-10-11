@@ -167,7 +167,7 @@ const isVuetifyIcon = computed(() => typeof props.item?.icon === 'string');
       </v-list-item>
     </template>
     <div v-if="item.pluginInfo" class="plugin-hover-card">
-      <div class="plugin-hover-card__title">{{ itemTitle }}</div>
+      <div class="plugin-hover-card__title">{{ item.pluginInfo.viewTitle || itemTitle }}</div>
       <div class="plugin-hover-card__row">
         <Puzzle :size="13" class="plugin-hover-card__icon" />
         <template v-if="pluginDisplayName">
