@@ -557,6 +557,8 @@ window.addEventListener("beforeunload", () => {
 
 `title` 用于 WebUI 外壳标题和插件详情页的视图组件名称；`description` 用于插件详情页的视图组件描述。视图内部使用 `bridge.t()` 渲染文案，并通过 `onContext()` 响应语言切换。
 
+侧边栏视图标题也会随 WebUI 语言切换。宿主界面优先读取 `views.<view_name>`，缺少相应字段时回退到旧的 `pages.<view_name>` 配置，已有插件无需迁移旧键。
+
 ```js
 function render() {
   document.title = bridge.t("views.bridge-demo.title", "Bridge Demo");

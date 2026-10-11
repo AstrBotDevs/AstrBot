@@ -557,6 +557,8 @@ Plugin Views reuse plugin i18n resource files. Add `views.<view_name>` to `.astr
 
 `title` is used by the WebUI shell title and the view component name on the plugin detail page. `description` is used by the view component description. Inside the view, render text with `bridge.t()` and react to locale changes with `onContext()`.
 
+Sidebar view titles also follow the WebUI language. The host UI prefers `views.<view_name>` and falls back to the legacy `pages.<view_name>` configuration for missing fields, so existing plugins do not need to migrate their old keys.
+
 ```js
 function render() {
   document.title = bridge.t("views.bridge-demo.title", "Bridge Demo");

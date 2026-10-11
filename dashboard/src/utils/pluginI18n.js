@@ -76,6 +76,15 @@ export function usePluginI18n() {
     if (!base || !attr) {
       return fallback;
     }
+    if (base.startsWith("pages.") || base.startsWith("views.")) {
+      const viewName = base.slice(6);
+      // Match the backend: prefer views and keep pages as a legacy alias.
+      return resolve(
+        plugin?.i18n,
+        `views.${viewName}.${attr}`,
+        resolve(plugin?.i18n, `pages.${viewName}.${attr}`, fallback),
+      );
+    }
     return resolve(plugin?.i18n, `${base}.${attr}`, fallback);
   };
 
