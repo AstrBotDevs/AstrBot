@@ -166,6 +166,10 @@ Use the `Conversations` tab to find and manage saved conversation records:
 
 The `Logs` tab shows AstrBot runtime logs in real time. You can filter by log level and install missing Pip packages from this page. To view DEBUG logs, first set `Console Log Level` to `DEBUG` under `System Settings → General → Logs`.
 
+Open `Filters` next to the search box to filter by level, source (System/Plugin), individual plugin, and bot platform, or exclude user-chat logs. Combine these conditions with `Search logs`. Plugin menus prefer display names and show plugin IDs as subtitles; `System` replaces the former Core source label.
+
+The toolbar contains search, fullscreen, font-size controls, and `Install Pip packages`. The default font size is 12px, adjustable from 8–16px in 2px steps. The former auto-scroll switch is replaced by bottom-following behavior: new logs follow when you are at the bottom, without interrupting reading older entries. Top-row filters move into the `Filters` sidebar; closing it preserves selections. Logs remain in memory, without new file-reading or database persistence.
+
 ### Trace
 
 The `Trace` tab shows AstrBot execution traces in real time and is useful for debugging model-call paths and tool invocations. Use the switch at the top to enable or disable trace recording.
