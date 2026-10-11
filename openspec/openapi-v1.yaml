@@ -78,7 +78,7 @@ tags:
   - name: Files
   - name: Plugins
   - name: Plugin Sources
-  - name: Plugin Pages
+  - name: Plugin Views
   - name: Commands
   - name: Tools
   - name: MCP
@@ -1224,6 +1224,13 @@ paths:
       tags: [Chat]
       summary: List webchat sessions
       operationId: listChatSessions
+      description: >-
+        API-key requests return a paginated object and require username.
+        Dashboard requests with page or page_size return the same paginated
+        object (sessions, page, page_size, total), scoped to the authenticated
+        user. Dashboard requests without pagination parameters retain the
+        legacy array response, limited to 100 sessions. Paginated requests
+        default to page 1 and page_size 20, with page_size clamped to 1–100.
       x-astrbot-scope: chat
       parameters:
         - $ref: "#/components/parameters/Page"
@@ -1272,6 +1279,7 @@ paths:
     get:
       tags: [Chat]
       summary: Get a webchat session and its messages
+      description: Includes session metadata independently of the paginated session list.
       operationId: getChatSession
       x-astrbot-scope: chat
       parameters:
@@ -2151,69 +2159,6 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
-  /api/v1/plugins/pages:
-    get:
-      tags: [Plugin Pages]
-      summary: List plugin pages by query ID
-      operationId: listPluginPagesById
-      x-astrbot-scope: plugin
-      parameters:
-        - name: plugin_id
-          in: query
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          $ref: "#/components/responses/Ok"
-
-  /api/v1/plugins/page:
-    get:
-      tags: [Plugin Pages]
-      summary: Get plugin page entry HTML by query ID
-      operationId: getPluginPageById
-      x-astrbot-scope: plugin
-      parameters:
-        - name: plugin_id
-          in: query
-          required: true
-          schema:
-            type: string
-        - name: page_name
-          in: query
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          $ref: "#/components/responses/Html"
-
-  /api/v1/plugins/page/assets:
-    get:
-      tags: [Plugin Pages]
-      summary: Get a plugin page asset by query ID
-      operationId: getPluginPageAssetById
-      x-astrbot-scope: plugin
-      parameters:
-        - name: plugin_id
-          in: query
-          required: true
-          schema:
-            type: string
-        - name: page_name
-          in: query
-          required: true
-          schema:
-            type: string
-        - name: asset_path
-          in: query
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Plugin asset content
-
   /api/v1/plugins/{plugin_id}:
     get:
       tags: [Plugins]
@@ -2747,11 +2692,89 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
-  /api/v1/plugins/{plugin_id}/pages:
+  /api/v1/plugins/views:
     get:
-      tags: [Plugin Pages]
-      summary: List plugin pages
-      operationId: listPluginPages
+      tags: [Plugin Views]
+      summary: List plugin views by query ID
+      operationId: listPluginViewsById
+      x-astrbot-scope: plugin
+      parameters:
+        - name: plugin_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugins/pages:
+    get:
+      tags: [Plugin Views]
+      summary: List plugin views by query ID (alias of /plugins/views)
+      description: Deprecated compatibility alias kept for a transition period. New clients should use /plugins/views.
+      operationId: listPluginPagesById
+      deprecated: true
+      x-astrbot-scope: plugin
+      parameters:
+        - name: plugin_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugins/view:
+    get:
+      tags: [Plugin Views]
+      summary: Get plugin view entry HTML by query ID
+      operationId: getPluginViewById
+      x-astrbot-scope: plugin
+      parameters:
+        - name: plugin_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: page_name
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Html"
+
+  /api/v1/plugins/page:
+    get:
+      tags: [Plugin Views]
+      summary: Get plugin view entry HTML by query ID (alias of /plugins/view)
+      description: Deprecated compatibility alias kept for a transition period. New clients should use /plugins/view.
+      operationId: getPluginPageById
+      deprecated: true
+      x-astrbot-scope: plugin
+      parameters:
+        - name: plugin_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: page_name
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Html"
+
+  /api/v1/plugins/{plugin_id}/views:
+    get:
+      tags: [Plugin Views]
+      summary: List plugin views
+      operationId: listPluginViews
       x-astrbot-scope: plugin
       parameters:
         - $ref: "#/components/parameters/PluginId"
@@ -2759,15 +2782,29 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
-  /api/v1/plugins/{plugin_id}/pages/{page_name}:
+  /api/v1/plugins/{plugin_id}/pages:
     get:
-      tags: [Plugin Pages]
-      summary: Get plugin page entry HTML
-      operationId: getPluginPage
+      tags: [Plugin Views]
+      summary: List plugin views (alias of /plugins/{plugin_id}/views)
+      description: Deprecated compatibility alias kept for a transition period. New clients should use /plugins/{plugin_id}/views.
+      operationId: listPluginPages
+      deprecated: true
       x-astrbot-scope: plugin
       parameters:
         - $ref: "#/components/parameters/PluginId"
-        - name: page_name
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugins/{plugin_id}/views/{view_name}:
+    get:
+      tags: [Plugin Views]
+      summary: Get plugin view entry HTML
+      operationId: getPluginView
+      x-astrbot-scope: plugin
+      parameters:
+        - $ref: "#/components/parameters/PluginId"
+        - name: view_name
           in: path
           required: true
           schema:
@@ -2776,17 +2813,47 @@ paths:
         "200":
           $ref: "#/components/responses/Html"
 
-  /api/v1/plugins/{plugin_id}/pages/{page_name}/assets/{asset_path}:
+  /api/v1/plugins/{plugin_id}/pages/{view_name}:
     get:
-      tags: [Plugin Pages]
-      summary: Get a plugin page asset
-      operationId: getPluginPageAsset
+      tags: [Plugin Views]
+      summary: Get plugin view entry HTML (alias of /plugins/{plugin_id}/views/{view_name})
+      description: Deprecated compatibility alias kept for a transition period. New clients should use /plugins/{plugin_id}/views/{view_name}.
+      operationId: getPluginPage
+      deprecated: true
       x-astrbot-scope: plugin
       parameters:
         - $ref: "#/components/parameters/PluginId"
-        - name: page_name
+        - name: view_name
           in: path
           required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Html"
+
+  /api/v1/plugins/{plugin_id}/views/{view_name}/_t/{token}/{asset_path}:
+    get:
+      tags: [Plugin Views]
+      summary: Get a plugin view asset via a scoped path token
+      description: >-
+        Serves plugin view assets without URL rewriting. The token is a
+        plugin-page-scoped JWT issued by the view entry config endpoint and
+        travels in the path so relative URLs inherit it through normal path
+        resolution. Use an empty asset_path (trailing slash) for the entry
+        document.
+      operationId: getPluginViewTokenAsset
+      parameters:
+        - $ref: "#/components/parameters/PluginId"
+        - name: view_name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: token
+          in: path
+          required: true
+          description: Scoped plugin page asset token.
           schema:
             type: string
         - name: asset_path
@@ -2798,10 +2865,12 @@ paths:
       responses:
         "200":
           description: Plugin asset content
+        "401":
+          description: Missing, invalid, expired, or wrongly scoped token
 
   /api/v1/plugins/page-bridge-sdk.js:
     get:
-      tags: [Plugin Pages]
+      tags: [Plugin Views]
       summary: Get the plugin page bridge SDK
       operationId: getPluginPageBridgeSdk
       x-astrbot-scope: plugin
@@ -2815,7 +2884,7 @@ paths:
 
   /api/v1/plugins/extensions/{plugin_path}:
     get:
-      tags: [Plugin Pages]
+      tags: [Plugin Views]
       summary: Proxy a plugin extension GET route
       operationId: getPluginExtensionRoute
       x-astrbot-scope: plugin
@@ -2830,7 +2899,7 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
     post:
-      tags: [Plugin Pages]
+      tags: [Plugin Views]
       summary: Proxy a plugin extension POST route
       operationId: postPluginExtensionRoute
       x-astrbot-scope: plugin
@@ -2855,7 +2924,7 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
     put:
-      tags: [Plugin Pages]
+      tags: [Plugin Views]
       summary: Proxy a plugin extension PUT route
       operationId: putPluginExtensionRoute
       x-astrbot-scope: plugin
@@ -2875,7 +2944,7 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
     patch:
-      tags: [Plugin Pages]
+      tags: [Plugin Views]
       summary: Proxy a plugin extension PATCH route
       operationId: patchPluginExtensionRoute
       x-astrbot-scope: plugin
@@ -2895,7 +2964,7 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
     delete:
-      tags: [Plugin Pages]
+      tags: [Plugin Views]
       summary: Proxy a plugin extension DELETE route
       operationId: deletePluginExtensionRoute
       x-astrbot-scope: plugin
@@ -5707,6 +5776,9 @@ components:
       type: object
       required: [message]
       properties:
+        locale:
+          type: string
+          description: UI locale for built-in LLM error messages. Omitted or unsupported locales fall back to zh-CN.
         username:
           type: string
           description: Caller-declared WebChat sender/session owner. Configured AstrBot administrator IDs require the chat:admin API key sub-scope.
@@ -5779,6 +5851,9 @@ components:
     ChatMessageRegenerateRequest:
       type: object
       properties:
+        locale:
+          type: string
+          description: UI locale for built-in LLM error messages. Omitted or unsupported locales fall back to zh-CN.
         selected_provider:
           type: string
         selected_model:
@@ -5810,6 +5885,9 @@ components:
       type: object
       required: [message]
       properties:
+        locale:
+          type: string
+          description: UI locale for built-in LLM error messages. Omitted or unsupported locales fall back to zh-CN.
         message:
           oneOf:
             - type: string

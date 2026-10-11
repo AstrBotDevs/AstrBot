@@ -239,7 +239,7 @@ def test_local_permission_policy_denies_disabled_execution():
     assert resolved.allow_execution is False
     assert error is not None
     assert "disabled by the Local permission policy" in error
-    assert "WebUI -> Config -> Normal Config" in error
+    assert "WebUI -> Config -> AI -> Capabilities" in error
     assert "Local Permission Policies" in error
 
 

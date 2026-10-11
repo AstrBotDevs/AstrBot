@@ -866,7 +866,8 @@ class SQLiteDatabase(BaseDatabase):
         async with self.get_db() as session:
             session: AsyncSession
             async with session.begin():
-                now = datetime.now()
+                # created_at stores UTC wall-clock values, so compare in UTC.
+                now = datetime.now(timezone.utc)
                 cutoff_time = now - timedelta(seconds=offset_sec)
                 await session.execute(
                     delete(PlatformMessageHistory).where(
@@ -1414,10 +1415,12 @@ class SQLiteDatabase(BaseDatabase):
         return await self.get_persona_folder_by_id(folder_id)
 
     async def delete_persona_folder(self, folder_id: str) -> None:
-        """Delete a persona folder by its folder_id.
+        """Delete a folder, moving its direct personas and child folders to root.
 
-        Note: This will also set folder_id to NULL for all personas in this folder,
-        moving them to the root directory.
+        Descendant folders retain their contents and internal hierarchy.
+
+        Args:
+            folder_id: ID of the folder to delete.
         """
         async with self.get_db() as session:
             session: AsyncSession
@@ -1427,6 +1430,12 @@ class SQLiteDatabase(BaseDatabase):
                     update(Persona)
                     .where(col(Persona.folder_id) == folder_id)
                     .values(folder_id=None)
+                )
+                # Preserve child subtrees by moving them to the root directory.
+                await session.execute(
+                    update(PersonaFolder)
+                    .where(col(PersonaFolder.parent_id) == folder_id)
+                    .values(parent_id=None)
                 )
                 # Delete the folder
                 await session.execute(
@@ -2174,7 +2183,9 @@ class SQLiteDatabase(BaseDatabase):
             total = int(total_result.scalar_one() or 0)
 
             result_query = (
-                base_query.order_by(desc(PlatformSession.updated_at))
+                base_query.order_by(
+                    desc(PlatformSession.updated_at), desc(PlatformSession.session_id)
+                )
                 .offset(offset)
                 .limit(page_size)
             )

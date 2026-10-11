@@ -17,7 +17,9 @@ from astrbot.core.astr_main_agent import (
     LLM_ERROR_MESSAGE_EXTRA_KEY,
     MainAgentBuildConfig,
     MainAgentBuildResult,
+    _matches_provider_wake_prefix,
     _provider_supports_modality,
+    _set_llm_error_message,
     build_main_agent,
 )
 from astrbot.core.config.agent_runner import resolve_context_compression_config
@@ -36,6 +38,7 @@ from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
 )
+from astrbot.core.star.session_llm_manager import SessionServiceManager
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.image_input import prepare_request_images
 from astrbot.core.utils.media_utils import normalize_model_image_max_size
@@ -52,6 +55,24 @@ from ...follow_up import (
     try_capture_follow_up,
     unregister_active_runner,
 )
+
+
+async def _prepare_file_attachments(event: AstrMessageEvent) -> None:
+    """Download file attachments before acquiring the session lock.
+
+    Args:
+        event: Incoming event whose direct and quoted files should be prepared.
+
+    Returns:
+        None.
+    """
+    for component in event.message_obj.message:
+        if isinstance(component, File):
+            await component.get_file()
+        elif isinstance(component, Reply) and component.chain:
+            for reply_component in component.chain:
+                if isinstance(reply_component, File):
+                    await reply_component.get_file()
 
 
 class InternalAgentSubStage(Stage):
@@ -205,8 +226,30 @@ class InternalAgentSubStage(Stage):
             if await call_event_hook(event, EventType.OnWaitingLLMRequestEvent):
                 return
 
+            if event.get_extra(
+                "provider_request"
+            ) is None and not _matches_provider_wake_prefix(
+                event,
+                provider_wake_prefix,
+            ):
+                return
+
+            await _prepare_file_attachments(event)
+
             async with session_lock_manager.acquire_lock(event.unified_msg_origin):
                 logger.debug("acquired session lock for llm request")
+                current_config = self.ctx.plugin_manager.context.get_config(
+                    umo=event.unified_msg_origin
+                )
+                if not current_config.get("provider_settings", {}).get(
+                    "enable", True
+                ) or not await SessionServiceManager.should_process_llm_request(event):
+                    logger.debug(
+                        "LLM was disabled while waiting for the session lock; "
+                        "skipping request for %s.",
+                        event.unified_msg_origin,
+                    )
+                    return
                 agent_runner: AgentRunner | None = None
                 runner_registered = False
                 reset_coro = None
@@ -245,11 +288,14 @@ class InternalAgentSubStage(Stage):
                     api_base = provider.provider_config.get("api_base", "")
                     for host in decoded_blocked:
                         if host in api_base:
-                            error_message = (
-                                f"LLM 请求失败：Provider API base `{api_base}` "
-                                "因安全原因被拦截，请更换可用的 AI 提供商。"
+                            _set_llm_error_message(
+                                event, "blockedProvider", api_base=api_base
                             )
-                            logger.error(error_message)
+                            error_message = event.get_extra(LLM_ERROR_MESSAGE_EXTRA_KEY)
+                            logger.error(
+                                "Provider API base %s was blocked for security reasons",
+                                api_base,
+                            )
                             await self._send_llm_error_message(event, error_message)
                             return
 

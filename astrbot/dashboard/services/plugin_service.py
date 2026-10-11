@@ -281,11 +281,21 @@ class PluginService:
         return f"/api/file/{logo_token}" if logo_token else None
 
     async def get_plugin_logo_token(self, logo_path: str) -> str | None:
+        """Get a reusable logo token, replacing expired cached tokens.
+
+        Args:
+            logo_path: The local path to the plugin logo.
+
+        Returns:
+            An active file token, or None if the file cannot be registered.
+        """
         try:
             if token := self._logo_cache.get(logo_path):
                 if not await file_token_service.check_token_expired(token):
                     return token
-            token = await file_token_service.register_file(logo_path, timeout=300)
+            token = await file_token_service.register_file(
+                logo_path, timeout=300, single_use=False
+            )
             self._logo_cache[logo_path] = token
             return token
         except Exception as exc:

@@ -755,6 +755,25 @@ class QQOfficialPlatformAdapter(Platform):
         return re.sub(r"<faceType=\d+[^>]*>", replace_face, content)
 
     @staticmethod
+    def _strip_bot_mention_markup(content: str | None, mention_id: str) -> str:
+        """Remove the current bot's QQ mention markup from incoming text.
+
+        Args:
+            content: Raw QQ message content.
+            mention_id: OpenID of the mentioned bot.
+
+        Returns:
+            Message content with current and legacy bot mention markup removed.
+        """
+        import re
+
+        escaped_id = re.escape(mention_id)
+        markup_pattern = (
+            rf'(?:<qqbot-at-user\s+id="{escaped_id}"\s*/>|<@!?{escaped_id}>)'
+        )
+        return re.sub(rf"(?:[ \t]*{markup_pattern}[ \t]*)+", " ", content or "")
+
+    @staticmethod
     async def _parse_from_qqofficial(
         message: botpy.message.Message
         | botpy.message.GroupMessage
@@ -845,12 +864,11 @@ class QQOfficialPlatformAdapter(Platform):
                 group_mentioned = bool(bot_mention_ids) or force_group_mention
                 plain_content_raw = message.content or ""
                 for mention_id in bot_mention_ids:
-                    plain_content_raw = plain_content_raw.replace(
-                        f"<@{mention_id}>",
-                        "",
-                    ).replace(
-                        f"<@!{mention_id}>",
-                        "",
+                    plain_content_raw = (
+                        QQOfficialPlatformAdapter._strip_bot_mention_markup(
+                            plain_content_raw,
+                            mention_id,
+                        )
                     )
                 abm.message_str = QQOfficialPlatformAdapter._parse_face_message(
                     plain_content_raw.strip()
@@ -887,9 +905,9 @@ class QQOfficialPlatformAdapter(Platform):
                 abm.self_id = ""
 
             plain_content = QQOfficialPlatformAdapter._parse_face_message(
-                message.content.replace(
-                    "<@!" + str(abm.self_id) + ">",
-                    "",
+                QQOfficialPlatformAdapter._strip_bot_mention_markup(
+                    message.content,
+                    str(abm.self_id),
                 ).strip()
             )
 
