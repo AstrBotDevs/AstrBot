@@ -225,7 +225,7 @@
     },
     "agent_computer_use": {
       "description": "Agent Computer Use",
-      "hint": "Allows the AstrBot to access and use your computer or an sandbox environment to perform more complex tasks. See: [Computer Use](https://docs.astrbot.app/use/computer.html).",
+      "hint": "Allows the AstrBot to access and use your computer or an sandbox environment to perform more complex tasks. See: [Agent Sandbox Environment](https://docs.astrbot.app/en/use/astrbot-agent-sandbox.html).",
       "provider_settings": {
         "computer_use_runtime": {
           "description": "Computer Use Runtime",
@@ -237,7 +237,7 @@
         },
         "computer_use_require_admin": {
           "description": "Require Admin Permission for Sandbox",
-          "hint": "When enabled, AstrBot admin permission is required to use remote sandbox capabilities. Admins can be added in Platform Config. Use the /sid command to view admin IDs."
+          "hint": "When enabled, AstrBot admin permission is required to use remote sandbox capabilities. Add admins under Config -> Access Control -> Administrators -> Administrator IDs. Send /sid to the bot to get the ID."
         },
         "sandbox": {
           "booter": {
@@ -313,6 +313,7 @@
         "scopeHints": {
           "none": "No file access allowed",
           "workspace": "Restricted workspace, temporary directories, and skill files.",
+          "workspaceUnsupported": "Restricted workspace file access is unavailable on this platform.",
           "host": "All files in the environment where AstrBot runs."
         },
         "scopeDetails": {
@@ -323,13 +324,9 @@
           "member": "Member",
           "admin": "Administrator"
         },
-        "accessMode": "Local computer access",
         "modes": {
-          "none": "Disabled",
-          "files": "File access only",
-          "full": "Unrestricted access"
+          "none": "Disabled"
         },
-        "unsupportedSelection": "Current policy is unsupported",
         "runtimeUnknown": "Runtime information is unavailable.",
         "memberWarning": "Members have network access or file access across the entire environment.",
         "runtime": {
@@ -337,8 +334,24 @@
           "arch": "Architecture",
           "sandbox": "Local isolation",
           "unavailableHint": "Sandbox startup failed, affecting restricted Shell/Python execution and workspace file search. Use the error below to check system security policies (such as Linux AppArmor and user namespace restrictions) or container restrictions, then restart AstrBot to check again.",
+          "dialog": {
+            "intro": "Using Seatbelt on macOS or bubblewrap (bwrap) on Linux, AstrBot provides security isolation for Agent execution, restricting file access scope and network permissions for different users of AstrBot Agent to improve security.",
+            "startupError": "View startup error",
+            "documentation": "View detailed setup documentation"
+          },
+          "close": "Close",
+          "setupHint": {
+            "missing": "Install {dependency} to enable all local isolation features.",
+            "unavailable": "Configure {backend} to enable all local isolation features.",
+            "unsupported": "Learn about local isolation support."
+          },
+          "executionUnavailable": {
+            "missing": "Missing {dependency}; code execution cannot be enabled when File access scope is set to Workspace.",
+            "unavailable": "{backend} cannot start; code execution cannot be enabled when File access scope is set to Workspace.",
+            "unsupported": "Local isolation is unsupported on this platform; code execution cannot be enabled when File access scope is set to Workspace."
+          },
           "status": {
-            "detected": "{backend} · Startup check passed",
+            "detected": "{backend}",
             "missing": "Missing {dependency}",
             "unavailable": "{backend} · Installed but cannot start",
             "unsupported": "Unsupported"
@@ -502,7 +515,7 @@
     }
   },
   "platform_group": {
-    "name": "Platform",
+    "name": "Platforms & Messages",
     "platform": {
       "description": "Message Platform Adapters",
       "app_id": {
@@ -923,9 +936,6 @@
     },
     "general": {
       "description": "General",
-      "admins_id": {
-        "description": "Administrator IDs"
-      },
       "platform_settings": {
         "unique_session": {
           "description": "Isolate Conversation",
@@ -956,29 +966,6 @@
       "disable_builtin_commands": {
         "description": "Disable Built-in Commands",
         "hint": "Disable all built-in AstrBot commands such as help, sid, new, etc."
-      }
-    },
-    "whitelist": {
-      "description": "Whitelist",
-      "platform_settings": {
-        "enable_id_white_list": {
-          "description": "Enable Whitelist",
-          "hint": "When enabled, only sessions in the whitelist will be responded to. If the whitelist is empty, the whitelist is disabled and all IDs are allowed."
-        },
-        "id_whitelist": {
-          "description": "Whitelist ID List",
-          "hint": "Use /sid to get IDs. If the list is empty, it means whitelist is disabled (all IDs are in the whitelist)."
-        },
-        "id_whitelist_log": {
-          "description": "Output Logs",
-          "hint": "When enabled, INFO level logs will be output when a message doesn't pass the whitelist."
-        },
-        "wl_ignore_admin_on_group": {
-          "description": "Administrator Group Messages Bypass ID Whitelist"
-        },
-        "wl_ignore_admin_on_friend": {
-          "description": "Administrator Private Messages Bypass ID Whitelist"
-        }
       }
     },
     "rate_limit": {
@@ -1075,6 +1062,39 @@
               "hint": "Enter Unicode emoji symbols, e.g., 👍, 🤔, ⏳"
             }
           }
+        }
+      }
+    }
+  },
+  "access_group": {
+    "name": "Access Control",
+    "admins": {
+      "description": "Administrators",
+      "admins_id": {
+        "description": "Administrator IDs",
+        "hint": "Send the /sid command to the bot to get the ID."
+      }
+    },
+    "whitelist": {
+      "description": "Whitelist",
+      "platform_settings": {
+        "enable_id_white_list": {
+          "description": "Enable Whitelist",
+          "hint": "When enabled, only sessions in the whitelist will be responded to."
+        },
+        "id_whitelist": {
+          "description": "Whitelist ID List",
+          "hint": "Send the /sid command to the bot to get the ID. An empty list disables the whitelist."
+        },
+        "id_whitelist_log": {
+          "description": "Log Blocked Messages",
+          "hint": "Log messages that fail whitelist checks."
+        },
+        "wl_ignore_admin_on_group": {
+          "description": "Administrator Group Messages Bypass ID Whitelist"
+        },
+        "wl_ignore_admin_on_friend": {
+          "description": "Administrator Private Messages Bypass ID Whitelist"
         }
       }
     }

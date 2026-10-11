@@ -1240,7 +1240,7 @@ CONFIG_METADATA_2 = {
                     "id_whitelist": {
                         "type": "list",
                         "items": {"type": "string"},
-                        "hint": "只处理填写的 ID 发来的消息事件，为空时不启用。可使用 /sid 指令获取在平台上的会话 ID(类似 abc:GroupMessage:123)。管理员可在 WebUI 的平台设置中管理白名单",
+                        "hint": "只处理填写的 ID 发来的消息事件，为空时不启用。可使用 /sid 指令获取在平台上的会话 ID(类似 abc:GroupMessage:123)。管理员可在 WebUI 的配置文件 -> 访问控制 -> 白名单中管理白名单。",
                     },
                     "id_whitelist_log": {
                         "type": "bool",
@@ -1995,7 +1995,7 @@ CONFIG_METADATA_2 = {
                         "enable": True,
                         "embedding_api_key": "",
                         "embedding_api_base": "",
-                        "embedding_model": "gemini-embedding-exp-03-07",
+                        "embedding_model": "gemini-embedding-001",
                         "embedding_dimensions": 768,
                         "timeout": 20,
                         "proxy": "",
@@ -3284,7 +3284,7 @@ Dashboard locale.
 """
 CONFIG_METADATA_3 = {
     "ai_group": {
-        "name": "AI 配置",
+        "name": "AI",
         "metadata": {
             "agent_runner": {
                 "description": "Agent 执行方式",
@@ -3825,7 +3825,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.computer_use_require_admin": {
                         "description": "沙箱能力需要 AstrBot 管理员权限",
                         "type": "bool",
-                        "hint": "开启后，需要 AstrBot 管理员权限才能调用远程沙箱能力。在平台配置->管理员中可添加管理员。使用 /sid 指令查看管理员 ID。",
+                        "hint": "开启后，需要 AstrBot 管理员权限才能调用远程沙箱能力。在配置文件 -> 访问控制 -> 管理员 -> 管理员 ID 中可添加管理员。给机器人发送 /sid 指令以获取 ID。",
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
                         },
@@ -4280,17 +4280,12 @@ CONFIG_METADATA_3 = {
         },
     },
     "platform_group": {
-        "name": "平台配置",
+        "name": "平台与消息",
         "metadata": {
             "general": {
                 "description": "基本",
                 "type": "object",
                 "items": {
-                    "admins_id": {
-                        "description": "管理员 ID",
-                        "type": "list",
-                        "items": {"type": "string"},
-                    },
                     "platform_settings.unique_session": {
                         "description": "隔离对话",
                         "type": "bool",
@@ -4329,36 +4324,6 @@ CONFIG_METADATA_3 = {
                         "description": "禁用自带指令",
                         "type": "bool",
                         "hint": "禁用所有 AstrBot 的自带指令，如 help, sid, new 等。",
-                    },
-                },
-            },
-            "whitelist": {
-                "description": "白名单",
-                "type": "object",
-                "items": {
-                    "platform_settings.enable_id_white_list": {
-                        "description": "启用白名单",
-                        "type": "bool",
-                        "hint": "启用后，只有在白名单内的会话会被响应。",
-                    },
-                    "platform_settings.id_whitelist": {
-                        "description": "白名单 ID 列表",
-                        "type": "list",
-                        "items": {"type": "string"},
-                        "hint": "使用 /sid 获取 ID。当白名单列表为空时，代表不启用白名单（即所有 ID 都在白名单内）。",
-                    },
-                    "platform_settings.id_whitelist_log": {
-                        "description": "输出日志",
-                        "type": "bool",
-                        "hint": "启用后，当一条消息没通过白名单时，会输出 INFO 级别的日志。",
-                    },
-                    "platform_settings.wl_ignore_admin_on_group": {
-                        "description": "管理员群组消息无视 ID 白名单",
-                        "type": "bool",
-                    },
-                    "platform_settings.wl_ignore_admin_on_friend": {
-                        "description": "管理员私聊消息无视 ID 白名单",
-                        "type": "bool",
                     },
                 },
             },
@@ -4488,8 +4453,55 @@ CONFIG_METADATA_3 = {
             },
         },
     },
+    "access_group": {
+        "name": "访问控制",
+        "metadata": {
+            "admins": {
+                "description": "管理员",
+                "type": "object",
+                "items": {
+                    "admins_id": {
+                        "description": "管理员 ID",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "给机器人发送 /sid 指令以获取 ID。",
+                    },
+                },
+            },
+            "whitelist": {
+                "description": "白名单",
+                "type": "object",
+                "items": {
+                    "platform_settings.enable_id_white_list": {
+                        "description": "启用白名单",
+                        "type": "bool",
+                        "hint": "启用后,只有在白名单内的会话会被响应。",
+                    },
+                    "platform_settings.id_whitelist": {
+                        "description": "白名单 ID 列表",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "给机器人发送 /sid 指令以获取 ID。为空时代表不启用白名单功能。",
+                    },
+                    "platform_settings.id_whitelist_log": {
+                        "description": "输出拦截日志",
+                        "type": "bool",
+                        "hint": "输出未通过白名单校验的消息的日志。",
+                    },
+                    "platform_settings.wl_ignore_admin_on_group": {
+                        "description": "管理员群组消息无视 ID 白名单",
+                        "type": "bool",
+                    },
+                    "platform_settings.wl_ignore_admin_on_friend": {
+                        "description": "管理员私聊消息无视 ID 白名单",
+                        "type": "bool",
+                    },
+                },
+            },
+        },
+    },
     "plugin_group": {
-        "name": "插件配置",
+        "name": "插件",
         "metadata": {
             "plugin": {
                 "description": "插件",

@@ -102,6 +102,10 @@ export type ChatMessagePatchRequest = {
 };
 
 export type ChatMessageRegenerateRequest = {
+    /**
+     * UI locale for built-in LLM error messages. Omitted or unsupported locales fall back to zh-CN.
+     */
+    locale?: string;
     selected_provider?: string;
     selected_model?: string;
     /**
@@ -132,6 +136,10 @@ export type ChatProjectRequest = {
 export type workspace_type = 'session' | 'project' | 'custom';
 
 export type ChatRequest = {
+    /**
+     * UI locale for built-in LLM error messages. Omitted or unsupported locales fall back to zh-CN.
+     */
+    locale?: string;
     /**
      * Caller-declared WebChat sender/session owner. Configured AstrBot administrator IDs require the chat:admin API key sub-scope.
      */
@@ -185,6 +193,10 @@ export type ChatThreadCreateRequest = {
 };
 
 export type ChatThreadMessageRequest = {
+    /**
+     * UI locale for built-in LLM error messages. Omitted or unsupported locales fall back to zh-CN.
+     */
+    locale?: string;
     message: (string | Array<MessagePart>);
     selected_provider?: string;
     selected_model?: string;
@@ -1934,39 +1946,6 @@ export type SetPluginEnabledByIdResponse = (SuccessEnvelope);
 
 export type SetPluginEnabledByIdError = unknown;
 
-export type ListPluginPagesByIdData = {
-    query: {
-        plugin_id: string;
-    };
-};
-
-export type ListPluginPagesByIdResponse = (SuccessEnvelope);
-
-export type ListPluginPagesByIdError = unknown;
-
-export type GetPluginPageByIdData = {
-    query: {
-        page_name: string;
-        plugin_id: string;
-    };
-};
-
-export type GetPluginPageByIdResponse = (string);
-
-export type GetPluginPageByIdError = unknown;
-
-export type GetPluginPageAssetByIdData = {
-    query: {
-        asset_path: string;
-        page_name: string;
-        plugin_id: string;
-    };
-};
-
-export type GetPluginPageAssetByIdResponse = (unknown);
-
-export type GetPluginPageAssetByIdError = unknown;
-
 export type GetPluginData = {
     body?: {
         delete_config?: boolean;
@@ -2297,42 +2276,6 @@ export type DeletePluginSourceByIdResponse = (SuccessEnvelope);
 
 export type DeletePluginSourceByIdError = unknown;
 
-export type ListPluginPagesData = {
-    path: {
-        plugin_id: string;
-    };
-};
-
-export type ListPluginPagesResponse = (SuccessEnvelope);
-
-export type ListPluginPagesError = unknown;
-
-export type GetPluginPageData = {
-    path: {
-        page_name: string;
-        plugin_id: string;
-    };
-};
-
-export type GetPluginPageResponse = (string);
-
-export type GetPluginPageError = unknown;
-
-export type GetPluginPageAssetData = {
-    path: {
-        /**
-         * URL-encoded relative asset path.
-         */
-        asset_path: string;
-        page_name: string;
-        plugin_id: string;
-    };
-};
-
-export type GetPluginPageAssetResponse = (unknown);
-
-export type GetPluginPageAssetError = unknown;
-
 export type ListPluginViewsByIdData = {
     query: {
         plugin_id: string;
@@ -2342,6 +2285,16 @@ export type ListPluginViewsByIdData = {
 export type ListPluginViewsByIdResponse = (SuccessEnvelope);
 
 export type ListPluginViewsByIdError = unknown;
+
+export type ListPluginPagesByIdData = {
+    query: {
+        plugin_id: string;
+    };
+};
+
+export type ListPluginPagesByIdResponse = (SuccessEnvelope);
+
+export type ListPluginPagesByIdError = unknown;
 
 export type GetPluginViewByIdData = {
     query: {
@@ -2354,17 +2307,16 @@ export type GetPluginViewByIdResponse = (string);
 
 export type GetPluginViewByIdError = unknown;
 
-export type GetPluginViewAssetByIdData = {
+export type GetPluginPageByIdData = {
     query: {
-        asset_path: string;
         page_name: string;
         plugin_id: string;
     };
 };
 
-export type GetPluginViewAssetByIdResponse = (unknown);
+export type GetPluginPageByIdResponse = (string);
 
-export type GetPluginViewAssetByIdError = unknown;
+export type GetPluginPageByIdError = unknown;
 
 export type ListPluginViewsData = {
     path: {
@@ -2376,10 +2328,20 @@ export type ListPluginViewsResponse = (SuccessEnvelope);
 
 export type ListPluginViewsError = unknown;
 
+export type ListPluginPagesData = {
+    path: {
+        plugin_id: string;
+    };
+};
+
+export type ListPluginPagesResponse = (SuccessEnvelope);
+
+export type ListPluginPagesError = unknown;
+
 export type GetPluginViewData = {
     path: {
-        page_name: string;
         plugin_id: string;
+        view_name: string;
     };
 };
 
@@ -2387,20 +2349,35 @@ export type GetPluginViewResponse = (string);
 
 export type GetPluginViewError = unknown;
 
-export type GetPluginViewAssetData = {
+export type GetPluginPageData = {
+    path: {
+        plugin_id: string;
+        view_name: string;
+    };
+};
+
+export type GetPluginPageResponse = (string);
+
+export type GetPluginPageError = unknown;
+
+export type GetPluginViewTokenAssetData = {
     path: {
         /**
          * URL-encoded relative asset path.
          */
         asset_path: string;
-        page_name: string;
         plugin_id: string;
+        /**
+         * Scoped plugin page asset token.
+         */
+        token: string;
+        view_name: string;
     };
 };
 
-export type GetPluginViewAssetResponse = (unknown);
+export type GetPluginViewTokenAssetResponse = (unknown);
 
-export type GetPluginViewAssetError = unknown;
+export type GetPluginViewTokenAssetError = (unknown);
 
 export type GetPluginPageBridgeSdkResponse = (string);
 

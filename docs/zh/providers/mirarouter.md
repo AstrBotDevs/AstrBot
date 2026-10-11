@@ -23,6 +23,6 @@ AstrBot 会自动为 MiraRouter 请求添加 `X-APP-CODE: astrbot` 标识。
 
 ## 设为默认模型
 
-进入「配置文件」，选择要使用的配置文件，在「AI 配置」→「模型」中将「对话模型」设为刚添加的模型，点击右下角「保存配置」。此项用于 AstrBot 内置 AI。
+进入「配置文件」，选择要使用的配置文件，在「AI」→「模型」中将「对话模型」设为刚添加的模型，点击右下角「保存配置」。此项用于 AstrBot 内置 AI。
 
 更多接入说明请参阅 [MiraRouter 文档](https://docs.mirarouter.com/)。

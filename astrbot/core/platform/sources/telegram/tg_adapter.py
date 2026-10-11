@@ -480,7 +480,10 @@ class TelegramPlatformAdapter(Platform):
                 for entity in update.message.caption_entities:
                     if entity.type == "mention":
                         name = update.message.parse_caption_entity(entity)[1:]
-                        message.message.append(Comp.At(qq=name, name=name))
+                        mention = Comp.At(qq=name, name=name)
+                        if name.lower() == message.self_id.lower():
+                            mention.qq = message.self_id
+                        message.message.append(mention)
 
         message = AstrBotMessage()
         message.session_id = str(update.message.chat.id)
@@ -611,10 +614,12 @@ class TelegramPlatformAdapter(Platform):
                 for entity in update.message.entities:
                     if entity.type == "mention":
                         name = update.message.parse_entity(entity)[1:]
-                        message.message.append(Comp.At(qq=name, name=name))
-                        if name.lower() == context.bot.username.lower():
+                        mention = Comp.At(qq=name, name=name)
+                        if name.lower() == message.self_id.lower():
+                            mention.qq = message.self_id
                             text_parts.append(text_utf16[last_end : entity.offset * 2])
                             last_end = (entity.offset + entity.length) * 2
+                        message.message.append(mention)
                 text_parts.append(text_utf16[last_end:])
                 plain_text = b"".join(text_parts).decode("utf-16-le")
 
