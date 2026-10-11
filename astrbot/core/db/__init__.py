@@ -269,6 +269,23 @@ class BaseDatabase(abc.ABC):
         ...
 
     @abc.abstractmethod
+    async def count_platform_message_history(
+        self,
+        platform_id: str,
+        user_id: str,
+    ) -> int:
+        """Count platform message history records for a scope.
+
+        Args:
+            platform_id: Platform identifier used to partition history.
+            user_id: Platform user or session identifier.
+
+        Returns:
+            Number of records belonging to the platform/user scope.
+        """
+        ...
+
+    @abc.abstractmethod
     async def get_platform_message_history_by_id(
         self,
         message_id: int,
@@ -848,6 +865,22 @@ class BaseDatabase(abc.ABC):
         user_alias: str | None,
     ) -> UmoAlias:
         """Create or update the display alias metadata for a UMO."""
+        ...
+
+    @abc.abstractmethod
+    async def upsert_umo_auto_name(
+        self,
+        umo: str,
+        creator_sender_id: str,
+        auto_name: str,
+    ) -> None:
+        """Create or update only the automatically discovered UMO name.
+
+        Args:
+            umo: Unified message origin to name.
+            creator_sender_id: Sender that first caused the UMO to be recorded.
+            auto_name: Name discovered from the inbound platform message.
+        """
         ...
 
     @abc.abstractmethod

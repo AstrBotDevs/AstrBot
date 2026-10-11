@@ -12,7 +12,6 @@ Changes:
 from sqlalchemy import func, select
 from sqlmodel import col
 
-from astrbot.api import logger
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import ConversationV2, PlatformMessageHistory, PlatformSession
 
@@ -23,8 +22,6 @@ async def migrate_webchat_session(db_helper: BaseDatabase) -> None:
     This migration extracts all unique user_ids from platform_message_history
     where platform_id='webchat' and creates corresponding PlatformSession records.
     """
-    logger.info("开始执行数据库迁移（WebChat 会话迁移）...")
-
     try:
         async with db_helper.get_db() as session:
             # 从 platform_message_history 创建 PlatformSession
@@ -44,10 +41,7 @@ async def migrate_webchat_session(db_helper: BaseDatabase) -> None:
             webchat_users = result.all()
 
             if not webchat_users:
-                logger.info("没有找到需要迁移的 WebChat 数据")
                 return
-
-            logger.info(f"找到 {len(webchat_users)} 个 WebChat 会话需要迁移")
 
             # 检查已存在的会话
             existing_query = select(col(PlatformSession.session_id))
@@ -83,7 +77,6 @@ async def migrate_webchat_session(db_helper: BaseDatabase) -> None:
 
                 # 检查是否已经存在该会话
                 if session_id in existing_session_ids:
-                    logger.debug(f"会话 {session_id} 已存在，跳过")
                     skipped_count += 1
                     continue
 
@@ -106,13 +99,5 @@ async def migrate_webchat_session(db_helper: BaseDatabase) -> None:
             if sessions_to_add:
                 session.add_all(sessions_to_add)
                 await session.commit()
-
-                logger.info(
-                    f"WebChat 会话迁移完成！成功迁移: {len(sessions_to_add)}, 跳过: {skipped_count}",
-                )
-            else:
-                logger.info("没有新会话需要迁移")
-
-    except Exception as e:
-        logger.error(f"迁移过程中发生错误: {e}", exc_info=True)
+    except Exception:
         raise

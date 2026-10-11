@@ -434,12 +434,15 @@ class MockPluginBuilder:
     def create(
         self,
         plugin_config: str | MockPluginConfig | None = None,
+        *,
+        target_dir: Path | None = None,
         **kwargs,
     ) -> Path:
         """创建模拟插件。
 
         Args:
             plugin_config: 插件名称字符串、MockPluginConfig 对象或 None
+            target_dir: Optional staging directory instead of the installed path.
             **kwargs: 如果 plugin_config 是字符串或 None，这些参数用于构建 MockPluginConfig
 
         Returns:
@@ -456,7 +459,11 @@ class MockPluginBuilder:
             raise TypeError(f"Invalid plugin_config type: {type(plugin_config)}")
 
         # 创建插件目录
-        plugin_dir = self.plugin_store_path / config.name
+        plugin_dir = (
+            target_dir
+            if target_dir is not None
+            else self.plugin_store_path / config.name
+        )
         plugin_dir.mkdir(parents=True, exist_ok=True)
 
         # 创建 metadata.yaml
@@ -548,8 +555,25 @@ def create_mock_updater_install(
         Callable: 异步函数，可用于 monkeypatch.setattr
     """
 
-    async def mock_install(repo_url: str, proxy: str = "") -> str:
-        """Mock updater.install 方法。"""
+    async def mock_install(
+        repo_url: str,
+        proxy: str = "",
+        download_url: str = "",
+        *,
+        target_dir: Path | None = None,
+    ) -> str:
+        """Create a plugin at the updater's requested destination.
+
+        Args:
+            repo_url: Repository URL used for plugin identity and metadata.
+            proxy: Unused download proxy.
+            download_url: Unused archive URL.
+            target_dir: Optional staging directory supplied by the manager.
+
+        Returns:
+            Path to the prepared plugin directory.
+        """
+        del proxy, download_url
         # 查找插件名称
         plugin_name = None
         if repo_to_plugin:
@@ -563,7 +587,7 @@ def create_mock_updater_install(
 
         # 创建插件目录
         config = MockPluginConfig(name=plugin_name, repo=repo_url)
-        plugin_dir = plugin_builder.create(config)
+        plugin_dir = plugin_builder.create(config, target_dir=target_dir)
         return str(plugin_dir)
 
     return mock_install

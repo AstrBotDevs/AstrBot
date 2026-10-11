@@ -9,12 +9,13 @@
 AstrBot supports rendering text into images.
 
 ```python
-@filter.command("image") # Register an /image command that accepts a text parameter.
+@filter.command("image")  # Register an /image command that accepts a text parameter.
 async def on_aiocqhttp(self, event: AstrMessageEvent, text: str):
-    url = await self.text_to_image(text) # text_to_image() is a method of the Star class.
+    url = await self.text_to_image(
+        text
+    )  # text_to_image() is a method of the Star class.
     # path = await self.text_to_image(text, return_url = False) # If you want to save the image locally
     yield event.image_result(url)
-
 ```
 
 ![image](https://files.astrbot.app/docs/source/images/plugin/image-3.png)
@@ -27,7 +28,7 @@ AstrBot supports rendering text-to-image templates using `HTML + Jinja2`.
 
 ```py{7}
 # Custom Jinja2 template with CSS support
-TMPL = '''
+TMPL = """
 <div style="font-size: 32px;">
 <h1 style="color: black">Todo List</h1>
 
@@ -36,12 +37,15 @@ TMPL = '''
     <li>{{ item }}</li>
 {% endfor %}
 </div>
-'''
+"""
+
 
 @filter.command("todo")
 async def custom_t2i_tmpl(self, event: AstrMessageEvent):
-    options = {} # Optionally pass rendering options.
-    url = await self.html_render(TMPL, {"items": ["Eat", "Sleep", "Play Genshin"]}, options=options) # The second parameter is the data for Jinja2 rendering
+    options = {}  # Optionally pass rendering options.
+    url = await self.html_render(
+        TMPL, {"items": ["Eat", "Sleep", "Play Genshin"]}, options=options
+    )  # The second parameter is the data for Jinja2 rendering
     yield event.image_result(url)
 ```
 

@@ -12,6 +12,7 @@ from astrbot.core.provider.entities import (
     RerankResult,
     ToolCallsResult,
 )
+from astrbot.core.provider.headers import build_provider_headers
 from astrbot.core.provider.register import provider_cls_map
 from astrbot.core.utils.astrbot_path import get_astrbot_path
 
@@ -31,6 +32,9 @@ class AbstractProvider(abc.ABC):
         super().__init__()
         self.model_name = ""
         self.provider_config = provider_config
+        self.request_headers = build_provider_headers(
+            provider_config.get("custom_headers")
+        )
 
     def set_model(self, model_name: str) -> None:
         """Set the current model name"""

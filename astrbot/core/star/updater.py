@@ -1,14 +1,17 @@
 import asyncio
 import os
+import re
 import shutil
 import tempfile
 import zipfile
+from copy import copy
 from pathlib import Path
 
 import yaml
 
 from astrbot.core import logger
 from astrbot.core.repository import (
+    GitHubRepository,
     GitUnavailableError,
     normalize_repository_url,
     parse_repository_url,
@@ -140,7 +143,7 @@ class _PluginUpdater(_RepoZipUpdater):
                 await self._clone_repository(normalized_url, checkout_path)
                 metadata = self.inspect_plugin_directory(checkout_path)["metadata"]
         else:
-            source = await self._resolve_repository_source(normalized_url)
+            source = GitHubRepository.parse(normalized_url)
             proxy = proxy.strip().removesuffix("/")
             async with self._create_httpx_client(
                 timeout=PLUGIN_REPOSITORY_TIMEOUT_SECONDS
@@ -197,11 +200,33 @@ class _PluginUpdater(_RepoZipUpdater):
             "repo": str(normalized_metadata.get("repo") or normalized_url),
         }
 
-    async def install(self, repo_url: str, proxy="", download_url: str = "") -> str:
+    async def install(
+        self,
+        repo_url: str,
+        proxy="",
+        download_url: str = "",
+        *,
+        target_dir: Path | None = None,
+    ) -> str:
+        """Download or clone a plugin into a new directory.
+
+        Args:
+            repo_url: Plugin repository URL.
+            proxy: Optional proxy prefix for repository downloads.
+            download_url: Optional archive URL to use instead of the repository.
+            target_dir: Staging destination supplied by the plugin manager. Defaults
+                to the repository directory under the plugin store.
+
+        Returns:
+            Path to the extracted or cloned plugin.
+
+        Raises:
+            Exception: If the destination exists or downloading or validation fails.
+        """
         normalized_url = normalize_repository_url(repo_url)
         repository = parse_repository_url(normalized_url)
         repo_name = self._format_name(repository.name)
-        plugin_path = os.path.join(self.plugin_store_path, repo_name)
+        plugin_path = str(target_dir or Path(self.plugin_store_path) / repo_name)
         if os.path.exists(plugin_path):
             raise Exception(f"安装失败：目录 {repo_name} 已存在。")
         if download_url:
@@ -454,11 +479,38 @@ class _PluginUpdater(_RepoZipUpdater):
         return str(inspection["metadata_entry"])
 
     def _extract_plugin_archive(self, zip_path: str, target_dir: str) -> None:
+        """Extract a validated plugin archive and flatten its repository directory.
+
+        Args:
+            zip_path: Path to the downloaded plugin archive.
+            target_dir: Directory that will receive the plugin files.
+
+        Raises:
+            ValueError: If the archive is not a valid plugin.
+            OSError: If extraction or moving the extracted files fails.
+            RuntimeError: If the target directory cannot be created.
+        """
         self.validate_plugin_archive(zip_path)
         ensure_dir(target_dir)
         logger.info(f"Extracting archive: {zip_path}")
         with zipfile.ZipFile(zip_path, "r") as z:
             update_dir = self._resolve_archive_root_dir(z.namelist())
-            z.extractall(target_dir)
+            root_parts = update_dir.replace("\\", "/").split("/")
+            archive_root = root_parts[0]
+            match = re.fullmatch(r"(.+)-([0-9a-fA-F]{40})", archive_root)
+            if match and all(
+                name == archive_root or name.startswith(archive_root + "/")
+                for name in z.namelist()
+            ):
+                short_root = f"{match[1]}-{match[2][:8]}"
+                # Shorten the temporary repository directory before extraction.
+                # Keep orig_filename intact for ZIP local-header validation.
+                for member in z.infolist():
+                    member = copy(member)
+                    member.filename = short_root + member.filename[len(archive_root) :]
+                    z.extract(member, target_dir)
+                update_dir = str(Path(short_root).joinpath(*root_parts[1:]))
+            else:
+                z.extractall(target_dir)
 
         self._finalize_extracted_archive(zip_path, target_dir, update_dir)

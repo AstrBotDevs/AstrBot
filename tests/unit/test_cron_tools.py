@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core.tools.cron_tools import FutureTaskTool
 
 
@@ -15,6 +16,7 @@ def _context(
     umo: str = "test:group:shared",
     sender_id: str = "user-1",
     tz_name: str | None = "Asia/Shanghai",
+    message_type: MessageType = MessageType.GROUP_MESSAGE,
 ):
     return SimpleNamespace(
         context=SimpleNamespace(
@@ -25,6 +27,7 @@ def _context(
             event=SimpleNamespace(
                 unified_msg_origin=umo,
                 get_sender_id=lambda: sender_id,
+                get_message_type=lambda: message_type,
             ),
         )
     )
@@ -183,7 +186,11 @@ async def test_future_task_edit_rejects_same_umo_different_sender():
         note="attacker note",
     )
 
-    assert result == "error: you can only edit your own future tasks."
+    assert result == (
+        "error: cron job job-1 was created by another member of this group chat, "
+        "so you cannot edit it. Only the member who created it can edit it; tell "
+        "the user to ask that member."
+    )
     cron_mgr.update_job.assert_not_awaited()
 
 
@@ -203,7 +210,11 @@ async def test_future_task_delete_rejects_same_umo_different_sender():
         job_id="job-1",
     )
 
-    assert result == "error: you can only delete your own future tasks."
+    assert result == (
+        "error: cron job job-1 was created by another member of this group chat, "
+        "so you cannot delete it. Only the member who created it can delete it; "
+        "tell the user to ask that member."
+    )
     cron_mgr.delete_job.assert_not_awaited()
 
 
@@ -367,3 +378,162 @@ async def test_future_task_create_falls_back_to_run_at_when_scheduler_has_no_tim
     )
 
     assert "2026-02-02 08:00:00+08:00" in result
+
+
+def _raw_job(
+    job_id: str,
+    *,
+    payload: dict | None = None,
+    job_type: str = "active_agent",
+):
+    """A job row without the convenience defaults of ``_job``."""
+    return SimpleNamespace(
+        job_id=job_id,
+        name=f"name-{job_id}",
+        job_type=job_type,
+        run_once=False,
+        cron_expression="0 8 * * *",
+        enabled=True,
+        next_run_time=None,
+        payload=payload or {},
+    )
+
+
+@pytest.mark.asyncio
+async def test_future_task_edit_reports_foreign_job_from_another_session():
+    """A job from another session is still "not yours", without group wording."""
+    tool = FutureTaskTool()
+    existing_job = _job("job-1", umo="test:group:other", sender_id="user-1")
+    cron_mgr = SimpleNamespace(
+        db=SimpleNamespace(get_cron_job=AsyncMock(return_value=existing_job)),
+        update_job=AsyncMock(),
+    )
+
+    result = await tool.call(
+        _context(cron_mgr, sender_id="user-1"),
+        action="edit",
+        job_id="job-1",
+        note="nope",
+    )
+
+    assert result == (
+        "error: cron job job-1 was not created by you, so you cannot edit it. "
+        "Only whoever created it can edit it."
+    )
+    cron_mgr.update_job.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_future_task_list_notes_hidden_same_session_group_tasks():
+    """List mode must say that other members' tasks exist but are filtered out."""
+    tool = FutureTaskTool()
+    own_job = _job("own-job", sender_id="user-1")
+    other_member_job = _job("other-member-job", sender_id="user-2")
+    cron_mgr = SimpleNamespace(
+        list_jobs=AsyncMock(return_value=[own_job, other_member_job])
+    )
+
+    result = await tool.call(_context(cron_mgr, sender_id="user-1"), action="list")
+
+    assert "own-job" in result
+    assert "other-member-job" not in result
+    assert (
+        "Note: tasks in this chat that were not created by you are not listed here, "
+        "and can only be edited or deleted by whoever created them."
+    ) in result
+
+
+@pytest.mark.asyncio
+async def test_future_task_list_explains_hidden_tasks_when_none_are_owned():
+    """The "no jobs" answer must not read as "your task disappeared"."""
+    tool = FutureTaskTool()
+    other_member_job = _job("other-member-job", sender_id="user-2")
+    cron_mgr = SimpleNamespace(list_jobs=AsyncMock(return_value=[other_member_job]))
+
+    result = await tool.call(_context(cron_mgr, sender_id="user-1"), action="list")
+
+    assert result.startswith("No cron jobs found.")
+    assert "Note: tasks in this chat that were not created by you" in result
+
+
+@pytest.mark.asyncio
+async def test_future_task_list_has_no_note_when_nothing_is_hidden():
+    """No hidden tasks -> no note, the plain answer is enough."""
+    tool = FutureTaskTool()
+    cron_mgr = SimpleNamespace(list_jobs=AsyncMock(return_value=[_job("own-job")]))
+
+    result = await tool.call(_context(cron_mgr, sender_id="user-1"), action="list")
+
+    assert "Note:" not in result
+
+
+@pytest.mark.asyncio
+async def test_future_task_list_ignores_other_sessions_for_the_hidden_note():
+    """Jobs from other sessions must not leak into the count."""
+    tool = FutureTaskTool()
+    other_session_job = _job("other-session-job", umo="test:group:other")
+    cron_mgr = SimpleNamespace(list_jobs=AsyncMock(return_value=[other_session_job]))
+
+    result = await tool.call(_context(cron_mgr, sender_id="user-1"), action="list")
+
+    assert result == "No cron jobs found."
+
+
+@pytest.mark.asyncio
+async def test_future_task_list_notes_hidden_basic_job_in_the_session():
+    """A basic job in this session is still not a task of the caller."""
+    tool = FutureTaskTool()
+    basic_job = _raw_job(
+        "basic-job",
+        job_type="basic",
+        payload={"session": "test:group:shared", "handler_arg": "x"},
+    )
+    cron_mgr = SimpleNamespace(list_jobs=AsyncMock(return_value=[basic_job]))
+
+    result = await tool.call(_context(cron_mgr, sender_id="user-1"), action="list")
+
+    assert result.startswith("No cron jobs found.")
+    assert "not created by you are not listed here" in result
+
+
+@pytest.mark.asyncio
+async def test_future_task_list_notes_hidden_jobs_without_a_creator():
+    """Dashboard/legacy rows have a session but no member as their creator."""
+    tool = FutureTaskTool()
+    orphan_job = _raw_job(
+        "orphan-job",
+        payload={"session": "test:group:shared", "origin": "api"},
+    )
+    cron_mgr = SimpleNamespace(list_jobs=AsyncMock(return_value=[orphan_job]))
+
+    result = await tool.call(_context(cron_mgr, sender_id="user-1"), action="list")
+
+    assert result.startswith("No cron jobs found.")
+    assert "not created by you are not listed here" in result
+
+
+@pytest.mark.asyncio
+async def test_future_task_delete_explains_jobs_without_a_creator():
+    """A job with no recorded creator must not be blamed on another member."""
+    tool = FutureTaskTool()
+    orphan_job = _raw_job(
+        "orphan-job",
+        payload={"session": "test:group:shared", "origin": "api"},
+    )
+    cron_mgr = SimpleNamespace(
+        db=SimpleNamespace(get_cron_job=AsyncMock(return_value=orphan_job)),
+        delete_job=AsyncMock(),
+    )
+
+    result = await tool.call(
+        _context(cron_mgr, sender_id="user-1"),
+        action="delete",
+        job_id="orphan-job",
+    )
+
+    assert result == (
+        "error: cron job orphan-job has no chat member as its creator (it was "
+        "created outside this chat, e.g. from the dashboard), so you cannot "
+        "delete it here."
+    )
+    cron_mgr.delete_job.assert_not_awaited()

@@ -1,4 +1,3 @@
-
 # Plugin Configuration
 
 As plugin functionality grows, you may need to define configurations to allow users to customize plugin behavior.
@@ -53,6 +52,7 @@ The file content is a `Schema` that represents the configuration. The Schema is 
 - `invisible`: Optional. Whether the configuration is hidden. Default is `false`. If set to `true`, it will not be displayed in the management panel.
 - `secret`: Optional. Applies to `string` and string `list` fields. When set to `true`, the dashboard displays a password input and lets the user temporarily reveal its value. This only masks the value in the UI; it does not encrypt the value in the configuration file.
 - `options`: Optional. A list, such as `"options": ["chat", "agent", "workflow"]`. Provides dropdown list options.
+- `slider`: Optional. Applies to `int` and `float` fields. A dict，such as `"slider": {"min": 1, "max": 100, "step": 1}`. Displays a slider with configurable minimum, maximum, and step values.
 - `editor_mode`: Optional. Whether to enable code editor mode. Requires AstrBot >= `v3.5.10`. Versions below this won't report errors but won't take effect. Default is false.
 - `editor_language`: Optional. The code language for the code editor, defaults to `json`.
 - `editor_theme`: Optional. The theme for the code editor. Options are `vs-light` (default) and `vs-dark`.
@@ -238,7 +238,6 @@ Templates also support these optional fields:
 
 <img width="1000" alt="image" src="https://github.com/user-attachments/assets/74876d30-11a4-491b-a7a0-8ebe8d603782" />
 
-
 ## Using Configuration in Plugins
 
 When loading plugins, AstrBot will check if there's a `_conf_schema.json` file in the plugin directory. If it exists, it will automatically parse the configuration and save it under `data/config/<plugin_name>_config.json` (a configuration file entity created according to the Schema), and pass it to `__init__()` when instantiating the plugin class.
@@ -246,8 +245,11 @@ When loading plugins, AstrBot will check if there's a `_conf_schema.json` file i
 ```py
 from astrbot.api import AstrBotConfig
 
+
 class ConfigPlugin(Star):
-    def __init__(self, context: Context, config: AstrBotConfig): # AstrBotConfig inherits from Dict and has all dictionary methods
+    def __init__(
+        self, context: Context, config: AstrBotConfig
+    ):  # AstrBotConfig inherits from Dict and has all dictionary methods
         super().__init__(context)
         self.config = config
         print(self.config)

@@ -8,8 +8,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from deprecated import deprecated
-from sqlalchemy import CursorResult, Row, case, not_
+from sqlalchemy import CursorResult, Row, case, literal, not_
 from sqlalchemy.dialects.sqlite import dialect as sqlite_dialect
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer
 from sqlmodel import col, delete, desc, func, or_, select, text, update
@@ -47,6 +48,31 @@ TxResult = T.TypeVar("TxResult")
 CRON_FIELD_NOT_SET = object()
 
 
+def _webchat_session_title_match(keyword: str):
+    """Build a correlated EXISTS condition matching WebChat session titles.
+
+    WebChat generates its title on the platform session instead of the
+    conversation row, so the conversation is matched through the unified
+    message origin suffix ``!<session_id>``.
+
+    Args:
+        keyword: Search text matched against the session display name.
+
+    Returns:
+        A SQLAlchemy EXISTS expression usable inside a conversation query.
+    """
+    return (
+        select(1)
+        .where(col(PlatformSession.display_name).ilike(f"%{keyword}%"))
+        .where(
+            col(ConversationV2.user_id).like(
+                literal("%!").concat(col(PlatformSession.session_id)),
+            )
+        )
+        .exists()
+    )
+
+
 class SQLiteDatabase(BaseDatabase):
     def __init__(self, db_path: str) -> None:
         self.db_path = db_path
@@ -72,6 +98,9 @@ class SQLiteDatabase(BaseDatabase):
             await self._ensure_platform_message_history_checkpoint_column(conn)
             await self._ensure_chatui_project_workspace_columns(conn)
             await self._ensure_conversation_indexes(conn)
+            # The table-level unique constraint already provides an index for UMO
+            # lookups. Older schemas also created this redundant explicit index.
+            await conn.execute(text("DROP INDEX IF EXISTS ix_umo_aliases_umo"))
             await conn.commit()
 
     async def _ensure_conversation_indexes(self, conn) -> None:
@@ -358,6 +387,8 @@ class SQLiteDatabase(BaseDatabase):
 
             if platform_ids:
                 conditions.append(col(ConversationV2.platform_id).in_(platform_ids))
+            # WebChat titles live on the platform session, not on the
+            # conversation row, so the search also matches session titles.
             if search_query:
                 escaped_search_query = json.dumps(
                     search_query,
@@ -370,6 +401,7 @@ class SQLiteDatabase(BaseDatabase):
                         col(ConversationV2.conversation_id).ilike(f"%{search_query}%"),
                         col(ConversationV2.content).ilike(f"%{search_query}%"),
                         col(ConversationV2.content).ilike(f"%{escaped_search_query}%"),
+                        _webchat_session_title_match(search_query),
                     )
                 )
             keyword_query = str(kwargs.get("keyword_query") or "").strip()
@@ -383,6 +415,7 @@ class SQLiteDatabase(BaseDatabase):
                         col(ConversationV2.title).ilike(f"%{keyword_query}%"),
                         col(ConversationV2.content).ilike(f"%{keyword_query}%"),
                         col(ConversationV2.content).ilike(f"%{escaped_keyword_query}%"),
+                        _webchat_session_title_match(keyword_query),
                     )
                 )
             message_types = kwargs.get("message_types") or []
@@ -400,8 +433,23 @@ class SQLiteDatabase(BaseDatabase):
                 conditions.append(col(ConversationV2.platform_id).in_(platforms))
             exclude_ids = kwargs.get("exclude_ids") or []
             for exclude_id in exclude_ids:
+                # Match the whole UMO or its platform segment only, so an id
+                # like "astrbot" does not swallow platforms such as
+                # "astrbotweb". Escape LIKE wildcards inside the id itself.
+                escaped = (
+                    exclude_id.replace("\\", "\\\\")
+                    .replace("%", r"\%")
+                    .replace("_", r"\_")
+                )
                 conditions.append(
-                    not_(col(ConversationV2.user_id).like(f"{exclude_id}%"))
+                    not_(
+                        or_(
+                            col(ConversationV2.user_id) == exclude_id,
+                            col(ConversationV2.user_id).like(
+                                f"{escaped}:%", escape="\\"
+                            ),
+                        )
+                    )
                 )
             exclude_platforms = kwargs.get("exclude_platforms") or []
             if exclude_platforms:
@@ -818,7 +866,8 @@ class SQLiteDatabase(BaseDatabase):
         async with self.get_db() as session:
             session: AsyncSession
             async with session.begin():
-                now = datetime.now()
+                # created_at stores UTC wall-clock values, so compare in UTC.
+                now = datetime.now(timezone.utc)
                 cutoff_time = now - timedelta(seconds=offset_sec)
                 await session.execute(
                     delete(PlatformMessageHistory).where(
@@ -852,6 +901,30 @@ class SQLiteDatabase(BaseDatabase):
             )
             result = await session.execute(query.offset(offset).limit(page_size))
             return result.scalars().all()
+
+    async def count_platform_message_history(
+        self,
+        platform_id: str,
+        user_id: str,
+    ) -> int:
+        """Count platform message history records for a scope.
+
+        Args:
+            platform_id: Platform identifier used to partition history.
+            user_id: Platform user or session identifier.
+
+        Returns:
+            Number of records matching the platform/user scope.
+        """
+        async with self.get_db() as session:
+            session: AsyncSession
+            result = await session.execute(
+                select(func.count(PlatformMessageHistory.id)).where(
+                    PlatformMessageHistory.platform_id == platform_id,
+                    PlatformMessageHistory.user_id == user_id,
+                )
+            )
+            return int(result.scalar_one() or 0)
 
     async def get_platform_message_history_by_id(
         self, message_id: int
@@ -1342,10 +1415,12 @@ class SQLiteDatabase(BaseDatabase):
         return await self.get_persona_folder_by_id(folder_id)
 
     async def delete_persona_folder(self, folder_id: str) -> None:
-        """Delete a persona folder by its folder_id.
+        """Delete a folder, moving its direct personas and child folders to root.
 
-        Note: This will also set folder_id to NULL for all personas in this folder,
-        moving them to the root directory.
+        Descendant folders retain their contents and internal hierarchy.
+
+        Args:
+            folder_id: ID of the folder to delete.
         """
         async with self.get_db() as session:
             session: AsyncSession
@@ -1355,6 +1430,12 @@ class SQLiteDatabase(BaseDatabase):
                     update(Persona)
                     .where(col(Persona.folder_id) == folder_id)
                     .values(folder_id=None)
+                )
+                # Preserve child subtrees by moving them to the root directory.
+                await session.execute(
+                    update(PersonaFolder)
+                    .where(col(PersonaFolder.parent_id) == folder_id)
+                    .values(parent_id=None)
                 )
                 # Delete the folder
                 await session.execute(
@@ -2102,7 +2183,9 @@ class SQLiteDatabase(BaseDatabase):
             total = int(total_result.scalar_one() or 0)
 
             result_query = (
-                base_query.order_by(desc(PlatformSession.updated_at))
+                base_query.order_by(
+                    desc(PlatformSession.updated_at), desc(PlatformSession.session_id)
+                )
                 .offset(offset)
                 .limit(page_size)
             )
@@ -2152,30 +2235,80 @@ class SQLiteDatabase(BaseDatabase):
         auto_name: str | None,
         user_alias: str | None,
     ) -> UmoAlias:
-        """Create or update alias metadata for a UMO."""
+        """Create or replace user-controlled alias metadata for a UMO.
+
+        Args:
+            umo: Unified message origin to name.
+            creator_sender_id: Sender responsible for the manual alias update.
+            auto_name: Latest name discovered from platform metadata.
+            user_alias: User-controlled display alias.
+
+        Returns:
+            Persisted UMO alias record.
+        """
+        now = datetime.now(timezone.utc)
+        statement = sqlite_insert(UmoAlias).values(
+            umo=umo,
+            creator_sender_id=creator_sender_id,
+            auto_name=auto_name,
+            user_alias=user_alias,
+            created_at=now,
+            updated_at=now,
+        )
+        statement = statement.on_conflict_do_update(
+            index_elements=[UmoAlias.umo],
+            set_={
+                "creator_sender_id": statement.excluded.creator_sender_id,
+                "auto_name": statement.excluded.auto_name,
+                "user_alias": statement.excluded.user_alias,
+                "updated_at": now,
+            },
+        )
         async with self.get_db() as session:
             session: AsyncSession
             async with session.begin():
+                await session.execute(statement)
                 result = await session.execute(
                     select(UmoAlias).where(col(UmoAlias.umo) == umo)
                 )
-                alias = result.scalar_one_or_none()
-                if alias:
-                    alias.creator_sender_id = creator_sender_id
-                    alias.auto_name = auto_name
-                    alias.user_alias = user_alias
-                    alias.updated_at = datetime.now(timezone.utc)
-                else:
-                    alias = UmoAlias(
-                        umo=umo,
-                        creator_sender_id=creator_sender_id,
-                        auto_name=auto_name,
-                        user_alias=user_alias,
-                    )
-                    session.add(alias)
-                await session.flush()
-                await session.refresh(alias)
-                return alias
+                return result.scalar_one()
+
+    async def upsert_umo_auto_name(
+        self,
+        umo: str,
+        creator_sender_id: str,
+        auto_name: str,
+    ) -> None:
+        """Persist an automatic UMO name without changing its manual alias.
+
+        Args:
+            umo: Unified message origin to name.
+            creator_sender_id: Sender that first caused the UMO to be recorded.
+            auto_name: Name discovered from the inbound platform message.
+        """
+        now = datetime.now(timezone.utc)
+        statement = sqlite_insert(UmoAlias).values(
+            umo=umo,
+            creator_sender_id=creator_sender_id,
+            auto_name=auto_name,
+            user_alias=None,
+            created_at=now,
+            updated_at=now,
+        )
+        statement = statement.on_conflict_do_update(
+            index_elements=[UmoAlias.umo],
+            set_={
+                "auto_name": statement.excluded.auto_name,
+                "updated_at": now,
+            },
+            where=col(UmoAlias.auto_name).is_distinct_from(
+                statement.excluded.auto_name
+            ),
+        )
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                await session.execute(statement)
 
     async def get_umo_alias(self, umo: str) -> UmoAlias | None:
         """Get alias metadata for one UMO."""
