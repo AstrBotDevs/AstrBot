@@ -27,6 +27,24 @@ Use simple directory names for `view_name`, such as `settings` or `bridge-demo`.
 
 Users open views from the plugin detail page in the WebUI.
 
+### Migrating from Pages to Views
+
+Earlier AstrBot versions called plugin views Pages and used `pages` for both the directory name and the i18n key. `views` is now canonical, with `pages` kept as a compatibility alias:
+
+| Item | Current | Compatibility alias |
+| --- | --- | --- |
+| View directory | `views/<view_name>/` | `pages/<view_name>/` |
+| i18n namespace | `views.<view_name>.*` | `pages.<view_name>.*` |
+| Bridge global | `window.AstrBotPluginView` | `window.AstrBotPluginPage` |
+| v1 API routes | `/plugins/views`, `/plugins/{plugin_id}/views/{view_name}` | `/plugins/pages` and the matching aliases |
+
+> [!WARNING]
+> When both `views/` and `pages/` exist, AstrBot only scans `views/` and every view under `pages/` is ignored. Move the whole directory in one step instead of copying the contents into `views/` while keeping the original `pages/` around.
+
+A `views:` declaration (`pages:` in older plugins) in `metadata.yaml` only feeds plugin metadata. View discovery is driven purely by directory scanning, so declaring `views:` never makes a view under another directory work.
+
+Untouched plugins keep working as before; new and maintained plugins should use `views`.
+
 ## Development Flow
 
 1. Create `views/<view_name>/index.html` in the plugin directory.
@@ -556,6 +574,9 @@ Plugin Views reuse plugin i18n resource files. Add `views.<view_name>` to `.astr
 ```
 
 `title` is used by the WebUI shell title and the view component name on the plugin detail page. `description` is used by the view component description. Inside the view, render text with `bridge.t()` and react to locale changes with `onContext()`.
+
+> [!IMPORTANT]
+> Switching the WebUI language does not reload the view iframe. The shell pushes the new `locale` and `i18n` through `bridge.onContext()`, so a view must register an `onContext()` callback and re-render inside it. A view that only calls `bridge.t()` once at load time stays in the previous language.
 
 ```js
 function render() {

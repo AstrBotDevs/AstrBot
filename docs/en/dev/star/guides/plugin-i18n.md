@@ -80,7 +80,7 @@ Corresponding `.astrbot-plugin/i18n/zh-CN.json`:
 
 ## Plugin Views
 
-`views` overrides plugin Dashboard View titles, descriptions, and custom text inside plugin views (`pages` is accepted as an alias). The structure is nested by view directory name.
+`views` overrides plugin Dashboard View titles, descriptions, and custom text inside plugin views (`pages` is accepted as an alias). The structure is nested by view directory name. New plugins should use `views`; see [Plugin Views](./plugin-pages) for how directories and keys line up.
 
 Example plugin view directory:
 

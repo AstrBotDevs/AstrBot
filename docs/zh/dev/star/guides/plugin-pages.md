@@ -27,6 +27,24 @@ astrbot_plugin_view_demo/
 
 用户可以在 WebUI 的插件页点击插件卡片进入插件详情页，然后打开插件声明的可视化视图。
 
+### 从 Pages 迁移到 Views
+
+早期版本的 AstrBot 把插件可视化视图称为 Pages，目录名和 i18n 键都写作 `pages`。现在统一以 `views` 为准，`pages` 作为兼容别名保留：
+
+| 项目 | 现在的写法 | 兼容别名 |
+| --- | --- | --- |
+| 视图目录 | `views/<view_name>/` | `pages/<view_name>/` |
+| i18n 命名空间 | `views.<view_name>.*` | `pages.<view_name>.*` |
+| bridge 全局对象 | `window.AstrBotPluginView` | `window.AstrBotPluginPage` |
+| v1 API 路由 | `/plugins/views`、`/plugins/{plugin_id}/views/{view_name}` | `/plugins/pages` 等同名别名 |
+
+> [!WARNING]
+> `views/` 和 `pages/` 同时存在时，AstrBot 只扫描 `views/`，`pages/` 下的视图会被完全忽略。迁移时请一次性移动整个目录，不要先把内容复制一份到 `views/` 而保留原来的 `pages/`。
+
+`metadata.yaml` 中声明的 `views:`（旧名 `pages:`）只影响插件元数据，视图发现完全以目录扫描为准，写错目录不会因为声明了 `views:` 而生效。
+
+未改动的旧插件可以继续工作；新插件和维护中的插件建议统一使用 `views`。
+
 ## 开发流程
 
 1. 在插件目录下创建 `views/<view_name>/index.html`。
@@ -538,7 +556,7 @@ window.addEventListener("beforeunload", () => {
 });
 ```
 
-##视图国际化
+## 视图国际化
 
 插件可视化视图复用插件 i18n 资源文件。给 `.astrbot-plugin/i18n/<locale>.json` 增加 `views.<view_name>`：
 
@@ -556,6 +574,9 @@ window.addEventListener("beforeunload", () => {
 ```
 
 `title` 用于 WebUI 外壳标题和插件详情页的视图组件名称；`description` 用于插件详情页的视图组件描述。视图内部使用 `bridge.t()` 渲染文案，并通过 `onContext()` 响应语言切换。
+
+> [!IMPORTANT]
+> 在 WebUI 中切换语言不会重新加载视图 iframe。外壳会通过 `bridge.onContext()` 下发新的 `locale` 和 `i18n`，所以视图必须注册 `onContext()` 回调并在回调里重新渲染。只在加载时调用一次 `bridge.t()` 的视图会一直停留在切换前的语言。
 
 ```js
 function render() {
