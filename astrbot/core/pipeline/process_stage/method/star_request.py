@@ -1,5 +1,6 @@
 """本地 Agent 模式的 AstrBot 插件调用 Stage"""
 
+import time
 import traceback
 from collections.abc import AsyncGenerator
 from typing import Any
@@ -7,11 +8,14 @@ from typing import Any
 from astrbot.core import logger
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.star.filter.command import CommandFilter
+from astrbot.core.star.filter.command_group import CommandGroupFilter
+from astrbot.core.star.filter.regex import RegexFilter
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, StarHandlerMetadata
 
 from ...context import PipelineContext, call_event_hook, call_handler
-from ..stage import Stage
+from ...stage import Stage
 
 
 class StarRequestSubStage(Stage):
@@ -44,10 +48,54 @@ class StarRequestSubStage(Stage):
                 )
                 continue
             logger.debug(f"plugin -> {md.name} - {handler.handler_name}")
+            previous_source = event.get_extra("_trace_response_source")
+            event.set_extra(
+                "_trace_response_source",
+                f"plugin:{md.name or handler.handler_module_path}",
+            )
+            handler_started = time.perf_counter()
+            # Match the component categories used by the plugin detail page.
+            handler_category = (
+                "command"
+                if any(
+                    isinstance(
+                        event_filter, CommandFilter | CommandGroupFilter | RegexFilter
+                    )
+                    for event_filter in handler.event_filters
+                )
+                else "listener"
+            )
+            event.trace.record(
+                "handler_start",
+                kind="plugin_handler",
+                status="running",
+                plugin=md.name or handler.handler_module_path,
+                plugin_display_name=md.display_name or md.name,
+                handler=handler.handler_name,
+                handler_full_name=handler.handler_full_name,
+                handler_type=handler.event_type.name,
+                handler_category=handler_category,
+                module=handler.handler_module_path,
+                priority=handler.extras_configs.get("priority", 0),
+            )
             try:
                 wrapper = call_handler(event, handler.handler, **params)
                 async for ret in wrapper:
                     yield ret
+                event.trace.record(
+                    "handler_end",
+                    kind="plugin_handler",
+                    status="success",
+                    duration_ms=round(
+                        (time.perf_counter() - handler_started) * 1000, 2
+                    ),
+                    plugin=md.name or handler.handler_module_path,
+                    plugin_display_name=md.display_name or md.name,
+                    handler=handler.handler_name,
+                    handler_full_name=handler.handler_full_name,
+                    handler_type=handler.event_type.name,
+                    handler_category=handler_category,
+                )
                 if event.is_stopped():
                     break
                 event.clear_result()  # 清除上一个 handler 的结果
@@ -55,6 +103,21 @@ class StarRequestSubStage(Stage):
                 traceback_text = traceback.format_exc()
                 logger.error(traceback_text)
                 logger.error(f"Star {handler.handler_full_name} handle error: {e}")
+                event.trace.record(
+                    "handler_end",
+                    kind="plugin_handler",
+                    status="error",
+                    duration_ms=round(
+                        (time.perf_counter() - handler_started) * 1000, 2
+                    ),
+                    plugin=md.name or handler.handler_module_path,
+                    plugin_display_name=md.display_name or md.name,
+                    handler=handler.handler_name,
+                    handler_full_name=handler.handler_full_name,
+                    handler_type=handler.event_type.name,
+                    handler_category=handler_category,
+                    error=str(e),
+                )
 
                 await call_event_hook(
                     event,
@@ -72,3 +135,8 @@ class StarRequestSubStage(Stage):
                     event.clear_result()
 
                 event.stop_event()
+            finally:
+                if previous_source is None:
+                    event._extras.pop("_trace_response_source", None)
+                else:
+                    event.set_extra("_trace_response_source", previous_source)

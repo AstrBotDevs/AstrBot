@@ -1,7 +1,8 @@
 """Tests for AstrMessageEvent class."""
 
+import asyncio
 import re
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -14,8 +15,16 @@ from astrbot.core.message.components import (
     Plain,
     Reply,
 )
-from astrbot.core.message.message_event_result import MessageEventResult
-from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.message.message_event_result import (
+    MessageChain,
+    MessageEventResult,
+    ResultContentType,
+)
+from astrbot.core.pipeline.respond.stage import RespondStage
+from astrbot.core.platform.astr_message_event import (
+    AstrMessageEvent,
+    streaming_response_event,
+)
 from astrbot.core.platform.astrbot_message import AstrBotMessage, Group, MessageMember
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
@@ -69,6 +78,82 @@ def astr_message_event(platform_meta, astrbot_message):
         platform_meta=platform_meta,
         session_id="session123",
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("tool_response", [False, True])
+async def test_streaming_trace_only_records_final_response(
+    astr_message_event, monkeypatch, tool_response
+):
+    """Aggregate adapter chunks without hiding independent tool responses."""
+    event = astr_message_event
+    event.trace = MagicMock()
+    monkeypatch.setattr(
+        "astrbot.core.platform.astr_message_event.Metric.upload", AsyncMock()
+    )
+
+    async def stream():
+        yield MessageChain([Plain("Hello")])
+        if tool_response:
+            await event.send(MessageChain([Plain("Tool reply")]))
+        yield MessageChain([Plain("hidden reasoning")], type="reasoning")
+        yield MessageChain([], type="break")
+        yield MessageChain([Plain(" world")])
+
+    async def deliver(generator, use_fallback):
+        async for chunk in generator:
+            if chunk.type not in {"reasoning", "break"}:
+                await event.send(chunk)
+        # The QQ streaming protocol may require an empty closing frame.
+        await event.send(MessageChain([Plain("\n")]))
+
+    event.send_streaming = AsyncMock(side_effect=deliver)
+    event.set_result(
+        MessageEventResult()
+        .set_result_content_type(ResultContentType.STREAMING_RESULT)
+        .set_async_stream(stream())
+    )
+    stage = RespondStage()
+    stage.config = {"provider_settings": {}}
+    await stage.process(event)
+
+    records = event.trace.record.call_args_list
+    assert [record.args[0] for record in records] == ["response_sent"] * (
+        2 if tool_response else 1
+    )
+    assert [record.kwargs["message"] for record in records] == (
+        ["Tool reply", "Hello world"] if tool_response else ["Hello world"]
+    )
+    assert records[-1].kwargs["streaming"] is True
+    assert streaming_response_event.get() is None
+    await event.send(MessageChain([Plain("Normal reply")]))
+    assert event.trace.record.call_args.kwargs["message"] == "Normal reply"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", [ValueError, asyncio.CancelledError])
+async def test_streaming_trace_context_restored_after_failure(
+    astr_message_event, failure
+):
+    """Failed or cancelled delivery must not suppress subsequent responses."""
+    event = astr_message_event
+    event.trace = MagicMock()
+    event.send_streaming = AsyncMock(side_effect=failure("delivery interrupted"))
+
+    async def stream():
+        yield MessageChain([Plain("Hello")])
+
+    event.set_result(
+        MessageEventResult()
+        .set_result_content_type(ResultContentType.STREAMING_RESULT)
+        .set_async_stream(stream())
+    )
+    stage = RespondStage()
+    stage.config = {"provider_settings": {}}
+    with pytest.raises(failure):
+        await stage.process(event)
+    event.trace.record.assert_not_called()
+    assert streaming_response_event.get() is None
 
 
 def test_retained_attachment_is_excluded_from_event_cleanup(

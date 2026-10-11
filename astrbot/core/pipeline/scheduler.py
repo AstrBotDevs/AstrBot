@@ -1,3 +1,4 @@
+import time
 from collections.abc import AsyncGenerator
 from typing import cast
 
@@ -89,6 +90,9 @@ class PipelineScheduler:
         """
         active_event_registry.register(event)
         with log_context(event.get_platform_id(), event.get_platform_name()):
+            pipeline_started = time.perf_counter()
+            pipeline_status = "success"
+            pipeline_error = None
             try:
                 await self._process_stages(event)
 
@@ -97,6 +101,21 @@ class PipelineScheduler:
                     await event.send(None)
 
                 logger.debug("pipeline execution completed.")
+            except BaseException as exc:
+                pipeline_status = "error"
+                pipeline_error = str(exc)
+                raise
             finally:
+                event.trace.record(
+                    "pipeline_end",
+                    kind="pipeline",
+                    status=pipeline_status,
+                    duration_ms=round(
+                        (time.perf_counter() - pipeline_started) * 1000,
+                        2,
+                    ),
+                    stopped=event.is_stopped(),
+                    error=pipeline_error,
+                )
                 event.cleanup_temporary_local_files()
                 active_event_registry.unregister(event)

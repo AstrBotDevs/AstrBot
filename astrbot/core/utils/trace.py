@@ -48,6 +48,7 @@ class TraceSpan:
         self.sender_name = sender_name
         self.message_outline = message_outline
         self.started_at = time.time()
+        self._sequence = 0
 
     def record(self, action: str, **fields: Any) -> None:
         # Check if trace recording is enabled
@@ -58,6 +59,10 @@ class TraceSpan:
             "type": "trace",
             "level": "TRACE",
             "time": time.time(),
+            "record_id": str(uuid.uuid4()),
+            "sequence": self._sequence,
+            "elapsed_ms": round((time.time() - self.started_at) * 1000, 2),
+            "schema_version": 2,
             "span_id": self.span_id,
             "name": self.name,
             "umo": self.umo,
@@ -66,6 +71,7 @@ class TraceSpan:
             "action": action,
             "fields": fields,
         }
+        self._sequence += 1
         log_broker = _get_log_broker()
         if log_broker:
             log_broker.publish(payload)

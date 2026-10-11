@@ -1,4 +1,5 @@
 import inspect
+import time
 import traceback
 import typing as T
 
@@ -93,19 +94,72 @@ async def call_event_hook(
         plugins_name=event.plugins_name,
     )
     for handler in handlers:
+        plugin = star_map.get(handler.handler_module_path)
+        plugin_name = plugin.name if plugin else handler.handler_module_path
+        plugin_display_name = plugin.display_name if plugin else None
+        previous_source = event.get_extra("_trace_response_source")
+        event.set_extra("_trace_response_source", f"plugin:{plugin_name}")
+        handler_started = time.perf_counter()
+        handler_category = (
+            "llm_tool" if hook_type == EventType.OnCallingFuncToolEvent else "hook"
+        )
+        event.trace.record(
+            "handler_start",
+            kind="plugin_handler",
+            status="running",
+            plugin=plugin_name,
+            plugin_display_name=plugin_display_name or plugin_name,
+            handler=handler.handler_name,
+            handler_full_name=handler.handler_full_name,
+            handler_type=handler.event_type.name,
+            handler_category=handler_category,
+            module=handler.handler_module_path,
+            hook=hook_type.name,
+        )
         try:
             assert inspect.iscoroutinefunction(handler.handler)
             logger.debug(
-                f"hook({hook_type.name}) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
+                f"hook({hook_type.name}) -> {plugin_name} - {handler.handler_name}",
             )
             await handler.handler(event, *args, **kwargs)
         except BaseException:
             logger.error(traceback.format_exc())
+            event.trace.record(
+                "handler_end",
+                kind="plugin_handler",
+                status="error",
+                duration_ms=round((time.perf_counter() - handler_started) * 1000, 2),
+                plugin=plugin_name,
+                plugin_display_name=plugin_display_name or plugin_name,
+                handler=handler.handler_name,
+                handler_full_name=handler.handler_full_name,
+                handler_type=handler.event_type.name,
+                handler_category=handler_category,
+                hook=hook_type.name,
+            )
+        else:
+            event.trace.record(
+                "handler_end",
+                kind="plugin_handler",
+                status="success",
+                duration_ms=round((time.perf_counter() - handler_started) * 1000, 2),
+                plugin=plugin_name,
+                plugin_display_name=plugin_display_name or plugin_name,
+                handler=handler.handler_name,
+                handler_full_name=handler.handler_full_name,
+                handler_type=handler.event_type.name,
+                handler_category=handler_category,
+                hook=hook_type.name,
+            )
+        finally:
+            if previous_source is None:
+                event._extras.pop("_trace_response_source", None)
+            else:
+                event.set_extra("_trace_response_source", previous_source)
 
         if event.is_stopped():
             logger.info(
-                f"{star_map[handler.handler_module_path].name} - "
-                f"{handler.handler_name} stopped event propagation.",
+                f"{plugin_name} - {handler.handler_name} stopped event propagation.",
             )
             return True
 

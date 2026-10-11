@@ -7,7 +7,10 @@ import astrbot.core.message.components as Comp
 from astrbot.core import logger
 from astrbot.core.message.components import BaseMessageComponent, ComponentType
 from astrbot.core.message.message_event_result import MessageChain, ResultContentType
-from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.astr_message_event import (
+    AstrMessageEvent,
+    streaming_response_event,
+)
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.path_util import path_Mapping
 
@@ -234,6 +237,20 @@ class RespondStage(Stage):
             f"Prepare to send - {event.get_sender_name()}/{event.get_sender_id()}: {event._outline_chain(result.chain)}",
             extra={"category": "user_chat"},
         )
+        event.set_extra(
+            "_trace_response_source",
+            "agent" if result.is_model_result() else "core",
+        )
+        if result.result_content_type != ResultContentType.STREAMING_RESULT:
+            event.trace.record(
+                "response_ready",
+                kind="response",
+                source=event.get_extra("_trace_response_source"),
+                message=event._outline_chain(result.chain),
+                component_types=[str(component.type) for component in result.chain],
+                component_count=len(result.chain),
+                result_type=result.result_content_type.value,
+            )
 
         if result.result_content_type == ResultContentType.STREAMING_RESULT:
             if result.async_stream is None:
@@ -248,7 +265,50 @@ class RespondStage(Stage):
                 == "realtime_segmenting"
             )
             logger.info(f"Applying streaming output ({event.get_platform_id()}).")
-            await event.send_streaming(result.async_stream, realtime_segmenting)
+            stream = result.async_stream
+            stream_outline: list[str] = []
+
+            async def traced_stream() -> AsyncGenerator[MessageChain, None]:
+                """Collect response outlines as the platform consumes the stream.
+
+                Yields:
+                    Original message chunks for platform delivery.
+                """
+                iterator = stream.__aiter__()
+                while True:
+                    # Tool/plugin sends during generation are independent responses.
+                    generation_token = streaming_response_event.set(None)
+                    try:
+                        chain = await iterator.__anext__()
+                    except StopAsyncIteration:
+                        break
+                    finally:
+                        streaming_response_event.reset(generation_token)
+                    if chain.type not in {
+                        "break",
+                        "reasoning",
+                        "audio_chunk",
+                        "tool_call",
+                        "agent_stats",
+                    }:
+                        stream_outline.append(event._outline_chain(chain.chain))
+                    yield chain
+
+            # Adapter chunks and protocol closing frames share one final trace.
+            stream_token = streaming_response_event.set(event)
+            try:
+                await event.send_streaming(traced_stream(), realtime_segmenting)
+            finally:
+                streaming_response_event.reset(stream_token)
+            outline = "".join(stream_outline)
+            if outline.strip():
+                event.trace.record(
+                    "response_sent",
+                    kind="response",
+                    source=event.get_extra("_trace_response_source"),
+                    message=outline,
+                    streaming=True,
+                )
             return
         if len(result.chain) > 0:
             # 检查路径映射

@@ -1,3 +1,4 @@
+import time
 from collections.abc import AsyncGenerator
 
 from astrbot.core import logger
@@ -49,5 +50,42 @@ class AgentRequestSubStage(Stage):
             )
             return
 
-        async for resp in self.agent_sub_stage.process(event, self.prov_wake_prefix):
-            yield resp
+        agent_started = time.perf_counter()
+        previous_source = event.get_extra("_trace_response_source")
+        event.set_extra("_trace_response_source", "agent")
+        agent_config = self.config.get("agent_runner", {})
+        event.trace.record(
+            "agent_start",
+            kind="agent",
+            status="running",
+            runner_type=agent_config.get("runner_type", "local"),
+            provider_wake_prefix=self.prov_wake_prefix,
+        )
+        try:
+            async for resp in self.agent_sub_stage.process(
+                event, self.prov_wake_prefix
+            ):
+                yield resp
+        except BaseException as exc:
+            event.trace.record(
+                "agent_end",
+                kind="agent",
+                status="error",
+                duration_ms=round((time.perf_counter() - agent_started) * 1000, 2),
+                error=str(exc),
+                runner_type=agent_config.get("runner_type", "local"),
+            )
+            raise
+        else:
+            event.trace.record(
+                "agent_end",
+                kind="agent",
+                status="success",
+                duration_ms=round((time.perf_counter() - agent_started) * 1000, 2),
+                runner_type=agent_config.get("runner_type", "local"),
+            )
+        finally:
+            if previous_source is None:
+                event._extras.pop("_trace_response_source", None)
+            else:
+                event.set_extra("_trace_response_source", previous_source)

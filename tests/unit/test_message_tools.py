@@ -1,7 +1,7 @@
 """Tests for send_message_to_user session handling."""
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -54,6 +54,7 @@ class _DummyRespondEvent:
         }
         self._result = MessageEventResult().message(result_text)
         self.send = AsyncMock()
+        self.trace = MagicMock()
         self.plugins_name = []
 
     def get_result(self):
@@ -226,6 +227,11 @@ async def test_respond_stage_sends_different_text_after_send_message_to_user():
 
     assert result is None
     event.send.assert_awaited_once()
+    assert event.trace.record.call_args.args == ("response_ready",)
+    assert event.trace.record.call_args.kwargs["source"] == "core"
+    assert event.trace.record.call_args.kwargs["message"] == (
+        "I have sent the message with the tool."
+    )
     assert event.get_result() is None
 
 

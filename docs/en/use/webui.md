@@ -172,10 +172,20 @@ The toolbar contains search, fullscreen, font-size controls, and `Install Pip pa
 
 ### Trace
 
-The `Trace` tab shows AstrBot execution traces in real time and is useful for debugging model-call paths and tool invocations. Use the switch at the top to enable or disable trace recording.
+The `Trace` tab shows message execution chains: receipt, plugin handlers, Agent requests, responses, and completion. Select a message on the left to inspect its timeline and node details on the right. Open `Filters` next to the search box to select `Has errors`, `Has model calls`, and `Has plugin calls`. Multiple selections require all checked conditions and can be combined with search. No selection shows all traces; `Reset` clears the checkboxes. Closing the sidebar preserves the selected filters. This multi-select sidebar replaces the former `All / Errors / Agent / Plugins` single-select tabs. The record count shows the number of message traces matching the current filters, not internal steps. Use the switch at the top to enable or disable trace recording.
+
+Session aliases replace raw UMOs when available; hover over the dotted underline to see the full UMO. Plugins use their display name when available; hover to see the plugin ID. Handler names, event types, and duration are also shown. Plugin handler nodes use the plugin logo when available and the plugin card's default blue star icon if it is missing or fails to load. Titles show the category in parentheses, matching the plugin detail page: command/command group, event listener, event hook, or LLM tool.
 
 > [!NOTE]
-> Trace recording currently covers only some model-call paths from the AstrBot main Agent. Coverage will continue to improve.
+> Traces are kept in memory and are cleared on restart or cache eviction. Instead of expanding a message row, select a message in the left list to view its timeline on the right.
+
+Handler names also have a dotted underline. Hover to lazily fetch plugin details and show that handler's description, including nested commands, using the same description as the plugin detail page. Details are cached for the current page; hover again to retry a failed request.
+
+Streaming responses show one final aggregated response after delivery finishes, without intermediate chunks or protocol closing frames. Messages sent independently by tools or plugins during generation remain separate responses.
+
+Consecutive nodes of the same type are collapsed by default, such as "Multiple plugin handlers triggered (Event listener)", with a record count and stacked icons. Click to expand or collapse the individual records. Different handler categories and records separated by another node type remain separate, preserving execution order. Collapsed groups still show error counts, and summary cards continue to count actual calls.
+
+The message list and message-received node show the platform logo. The message-received title includes `platform_id` in parentheses. A generic icon is used when no logo matches or the image fails to load; text still indicates processing status. The `sel_persona` node is labeled "Select persona". The search hint is "Search messages, sessions, or plugins". Summary cards show duration, plugin handler calls, and responses, without counting steps.
 
 ## Command Management
 
