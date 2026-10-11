@@ -939,9 +939,9 @@ export const chatApi = {
       openApiV1.deleteChatProject({ path: { project_id: projectId } }),
     );
   },
-  listProjectSessions(projectId: string) {
+  listProjectSessions(projectId: string, params?: { page?: number; page_size?: number }) {
     return typed<any>(
-      openApiV1.listChatProjectSessions({ path: { project_id: projectId } }),
+      openApiV1.listChatProjectSessions({ path: { project_id: projectId }, query: params }),
     );
   },
   listProjectWorkspaceFiles(projectId: string, path = '') {
