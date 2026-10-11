@@ -260,6 +260,73 @@ class TestAstrBotImporter:
         assert importer.main_db is mock_main_db
         assert importer.kb_manager is mock_kb_manager
 
+    @staticmethod
+    def _kb_manager_with_session() -> MagicMock:
+        """构造带可用 async 上下文管理器链的 KnowledgeBaseManager mock。"""
+        session = AsyncMock()
+        session.add = MagicMock()
+        begin_cm = AsyncMock()
+        begin_cm.__aenter__ = AsyncMock(return_value=session)
+        begin_cm.__aexit__ = AsyncMock(return_value=None)
+        session.begin = MagicMock(return_value=begin_cm)
+
+        db_cm = AsyncMock()
+        db_cm.__aenter__ = AsyncMock(return_value=session)
+        db_cm.__aexit__ = AsyncMock(return_value=None)
+
+        kb_manager = MagicMock()
+        kb_manager.kb_insts = {}
+        kb_manager.load_kbs = AsyncMock()
+        kb_manager.kb_db = MagicMock()
+        kb_manager.kb_db.get_db = MagicMock(return_value=db_cm)
+        return kb_manager
+
+    @pytest.mark.asyncio
+    async def test_import_knowledge_bases_rejects_kb_id_escape(
+        self, mock_main_db, tmp_path
+    ):
+        """kb_id 来自备份载荷，越出 kb_root 时必须跳过而不是写入。"""
+        kb_root = tmp_path / "kb_root"
+        kb_root.mkdir()
+        importer = AstrBotImporter(
+            main_db=mock_main_db,
+            kb_manager=self._kb_manager_with_session(),
+            kb_root_dir=str(kb_root),
+        )
+        zf = MagicMock()
+        zf.namelist.return_value = []
+        result = ImportResult()
+
+        await importer._import_knowledge_bases(
+            zf, {"knowledge_bases": [{"kb_id": "../escaped_kb"}]}, result
+        )
+
+        assert any("非法" in warning for warning in result.warnings)
+        assert not (tmp_path / "escaped_kb").exists()
+
+    @pytest.mark.asyncio
+    async def test_import_knowledge_bases_keeps_valid_kb_id(
+        self, mock_main_db, tmp_path
+    ):
+        """正常 kb_id 仍应在 kb_root 下创建目录。"""
+        kb_root = tmp_path / "kb_root"
+        kb_root.mkdir()
+        importer = AstrBotImporter(
+            main_db=mock_main_db,
+            kb_manager=self._kb_manager_with_session(),
+            kb_root_dir=str(kb_root),
+        )
+        zf = MagicMock()
+        zf.namelist.return_value = []
+        result = ImportResult()
+
+        await importer._import_knowledge_bases(
+            zf, {"knowledge_bases": [{"kb_id": "good_kb"}]}, result
+        )
+
+        assert not any("非法" in warning for warning in result.warnings)
+        assert (kb_root / "good_kb").is_dir()
+
     def test_validate_version_match(self):
         """测试版本匹配验证"""
         importer = AstrBotImporter(main_db=MagicMock())

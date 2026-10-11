@@ -4,6 +4,7 @@
  */
 
 import type { ValidationResult, ValidationError, UsageReport, TranslationStats } from './types';
+import { I18nLoader } from './loader';
 
 export class I18nValidator {
   private baseLocale: string = 'zh-CN';
@@ -12,7 +13,7 @@ export class I18nValidator {
   /**
    * 验证翻译完整性
    */
-  validateCompleteness(localeData: Record<string, any>): ValidationResult {
+  validateCompleteness(localeData: Record<string, any>, locales?: string[]): ValidationResult {
     const errors: ValidationError[] = [];
     const missingKeys: string[] = [];
     const extraKeys: string[] = [];
@@ -32,8 +33,10 @@ export class I18nValidator {
     // 获取所有键
     const baseKeys = this.getAllKeys(baseData);
 
-    // 验证每种语言
-    for (const locale of this.supportedLocales) {
+    // 只遍历本次实际参与校验的语言：调用方可能只传入 supportedLocales 的子集，
+    // 按完整列表遍历会把未请求的语言误报为「数据缺失」。
+    const targets = locales ?? this.supportedLocales;
+    for (const locale of targets) {
       if (locale === this.baseLocale) continue;
 
       const targetData = localeData[locale];
@@ -356,45 +359,49 @@ export class I18nValidator {
     details: ValidationResult[];
     recommendations: string[];
   }> {
+    const loader = new I18nLoader();
+    const localeData: Record<string, any> = {};
     const results: ValidationResult[] = [];
-    
+
     for (const locale of locales) {
       try {
-        // 这里应该从实际的翻译文件中加载，暂时创建基本结构
-        const localeData = { [locale]: {} };
-        const result = this.validateCompleteness(localeData);
-        results.push(result);
-             } catch (error) {
-         console.error(`验证语言包 ${locale} 时出错:`, error);
-         // 创建错误结果
-         const errorResult: ValidationResult = {
-           isValid: false,
-           missingKeys: [],
-           extraKeys: [],
-           errors: [
-             {
-               type: 'missing',
-               key: locale,
-               message: error instanceof Error ? error.message : '未知错误',
-               severity: 'error'
-             }
-           ]
-         };
-         results.push(errorResult);
-       }
+        localeData[locale] = await loader.loadLocale(locale);
+      } catch (error) {
+        console.error(`验证语言包 ${locale} 时出错:`, error);
+        results.push({
+          isValid: false,
+          missingKeys: [],
+          extraKeys: [],
+          errors: [
+            {
+              type: 'missing',
+              key: locale,
+              message: error instanceof Error ? error.message : '未知错误',
+              severity: 'error'
+            }
+          ]
+        });
+      }
     }
-    
-        // 生成汇总报告
-    const totalKeys = results.length * 100; // 估算的总键数
+
+    // 汇总必须来自真实的校验输出
+    if (Object.keys(localeData).length > 0) {
+      // 只校验成功加载的语言；加载失败的语言已在上面的循环里单独记录
+      results.push(this.validateCompleteness(localeData, Object.keys(localeData)));
+    }
+
+    const totalKeys = this.getAllKeys(localeData[this.baseLocale] ?? {}).length;
     const missingKeys = results.reduce((sum, r) => sum + r.missingKeys.length, 0);
-    
+    const emptyValues = this.validateValues(localeData).length;
+    const invalidInterpolations = this.validateInterpolation(localeData).length;
+
     return {
       summary: {
-        totalLocales: results.length,
+        totalLocales: Object.keys(localeData).length,
         totalKeys,
         missingKeys,
-        emptyValues: 0, // 暂时设为0
-        invalidInterpolations: 0, // 暂时设为0
+        emptyValues,
+        invalidInterpolations,
         completeness: totalKeys > 0 ? ((totalKeys - missingKeys) / totalKeys) * 100 : 100
       },
       details: results,

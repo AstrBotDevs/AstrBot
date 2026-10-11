@@ -47,7 +47,10 @@ from astrbot.dashboard.server import AstrBotDashboard
 from astrbot.dashboard.services.auth_service import DASHBOARD_JWT_COOKIE_NAME
 from astrbot.dashboard.services.plugin_page_service import PluginPageService
 from astrbot.dashboard.services.plugin_service import PluginService
-from astrbot.dashboard.services.skills_service import SkillsService
+from astrbot.dashboard.services.skills_service import (
+    SkillsService,
+    SkillsServiceError,
+)
 from tests.fixtures.helpers import (
     MockPluginBuilder,
     create_mock_updater_install,
@@ -121,6 +124,57 @@ def test_skills_service_marks_inactive_plugin_skills(monkeypatch):
     assert result["skills"][1]["plugin_active"] is True
     assert result["skills"][2]["plugin_display_name"] == "Inactive Plugin"
     assert result["skills"][2]["plugin_active"] is False
+
+
+def test_skills_service_rejects_unsafe_skill_names(monkeypatch):
+    """技能名不是安全标识符时必须拒绝，不能进入路径拼接。"""
+    monkeypatch.setattr("astrbot.dashboard.services.skills_service.DEMO_MODE", False)
+    service = SkillsService(SimpleNamespace())
+
+    for name in ["../escape", "a/b", "a\\b", "", "   ", "skill name", "skill\u0000"]:
+        with pytest.raises(SkillsServiceError, match="Invalid skill name"):
+            service._validated_skill_name(name)
+
+
+def test_update_skill_rejects_path_traversal_name(monkeypatch, tmp_path):
+    """update_skill 触及 SkillManager 之前必须先完成技能名校验。"""
+    monkeypatch.setattr("astrbot.dashboard.services.skills_service.DEMO_MODE", False)
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.skills_service.SkillManager",
+        lambda: MagicMock(),
+    )
+    service = SkillsService(SimpleNamespace())
+
+    with pytest.raises(SkillsServiceError, match="Invalid skill name"):
+        service.update_skill({"name": "../escape", "active": False})
+
+
+@pytest.mark.asyncio
+async def test_delete_skill_rejects_traversal_and_missing_local_skill(
+    monkeypatch, tmp_path
+):
+    """delete_skill：越界名被标识符校验拦下，不存在的本地技能被解析拦下。"""
+    monkeypatch.setattr("astrbot.dashboard.services.skills_service.DEMO_MODE", False)
+    skills_root = tmp_path / "skills"
+    skills_root.mkdir()
+
+    skill_manager = MagicMock()
+    skill_manager.is_sandbox_only_skill.return_value = False
+    skill_manager._get_plugin_skill_dir.return_value = None
+    skill_manager.skills_root = str(skills_root)
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.skills_service.SkillManager",
+        lambda: skill_manager,
+    )
+    service = SkillsService(SimpleNamespace())
+
+    with pytest.raises(SkillsServiceError, match="Invalid skill name"):
+        await service.delete_skill({"name": "../escape"})
+
+    with pytest.raises(SkillsServiceError):
+        await service.delete_skill({"name": "does-not-exist"})
+
+    skill_manager.delete_skill.assert_not_called()
 
 
 def _removed_md5_hint_alias_key() -> str:

@@ -50,7 +50,7 @@ class CommandDescriptor:
 
 async def sync_command_configs() -> None:
     """同步指令配置，清理过期配置。"""
-    descriptors = _collect_descriptors(include_sub_commands=False)
+    descriptors = _collect_descriptors(include_sub_commands=True)
     config_records = await db_helper.get_command_configs()
     config_map = _bind_configs_to_descriptors(descriptors, config_records)
     live_handlers = {desc.handler_full_name for desc in descriptors}

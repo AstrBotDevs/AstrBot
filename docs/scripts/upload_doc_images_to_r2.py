@@ -253,17 +253,20 @@ def rewrite_markdown_files(
             url = to_url(md_file, raw, is_markdown=True)
             if not url:
                 return match.group(0)
-            return match.group(0).replace(raw, url, 1)
+            whole = match.group(0)
+            start = match.start(1) - match.start(0)
+            end = match.end(1) - match.start(0)
+            return whole[:start] + url + whole[end:]
 
         def html_repl(match: re.Match[str]) -> str:
-            quote_ch = match.group(1)
             raw = match.group(2)
             url = to_url(md_file, raw, is_markdown=False)
             if not url:
                 return match.group(0)
-            return match.group(0).replace(
-                f"src={quote_ch}{raw}{quote_ch}", f"src={quote_ch}{url}{quote_ch}", 1
-            )
+            whole = match.group(0)
+            start = match.start(2) - match.start(0)
+            end = match.end(2) - match.start(0)
+            return whole[:start] + url + whole[end:]
 
         updated = MD_IMAGE_RE.sub(md_repl, text)
         updated = HTML_IMG_RE.sub(html_repl, updated)

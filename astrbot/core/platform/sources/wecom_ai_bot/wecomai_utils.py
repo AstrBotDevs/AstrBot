@@ -106,14 +106,14 @@ def parse_session_id(formatted_session_id: str) -> tuple[str, str]:
         (会话类型, 原始会话ID)
 
     """
-    parts = formatted_session_id.split("_", 3)
+    parts = formatted_session_id.split("_", 4)
     if (
         len(parts) >= 4
         and parts[0] == "wecom"
         and parts[1] == "ai"
         and parts[2] == "bot"
     ):
-        return parts[3], "_".join(parts[4:]) if len(parts) > 4 else ""
+        return parts[3], parts[4] if len(parts) > 4 else ""
     return "user", formatted_session_id
 
 

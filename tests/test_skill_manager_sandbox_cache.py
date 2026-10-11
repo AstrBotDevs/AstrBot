@@ -170,3 +170,61 @@ def test_sandbox_and_local_path_resolution_with_show_sandbox_path_false(
     assert local_skill_path.is_relative_to(skills_root)
     assert local_skill_path == skills_root / "custom-local" / "SKILL.md"
     assert by_name["python-sandbox"].path == "/app/skills/python-sandbox/SKILL.md"
+
+
+def _make_manager(monkeypatch, tmp_path: Path) -> tuple[SkillManager, Path]:
+    data_dir = tmp_path / "data"
+    temp_dir = tmp_path / "temp"
+    skills_root = tmp_path / "skills"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    skills_root.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_data_path",
+        lambda: str(data_dir),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_temp_path",
+        lambda: str(temp_dir),
+    )
+    return SkillManager(skills_root=str(skills_root)), skills_root
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["../outside", "..", "../../etc", "/tmp/outside"],
+)
+def test_delete_skill_rejects_names_escaping_root(
+    monkeypatch, tmp_path: Path, name: str
+):
+    """技能名来自用户输入，解析后越出 skills 根目录必须拒绝（CWE-22）。"""
+    mgr, skills_root = _make_manager(monkeypatch, tmp_path)
+    _write_skill(tmp_path, "outside", "outside skill")
+    outside = tmp_path / "outside"
+
+    with pytest.raises(ValueError, match="Invalid skill name"):
+        mgr.delete_skill(name)
+
+    assert (outside / "SKILL.md").is_file()
+
+
+def test_delete_skill_rejects_symlink_escaping_root(monkeypatch, tmp_path: Path):
+    """指向外部的软链会被 resolve() 判为越界，删除必须被拒绝。"""
+    mgr, skills_root = _make_manager(monkeypatch, tmp_path)
+    _write_skill(tmp_path, "outside", "outside skill")
+    outside = tmp_path / "outside"
+    (skills_root / "linked").symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(ValueError, match="Invalid skill name"):
+        mgr.delete_skill("linked")
+
+    assert (outside / "SKILL.md").is_file()
+
+
+def test_delete_skill_removes_valid_local_skill(monkeypatch, tmp_path: Path):
+    mgr, skills_root = _make_manager(monkeypatch, tmp_path)
+    _write_skill(skills_root, "custom-local", "local description")
+
+    mgr.delete_skill("custom-local")
+
+    assert not (skills_root / "custom-local").exists()
