@@ -105,7 +105,7 @@ views/
 }
 ```
 
-`title` 会用于 WebUI 外壳标题和插件详情页中的视图组件名称，`description` 会用于插件详情页中的视图组件描述。其他字段由页面通过 bridge 自行读取：
+`title` 会用于侧边栏、WebUI 外壳标题和插件详情页中的视图组件名称，`description` 会用于插件详情页中的视图组件描述。其他字段由页面通过 bridge 自行读取：
 
 ```js
 const bridge = window.AstrBotPluginView;
