@@ -9,12 +9,12 @@
  * key is absent, which is truthy, so `t(key) || 'fallback'` never falls back and
  * the placeholder leaks into the UI. A key that is absent from *all* locales is
  * invisible to locale-vs-locale comparison (src/i18n/validator.ts), because all
- * bundles agree on the missing key. This script compares source usage against
- * the bundles, which is the only way to catch that class of defect.
+ * bundles agree on the missing key. Comparing source usage against the bundles is
+ * the only way to catch that class of defect.
  *
  * Usage:
  *   node scripts/check-i18n-keys.mjs            # exit 1 on any problem
- *   node scripts/check-i18n-keys.mjs --verbose  # also list dynamic keys
+ *   node scripts/check-i18n-keys.mjs --verbose  # list every drift key
  */
 
 import fs from 'node:fs';
@@ -91,7 +91,7 @@ function buildTree(lang) {
   return parseObj();
 }
 
-/** Flat list of leaf key paths, e.g. "core.common.cancel". */
+/** Flat list of leaf key paths, e.g. "core.common.cancel". Arrays count as leaves. */
 function leafKeys(obj, prefix = '') {
   const out = [];
   for (const [k, v] of Object.entries(obj)) {
@@ -159,6 +159,26 @@ function stripComments(src) {
   return out;
 }
 
+const CALL_RE = /\b(t|tm)\s*\(\s*(['"`])/g;
+/** `props.tm(` / `this.tm(` — a translator that arrived as a prop. */
+const INJECTED_CALL_RE = /\b(?:props|this)\.(t|tm)\s*\(\s*(['"`])/g;
+/** `tm: { type: Function, required: true }` inside defineProps / props. */
+const FN_PROP_RE = /^\s*(t|tm)\s*:\s*\{\s*type\s*:\s*Function/gm;
+/** `const { tm } = useModuleI18n('features/provider')`. */
+const MODULE_BINDING_RE = /const\s*\{([^}]*)\}\s*=\s*useModuleI18n\(\s*['"]([^'"]+)['"]\s*\)/g;
+/** `:tm="tm"` passed down to a child component. */
+const PASSTHROUGH_RE = /:?(t|tm)\s*=\s*"([A-Za-z_$][\w$]*)"/g;
+
+/** Pull the literal key that starts at `from` in `src`, or null if it is dynamic. */
+function readLiteral(src, from, quote) {
+  const end = src.indexOf(quote, from);
+  if (end === -1) return { literal: null, dynamic: false };
+  const literal = src.slice(from, end);
+  if (quote === '`' && literal.includes('${')) return { literal: null, dynamic: true };
+  if (!literal || /[\\\n]/.test(literal)) return { literal: null, dynamic: false };
+  return { literal, dynamic: false };
+}
+
 /** Collect literal translator calls plus the dynamic ones we deliberately skip. */
 function collectUsages(file, raw) {
   const src = stripComments(raw);
@@ -176,7 +196,7 @@ function collectUsages(file, raw) {
   const moduleAliases = new Map(); // local name -> module namespace
   const fullAliases = new Set();   // local names that take a full key path
 
-  for (const m of src.matchAll(/const\s*\{([^}]*)\}\s*=\s*useModuleI18n\(\s*['"]([^'"]+)['"]\s*\)/g)) {
+  for (const m of src.matchAll(MODULE_BINDING_RE)) {
     const ns = m[2].replace(/\//g, '.');
     for (const part of m[1].split(',')) {
       const [orig, alias] = part.split(':').map((s) => s.trim());
@@ -192,33 +212,69 @@ function collectUsages(file, raw) {
       if (orig === 't') fullAliases.add(local);
     }
   }
-  if (/\bthis\.t\s*\(/.test(src)) fullAliases.add('t');
+
+  // `this.t(...)` in options-API components: full-path, unless `t` in this file is
+  // a module binding, in which case it is module-relative.
+  const thisAliases = new Set();
+  const thisCalls = [...src.matchAll(/\bthis\.(t|tm)\s*\(/g)].map((m) => m[1]);
+  for (const name of thisCalls) {
+    if (moduleAliases.has(name)) thisAliases.add(name);
+    else if (name === 't') fullAliases.add('t');
+  }
 
   const usages = [];
   const lineOf = (offset) => src.slice(0, offset).split('\n').length;
-  const callRe = /\b(t|tm)\s*\(\s*(['"`])/g;
 
   let dynamic = 0;
-  for (const m of src.matchAll(callRe)) {
+  for (const m of src.matchAll(CALL_RE)) {
     const [, fn, quote] = m;
     const moduleNs = moduleAliases.get(fn);
     const isModule = moduleNs !== undefined;
     const isFull = fullAliases.has(fn);
     if (!isModule && !isFull) continue;
 
-    const start = m.index + m[0].length;
-    const end = src.indexOf(quote, start);
-    if (end === -1) continue;
-    const literal = src.slice(start, end);
+    const { literal, dynamic: isDynamic } = readLiteral(src, m.index + m[0].length, quote);
+    if (isDynamic) { dynamic++; continue; }
+    if (literal === null) continue;
 
-    // Template literal with interpolation, or a concatenated key: not statically resolvable.
-    if (quote === '`' && literal.includes('${')) { dynamic++; continue; }
-    if (!literal || /[\\\n]/.test(literal)) continue;
-
-    // A name bound from useModuleI18n() always resolves relative to that module.
     usages.push({ key: literal, module: isModule ? moduleNs : null, line: lineOf(m.index), fn });
   }
+
   return { usages, dynamic, skipped: false };
+}
+
+/**
+ * Literal keys read through a translator that arrived as a prop, e.g.
+ * `props.tm('models.metadata.image')`. These have no local binding, so the
+ * module namespace is unknown here; the caller resolves it against the parent
+ * components that pass the prop down.
+ */
+function collectInjected(file, raw) {
+  const src = stripComments(raw);
+  if (/usePluginI18n/.test(src)) return { injected: [], moduleAliases: new Map() };
+
+  const moduleAliases = new Map();
+  for (const m of src.matchAll(MODULE_BINDING_RE)) {
+    const ns = m[2].replace(/\//g, '.');
+    for (const part of m[1].split(',')) {
+      const [orig, alias] = part.split(':').map((s) => s.trim());
+      if (orig === 't' || orig === 'tm') moduleAliases.set(alias || orig, ns);
+    }
+  }
+
+  const fnProps = new Set();
+  for (const m of src.matchAll(FN_PROP_RE)) fnProps.add(m[1]);
+  for (const m of src.matchAll(/\bthis\.(t|tm)\s*\(/g)) fnProps.add(m[1]);
+
+  const injected = [];
+  for (const m of src.matchAll(INJECTED_CALL_RE)) {
+    const [, fn, quote] = m;
+    if (!fnProps.has(fn) && !moduleAliases.has(fn)) continue;
+    const { literal, dynamic: isDynamic } = readLiteral(src, m.index + m[0].length, quote);
+    if (isDynamic || literal === null) continue;
+    injected.push({ key: literal, prop: fn, line: src.slice(0, m.index).split('\n').length });
+  }
+  return { injected, moduleAliases };
 }
 
 // ---------------------------------------------------------------- run
@@ -232,39 +288,69 @@ for (const lang of LANGS) {
   leaves[lang] = leafKeys(trees[lang]);
 }
 
-const baselineKeys = new Set(leaves[BASE]);
+const allFiles = walk(SRC);
+
+// Every dotted suffix of every leaf key across all locales, e.g. both
+// `features.provider.models.metadata.image` and `models.metadata.image`. An
+// injected-translator key is judged against this, so we never have to know which
+// namespace the parent component actually supplied.
+const suffixIndex = new Set();
+for (const lang of LANGS) {
+  for (const leaf of leaves[lang]) {
+    const parts = leaf.split('.');
+    for (let i = 0; i < parts.length; i++) suffixIndex.add(parts.slice(i).join('.'));
+  }
+}
 
 // (A) code -> bundle: a key used in source but absent from some/all locales.
 const codeProblems = new Map(); // key -> { langs:Set, sites:[] }
+const unresolvedInjected = new Map(); // key -> { prop, sites:[] }
 let dynamicCount = 0;
 let scanned = 0;
 let skippedFiles = 0;
 
-for (const file of walk(SRC)) {
+for (const file of allFiles) {
   const raw = fs.readFileSync(file, 'utf8');
   const { usages, dynamic, skipped } = collectUsages(file, raw);
   if (skipped) { skippedFiles++; continue; }
   if (usages.length) scanned++;
 
+  const rel = path.relative(DASHBOARD, file).replace(/\\/g, '/');
+  const record = (full, site) => {
+    if (!codeProblems.has(full)) codeProblems.set(full, { langs: new Set(), sites: [] });
+    const rec = codeProblems.get(full);
+    site.langs.forEach((l) => rec.langs.add(l));
+    rec.sites.push(site.text);
+  };
+
   for (const u of usages) {
     const full = u.module ? `${u.module}.${u.key}` : u.key;
-    for (const lang of LANGS) {
-      if (sets[lang].has(full)) continue;
-      if (!codeProblems.has(full)) codeProblems.set(full, { langs: new Set(), sites: [] });
-      const rec = codeProblems.get(full);
-      rec.langs.add(lang);
-      rec.sites.push(`${path.relative(DASHBOARD, file).replace(/\\/g, '/')}:${u.line}  ${u.fn}('${u.key}')`);
-    }
+    const absent = new Set(LANGS.filter((l) => !sets[l].has(full)));
+    if (absent.size) record(full, { langs: absent, text: `${rel}:${u.line}  ${u.fn}('${u.key}')` });
   }
   dynamicCount += dynamic;
+
+  // Injected translators: a key is reported only when it resolves nowhere in any
+  // locale under any namespace, so this pass cannot produce false positives. The
+  // cost is that it cannot tell which namespace the parent actually supplied, so
+  // a key that exists elsewhere but not in the injected namespace is not caught.
+  const { injected } = collectInjected(file, raw);
+  for (const use of injected) {
+    if (suffixIndex.has(use.key)) continue;
+    if (LANGS.every((l) => sets[l].has(use.key))) continue;
+    const site = `${rel}:${use.line}  props.${use.prop}('${use.key}')`;
+    if (!unresolvedInjected.has(use.key)) unresolvedInjected.set(use.key, { prop: use.prop, sites: [] });
+    unresolvedInjected.get(use.key).sites.push(site);
+  }
 }
 
-// (B) bundle -> bundle: keys present in some locales but missing from others.
+// (B) bundle -> bundle: key sets must match the baseline in BOTH directions.
 const drift = [];
 for (const lang of LANGS) {
   if (lang === BASE) continue;
-  const missing = [...baselineKeys].filter((k) => !sets[lang].has(k));
-  if (missing.length) drift.push({ lang, missing });
+  const missing = [...leaves[BASE]].filter((k) => !sets[lang].has(k));
+  const extra = [...leaves[lang]].filter((k) => !sets[BASE].has(k));
+  if (missing.length || extra.length) drift.push({ lang, missing, extra });
 }
 
 // ---------------------------------------------------------------- report
@@ -290,19 +376,39 @@ if (codeProblems.size === 0) {
   console.log(`  ${codeProblems.size} key(s) affected`);
 }
 
-console.log('\n[B] locale drift (present in baseline, absent elsewhere)');
-if (drift.length === 0) {
-  console.log('  OK - all locales cover the baseline key set');
+console.log('\n[A2] keys read through an injected translator that resolve nowhere');
+if (unresolvedInjected.size === 0) {
+  console.log('  OK - every injected-translator key resolves under a plausible namespace');
 } else {
-  for (const { lang, missing } of drift) {
-    console.log(`  ${lang}: ${missing.length} keys missing`);
-    for (const k of missing.slice(0, VERBOSE ? missing.length : 10)) console.log(`      ${k}`);
-    if (!VERBOSE && missing.length > 10) console.log(`      ... and ${missing.length - 10} more (use --verbose)`);
+  failed = true;
+  for (const [key, rec] of [...unresolvedInjected].sort()) {
+    console.log(`  UNRESOLVED: ${key}   (via prop "${rec.prop}")`);
+    for (const s of [...new Set(rec.sites)]) console.log(`      ${s}`);
+  }
+  console.log(`  ${unresolvedInjected.size} key(s) affected`);
+}
+
+console.log('\n[B] locale drift (key sets must match the baseline in both directions)');
+if (drift.length === 0) {
+  console.log('  OK - all locales expose exactly the baseline key set');
+} else {
+  failed = true;
+  for (const { lang, missing, extra } of drift) {
+    if (missing.length) {
+      console.log(`  ${lang}: ${missing.length} key(s) missing vs ${BASE}`);
+      for (const k of missing.slice(0, VERBOSE ? missing.length : 10)) console.log(`      - ${k}`);
+      if (!VERBOSE && missing.length > 10) console.log(`      ... and ${missing.length - 10} more (use --verbose)`);
+    }
+    if (extra.length) {
+      console.log(`  ${lang}: ${extra.length} key(s) absent from ${BASE}`);
+      for (const k of extra.slice(0, VERBOSE ? extra.length : 10)) console.log(`      + ${k}`);
+      if (!VERBOSE && extra.length > 10) console.log(`      ... and ${extra.length - 10} more (use --verbose)`);
+    }
   }
 }
 
 if (failed) {
-  console.log('\nFAILED: add the missing keys to every locale bundle.');
+  console.log('\nFAILED: reconcile the locale bundles with source usage.');
   process.exit(1);
 }
 console.log('\nPASS');
