@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import uuid
+from pathlib import Path
 
 import lark_oapi as lark
 from lark_oapi.api.cardkit.v1 import (
@@ -35,7 +36,9 @@ from astrbot.core.utils.media_utils import (
     MediaResolver,
     convert_audio_to_opus,
     convert_video_format,
+    file_uri_to_path,
     get_media_duration,
+    is_file_uri,
 )
 from astrbot.core.utils.metrics import Metric
 
@@ -786,18 +789,23 @@ class LarkMessageEvent(AstrMessageEvent):
             RuntimeError: A proactive message cannot be delivered.
         """
         try:
-            file_path = await file_comp.get_file()
+            source = file_comp.file_ or ""
+            if is_file_uri(source):
+                source = file_uri_to_path(source)
+            if not source or not Path(source).exists():
+                source = file_comp.url or source
+            async with MediaResolver(source).as_path() as resolved:
+                file_key = await LarkMessageEvent._upload_lark_file(
+                    lark_client,
+                    path=str(resolved.path),
+                    file_type="stream",
+                    file_name=file_comp.name,
+                )
         except Exception as exc:
             logger.error("[Lark] Failed to download attachment: %s", exc)
             if not reply_message_id:
                 raise RuntimeError("[Lark] Attachment download failed") from exc
             return
-        file_key = await LarkMessageEvent._upload_lark_file(
-            lark_client,
-            path=file_path,
-            file_type="stream",
-            file_name=file_comp.name,
-        )
         if not file_key:
             if not reply_message_id:
                 raise RuntimeError("[Lark] Attachment upload failed")
