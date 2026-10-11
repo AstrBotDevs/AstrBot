@@ -1,11 +1,14 @@
+import asyncio
 import base64
 from io import BufferedReader, BytesIO
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, Mock
 
+import aiohttp
+import discord
 import pytest
 
-from astrbot.api.message_components import File, Image, Plain, Record, Video
+from astrbot.api.message_components import File, Image, Plain, Record, Reply, Video
 from astrbot.api.platform import Group, MessageType
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.sources.discord import (
@@ -25,6 +28,112 @@ _PNG_BYTES = base64.b64decode(
 )
 _WAV_BYTES = b"RIFF\x24\x00\x00\x00WAVEfmt " + b"\x00" * 16
 _WAV_PATH = "/tmp/discord_voice.wav"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source", ["resolved", "cached", "fetched"])
+async def test_discord_reply_body_reaches_model_request(source):
+    """Verify that Discord reply text reaches the model request.
+
+    Args:
+        source: Where the referenced Discord message is available.
+    """
+    from astrbot.core.astr_main_agent import _process_quote_message
+    from astrbot.core.provider.entities import ProviderRequest
+
+    adapter = DiscordPlatformAdapter.__new__(DiscordPlatformAdapter)
+    adapter.bot_self_id = "1"
+    adapter.client = SimpleNamespace(user=SimpleNamespace(id=1))
+    quoted = Mock(
+        spec=discord.Message,
+        id=41,
+        content="<@1> TEST_CODE 1008",
+        author=SimpleNamespace(id=3, display_name="original sender"),
+    )
+    channel = SimpleNamespace(
+        id=123, guild=None, fetch_message=AsyncMock(return_value=quoted)
+    )
+    message = SimpleNamespace(
+        id=42,
+        type=discord.MessageType.reply,
+        content="<@1> What is the quoted code?",
+        channel=channel,
+        author=SimpleNamespace(id=2, display_name="tester"),
+        attachments=[],
+        reference=SimpleNamespace(
+            message_id=41,
+            resolved=quoted if source == "resolved" else None,
+            cached_message=quoted if source == "cached" else None,
+        ),
+    )
+
+    abm = await adapter.convert_message({"message": message})
+    req = ProviderRequest(prompt=abm.message_str)
+    await _process_quote_message(SimpleNamespace(message_obj=abm), req, "", Mock())
+
+    assert req.prompt == "What is the quoted code?"
+    quoted_text = "\n".join(part.text for part in req.extra_user_content_parts)
+    assert quoted.content in quoted_text
+    assert quoted.author.display_name in quoted_text
+    reply = next(comp for comp in abm.message if isinstance(comp, Reply))
+    assert str(reply.sender_id) == "3"
+    if source == "fetched":
+        channel.fetch_message.assert_awaited_once_with(41)
+    else:
+        channel.fetch_message.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "case",
+    ["deleted", "non_reply", "http_error", "timeout", "disconnect", "cancelled"],
+)
+async def test_discord_unavailable_reply_preserves_current_message(case):
+    """Preserve the current message on quote failure, but propagate cancellation.
+
+    Args:
+        case: Unavailable reference or interrupted lookup scenario.
+    """
+    adapter = DiscordPlatformAdapter.__new__(DiscordPlatformAdapter)
+    adapter.bot_self_id = "1"
+    adapter.client = SimpleNamespace(user=SimpleNamespace(id=1))
+    reference = SimpleNamespace(message_id=41, resolved=None, cached_message=None)
+    errors = {
+        "http_error": discord.Forbidden(
+            SimpleNamespace(status=403, reason="Forbidden"), "Cannot read message"
+        ),
+        "timeout": asyncio.TimeoutError("Lookup timed out"),
+        "disconnect": aiohttp.ServerDisconnectedError("Connection lost"),
+        "cancelled": asyncio.CancelledError(),
+    }
+    channel = SimpleNamespace(
+        id=123, guild=None, fetch_message=AsyncMock(side_effect=errors.get(case))
+    )
+    if case == "deleted":
+        reference.resolved = discord.DeletedReferencedMessage(reference)
+    message = SimpleNamespace(
+        id=42,
+        type=discord.MessageType.default
+        if case == "non_reply"
+        else discord.MessageType.reply,
+        content="<@1> Current question",
+        channel=channel,
+        author=SimpleNamespace(id=2, display_name="tester"),
+        attachments=[],
+        reference=reference,
+    )
+
+    if case == "cancelled":
+        with pytest.raises(asyncio.CancelledError):
+            await adapter.convert_message({"message": message})
+    else:
+        abm = await adapter.convert_message({"message": message})
+        assert abm.message_str == "Current question"
+        assert abm.message == [Plain(text="Current question")]
+    if case in errors:
+        channel.fetch_message.assert_awaited_once_with(41)
+    else:
+        channel.fetch_message.assert_not_awaited()
 
 
 @pytest.mark.asyncio
