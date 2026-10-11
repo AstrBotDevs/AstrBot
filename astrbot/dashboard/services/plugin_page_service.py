@@ -482,7 +482,7 @@ class PluginPageService:
         plugin_root: Path,
         selected_dir: str,
     ) -> None:
-        """Warn once when a plugin keeps views in a directory that gets ignored.
+        """Warn once about a plugin view layout that needs migrating.
 
         Args:
             plugin: Plugin metadata owning the view directory.
@@ -490,10 +490,12 @@ class PluginPageService:
             selected_dir: The view directory name discovery selected.
 
         Note:
-            View discovery stops at the first directory in
-            ``PLUGIN_PAGE_ROOT_DIR_NAMES`` that exists, so a plugin shipping
-            both ``views/`` and ``pages/`` silently loses every view that only
-            lives under the shadowed directory.
+            Two layouts are reported. A plugin shipping both ``views/`` and
+            ``pages/`` loses every view that only lives under the shadowed
+            directory, because discovery stops at the first entry of
+            ``PLUGIN_PAGE_ROOT_DIR_NAMES`` that exists. A plugin that keeps its
+            views in ``pages/`` only still works, so it gets a migration hint
+            instead of being warned about lost views.
         """
         warn_key = f"{plugin.name}:{selected_dir}"
         if warn_key in _WARNED_VIEW_LAYOUTS:
