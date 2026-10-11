@@ -27,6 +27,24 @@ astrbot_plugin_view_demo/
 
 用户可以在 WebUI 的插件页点击插件卡片进入插件详情页，然后打开插件声明的可视化视图。
 
+### 从 Pages 迁移到 Views
+
+早期版本把插件可视化视图称为 Pages。现在统一以 `views` 为准，`pages` 仅作为兼容别名保留：
+
+| 项目 | 现在的写法 | 兼容别名 |
+| --- | --- | --- |
+| 视图目录 | `views/<view_name>/` | `pages/<view_name>/` |
+| i18n 命名空间 | `views.<view_name>.*` | `pages.<view_name>.*` |
+| bridge 全局对象 | `window.AstrBotPluginView` | `window.AstrBotPluginPage` |
+| v1 API 路由 | `/plugins/views`、`/plugins/{plugin_id}/views/{view_name}` | `/plugins/pages` 等同名别名 |
+
+> [!WARNING]
+> `views/` 和 `pages/` 同时存在时，AstrBot 只扫描 `views/`，`pages/` 下的视图会被完全忽略（出现这种情况时日志中会给出提示）。迁移时请一次性移动整个目录，不要先把内容复制一份到 `views/` 而保留原来的 `pages/`。
+
+`metadata.yaml` 中的 `views:`（旧名 `pages:`）只影响插件元数据，视图发现完全以目录扫描为准；把文件留在别的目录时，声明 `views:` 并不会让它生效。
+
+未改动的旧插件可以继续工作；新插件和维护中的插件建议统一使用 `views`。
+
 ## 开发流程
 
 1. 在插件目录下创建 `views/<view_name>/index.html`。
