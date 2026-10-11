@@ -783,7 +783,7 @@ class LarkMessageEvent(AstrMessageEvent):
         Raises:
             RuntimeError: A proactive message cannot be delivered.
         """
-        file_path = file_comp.file or ""
+        file_path = await file_comp.get_file()
         file_key = await LarkMessageEvent._upload_lark_file(
             lark_client, path=file_path, file_type="stream"
         )
