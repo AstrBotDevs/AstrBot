@@ -75,7 +75,7 @@ import {
   type MessagePart,
   type ChatThread,
 } from "@/composables/useMessages";
-import { useModuleI18n } from "@/i18n/composables";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
 import ChatMessageList from "@/components/chat/ChatMessageList.vue";
 
 const props = defineProps<{
@@ -92,6 +92,7 @@ const emit = defineEmits<{
 }>();
 
 const { tm } = useModuleI18n("features/chat");
+const { locale } = useI18n();
 const messages = ref<ChatRecord[]>([]);
 const draft = ref("");
 const sending = ref(false);
@@ -168,6 +169,7 @@ async function send() {
         body: JSON.stringify({
           message: [{ type: "plain", text }],
           flags: buildChatRequestFlags(),
+          locale: locale.value,
           selected_provider: selection.providerId,
           selected_model: selection.modelName,
         }),
