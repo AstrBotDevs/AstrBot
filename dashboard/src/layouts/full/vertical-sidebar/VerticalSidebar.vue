@@ -323,9 +323,11 @@ function toggleSidebar() {
 </template>
 
 <style scoped>
+/* Match the shell's dynamic viewport sizing so the drawer's bottom (last nav entries
+   and the Settings footer) stays above the mobile browsers' toolbar area. */
 .leftSidebar {
   top: 0 !important;
-  height: 100vh !important;
+  height: 100dvh !important;
   border-right: 0 !important;
   background: rgb(var(--v-theme-surface)) !important;
   user-select: none;
