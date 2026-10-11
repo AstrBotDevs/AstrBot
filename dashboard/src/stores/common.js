@@ -28,7 +28,6 @@ export const useCommonStore = defineStore("common", {
       // 注意：这里如果之前改过 Polyfill 的话，可能需要保持原样
       // 如果是用 fetch 的话，这里是支持 Authorization Header 的
       const headers = {
-        "Content-Type": "multipart/form-data",
         Authorization: "Bearer " + localStorage.getItem("token"),
       };
 

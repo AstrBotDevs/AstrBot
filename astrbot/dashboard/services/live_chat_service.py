@@ -575,6 +575,7 @@ class LiveChatService:
                         "persona_prompt": persona_prompt,
                         "show_reasoning": show_reasoning,
                         "flags": flags,
+                        "locale": message.get("locale"),
                         "message_id": message_id,
                         "llm_checkpoint_id": llm_checkpoint_id,
                     },

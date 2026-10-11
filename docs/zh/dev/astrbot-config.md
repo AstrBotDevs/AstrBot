@@ -10,6 +10,8 @@ AstrBot 的配置文件是一个 JSON 格式的文件。AstrBot 会在启动时�
 
 > 在 AstrBot v4.0.0 版本及之后，我们引入了[多配置文件](https://blog.astrbot.app/posts/what-is-changed-in-4.0.0/#%E5%A4%9A%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6)的概念。`data/cmd_config.json` 作为默认配置文件 `default`。其他您在 WebUI 新建的配置文件会存储在 `data/config/` 目录下，以 `abconf_` 开头。
 
+WebUI 中，按机器人或会话使用的行为配置（含文本转图像）在 `配置文件` 页面管理；全局运行、日志、网络和 WebUI 安全等配置在 `系统设置` 页面管理。模型连接和机器人连接分别在 `模型提供商` 和 `机器人` 页面管理。
+
 AstrBot 默认配置如下：
 
 ```jsonc
@@ -75,7 +77,7 @@ AstrBot 默认配置如下：
         "streaming_response": False,
         "show_tool_use_status": False,
         "streaming_segmented": False,
-        "max_agent_step": 30,
+        "max_agent_step": 128,
         "tool_call_timeout": 120,
     },
     "provider_stt_settings": {
@@ -159,7 +161,7 @@ AstrBot 默认配置如下：
 
 #### `platform_settings.unique_session`
 
-是否启用会话隔离。默认为 `false`。启用后，在群组或者频道中，每个人的对话的上下文都是独立的。
+是否启用「隔离对话」。默认为 `false`。启用后，支持隔离的渠道会为每位群成员使用独立上下文；不支持隔离的渠道仍使用原有上下文。`/new` 和 `/reset` 的权限由[指令管理设置](../use/command.md)决定，默认跟随对话是否隔离。
 
 #### `platform_settings.rate_limit`
 
@@ -174,6 +176,8 @@ AstrBot 默认配置如下：
 > 目前仅 QQ 平台适配器适用。
 
 消息转发阈值。当回复内容超过一定字数后，机器人会将消息折叠成 QQ 群聊的 “转发消息”，以防止刷屏。
+
+在 WebUI 中，选择机器人使用的配置文件，进入 `访问控制 → 白名单` 管理以下白名单设置。
 
 #### `platform_settings.enable_id_white_list`
 
@@ -366,7 +370,7 @@ Firecrawl 搜索引擎的 API Key 列表。使用 `firecrawl` 作为网页搜索
 
 #### `provider_settings.max_agent_step`
 
-Agent 最大步骤数限制。默认为 `30`。模型的每次工具调用算作一步。
+Agent 最大步骤数限制。默认为 `128`。模型的每次工具调用算作一步。
 
 #### `provider_settings.tool_call_timeout`
 
@@ -462,6 +466,8 @@ Added in `v4.3.5`
 
 管理员 ID 列表。此外，还可以使用 `/op`, `/deop` 指令来添加或删除管理员。
 
+在 WebUI 的 `配置文件` 中选择机器人使用的配置文件，再进入 `访问控制 → 管理员 → 管理员 ID` 设置。给机器人发送 `/sid` 指令以获取 `UID`。
+
 ### `t2i`
 
 是否启用文本转图像功能。默认为 `false`。启用后，当用户发送的消息超过一定字数时，机器人会将消息渲染成图片发送给用户，以提高可读性并防止刷屏。支持 Markdown 渲染。
@@ -487,7 +493,7 @@ AstrBot API 的地址。用于渲染 Markdown 图片。当 `t2i_strategy` 为 `r
 
 ### `http_proxy`
 
-HTTP 代理。如 `http://localhost:7890`。
+HTTP 代理。如 `http://localhost:7890`。Docker 部署时请填写 AstrBot 容器能访问到的地址，见 [Docker 部署](/deploy/astrbot/docker.md)。
 
 ### `no_proxy`
 
@@ -548,7 +554,7 @@ AstrBot WebUI 配置。
 
 ### `trace_enable`
 
-是否启用追踪记录。默认为 `false`。启用后，AstrBot 会记录运行追踪信息，可以在管理面板的 Trace 页面查看。
+是否启用追踪记录。默认为 `false`。启用后，AstrBot 会记录运行追踪信息，可以在管理面板的 `数据与日志 → 追踪` 页面查看。
 
 ### `pip_install_arg`
 

@@ -11,6 +11,7 @@ import {
   type BackupUploadSessionRequest,
   type BotConfigRequest,
   type BotRegistrationRequest,
+  type ChatChunkUploadRequest,
   type ChatMessagePatchRequest,
   type ChatMessageRegenerateRequest,
   type ChatProjectRequest,
@@ -19,6 +20,8 @@ import {
   type ChatSessionPatchRequest,
   type ChatThreadCreateRequest,
   type ChatThreadMessageRequest,
+  type ChatUploadInitRequest,
+  type ChatUploadSessionRequest,
   type CommandPatchRequest,
   type ConfigRouteUpsertRequest,
   type ConfigRoutesReplaceRequest,
@@ -43,6 +46,7 @@ import {
   type PluginValidateRepoRequest,
   type PluginConfigFileDeleteRequest,
   type ProviderConfigRequest,
+  type RuntimeInfo,
   type BatchSessionProviderRequest,
   type BatchSessionServiceRequest,
   type SetupAuthRequest,
@@ -120,6 +124,7 @@ export interface VersionData {
   change_pwd_hint?: boolean;
   md5_pwd_hint?: boolean;
   password_upgrade_required?: boolean;
+  runtime?: RuntimeInfo;
   [key: string]: unknown;
 }
 
@@ -151,7 +156,7 @@ export interface BotListParams {
 }
 
 export interface ProviderListParams {
-  capability?: 'chat' | 'agent' | 'stt' | 'tts' | 'embedding' | 'rerank';
+  capability?: 'chat' | 'stt' | 'tts' | 'embedding' | 'rerank';
   source_id?: string;
   enabled?: boolean;
 }
@@ -191,6 +196,11 @@ export interface ChatSessionListParams {
   username?: string;
 }
 
+export interface ChatHistoryPageParams {
+  page?: number;
+  page_size?: number;
+}
+
 export interface CronJobListParams {
   type?: string;
 }
@@ -199,7 +209,6 @@ type ProviderCapability = NonNullable<ProviderListParams['capability']>;
 
 const PROVIDER_TYPE_TO_CAPABILITY: Record<string, ProviderCapability> = {
   chat_completion: 'chat',
-  agent_runner: 'agent',
   speech_to_text: 'stt',
   text_to_speech: 'tts',
   embedding: 'embedding',
@@ -765,6 +774,9 @@ export const backupApi = {
   abortUpload(payload: BackupUploadSessionRequest) {
     return typed<OpenConfig>(openApiV1.abortBackupUpload({ body: payload }));
   },
+  statusUpload(payload: BackupUploadSessionRequest) {
+    return typed<any>(openApiV1.statusBackupUpload({ body: payload }));
+  },
   check(filename: string) {
     return typed<any>(
       openApiV1.checkBackup({ path: { filename } }),
@@ -823,9 +835,12 @@ export const chatApi = {
       }),
     );
   },
-  getSession(sessionId: string) {
+  getSession(sessionId: string, params?: ChatHistoryPageParams) {
     return typed<any>(
-      openApiV1.getChatSession({ path: { session_id: sessionId } }),
+      openApiV1.getChatSession({
+        path: { session_id: sessionId },
+        query: generatedQuery(params),
+      }),
     );
   },
   updateSession(sessionId: string, payload: ChatSessionPatchRequest) {
@@ -971,6 +986,23 @@ export const fileApi = {
     return typed<any>(
       openApiV1.uploadFile({ body: generatedFormData(formData) }),
     );
+  },
+  initUpload(payload: ChatUploadInitRequest) {
+    return typed<any>(openApiV1.initFileUpload({ body: payload }));
+  },
+  uploadChunk(formData: FormData | ChatChunkUploadRequest) {
+    return typed<any>(
+      openApiV1.uploadFileChunk({ body: generatedFormData(formData) }),
+    );
+  },
+  completeUpload(payload: ChatUploadSessionRequest) {
+    return typed<any>(openApiV1.completeFileUpload({ body: payload }));
+  },
+  abortUpload(payload: ChatUploadSessionRequest) {
+    return typed<any>(openApiV1.abortFileUpload({ body: payload }));
+  },
+  statusUpload(payload: ChatUploadSessionRequest) {
+    return typed<any>(openApiV1.statusFileUpload({ body: payload }));
   },
   getByName(filename: string) {
     return openApiV1.getFileByName({
@@ -1393,7 +1425,7 @@ export const pluginApi = {
   },
   page(pluginId: string, pageName: string) {
     return typed<any>(
-      openApiV1.getPluginPageById({
+      openApiV1.getPluginViewById({
         query: { plugin_id: pluginId, page_name: pageName },
       }) as any,
     );
@@ -1705,6 +1737,11 @@ export const personaApi = {
 };
 
 export const conversationApi = {
+  filterOptions() {
+    return typed<{ bots: Array<{ id: string; type: string }> }>(
+      openApiV1.getConversationFilterOptions(),
+    );
+  },
   list(params?: ListConversationsQuery, requestConfig?: AxiosRequestConfig) {
     return typed<any>(
       openApiV1.listConversations(

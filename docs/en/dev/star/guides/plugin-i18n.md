@@ -78,14 +78,14 @@ Corresponding `.astrbot-plugin/i18n/zh-CN.json`:
 
 `options` are stored configuration values and should usually not be translated. Use `labels` for select display text.
 
-## Plugin Pages
+## Plugin Views
 
-`pages` overrides plugin Dashboard Page titles, descriptions, and custom text inside plugin pages. The structure is nested by Page directory name.
+`views` overrides plugin Dashboard View titles, descriptions, and custom text inside plugin views (`pages` is accepted as an alias). The structure is nested by view directory name.
 
-Example plugin page directory:
+Example plugin view directory:
 
 ```text
-pages/
+views/
   settings/
     index.html
 ```
@@ -94,7 +94,7 @@ Corresponding `.astrbot-plugin/i18n/en-US.json`:
 
 ```json
 {
-  "pages": {
+  "views": {
     "settings": {
       "title": "Settings",
       "description": "Manage advanced settings for this plugin.",
@@ -105,14 +105,14 @@ Corresponding `.astrbot-plugin/i18n/en-US.json`:
 }
 ```
 
-`title` is used by the WebUI shell title and the Page component name on the plugin detail page. `description` is used by the Page component description on the plugin detail page. Other fields are read by the page through the bridge:
+`title` is used by the WebUI shell title and the view component name on the plugin detail page. `description` is used by the view component description on the plugin detail page. Other fields are read by the page through the bridge:
 
 ```js
-const bridge = window.AstrBotPluginPage;
+const bridge = window.AstrBotPluginView;
 
 function render() {
   document.getElementById("save").textContent = bridge.t(
-    "pages.settings.save",
+    "views.settings.save",
     "Save",
   );
 }

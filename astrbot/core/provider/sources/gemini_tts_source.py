@@ -28,7 +28,9 @@ class ProviderGeminiTTSAPI(TTSProvider):
         api_key: str = provider_config.get("gemini_tts_api_key", "")
         api_base: str | None = provider_config.get("gemini_tts_api_base")
         timeout: int = int(provider_config.get("gemini_tts_timeout", 20))
-        http_options = types.HttpOptions(timeout=timeout * 1000)
+        http_options = types.HttpOptions(
+            timeout=timeout * 1000, headers=self.request_headers
+        )
 
         if api_base:
             api_base = api_base.removesuffix("/")
@@ -39,6 +41,8 @@ class ProviderGeminiTTSAPI(TTSProvider):
             logger.info(f"[Gemini TTS] 使用代理: {proxy}")
 
         self.client = genai.Client(api_key=api_key, http_options=http_options).aio
+        # The SDK adds its own lower-case UA alongside our explicit header.
+        self.client._api_client._http_options.headers.pop("user-agent", None)
         self.model: str = provider_config.get(
             "gemini_tts_model",
             "gemini-2.5-flash-preview-tts",
