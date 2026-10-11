@@ -15,7 +15,6 @@ import aiofiles
 import jwt
 from aiofiles import ospath as aio_ospath
 
-from astrbot.core import logger
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.star.star import StarMetadata
@@ -28,9 +27,6 @@ PLUGIN_PAGE_ASSET_TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60
 # Directory names that hold plugin views inside a plugin package, in
 # preference order. "views" is preferred; "pages" stays as an alias.
 PLUGIN_PAGE_ROOT_DIR_NAMES = ("views", "pages")
-# View discovery runs again on every plugin list request, so a legacy view
-# layout is reported at most once per plugin and process.
-_WARNED_VIEW_LAYOUTS: set[str] = set()
 PLUGIN_PAGE_ENTRY_FILE_NAME = "index.html"
 PLUGIN_PAGE_BRIDGE_FILE = (
     Path(__file__).resolve().parent.parent / "plugin_page_bridge.js"
@@ -472,61 +468,8 @@ class PluginPageService:
             if pages_root == plugin_root:
                 continue
             if await aio_ospath.isdir(str(pages_root)):
-                await self._warn_legacy_view_layout(plugin, plugin_root, dir_name)
                 return pages_root
         raise FileNotFoundError("Plugin views root directory does not exist")
-
-    async def _warn_legacy_view_layout(
-        self,
-        plugin: StarMetadata,
-        plugin_root: Path,
-        selected_dir: str,
-    ) -> None:
-        """Warn once about a plugin view layout that needs migrating.
-
-        Args:
-            plugin: Plugin metadata owning the view directory.
-            plugin_root: Plugin root directory.
-            selected_dir: The view directory name discovery selected.
-
-        Note:
-            Two layouts are reported. A plugin shipping both ``views/`` and
-            ``pages/`` loses every view that only lives under the shadowed
-            directory, because discovery stops at the first entry of
-            ``PLUGIN_PAGE_ROOT_DIR_NAMES`` that exists. A plugin that keeps its
-            views in ``pages/`` only still works, so it gets a migration hint
-            instead of being warned about lost views.
-        """
-        warn_key = f"{plugin.name}:{selected_dir}"
-        if warn_key in _WARNED_VIEW_LAYOUTS:
-            return
-        _WARNED_VIEW_LAYOUTS.add(warn_key)
-
-        shadowed = [
-            dir_name
-            for dir_name in PLUGIN_PAGE_ROOT_DIR_NAMES
-            if dir_name != selected_dir
-            and await aio_ospath.isdir(str(plugin_root / dir_name))
-        ]
-        if shadowed:
-            logger.warning(
-                "Plugin %s ships both %s/ and %s/. Only %s/ is scanned, so every view "
-                "under %s/ is ignored; move the views instead of copying them.",
-                plugin.name,
-                selected_dir,
-                shadowed[0],
-                selected_dir,
-                shadowed[0],
-            )
-        elif selected_dir != PLUGIN_PAGE_ROOT_DIR_NAMES[0]:
-            logger.warning(
-                "Plugin %s still keeps its views in %s/. %s/ is the preferred "
-                "directory and %s/ remains supported as an alias.",
-                plugin.name,
-                selected_dir,
-                PLUGIN_PAGE_ROOT_DIR_NAMES[0],
-                selected_dir,
-            )
 
     async def discover_plugin_pages(self, plugin: StarMetadata) -> list[PluginPage]:
         try:

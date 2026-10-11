@@ -39,7 +39,7 @@ Earlier versions called plugin views Pages. `views` is now canonical, with `page
 | v1 API routes | `/plugins/views`, `/plugins/{plugin_id}/views/{view_name}` | `/plugins/pages` and the matching aliases |
 
 > [!WARNING]
-> When both `views/` and `pages/` exist, AstrBot only scans `views/` and every view under `pages/` is ignored; the log points this out when it happens. Move the whole directory in one step instead of copying the contents into `views/` while keeping the original `pages/` around.
+> When both `views/` and `pages/` exist, AstrBot only scans `views/` and every view under `pages/` is ignored. Move the whole directory in one step instead of copying the contents into `views/` while keeping the original `pages/` around.
 
 A `views:` declaration (`pages:` in older plugins) in `metadata.yaml` only feeds plugin metadata. View discovery is driven purely by directory scanning, so declaring `views:` never makes a view under another directory work.
 

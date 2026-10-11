@@ -39,7 +39,7 @@ astrbot_plugin_view_demo/
 | v1 API 路由 | `/plugins/views`、`/plugins/{plugin_id}/views/{view_name}` | `/plugins/pages` 等同名别名 |
 
 > [!WARNING]
-> `views/` 和 `pages/` 同时存在时，AstrBot 只扫描 `views/`，`pages/` 下的视图会被完全忽略（出现这种情况时日志中会给出提示）。迁移时请一次性移动整个目录，不要先把内容复制一份到 `views/` 而保留原来的 `pages/`。
+> `views/` 和 `pages/` 同时存在时，AstrBot 只扫描 `views/`，`pages/` 下的视图会被完全忽略。迁移时请一次性移动整个目录，不要先把内容复制一份到 `views/` 而保留原来的 `pages/`。
 
 `metadata.yaml` 中的 `views:`（旧名 `pages:`）只影响插件元数据，视图发现完全以目录扫描为准；把文件留在别的目录时，声明 `views:` 并不会让它生效。
 
