@@ -36,6 +36,7 @@ from astrbot.core.utils.io import download_file
 from astrbot.core.utils.media_utils import MediaResolver
 
 from .tg_event import TelegramPlatformEvent
+from .tg_request import TelegramPollingRequest
 
 if sys.version_info >= (3, 12):
     from typing import override
@@ -139,6 +140,11 @@ class TelegramPlatformAdapter(Platform):
             .token(self.config["telegram_token"])
             .base_url(self.base_url)
             .base_file_url(self.file_base_url)
+            .get_updates_request(
+                TelegramPollingRequest(
+                    self._polling_recovery_requested, self._polling_recovery_threshold
+                )
+            )
             .build()
         )
         message_handler = TelegramMessageHandler(
@@ -267,6 +273,7 @@ class TelegramPlatformAdapter(Platform):
                     continue
 
                 if not self._terminating:
+                    await asyncio.sleep(self._polling_restart_delay)
                     logger.info("Telegram polling restarted with a fresh client.")
                     continue
             except asyncio.CancelledError:
