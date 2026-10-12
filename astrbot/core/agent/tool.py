@@ -224,8 +224,10 @@ class ToolSet:
         for tool in self.tools:
             input_schema = {"type": "object"}
             if tool.parameters:
-                input_schema["properties"] = tool.parameters.get("properties", {})
-                input_schema["required"] = tool.parameters.get("required", [])
+                # Preserve reference targets and all other JSON Schema constraints.
+                input_schema.update(copy.deepcopy(tool.parameters))
+                input_schema.setdefault("properties", {})
+                input_schema.setdefault("required", [])
             tool_def = {"name": tool.name, "input_schema": input_schema}
             if tool.description:
                 tool_def["description"] = tool.description
