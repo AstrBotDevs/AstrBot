@@ -136,7 +136,7 @@ const traceRows = computed(() => filteredEvents.value.map((event) => ({
 
 const traceHeaders = computed(() => [
   { title: tm("columns.status"), key: "status", width: 120 },
-  { title: tm("columns.platform"), key: "platform", width: 80 },
+  { title: tm("columns.platform"), key: "platform", width: 112, minWidth: 112, headerProps: { class: "text-no-wrap" } },
   { title: tm("columns.timestamp"), key: "timestamp", width: 160 },
   { title: tm("columns.duration"), key: "duration", width: 120 },
   { title: tm("columns.message"), key: "message", minWidth: 240 },

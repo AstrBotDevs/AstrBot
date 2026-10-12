@@ -114,6 +114,12 @@ test("Vuetify datatable keeps the requested columns and explicit detail selectio
     "columns.status", "columns.platform", "columns.timestamp",
     "columns.duration", "columns.message", "UMO", "columns.sender", "Spans",
   ]);
+  const platformHeader = state.traceHeaders.value.find((header) => header.key === "platform");
+  assert.equal(platformHeader.width, 112);
+  assert.equal(platformHeader.minWidth, 112);
+  assert.equal(platformHeader.headerProps.class, "text-no-wrap");
+  const zh = JSON.parse(readFileSync(new URL("../src/i18n/locales/zh-CN/features/trace.json", import.meta.url), "utf8"));
+  assert.equal(zh.columns.duration, "时长");
   assert.match(descriptor.template.content, /<v-data-table/);
   assert.match(descriptor.template.content, /item-value="event.span_id"/);
   assert.match(descriptor.template.content, /:items-per-page="-1"/);

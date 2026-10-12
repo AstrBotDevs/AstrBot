@@ -43,7 +43,7 @@
     "updateFailed": "切换追踪记录失败，请重试"
   },
   "columns": {
-    "duration": "运行时间",
+    "duration": "时长",
     "status": "状态",
     "platform": "平台",
     "timestamp": "时间戳",

@@ -21,3 +21,4 @@
 - Remove the outer gray trace card and tinted list shell, using a flat tab layout with toolbar/table separators in both themes.
 - Top hint and separate recording switch → a toolbar Start/Pause/Connecting button. Filters, recording, and refresh share gray icon-and-text styling and 36px input height; search fills available width and includes the message count in its placeholder.
 - Use Vuetify datatable with native rows, typography, spacing, and hover styling for the trace list; customize individual cells while retaining fixed headers, stable trace row IDs, keyboard activation, and explicit detail selection without adding pagination or automatic selection.
+- Shorten the Chinese duration column label and prevent the platform column header from wrapping with a minimum width.
