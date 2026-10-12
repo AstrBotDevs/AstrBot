@@ -219,11 +219,22 @@ class ToolSet:
         return result
 
     def anthropic_schema(self) -> list[dict]:
-        """Convert tools to Anthropic API format."""
+        """Convert tools to Anthropic API format.
+
+        Returns:
+            Tool definitions with object input schemas.
+
+        Raises:
+            ValueError: If a tool explicitly declares a non-object root type.
+        """
         result = []
         for tool in self.tools:
             input_schema = {"type": "object"}
             if tool.parameters:
+                if tool.parameters.get("type", "object") != "object":
+                    raise ValueError(
+                        f"Anthropic tool '{tool.name}' input schema must have an object root."
+                    )
                 # Preserve reference targets and all other JSON Schema constraints.
                 input_schema.update(copy.deepcopy(tool.parameters))
                 input_schema.setdefault("properties", {})
