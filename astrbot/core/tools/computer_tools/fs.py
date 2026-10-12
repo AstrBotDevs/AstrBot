@@ -346,7 +346,7 @@ def _context_supports_image(context: ContextWrapper[AstrAgentContext]) -> bool:
 async def _caption_image_fallback(
     context: ContextWrapper[AstrAgentContext],
     image_ref: str,
-) -> ToolExecResult:
+) -> str | None:
     """Describe an image as text using the configured caption provider.
 
     Args:
@@ -355,8 +355,9 @@ async def _caption_image_fallback(
             local file path or a ``data:image/...;base64,`` URI.
 
     Returns:
-        The image description, or an error message when captioning is not
-        possible.
+        The image description, or None when captioning is not possible. The
+        reason is logged only; callers must keep the raw image on None so the
+        agent runner can still cache it and hand the model a usable file path.
     """
     from astrbot.core.provider.provider import Provider
 
@@ -373,11 +374,10 @@ async def _caption_image_fallback(
         provider_settings.get("default_image_caption_provider_id", "") or ""
     ).strip()
     if not caption_provider_id:
-        return (
-            "Error: your provider does not support image modality and no image "
-            "caption provider is configured. Please set "
-            "provider_settings.default_image_caption_provider_id."
+        logger.debug(
+            "[ImageFallback] No image caption provider configured; keeping the raw image."
         )
+        return None
 
     pm = context.context.context.provider_manager
     try:
@@ -390,11 +390,11 @@ async def _caption_image_fallback(
         caption_provider = None
 
     if not isinstance(caption_provider, Provider):
-        return (
-            "Error: your provider does not support image modality and the "
-            f"configured image caption provider `{caption_provider_id}` is not "
-            "available. Unable to read image file."
+        logger.warning(
+            f"[ImageFallback] Image caption provider `{caption_provider_id}` is "
+            "unavailable; keeping the raw image."
         )
+        return None
 
     caption_prompt = str(
         provider_settings.get("image_caption_prompt", "Please describe the image.")
@@ -407,11 +407,12 @@ async def _caption_image_fallback(
         )
     except Exception as exc:
         logger.error(f"[ImageFallback] Image captioning failed: {exc}")
-        return f"Error: failed to generate image description: {exc}"
+        return None
 
     caption = (getattr(llm_resp, "completion_text", None) or "").strip()
     if not caption:
-        return "Error: image caption provider returned an empty description."
+        logger.warning("[ImageFallback] Image caption provider returned empty text.")
+        return None
     return f"[Image description]: {caption}"
 
 
@@ -544,7 +545,27 @@ class FileReadTool(FunctionTool):
                         mime = item.mimeType or "image/jpeg"
                         image_ref = f"data:{mime};base64,{item.data}"
                         break
-                return await _caption_image_fallback(context, image_ref)
+                caption = await _caption_image_fallback(context, image_ref)
+                if caption is not None:
+                    return caption
+                # Captioning was not possible. Keep the raw image so the agent
+                # runner still caches it and hands the model a usable path, and
+                # attach the reason as an extra text part.
+                result = mcp.types.CallToolResult(
+                    content=[
+                        *result.content,
+                        mcp.types.TextContent(
+                            type="text",
+                            text=(
+                                "[Image caption unavailable] The model selected for "
+                                "this turn cannot read images, and no image caption "
+                                "provider produced a description. Set "
+                                "provider_settings.default_image_caption_provider_id "
+                                "to receive a text description of image files."
+                            ),
+                        ),
+                    ]
+                )
 
             return result
         except IsADirectoryError:

@@ -11,7 +11,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from mcp.types import CallToolResult, ImageContent
+from mcp.types import CallToolResult, ImageContent, TextContent
 from PIL import Image
 
 from astrbot.core.agent.run_context import ContextWrapper
@@ -950,10 +950,11 @@ async def test_file_read_tool_captions_image_when_model_lacks_image_modality(
 
 
 @pytest.mark.asyncio
-async def test_file_read_tool_reports_missing_caption_provider(
+async def test_file_read_tool_keeps_image_when_no_caption_provider_configured(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ):
+    """Without a caption provider the raw image must be preserved for the runner."""
     workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
     Image.new("RGB", (32, 16), color=(0, 255, 0)).save(
         workspace / "sample.png", format="PNG"
@@ -967,9 +968,62 @@ async def test_file_read_tool_reports_missing_caption_provider(
         path="sample.png",
     )
 
-    assert isinstance(result, str)
-    assert "does not support image modality" in result
-    assert "default_image_caption_provider_id" in result
+    assert isinstance(result, CallToolResult)
+    assert any(isinstance(item, ImageContent) for item in result.content)
+    note = next(item for item in result.content if isinstance(item, TextContent))
+    assert "default_image_caption_provider_id" in note.text
+
+
+@pytest.mark.asyncio
+async def test_file_read_tool_keeps_image_when_caption_provider_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    """A configured but missing caption provider must not swallow the image."""
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+    Image.new("RGB", (32, 16), color=(255, 255, 0)).save(
+        workspace / "sample.png", format="PNG"
+    )
+
+    result = await fs_tools.FileReadTool().call(
+        _make_vision_fallback_context(
+            modalities=["text"],
+            caption_provider_id="vision-1",
+            caption_provider=None,
+        ),
+        path="sample.png",
+    )
+
+    assert isinstance(result, CallToolResult)
+    assert any(isinstance(item, ImageContent) for item in result.content)
+    note = next(item for item in result.content if isinstance(item, TextContent))
+    assert "default_image_caption_provider_id" in note.text
+
+
+@pytest.mark.asyncio
+async def test_file_read_tool_keeps_image_when_caption_is_empty(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    """An empty caption must not replace the image with nothing useful."""
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+    Image.new("RGB", (32, 16), color=(0, 255, 255)).save(
+        workspace / "sample.png", format="PNG"
+    )
+    caption_provider = _make_caption_provider("")
+
+    result = await fs_tools.FileReadTool().call(
+        _make_vision_fallback_context(
+            modalities=["text"],
+            caption_provider_id="vision-1",
+            caption_provider=caption_provider,
+        ),
+        path="sample.png",
+    )
+
+    caption_provider.text_chat.assert_awaited_once()
+    assert isinstance(result, CallToolResult)
+    assert any(isinstance(item, ImageContent) for item in result.content)
 
 
 @pytest.mark.asyncio
