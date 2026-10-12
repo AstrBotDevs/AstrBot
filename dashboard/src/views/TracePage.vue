@@ -1,15 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { onMounted, ref } from "vue";
 import { Waypoints } from "@lucide/vue";
-import { useTheme } from "vuetify";
 import TraceDisplayer from "@/components/shared/TraceDisplayer.vue";
 import { traceApi } from "@/api/v1";
 import { useModuleI18n } from "@/i18n/composables";
 
 const { tm } = useModuleI18n("features/trace");
-const theme = useTheme();
-
-const isDark = computed(() => theme.global.current.value.dark);
 const traceEnabled = ref(true);
 const loading = ref(false);
 const traceDisplayerKey = ref(0);
@@ -42,63 +38,47 @@ onMounted(fetchTraceSettings);
 </script>
 
 <template>
-  <div class="trace-page" :class="{ 'is-dark': isDark }">
-    <section class="trace-card">
-      <div class="trace-toolbar">
-        <div class="trace-hint">
-          <Waypoints :size="16" :stroke-width="1.8" aria-hidden="true" />
-          <span>{{ tm("hint") }}</span>
-        </div>
-        <v-switch
-          v-model="traceEnabled"
-          :loading="loading"
-          :disabled="loading"
-          :aria-label="tm('toggleLabel')"
-          color="primary"
-          hide-details
-          density="compact"
-          inset
-          @update:model-value="updateTraceSettings"
-        >
-          <template #label>
-            <span class="switch-label">
-              {{ traceEnabled ? tm("recording") : tm("paused") }}
-            </span>
-          </template>
-        </v-switch>
+  <div class="trace-page">
+    <div class="trace-toolbar">
+      <div class="trace-hint">
+        <Waypoints :size="16" :stroke-width="1.8" aria-hidden="true" />
+        <span>{{ tm("hint") }}</span>
       </div>
-      <div class="trace-body">
-        <TraceDisplayer :key="traceDisplayerKey" />
-      </div>
-    </section>
+      <v-switch
+        v-model="traceEnabled"
+        :loading="loading"
+        :disabled="loading"
+        :aria-label="tm('toggleLabel')"
+        color="primary"
+        hide-details
+        density="compact"
+        inset
+        @update:model-value="updateTraceSettings"
+      >
+        <template #label>
+          <span class="switch-label">
+            {{ traceEnabled ? tm("recording") : tm("paused") }}
+          </span>
+        </template>
+      </v-switch>
+    </div>
+    <div class="trace-body">
+      <TraceDisplayer :key="traceDisplayerKey" />
+    </div>
   </div>
 </template>
 
 <style scoped>
 .trace-page {
-  --trace-card: #f5f6f7;
-
+  display: flex;
+  flex-direction: column;
   height: calc(100dvh - 112px);
   margin: 0 auto;
   max-width: 1560px;
   min-height: 0;
+  overflow: hidden;
   padding: 0 12px 8px;
   width: 100%;
-}
-
-.trace-page.is-dark {
-  --trace-card: rgba(var(--v-theme-on-surface), 0.06);
-}
-
-.trace-card {
-  background: var(--trace-card);
-  border-radius: 16px;
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-  overflow: hidden;
-  padding: 12px;
 }
 
 .trace-toolbar {
@@ -143,11 +123,6 @@ onMounted(fetchTraceSettings);
 @media (max-width: 800px) {
   .trace-page {
     padding: 0 4px 6px;
-  }
-
-  .trace-card {
-    border-radius: 14px;
-    padding: 10px;
   }
 
   .trace-toolbar {

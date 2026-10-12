@@ -4,7 +4,7 @@ import test from "node:test";
 import vm from "node:vm";
 import ts from "typescript";
 import { computed, nextTick, reactive, ref, watch } from "vue";
-import { parse } from "vue/compiler-sfc";
+import { compileStyle, compileTemplate, parse } from "vue/compiler-sfc";
 
 const source = readFileSync(new URL("../src/components/shared/TraceDisplayer.vue", import.meta.url), "utf8");
 const { descriptor } = parse(source);
@@ -119,4 +119,16 @@ test("list columns follow the requested order and the inspector has an explicit 
   assert.match(descriptor.template.content, /tm\('closeDetails'\)/);
   assert.match(descriptor.template.content, /@keydown.enter="selectEvent\(event.span_id\)"/);
   assert.match(descriptor.scriptSetup.content, /clearInterval\(durationTimer.value\)/);
+});
+
+test("trace tab stays flat without outer cards or a tinted list container", () => {
+  const page = parse(readFileSync(new URL("../src/views/TracePage.vue", import.meta.url), "utf8")).descriptor;
+  assert.doesNotMatch(page.template.content, /trace-card/);
+  assert.doesNotMatch(page.styles[0].content, /--trace-card|\.trace-card/);
+  const explorer = descriptor.styles[0].content.match(/\.trace-explorer\s*\{([^}]+)\}/)[1];
+  assert.match(explorer, /background:\s*transparent/);
+  assert.match(explorer, /border:\s*0/);
+  assert.match(explorer, /border-radius:\s*0/);
+  assert.deepEqual(compileTemplate({ source: page.template.content, filename: "TracePage.vue", id: "trace-flat" }).errors, []);
+  assert.deepEqual(compileStyle({ source: page.styles[0].content, filename: "TracePage.vue", id: "trace-flat", scoped: true }).errors, []);
 });

@@ -742,7 +742,7 @@ onBeforeUnmount(() => {
 .timeline-group-expansion svg { transition: transform 0.15s ease; }
 .timeline-group-expansion .is-collapsed { transform: rotate(-90deg); }
 .timeline-nested .timeline-content { border-left: 2px solid var(--trace-border); padding-left: 10px; }
-.trace-explorer { --trace-border: rgba(var(--v-theme-on-surface), 0.1); --trace-muted: rgba(var(--v-theme-on-surface), 0.58); background: rgba(var(--v-theme-on-surface), 0.025); border: 1px solid var(--trace-border); border-radius: 12px; display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; }
+.trace-explorer { --trace-border: rgba(var(--v-theme-on-surface), 0.1); --trace-muted: rgba(var(--v-theme-on-surface), 0.58); background: transparent; border: 0; border-radius: 0; display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; }
 .trace-explorer-toolbar { align-items: center; border-bottom: 1px solid var(--trace-border); display: flex; gap: 10px; min-height: 50px; padding: 8px 12px; }
 .filter-toggle-btn { flex: 0 0 auto; }
 .filter-toggle-btn :deep(.v-btn__content) { gap: 5px; }

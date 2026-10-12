@@ -18,3 +18,4 @@
 - Record only the final streaming-response summary, excluding adapter chunks and protocol closing frames while retaining independent tool/plugin replies.
 - Keep the existing in-memory trace storage; no new database persistence.
 - Show execution mode, plugin names, and response ownership as timeline chips. Reuse profile runner labels and classify built-in Agent replies as system/core while preserving plugin senders.
+- Remove the outer gray trace card and tinted list shell, using a flat tab layout with toolbar/table separators in both themes.
