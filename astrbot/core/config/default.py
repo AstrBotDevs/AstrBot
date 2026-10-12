@@ -1389,6 +1389,18 @@ CONFIG_METADATA_2 = {
                         "custom_headers": {},
                         "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
                     },
+                    "OpenCode Go": {
+                        "id": "opencode-go",
+                        "provider": "opencode",
+                        "type": "opencode_go_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://opencode.ai/zen/go/v1",
+                        "timeout": 120,
+                        "proxy": "",
+                        "custom_headers": {},
+                    },
                     "Moonshot": {
                         "id": "moonshot",
                         "provider": "moonshot",
