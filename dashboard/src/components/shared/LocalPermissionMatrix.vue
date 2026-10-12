@@ -1,94 +1,79 @@
 <template>
-  <div class="local-permission-matrix" :class="{ 'local-permission-matrix--simple': unsupported }">
+  <div class="local-permission-matrix" :class="{ 'local-permission-matrix--without-network': isolationUnavailable }">
     <v-progress-linear v-if="runtimeLoading && !runtime" indeterminate color="primary" />
     <v-alert v-else-if="!runtime" type="warning" variant="tonal" density="compact">
       {{ tm('runtimeUnknown') }}
-    </v-alert>
-    <dl v-else class="runtime-info">
-      <div>
-        <dt><Monitor :size="14" aria-hidden="true" />{{ tm('runtime.os') }}</dt>
-        <dd>{{ { linux: 'Linux', darwin: 'macOS', windows: 'Windows' }[runtime.os] || runtime.os }}</dd>
-      </div>
-      <div>
-        <dt><Cpu :size="14" aria-hidden="true" />{{ tm('runtime.arch') }}</dt>
-        <dd>{{ runtime.arch || '—' }}</dd>
-      </div>
-      <div :class="{ 'runtime-info--warning': sandboxUnavailable }">
-        <dt>
-          <component
-            :is="sandboxUnavailable ? ShieldAlert : unsupported ? ShieldOff : Shield"
-            :size="14"
-            :class="sandboxUnavailable ? 'text-warning' : unsupported ? '' : 'text-primary'"
-            aria-hidden="true"
-          />
-          {{ tm('runtime.sandbox') }}
-        </dt>
-        <dd>
-          {{ tm(`runtime.status.${runtime.sandbox.status}`, {
-            backend: runtime.sandbox.backend === 'seatbelt' ? 'Seatbelt' : 'bubblewrap',
-            dependency: runtime.sandbox.backend === 'seatbelt' ? 'sandbox-exec' : 'bwrap'
-          }) }}
-        </dd>
-      </div>
-    </dl>
-
-    <v-alert v-if="runtime?.sandbox?.status === 'unavailable'" type="warning" variant="tonal" density="compact">
-      <div>{{ tm('runtime.unavailableHint') }}</div>
-      <div v-if="runtime.sandbox.error" class="sandbox-error mt-2">{{ runtime.sandbox.error }}</div>
     </v-alert>
 
     <v-table class="permission-table">
       <thead>
         <tr>
           <th scope="col">{{ tm('role') }}</th>
-          <th v-if="unsupported" scope="col">{{ tm('accessMode') }}</th>
-          <template v-else>
-            <th scope="col" class="text-center">{{ tm('execution') }}</th>
-            <th scope="col" class="text-center">{{ tm('network') }}</th>
-            <th scope="col" class="text-center">{{ tm('filesystem') }}</th>
-          </template>
+          <th scope="col" class="text-center">{{ tm('execution') }}</th>
+          <th v-if="!isolationUnavailable" scope="col" class="text-center">{{ tm('network') }}</th>
+          <th scope="col" class="text-center">{{ tm('filesystem') }}</th>
         </tr>
       </thead>
       <tbody>
         <tr v-for="role in roles" :key="role" :aria-label="tm(`roles.${role}`)">
           <th scope="row">{{ tm(`roles.${role}`) }}</th>
-          <td v-if="unsupported">
+          <td>
+            <v-tooltip
+              location="top"
+              :disabled="!isolationUnavailable || policy(role).filesystem_scope !== 'workspace'"
+              :text="executionUnavailableHint"
+            >
+              <template #activator="{ props: tooltipProps }">
+                <span
+                  v-bind="tooltipProps"
+                  class="execution-control"
+                  :tabindex="isolationUnavailable && policy(role).filesystem_scope === 'workspace' ? 0 : undefined"
+                >
+                  <v-checkbox-btn
+                    :model-value="policy(role).allow_execution && !permissionLocks[role].execution"
+                    :disabled="permissionLocks[role].execution"
+                    :aria-label="`${tm(`roles.${role}`)} · ${tm('execution')}`"
+                    color="primary"
+                    density="compact"
+                    @update:model-value="updatePermission(role, { allow_execution: Boolean($event) })"
+                  />
+                </span>
+              </template>
+            </v-tooltip>
+          </td>
+          <td v-if="!isolationUnavailable">
+            <v-checkbox-btn
+              :model-value="policy(role).allow_network"
+              :disabled="permissionLocks[role].network"
+              :aria-label="`${tm(`roles.${role}`)} · ${tm('network')}`"
+              color="primary"
+              density="compact"
+              @update:model-value="updatePermission(role, { allow_network: Boolean($event) })"
+            />
+          </td>
+          <td>
             <v-select
-              :model-value="accessModes[role]"
+              :model-value="policy(role).filesystem_scope"
               :items="[
                 { title: tm('modes.none'), value: 'none' },
-                { title: tm('modes.files'), value: 'files' },
-                { title: tm('modes.full'), value: 'full' }
+                { title: tm('scopes.workspace'), value: 'workspace', props: { disabled: unsupported } },
+                { title: tm('scopes.host'), value: 'host' }
               ]"
-              :placeholder="tm('unsupportedSelection')"
-              :aria-label="`${tm(`roles.${role}`)} · ${tm('accessMode')}`"
-              persistent-placeholder
-              hide-details
+              :disabled="!runtime"
+              :aria-label="`${tm(`roles.${role}`)} · ${tm('filesystem')}`"
               variant="outlined"
               density="compact"
-              :color="accessModes[role] === 'full' ? 'warning' : 'primary'"
+              hide-details
               :menu-props="{ rounded: 'lg', maxWidth: 420 }"
-              @update:model-value="updatePermission(role, accessPolicies[$event])"
+              @update:model-value="updatePermission(role, { filesystem_scope: $event })"
             >
-              <template #prepend-inner>
-                <component
-                  :is="accessIcons[accessModes[role]]"
-                  v-if="accessModes[role]"
-                  :size="18"
-                  :class="accessModes[role] === 'full' ? 'text-warning' : 'text-medium-emphasis'"
-                  aria-hidden="true"
-                />
-              </template>
               <template #item="{ props: itemProps, item }">
-                <v-list-item v-bind="itemProps" :lines="false" role="option" :aria-selected="accessModes[role] === item.value">
-                  <template #prepend>
-                    <component :is="accessIcons[item.value]" :size="18" class="mr-3" aria-hidden="true" />
-                  </template>
+                <v-list-item v-bind="itemProps" :lines="false" role="option" :aria-selected="policy(role).filesystem_scope === item.value">
                   <template #subtitle>
                     <div class="scope-hint">
-                      {{ tm(item.value === 'none' ? 'scopeHints.none' : 'scopeHints.host') }}
+                      {{ tm(unsupported && item.value === 'workspace' ? 'scopeHints.workspaceUnsupported' : `scopeHints.${item.value}`) }}
                       <v-menu
-                        v-if="item.value !== 'none'"
+                        v-if="item.value === 'host'"
                         open-on-hover
                         open-on-click
                         open-on-focus
@@ -112,79 +97,46 @@
               </template>
             </v-select>
           </td>
-          <template v-else>
-            <td class="permission-toggle">
-              <v-checkbox-btn
-                :model-value="policy(role).allow_execution"
-                :disabled="permissionLocks[role].execution"
-                :aria-label="`${tm(`roles.${role}`)} · ${tm('execution')}`"
-                color="primary"
-                density="compact"
-                @update:model-value="updatePermission(role, { allow_execution: Boolean($event) })"
-              />
-              <LockKeyhole v-if="permissionLocks[role].execution" class="permission-lock" :size="12" aria-hidden="true" />
-            </td>
-            <td class="permission-toggle">
-              <v-checkbox-btn
-                :model-value="policy(role).allow_network"
-                :disabled="permissionLocks[role].network"
-                :aria-label="`${tm(`roles.${role}`)} · ${tm('network')}`"
-                color="primary"
-                density="compact"
-                @update:model-value="updatePermission(role, { allow_network: Boolean($event) })"
-              />
-              <LockKeyhole v-if="permissionLocks[role].network" class="permission-lock" :size="12" aria-hidden="true" />
-            </td>
-            <td>
-              <v-select
-                :model-value="policy(role).filesystem_scope"
-                :items="[
-                  { title: tm('modes.none'), value: 'none' },
-                  { title: tm('scopes.workspace'), value: 'workspace' },
-                  { title: tm('scopes.host'), value: 'host' }
-                ]"
-                :disabled="!runtime"
-                :aria-label="`${tm(`roles.${role}`)} · ${tm('filesystem')}`"
-                variant="outlined"
-                density="compact"
-                hide-details
-                :menu-props="{ rounded: 'lg', maxWidth: 420 }"
-                @update:model-value="updatePermission(role, { filesystem_scope: $event })"
-              >
-                <template #item="{ props: itemProps, item }">
-                  <v-list-item v-bind="itemProps" :lines="false" role="option" :aria-selected="policy(role).filesystem_scope === item.value">
-                    <template #subtitle>
-                      <div class="scope-hint">
-                        {{ tm(`scopeHints.${item.value}`) }}
-                        <v-menu
-                          v-if="item.value === 'host'"
-                          open-on-hover
-                          open-on-click
-                          open-on-focus
-                          :close-on-content-click="false"
-                          location="top"
-                          :max-width="360"
-                        >
-                          <template #activator="{ props: helpProps }">
-                            <button v-bind="helpProps" type="button" class="scope-help" :aria-label="tm('filesystem')" @click.stop>
-                              <CircleHelp :size="14" aria-hidden="true" />
-                            </button>
-                          </template>
-                          <v-card class="pa-3 text-body-2">
-                            <div>{{ tm('scopeDetails.account') }}</div>
-                            <div class="mt-2">{{ tm('scopeDetails.docker') }}</div>
-                          </v-card>
-                        </v-menu>
-                      </div>
-                    </template>
-                  </v-list-item>
-                </template>
-              </v-select>
-            </td>
-          </template>
         </tr>
       </tbody>
     </v-table>
+
+    <button
+      v-if="isolationUnavailable"
+      type="button"
+      class="isolation-hint"
+      aria-haspopup="dialog"
+      @click="isolationDialogOpen = true"
+    >
+      <ShieldAlert :size="16" aria-hidden="true" />
+      <span>{{ tm(`runtime.setupHint.${runtime.sandbox.status}`, {
+        backend: runtime.sandbox.backend === 'seatbelt' ? 'Seatbelt' : 'bubblewrap',
+        dependency: runtime.sandbox.backend === 'seatbelt' ? 'sandbox-exec' : 'bwrap'
+      }) }}</span>
+    </button>
+
+    <v-dialog v-model="isolationDialogOpen" max-width="640">
+      <v-card>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ tm('runtime.sandbox') }}</v-card-title>
+        <v-card-text class="pa-6 pb-2">
+          <p class="text-body-1">{{ tm('runtime.dialog.intro') }}</p>
+          <details v-if="runtime?.sandbox?.status === 'unavailable' && runtime.sandbox.error" class="sandbox-diagnostics mt-4">
+            <summary>{{ tm('runtime.dialog.startupError') }}</summary>
+            <pre class="mt-2">{{ runtime.sandbox.error }}</pre>
+          </details>
+          <a
+            :href="isolationDocumentationUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="d-inline-block text-primary text-decoration-underline text-body-2 mt-5"
+          >{{ tm('runtime.dialog.documentation') }}</a>
+        </v-card-text>
+        <v-card-actions class="pa-4">
+          <v-spacer />
+          <v-btn variant="text" @click="isolationDialogOpen = false">{{ tm('runtime.close') }}</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <v-alert v-if="memberHasElevatedAccess" type="warning" variant="tonal" density="compact">
       {{ tm('memberWarning') }}
@@ -201,8 +153,8 @@ export const windowsPermissionDefaults = {
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { CircleHelp, Cpu, FolderOpen, LockKeyhole, Monitor, Shield, ShieldAlert, ShieldOff } from '@lucide/vue'
-import { useModuleI18n } from '@/i18n/composables'
+import { CircleHelp, ShieldAlert } from '@lucide/vue'
+import { useI18n, useModuleI18n } from '@/i18n/composables'
 import { statsApi } from '@/api/v1'
 
 const props = defineProps({
@@ -213,11 +165,24 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:modelValue'])
+const { locale } = useI18n()
 const { tm } = useModuleI18n('features/config-metadata.ai_group.agent_computer_use.local_permissions')
 const runtime = ref(null)
 const runtimeLoading = ref(true)
+const isolationDialogOpen = ref(false)
+const isolationDocumentationUrl = computed(() =>
+  `https://docs.astrbot.app/${locale.value === 'zh-CN' ? '' : 'en/'}use/astrbot-agent-sandbox.html#local-environment`
+)
 const unsupported = computed(() => runtime.value?.sandbox?.status === 'unsupported')
 const sandboxUnavailable = computed(() => ['missing', 'unavailable'].includes(runtime.value?.sandbox?.status))
+const isolationUnavailable = computed(() => unsupported.value || sandboxUnavailable.value)
+const executionUnavailableHint = computed(() => isolationUnavailable.value ? tm(
+  `runtime.executionUnavailable.${runtime.value.sandbox.status}`,
+  {
+    backend: runtime.value.sandbox.backend === 'seatbelt' ? 'Seatbelt' : 'bubblewrap',
+    dependency: runtime.value.sandbox.backend === 'seatbelt' ? 'sandbox-exec' : 'bwrap'
+  }
+) : '')
 const roles = ['member', 'admin']
 const defaults = computed(() => runtime.value?.os === 'windows' ? windowsPermissionDefaults : {
   member: {
@@ -251,7 +216,8 @@ function policy(role) {
   if (!['none', 'workspace', 'host'].includes(resolved.filesystem_scope)) {
     resolved.filesystem_scope = defaults.value[role].filesystem_scope
   }
-  resolved.allow_execution = resolved.filesystem_scope !== 'none' && resolved.allow_execution === true
+  resolved.allow_execution = resolved.filesystem_scope !== 'none' && resolved.allow_execution === true &&
+    !(isolationUnavailable.value && resolved.filesystem_scope === 'workspace')
   resolved.allow_network = resolved.allow_execution && resolved.allow_network === true
   return resolved
 }
@@ -261,15 +227,13 @@ function updatePermission(role, changes) {
     ...policy(role),
     ...changes
   }
-  if (updatedRole.filesystem_scope === 'none' || (sandboxUnavailable.value && changes.filesystem_scope === 'workspace')) {
+  if (updatedRole.filesystem_scope === 'none') {
     updatedRole.allow_execution = false
   }
-  if (sandboxUnavailable.value && changes.allow_execution === true) {
-    if (updatedRole.filesystem_scope === 'workspace') {
-      updatedRole.allow_execution = false
-    } else {
-      updatedRole.allow_network = true
-    }
+  if (isolationUnavailable.value && updatedRole.allow_execution) {
+    // Without isolation, execution requires host access and cannot block networking.
+    updatedRole.allow_execution = updatedRole.filesystem_scope === 'host'
+    updatedRole.allow_network = updatedRole.allow_execution
   }
   if (!updatedRole.allow_execution) {
     updatedRole.allow_network = false
@@ -280,33 +244,14 @@ function updatePermission(role, changes) {
   })
 }
 
-const accessPolicies = {
-  none: windowsPermissionDefaults.member,
-  files: { filesystem_scope: 'host', allow_execution: false, allow_network: false },
-  full: windowsPermissionDefaults.admin
-}
-const accessIcons = { none: LockKeyhole, files: FolderOpen, full: ShieldAlert }
 const permissionLocks = computed(() => Object.fromEntries(roles.map(role => {
   const current = policy(role)
   return [role, {
     execution: !runtime.value || current.filesystem_scope === 'none' ||
-      (sandboxUnavailable.value && current.filesystem_scope === 'workspace' && !current.allow_execution),
-    network: !runtime.value || !current.allow_execution ||
-      (sandboxUnavailable.value && current.allow_network)
+      (isolationUnavailable.value && current.filesystem_scope === 'workspace'),
+    network: !runtime.value || !current.allow_execution
   }]
 })))
-const accessModes = computed(() => Object.fromEntries(roles.map(role => {
-  const current = policy(role)
-  let mode = null
-  if (current.filesystem_scope === 'none') {
-    mode = 'none'
-  } else if (current.filesystem_scope === 'host') {
-    if (!current.allow_execution) mode = 'files'
-    else if (current.allow_network) mode = 'full'
-  }
-  return [role, mode]
-})))
-
 const memberHasElevatedAccess = computed(() => {
   const member = policy('member')
   return member.allow_network || member.filesystem_scope === 'host'
@@ -333,12 +278,6 @@ const memberHasElevatedAccess = computed(() => {
   cursor: help;
 }
 
-.sandbox-error {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  font-family: monospace;
-}
-
 .local-permission-matrix {
   display: grid;
   gap: 12px;
@@ -347,43 +286,38 @@ const memberHasElevatedAccess = computed(() => {
   padding-top: 12px;
 }
 
-.runtime-info,
-.runtime-info > div,
-.runtime-info dt {
-  display: flex;
+.isolation-hint {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-}
-
-.runtime-info {
-  flex-wrap: wrap;
-  margin: 0;
-  font-size: 0.8125rem;
-  line-height: 20px;
-}
-
-.runtime-info > div {
-  flex-wrap: wrap;
-  padding: 6px 10px;
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-  border-radius: 8px;
-  background: rgba(var(--v-theme-on-surface), 0.025);
-}
-
-.runtime-info dt {
+  justify-self: start;
   gap: 6px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  text-align: left;
+}
+
+.isolation-hint svg {
+  flex-shrink: 0;
+}
+
+.isolation-hint span {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.sandbox-diagnostics {
   color: rgba(var(--v-theme-on-surface), 0.6);
   font-size: 0.75rem;
 }
 
-.runtime-info dd {
-  margin: 0;
-  font-weight: 500;
+.sandbox-diagnostics summary {
+  cursor: pointer;
 }
 
-.runtime-info > .runtime-info--warning {
-  border-color: rgba(var(--v-theme-warning), 0.3);
-  background: rgba(var(--v-theme-warning), 0.08);
+.sandbox-diagnostics pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .permission-table {
@@ -415,41 +349,8 @@ const memberHasElevatedAccess = computed(() => {
   justify-content: center;
 }
 
-.permission-toggle {
-  position: relative;
-}
-
-.permission-lock {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  color: rgba(var(--v-theme-on-surface), 0.4);
-  pointer-events: none;
-}
-
-.local-permission-matrix--simple {
-  max-width: 640px;
-  gap: 8px;
-}
-
-.local-permission-matrix--simple .permission-table :deep(table) {
-  min-width: 0;
-}
-
-.local-permission-matrix--simple .permission-table :deep(th:first-child) {
-  width: 140px;
-}
-
-.local-permission-matrix--simple .permission-table :deep(thead th) {
-  height: 40px;
-  font-size: 0.75rem;
-  color: rgba(var(--v-theme-on-surface), 0.65);
-}
-
-.local-permission-matrix--simple .permission-table :deep(td) {
-  height: 68px;
-  padding: 12px 16px;
+.execution-control {
+  display: inline-flex;
 }
 
 @media (max-width: 600px) {
@@ -466,8 +367,8 @@ const memberHasElevatedAccess = computed(() => {
     width: 60px;
   }
 
-  .local-permission-matrix--simple .permission-table :deep(th:first-child) {
-    width: 88px;
+  .local-permission-matrix--without-network .permission-table :deep(table) {
+    min-width: 420px;
   }
 }
 </style>

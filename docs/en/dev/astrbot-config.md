@@ -10,7 +10,7 @@ AstrBot's configuration file is a JSON format file. AstrBot reads this file at s
 
 > Since AstrBot v4.0.0, we introduced the concept of [multiple configuration files](https://blog.astrbot.app/posts/what-is-changed-in-4.0.0/#%E5%A4%9A%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6). `data/cmd_config.json` serves as the default configuration `default`. Other configuration files you create in the WebUI are stored in the `data/config/` directory, starting with `abconf_`.
 
-In the WebUI, manage bot and session behavior profiles under `Config`. Global runtime, logging, network, WebUI security, and text-to-image service settings are under `Settings`. Model connections and bot connections are managed under `Providers` and `Platforms`, respectively.
+In the WebUI, manage bot and session behavior profiles (including text-to-image) under `Config`. Global runtime, logging, network, and WebUI security settings are under `System Settings`. Model connections and bot connections are managed under `Providers` and `Platforms`, respectively.
 
 The default AstrBot configuration is as follows:
 
@@ -176,6 +176,8 @@ Fixed prefix string when replying to messages. Default is empty.
 > Currently only applicable to the QQ platform adapter.
 
 Message forwarding threshold. When the reply content exceeds a certain number of characters, the bot will fold the message into a QQ group "forwarded message" to prevent spamming.
+
+In WebUI, select the profile used by your bot and open `Access Control → Whitelist` to manage the following whitelist settings.
 
 #### `platform_settings.enable_id_white_list`
 
@@ -463,6 +465,8 @@ Baidu AI content moderation settings.
 ### `admins_id`
 
 List of administrator IDs. Additionally, you can use `/op` and `/deop` commands to add or remove admins.
+
+In WebUI, select the profile used by your bot under `Config`, then open `Access Control → Administrators → Administrator IDs`. Send `/sid` to the bot to get your `UID`.
 
 ### `t2i`
 

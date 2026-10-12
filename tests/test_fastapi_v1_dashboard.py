@@ -1,3 +1,4 @@
+import asyncio
 import copy
 import json
 from dataclasses import dataclass
@@ -11,6 +12,7 @@ import pytest
 import pytest_asyncio
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, PlainTextResponse
+from PIL import Image as PILImage
 
 import astrbot.dashboard.services.config_service as config_service
 import astrbot.dashboard.services.stat_service as stat_service
@@ -3704,6 +3706,104 @@ async def test_v1_token_file_is_public(
     assert response.status_code == 200
     assert response.text == "token:demo-token"
     assert response.headers["content-type"].startswith("text/plain")
+
+    second_response = await asgi_client.get(f"/api/v1/files/tokens/{file_token}")
+
+    assert second_response.status_code == 404
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cached_token_state", ["valid", "expired", "consumed"])
+async def test_v1_platform_logo_refreshes_stale_tokens_and_supports_repeated_reads(
+    asgi_client: httpx.AsyncClient,
+    asgi_app,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cached_token_state: str,
+):
+    """Exercise real config and image routes with reusable and stale logo tokens."""
+    logo_file = tmp_path / "logo.png"
+    PILImage.new("RGB", (1, 1), "red").save(logo_file)
+    platform = SimpleNamespace(
+        name="logo-test",
+        logo_path=logo_file.name,
+        default_config_tmpl={"type": "logo-test"},
+        config_metadata=None,
+    )
+    monkeypatch.setattr(file_token_service, "staged_files", {})
+    monkeypatch.setattr(config_service, "platform_registry", [platform])
+    monkeypatch.setitem(config_service.platform_cls_map, platform.name, FakePlatform)
+    monkeypatch.setattr(
+        config_service,
+        "inspect",
+        SimpleNamespace(getfile=lambda _cls: str(tmp_path / "adapter.py")),
+    )
+    display_service = asgi_app.state.services.config_display
+    cached_token = None
+    if cached_token_state != "valid":
+        cached_token = await file_token_service.register_file(
+            str(logo_file), timeout=-1 if cached_token_state == "expired" else 60
+        )
+        if cached_token_state == "consumed":
+            await file_token_service.handle_file(cached_token)
+        display_service._logo_token_cache[f"{platform.name}:{platform.logo_path}"] = (
+            cached_token
+        )
+
+    config_response = await asgi_client.get(
+        "/api/v1/system-config/runtime", headers=_jwt_headers()
+    )
+    assert config_response.status_code == 200
+    platform_metadata = config_response.json()["data"]["metadata"]["platform_group"][
+        "metadata"
+    ]["platform"]
+    token = platform_metadata["config_template"][platform.name]["logo_token"]
+    if cached_token is not None:
+        assert token != cached_token
+    logo_url = f"/api/v1/files/tokens/{token}"
+
+    first_response = await asgi_client.get(logo_url)
+    second_response = await asgi_client.get(logo_url)
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    assert second_response.content == logo_file.read_bytes()
+    assert second_response.headers["content-type"].startswith("image/png")
+
+    responses = await asyncio.gather(*(asgi_client.get(logo_url) for _ in range(3)))
+    assert all(response.status_code == 200 for response in responses)
+
+    templates = {}
+    await display_service.register_platform_logo(platform, templates)
+    assert templates[platform.name]["logo_token"] == token
+
+
+@pytest.mark.asyncio
+async def test_v1_plugin_logo_supports_repeated_reads(
+    asgi_client: httpx.AsyncClient,
+    asgi_app,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    logo_file = tmp_path / "logo.png"
+    PILImage.new("RGB", (1, 1), "red").save(logo_file)
+    monkeypatch.setattr(file_token_service, "staged_files", {})
+    plugin_service = asgi_app.state.services.plugins
+    plugin = SimpleNamespace(logo_path=str(logo_file))
+    logo_url = await plugin_service.resolve_plugin_logo_url(
+        plugin, plugin_service.get_plugin_logo_token
+    )
+
+    first_response = await asgi_client.get(logo_url)
+    second_response = await asgi_client.get(logo_url)
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    assert second_response.content == logo_file.read_bytes()
+    assert (
+        await plugin_service.resolve_plugin_logo_url(
+            plugin, plugin_service.get_plugin_logo_token
+        )
+        == logo_url
+    )
 
 
 def test_v1_openapi_alias_websocket_routes_are_mounted(asgi_app):

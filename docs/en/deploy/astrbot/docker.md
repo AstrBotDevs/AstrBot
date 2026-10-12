@@ -125,6 +125,25 @@ If there are no errors, you will see a log message similar to `🌈 Dashboard st
 
 Next, you need to deploy any messaging platform to use AstrBot on that platform.
 
+## Reset the Dashboard Password
+
+If you forget the dashboard password, you can reset it with the built-in AstrBot CLI inside the container:
+
+```bash
+sudo docker exec -it astrbot astrbot password
+```
+
+The first `astrbot` is the container name; replace it with your actual container name (check with `sudo docker ps`).
+
+Follow the prompt to enter a new password. To also change the username:
+
+```bash
+sudo docker exec -it astrbot astrbot password --username <new-username>
+```
+
+> [!TIP]
+> The new password takes effect after restarting the container: `sudo docker restart astrbot`.
+
 ## Configure an HTTP proxy in Docker
 
 Set the HTTP proxy in the WebUI under `Settings → Network → Proxy & Dependency Sources → HTTP Proxy`. AstrBot reaches that address **from inside its own container**, so `http://127.0.0.1:7890` points at the AstrBot container itself rather than the host or another container.

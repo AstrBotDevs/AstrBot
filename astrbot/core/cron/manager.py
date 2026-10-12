@@ -299,7 +299,7 @@ class CronJobManager:
                 trigger=trigger,
                 args=[job.job_id],
                 replace_existing=True,
-                misfire_grace_time=30,
+                misfire_grace_time=300,
             )
             asyncio.create_task(
                 self.db.update_cron_job(

@@ -1,9 +1,12 @@
 <template>
 
   <div class="config-page-shell">
-    <div v-if="selectedConfigID || isSystemConfig" class="config-panel">
+    <div
+      v-if="selectedConfigID || isSystemConfig"
+      class="config-panel"
+    >
 
-      <div class="config-toolbar-sticky">
+      <div class="config-toolbar-header">
         <div
           class="config-toolbar"
           :class="{ 'config-toolbar--searching': configSearchExpanded }"
@@ -54,7 +57,6 @@
           </div>
         </div>
         <div class="config-toolbar-separator">
-          <v-divider />
           <v-progress-linear
             v-if="!fetched"
             indeterminate
@@ -96,7 +98,7 @@
         <v-tooltip text="测试当前配置" location="left" v-if="!isSystemConfig">
           <template v-slot:activator="{ props }">
             <v-btn v-bind="props" icon="mdi-chat-processing" size="x-large"
-              style="position: fixed; right: 52px; bottom: 196px;" color="secondary"
+              style="position: fixed; right: 52px; bottom: 196px;" color="primary"
               @click="openTestChat">
             </v-btn>
           </template>
@@ -162,7 +164,12 @@
 
         <!-- Config List -->
         <v-list lines="two">
-          <v-list-item v-for="config in configInfoList" :key="config.id" :title="configDisplayName(config)">
+          <v-list-item
+            v-for="config in configInfoList"
+            :key="config.id"
+            :title="configDisplayName(config)"
+            :subtitle="config.id"
+          >
             <template v-slot:append>
               <div class="d-flex align-center" style="gap: 8px;">
                 <v-btn icon="mdi-content-copy" size="small" variant="text" color="primary"
@@ -253,7 +260,7 @@ import { configProfileApi, systemConfigApi } from '@/api/v1';
 import AstrBotCoreConfigWrapper from '@/components/config/AstrBotCoreConfigWrapper.vue';
 import ConfigProfileMenu from '@/components/config/ConfigProfileMenu.vue';
 import StandaloneChat from '@/components/chat/StandaloneChat.vue';
-import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
+import { LazyMonacoEditor as VueMonacoEditor } from '@/components/shared/LazyMonacoEditor';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import {
   askForConfirmation as askForConfirmationDialog,
@@ -1007,6 +1014,7 @@ export default {
   flex-direction: column;
   align-items: center;
   width: 100%;
+  height: 100%;
   margin-top: -8px;
 }
 
@@ -1015,28 +1023,49 @@ export default {
   flex-direction: column;
   align-items: stretch;
   width: min(100%, 940px);
-  padding: 0 18px 48px;
+  height: 100%;
+  min-height: 0;
+  padding: 0 18px 8px;
 }
 
-.config-toolbar-sticky {
-  position: sticky;
-  top: calc(var(--v-layout-top, 64px));
-  z-index: 20;
-  isolation: isolate;
+.config-toolbar-header {
   margin-bottom: 28px;
 }
 
-.config-toolbar-sticky::before {
-  position: absolute;
-  z-index: -1;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  width: calc(100vw - var(--v-layout-left, 0px));
-  max-width: 100vw;
-  transform: translateX(-50%);
-  background: rgb(var(--v-theme-containerBg));
-  content: '';
+/* Pin the toolbar and navigation while the right configuration form scrolls. */
+.config-content {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.config-panel .config-content .config-workspace {
+  height: 100%;
+  grid-template-rows: minmax(0, 1fr);
+  align-items: stretch;
+}
+
+.config-panel .config-content .config-workspace__nav {
+  position: static;
+  top: auto;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.config-panel .config-content .config-workspace__main {
+  height: 100%;
+  overflow-y: auto;
+}
+
+@media (max-width: 720px) {
+  .config-panel .config-content .config-workspace {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .config-panel .config-content .config-workspace__nav {
+    height: auto;
+    overflow-y: hidden;
+  }
 }
 
 .config-toolbar {
@@ -1088,11 +1117,9 @@ export default {
 
 .config-toolbar-separator {
   position: relative;
-  width: calc(100vw - var(--v-layout-left, 0px));
-  max-width: 100vw;
+  width: 100%;
   height: 1px;
-  margin-left: 50%;
-  transform: translateX(-50%);
+  margin-left: 0;
 }
 
 .config-toolbar-separator :is(.v-divider) {
@@ -1168,7 +1195,7 @@ export default {
 
   .config-panel {
     width: 100%;
-    padding: 0 14px 40px;
+    padding: 0 14px 8px;
   }
 
   .config-toolbar {

@@ -61,10 +61,6 @@
       "tempStorage": {
         "title": "Cache",
         "subtitle": "Automatic cleanup threshold for the temporary directory."
-      },
-      "t2iRendering": {
-        "title": "Text-to-Image",
-        "subtitle": "Rendering strategy, endpoint, and custom templates for text-to-image."
       }
     },
     "timePreview": {
@@ -150,16 +146,6 @@
         "cleanupSuccess": "Cleared {count} files and freed {size}",
         "cleanupFailed": "Cleanup failed"
       }
-    }
-  },
-  "sidebar": {
-    "title": "Sidebar",
-    "customize": {
-      "title": "Customize Sidebar",
-      "subtitle": "Drag to reorder modules, or move modules in/out of the \"More Features\" group. Settings are saved locally in your browser.",
-      "reset": "Reset to Default",
-      "mainItems": "Main Modules",
-      "moreItems": "More Features"
     }
   },
   "backup": {

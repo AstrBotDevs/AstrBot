@@ -1,4 +1,9 @@
 ﻿{
+    "configProfileDrawer": {
+            "title": "Изменить профиль",
+            "loadFailed": "Не удалось загрузить профиль",
+            "close": "Закрыть"
+        },
     "knowledgeBaseSelector": {
         "notSelected": "Не выбрано",
         "buttonText": "Выбрать базу знаний...",

@@ -5,6 +5,7 @@ from collections.abc import Callable
 from typing import Any
 from urllib.parse import quote
 
+import jwt
 from fastapi import APIRouter, Body, Depends, Query, Request
 from fastapi.responses import PlainTextResponse, Response
 
@@ -16,7 +17,7 @@ from astrbot.dashboard.asgi_runtime import (
     call_request_view,
 )
 from astrbot.dashboard.async_utils import run_maybe_async
-from astrbot.dashboard.responses import error, ok
+from astrbot.dashboard.responses import ApiError, error, ok
 from astrbot.dashboard.schemas import (
     EnabledPatch,
     PluginByIdRequest,
@@ -38,6 +39,7 @@ from astrbot.dashboard.services.config_service import (
     ConfigFileService,
 )
 from astrbot.dashboard.services.plugin_page_service import (
+    PLUGIN_PAGE_ASSET_TOKEN_TYPE,
     PluginPageContentPayload,
     PluginPageService,
     PluginPageServiceError,
@@ -57,6 +59,47 @@ legacy_router = APIRouter(tags=["Dashboard Plugins"], include_in_schema=False)
 
 
 require_plugin_scope = ScopeDependency("plugin")
+
+
+async def require_plugin_view_token(request: Request) -> str:
+    """Validate the scoped token embedded in a plugin view asset path.
+
+    V1 routes are not covered by the dashboard auth middleware, so path-token
+    view URLs authenticate here instead. The token must be a plugin page asset
+    token scoped to exactly the plugin and page named in the path.
+
+    Args:
+        request: Current FastAPI request with plugin_id/view_name/token path
+            params.
+
+    Returns:
+        The username the token was issued to.
+
+    Raises:
+        ApiError: 401 when the token is missing, invalid, expired, or scoped
+            to a different plugin or page.
+    """
+    token = request.path_params.get("token", "")
+    try:
+        payload = jwt.decode(
+            token,
+            request.app.state.jwt_secret,
+            algorithms=["HS256"],
+        )
+    except jwt.InvalidTokenError as exc:
+        raise ApiError("Token 无效", status_code=401) from exc
+
+    if (
+        payload.get("token_type") != PLUGIN_PAGE_ASSET_TOKEN_TYPE
+        or payload.get("plugin_name") != request.path_params.get("plugin_id")
+        or payload.get("page_name") != request.path_params.get("view_name")
+    ):
+        raise ApiError("Token 无效", status_code=401)
+
+    username = payload.get("username")
+    if not isinstance(username, str) or not username.strip():
+        raise ApiError("Token 无效", status_code=401)
+    return username
 
 
 def get_service(request: Request) -> PluginService:
@@ -261,30 +304,6 @@ def _plugin_page_payload_response(payload: PluginPageContentPayload):
     )
 
 
-async def _serve_plugin_page_content(
-    *,
-    request: Request,
-    page_service: PluginPageService,
-    username: str | None,
-    plugin_id: str,
-    page_name: str,
-    asset_path: str,
-):
-    try:
-        payload = await page_service.serve_page_content(
-            plugin_name=plugin_id,
-            page_name=page_name,
-            asset_path=asset_path,
-            asset_token=request.query_params.get("asset_token", "").strip(),
-            username=username,
-            locale=_get_request_locale(request),
-            theme=_get_request_theme(request),
-        )
-    except PluginPageServiceError as exc:
-        return _plugin_page_error_response(exc.status_code, exc.public_message)
-    return _plugin_page_payload_response(payload)
-
-
 async def _serve_plugin_page_bridge_sdk(
     *,
     request: Request,
@@ -307,13 +326,13 @@ async def _get_plugin_page_entry_config(
     page_service: PluginPageService,
     username: str | None,
     plugin_id: str | None,
-    page_name: str | None,
+    view_name: str | None,
 ):
     try:
         return ok(
             await page_service.get_plugin_page_entry_config(
                 plugin_name=plugin_id,
-                page_name=page_name,
+                view_name=view_name,
                 username=username,
                 locale=_get_request_locale(request),
             )
@@ -863,7 +882,8 @@ async def set_plugin_enabled_by_id(
     )
 
 
-@router.get("/plugins/pages")
+@router.get("/plugins/views")
+@router.get("/plugins/pages")  # deprecated alias
 async def list_plugin_pages_by_id(
     plugin_id: str = Query(...),
     _auth: AuthContext = Depends(require_plugin_scope),
@@ -877,7 +897,8 @@ async def list_plugin_pages_by_id(
     )
 
 
-@router.get("/plugins/page")
+@router.get("/plugins/view")
+@router.get("/plugins/page")  # deprecated alias
 async def get_plugin_page_by_id(
     request: Request,
     plugin_id: str = Query(...),
@@ -890,26 +911,7 @@ async def get_plugin_page_by_id(
         page_service=page_service,
         username=auth.username,
         plugin_id=plugin_id,
-        page_name=page_name,
-    )
-
-
-@router.get("/plugins/page/assets")
-async def get_plugin_page_asset_by_id(
-    request: Request,
-    plugin_id: str = Query(...),
-    page_name: str = Query(...),
-    asset_path: str = Query(...),
-    auth: AuthContext = Depends(require_plugin_scope),
-    page_service: PluginPageService = Depends(get_page_service),
-):
-    return await _serve_plugin_page_content(
-        request=request,
-        page_service=page_service,
-        username=auth.username,
-        plugin_id=plugin_id,
-        page_name=page_name,
-        asset_path=asset_path,
+        view_name=page_name,
     )
 
 
@@ -1154,7 +1156,8 @@ async def update_plugin(
     )
 
 
-@router.get("/plugins/{plugin_id}/pages")
+@router.get("/plugins/{plugin_id}/views")
+@router.get("/plugins/{plugin_id}/pages")  # deprecated alias
 async def list_plugin_pages(
     plugin_id: str,
     _auth: AuthContext = Depends(require_plugin_scope),
@@ -1168,10 +1171,11 @@ async def list_plugin_pages(
     )
 
 
-@router.get("/plugins/{plugin_id}/pages/{page_name}")
+@router.get("/plugins/{plugin_id}/views/{view_name}")
+@router.get("/plugins/{plugin_id}/pages/{view_name}")  # deprecated alias
 async def get_plugin_page(
     plugin_id: str,
-    page_name: str,
+    view_name: str,
     request: Request,
     auth: AuthContext = Depends(require_plugin_scope),
     page_service: PluginPageService = Depends(get_page_service),
@@ -1181,27 +1185,39 @@ async def get_plugin_page(
         page_service=page_service,
         username=auth.username,
         plugin_id=plugin_id,
-        page_name=page_name,
+        view_name=view_name,
     )
 
 
-@router.get("/plugins/{plugin_id}/pages/{page_name}/assets/{asset_path:path}")
-async def get_plugin_page_asset(
+@router.get("/plugins/{plugin_id}/views/{view_name}/_t/{token}/")
+@router.get("/plugins/{plugin_id}/views/{view_name}/_t/{token}/{asset_path:path}")
+async def get_plugin_view_token_asset(
     plugin_id: str,
-    page_name: str,
-    asset_path: str,
+    view_name: str,
+    token: str,
     request: Request,
-    auth: AuthContext = Depends(require_plugin_scope),
+    asset_path: str = "",
+    username: str = Depends(require_plugin_view_token),
     page_service: PluginPageService = Depends(get_page_service),
 ):
-    return await _serve_plugin_page_content(
-        request=request,
-        page_service=page_service,
-        username=auth.username,
-        plugin_id=plugin_id,
-        page_name=page_name,
-        asset_path=asset_path,
-    )
+    """Serve plugin view assets authenticated by a scoped path token.
+
+    Assets are served without URL rewriting because relative URLs inherit the
+    token through normal path resolution.
+    """
+    try:
+        payload = await page_service.serve_page_content(
+            plugin_name=plugin_id,
+            view_name=view_name,
+            asset_path=asset_path,
+            asset_token=request.query_params.get("asset_token", "").strip() or token,
+            username=username,
+            locale=_get_request_locale(request),
+            theme=_get_request_theme(request),
+        )
+    except PluginPageServiceError as exc:
+        return _plugin_page_error_response(exc.status_code, exc.public_message)
+    return _plugin_page_payload_response(payload)
 
 
 @legacy_router.get("/api/plugin/get")
@@ -1252,7 +1268,7 @@ async def dashboard_get_plugin_page_entry_config(
         page_service=page_service,
         username=username,
         plugin_id=request.query_params.get("name"),
-        page_name=request.query_params.get("page"),
+        view_name=request.query_params.get("page"),
     )
 
 
@@ -1463,43 +1479,6 @@ async def dashboard_get_plugin_page_bridge_sdk(
     return await _serve_plugin_page_bridge_sdk(
         request=request,
         page_service=page_service,
-    )
-
-
-@legacy_router.get("/api/plugin/page/content/{plugin_id}/{page_name}/")
-async def dashboard_get_plugin_page_entry(
-    plugin_id: str,
-    page_name: str,
-    request: Request,
-    username: str = Depends(require_dashboard_user),
-    page_service: PluginPageService = Depends(get_page_service),
-):
-    return await _serve_plugin_page_content(
-        request=request,
-        page_service=page_service,
-        username=username,
-        plugin_id=plugin_id,
-        page_name=page_name,
-        asset_path="",
-    )
-
-
-@legacy_router.get("/api/plugin/page/content/{plugin_id}/{page_name}/{asset_path:path}")
-async def dashboard_get_plugin_page_asset(
-    plugin_id: str,
-    page_name: str,
-    asset_path: str,
-    request: Request,
-    username: str = Depends(require_dashboard_user),
-    page_service: PluginPageService = Depends(get_page_service),
-):
-    return await _serve_plugin_page_content(
-        request=request,
-        page_service=page_service,
-        username=username,
-        plugin_id=plugin_id,
-        page_name=page_name,
-        asset_path=asset_path,
     )
 
 

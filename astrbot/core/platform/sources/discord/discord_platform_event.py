@@ -3,6 +3,7 @@ from collections.abc import AsyncGenerator
 from io import BytesIO
 from pathlib import Path
 from typing import cast
+from urllib.parse import unquote, urlparse
 
 import discord
 from discord.types.interactions import ComponentInteractionData
@@ -16,6 +17,7 @@ from astrbot.api.message_components import (
     Plain,
     Record,
     Reply,
+    Video,
 )
 from astrbot.api.platform import (
     AstrBotMessage,
@@ -384,6 +386,22 @@ class DiscordPlatformEvent(AstrMessageEvent):
                     logger.error(
                         "[Discord] 处理语音时发生未知严重错误: %s",
                         describe_media_ref(audio_ref),
+                        exc_info=True,
+                    )
+            elif isinstance(i, Video):
+                try:
+                    path = Path(await i.convert_to_file_path())
+                    filename = path.name
+                    if i.file.startswith(("http://", "https://")):
+                        url_path = unquote(urlparse(i.file).path).replace("\\", "/")
+                        url_filename = url_path.rsplit("/", 1)[-1]
+                        if url_filename not in ("", ".", ".."):
+                            filename = url_filename
+                    files.append(discord.File(path, filename=filename))
+                except Exception:
+                    logger.warning(
+                        "[Discord] Failed to process video: %s",
+                        describe_media_ref(i.file),
                         exc_info=True,
                     )
             elif isinstance(i, File):
