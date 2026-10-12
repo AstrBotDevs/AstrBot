@@ -163,6 +163,8 @@ AstrBot 默认配置如下：
 
 是否启用「隔离对话」。默认为 `false`。启用后，支持隔离的渠道会为每位群成员使用独立上下文；不支持隔离的渠道仍使用原有上下文。`/new` 和 `/reset` 的权限由[指令管理设置](../use/command.md)决定，默认跟随对话是否隔离。
 
+该开关同时会改写群消息的会话标识，但**仅对支持隔离的渠道生效**（不支持隔离的渠道不改写）：`session_id` 变为平台相关的复合 ID（如 QQ 上为 `发送者ID_群ID`，钉钉上仅为 `发送者ID`），`unified_msg_origin` 也随之变化。插件如需以群为单位存储或查询数据，应使用 `event.get_group_id()` 获取原始群号，详见[处理消息事件](./star/guides/listen-message-event)。
+
 #### `platform_settings.rate_limit`
 
 当消息速率超过限制时的处理策略。`time` 为时间窗口，`count` 为消息数量，`strategy` 为限制策略。`stall` 为等待，`discard` 为丢弃。
