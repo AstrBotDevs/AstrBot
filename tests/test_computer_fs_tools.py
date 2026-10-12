@@ -8,7 +8,7 @@ import sys
 import zipfile
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from mcp.types import CallToolResult, ImageContent
@@ -17,6 +17,7 @@ from PIL import Image
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.computer import file_read_utils, local_file_security
 from astrbot.core.computer.booters.local import LocalBooter
+from astrbot.core.provider.provider import Provider
 from astrbot.core.tools.computer_tools import fs as fs_tools
 from astrbot.core.tools.computer_tools import util as computer_util
 
@@ -67,6 +68,65 @@ def _make_sandbox_context(
     )
     astr_ctx = SimpleNamespace(context=config_holder, event=event)
     return ContextWrapper(context=astr_ctx)
+
+
+def _make_vision_fallback_context(
+    *,
+    modalities: list[str] | None,
+    caption_provider_id: str = "",
+    caption_provider: Any = None,
+    main_provider_missing: bool = False,
+    umo: str = "qq:friend:user-1",
+) -> ContextWrapper:
+    """Build a Local host scope context with a stubbed provider manager.
+
+    Host scope is used so the read path stays free of POSIX-only restricted
+    access checks, letting the image fallback logic run on every platform.
+
+    Args:
+        modalities: Modalities reported by the active chat provider.
+        caption_provider_id: Configured dedicated image caption provider ID.
+        caption_provider: Provider instance returned for the caption provider ID.
+        main_provider_missing: When True, no active chat provider is resolved.
+        umo: Unified message origin used for the session.
+
+    Returns:
+        A ContextWrapper wired with the requested provider behavior.
+    """
+    provider_settings = {
+        "computer_use_require_admin": True,
+        "computer_use_runtime": "local",
+        "computer_use_local_permissions": {"admin": {"filesystem_scope": "host"}},
+        "default_image_caption_provider_id": caption_provider_id,
+    }
+    main_provider = (
+        None
+        if main_provider_missing
+        else SimpleNamespace(provider_config={"modalities": modalities})
+    )
+    provider_manager = SimpleNamespace(
+        get_using_provider_async=AsyncMock(return_value=main_provider),
+        get_provider_by_id=AsyncMock(return_value=caption_provider),
+    )
+    config_holder = SimpleNamespace(
+        get_config=lambda umo=None: {"provider_settings": provider_settings},
+        provider_manager=provider_manager,
+    )
+    event = SimpleNamespace(
+        role="admin",
+        unified_msg_origin=umo,
+        get_sender_id=lambda: "user-1",
+    )
+    astr_ctx = SimpleNamespace(context=config_holder, event=event)
+    return ContextWrapper(context=astr_ctx)
+
+
+def _make_caption_provider(caption: str = "a red rectangle") -> Any:
+    provider = MagicMock(spec=Provider)
+    provider.text_chat = AsyncMock(
+        return_value=SimpleNamespace(completion_text=caption)
+    )
+    return provider
 
 
 @pytest.mark.asyncio
@@ -863,6 +923,104 @@ async def test_file_read_tool_returns_image_call_tool_result_for_images(
     assert isinstance(result.content[0], ImageContent)
     assert result.content[0].mimeType == "image/jpeg"
     assert base64.b64decode(result.content[0].data).startswith(b"\xff\xd8\xff")
+
+
+@pytest.mark.asyncio
+async def test_file_read_tool_captions_image_when_provider_lacks_image_modality(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+    Image.new("RGB", (32, 16), color=(255, 0, 0)).save(
+        workspace / "sample.png", format="PNG"
+    )
+    caption_provider = _make_caption_provider("a red rectangle")
+
+    result = await fs_tools.FileReadTool().call(
+        _make_vision_fallback_context(
+            modalities=["text"],
+            caption_provider_id="vision-1",
+            caption_provider=caption_provider,
+        ),
+        path="sample.png",
+    )
+
+    assert result == "[Image description]: a red rectangle"
+    caption_provider.text_chat.assert_awaited_once()
+    captioned = caption_provider.text_chat.await_args.kwargs["image_urls"]
+    assert captioned == [captioned[0]]
+    assert captioned[0].startswith("data:image/jpeg;base64,")
+
+
+@pytest.mark.asyncio
+async def test_file_read_tool_reports_missing_caption_provider(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+    Image.new("RGB", (32, 16), color=(0, 255, 0)).save(
+        workspace / "sample.png", format="PNG"
+    )
+
+    result = await fs_tools.FileReadTool().call(
+        _make_vision_fallback_context(
+            modalities=["text"],
+            caption_provider_id="",
+        ),
+        path="sample.png",
+    )
+
+    assert isinstance(result, str)
+    assert "does not support image modality" in result
+    assert "default_image_caption_provider_id" in result
+
+
+@pytest.mark.asyncio
+async def test_file_read_tool_returns_image_when_provider_supports_image(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+    Image.new("RGB", (32, 16), color=(0, 0, 255)).save(
+        workspace / "sample.png", format="PNG"
+    )
+    caption_provider = _make_caption_provider()
+
+    result = await fs_tools.FileReadTool().call(
+        _make_vision_fallback_context(
+            modalities=["text", "image"],
+            caption_provider_id="vision-1",
+            caption_provider=caption_provider,
+        ),
+        path="sample.png",
+    )
+
+    assert isinstance(result, CallToolResult)
+    assert isinstance(result.content[0], ImageContent)
+    caption_provider.text_chat.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_file_read_tool_returns_image_when_provider_is_unknown(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+    Image.new("RGB", (32, 16), color=(255, 0, 255)).save(
+        workspace / "sample.png", format="PNG"
+    )
+
+    result = await fs_tools.FileReadTool().call(
+        _make_vision_fallback_context(
+            modalities=None,
+            caption_provider_id="vision-1",
+            main_provider_missing=True,
+        ),
+        path="sample.png",
+    )
+
+    assert isinstance(result, CallToolResult)
+    assert isinstance(result.content[0], ImageContent)
 
 
 @pytest.mark.asyncio
