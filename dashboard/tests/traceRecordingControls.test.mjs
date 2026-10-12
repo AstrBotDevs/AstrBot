@@ -117,7 +117,7 @@ test("toolbar has matching icon-and-text buttons, fluid input, and an embedded r
   assert.match(buttons[2], /tm\("refresh"\)/);
   assert.match(buttons[1], /:loading="recordingBusy"/);
   assert.match(buttons[1], /:disabled="recordingBusy"/);
-  assert.match(toolbar, /tm\('search', \{ count: filteredEvents.length \}\)/);
+  assert.match(toolbar, /tm\('search', \{ count: totalRecords \}\)/);
   const searchStyle = view.styles[0].content.match(/\.trace-search\s*\{([^}]+)\}/)[1];
   assert.match(searchStyle, /flex:\s*1/);
   assert.match(searchStyle, /height:\s*36px/);

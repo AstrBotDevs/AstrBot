@@ -89,7 +89,10 @@ class PipelineScheduler:
 
         """
         active_event_registry.register(event)
-        with log_context(event.get_platform_id(), event.get_platform_name()):
+        with (
+            log_context(event.get_platform_id(), event.get_platform_name()),
+            event.trace.context(),
+        ):
             pipeline_started = time.perf_counter()
             pipeline_status = "success"
             pipeline_error = None

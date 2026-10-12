@@ -556,6 +556,27 @@ AstrBot WebUI 配置。
 
 是否启用追踪记录。默认为 `false`。启用后，AstrBot 会记录运行追踪信息，可以在管理面板的 `数据与日志 → 追踪` 页面查看。
 
+开启后自动持久化；暂停不删除历史，已开始的追踪仍会记录完成状态。日志会关联当前活动的 `trace_id` / `span_id`，插件仍使用原来的 `astrbot.api.logger`。数据模型对齐 OTel 核心字段，但没有 OTel SDK、OTLP 或外部导出。
+
+### `trace_db_path`
+
+独立 SQLite 路径，默认 `logs/traces.db`（相对 `data` 目录），更改路径后重启生效。数据库、WAL 和 SHM 不受“清理日志”影响。追踪正文可能包含消息、插件参数和工具结果，请限制数据库文件访问权限。
+
+### `trace_db_max_mb` / `trace_retention_days`
+
+正整数，默认容量目标 80 MB、保留 7 天，不支持无限容量。达到容量或过期后按完整 trace 淘汰旧数据；WAL、检查点和回收页面可能暂时增加磁盘占用，因此容量不是瞬时硬上限。单条追踪也有内容、Span 和事件数量限制，截断会在详情中提示。
+
+旧配置在加载时自动迁移，新配置优先，旧 JSONL 文件保留但不再写入或自动导入：
+
+| 旧配置 | 新配置/行为 |
+| --- | --- |
+| `trace_enable` | 保持不变，控制新追踪记录与持久化 |
+| `trace_log_enable` | 移除，不再单独开关 JSONL |
+| `trace_log_path` | 移除，默认改用 `trace_db_path: logs/traces.db` |
+| `trace_log_max_mb` | 未指定新容量时，正整数乘 4 迁移为 `trace_db_max_mb`（接近原当前文件加 3 份备份预算）；无效值改用 80 MB |
+
+新增 `trace_retention_days` 默认为 7 天。
+
 ### `pip_install_arg`
 
 `pip install` 的参数。如 `-i https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple`。

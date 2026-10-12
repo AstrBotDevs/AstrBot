@@ -309,9 +309,9 @@ DEFAULT_CONFIG = {
     "log_file_max_mb": 20,
     "temp_dir_max_size": 1024,
     "trace_enable": False,
-    "trace_log_enable": False,
-    "trace_log_path": "logs/astrbot.trace.log",
-    "trace_log_max_mb": 20,
+    "trace_db_path": "logs/traces.db",
+    "trace_db_max_mb": 80,
+    "trace_retention_days": 7,
     "pip_install_arg": "",
     "pypi_index_url": "https://mirrors.aliyun.com/pypi/simple/",
     "persona": [],  # deprecated
@@ -3236,15 +3236,9 @@ CONFIG_METADATA_2 = {
             "log_file_path": {"type": "string", "condition": {"log_file_enable": True}},
             "log_file_max_mb": {"type": "int", "condition": {"log_file_enable": True}},
             "temp_dir_max_size": {"type": "int"},
-            "trace_log_enable": {"type": "bool"},
-            "trace_log_path": {
-                "type": "string",
-                "condition": {"trace_log_enable": True},
-            },
-            "trace_log_max_mb": {
-                "type": "int",
-                "condition": {"trace_log_enable": True},
-            },
+            "trace_db_path": {"type": "string"},
+            "trace_db_max_mb": {"type": "int"},
+            "trace_retention_days": {"type": "int"},
             "t2i_strategy": {
                 "type": "string",
                 "options": ["remote", "local"],
@@ -4805,20 +4799,20 @@ CONFIG_METADATA_3_SYSTEM = {
                         "type": "int",
                         "hint": "用于限制 data/temp 目录总大小，单位为 MB。系统每 10 分钟检查一次，超限时按文件修改时间从旧到新删除，释放约 30% 当前体积。",
                     },
-                    "trace_log_enable": {
-                        "description": "启用 Trace 文件日志",
-                        "type": "bool",
-                        "hint": "将 Trace 事件写入独立文件（不影响控制台输出）。",
-                    },
-                    "trace_log_path": {
-                        "description": "Trace 日志文件路径",
+                    "trace_db_path": {
+                        "description": "追踪数据库路径",
                         "type": "string",
-                        "hint": "相对路径以 data 目录为基准，例如 logs/astrbot.trace.log；支持绝对路径。",
+                        "hint": "独立 SQLite 数据库，相对 data 目录。默认 logs/traces.db；更改路径后重启生效。开启追踪即持久化，不再输出 JSONL。",
                     },
-                    "trace_log_max_mb": {
-                        "description": "Trace 日志大小上限 (MB)",
+                    "trace_db_max_mb": {
+                        "description": "追踪数据库容量预算 (MB)",
                         "type": "int",
-                        "hint": "超过大小后自动轮转，默认 20MB。",
+                        "hint": "正整数，默认 80 MB。按完整追踪淘汰旧数据；WAL 与检查点可能暂时增加磁盘占用，非瞬时硬上限。不支持无限容量。",
+                    },
+                    "trace_retention_days": {
+                        "description": "追踪保留天数",
+                        "type": "int",
+                        "hint": "正整数，默认 7 天；保留期限或容量预算先达到者触发清理。运行中的追踪不会被常规清理。",
                     },
                     "pip_install_arg": {
                         "description": "pip 安装额外参数",

@@ -34,6 +34,14 @@
   "details": "查看详情",
   "selectTrace": "选择一条追踪查看完整执行链",
   "closeDetails": "关闭详情",
+  "history": {
+    "loadFailed": "读取追踪历史失败，请重试",
+    "detailFailed": "读取追踪详情失败；记录可能已被清理，请重试",
+    "storageWarning": "部分追踪未能持久化，请检查数据库写入错误或容量限制。",
+    "loadMore": "加载更多",
+    "limitHint": "当前最多展示 {count} 条，请缩小搜索范围。",
+    "truncated": "此追踪内容或节点数量超过限制，部分数据已截断。"
+  },
   "controls": {
     "start": "启动",
     "pauseButton": "暂停",
@@ -49,7 +57,7 @@
     "timestamp": "时间戳",
     "message": "消息",
     "sender": "发送人",
-    "spansHint": "时间线节点数；开始/结束合并，同类型折叠不减少计数。"
+    "spansHint": "实际 Span 数（含消息根 Span），不包含事件；折叠不影响计数。"
   },
   "chips": {
     "executionMode": "执行方式：{name}",

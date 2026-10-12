@@ -158,6 +158,38 @@ async def test_streaming_trace_context_restored_after_failure(
 
 
 @pytest.mark.asyncio
+async def test_streaming_outline_limit_does_not_truncate_delivery(astr_message_event):
+    """Bound diagnostic content without changing the outgoing stream."""
+    event = astr_message_event
+    event.trace = MagicMock()
+    fragment = "字" * 20000
+    delivered = []
+
+    async def stream():
+        yield MessageChain([Plain(fragment)])
+        yield MessageChain([Plain("End")])
+
+    async def deliver(generator, use_fallback):
+        async for chunk in generator:
+            delivered.append(chunk.chain[0].text)
+
+    event.send_streaming = AsyncMock(side_effect=deliver)
+    event.set_result(
+        MessageEventResult()
+        .set_result_content_type(ResultContentType.STREAMING_RESULT)
+        .set_async_stream(stream())
+    )
+    stage = RespondStage()
+    stage.config = {"provider_settings": {}}
+    await stage.process(event)
+    event.trace.record.assert_called_once()
+    fields = event.trace.record.call_args.kwargs
+    assert len(fields["message"].encode()) <= 4096
+    assert fields["truncated"] is True
+    assert delivered == [fragment, "End"]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "result_type",
     [

@@ -155,7 +155,32 @@ class StorageCleaner:
         files = set(self._iter_files(self._data_dir / "logs"))
         for log_path in self._configured_log_paths():
             files.update(self._iter_log_family_files(log_path))
-        return files
+        trace_path = self._resolve_log_path(
+            self._get_optional_str("trace_db_path"),
+            default_relative_path="logs/traces.db",
+        ).resolve()
+        protected = {
+            Path(str(trace_path) + suffix)
+            for suffix in ("", "-wal", "-shm", "-journal")
+        }
+        candidates = set()
+        for path in files:
+            if (
+                path.resolve() in protected
+                or path.suffix in {".db", ".sqlite", ".sqlite3"}
+                or path.name.endswith(("-wal", "-shm", "-journal"))
+            ):
+                continue
+            try:
+                # Protect custom database names, including an old active path
+                # after a configuration edit that has not restarted the core.
+                with path.open("rb") as stream:
+                    if stream.read(16) == b"SQLite format 3\x00":
+                        continue
+            except OSError:
+                continue
+            candidates.add(path)
+        return candidates
 
     def _collect_cache_files(self) -> set[Path]:
         files = set(self._iter_files(self._temp_dir))

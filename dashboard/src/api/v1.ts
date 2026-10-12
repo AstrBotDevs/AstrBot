@@ -688,6 +688,12 @@ export const apiKeyApi = {
 };
 
 export const traceApi = {
+  history(query?: { limit?: number; cursor?: string; query?: string; errors?: boolean; models?: boolean; plugins?: boolean }) {
+    return typed<OpenConfig>(openApiV1.listTraces({ query }));
+  },
+  detail(traceId: string) {
+    return typed<OpenConfig>(openApiV1.getTraceDetail({ path: { trace_id: traceId } }));
+  },
   getSettings() {
     return typed<OpenConfig>(openApiV1.getTraceSettings());
   },

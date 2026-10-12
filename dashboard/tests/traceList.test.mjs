@@ -12,15 +12,26 @@ const ast = ts.createSourceFile("trace.js", descriptor.scriptSetup.content, ts.S
 
 function setup(t) {
   const focused = [];
+  const historyRequests = [];
+  const detailRequests = [];
   const context = vm.createContext({
     computed, nextTick, reactive, ref, watch, tm: (key) => key,
     getPlatformIcon: (name) => name + ".png",
+    console: { error() {} },
+    traceApi: {
+      history: (options) => new Promise((resolve, reject) => historyRequests.push({ options, resolve, reject })),
+      detail: (id) => new Promise((resolve, reject) => detailRequests.push({ id, resolve, reject })),
+    },
+    pluginApi: { list: async () => ({ data: { data: [] } }) },
+    sessionApi: { activeUmos: async () => ({ data: { data: { umo_infos: [] } } }) },
     document: { querySelector: (selector) => ({ scrollIntoView() {}, focus() { focused.push(selector); } }) },
   });
   const names = new Set([
     "events", "selectedSpanId", "searchText", "selectedFilters", "umoNames", "clockNow",
     "eventIndex", "maxItems", "selectedEvent", "normalizedSearch", "filteredEvents", "traceRows", "traceHeaders",
-    "processNewTraces", "matchesFilter", "recordSearchText", "timelineRecords", "formatDuration", "selectEvent",
+    "processNewTraces", "normalizeTracePayload", "matchesFilter", "recordSearchText", "timelineRecords", "formatDuration", "selectEvent",
+    "fetchTraceHistory", "loadTraceDetail", "historyBusy", "detailBusy", "historyError", "detailError",
+    "totalRecords", "nextCursor", "storageWarning", "metadataLoaded", "historyRequest", "detailRequest", "plugins", "loading",
   ]);
   const statements = ast.statements.filter((node) =>
     ts.isFunctionDeclaration(node) ? names.has(node.name?.text) :
@@ -30,12 +41,94 @@ function setup(t) {
   vm.runInContext(statements.map((node) => node.getText(ast)).join("\n"), context);
   const watcher = ast.statements.find((node) => node.getText(ast).startsWith("watch(filteredEvents,"));
   t.after(vm.runInContext(watcher.getText(ast), context));
-  return { focused, ...vm.runInContext("({ events, selectedSpanId, selectedEvent, selectedFilters, traceRows, traceHeaders, clockNow, processNewTraces, selectEvent })", context) };
+  return { focused, historyRequests, detailRequests, ...vm.runInContext("({ events, selectedSpanId, selectedEvent, selectedFilters, traceRows, traceHeaders, clockNow, processNewTraces, selectEvent, searchText, fetchTraceHistory, loadTraceDetail, totalRecords, nextCursor, historyBusy, detailBusy, historyError, detailError })", context) };
 }
 
 function record(span, action, time, fields = {}) {
   return { span_id: span, record_id: span + ":" + action + ":" + time, action, time, fields };
 }
+
+function canonical(id, stamp = "2000000000", completed = true) {
+  return {
+    trace_id: id, root_span_id: id.slice(0, 16), name: "message",
+    start_time_unix_nano: "1000000000", updated_time_unix_nano: stamp,
+    end_time_unix_nano: completed ? stamp : null,
+    state: completed ? "completed" : "running", has_errors: false,
+    has_models: true, has_plugins: true, span_count: 3,
+    attributes: { "astrbot.message_outline": "Hello", "astrbot.plugins": "Weather" },
+  };
+}
+
+test("canonical live updates keep summaries only and count real spans, not events", async (t) => {
+  const state = setup(t);
+  const trace = canonical("a".repeat(32));
+  state.processNewTraces([{ trace, event: { event_id: "reply", name: "response_sent", time_unix_nano: "2000000000", attributes: { "astrbot.message": "Reply" } } }]);
+  assert.equal(state.events.value[0].records.length, 0);
+  assert.equal(state.traceRows.value[0].spans, 3);
+  assert.equal(state.events.value[0].completed, true);
+  state.processNewTraces([{ trace: canonical(trace.trace_id, "1500000000", false) }]);
+  assert.equal(state.events.value[0].completed, true);
+  state.selectEvent(trace.trace_id);
+  state.detailRequests[0].resolve({ data: { status: "ok", data: {
+    trace, spans: [{
+      trace_id: trace.trace_id, span_id: trace.root_span_id, parent_span_id: null,
+      start_time_unix_nano: "1000000000", end_time_unix_nano: "2000000000",
+      status: { code: 1 }, attributes: {},
+      events: [{ event_id: "reply", name: "response_sent", time_unix_nano: "2000000000", attributes: { "astrbot.message": "Reply" } }],
+    }],
+  } } });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(state.events.value[0].records.length, 3);
+  assert.equal(state.traceRows.value[0].spans, 3);
+  state.selectEvent(null);
+  assert.equal(state.events.value[0].records.length, 0);
+});
+
+test("history uses keyset pages and ignores a superseded search response", async (t) => {
+  const state = setup(t);
+  const first = state.fetchTraceHistory();
+  await new Promise((resolve) => setImmediate(resolve));
+  state.historyRequests[0].resolve({ data: { status: "ok", data: {
+    traces: [canonical("a".repeat(32))], total: 51, cursor: "next", storage: {},
+  } } });
+  await first;
+  assert.equal(state.totalRecords.value, 51);
+  const more = state.fetchTraceHistory(false);
+  assert.equal(state.historyRequests[1].options.cursor, "next");
+  state.historyRequests[1].resolve({ data: { status: "ok", data: {
+    traces: [canonical("b".repeat(32))], total: 51, cursor: null, storage: {},
+  } } });
+  await more;
+  assert.equal(state.events.value.length, 2);
+  const oldRequest = state.fetchTraceHistory();
+  state.searchText.value = "New";
+  const newRequest = state.fetchTraceHistory();
+  state.historyRequests[3].resolve({ data: { status: "ok", data: { traces: [], total: 0, cursor: null } } });
+  await newRequest;
+  state.historyRequests[2].resolve({ data: { status: "ok", data: { traces: [canonical("c".repeat(32))], total: 500 } } });
+  await oldRequest;
+  assert.equal(state.totalRecords.value, 0);
+  assert.equal(state.events.value.length, 0);
+  assert.equal(state.historyBusy.value, false);
+});
+
+test("late detail responses cannot reopen a closed inspector or another trace", async (t) => {
+  const state = setup(t);
+  const a = canonical("a".repeat(32));
+  const b = canonical("b".repeat(32));
+  state.processNewTraces([{ trace: a }, { trace: b }]);
+  state.selectEvent(a.trace_id);
+  state.selectEvent(b.trace_id);
+  state.detailRequests[1].resolve({ data: { status: "ok", data: { trace: b, spans: [] } } });
+  await new Promise((resolve) => setImmediate(resolve));
+  state.detailRequests[0].resolve({ data: { status: "ok", data: { trace: a, spans: [] } } });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(state.selectedEvent.value.span_id, b.trace_id);
+  assert.equal(state.detailBusy.value, false);
+  state.selectEvent(null);
+  assert.equal(state.selectedEvent.value, null);
+  assert.equal(state.events.value.find((event) => event.span_id === a.trace_id).records.length, 0);
+});
 
 test("history and new traces leave the full-width list unselected", async (t) => {
   const state = setup(t);

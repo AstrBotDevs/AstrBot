@@ -17,7 +17,7 @@ import {
 } from "@lucide/vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { EventSourcePolyfill } from "event-source-polyfill";
-import { logApi, pluginApi, sessionApi } from "@/api/v1";
+import { logApi, traceApi, pluginApi, sessionApi } from "@/api/v1";
 import { useModuleI18n } from "@/i18n/composables";
 import { getPlatformIcon } from "@/utils/platformUtils";
 import defaultPluginIcon from "/favicon.svg";
@@ -36,6 +36,18 @@ const searchText = ref("");
 const filtersOpen = ref(false);
 const selectedFilters = ref([]);
 const loading = ref(true);
+const historyBusy = ref(false);
+const detailBusy = ref(false);
+const historyError = ref("");
+const detailError = ref("");
+const totalRecords = ref(0);
+const nextCursor = ref(null);
+const storageWarning = ref(false);
+let metadataLoaded = false;
+let historyRequest = 0;
+let detailRequest = 0;
+let queryTimer = null;
+let historyRefreshTimer = null;
 const clockNow = ref(Date.now() / 1000);
 const durationTimer = ref(null);
 const connected = ref(false);
@@ -107,6 +119,7 @@ const filteredEvents = computed(() => {
       event.umo,
       umoNames.value[event.umo],
       event.sender_name,
+      event.plugin_names,
       ...event.records.map((record) => recordSearchText(record)),
     ]
       .filter(Boolean)
@@ -124,6 +137,8 @@ const filters = computed(() => [
 
 watch(filteredEvents, (visibleEvents) => {
   if (selectedSpanId.value && !visibleEvents.some((event) => event.span_id === selectedSpanId.value)) {
+    const previous = eventIndex.get(selectedSpanId.value);
+    if (previous?.model_version === 3) previous.records = [];
     selectedSpanId.value = null;
   }
 });
@@ -131,7 +146,7 @@ watch(filteredEvents, (visibleEvents) => {
 const traceRows = computed(() => filteredEvents.value.map((event) => ({
   event,
   duration: formatDuration(Math.max(0, ((event.completed ? event.last_time : Math.max(clockNow.value, event.last_time)) - event.first_time) * 1000)),
-  spans: timelineRecords(event).length,
+  spans: event.span_count ?? timelineRecords(event).length,
 })));
 
 const traceHeaders = computed(() => [
@@ -203,7 +218,9 @@ function timelineRecords(event) {
       const startAction = record.action === "handler_end" ? "handler_start" : "agent_start";
       const start = [...records].reverse().find((item) =>
         item.action === startAction && !item.completed &&
-        item.fields.handler_full_name === record.fields.handler_full_name,
+        (item.operation_span_id && record.operation_span_id
+          ? item.operation_span_id === record.operation_span_id
+          : item.fields.handler_full_name === record.fields.handler_full_name),
       );
       if (start) {
         start.fields = { ...start.fields, ...record.fields };
@@ -219,11 +236,11 @@ function timelineRecords(event) {
 function matchesFilter(event, filter) {
   if (filter === "errors") return event.status === "error";
   if (filter === "models") {
-    return event.records.some((record) => record.kind === "agent" ||
+    return event.has_models ?? event.records.some((record) => record.kind === "agent" ||
       ["astr_agent_prepare", "astr_agent_complete"].includes(record.action));
   }
   if (filter === "plugins") {
-    return event.records.some((record) => record.kind === "plugin_handler");
+    return event.has_plugins ?? event.records.some((record) => record.kind === "plugin_handler");
   }
   return true;
 }
@@ -243,60 +260,138 @@ function recordSearchText(record) {
     .join(" ");
 }
 
+function normalizeTracePayload(payload) {
+  const summary = payload.trace;
+  const attrs = summary.attributes || {};
+  const finished = summary.state !== "running";
+  const time = Number(payload.time_unix_nano || summary.updated_time_unix_nano || summary.start_time_unix_nano) / 1e9;
+  const meta = {
+    span_id: summary.trace_id, name: summary.name, model_version: 3,
+    umo: attrs["astrbot.umo"] || "", sender_name: attrs["astrbot.sender_name"] || "",
+    message_outline: attrs["astrbot.message_outline"] || "",
+    plugin_names: attrs["astrbot.plugins"] || "",
+    platform_id: attrs["astrbot.platform_id"] || "",
+    platform_name: attrs["astrbot.platform_name"] || "",
+    time: Number(summary.start_time_unix_nano) / 1e9,
+    last_time: Number(summary.end_time_unix_nano) / 1e9 || time,
+    completed: finished, status: summary.has_errors ? "error" : finished ? "success" : "running",
+    has_models: summary.has_models, has_plugins: summary.has_plugins,
+    span_count: summary.span_count, truncated: summary.truncated,
+    model_updated_ns: String(summary.updated_time_unix_nano || summary.start_time_unix_nano),
+  };
+  const records = [];
+  const spans = payload.spans || (payload.span ? [payload.span] : []);
+  const items = [
+    ...spans.map((span) => ({ span })),
+    ...spans.flatMap((span) => (span.events || []).map((event) => ({ event }))),
+    ...(payload.event ? [{ event: payload.event }] : []),
+  ];
+  for (const item of items) {
+    const model = item.span || item.event;
+    const inspectedModel = item.span ? { ...model, events: undefined } : model;
+    const fields = {};
+    for (const [key, value] of Object.entries(model.attributes || {})) {
+      if (!key.startsWith("astrbot.")) continue;
+      const name = key.slice(8);
+      fields[name] = value;
+      if (["chat_provider", "stats", "tools", "tool_name"].includes(name) && typeof value === "string") {
+        try { fields[name] = JSON.parse(value); } catch { /* Plain text is valid. */ }
+      }
+    }
+    if (item.event) {
+      records.push({
+        span_id: summary.trace_id, record_id: model.event_id,
+        action: model.name, time: Number(model.time_unix_nano) / 1e9,
+        fields, kind: fields.kind, model: inspectedModel,
+      });
+      continue;
+    }
+    const root = model.span_id === summary.root_span_id;
+    const action = root ? "event_received" : fields.action;
+    if (!action) continue;
+    const started = Number(model.start_time_unix_nano) / 1e9;
+    records.push({
+      span_id: summary.trace_id, record_id: model.span_id + ":start",
+      operation_span_id: model.span_id, parent_span_id: model.parent_span_id,
+      action, time: started,
+      fields: { ...fields, kind: root ? "message" : fields.kind, status: "running" },
+      kind: root ? "message" : fields.kind, model: inspectedModel,
+    });
+    if (model.end_time_unix_nano) {
+      const ended = Number(model.end_time_unix_nano) / 1e9;
+      records.push({
+        span_id: summary.trace_id, record_id: model.span_id + ":end",
+        operation_span_id: model.span_id, parent_span_id: model.parent_span_id,
+        action: root ? "pipeline_end" : fields.end_action,
+        time: ended, kind: fields.kind,
+        fields: { ...fields, duration_ms: Math.max(0, (ended - started) * 1000),
+          status: model.status?.code === 2 ? "error" : "success",
+          error: model.status?.message || fields.error },
+        model: inspectedModel,
+      });
+    }
+  }
+  return { meta, records };
+}
+
 function processNewTraces(newTraces) {
   if (!Array.isArray(newTraces)) return;
-
-  for (const trace of newTraces) {
+  for (const packet of newTraces) {
+    const normalized = packet?.trace ? normalizeTracePayload(packet) : null;
+    const trace = normalized?.meta || packet;
     if (!trace?.span_id) continue;
     if (["stage_start", "stage_end", "pipeline_start", "wake_evaluated"].includes(trace.action)) continue;
     let event = eventIndex.get(trace.span_id);
     if (!event) {
       event = reactive({
-        span_id: trace.span_id,
-        name: trace.name || "AstrMessageEvent",
-        umo: trace.umo || "",
-        sender_name: trace.sender_name || "",
+        span_id: trace.span_id, name: trace.name || "AstrMessageEvent",
+        umo: trace.umo || "", sender_name: trace.sender_name || "",
         message_outline: trace.message_outline || "",
-        platform_id: "",
-        platform_name: "",
-        platform_icon: "",
+        platform_id: "", platform_name: "", platform_icon: "",
         first_time: trace.time || Date.now() / 1000,
         last_time: trace.time || Date.now() / 1000,
-        status: "running",
-        completed: false,
-        records: [],
+        status: "running", completed: false, records: [],
       });
       eventIndex.set(trace.span_id, event);
       events.value.unshift(event);
     }
-
-    event.umo = event.umo || trace.umo || "";
-    event.sender_name = event.sender_name || trace.sender_name || "";
-    event.message_outline = event.message_outline || trace.message_outline || "";
-    event.platform_id = trace.fields?.platform_id || event.platform_id;
-    if (trace.fields?.platform_name) {
-      event.platform_name = trace.fields.platform_name;
-      event.platform_icon = getPlatformIcon(event.platform_name) || "";
+    if (normalized) {
+      if (!event.model_updated_ns || trace.model_updated_ns.padStart(20, "0") >= event.model_updated_ns.padStart(20, "0")) {
+        Object.assign(event, trace);
+        event.first_time = trace.time;
+        event.platform_icon = getPlatformIcon(trace.platform_name) || "";
+      }
+    } else {
+      event.umo = event.umo || trace.umo || "";
+      event.sender_name = event.sender_name || trace.sender_name || "";
+      event.message_outline = event.message_outline || trace.message_outline || "";
+      event.platform_id = trace.fields?.platform_id || event.platform_id;
+      if (trace.fields?.platform_name) {
+        event.platform_name = trace.fields.platform_name;
+        event.platform_icon = getPlatformIcon(event.platform_name) || "";
+      }
+      event.first_time = Math.min(event.first_time, trace.time || event.first_time);
+      event.last_time = Math.max(event.last_time, trace.time || event.last_time);
     }
-    event.first_time = Math.min(event.first_time, trace.time || event.first_time);
-    event.last_time = Math.max(event.last_time, trace.time || event.last_time);
-
-    const recordKey = trace.record_id || `${trace.span_id}:${trace.sequence ?? trace.time}:${trace.action}`;
-    if (!event.records.some((record) => record.key === recordKey)) {
-      event.records.push({ ...trace, key: recordKey, kind: trace.kind || trace.fields?.kind, fields: trace.fields || {} });
-      event.records.sort((a, b) => (a.time || 0) - (b.time || 0));
+    // Only the inspected trace retains span bodies. Other live packets update
+    // bounded list summaries; history is paged independently from SQLite.
+    const records = normalized
+      ? selectedSpanId.value === trace.span_id || packet.spans ? normalized.records : []
+      : [trace];
+    for (const record of records) {
+      const recordKey = record.record_id || `${trace.span_id}:${record.sequence ?? record.time}:${record.action}`;
+      const value = { ...record, key: recordKey, kind: record.kind || record.fields?.kind, fields: record.fields || {} };
+      const existing = event.records.findIndex((item) => item.key === recordKey);
+      if (existing === -1) event.records.push(value);
+      else event.records[existing] = value;
+      if (!normalized) {
+        if (record.action === "pipeline_end") event.completed = true;
+        if (record.status === "error" || record.fields?.status === "error") event.status = "error";
+        else if (record.action === "pipeline_end") event.status = event.status === "error" ? "error" : "success";
+      }
     }
-    if (trace.fields?.message && !event.message_outline && trace.action === "event_received") {
-      event.message_outline = trace.fields.message;
-    }
-    if (trace.action === "pipeline_end") event.completed = true;
-    if (trace.status === "error" || trace.fields?.status === "error") {
-      event.status = "error";
-    } else if (trace.action === "pipeline_end") {
-      event.status = event.status === "error" ? "error" : "success";
-    }
+    event.records.sort((a, b) => (a.time || 0) - (b.time || 0));
   }
-
   events.value.sort((a, b) => b.first_time - a.first_time);
   if (events.value.length > maxItems) {
     const removed = events.value.splice(maxItems);
@@ -304,35 +399,86 @@ function processNewTraces(newTraces) {
   }
 }
 
-async function fetchTraceHistory() {
-  try {
-    const response = await pluginApi.list();
-    plugins.value = Object.fromEntries(
-      (response.data?.data || []).filter((plugin) => plugin.name).map((plugin) => [plugin.name, plugin]),
-    );
-  } catch (error) {
-    console.error("Failed to fetch trace plugin metadata:", error);
+async function fetchTraceHistory(reset = true, reloadMetadata = false, preserveLoaded = false) {
+  if (!reset && (historyBusy.value || !nextCursor.value || events.value.length >= maxItems)) return;
+  const request = ++historyRequest;
+  historyBusy.value = true;
+  historyError.value = "";
+  if (!metadataLoaded || reloadMetadata) {
+    try {
+      const response = await pluginApi.list();
+      plugins.value = Object.fromEntries(
+        (response.data?.data || []).filter((plugin) => plugin.name).map((plugin) => [plugin.name, plugin]),
+      );
+    } catch (error) {
+      console.error("Failed to fetch trace plugin metadata:", error);
+    }
+    try {
+      const response = await sessionApi.activeUmos();
+      umoNames.value = Object.fromEntries(
+        (response.data?.data?.umo_infos || []).map((info) => [
+          info.umo, info.user_alias || info.auto_name || info.display_name || info.umo,
+        ]),
+      );
+    } catch (error) {
+      console.error("Failed to fetch session aliases:", error);
+    }
+    metadataLoaded = true;
   }
   try {
-    const response = await sessionApi.activeUmos();
-    umoNames.value = Object.fromEntries(
-      (response.data?.data?.umo_infos || []).map((info) => [
-        info.umo, info.user_alias || info.auto_name || info.display_name || info.umo,
-      ]),
-    );
+    const response = await traceApi.history({
+      limit: 50, cursor: reset ? undefined : nextCursor.value,
+      query: searchText.value.trim().slice(0, 256),
+      errors: selectedFilters.value.includes("errors"),
+      models: selectedFilters.value.includes("models"),
+      plugins: selectedFilters.value.includes("plugins"),
+    });
+    if (request !== historyRequest) return;
+    if (response.data?.status !== "ok") throw new Error("Trace history request failed");
+    const data = response.data.data;
+    if (reset && !preserveLoaded) {
+      const keep = new Set((data.traces || []).map((trace) => trace.trace_id));
+      if (selectedSpanId.value) keep.add(selectedSpanId.value);
+      events.value = events.value.filter((event) => keep.has(event.span_id));
+      for (const id of eventIndex.keys()) if (!keep.has(id)) eventIndex.delete(id);
+    }
+    processNewTraces((data.traces || []).map((trace) => ({ trace })));
+    totalRecords.value = data.total || 0;
+    nextCursor.value = data.cursor;
+    storageWarning.value = Boolean(data.storage?.error || data.storage?.dropped);
+    if (reset && selectedSpanId.value) loadTraceDetail(selectedSpanId.value);
   } catch (error) {
-    console.error("Failed to fetch session aliases:", error);
-  }
-  try {
-    const response = await logApi.history();
-    const logs = response.data?.data?.logs || [];
-    processNewTraces(logs.filter((item) => item.type === "trace"));
-  } catch (error) {
+    if (request === historyRequest) historyError.value = tm("history.loadFailed");
     console.error("Failed to fetch trace history:", error);
   } finally {
-    loading.value = false;
+    if (request === historyRequest) {
+      historyBusy.value = false;
+      loading.value = false;
+    }
   }
 }
+
+async function loadTraceDetail(traceId) {
+  const request = ++detailRequest;
+  detailBusy.value = true;
+  detailError.value = "";
+  try {
+    const response = await traceApi.detail(traceId);
+    if (request !== detailRequest || selectedSpanId.value !== traceId) return;
+    if (response.data?.status !== "ok") throw new Error("Trace detail request failed");
+    processNewTraces([response.data.data]);
+  } catch (error) {
+    if (request === detailRequest && selectedSpanId.value === traceId) detailError.value = tm("history.detailFailed");
+    console.error("Failed to fetch trace details:", error);
+  } finally {
+    if (request === detailRequest) detailBusy.value = false;
+  }
+}
+
+watch([searchText, selectedFilters], () => {
+  if (queryTimer) clearTimeout(queryTimer);
+  queryTimer = setTimeout(() => fetchTraceHistory(), 250);
+}, { deep: true });
 
 function connectSSE() {
   if (eventSource.value) eventSource.value.close();
@@ -346,12 +492,22 @@ function connectSSE() {
   source.onopen = () => {
     connected.value = true;
     retryAttempts.value = 0;
+    fetchTraceHistory(true, false, true);
   };
   source.onmessage = (event) => {
     if (event.lastEventId) lastEventId.value = event.lastEventId;
     try {
       const payload = JSON.parse(event.data);
-      if (payload?.type === "trace") processNewTraces([payload]);
+      if (payload?.type === "trace") {
+        processNewTraces([payload]);
+        if (payload.storage_accepted === false) storageWarning.value = true;
+        if (payload.span && (!payload.span.parent_span_id || selectedFilters.value.length) && !historyRefreshTimer) {
+          historyRefreshTimer = setTimeout(() => {
+            historyRefreshTimer = null;
+            fetchTraceHistory(true, false, true);
+          }, 1000);
+        }
+      }
     } catch (error) {
       console.error("Failed to parse trace payload:", error);
     }
@@ -371,7 +527,10 @@ function connectSSE() {
 
 function selectEvent(spanId) {
   const previousSpanId = selectedSpanId.value;
+  const previous = eventIndex.get(previousSpanId);
+  if (previous?.model_version === 3 && previousSpanId !== spanId) previous.records = [];
   selectedSpanId.value = spanId;
+  if (spanId && eventIndex.get(spanId)?.model_version === 3) loadTraceDetail(spanId);
   nextTick(() => {
     const row = document.querySelector(`[data-trace-id="${spanId || previousSpanId}"]`);
     row?.scrollIntoView({ block: "nearest" });
@@ -517,6 +676,10 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  historyRequest++;
+  detailRequest++;
+  if (queryTimer) clearTimeout(queryTimer);
+  if (historyRefreshTimer) clearTimeout(historyRefreshTimer);
   if (durationTimer.value) clearInterval(durationTimer.value);
   eventSource.value?.close();
   if (retryTimer.value) clearTimeout(retryTimer.value);
@@ -540,7 +703,7 @@ onBeforeUnmount(() => {
       </v-btn>
       <div class="trace-search">
         <Search :size="16" aria-hidden="true" />
-        <input v-model="searchText" :placeholder="tm('search', { count: filteredEvents.length })" />
+        <input v-model="searchText" :placeholder="tm('search', { count: totalRecords })" :aria-label="tm('search', { count: totalRecords })" />
         <button v-if="searchText" type="button" class="icon-button" :aria-label="tm('clearSearch')" @click="clearSearch">
           <X :size="15" aria-hidden="true" />
         </button>
@@ -559,12 +722,14 @@ onBeforeUnmount(() => {
         <component :is="!recordingEnabled ? Play : connected ? Pause : LoaderCircle" :size="16" :class="{ 'trace-connecting-icon': recordingEnabled && !connected }" aria-hidden="true" />
         {{ recordingLabel }}
       </v-btn>
-      <v-btn class="refresh-button" size="small" variant="tonal" :aria-label="tm('refresh')" :title="tm('refresh')" @click="fetchTraceHistory">
+      <v-btn class="refresh-button" size="small" variant="tonal" :aria-label="tm('refresh')" :title="tm('refresh')" @click="fetchTraceHistory(true, true)">
         <RefreshCw :size="16" aria-hidden="true" />
         <span>{{ tm("refresh") }}</span>
       </v-btn>
     </div>
 
+    <v-alert v-if="historyError" type="error" variant="tonal" density="compact">{{ historyError }}</v-alert>
+    <v-alert v-if="storageWarning" type="warning" variant="tonal" density="compact">{{ tm("history.storageWarning") }}</v-alert>
     <div class="trace-workspace">
       <button v-if="filtersOpen" type="button" class="trace-filter-backdrop" :aria-label="tm('filters.close')" @click="filtersOpen = false" />
       <aside v-if="filtersOpen" id="trace-filter-panel" class="trace-filter-panel" :aria-label="tm('filters.title')" @keydown.esc="filtersOpen = false">
@@ -645,6 +810,10 @@ onBeforeUnmount(() => {
             <span :title="tm('columns.spansHint')">{{ item.spans }}</span>
           </template>
         </v-data-table>
+        <div v-if="nextCursor" class="trace-page-footer">
+          <v-btn v-if="events.length < maxItems" size="small" variant="tonal" :loading="historyBusy" @click="fetchTraceHistory(false)">{{ tm("history.loadMore") }}</v-btn>
+          <span v-else>{{ tm("history.limitHint", { count: maxItems }) }}</span>
+        </div>
       </section>
 
       <main v-if="selectedEvent" class="trace-detail" @keydown.esc.stop="selectEvent(null)">
@@ -667,7 +836,13 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <div class="trace-stat-grid">
+        <v-alert v-if="selectedEvent.truncated" class="mt-3" type="warning" variant="tonal" density="compact">{{ tm("history.truncated") }}</v-alert>
+        <div v-if="detailBusy" class="trace-empty-state" aria-live="polite"><LoaderCircle :size="20" class="trace-connecting-icon" /><span>{{ tm("loading") }}</span></div>
+        <v-alert v-if="detailError" class="mt-3" type="error" variant="tonal" density="compact">
+          {{ detailError }}
+          <v-btn size="small" variant="text" @click="loadTraceDetail(selectedSpanId)">{{ tm("refresh") }}</v-btn>
+        </v-alert>
+        <div v-if="!detailBusy && !detailError" class="trace-stat-grid">
           <div class="trace-stat"><Clock3 :size="15" /><span>{{ tm("duration") }}</span><strong>{{ selectedStats.duration }}</strong></div>
           <div class="trace-stat"><PlugZap :size="15" /><span>{{ tm("handlers") }}</span><strong>{{ selectedStats.handlers }}</strong></div>
           <div class="trace-stat"><Send :size="15" /><span>{{ tm("responses") }}</span><strong>{{ selectedStats.responses }}</strong></div>
@@ -755,7 +930,7 @@ onBeforeUnmount(() => {
                 <v-chip class="timeline-metadata-chip" size="x-small" variant="tonal" color="primary">{{ tm("chips.executionMode", { name: recordSubtitle(record) }) }}</v-chip>
               </div>
               <div v-else-if="recordSubtitle(record)" class="timeline-subtitle">{{ recordSubtitle(record) }}</div>
-              <details v-if="formatFields(record.fields)" class="timeline-fields"><summary>{{ tm("details") }}</summary><pre>{{ formatFields(record.fields) }}</pre></details>
+              <details v-if="formatFields(record.model || record.fields)" class="timeline-fields"><summary>{{ tm("details") }}</summary><pre>{{ formatFields(record.model || record.fields) }}</pre></details>
               </template>
             </div>
           </div>
@@ -815,9 +990,10 @@ onBeforeUnmount(() => {
 @keyframes trace-connecting-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .trace-connecting-icon { animation: none; } }
 .trace-explorer-body { display: flex; flex: 1; min-height: 0; min-width: 0; overflow: hidden; position: relative; }
-.trace-list { flex: 1; min-height: 0; min-width: 0; overflow: hidden; }
+.trace-list { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; overflow: hidden; }
 .has-detail .trace-list { border-right: 1px solid var(--trace-border); }
-.trace-list-table { background: transparent; border-radius: 0; height: 100%; }
+.trace-list-table { background: transparent; border-radius: 0; flex: 1; min-height: 0; height: 100%; }
+.trace-page-footer { align-items: center; color: var(--trace-muted); display: flex; justify-content: center; padding: 8px; font-size: 12px; }
 .trace-list-table :deep(.trace-list-row.selected) { background: rgba(var(--v-theme-primary), 0.1); }
 .trace-list-table :deep(.trace-list-row:focus-visible) { outline: 2px solid rgb(var(--v-theme-primary)); outline-offset: -2px; }
 .trace-cell-text { display: block; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -34,6 +34,14 @@
   "details": "詳細を表示",
   "selectTrace": "トレースを選択すると実行チェーンを確認できます",
   "closeDetails": "詳細を閉じる",
+  "history": {
+    "loadFailed": "トレース履歴を読み込めません。再試行してください。",
+    "detailFailed": "詳細を読み込めません。削除済みの可能性があります。再試行してください。",
+    "storageWarning": "一部のトレースを保存できませんでした。DB エラーまたは容量を確認してください。",
+    "loadMore": "もっと読み込む",
+    "limitHint": "最大 {count} 件表示。検索条件を絞ってください。",
+    "truncated": "内容またはノード数が上限を超え、一部が省略されました。"
+  },
   "controls": {
     "start": "開始",
     "pauseButton": "一時停止",
@@ -49,7 +57,7 @@
     "timestamp": "タイムスタンプ",
     "message": "メッセージ",
     "sender": "送信者",
-    "spansHint": "開始と終了をまとめたタイムラインのノード数。グループを折りたたんでも件数は変わりません。"
+    "spansHint": "メッセージのルートを含む実際の Span 数。イベントは含まず、折りたたんでも変わりません。"
   },
   "chips": {
     "executionMode": "実行方式: {name}",

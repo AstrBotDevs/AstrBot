@@ -3725,6 +3725,31 @@ export type GetLogHistoryResponse = (string);
 
 export type GetLogHistoryError = unknown;
 
+export type ListTracesData = {
+    query?: {
+        cursor?: string;
+        errors?: boolean;
+        limit?: number;
+        models?: boolean;
+        plugins?: boolean;
+        query?: string;
+    };
+};
+
+export type ListTracesResponse = (SuccessEnvelope);
+
+export type ListTracesError = unknown;
+
+export type GetTraceDetailData = {
+    path: {
+        trace_id: string;
+    };
+};
+
+export type GetTraceDetailResponse = (SuccessEnvelope);
+
+export type GetTraceDetailError = (unknown);
+
 export type GetTraceSettingsResponse = (SuccessEnvelope);
 
 export type GetTraceSettingsError = unknown;

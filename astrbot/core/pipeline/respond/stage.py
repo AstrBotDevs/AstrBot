@@ -13,6 +13,7 @@ from astrbot.core.platform.astr_message_event import (
 )
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.path_util import path_Mapping
+from astrbot.core.utils.telemetry import bounded_text
 
 from ..context import PipelineContext, call_event_hook
 from ..stage import Stage, register_stage
@@ -267,6 +268,8 @@ class RespondStage(Stage):
             logger.info(f"Applying streaming output ({event.get_platform_id()}).")
             stream = result.async_stream
             stream_outline: list[str] = []
+            outline_bytes = 0
+            outline_truncated = False
 
             async def traced_stream() -> AsyncGenerator[MessageChain, None]:
                 """Collect response outlines as the platform consumes the stream.
@@ -274,6 +277,7 @@ class RespondStage(Stage):
                 Yields:
                     Original message chunks for platform delivery.
                 """
+                nonlocal outline_bytes, outline_truncated
                 iterator = stream.__aiter__()
                 while True:
                     # Tool/plugin sends during generation are independent responses.
@@ -291,7 +295,15 @@ class RespondStage(Stage):
                         "tool_call",
                         "agent_stats",
                     }:
-                        stream_outline.append(event._outline_chain(chain.chain))
+                        fragment = event._outline_chain(chain.chain)
+                        remaining = 4096 - outline_bytes
+                        if remaining >= 16:
+                            preview = bounded_text(fragment, remaining)
+                            stream_outline.append(preview)
+                            outline_bytes += len(preview.encode())
+                            outline_truncated |= preview != fragment
+                        elif fragment:
+                            outline_truncated = True
                     yield chain
 
             # Adapter chunks and protocol closing frames share one final trace.
@@ -308,6 +320,7 @@ class RespondStage(Stage):
                     source=event.get_extra("_trace_response_source"),
                     message=outline,
                     streaming=True,
+                    **({"truncated": True} if outline_truncated else {}),
                 )
             return
         if len(result.chain) > 0:
