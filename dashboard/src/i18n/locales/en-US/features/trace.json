@@ -18,7 +18,7 @@
   "collapse": "Collapse",
   "showMore": "Show more",
   "empty": "No trace data yet",
-  "search": "Search messages, sessions, or plugins",
+  "search": "Search messages, sessions, or plugins in {count} records",
   "clearSearch": "Clear search",
   "live": "Live",
   "connecting": "Connecting",
@@ -34,6 +34,14 @@
   "details": "View details",
   "selectTrace": "Select a trace to inspect the complete execution chain",
   "closeDetails": "Close details",
+  "controls": {
+    "start": "Start",
+    "pauseButton": "Pause",
+    "pause": "Pause trace recording",
+    "resume": "Start trace recording",
+    "loadFailed": "Failed to load trace settings. Refresh to retry.",
+    "updateFailed": "Failed to change trace recording. Please retry."
+  },
   "columns": {
     "duration": "Duration",
     "status": "Status",

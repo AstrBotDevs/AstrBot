@@ -19,3 +19,5 @@
 - Keep the existing in-memory trace storage; no new database persistence.
 - Show execution mode, plugin names, and response ownership as timeline chips. Reuse profile runner labels and classify built-in Agent replies as system/core while preserving plugin senders.
 - Remove the outer gray trace card and tinted list shell, using a flat tab layout with toolbar/table separators in both themes.
+- Top hint and separate recording switch → a toolbar Start/Pause/Connecting button. Filters, recording, and refresh share gray icon-and-text styling and 36px input height; search fills available width and includes the message count in its placeholder.
+- Use Vuetify datatable for the trace list, retaining fixed headers, stable trace row IDs, and explicit detail selection without adding pagination or automatic selection.

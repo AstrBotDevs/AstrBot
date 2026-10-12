@@ -1,34 +1,44 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
-import { Waypoints } from "@lucide/vue";
 import TraceDisplayer from "@/components/shared/TraceDisplayer.vue";
 import { traceApi } from "@/api/v1";
 import { useModuleI18n } from "@/i18n/composables";
+import { useToast } from "@/utils/toast";
 
 const { tm } = useModuleI18n("features/trace");
+const toast = useToast();
 const traceEnabled = ref(true);
-const loading = ref(false);
-const traceDisplayerKey = ref(0);
+const loading = ref(true);
 
 async function fetchTraceSettings() {
   try {
     const response = await traceApi.getSettings();
-    if (response.data?.status === "ok") {
-      const enabled = response.data.data?.trace_enable;
-      traceEnabled.value = typeof enabled === "boolean" ? enabled : true;
-    }
+    if (response.data?.status !== "ok")
+      throw new Error("Trace settings are unavailable");
+    const enabled = response.data.data?.trace_enable;
+    traceEnabled.value = typeof enabled === "boolean" ? enabled : true;
   } catch (error) {
     console.error("Failed to fetch trace settings:", error);
+    toast.error(tm("controls.loadFailed"));
+  } finally {
+    loading.value = false;
   }
 }
 
 async function updateTraceSettings() {
+  if (loading.value) return;
+  const nextEnabled = !traceEnabled.value;
   loading.value = true;
   try {
-    await traceApi.updateSettings({ trace_enable: traceEnabled.value });
-    traceDisplayerKey.value += 1;
+    const response = await traceApi.updateSettings({
+      trace_enable: nextEnabled,
+    });
+    if (response.data?.status !== "ok")
+      throw new Error("Trace settings update failed");
+    traceEnabled.value = nextEnabled;
   } catch (error) {
     console.error("Failed to update trace settings:", error);
+    toast.error(tm("controls.updateFailed"));
   } finally {
     loading.value = false;
   }
@@ -39,31 +49,12 @@ onMounted(fetchTraceSettings);
 
 <template>
   <div class="trace-page">
-    <div class="trace-toolbar">
-      <div class="trace-hint">
-        <Waypoints :size="16" :stroke-width="1.8" aria-hidden="true" />
-        <span>{{ tm("hint") }}</span>
-      </div>
-      <v-switch
-        v-model="traceEnabled"
-        :loading="loading"
-        :disabled="loading"
-        :aria-label="tm('toggleLabel')"
-        color="primary"
-        hide-details
-        density="compact"
-        inset
-        @update:model-value="updateTraceSettings"
-      >
-        <template #label>
-          <span class="switch-label">
-            {{ traceEnabled ? tm("recording") : tm("paused") }}
-          </span>
-        </template>
-      </v-switch>
-    </div>
     <div class="trace-body">
-      <TraceDisplayer :key="traceDisplayerKey" />
+      <TraceDisplayer
+        :recording-enabled="traceEnabled"
+        :recording-busy="loading"
+        @toggle-recording="updateTraceSettings"
+      />
     </div>
   </div>
 </template>
@@ -81,40 +72,6 @@ onMounted(fetchTraceSettings);
   width: 100%;
 }
 
-.trace-toolbar {
-  align-items: center;
-  display: flex;
-  flex: 0 0 auto;
-  gap: 20px;
-  justify-content: space-between;
-  min-height: 42px;
-  padding: 0 2px 10px;
-}
-
-.trace-hint {
-  align-items: center;
-  color: rgba(var(--v-theme-on-surface), 0.58);
-  display: flex;
-  font-size: 0.75rem;
-  gap: 7px;
-  line-height: 1.45;
-  min-width: 0;
-}
-
-.trace-hint svg {
-  flex: 0 0 auto;
-}
-
-.switch-label {
-  color: rgba(var(--v-theme-on-surface), 0.68);
-  font-size: 0.75rem;
-  white-space: nowrap;
-}
-
-.trace-toolbar :deep(.v-switch .v-selection-control) {
-  min-height: 34px;
-}
-
 .trace-body {
   flex: 1 1 auto;
   min-height: 0;
@@ -123,26 +80,6 @@ onMounted(fetchTraceSettings);
 @media (max-width: 800px) {
   .trace-page {
     padding: 0 4px 6px;
-  }
-
-  .trace-toolbar {
-    align-items: flex-start;
-    gap: 8px;
-    padding: 0 0 8px;
-  }
-
-  .trace-hint {
-    padding-top: 7px;
-  }
-}
-
-@media (max-width: 520px) {
-  .trace-toolbar {
-    justify-content: flex-end;
-  }
-
-  .trace-hint {
-    display: none;
   }
 }
 </style>

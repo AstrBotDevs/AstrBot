@@ -13,13 +13,13 @@ const ast = ts.createSourceFile("trace.js", descriptor.scriptSetup.content, ts.S
 function setup(t) {
   const focused = [];
   const context = vm.createContext({
-    computed, nextTick, reactive, ref, watch,
+    computed, nextTick, reactive, ref, watch, tm: (key) => key,
     getPlatformIcon: (name) => name + ".png",
     document: { querySelector: (selector) => ({ scrollIntoView() {}, focus() { focused.push(selector); } }) },
   });
   const names = new Set([
     "events", "selectedSpanId", "searchText", "selectedFilters", "umoNames", "clockNow",
-    "eventIndex", "maxItems", "selectedEvent", "normalizedSearch", "filteredEvents", "traceRows",
+    "eventIndex", "maxItems", "selectedEvent", "normalizedSearch", "filteredEvents", "traceRows", "traceHeaders",
     "processNewTraces", "matchesFilter", "recordSearchText", "timelineRecords", "formatDuration", "selectEvent",
   ]);
   const statements = ast.statements.filter((node) =>
@@ -30,7 +30,7 @@ function setup(t) {
   vm.runInContext(statements.map((node) => node.getText(ast)).join("\n"), context);
   const watcher = ast.statements.find((node) => node.getText(ast).startsWith("watch(filteredEvents,"));
   t.after(vm.runInContext(watcher.getText(ast), context));
-  return { focused, ...vm.runInContext("({ events, selectedSpanId, selectedEvent, selectedFilters, traceRows, clockNow, processNewTraces, selectEvent })", context) };
+  return { focused, ...vm.runInContext("({ events, selectedSpanId, selectedEvent, selectedFilters, traceRows, traceHeaders, clockNow, processNewTraces, selectEvent })", context) };
 }
 
 function record(span, action, time, fields = {}) {
@@ -108,13 +108,17 @@ test("duration updates while running or errored-but-active and freezes on comple
   assert.equal(state.traceRows.value[0].event.status, "error");
 });
 
-test("list columns follow the requested order and the inspector has an explicit close action", () => {
-  const header = descriptor.template.content.match(/<thead>([\s\S]*?)<\/thead>/)[1];
-  const columns = Array.from(header.matchAll(/<th\b[^>]*>(.*?)<\/th>/gs), (match) => match[1]);
-  assert.deepEqual(columns, [
-    '{{ tm("columns.status") }}', '{{ tm("columns.platform") }}', '{{ tm("columns.timestamp") }}',
-    '{{ tm("columns.duration") }}', '{{ tm("columns.message") }}', "UMO", '{{ tm("columns.sender") }}', "Spans",
+test("Vuetify datatable keeps the requested columns and explicit detail selection", (t) => {
+  const state = setup(t);
+  assert.deepEqual(Array.from(state.traceHeaders.value, (header) => header.title), [
+    "columns.status", "columns.platform", "columns.timestamp",
+    "columns.duration", "columns.message", "UMO", "columns.sender", "Spans",
   ]);
+  assert.match(descriptor.template.content, /<v-data-table/);
+  assert.match(descriptor.template.content, /item-value="event.span_id"/);
+  assert.match(descriptor.template.content, /:items-per-page="-1"/);
+  assert.match(descriptor.template.content, /hide-default-footer/);
+  assert.match(descriptor.template.content, /#item="\{ item: \{ event, duration, spans \} \}"/);
   assert.match(descriptor.template.content, /<main v-if="selectedEvent"/);
   assert.match(descriptor.template.content, /tm\('closeDetails'\)/);
   assert.match(descriptor.template.content, /@keydown.enter="selectEvent\(event.span_id\)"/);

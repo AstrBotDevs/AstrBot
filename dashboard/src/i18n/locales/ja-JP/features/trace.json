@@ -18,7 +18,7 @@
   "collapse": "折りたたむ",
   "showMore": "さらに表示",
   "empty": "トレースデータはありません",
-  "search": "メッセージ、セッション、プラグインを検索",
+  "search": "{count} 件の記録からメッセージ、セッション、プラグインを検索",
   "clearSearch": "検索をクリア",
   "live": "ライブ",
   "connecting": "接続中",
@@ -34,6 +34,14 @@
   "details": "詳細を表示",
   "selectTrace": "トレースを選択すると実行チェーンを確認できます",
   "closeDetails": "詳細を閉じる",
+  "controls": {
+    "start": "開始",
+    "pauseButton": "一時停止",
+    "pause": "トレース記録を一時停止",
+    "resume": "トレース記録を開始",
+    "loadFailed": "トレース設定の取得に失敗しました。ページを更新してください。",
+    "updateFailed": "トレース記録の切り替えに失敗しました。再試行してください。"
+  },
   "columns": {
     "duration": "実行時間",
     "status": "状態",

@@ -18,7 +18,7 @@
   "collapse": "收起",
   "showMore": "显示更多",
   "empty": "暂无追踪数据",
-  "search": "搜索消息、会话、插件",
+  "search": "在 {count} 条记录中搜索消息、会话、插件",
   "clearSearch": "清除搜索",
   "live": "实时",
   "connecting": "连接中",
@@ -34,6 +34,14 @@
   "details": "查看详情",
   "selectTrace": "选择一条追踪查看完整执行链",
   "closeDetails": "关闭详情",
+  "controls": {
+    "start": "启动",
+    "pauseButton": "暂停",
+    "pause": "暂停追踪记录",
+    "resume": "开始追踪记录",
+    "loadFailed": "读取追踪设置失败，请刷新页面重试",
+    "updateFailed": "切换追踪记录失败，请重试"
+  },
   "columns": {
     "duration": "运行时间",
     "status": "状态",

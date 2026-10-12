@@ -5,6 +5,9 @@ import {
   Check,
   ChevronDown,
   Clock3,
+  LoaderCircle,
+  Pause,
+  Play,
   PlugZap,
   RefreshCw,
   Search,
@@ -21,6 +24,11 @@ import defaultPluginIcon from "/favicon.svg";
 
 const { tm } = useModuleI18n("features/trace");
 const { tm: configTm } = useModuleI18n("features/config");
+const props = defineProps({
+  recordingEnabled: { type: Boolean, default: true },
+  recordingBusy: { type: Boolean, default: false },
+});
+const emit = defineEmits(["toggle-recording"]);
 const maxItems = 300;
 const events = ref([]);
 const selectedSpanId = ref(null);
@@ -31,6 +39,7 @@ const loading = ref(true);
 const clockNow = ref(Date.now() / 1000);
 const durationTimer = ref(null);
 const connected = ref(false);
+const recordingLabel = computed(() => !props.recordingEnabled ? tm("controls.start") : connected.value ? tm("controls.pauseButton") : tm("connecting"));
 const eventSource = ref(null);
 const retryTimer = ref(null);
 const retryAttempts = ref(0);
@@ -124,6 +133,17 @@ const traceRows = computed(() => filteredEvents.value.map((event) => ({
   duration: formatDuration(Math.max(0, ((event.completed ? event.last_time : Math.max(clockNow.value, event.last_time)) - event.first_time) * 1000)),
   spans: timelineRecords(event).length,
 })));
+
+const traceHeaders = computed(() => [
+  { title: tm("columns.status"), key: "status", width: 100 },
+  { title: tm("columns.platform"), key: "platform", width: 56 },
+  { title: tm("columns.timestamp"), key: "timestamp", width: 132 },
+  { title: tm("columns.duration"), key: "duration", width: 92 },
+  { title: tm("columns.message"), key: "message", width: "26%" },
+  { title: "UMO", key: "umo", width: "28%" },
+  { title: tm("columns.sender"), key: "sender", width: 110 },
+  { title: "Spans", key: "spans", width: 64 },
+]);
 
 const selectedStats = computed(() => {
   const event = selectedEvent.value;
@@ -509,7 +529,7 @@ onBeforeUnmount(() => {
       <v-btn
         class="filter-toggle-btn"
         size="small"
-        :variant="filtersOpen || selectedFilters.length ? 'tonal' : 'text'"
+        variant="tonal"
         :aria-expanded="filtersOpen"
         aria-controls="trace-filter-panel"
         @click="filtersOpen = !filtersOpen"
@@ -520,16 +540,29 @@ onBeforeUnmount(() => {
       </v-btn>
       <div class="trace-search">
         <Search :size="16" aria-hidden="true" />
-        <input v-model="searchText" :placeholder="tm('search')" />
+        <input v-model="searchText" :placeholder="tm('search', { count: filteredEvents.length })" />
         <button v-if="searchText" type="button" class="icon-button" :aria-label="tm('clearSearch')" @click="clearSearch">
           <X :size="15" aria-hidden="true" />
         </button>
       </div>
-      <div class="trace-live-state" :class="{ connected }"><span class="live-dot" />{{ connected ? tm("live") : tm("connecting") }}</div>
-      <div class="trace-count">{{ filteredEvents.length }} {{ tm("records") }}</div>
-      <button type="button" class="icon-button refresh-button" :aria-label="tm('refresh')" @click="fetchTraceHistory">
+      <v-btn
+        class="trace-recording-btn"
+        size="small"
+        variant="tonal"
+        :loading="recordingBusy"
+        :disabled="recordingBusy"
+        :aria-pressed="recordingEnabled"
+        :aria-label="tm(recordingEnabled ? 'controls.pause' : 'controls.resume')"
+        :title="tm(recordingEnabled ? 'controls.pause' : 'controls.resume')"
+        @click="emit('toggle-recording')"
+      >
+        <component :is="!recordingEnabled ? Play : connected ? Pause : LoaderCircle" :size="16" :class="{ 'trace-connecting-icon': recordingEnabled && !connected }" aria-hidden="true" />
+        {{ recordingLabel }}
+      </v-btn>
+      <v-btn class="refresh-button" size="small" variant="tonal" :aria-label="tm('refresh')" :title="tm('refresh')" @click="fetchTraceHistory">
         <RefreshCw :size="16" aria-hidden="true" />
-      </button>
+        <span>{{ tm("refresh") }}</span>
+      </v-btn>
     </div>
 
     <div class="trace-workspace">
@@ -552,22 +585,23 @@ onBeforeUnmount(() => {
       <section class="trace-list" :aria-label="tm('traceList')">
         <div v-if="loading" class="trace-empty-state">{{ tm("loading") }}</div>
         <div v-else-if="filteredEvents.length === 0" class="trace-empty-state"><Activity :size="22" aria-hidden="true" /><span>{{ tm("empty") }}</span></div>
-        <table v-else class="trace-list-table">
-          <thead>
-            <tr>
-              <th scope="col">{{ tm("columns.status") }}</th>
-              <th scope="col">{{ tm("columns.platform") }}</th>
-              <th scope="col">{{ tm("columns.timestamp") }}</th>
-              <th scope="col">{{ tm("columns.duration") }}</th>
-              <th scope="col">{{ tm("columns.message") }}</th>
-              <th scope="col">UMO</th>
-              <th scope="col">{{ tm("columns.sender") }}</th>
-              <th scope="col" :title="tm('columns.spansHint')">Spans</th>
-            </tr>
-          </thead>
-          <tbody>
+        <v-data-table
+          v-else
+          class="trace-list-table"
+          :headers="traceHeaders"
+          :items="traceRows"
+          item-value="event.span_id"
+          :items-per-page="-1"
+          :mobile="false"
+          density="compact"
+          fixed-header
+          height="100%"
+          hide-default-footer
+          disable-sort
+        >
+          <template #header.spans><span :title="tm('columns.spansHint')">Spans</span></template>
+          <template #item="{ item: { event, duration, spans } }">
             <tr
-              v-for="{ event, duration, spans } in traceRows"
               :key="event.span_id"
               class="trace-list-row"
               :class="{ selected: event.span_id === selectedSpanId }"
@@ -597,8 +631,8 @@ onBeforeUnmount(() => {
               <td class="trace-sender-cell" :title="event.sender_name">{{ event.sender_name || "-" }}</td>
               <td class="trace-spans-cell" :title="tm('columns.spansHint')">{{ spans }}</td>
             </tr>
-          </tbody>
-        </table>
+          </template>
+        </v-data-table>
       </section>
 
       <main v-if="selectedEvent" class="trace-detail" @keydown.esc.stop="selectEvent(null)">
@@ -742,10 +776,12 @@ onBeforeUnmount(() => {
 .timeline-group-expansion svg { transition: transform 0.15s ease; }
 .timeline-group-expansion .is-collapsed { transform: rotate(-90deg); }
 .timeline-nested .timeline-content { border-left: 2px solid var(--trace-border); padding-left: 10px; }
-.trace-explorer { --trace-border: rgba(var(--v-theme-on-surface), 0.1); --trace-muted: rgba(var(--v-theme-on-surface), 0.58); background: transparent; border: 0; border-radius: 0; display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; }
+.trace-explorer { --trace-border: rgba(var(--v-theme-on-surface), 0.1); --trace-muted: rgba(var(--v-theme-on-surface), 0.58); --trace-control-background: rgba(var(--v-theme-on-surface), 0.06); background: transparent; border: 0; border-radius: 0; display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; }
 .trace-explorer-toolbar { align-items: center; border-bottom: 1px solid var(--trace-border); display: flex; gap: 10px; min-height: 50px; padding: 8px 12px; }
+.trace-explorer-toolbar :deep(.v-btn) { background: var(--trace-control-background); height: 36px; }
+.trace-explorer-toolbar :deep(.v-btn__underlay) { display: none; }
 .filter-toggle-btn { flex: 0 0 auto; }
-.filter-toggle-btn :deep(.v-btn__content) { gap: 5px; }
+.trace-explorer-toolbar :deep(.v-btn__content) { gap: 6px; }
 .filter-status-dot { background: rgb(var(--v-theme-primary)); border-radius: 50%; height: 6px; width: 6px; }
 .trace-workspace { display: flex; flex: 1; min-height: 0; min-width: 0; overflow: hidden; position: relative; }
 .trace-filter-panel { background: rgb(var(--v-theme-surface)); border-right: 1px solid var(--trace-border); flex: 0 0 220px; min-height: 0; overflow: auto; padding: 12px; }
@@ -756,22 +792,23 @@ onBeforeUnmount(() => {
 .trace-filter-option :deep(.v-selection-control) { flex: 0 0 auto; min-height: 32px; }
 .trace-filter-hint { color: var(--trace-muted); font-size: 11px; line-height: 1.6; margin: 12px 0 0; }
 .trace-filter-backdrop { display: none; }
-.trace-search { align-items: center; background: rgba(var(--v-theme-on-surface), 0.06); border: 1px solid transparent; border-radius: 7px; color: var(--trace-muted); display: flex; flex: 1; gap: 8px; max-width: 520px; padding: 7px 9px; }
+.trace-search { align-items: center; background: var(--trace-control-background); border: 1px solid transparent; border-radius: 7px; color: var(--trace-muted); display: flex; flex: 1; gap: 8px; height: 36px; min-width: 0; padding: 0 10px; }
 .trace-search:focus-within { border-color: rgba(var(--v-theme-primary), 0.6); }
 .trace-search input { background: transparent; border: 0; color: rgb(var(--v-theme-on-surface)); font-size: 12px; min-width: 0; outline: 0; width: 100%; }
 .icon-button { align-items: center; background: transparent; border: 0; border-radius: 5px; color: var(--trace-muted); cursor: pointer; display: inline-flex; justify-content: center; padding: 4px; }
 .icon-button:hover { background: rgba(var(--v-theme-on-surface), 0.08); color: rgb(var(--v-theme-on-surface)); }
-.trace-live-state, .trace-count { color: var(--trace-muted); font-size: 11px; white-space: nowrap; }
-.trace-live-state { align-items: center; display: flex; gap: 6px; }
-.live-dot { background: #a1a1aa; border-radius: 50%; height: 6px; width: 6px; }
-.trace-live-state.connected .live-dot { background: #22c55e; box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.14); }
+.trace-recording-btn { flex: 0 0 auto; white-space: nowrap; }
+.refresh-button { flex: 0 0 auto; white-space: nowrap; }
+.trace-connecting-icon { animation: trace-connecting-spin 1s linear infinite; }
+@keyframes trace-connecting-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .trace-connecting-icon { animation: none; } }
 .trace-explorer-body { display: flex; flex: 1; min-height: 0; min-width: 0; overflow: hidden; position: relative; }
-.trace-list { flex: 1; min-height: 0; min-width: 0; overflow: auto; }
+.trace-list { flex: 1; min-height: 0; min-width: 0; overflow: hidden; }
 .has-detail .trace-list { border-right: 1px solid var(--trace-border); }
-.trace-list-table { border-collapse: separate; border-spacing: 0; font-size: 12px; min-width: 1100px; table-layout: fixed; width: 100%; }
-.trace-list-table th { background: rgb(var(--v-theme-surface)); border-bottom: 1px solid var(--trace-border); color: var(--trace-muted); font-size: 11px; font-weight: 600; padding: 11px 12px; position: sticky; text-align: left; top: 0; white-space: nowrap; z-index: 1; }
-.trace-list-table th:nth-child(1) { width: 100px; } .trace-list-table th:nth-child(2) { width: 56px; } .trace-list-table th:nth-child(3) { width: 132px; } .trace-list-table th:nth-child(4) { width: 92px; } .trace-list-table th:nth-child(5) { width: 26%; } .trace-list-table th:nth-child(6) { width: 28%; } .trace-list-table th:nth-child(7) { width: 110px; } .trace-list-table th:nth-child(8) { width: 64px; }
-.trace-list-table td { border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.06); height: 48px; overflow: hidden; padding: 10px 12px; text-overflow: ellipsis; white-space: nowrap; }
+.trace-list-table { background: transparent; border-radius: 0; font-size: 12px; height: 100%; }
+.trace-list-table :deep(table) { border-collapse: separate; border-spacing: 0; min-width: 1100px; table-layout: fixed; width: 100%; }
+.trace-list-table :deep(table > thead > tr > th) { background: rgb(var(--v-theme-surface)); border-bottom: 1px solid var(--trace-border); color: var(--trace-muted); font-size: 11px; font-weight: 600; padding: 11px 12px; white-space: nowrap; }
+.trace-list-table :deep(table > tbody > tr > td) { border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.06); height: 48px; overflow: hidden; padding: 10px 12px; text-overflow: ellipsis; white-space: nowrap; }
 .trace-list-row { cursor: pointer; } .trace-list-row:hover { background: rgba(var(--v-theme-on-surface), 0.045); } .trace-list-row.selected { background: rgba(var(--v-theme-primary), 0.1); } .trace-list-row:focus-visible { outline: 2px solid rgb(var(--v-theme-primary)); outline-offset: -2px; }
 .trace-item-platform { align-items: center; color: var(--trace-muted); display: inline-flex; height: 20px; justify-content: center; vertical-align: middle; width: 20px; }
 .trace-item-platform img { height: 20px; object-fit: contain; width: 20px; }
@@ -792,6 +829,6 @@ onBeforeUnmount(() => {
 .timeline-fields { margin-top: 6px; } .timeline-fields summary { color: var(--trace-muted); cursor: pointer; font-size: 10px; } .timeline-fields pre { background: rgba(var(--v-theme-on-surface), 0.04); border-radius: 6px; color: var(--trace-muted); font-size: 10px; line-height: 1.5; margin: 6px 0 0; max-height: 280px; overflow: auto; padding: 8px; white-space: pre-wrap; word-break: break-word; }
 .trace-empty-state { align-items: center; color: var(--trace-muted); display: flex; flex-direction: column; font-size: 12px; gap: 8px; justify-content: center; min-height: 180px; }
 @media (max-width: 1100px) { .trace-detail { border-left: 1px solid var(--trace-border); bottom: 0; box-shadow: -8px 0 24px rgba(0, 0, 0, 0.12); max-width: none; min-width: 0; position: absolute; right: 0; top: 0; width: min(760px, 90%); z-index: 1; } }
-@media (max-width: 900px) { .trace-filter-panel { bottom: 0; box-shadow: 8px 0 24px rgba(0, 0, 0, 0.18); left: 0; max-width: 85%; position: absolute; top: 0; width: 220px; z-index: 3; } .trace-filter-backdrop { background: rgba(var(--v-theme-on-surface), 0.12); border: 0; display: block; inset: 0; position: absolute; z-index: 2; } .trace-detail { padding: 15px; } .trace-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .trace-count { display: none; } }
-@media (max-width: 640px) { .trace-explorer-toolbar { flex-wrap: wrap; } .filter-toggle-btn { order: 1; } .trace-search { flex: 1 1 160px; max-width: none; order: 1; } .trace-live-state { order: 2; } .refresh-button { margin-left: auto; order: 2; } .trace-detail { width: 100%; } .trace-detail-time { display: none; } }
+@media (max-width: 900px) { .trace-filter-panel { bottom: 0; box-shadow: 8px 0 24px rgba(0, 0, 0, 0.18); left: 0; max-width: 85%; position: absolute; top: 0; width: 220px; z-index: 3; } .trace-filter-backdrop { background: rgba(var(--v-theme-on-surface), 0.12); border: 0; display: block; inset: 0; position: absolute; z-index: 2; } .trace-detail { padding: 15px; } .trace-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .trace-explorer-toolbar { flex-wrap: wrap; } .filter-toggle-btn { order: 1; } .trace-search { flex: 1 1 160px; max-width: none; order: 1; } .trace-recording-btn { order: 2; } .refresh-button { margin-left: auto; order: 2; } .trace-detail { width: 100%; } .trace-detail-time { display: none; } }
 </style>
