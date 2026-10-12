@@ -239,7 +239,7 @@ class RespondStage(Stage):
         )
         event.set_extra(
             "_trace_response_source",
-            "agent" if result.is_model_result() else "core",
+            event.get_extra("_trace_response_source") or "core",
         )
         if result.result_content_type != ResultContentType.STREAMING_RESULT:
             event.trace.record(

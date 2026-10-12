@@ -33,6 +33,12 @@
   "responses": "Ответы",
   "details": "Подробности",
   "selectTrace": "Выберите трассировку, чтобы увидеть цепочку выполнения",
+  "chips": {
+    "executionMode": "Режим выполнения: {name}",
+    "systemSender": "Отправлено системой",
+    "pluginSender": "Отправлено плагином: {name}",
+    "unknownSender": "Неизвестный отправитель"
+  },
   "groups": {
     "handlerStart": "Вызваны несколько обработчиков плагинов",
     "agentStart": "Запущены несколько Agent",

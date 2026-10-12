@@ -16,11 +16,20 @@ const translations = JSON.parse(readFileSync(
   new URL("../src/i18n/locales/zh-CN/features/trace.json", import.meta.url),
   "utf8",
 ));
+const configTranslations = JSON.parse(readFileSync(
+  new URL("../src/i18n/locales/zh-CN/features/config.json", import.meta.url), "utf8",
+));
 
 function setup(t, records) {
   const selectedEvent = ref({ records, first_time: 1, last_time: 2 });
   const context = vm.createContext({
     computed, reactive, ref, watch, selectedEvent,
+    plugins: ref({ weather: { display_name: "Weather Forecast" } }),
+    configTm(key) {
+      const text = key.split(".").reduce((value, part) => value?.[part], configTranslations);
+      assert.equal(typeof text, "string", `Missing config translation: ${key}`);
+      return text;
+    },
     tm(key, params = {}) {
       const text = key.split(".").reduce((value, part) => value?.[part], translations);
       assert.equal(typeof text, "string", `Missing translation: ${key}`);
@@ -30,7 +39,7 @@ function setup(t, records) {
   const names = new Set([
     "selectedSpanId", "expandedGroups", "actionLabels", "selectedStats",
     "selectedRecords", "timelineGroups", "timelineRows", "timelineRecords",
-    "recordLabel", "formatDuration",
+    "recordLabel", "recordSubtitle", "formatDuration",
   ]);
   const statements = ast.statements.filter((node) =>
     ts.isFunctionDeclaration(node) ? names.has(node.name?.text) :
@@ -41,7 +50,7 @@ function setup(t, records) {
   vm.runInContext(statements.map((node) => node.getText(ast)).join("\n"), context);
   const stop = vm.runInContext(watcher.getText(ast), context);
   t.after(stop);
-  return vm.runInContext("({ selectedEvent, selectedSpanId, selectedStats, selectedRecords, timelineGroups, timelineRows, expandedGroups, recordLabel })", context);
+  return vm.runInContext("({ selectedEvent, selectedSpanId, selectedStats, selectedRecords, timelineGroups, timelineRows, expandedGroups, recordLabel, recordSubtitle })", context);
 }
 
 function handler(key, category = "listener", fields = {}) {
@@ -68,7 +77,7 @@ test("collapse adjacent handlers by category without reordering separated record
   const listener = state.timelineRows.value[1];
   assert.equal(listener.expanded, false);
   assert.equal(listener.group.records.length, 2);
-  assert.equal(listener.plugins, "Test Plugin · Another Plugin");
+  assert.equal(listener.plugins, "Test Plugin, Another Plugin");
   assert.equal(state.recordLabel(listener.record, true), "触发多个插件处理器 (事件监听器)");
   assert.equal(state.recordLabel(state.timelineRows.value[2].record, true), "触发多个插件处理器 (事件钩子)");
   assert.equal(state.selectedStats.value.handlers, 5);
@@ -120,6 +129,22 @@ test("empty and singleton timelines do not create group headers", (t) => {
   assert.equal(state.recordLabel(state.timelineRows.value[0].record), "触发插件处理器 (指令/指令组)");
 });
 
+test("chips reuse profile runner names and classify responses by their sending owner", (t) => {
+  const state = setup(t, [
+    { key: "agent1", action: "agent_start", kind: "agent", fields: { runner_type: "local" } },
+    { key: "agent2", action: "agent_start", kind: "agent", fields: { runner_type: "dify" } },
+    { key: "system", action: "response_sent", kind: "response", fields: { source: "core" } },
+    { key: "legacy", action: "response_sent", kind: "response", fields: { source: "agent" } },
+    { key: "plugin", action: "response_sent", kind: "response", fields: { source: "plugin:weather" } },
+  ]);
+  const rows = state.timelineRows.value;
+  assert.deepEqual(Array.from(rows[0].metadata), ["执行方式：AstrBot 内置 AI", "执行方式：Dify"]);
+  assert.deepEqual(Array.from(rows[1].metadata), ["系统发送", "插件发送：Weather Forecast"]);
+  assert.equal(state.recordSubtitle({ action: "agent_start", fields: { runner_type: "custom_runner" } }), "custom_runner");
+  assert.equal(state.recordSubtitle({ action: "response_sent", fields: { source: "unknown" } }), "来源未知");
+  assert.equal(state.recordSubtitle({ action: "response_sent", fields: { source: "plugin:uninstalled" } }), "插件发送：uninstalled");
+});
+
 test("group template and stacked icon styles compile, and all locales include group labels", () => {
   const template = compileTemplate({ source: descriptor.template.content, filename: "TraceDisplayer.vue", id: "trace-groups" });
   assert.deepEqual(template.errors, []);
@@ -127,8 +152,10 @@ test("group template and stacked icon styles compile, and all locales include gr
   assert.deepEqual(styles.errors, []);
   assert.match(descriptor.template.content, /:aria-expanded="row.expanded"/);
   assert.match(descriptor.template.content, /row.group.records.slice\(0, 3\)/);
+  assert.match(descriptor.template.content, /<v-chip[^>]*timeline-metadata-chip/);
   for (const locale of ["en-US", "ja-JP", "ru-RU"]) {
     const data = JSON.parse(readFileSync(new URL(`../src/i18n/locales/${locale}/features/trace.json`, import.meta.url), "utf8").replace(/^\uFEFF/, ""));
     assert.deepEqual(Object.keys(data.groups).sort(), Object.keys(translations.groups).sort());
+    assert.deepEqual(Object.keys(data.chips).sort(), Object.keys(translations.chips).sort());
   }
 });

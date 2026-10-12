@@ -33,6 +33,12 @@
   "responses": "响应",
   "details": "查看详情",
   "selectTrace": "选择一条追踪查看完整执行链",
+  "chips": {
+    "executionMode": "执行方式：{name}",
+    "systemSender": "系统发送",
+    "pluginSender": "插件发送：{name}",
+    "unknownSender": "来源未知"
+  },
   "groups": {
     "handlerStart": "触发多个插件处理器",
     "agentStart": "启动多个 Agent",

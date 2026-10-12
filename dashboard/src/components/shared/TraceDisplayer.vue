@@ -20,6 +20,7 @@ import { getPlatformIcon } from "@/utils/platformUtils";
 import defaultPluginIcon from "/favicon.svg";
 
 const { tm } = useModuleI18n("features/trace");
+const { tm: configTm } = useModuleI18n("features/config");
 const maxItems = 300;
 const events = ref([]);
 const selectedSpanId = ref(null);
@@ -152,9 +153,13 @@ const timelineRows = computed(() => timelineGroups.value.flatMap((group) => {
   const errors = group.records.filter((record) => record.fields.status === "error").length;
   const plugins = [...new Set(group.records.map((record) =>
     record.fields.plugin_display_name || record.fields.plugin,
-  ).filter(Boolean))].join(" · ");
+  ).filter(Boolean))].join(", ");
+  const metadata = [...new Set(group.records.filter((record) =>
+    record.action === "agent_start" || record.kind === "response",
+  ).map((record) => record.action === "agent_start"
+    ? tm("chips.executionMode", { name: recordSubtitle(record) }) : recordSubtitle(record)))];
   return [
-    { key: `${group.key}:group`, record: group.records[0], group, expanded, errors, plugins },
+    { key: `${group.key}:group`, record: group.records[0], group, expanded, errors, plugins, metadata },
     ...(expanded ? group.records.map((record) => ({ key: record.key, record, nested: true })) : []),
   ];
 }));
@@ -430,9 +435,20 @@ function recordSubtitle(record) {
     return `${fields.plugin_display_name || fields.plugin || "Plugin"} · ${fields.handler || "handler"} · ${fields.handler_type || ""}`;
   }
   if (record.action === "stage_start" || record.action === "stage_end") return fields.stage || "";
-  if (record.action === "response_sent") return `${fields.source || "response"} · ${fields.message || ""}`;
-  if (record.action === "response_ready") return `${fields.source || "response"} · ${fields.message || ""}`;
-  if (record.action === "agent_start") return fields.runner_type || "agent";
+  if (record.action === "response_sent" || record.action === "response_ready") {
+    const source = fields.source;
+    if (source?.startsWith("plugin:")) {
+      const plugin = source.slice("plugin:".length);
+      return tm("chips.pluginSender", { name: plugins.value[plugin]?.display_name || plugin });
+    }
+    return tm(source === "core" || source === "agent" ? "chips.systemSender" : "chips.unknownSender");
+  }
+  if (record.action === "agent_start") {
+    const runner = fields.runner_type || "local";
+    if (runner === "local") return configTm("aiSettings.localSettingsTitle");
+    return ["dify", "coze", "dashscope", "deerflow"].includes(runner)
+      ? configTm(`aiSettings.runners.${runner}.title`) : runner;
+  }
   if (record.action === "agent_tool_call") return fields.tool_name?.name || fields.tool_name || "tool";
   if (record.action === "event_received") return fields.message || "";
   if (record.fields?.error) return record.fields.error;
@@ -614,7 +630,8 @@ onBeforeUnmount(() => {
                   <time>{{ formatTime(row.record.time) }}</time>
                 </div>
                 <div class="timeline-subtitle timeline-group-summary">
-                  <span v-if="row.plugins" class="timeline-group-plugins">{{ row.plugins }}</span>
+                  <v-chip v-if="row.plugins" class="timeline-metadata-chip" size="x-small" variant="tonal" color="primary" :title="row.plugins">{{ row.plugins }}</v-chip>
+                  <v-chip v-for="label in row.metadata" :key="label" class="timeline-metadata-chip" size="x-small" variant="tonal">{{ label }}</v-chip>
                   <span class="timeline-group-expansion"><ChevronDown :size="13" :class="{ 'is-collapsed': !row.expanded }" aria-hidden="true" />{{ tm(row.expanded ? "collapse" : "expand") }}</span>
                 </div>
               </button>
@@ -623,7 +640,7 @@ onBeforeUnmount(() => {
               <div v-if="record.kind === 'plugin_handler'" class="timeline-subtitle">
                 <v-tooltip :text="record.fields.plugin" location="top">
                   <template #activator="{ props }">
-                    <span v-bind="props" class="trace-hover-name">{{ record.fields.plugin_display_name || record.fields.plugin || "Plugin" }}</span>
+                    <v-chip v-bind="props" class="trace-hover-name timeline-metadata-chip" size="x-small" variant="tonal" color="primary">{{ record.fields.plugin_display_name || record.fields.plugin || "Plugin" }}</v-chip>
                   </template>
                 </v-tooltip>
                 ·
@@ -641,8 +658,11 @@ onBeforeUnmount(() => {
                 <span v-if="record.fields.duration_ms != null"> · {{ formatDuration(record.fields.duration_ms) }}</span>
               </div>
               <div v-else-if="record.kind === 'response'" class="timeline-subtitle">
-                <span>{{ record.fields.source || "response" }}</span>
+                <v-chip class="timeline-metadata-chip" size="x-small" variant="tonal" :title="record.fields.source">{{ recordSubtitle(record) }}</v-chip>
                 <div v-if="record.fields.message" class="trace-response-outline">{{ record.fields.message }}</div>
+              </div>
+              <div v-else-if="record.action === 'agent_start'" class="timeline-subtitle">
+                <v-chip class="timeline-metadata-chip" size="x-small" variant="tonal" color="primary">{{ tm("chips.executionMode", { name: recordSubtitle(record) }) }}</v-chip>
               </div>
               <div v-else-if="recordSubtitle(record)" class="timeline-subtitle">{{ recordSubtitle(record) }}</div>
               <details v-if="formatFields(record.fields)" class="timeline-fields"><summary>{{ tm("details") }}</summary><pre>{{ formatFields(record.fields) }}</pre></details>
@@ -672,8 +692,9 @@ onBeforeUnmount(() => {
 .timeline-group-title { align-items: center; display: flex; flex-wrap: wrap; gap: 6px; }
 .timeline-group-count { background: rgba(var(--v-theme-on-surface), 0.06); border-radius: 4px; color: var(--trace-muted); font-size: 10px; padding: 1px 5px; white-space: nowrap; }
 .timeline-group-errors { color: #ef4444; font-size: 10px; white-space: nowrap; }
-.timeline-group-summary { align-items: center; display: flex; gap: 10px; }
-.timeline-group-plugins { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.timeline-group-summary { align-items: center; display: flex; flex-wrap: wrap; gap: 6px 10px; }
+.timeline-metadata-chip { max-width: 100%; vertical-align: middle; }
+.timeline-metadata-chip :deep(.v-chip__content) { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .timeline-group-expansion { align-items: center; display: inline-flex; flex: 0 0 auto; font-size: 10px; gap: 3px; }
 .timeline-group-expansion svg { transition: transform 0.15s ease; }
 .timeline-group-expansion .is-collapsed { transform: rotate(-90deg); }

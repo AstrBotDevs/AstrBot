@@ -33,6 +33,12 @@
   "responses": "レスポンス",
   "details": "詳細を表示",
   "selectTrace": "トレースを選択すると実行チェーンを確認できます",
+  "chips": {
+    "executionMode": "実行方式: {name}",
+    "systemSender": "システムから送信",
+    "pluginSender": "プラグインから送信: {name}",
+    "unknownSender": "送信元不明"
+  },
   "groups": {
     "handlerStart": "複数のプラグインハンドラーを実行",
     "agentStart": "複数の Agent を開始",

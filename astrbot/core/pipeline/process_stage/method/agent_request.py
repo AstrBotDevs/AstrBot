@@ -52,7 +52,7 @@ class AgentRequestSubStage(Stage):
 
         agent_started = time.perf_counter()
         previous_source = event.get_extra("_trace_response_source")
-        event.set_extra("_trace_response_source", "agent")
+        event.set_extra("_trace_response_source", "core")
         agent_config = self.config.get("agent_runner", {})
         event.trace.record(
             "agent_start",

@@ -125,6 +125,7 @@ async def test_streaming_trace_only_records_final_response(
         ["Tool reply", "Hello world"] if tool_response else ["Hello world"]
     )
     assert records[-1].kwargs["streaming"] is True
+    assert records[-1].kwargs["source"] == "core"
     assert streaming_response_event.get() is None
     await event.send(MessageChain([Plain("Normal reply")]))
     assert event.trace.record.call_args.kwargs["message"] == "Normal reply"
@@ -154,6 +155,61 @@ async def test_streaming_trace_context_restored_after_failure(
         await stage.process(event)
     event.trace.record.assert_not_called()
     assert streaming_response_event.get() is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "result_type",
+    [
+        ResultContentType.GENERAL_RESULT,
+        ResultContentType.LLM_RESULT,
+        ResultContentType.STREAMING_RESULT,
+    ],
+)
+@pytest.mark.parametrize("source", [None, "core", "plugin:test_plugin"])
+async def test_response_trace_preserves_sending_owner(
+    astr_message_event, monkeypatch, result_type, source
+):
+    """Attribute system/model replies to core while preserving plugin ownership."""
+    event = astr_message_event
+    event.trace = MagicMock()
+    monkeypatch.setattr(
+        "astrbot.core.platform.astr_message_event.Metric.upload", AsyncMock()
+    )
+    monkeypatch.setattr(
+        "astrbot.core.pipeline.respond.stage.call_event_hook",
+        AsyncMock(return_value=False),
+    )
+    if source is not None:
+        event.set_extra("_trace_response_source", source)
+
+    async def stream():
+        yield MessageChain([Plain("Reply")])
+
+    async def deliver(generator, use_fallback):
+        async for chunk in generator:
+            await event.send(chunk)
+
+    result = MessageEventResult().set_result_content_type(result_type)
+    if result_type == ResultContentType.STREAMING_RESULT:
+        result.set_async_stream(stream())
+        event.send_streaming = AsyncMock(side_effect=deliver)
+    else:
+        result.message("Reply")
+    event.set_result(result)
+    stage = RespondStage()
+    stage.config = {"provider_settings": {}}
+    stage.platform_settings = {"path_mapping": []}
+    stage.enable_seg = False
+    await stage.process(event)
+
+    sent = [
+        record for record in event.trace.record.call_args_list
+        if record.args[0] == "response_sent"
+    ]
+    assert len(sent) == 1
+    assert sent[0].kwargs["source"] == (source or "core")
+    assert sent[0].kwargs["message"] == "Reply"
 
 
 def test_retained_attachment_is_excluded_from_event_cleanup(

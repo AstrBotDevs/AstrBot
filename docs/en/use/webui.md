@@ -183,6 +183,8 @@ Handler names also have a dotted underline. Hover to lazily fetch plugin details
 
 Streaming responses show one final aggregated response after delivery finishes, without intermediate chunks or protocol closing frames. Messages sent independently by tools or plugins during generation remain separate responses.
 
+Timeline chips show execution mode using the profile page's labels (`local` uses the AstrBot built-in AI title), plugin names (comma-separated in collapsed groups), and response ownership. Built-in Agent replies are system responses (`source: core`); plugin replies use `source: plugin:<plugin ID>` and show the plugin's display name.
+
 Consecutive nodes of the same type are collapsed by default, such as "Multiple plugin handlers triggered (Event listener)", with a record count and stacked icons. Click to expand or collapse the individual records. Different handler categories and records separated by another node type remain separate, preserving execution order. Collapsed groups still show error counts, and summary cards continue to count actual calls.
 
 The message list and message-received node show the platform logo. The message-received title includes `platform_id` in parentheses. A generic icon is used when no logo matches or the image fails to load; text still indicates processing status. The `sel_persona` node is labeled "Select persona". The search hint is "Search messages, sessions, or plugins". Summary cards show duration, plugin handler calls, and responses, without counting steps.
