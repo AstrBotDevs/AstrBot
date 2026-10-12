@@ -33,6 +33,16 @@
   "responses": "Responses",
   "details": "View details",
   "selectTrace": "Select a trace to inspect the complete execution chain",
+  "closeDetails": "Close details",
+  "columns": {
+    "duration": "Duration",
+    "status": "Status",
+    "platform": "Platform",
+    "timestamp": "Timestamp",
+    "message": "Message",
+    "sender": "Sender",
+    "spansHint": "Timeline nodes, with start/end paired; collapsing groups does not reduce the count."
+  },
   "chips": {
     "executionMode": "Execution mode: {name}",
     "systemSender": "Sent by system",

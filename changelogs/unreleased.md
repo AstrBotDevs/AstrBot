@@ -11,7 +11,7 @@
 ## Trace
 
 - Expand message traces to include plugin handlers and their categories, event hooks, Agent requests, response outlines, and completion status.
-- Trace table with expandable message rows → message list with a detailed execution timeline.
+- Trace table with expandable message rows → full-width tracing list with an opt-in execution timeline inspector. Columns: status chip, platform logo, timestamp, live duration, message, UMO, sender, and Spans.
 - Add a Filters sidebar with combinable Has errors / Has model calls / Has plugin calls conditions; counts refer to message traces, not internal steps.
 - Prefer session aliases and plugin display names with hover details; show platform/plugin logos and lazily load handler descriptions from plugin details.
 - Collapse consecutive same-type timeline nodes with stacked icons and visible error counts.

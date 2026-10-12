@@ -23,7 +23,7 @@ const configTranslations = JSON.parse(readFileSync(
 function setup(t, records) {
   const selectedEvent = ref({ records, first_time: 1, last_time: 2 });
   const context = vm.createContext({
-    computed, reactive, ref, watch, selectedEvent,
+    computed, reactive, ref, watch, selectedEvent, clockNow: ref(2),
     plugins: ref({ weather: { display_name: "Weather Forecast" } }),
     configTm(key) {
       const text = key.split(".").reduce((value, part) => value?.[part], configTranslations);
@@ -157,5 +157,6 @@ test("group template and stacked icon styles compile, and all locales include gr
     const data = JSON.parse(readFileSync(new URL(`../src/i18n/locales/${locale}/features/trace.json`, import.meta.url), "utf8").replace(/^\uFEFF/, ""));
     assert.deepEqual(Object.keys(data.groups).sort(), Object.keys(translations.groups).sort());
     assert.deepEqual(Object.keys(data.chips).sort(), Object.keys(translations.chips).sort());
+    assert.deepEqual(Object.keys(data.columns).sort(), Object.keys(translations.columns).sort());
   }
 });

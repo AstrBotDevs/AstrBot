@@ -33,6 +33,16 @@
   "responses": "响应",
   "details": "查看详情",
   "selectTrace": "选择一条追踪查看完整执行链",
+  "closeDetails": "关闭详情",
+  "columns": {
+    "duration": "运行时间",
+    "status": "状态",
+    "platform": "平台",
+    "timestamp": "时间戳",
+    "message": "消息",
+    "sender": "发送人",
+    "spansHint": "时间线节点数；开始/结束合并，同类型折叠不减少计数。"
+  },
   "chips": {
     "executionMode": "执行方式：{name}",
     "systemSender": "系统发送",
@@ -63,7 +73,7 @@
   "status": {
     "error": "错误",
     "complete": "已完成",
-    "live": "进行中"
+    "live": "运行中"
   },
   "handlerDescription": {
     "loading": "正在加载处理器说明…",

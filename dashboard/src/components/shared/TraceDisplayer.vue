@@ -28,6 +28,8 @@ const searchText = ref("");
 const filtersOpen = ref(false);
 const selectedFilters = ref([]);
 const loading = ref(true);
+const clockNow = ref(Date.now() / 1000);
+const durationTimer = ref(null);
 const connected = ref(false);
 const eventSource = ref(null);
 const retryTimer = ref(null);
@@ -112,15 +114,21 @@ const filters = computed(() => [
 ]);
 
 watch(filteredEvents, (visibleEvents) => {
-  if (!visibleEvents.some((event) => event.span_id === selectedSpanId.value)) {
-    selectedSpanId.value = visibleEvents[0]?.span_id || null;
+  if (selectedSpanId.value && !visibleEvents.some((event) => event.span_id === selectedSpanId.value)) {
+    selectedSpanId.value = null;
   }
 });
+
+const traceRows = computed(() => filteredEvents.value.map((event) => ({
+  event,
+  duration: formatDuration(Math.max(0, ((event.completed ? event.last_time : Math.max(clockNow.value, event.last_time)) - event.first_time) * 1000)),
+  spans: timelineRecords(event).length,
+})));
 
 const selectedStats = computed(() => {
   const event = selectedEvent.value;
   if (!event) return { duration: "-", handlers: 0, responses: 0 };
-  const duration = Math.max(0, (event.last_time - event.first_time) * 1000);
+  const duration = Math.max(0, ((event.completed ? event.last_time : Math.max(clockNow.value, event.last_time)) - event.first_time) * 1000);
   return {
     duration: formatDuration(duration),
     handlers: event.records.filter(
@@ -217,12 +225,10 @@ function recordSearchText(record) {
 
 function processNewTraces(newTraces) {
   if (!Array.isArray(newTraces)) return;
-  let firstTrace = null;
 
   for (const trace of newTraces) {
     if (!trace?.span_id) continue;
     if (["stage_start", "stage_end", "pipeline_start", "wake_evaluated"].includes(trace.action)) continue;
-    if (!firstTrace) firstTrace = trace;
     let event = eventIndex.get(trace.span_id);
     if (!event) {
       event = reactive({
@@ -237,6 +243,7 @@ function processNewTraces(newTraces) {
         first_time: trace.time || Date.now() / 1000,
         last_time: trace.time || Date.now() / 1000,
         status: "running",
+        completed: false,
         records: [],
       });
       eventIndex.set(trace.span_id, event);
@@ -262,6 +269,7 @@ function processNewTraces(newTraces) {
     if (trace.fields?.message && !event.message_outline && trace.action === "event_received") {
       event.message_outline = trace.fields.message;
     }
+    if (trace.action === "pipeline_end") event.completed = true;
     if (trace.status === "error" || trace.fields?.status === "error") {
       event.status = "error";
     } else if (trace.action === "pipeline_end") {
@@ -274,7 +282,6 @@ function processNewTraces(newTraces) {
     const removed = events.value.splice(maxItems);
     removed.forEach((event) => eventIndex.delete(event.span_id));
   }
-  if (!selectedSpanId.value && firstTrace?.span_id) selectedSpanId.value = firstTrace.span_id;
 }
 
 async function fetchTraceHistory() {
@@ -343,9 +350,12 @@ function connectSSE() {
 }
 
 function selectEvent(spanId) {
+  const previousSpanId = selectedSpanId.value;
   selectedSpanId.value = spanId;
   nextTick(() => {
-    document.querySelector(`[data-trace-id="${spanId}"]`)?.scrollIntoView({ block: "nearest" });
+    const row = document.querySelector(`[data-trace-id="${spanId || previousSpanId}"]`);
+    row?.scrollIntoView({ block: "nearest" });
+    if (!spanId) row?.focus();
   });
 }
 
@@ -481,11 +491,13 @@ function formatFields(fields) {
 }
 
 onMounted(async () => {
+  durationTimer.value = setInterval(() => { clockNow.value = Date.now() / 1000; }, 1000);
   await fetchTraceHistory();
   connectSSE();
 });
 
 onBeforeUnmount(() => {
+  if (durationTimer.value) clearInterval(durationTimer.value);
   eventSource.value?.close();
   if (retryTimer.value) clearTimeout(retryTimer.value);
 });
@@ -536,31 +548,60 @@ onBeforeUnmount(() => {
         </div>
         <p class="trace-filter-hint">{{ tm("filters.hint") }}</p>
       </aside>
-    <div class="trace-explorer-body">
-      <aside class="trace-list" :aria-label="tm('traceList')">
+    <div class="trace-explorer-body" :class="{ 'has-detail': selectedEvent }">
+      <section class="trace-list" :aria-label="tm('traceList')">
         <div v-if="loading" class="trace-empty-state">{{ tm("loading") }}</div>
         <div v-else-if="filteredEvents.length === 0" class="trace-empty-state"><Activity :size="22" aria-hidden="true" /><span>{{ tm("empty") }}</span></div>
-        <button v-for="event in filteredEvents" :key="event.span_id" type="button" class="trace-list-item" :class="{ selected: event.span_id === selectedSpanId }" :data-trace-id="event.span_id" @click="selectEvent(event.span_id)">
-          <span class="trace-item-platform">
-            <img v-if="event.platform_icon && !failedPlatformLogos.has(event.platform_icon)" :src="event.platform_icon" alt="" @error="failedPlatformLogos.add(event.platform_icon)" />
-            <Activity v-else :size="14" aria-hidden="true" />
-          </span>
-          <span class="trace-item-content">
-            <span class="trace-item-title">{{ event.message_outline || tm("untitled") }}</span>
-            <span class="trace-item-meta">{{ event.sender_name || "-" }} ·
-              <v-tooltip :text="event.umo" location="top">
-                <template #activator="{ props }">
-                  <span v-bind="props" :class="{ 'trace-hover-name': umoNames[event.umo] && umoNames[event.umo] !== event.umo }">{{ umoNames[event.umo] || event.umo || "-" }}</span>
-                </template>
-              </v-tooltip>
-            </span>
-            <span class="trace-item-foot"><span>{{ formatTime(event.first_time) }}</span><span class="trace-status-text" :class="statusClass(event)">{{ statusLabel(event) }}</span></span>
-          </span>
-          <ChevronDown :size="15" class="trace-item-chevron" aria-hidden="true" />
-        </button>
-      </aside>
+        <table v-else class="trace-list-table">
+          <thead>
+            <tr>
+              <th scope="col">{{ tm("columns.status") }}</th>
+              <th scope="col">{{ tm("columns.platform") }}</th>
+              <th scope="col">{{ tm("columns.timestamp") }}</th>
+              <th scope="col">{{ tm("columns.duration") }}</th>
+              <th scope="col">{{ tm("columns.message") }}</th>
+              <th scope="col">UMO</th>
+              <th scope="col">{{ tm("columns.sender") }}</th>
+              <th scope="col" :title="tm('columns.spansHint')">Spans</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="{ event, duration, spans } in traceRows"
+              :key="event.span_id"
+              class="trace-list-row"
+              :class="{ selected: event.span_id === selectedSpanId }"
+              :data-trace-id="event.span_id"
+              tabindex="0"
+              @click="selectEvent(event.span_id)"
+              @keydown.enter="selectEvent(event.span_id)"
+              @keydown.space.prevent="selectEvent(event.span_id)"
+            >
+              <td><v-chip size="x-small" variant="tonal" :color="event.status === 'error' ? 'error' : event.status === 'success' ? 'success' : 'warning'">{{ statusLabel(event) }}</v-chip></td>
+              <td class="trace-platform-cell">
+                <span class="trace-item-platform" :title="event.platform_id || event.platform_name">
+                  <img v-if="event.platform_icon && !failedPlatformLogos.has(event.platform_icon)" :src="event.platform_icon" :alt="event.platform_name" @error="failedPlatformLogos.add(event.platform_icon)" />
+                  <Activity v-else :size="16" aria-hidden="true" />
+                </span>
+              </td>
+              <td class="trace-time-cell">{{ formatTime(event.first_time) }}</td>
+              <td class="trace-duration-cell">{{ duration }}</td>
+              <td class="trace-message-cell" :title="event.message_outline || tm('untitled')">{{ event.message_outline || tm("untitled") }}</td>
+              <td class="trace-umo-cell">
+                <v-tooltip :text="event.umo" location="top">
+                  <template #activator="{ props }">
+                    <span v-bind="props" :class="{ 'trace-hover-name': umoNames[event.umo] && umoNames[event.umo] !== event.umo }">{{ umoNames[event.umo] || event.umo || "-" }}</span>
+                  </template>
+                </v-tooltip>
+              </td>
+              <td class="trace-sender-cell" :title="event.sender_name">{{ event.sender_name || "-" }}</td>
+              <td class="trace-spans-cell" :title="tm('columns.spansHint')">{{ spans }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
 
-      <main v-if="selectedEvent" class="trace-detail">
+      <main v-if="selectedEvent" class="trace-detail" @keydown.esc.stop="selectEvent(null)">
         <div class="trace-detail-header">
           <div>
             <div class="trace-detail-kicker"><span class="trace-status-badge" :class="statusClass(selectedEvent)">{{ statusLabel(selectedEvent) }}</span><span>{{ shortSpan(selectedEvent.span_id) }}</span></div>
@@ -574,7 +615,10 @@ onBeforeUnmount(() => {
               · {{ selectedEvent.sender_name || "-" }}
             </p>
           </div>
-          <div class="trace-detail-time">{{ formatTime(selectedEvent.first_time) }}</div>
+          <div class="trace-detail-actions">
+            <div class="trace-detail-time">{{ formatTime(selectedEvent.first_time) }}</div>
+            <button type="button" class="icon-button" :aria-label="tm('closeDetails')" @click="selectEvent(null)"><X :size="17" aria-hidden="true" /></button>
+          </div>
         </div>
 
         <div class="trace-stat-grid">
@@ -671,7 +715,6 @@ onBeforeUnmount(() => {
           </div>
         </div>
       </main>
-      <div v-else class="trace-detail trace-empty-detail"><Activity :size="28" aria-hidden="true" /><span>{{ tm("selectTrace") }}</span></div>
     </div>
     </div>
   </div>
@@ -722,19 +765,20 @@ onBeforeUnmount(() => {
 .trace-live-state { align-items: center; display: flex; gap: 6px; }
 .live-dot { background: #a1a1aa; border-radius: 50%; height: 6px; width: 6px; }
 .trace-live-state.connected .live-dot { background: #22c55e; box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.14); }
-.trace-explorer-body { display: grid; flex: 1; grid-template-columns: minmax(270px, 34%) minmax(0, 1fr); min-height: 0; min-width: 0; overflow: hidden; }
-.trace-list { border-right: 1px solid var(--trace-border); min-height: 0; overflow: auto; padding: 6px; }
-.trace-list-item { align-items: flex-start; background: transparent; border: 1px solid transparent; border-radius: 8px; color: inherit; cursor: pointer; display: flex; gap: 9px; padding: 10px 9px; text-align: left; width: 100%; }
-.trace-list-item:hover { background: rgba(var(--v-theme-on-surface), 0.045); }
-.trace-list-item.selected { background: rgba(var(--v-theme-primary), 0.1); }
-.trace-item-platform { align-items: center; color: var(--trace-muted); display: inline-flex; flex: 0 0 16px; height: 16px; justify-content: center; margin-top: 1px; }
-.trace-item-platform img { height: 16px; object-fit: contain; width: 16px; }
-.trace-item-content { display: flex; flex: 1; flex-direction: column; gap: 3px; min-width: 0; }
-.trace-item-title { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.trace-item-meta, .trace-item-foot { color: var(--trace-muted); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.trace-item-foot { display: flex; gap: 8px; } .trace-status-text.is-error { color: #ef4444; } .trace-status-text.is-success { color: #22c55e; } .trace-status-text.is-live { color: #f59e0b; }
-.trace-item-chevron { color: var(--trace-muted); flex: 0 0 auto; margin-top: 3px; transform: rotate(-90deg); }
-.trace-detail { min-height: 0; overflow: auto; padding: 18px 22px 28px; }
+.trace-explorer-body { display: flex; flex: 1; min-height: 0; min-width: 0; overflow: hidden; position: relative; }
+.trace-list { flex: 1; min-height: 0; min-width: 0; overflow: auto; }
+.has-detail .trace-list { border-right: 1px solid var(--trace-border); }
+.trace-list-table { border-collapse: separate; border-spacing: 0; font-size: 12px; min-width: 1100px; table-layout: fixed; width: 100%; }
+.trace-list-table th { background: rgb(var(--v-theme-surface)); border-bottom: 1px solid var(--trace-border); color: var(--trace-muted); font-size: 11px; font-weight: 600; padding: 11px 12px; position: sticky; text-align: left; top: 0; white-space: nowrap; z-index: 1; }
+.trace-list-table th:nth-child(1) { width: 100px; } .trace-list-table th:nth-child(2) { width: 56px; } .trace-list-table th:nth-child(3) { width: 132px; } .trace-list-table th:nth-child(4) { width: 92px; } .trace-list-table th:nth-child(5) { width: 26%; } .trace-list-table th:nth-child(6) { width: 28%; } .trace-list-table th:nth-child(7) { width: 110px; } .trace-list-table th:nth-child(8) { width: 64px; }
+.trace-list-table td { border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.06); height: 48px; overflow: hidden; padding: 10px 12px; text-overflow: ellipsis; white-space: nowrap; }
+.trace-list-row { cursor: pointer; } .trace-list-row:hover { background: rgba(var(--v-theme-on-surface), 0.045); } .trace-list-row.selected { background: rgba(var(--v-theme-primary), 0.1); } .trace-list-row:focus-visible { outline: 2px solid rgb(var(--v-theme-primary)); outline-offset: -2px; }
+.trace-item-platform { align-items: center; color: var(--trace-muted); display: inline-flex; height: 20px; justify-content: center; vertical-align: middle; width: 20px; }
+.trace-item-platform img { height: 20px; object-fit: contain; width: 20px; }
+.trace-time-cell, .trace-duration-cell, .trace-spans-cell { color: var(--trace-muted); font-family: var(--astrbot-font-cjk-mono), monospace; font-size: 11px; }
+.trace-message-cell { font-weight: 500; } .trace-umo-cell, .trace-sender-cell { color: var(--trace-muted); }
+.trace-detail { background: rgb(var(--v-theme-surface)); flex: 0 0 58%; max-width: 850px; min-height: 0; min-width: 360px; overflow: auto; padding: 18px 22px 28px; }
+.trace-detail-actions { align-items: center; display: flex; flex: 0 0 auto; gap: 8px; }
 .trace-detail-header { align-items: flex-start; display: flex; gap: 16px; justify-content: space-between; }
 .trace-detail-kicker { align-items: center; color: var(--trace-muted); display: flex; font-size: 10px; gap: 8px; text-transform: uppercase; }
 .trace-detail-header h2 { font-size: 17px; font-weight: 650; margin: 8px 0 4px; overflow-wrap: anywhere; } .trace-detail-header p { color: var(--trace-muted); font-size: 11px; margin: 0; }
@@ -746,7 +790,8 @@ onBeforeUnmount(() => {
 .timeline-icon { --timeline-icon-background: rgba(var(--v-theme-on-surface), 0.06); align-items: center; background: var(--timeline-icon-background); border: 1px solid var(--trace-border); border-radius: 50%; display: inline-flex; height: 23px; justify-content: center; width: 23px; z-index: 1; } .timeline-icon.is-system { color: var(--trace-muted); } .timeline-icon.is-plugin { --timeline-icon-background: rgba(168, 85, 247, 0.13); color: #a855f7; } .timeline-icon.is-agent { --timeline-icon-background: rgba(59, 130, 246, 0.13); color: #3b82f6; } .timeline-icon.is-response { --timeline-icon-background: rgba(34, 197, 94, 0.13); color: #22c55e; } .timeline-icon.is-error { --timeline-icon-background: rgba(239, 68, 68, 0.13); color: #ef4444; }
 .timeline-line { background: var(--trace-border); flex: 1; width: 1px; } .timeline-content { border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.07); min-width: 0; padding: 2px 0 13px; } .timeline-heading { align-items: baseline; display: flex; gap: 10px; justify-content: space-between; } .timeline-heading strong { font-size: 12px; font-weight: 650; } .timeline-heading time { color: var(--trace-muted); font-family: var(--astrbot-font-cjk-mono), monospace; font-size: 10px; white-space: nowrap; } .timeline-subtitle { color: var(--trace-muted); font-size: 11px; line-height: 1.5; margin-top: 4px; overflow-wrap: anywhere; }
 .timeline-fields { margin-top: 6px; } .timeline-fields summary { color: var(--trace-muted); cursor: pointer; font-size: 10px; } .timeline-fields pre { background: rgba(var(--v-theme-on-surface), 0.04); border-radius: 6px; color: var(--trace-muted); font-size: 10px; line-height: 1.5; margin: 6px 0 0; max-height: 280px; overflow: auto; padding: 8px; white-space: pre-wrap; word-break: break-word; }
-.trace-empty-state, .trace-empty-detail { align-items: center; color: var(--trace-muted); display: flex; flex-direction: column; font-size: 12px; gap: 8px; justify-content: center; min-height: 180px; } .trace-empty-detail { height: 100%; }
-@media (max-width: 900px) { .trace-filter-panel { bottom: 0; box-shadow: 8px 0 24px rgba(0, 0, 0, 0.18); left: 0; max-width: 85%; position: absolute; top: 0; width: 220px; z-index: 3; } .trace-filter-backdrop { background: rgba(var(--v-theme-on-surface), 0.12); border: 0; display: block; inset: 0; position: absolute; z-index: 2; } .trace-explorer-body { grid-template-columns: minmax(220px, 42%) minmax(0, 1fr); } .trace-detail { padding: 15px; } .trace-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .trace-count { display: none; } }
-@media (max-width: 640px) { .trace-explorer-toolbar { flex-wrap: wrap; } .filter-toggle-btn { order: 1; } .trace-search { flex: 1 1 160px; max-width: none; order: 1; } .trace-live-state { order: 2; } .refresh-button { margin-left: auto; order: 2; } .trace-explorer-body { grid-template-columns: 1fr; } .trace-list { border-bottom: 1px solid var(--trace-border); border-right: 0; max-height: 230px; } .trace-detail { min-height: 390px; } .trace-detail-time { display: none; } }
+.trace-empty-state { align-items: center; color: var(--trace-muted); display: flex; flex-direction: column; font-size: 12px; gap: 8px; justify-content: center; min-height: 180px; }
+@media (max-width: 1100px) { .trace-detail { border-left: 1px solid var(--trace-border); bottom: 0; box-shadow: -8px 0 24px rgba(0, 0, 0, 0.12); max-width: none; min-width: 0; position: absolute; right: 0; top: 0; width: min(760px, 90%); z-index: 1; } }
+@media (max-width: 900px) { .trace-filter-panel { bottom: 0; box-shadow: 8px 0 24px rgba(0, 0, 0, 0.18); left: 0; max-width: 85%; position: absolute; top: 0; width: 220px; z-index: 3; } .trace-filter-backdrop { background: rgba(var(--v-theme-on-surface), 0.12); border: 0; display: block; inset: 0; position: absolute; z-index: 2; } .trace-detail { padding: 15px; } .trace-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .trace-count { display: none; } }
+@media (max-width: 640px) { .trace-explorer-toolbar { flex-wrap: wrap; } .filter-toggle-btn { order: 1; } .trace-search { flex: 1 1 160px; max-width: none; order: 1; } .trace-live-state { order: 2; } .refresh-button { margin-left: auto; order: 2; } .trace-detail { width: 100%; } .trace-detail-time { display: none; } }
 </style>

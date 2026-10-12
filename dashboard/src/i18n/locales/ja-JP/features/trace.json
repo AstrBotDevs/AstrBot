@@ -33,6 +33,16 @@
   "responses": "レスポンス",
   "details": "詳細を表示",
   "selectTrace": "トレースを選択すると実行チェーンを確認できます",
+  "closeDetails": "詳細を閉じる",
+  "columns": {
+    "duration": "実行時間",
+    "status": "状態",
+    "platform": "プラットフォーム",
+    "timestamp": "タイムスタンプ",
+    "message": "メッセージ",
+    "sender": "送信者",
+    "spansHint": "開始と終了をまとめたタイムラインのノード数。グループを折りたたんでも件数は変わりません。"
+  },
   "chips": {
     "executionMode": "実行方式: {name}",
     "systemSender": "システムから送信",
