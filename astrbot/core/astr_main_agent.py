@@ -1433,10 +1433,13 @@ def _matches_provider_wake_prefix(
         True when no prefix is configured, WebChat is exempt, or the message
         starts with the configured prefix.
     """
+    message_str = event.message_str or ""
+    if event.get_platform_name() == "lark":
+        message_str = message_str.lstrip()
     return (
         not provider_wake_prefix
         or event.get_platform_name() == "webchat"
-        or (event.message_str or "").startswith(provider_wake_prefix)
+        or message_str.startswith(provider_wake_prefix)
     )
 
 
@@ -1506,10 +1509,11 @@ async def collect_initial_request(
                 return None, None
 
             req.prompt = event.message_str
-            if provider_wake_prefix and event.message_str.startswith(
-                provider_wake_prefix
-            ):
-                req.prompt = event.message_str[len(provider_wake_prefix) :]
+            prefix_text = event.message_str
+            if event.get_platform_name() == "lark":
+                prefix_text = prefix_text.lstrip()
+            if provider_wake_prefix and prefix_text.startswith(provider_wake_prefix):
+                req.prompt = prefix_text[len(provider_wake_prefix) :]
 
             # media files attachments
             for comp in event.message_obj.message:
