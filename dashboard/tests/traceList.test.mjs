@@ -118,11 +118,46 @@ test("Vuetify datatable keeps the requested columns and explicit detail selectio
   assert.match(descriptor.template.content, /item-value="event.span_id"/);
   assert.match(descriptor.template.content, /:items-per-page="-1"/);
   assert.match(descriptor.template.content, /hide-default-footer/);
-  assert.match(descriptor.template.content, /#item="\{ item: \{ event, duration, spans \} \}"/);
+  assert.doesNotMatch(descriptor.template.content, /#item=/);
+  for (const key of ["status", "platform", "timestamp", "duration", "message", "umo", "sender", "spans"]) {
+    assert.match(descriptor.template.content, new RegExp("#item\\." + key + "="));
+  }
+  assert.match(descriptor.template.content, /@click:row="\(_, \{ item \}\) => selectEvent\(item.event.span_id\)"/);
   assert.match(descriptor.template.content, /<main v-if="selectedEvent"/);
   assert.match(descriptor.template.content, /tm\('closeDetails'\)/);
-  assert.match(descriptor.template.content, /@keydown.enter="selectEvent\(event.span_id\)"/);
   assert.match(descriptor.scriptSetup.content, /clearInterval\(durationTimer.value\)/);
+});
+
+test("native table rows retain trace identity, selection, and keyboard activation", () => {
+  const selections = [];
+  const expression = descriptor.template.content.match(/:row-props="([\s\S]*?)"/)[1];
+  const rowProps = vm.runInNewContext("(" + expression + ")", {
+    selectedSpanId: "first",
+    selectEvent: (id) => selections.push(id),
+  });
+  const props = rowProps({ item: { event: { span_id: "first" } } });
+  assert.equal(props["data-trace-id"], "first");
+  assert.equal(props["aria-selected"], true);
+  assert.equal(props.class.selected, true);
+  assert.equal(props.tabindex, 0);
+  let prevented = 0;
+  for (const key of ["Enter", " ", "ArrowDown"]) {
+    props.onKeydown({ key, preventDefault() { prevented++; } });
+  }
+  assert.deepEqual(selections, ["first", "first"]);
+  assert.equal(prevented, 2);
+  assert.equal(rowProps({ item: { event: { span_id: "second" } } }).class.selected, false);
+});
+
+test("table typography, density, spacing, and hover use Vuetify defaults", () => {
+  const table = descriptor.template.content.match(/<v-data-table[\s\S]*?>/)[0];
+  assert.match(table, /\s+hover\s/);
+  assert.doesNotMatch(table, /density=/);
+  assert.doesNotMatch(descriptor.styles[0].content, /:deep\(table|table-layout:\s*fixed|\.trace-list-row:hover/);
+  const tableStyle = descriptor.styles[0].content.match(/\.trace-list-table\s*\{([^}]+)\}/)[1];
+  assert.doesNotMatch(tableStyle, /font-size|padding|font-family/);
+  assert.deepEqual(compileTemplate({ source: descriptor.template.content, filename: "TraceDisplayer.vue", id: "trace-native" }).errors, []);
+  assert.deepEqual(compileStyle({ source: descriptor.styles[0].content, filename: "TraceDisplayer.vue", id: "trace-native", scoped: true }).errors, []);
 });
 
 test("trace tab stays flat without outer cards or a tinted list container", () => {

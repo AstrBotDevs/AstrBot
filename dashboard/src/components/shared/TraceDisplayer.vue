@@ -135,14 +135,14 @@ const traceRows = computed(() => filteredEvents.value.map((event) => ({
 })));
 
 const traceHeaders = computed(() => [
-  { title: tm("columns.status"), key: "status", width: 100 },
-  { title: tm("columns.platform"), key: "platform", width: 56 },
-  { title: tm("columns.timestamp"), key: "timestamp", width: 132 },
-  { title: tm("columns.duration"), key: "duration", width: 92 },
-  { title: tm("columns.message"), key: "message", width: "26%" },
-  { title: "UMO", key: "umo", width: "28%" },
-  { title: tm("columns.sender"), key: "sender", width: 110 },
-  { title: "Spans", key: "spans", width: 64 },
+  { title: tm("columns.status"), key: "status", width: 120 },
+  { title: tm("columns.platform"), key: "platform", width: 80 },
+  { title: tm("columns.timestamp"), key: "timestamp", width: 160 },
+  { title: tm("columns.duration"), key: "duration", width: 120 },
+  { title: tm("columns.message"), key: "message", minWidth: 240 },
+  { title: "UMO", key: "umo", minWidth: 240 },
+  { title: tm("columns.sender"), key: "sender", minWidth: 120 },
+  { title: "Spans", key: "spans", width: 80 },
 ]);
 
 const selectedStats = computed(() => {
@@ -593,44 +593,56 @@ onBeforeUnmount(() => {
           item-value="event.span_id"
           :items-per-page="-1"
           :mobile="false"
-          density="compact"
+          hover
+          :row-props="({ item }) => ({
+            class: { 'trace-list-row': true, selected: item.event.span_id === selectedSpanId },
+            'data-trace-id': item.event.span_id,
+            'aria-selected': item.event.span_id === selectedSpanId,
+            tabindex: 0,
+            onKeydown: (event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                selectEvent(item.event.span_id);
+              }
+            },
+          })"
+          @click:row="(_, { item }) => selectEvent(item.event.span_id)"
           fixed-header
           height="100%"
           hide-default-footer
           disable-sort
         >
           <template #header.spans><span :title="tm('columns.spansHint')">Spans</span></template>
-          <template #item="{ item: { event, duration, spans } }">
-            <tr
-              :key="event.span_id"
-              class="trace-list-row"
-              :class="{ selected: event.span_id === selectedSpanId }"
-              :data-trace-id="event.span_id"
-              tabindex="0"
-              @click="selectEvent(event.span_id)"
-              @keydown.enter="selectEvent(event.span_id)"
-              @keydown.space.prevent="selectEvent(event.span_id)"
-            >
-              <td><v-chip size="x-small" variant="tonal" :color="event.status === 'error' ? 'error' : event.status === 'success' ? 'success' : 'warning'">{{ statusLabel(event) }}</v-chip></td>
-              <td class="trace-platform-cell">
-                <span class="trace-item-platform" :title="event.platform_id || event.platform_name">
-                  <img v-if="event.platform_icon && !failedPlatformLogos.has(event.platform_icon)" :src="event.platform_icon" :alt="event.platform_name" @error="failedPlatformLogos.add(event.platform_icon)" />
-                  <Activity v-else :size="16" aria-hidden="true" />
-                </span>
-              </td>
-              <td class="trace-time-cell">{{ formatTime(event.first_time) }}</td>
-              <td class="trace-duration-cell">{{ duration }}</td>
-              <td class="trace-message-cell" :title="event.message_outline || tm('untitled')">{{ event.message_outline || tm("untitled") }}</td>
-              <td class="trace-umo-cell">
-                <v-tooltip :text="event.umo" location="top">
-                  <template #activator="{ props }">
-                    <span v-bind="props" :class="{ 'trace-hover-name': umoNames[event.umo] && umoNames[event.umo] !== event.umo }">{{ umoNames[event.umo] || event.umo || "-" }}</span>
-                  </template>
-                </v-tooltip>
-              </td>
-              <td class="trace-sender-cell" :title="event.sender_name">{{ event.sender_name || "-" }}</td>
-              <td class="trace-spans-cell" :title="tm('columns.spansHint')">{{ spans }}</td>
-            </tr>
+          <template #item.status="{ item: { event } }">
+            <v-chip size="small" variant="tonal" :color="event.status === 'error' ? 'error' : event.status === 'success' ? 'success' : 'warning'">{{ statusLabel(event) }}</v-chip>
+          </template>
+          <template #item.platform="{ item: { event } }">
+            <span class="trace-item-platform" :title="event.platform_id || event.platform_name">
+              <img v-if="event.platform_icon && !failedPlatformLogos.has(event.platform_icon)" :src="event.platform_icon" :alt="event.platform_name" @error="failedPlatformLogos.add(event.platform_icon)" />
+              <Activity v-else :size="16" aria-hidden="true" />
+            </span>
+          </template>
+          <template #item.timestamp="{ item: { event } }">
+            <span class="text-no-wrap">{{ formatTime(event.first_time) }}</span>
+          </template>
+          <template #item.duration="{ item }">
+            <span class="text-no-wrap">{{ item.duration }}</span>
+          </template>
+          <template #item.message="{ item: { event } }">
+            <span class="trace-cell-text" :title="event.message_outline || tm('untitled')">{{ event.message_outline || tm("untitled") }}</span>
+          </template>
+          <template #item.umo="{ item: { event } }">
+            <v-tooltip :text="event.umo" location="top">
+              <template #activator="{ props }">
+                <span v-bind="props" class="trace-cell-text" :class="{ 'trace-hover-name': umoNames[event.umo] && umoNames[event.umo] !== event.umo }">{{ umoNames[event.umo] || event.umo || "-" }}</span>
+              </template>
+            </v-tooltip>
+          </template>
+          <template #item.sender="{ item: { event } }">
+            <span class="trace-cell-text" :title="event.sender_name">{{ event.sender_name || "-" }}</span>
+          </template>
+          <template #item.spans="{ item }">
+            <span :title="tm('columns.spansHint')">{{ item.spans }}</span>
           </template>
         </v-data-table>
       </section>
@@ -805,15 +817,12 @@ onBeforeUnmount(() => {
 .trace-explorer-body { display: flex; flex: 1; min-height: 0; min-width: 0; overflow: hidden; position: relative; }
 .trace-list { flex: 1; min-height: 0; min-width: 0; overflow: hidden; }
 .has-detail .trace-list { border-right: 1px solid var(--trace-border); }
-.trace-list-table { background: transparent; border-radius: 0; font-size: 12px; height: 100%; }
-.trace-list-table :deep(table) { border-collapse: separate; border-spacing: 0; min-width: 1100px; table-layout: fixed; width: 100%; }
-.trace-list-table :deep(table > thead > tr > th) { background: rgb(var(--v-theme-surface)); border-bottom: 1px solid var(--trace-border); color: var(--trace-muted); font-size: 11px; font-weight: 600; padding: 11px 12px; white-space: nowrap; }
-.trace-list-table :deep(table > tbody > tr > td) { border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.06); height: 48px; overflow: hidden; padding: 10px 12px; text-overflow: ellipsis; white-space: nowrap; }
-.trace-list-row { cursor: pointer; } .trace-list-row:hover { background: rgba(var(--v-theme-on-surface), 0.045); } .trace-list-row.selected { background: rgba(var(--v-theme-primary), 0.1); } .trace-list-row:focus-visible { outline: 2px solid rgb(var(--v-theme-primary)); outline-offset: -2px; }
+.trace-list-table { background: transparent; border-radius: 0; height: 100%; }
+.trace-list-table :deep(.trace-list-row.selected) { background: rgba(var(--v-theme-primary), 0.1); }
+.trace-list-table :deep(.trace-list-row:focus-visible) { outline: 2px solid rgb(var(--v-theme-primary)); outline-offset: -2px; }
+.trace-cell-text { display: block; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .trace-item-platform { align-items: center; color: var(--trace-muted); display: inline-flex; height: 20px; justify-content: center; vertical-align: middle; width: 20px; }
 .trace-item-platform img { height: 20px; object-fit: contain; width: 20px; }
-.trace-time-cell, .trace-duration-cell, .trace-spans-cell { color: var(--trace-muted); font-family: var(--astrbot-font-cjk-mono), monospace; font-size: 11px; }
-.trace-message-cell { font-weight: 500; } .trace-umo-cell, .trace-sender-cell { color: var(--trace-muted); }
 .trace-detail { background: rgb(var(--v-theme-surface)); flex: 0 0 58%; max-width: 850px; min-height: 0; min-width: 360px; overflow: auto; padding: 18px 22px 28px; }
 .trace-detail-actions { align-items: center; display: flex; flex: 0 0 auto; gap: 8px; }
 .trace-detail-header { align-items: flex-start; display: flex; gap: 16px; justify-content: space-between; }
