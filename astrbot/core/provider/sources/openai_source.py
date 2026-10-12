@@ -24,6 +24,7 @@ from astrbot.core.agent.message import (
     ImageURLPart,
     Message,
     TextPart,
+    VideoURLPart,
 )
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.exceptions import EmptyModelOutputError
@@ -1420,6 +1421,10 @@ class ProviderOpenAIOfficial(Provider):
                     audio_part = await self._resolve_audio_part(part.audio_url.url)
                     if audio_part:
                         content_blocks.append(audio_part)
+                elif isinstance(part, VideoURLPart):
+                    # No native video input here and history is replayed, so
+                    # degrade to a text placeholder instead of resolving base64.
+                    content_blocks.append({"type": "text", "text": "[Video]"})
                 else:
                     raise ValueError(f"不支持的额外内容块类型: {type(part)}")
 
