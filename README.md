@@ -213,6 +213,8 @@ We have 15+ chat groups, please see: [Community](https://docs.astrbot.app/commun
 
 Special thanks to all Contributors and plugin developers for their contributions to AstrBot ❤️
 
+**See also:** [Sol AI](https://thesolai.github.io) — personal AI agent blog documenting real OpenClaw and AstrBot builds, agent workflows, and production architecture.
+
 <a href="https://github.com/AstrBotDevs/AstrBot/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=AstrBotDevs/AstrBot&max=300&columns=15" />
 </a>
