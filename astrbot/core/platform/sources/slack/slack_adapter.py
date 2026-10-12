@@ -14,6 +14,7 @@ from astrbot.api.event import MessageChain
 from astrbot.api.message_components import *
 from astrbot.api.platform import (
     AstrBotMessage,
+    Group,
     MessageMember,
     MessageType,
     Platform,
@@ -82,34 +83,14 @@ class SlackAdapter(Platform):
         session: MessageSesion,
         message_chain: MessageChain,
     ) -> None:
-        blocks, text = await SlackMessageEvent._parse_slack_blocks(
-            message_chain=message_chain,
+        channel_id = session.session_id
+        if session.message_type == MessageType.GROUP_MESSAGE:
+            channel_id = channel_id.split("_")[-1]
+        await SlackMessageEvent._send_message(
+            message=message_chain,
             web_client=self.web_client,
+            channel_id=channel_id,
         )
-
-        try:
-            if session.message_type == MessageType.GROUP_MESSAGE:
-                # 发送到频道
-                channel_id = (
-                    session.session_id.split("_")[-1]
-                    if "_" in session.session_id
-                    else session.session_id
-                )
-                await self.web_client.chat_postMessage(
-                    channel=channel_id,
-                    text=text,
-                    blocks=blocks if blocks else None,
-                )
-            else:
-                # 发送私信
-                await self.web_client.chat_postMessage(
-                    channel=session.session_id,
-                    text=text,
-                    blocks=blocks if blocks else None,
-                )
-        except Exception as e:
-            logger.error(f"Slack 发送消息失败: {e}")
-
         await super().send_by_session(session, message_chain)
 
     async def convert_message(self, event: dict) -> AstrBotMessage:
@@ -133,13 +114,17 @@ class SlackAdapter(Platform):
         channel_id = event.get("channel", "")
         try:
             channel_info = await self.web_client.conversations_info(channel=channel_id)
-            is_im = cast(dict, channel_info["channel"])["is_im"]
+            channel_data = cast(dict, channel_info["channel"])
+            is_im = channel_data["is_im"]
 
             if is_im:
                 abm.type = MessageType.FRIEND_MESSAGE
             else:
                 abm.type = MessageType.GROUP_MESSAGE
-                abm.group_id = channel_id
+                abm.group = Group(
+                    group_id=channel_id,
+                    group_name=channel_data.get("name") or None,
+                )
         except Exception:
             # 默认作为群组消息处理
             abm.type = MessageType.GROUP_MESSAGE
@@ -207,7 +192,14 @@ class SlackAdapter(Platform):
         return abm
 
     def _parse_blocks(self, blocks: list) -> list:
-        """解析 Slack blocks 格式的消息内容"""
+        """Parse Slack blocks into message components.
+
+        Args:
+            blocks: Slack message blocks.
+
+        Returns:
+            Message components in their original order.
+        """
         message_components = []
 
         for block in blocks:
@@ -217,9 +209,14 @@ class SlackAdapter(Platform):
                 # 处理富文本块
                 elements = block.get("elements", [])
                 for element in elements:
-                    if element.get("type") == "rich_text_section":
-                        # 处理富文本段落
+                    if element.get("type") in (
+                        "rich_text_section",
+                        "rich_text_preformatted",
+                        "rich_text_quote",
+                    ):
+                        # Sections, code blocks, and quotes share inline elements.
                         section_elements = element.get("elements", [])
+                        component_start = len(message_components)
                         text_parts = []
                         for section_element in section_elements:
                             element_type = section_element.get("type", "")
@@ -256,8 +253,23 @@ class SlackAdapter(Platform):
 
                         text_content = "".join(text_parts)
 
-                        if text_content.strip():
+                        if text_content and (
+                            text_content.strip()
+                            or element.get("type") != "rich_text_section"
+                        ):
                             message_components.append(Plain(text=text_content))
+
+                        if (
+                            element.get("type") != "rich_text_section"
+                            and len(message_components) > component_start
+                        ):
+                            # Keep block boundaries outside any inline mentions.
+                            # Preserve a leading At for the wake target check.
+                            if component_start:
+                                message_components.insert(
+                                    component_start, Plain(text="\n")
+                                )
+                            message_components.append(Plain(text="\n"))
 
                     elif element.get("type") == "rich_text_list":
                         # 处理列表
@@ -265,15 +277,25 @@ class SlackAdapter(Platform):
                         list_text = ""
                         for item in list_items:
                             if item.get("type") == "rich_text_section":
-                                item_elements = item.get("elements", [])
-                                item_text = ""
-                                for item_element in item_elements:
-                                    if item_element.get("type") == "text":
-                                        item_text += item_element.get("text", "")
-                                list_text += f"• {item_text}\n"
+                                # Reuse section parsing to preserve inline components.
+                                item_components = self._parse_blocks(
+                                    [{"type": "rich_text", "elements": [item]}]
+                                )
+                                list_text += "• "
+                                for component in item_components:
+                                    if isinstance(component, Plain):
+                                        list_text += component.text
+                                    else:
+                                        if list_text:
+                                            message_components.append(
+                                                Plain(text=list_text)
+                                            )
+                                            list_text = ""
+                                        message_components.append(component)
+                                list_text += "\n"
 
                         if list_text.strip():
-                            message_components.append(Plain(text=list_text.strip()))
+                            message_components.append(Plain(text=list_text.rstrip()))
 
             elif block_type == "section":
                 # 处理段落块

@@ -1,8 +1,10 @@
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { providerApi } from '@/api/v1'
-import { getProviderIcon } from '@/utils/providerUtils'
+import { getProviderIcon, isMonochromeProviderIcon } from '@/utils/providerUtils'
 import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from '@/utils/confirmDialog'
 import { normalizeTextInput } from '@/utils/inputValue'
+import { sponsorCatalog, loadSponsorCatalog } from '@/utils/sponsorCatalog'
+import { useI18n } from '@/i18n/composables'
 
 export interface UseProviderSourcesOptions {
   defaultTab?: string
@@ -10,12 +12,22 @@ export interface UseProviderSourcesOptions {
   showMessage: (message: string, color?: string) => void
 }
 
+interface ProviderSourceType {
+  value: string
+  label: string
+  icon: string
+  isMonochrome: boolean
+  isSponsor?: boolean
+  subtitle?: string
+  website_url?: string
+}
+
+interface ProviderIconSource {
+  provider?: string
+}
+
 export function resolveDefaultTab(value?: string) {
   const normalized = (value || '').toLowerCase()
-
-  if (normalized.startsWith('select_agent_runner_provider') || normalized === 'agent_runner') {
-    return 'agent_runner'
-  }
 
   if (normalized === 'select_provider_stt' || normalized === 'speech_to_text' || normalized.includes('stt')) {
     return 'speech_to_text'
@@ -38,6 +50,7 @@ export function resolveDefaultTab(value?: string) {
 
 export function useProviderSources(options: UseProviderSourcesOptions) {
   const { tm, showMessage } = options
+  const { locale } = useI18n()
 
   const confirmDialog = useConfirmDialog()
 
@@ -56,6 +69,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const editableProviderSource = ref<any | null>(null)
   const availableModels = ref<any[]>([])
   const modelMetadata = ref<Record<string, any>>({})
+  const loadingSources = ref(true)
   const loadingModels = ref(false)
   const savingSource = ref(false)
   const savingProviderToggles = ref<string[]>([])
@@ -71,7 +85,6 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
   const providerTypes = computed(() => [
     { value: 'chat_completion', label: tm('providers.tabs.chatCompletion'), icon: 'mdi-message-text' },
-    { value: 'agent_runner', label: tm('providers.tabs.agentRunner'), icon: 'mdi-robot' },
     { value: 'speech_to_text', label: tm('providers.tabs.speechToText'), icon: 'mdi-microphone-message' },
     { value: 'text_to_speech', label: tm('providers.tabs.textToSpeech'), icon: 'mdi-volume-high' },
     { value: 'embedding', label: tm('providers.tabs.embedding'), icon: 'mdi-code-json' },
@@ -84,18 +97,47 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       return []
     }
 
-    const types: Array<{ value: string; label: string; icon: string }> = []
+    const types: ProviderSourceType[] = []
+    const builtInSponsors = ['MiraRouter', 'SSYCloud(胜算云)']
+    if (selectedProviderType.value === 'chat_completion' && sponsorCatalog.value) {
+      for (const sponsor of sponsorCatalog.value.sponsors) {
+        if (providerTemplates.value[sponsor.template]?.provider_type !== 'chat_completion') continue
+        const translation = sponsor.i18n?.[locale.value]
+        types.push({
+          value: `sponsor:${sponsor.id}`,
+          label: translation?.title || sponsor.title,
+          icon: sponsor.logo,
+          website_url: sponsor.website_url,
+          subtitle: translation?.subtitle || sponsor.subtitle,
+          isMonochrome: false,
+          isSponsor: true
+        })
+      }
+    }
     for (const [templateName, template] of Object.entries(providerTemplates.value)) {
+      if (templateName === 'AIHubMix') continue
+      if (sponsorCatalog.value && builtInSponsors.includes(templateName)) continue
       if (template.provider_type === selectedProviderType.value) {
         types.push({
           value: templateName,
           label: templateName,
-          icon: getProviderIcon(template.provider)
+          icon: getProviderIcon(template.provider),
+          isMonochrome: isMonochromeProviderIcon(template.provider),
+          isSponsor: builtInSponsors.includes(templateName)
         })
       }
     }
 
     return types
+  })
+
+  const selectedSponsor = computed(() => {
+    const source = selectedProviderSource.value
+    if (!source?.api_base) return undefined
+    return sponsorCatalog.value?.sponsors.find(sponsor =>
+      sponsor.api_base.replace(/\/+$/, '') === source.api_base.replace(/\/+$/, '') &&
+      providerTemplates.value[sponsor.template]?.type === source.type
+    )
   })
 
   const filteredProviderSources = computed(() => {
@@ -290,9 +332,13 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     return type.includes(providerType)
   }
 
-  function resolveSourceIcon(source: any) {
+  function resolveSourceIcon(source: ProviderIconSource | null | undefined) {
     if (!source) return ''
-    return getProviderIcon(source.provider) || ''
+    return getProviderIcon(source.provider || '') || ''
+  }
+
+  function isMonochromeSourceIcon(source: ProviderIconSource | null | undefined) {
+    return Boolean(source && isMonochromeProviderIcon(source.provider || ''))
   }
 
   function getSourceDisplayName(source: any) {
@@ -344,8 +390,6 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       anthropic_chat_completion: 'chat_completion',
       googlegenai_chat_completion: 'chat_completion',
       zhipu_chat_completion: 'chat_completion',
-      dify: 'agent_runner',
-      coze: 'agent_runner',
       dashscope: 'chat_completion',
       openai_whisper_api: 'speech_to_text',
       mimo_stt_api: 'speech_to_text',
@@ -445,7 +489,13 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   function addProviderSource(templateKey: string) {
-    const template = providerTemplates.value[templateKey]
+    const sponsor = templateKey.startsWith('sponsor:')
+      ? sponsorCatalog.value?.sponsors.find(item => `sponsor:${item.id}` === templateKey)
+      : null
+    const baseTemplate = providerTemplates.value[sponsor?.template || templateKey]
+    const template = sponsor && baseTemplate
+      ? { ...baseTemplate, id: sponsor.id, api_base: sponsor.api_base }
+      : baseTemplate
     if (!template) {
       showMessage('未找到对应的模板配置', 'error')
       return
@@ -644,14 +694,16 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
   async function deleteProvider(provider: any) {
     const confirmed = await askForConfirmation(tm('models.deleteConfirm', { id: provider.id }))
-    if (!confirmed) return
+    if (!confirmed) return false
 
     try {
       await providerApi.delete(String(provider.id))
       providers.value = providers.value.filter((p) => p.id !== provider.id)
       showMessage(tm('models.deleteSuccess'))
+      return true
     } catch (error: any) {
       showMessage(error.message || tm('models.deleteError'), 'error')
+      return false
     } finally {
       await loadConfig()
     }
@@ -705,6 +757,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   async function loadProviderTemplate() {
+    loadingSources.value = true
     try {
       const response = await providerApi.schema()
       if (response.data.status === 'ok') {
@@ -718,6 +771,8 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       }
     } catch (error) {
       console.error('Failed to load provider template:', error)
+    } finally {
+      loadingSources.value = false
     }
   }
 
@@ -726,6 +781,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   onMounted(async () => {
+    void loadSponsorCatalog()
     await loadProviderTemplate()
   })
 
@@ -741,6 +797,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     editableProviderSource,
     availableModels,
     modelMetadata,
+    loadingSources,
     loadingModels,
     savingSource,
     savingProviderToggles,
@@ -754,6 +811,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     // computed
     providerTypes,
     availableSourceTypes,
+    selectedSponsor,
     displayedProviderSources,
     sourceProviders,
     mergedModelEntries,
@@ -766,6 +824,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
     // helpers
     resolveSourceIcon,
+    isMonochromeSourceIcon,
     getSourceDisplayName,
     getModelMetadata,
     supportsImageInput,

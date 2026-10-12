@@ -39,6 +39,7 @@ async def test_waking_check_enforces_api_key_admin_authorization(
     stage.ignore_at_all = False
     stage.disable_builtin_commands = False
     stage.no_permission_reply = True
+    stage._umo_auto_name_recorder = MagicMock()
 
     event = MagicMock()
     event.message_str = "hello"
@@ -48,9 +49,7 @@ async def test_waking_check_enforces_api_key_admin_authorization(
     event.is_private_chat.return_value = True
     event.get_platform_name.return_value = "webchat"
     event.get_extra.side_effect = lambda key=None, default=None: (
-        api_key_allow_admin_role
-        if key == "_api_key_allow_admin_role"
-        else default
+        api_key_allow_admin_role if key == "_api_key_allow_admin_role" else default
     )
     monkeypatch.setattr(
         star_handlers_registry,

@@ -24,7 +24,7 @@ provider_id = await self.context.get_current_chat_provider_id(umo=umo)
 
 ```py
 llm_resp = await self.context.llm_generate(
-    chat_provider_id=provider_id, # Chat model ID
+    chat_provider_id=provider_id,  # Chat model ID
     prompt="Hello, world!",
 )
 # print(llm_resp.completion_text) # Get the returned text
@@ -97,12 +97,14 @@ Alternatively, you can use the `@filter.llm_tool` decorator to define and regist
 
 ```py{3,4,5,6,7}
 @filter.llm_tool(name="get_weather")  # If name is omitted, the function name is used
-async def get_weather(self, event: AstrMessageEvent, location: str) -> MessageEventResult:
-    '''Get weather information.
+async def get_weather(
+    self, event: AstrMessageEvent, location: str
+) -> MessageEventResult:
+    """Get weather information.
 
     Args:
         location(string): The location to query
-    '''
+    """
     resp = self.get_weather_from_api(location)
     yield event.plain_result("Weather: " + resp)
 ```
@@ -134,8 +136,8 @@ llm_resp = await self.context.tool_loop_agent(
     chat_provider_id=prov_id,
     prompt="Search for videos related to AstrBot on Bilibili.",
     tools=ToolSet([BilibiliTool()]),
-    max_steps=30, # Maximum agent execution steps
-    tool_call_timeout=120, # Tool invocation timeout
+    max_steps=30,  # Maximum agent execution steps
+    tool_call_timeout=120,  # Tool invocation timeout
 )
 # print(llm_resp.completion_text) # Get the returned text
 ```
@@ -358,7 +360,9 @@ curr_cid = await conv_mgr.get_curr_conversation_id(event.unified_msg_origin)
 user_msg = UserMessageSegment(content=[TextPart(text="hi")])
 llm_resp = await self.context.llm_generate(
     chat_provider_id=provider_id,  # Chat model ID
-    contexts=[user_msg],  # When prompt is not specified, contexts is used as input; if both prompt and contexts are provided, prompt is appended to the end of the LLM input
+    contexts=[
+        user_msg
+    ],  # When prompt is not specified, contexts is used as input; if both prompt and contexts are provided, prompt is appended to the end of the LLM input
 )
 await conv_mgr.add_message_pair(
     cid=curr_cid,
@@ -526,7 +530,6 @@ persona_mgr = self.context.persona_manager
 ::: details Persona / Personality Type Definition
 
 ```py
-
 class Persona(SQLModel, table=True):
     """Persona is a set of instructions for LLMs to follow.
 

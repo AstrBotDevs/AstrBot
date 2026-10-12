@@ -116,7 +116,7 @@
       "name": "Plugin Sources"
     },
     {
-      "name": "Plugin Pages"
+      "name": "Plugin Views"
     },
     {
       "name": "MCP"
@@ -1784,6 +1784,7 @@
         ],
         "summary": "List webchat sessions",
         "operationId": "listChatSessions",
+        "description": "API-key requests return a paginated object and require username. Dashboard requests with page or page_size return the same paginated object (sessions, page, page_size, total), scoped to the authenticated user. Dashboard requests without pagination parameters retain the legacy array response, limited to 100 sessions. Paginated requests default to page 1 and page_size 20, with page_size clamped to 1–100.\n\n**Required scope:** `chat`",
         "x-astrbot-scope": "chat",
         "parameters": [
           {
@@ -1804,8 +1805,7 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        },
-        "description": "**Required scope:** `chat`"
+        }
       }
     },
     "/api/v1/chat/sessions/new": {
@@ -1866,19 +1866,38 @@
           "Chat"
         ],
         "summary": "Get a webchat session and its messages",
+        "description": "Includes session metadata independently of the paginated session list.\n\n**Required scope:** `chat`",
         "operationId": "getChatSession",
         "x-astrbot-scope": "chat",
         "parameters": [
           {
             "$ref": "#/components/parameters/SessionId"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000,
+              "default": 1000
+            }
           }
         ],
         "responses": {
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        },
-        "description": "**Required scope:** `chat`"
+        }
       },
       "patch": {
         "tags": [
@@ -2561,6 +2580,136 @@
         "description": "**Required scope:** `file`"
       }
     },
+    "/api/v1/files/upload/init": {
+      "post": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Initialize chunked file upload",
+        "operationId": "initFileUpload",
+        "x-astrbot-scope": "file",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatUploadInitRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `file`"
+      }
+    },
+    "/api/v1/files/upload/chunk": {
+      "post": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Upload a file chunk",
+        "operationId": "uploadFileChunk",
+        "x-astrbot-scope": "file",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatChunkUploadRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `file`"
+      }
+    },
+    "/api/v1/files/upload/complete": {
+      "post": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Complete chunked file upload",
+        "operationId": "completeFileUpload",
+        "x-astrbot-scope": "file",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatUploadSessionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `file`"
+      }
+    },
+    "/api/v1/files/upload/abort": {
+      "post": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Abort chunked file upload",
+        "operationId": "abortFileUpload",
+        "x-astrbot-scope": "file",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatUploadSessionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `file`"
+      }
+    },
+    "/api/v1/files/upload/status": {
+      "post": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Query chunked file upload status",
+        "operationId": "statusFileUpload",
+        "x-astrbot-scope": "file",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatUploadSessionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `file`"
+      }
+    },
     "/api/v1/file": {
       "post": {
         "tags": [
@@ -3140,108 +3289,6 @@
         "responses": {
           "200": {
             "$ref": "#/components/responses/Ok"
-          }
-        },
-        "description": "**Required scope:** `plugin`"
-      }
-    },
-    "/api/v1/plugins/pages": {
-      "get": {
-        "tags": [
-          "Plugin Pages"
-        ],
-        "summary": "List plugin pages by query ID",
-        "operationId": "listPluginPagesById",
-        "x-astrbot-scope": "plugin",
-        "parameters": [
-          {
-            "name": "plugin_id",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Ok"
-          }
-        },
-        "description": "**Required scope:** `plugin`"
-      }
-    },
-    "/api/v1/plugins/page": {
-      "get": {
-        "tags": [
-          "Plugin Pages"
-        ],
-        "summary": "Get plugin page entry HTML by query ID",
-        "operationId": "getPluginPageById",
-        "x-astrbot-scope": "plugin",
-        "parameters": [
-          {
-            "name": "plugin_id",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "page_name",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Html"
-          }
-        },
-        "description": "**Required scope:** `plugin`"
-      }
-    },
-    "/api/v1/plugins/page/assets": {
-      "get": {
-        "tags": [
-          "Plugin Pages"
-        ],
-        "summary": "Get a plugin page asset by query ID",
-        "operationId": "getPluginPageAssetById",
-        "x-astrbot-scope": "plugin",
-        "parameters": [
-          {
-            "name": "plugin_id",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "page_name",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "asset_path",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Plugin asset content"
           }
         },
         "description": "**Required scope:** `plugin`"
@@ -4161,13 +4208,135 @@
         "description": "**Required scope:** `plugin`"
       }
     },
-    "/api/v1/plugins/{plugin_id}/pages": {
+    "/api/v1/plugins/views": {
       "get": {
         "tags": [
-          "Plugin Pages"
+          "Plugin Views"
         ],
-        "summary": "List plugin pages",
-        "operationId": "listPluginPages",
+        "summary": "List plugin views by query ID",
+        "operationId": "listPluginViewsById",
+        "x-astrbot-scope": "plugin",
+        "parameters": [
+          {
+            "name": "plugin_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `plugin`"
+      }
+    },
+    "/api/v1/plugins/pages": {
+      "get": {
+        "tags": [
+          "Plugin Views"
+        ],
+        "summary": "List plugin views by query ID (alias of /plugins/views)",
+        "description": "Deprecated compatibility alias kept for a transition period. New clients should use /plugins/views.\n\n**Required scope:** `plugin`",
+        "operationId": "listPluginPagesById",
+        "deprecated": true,
+        "x-astrbot-scope": "plugin",
+        "parameters": [
+          {
+            "name": "plugin_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/plugins/view": {
+      "get": {
+        "tags": [
+          "Plugin Views"
+        ],
+        "summary": "Get plugin view entry HTML by query ID",
+        "operationId": "getPluginViewById",
+        "x-astrbot-scope": "plugin",
+        "parameters": [
+          {
+            "name": "plugin_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page_name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Html"
+          }
+        },
+        "description": "**Required scope:** `plugin`"
+      }
+    },
+    "/api/v1/plugins/page": {
+      "get": {
+        "tags": [
+          "Plugin Views"
+        ],
+        "summary": "Get plugin view entry HTML by query ID (alias of /plugins/view)",
+        "description": "Deprecated compatibility alias kept for a transition period. New clients should use /plugins/view.\n\n**Required scope:** `plugin`",
+        "operationId": "getPluginPageById",
+        "deprecated": true,
+        "x-astrbot-scope": "plugin",
+        "parameters": [
+          {
+            "name": "plugin_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page_name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Html"
+          }
+        }
+      }
+    },
+    "/api/v1/plugins/{plugin_id}/views": {
+      "get": {
+        "tags": [
+          "Plugin Views"
+        ],
+        "summary": "List plugin views",
+        "operationId": "listPluginViews",
         "x-astrbot-scope": "plugin",
         "parameters": [
           {
@@ -4182,20 +4351,42 @@
         "description": "**Required scope:** `plugin`"
       }
     },
-    "/api/v1/plugins/{plugin_id}/pages/{page_name}": {
+    "/api/v1/plugins/{plugin_id}/pages": {
       "get": {
         "tags": [
-          "Plugin Pages"
+          "Plugin Views"
         ],
-        "summary": "Get plugin page entry HTML",
-        "operationId": "getPluginPage",
+        "summary": "List plugin views (alias of /plugins/{plugin_id}/views)",
+        "description": "Deprecated compatibility alias kept for a transition period. New clients should use /plugins/{plugin_id}/views.\n\n**Required scope:** `plugin`",
+        "operationId": "listPluginPages",
+        "deprecated": true,
+        "x-astrbot-scope": "plugin",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PluginId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/plugins/{plugin_id}/views/{view_name}": {
+      "get": {
+        "tags": [
+          "Plugin Views"
+        ],
+        "summary": "Get plugin view entry HTML",
+        "operationId": "getPluginView",
         "x-astrbot-scope": "plugin",
         "parameters": [
           {
             "$ref": "#/components/parameters/PluginId"
           },
           {
-            "name": "page_name",
+            "name": "view_name",
             "in": "path",
             "required": true,
             "schema": {
@@ -4211,31 +4402,24 @@
         "description": "**Required scope:** `plugin`"
       }
     },
-    "/api/v1/plugins/{plugin_id}/pages/{page_name}/assets/{asset_path}": {
+    "/api/v1/plugins/{plugin_id}/pages/{view_name}": {
       "get": {
         "tags": [
-          "Plugin Pages"
+          "Plugin Views"
         ],
-        "summary": "Get a plugin page asset",
-        "operationId": "getPluginPageAsset",
+        "summary": "Get plugin view entry HTML (alias of /plugins/{plugin_id}/views/{view_name})",
+        "description": "Deprecated compatibility alias kept for a transition period. New clients should use /plugins/{plugin_id}/views/{view_name}.\n\n**Required scope:** `plugin`",
+        "operationId": "getPluginPage",
+        "deprecated": true,
         "x-astrbot-scope": "plugin",
         "parameters": [
           {
             "$ref": "#/components/parameters/PluginId"
           },
           {
-            "name": "page_name",
+            "name": "view_name",
             "in": "path",
             "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "asset_path",
-            "in": "path",
-            "required": true,
-            "description": "URL-encoded relative asset path.",
             "schema": {
               "type": "string"
             }
@@ -4243,16 +4427,15 @@
         ],
         "responses": {
           "200": {
-            "description": "Plugin asset content"
+            "$ref": "#/components/responses/Html"
           }
-        },
-        "description": "**Required scope:** `plugin`"
+        }
       }
     },
     "/api/v1/plugins/page-bridge-sdk.js": {
       "get": {
         "tags": [
-          "Plugin Pages"
+          "Plugin Views"
         ],
         "summary": "Get the plugin page bridge SDK",
         "operationId": "getPluginPageBridgeSdk",
@@ -4275,7 +4458,7 @@
     "/api/v1/plugins/extensions/{plugin_path}": {
       "get": {
         "tags": [
-          "Plugin Pages"
+          "Plugin Views"
         ],
         "summary": "Proxy a plugin extension GET route",
         "operationId": "getPluginExtensionRoute",
@@ -4300,7 +4483,7 @@
       },
       "post": {
         "tags": [
-          "Plugin Pages"
+          "Plugin Views"
         ],
         "summary": "Proxy a plugin extension POST route",
         "operationId": "postPluginExtensionRoute",
@@ -4341,7 +4524,7 @@
       },
       "put": {
         "tags": [
-          "Plugin Pages"
+          "Plugin Views"
         ],
         "summary": "Proxy a plugin extension PUT route",
         "operationId": "putPluginExtensionRoute",
@@ -4375,7 +4558,7 @@
       },
       "patch": {
         "tags": [
-          "Plugin Pages"
+          "Plugin Views"
         ],
         "summary": "Proxy a plugin extension PATCH route",
         "operationId": "patchPluginExtensionRoute",
@@ -4409,7 +4592,7 @@
       },
       "delete": {
         "tags": [
-          "Plugin Pages"
+          "Plugin Views"
         ],
         "summary": "Proxy a plugin extension DELETE route",
         "operationId": "deletePluginExtensionRoute",
@@ -6198,6 +6381,55 @@
             "description": "Comma-separated platforms to exclude."
           },
           {
+            "name": "keyword",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Match conversation titles or message content."
+          },
+          {
+            "name": "umo",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Match the unified message origin."
+          },
+          {
+            "name": "sort_by",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "created_at",
+                "updated_at"
+              ],
+              "default": "created_at"
+            }
+          },
+          {
+            "name": "sort_order",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "default": "desc"
+            }
+          },
+          {
+            "name": "group_by_session",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            },
+            "description": "Paginate by UMO and return all conversation summaries for each selected session."
+          },
+          {
             "name": "include_history",
             "in": "query",
             "schema": {
@@ -6207,6 +6439,22 @@
             "description": "Include full message history in each conversation."
           }
         ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `data`"
+      }
+    },
+    "/api/v1/conversations/filter-options": {
+      "get": {
+        "tags": [
+          "Conversations"
+        ],
+        "summary": "List available conversation filters",
+        "operationId": "getConversationFilterOptions",
+        "x-astrbot-scope": "data",
         "responses": {
           "200": {
             "$ref": "#/components/responses/Ok"
@@ -7053,6 +7301,11 @@
             "type": "boolean",
             "default": true,
             "description": "Enable streaming model output for this request. This value takes priority over the legacy top-level enable_streaming field."
+          },
+          "enable_reasoning": {
+            "type": "boolean",
+            "default": true,
+            "description": "Display reasoning content for this WebChat request independently of the global display_reasoning_text setting."
           }
         },
         "additionalProperties": false
@@ -7063,6 +7316,10 @@
           "message"
         ],
         "properties": {
+          "locale": {
+            "type": "string",
+            "description": "UI locale for built-in LLM error messages. Omitted or unsupported locales fall back to zh-CN."
+          },
           "username": {
             "type": "string",
             "description": "Caller-declared WebChat sender/session owner. Configured AstrBot administrator IDs require the chat:admin API key sub-scope."
@@ -7167,6 +7424,10 @@
       "ChatMessageRegenerateRequest": {
         "type": "object",
         "properties": {
+          "locale": {
+            "type": "string",
+            "description": "UI locale for built-in LLM error messages. Omitted or unsupported locales fall back to zh-CN."
+          },
           "selected_provider": {
             "type": "string"
           },
@@ -7218,6 +7479,10 @@
           "message"
         ],
         "properties": {
+          "locale": {
+            "type": "string",
+            "description": "UI locale for built-in LLM error messages. Omitted or unsupported locales fall back to zh-CN."
+          },
           "message": {
             "oneOf": [
               {
@@ -7971,6 +8236,59 @@
           }
         },
         "additionalProperties": false
+      },
+      "ChatUploadInitRequest": {
+        "type": "object",
+        "required": [
+          "filename",
+          "total_size"
+        ],
+        "properties": {
+          "filename": {
+            "type": "string"
+          },
+          "total_size": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "content_type": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ChatUploadSessionRequest": {
+        "type": "object",
+        "required": [
+          "upload_id"
+        ],
+        "properties": {
+          "upload_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ChatChunkUploadRequest": {
+        "type": "object",
+        "required": [
+          "upload_id",
+          "chunk_index",
+          "chunk"
+        ],
+        "properties": {
+          "upload_id": {
+            "type": "string"
+          },
+          "chunk_index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "chunk": {
+            "type": "string",
+            "format": "binary"
+          }
+        }
       },
       "T2iTemplateRequest": {
         "type": "object",

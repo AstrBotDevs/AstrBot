@@ -18,30 +18,30 @@ Make sure DeerFlow is running properly and that AstrBot can reach the DeerFlow g
 
 ## Configure DeerFlow in AstrBot
 
-In the WebUI, click "Model Provider" -> "Add Provider", select "Agent Runner", select "DeerFlow", and enter the DeerFlow configuration page.
+In the WebUI, open **Config**, select the profile to edit, and open **AI**. Click **More actions** (`…`) beside the heading → **Change Execution Mode**, select **DeerFlow**, read and check the reset acknowledgement, then click **Use This Mode**. Make sure **Enable AI** is on, then enter the connection settings on this page. Switching resets the current mode's configuration; see [Agent Runner](../../use/agent-runner.md).
 
 Fill in the following fields:
 
 - `API Base URL`: DeerFlow API gateway URL. Default: `http://127.0.0.1:2026`
-- `DeerFlow API Key`: Optional. Fill this if your DeerFlow gateway is protected by Bearer auth
-- `Authorization Header`: Optional. Custom Authorization header value. This takes precedence over `DeerFlow API Key`
+- `API Key`: Optional. Fill this if your DeerFlow gateway is protected by Bearer auth
+- `Authorization Header`: Optional. Custom Authorization header value. This takes precedence over `API Key`
 - `Assistant ID`: Maps to LangGraph `assistant_id`. Default: `lead_agent`
-- `Model name override`: Optional. Overrides the default model configured in DeerFlow
-- `Enable thinking mode`: Whether to enable DeerFlow thinking mode
-- `Enable plan mode`: Maps to DeerFlow `is_plan_mode`
-- `Enable subagent`: Maps to DeerFlow `subagent_enabled`
-- `Max concurrent subagents`: Maps to `max_concurrent_subagents`. Effective only when subagents are enabled. Default: `3`
-- `Recursion limit`: Maps to LangGraph `recursion_limit`. Default: `1000`
+- `Model Name Override`: Optional. Overrides the default model configured in DeerFlow
+- `Enable Thinking Mode`: Whether to enable DeerFlow thinking mode
+- `Enable Plan Mode`: Maps to DeerFlow `is_plan_mode`
+- `Enable Subagents`: Maps to DeerFlow `subagent_enabled`
+- `Maximum Concurrent Subagents`: Maps to `max_concurrent_subagents`. Effective only when subagents are enabled. Default: `3`
+- `Recursion Limit`: Maps to LangGraph `recursion_limit`. Default: `1000`
 
-After filling in the configuration, click Save.
+After filling in the configuration, click **Save Configuration**.
 
 > [!TIP]
-> - If DeerFlow already has a default model configured on its side, you can leave `Model name override` empty.
+> - If DeerFlow already has a default model configured on its side, you can leave `Model Name Override` empty.
 > - Only enable `plan mode` or `subagent` related options when the corresponding DeerFlow capabilities are already configured on the DeerFlow side.
 
-## Select Agent Runner
+## Save the Configuration
 
-Go to the Configuration page in the left sidebar, click "Agent Execution Method", select "DeerFlow", then select the ID of the DeerFlow Agent Runner you just created in the new configuration option below, and click "Save" in the bottom right corner to complete the configuration.
+When all fields are complete, click **Save Configuration** at the bottom right. This profile uses the selected execution mode and connection settings directly; no separate runner provider or provider ID selection is needed.
 
 ## Common Checks
 

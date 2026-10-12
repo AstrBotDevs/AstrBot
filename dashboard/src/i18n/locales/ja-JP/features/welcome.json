@@ -1,0 +1,51 @@
+{
+  "greeting": {
+    "morning": "おはようございます。AstrBot へようこそ",
+    "afternoon": "こんにちは。AstrBot へようこそ",
+    "evening": "こんばんは。AstrBot へようこそ",
+    "newYear": "あけましておめでとうございます！"
+  },
+  "subtitle": "まずクイックガイドを完了しましょう。プラットフォームと会話プロバイダーは後から設定することもできます。",
+  "announcement": {
+    "title": "お知らせ"
+  },
+  "onboard": {
+    "title": "クイックガイド",
+    "subtitle": "このページで初期設定を完了できます。",
+    "step1Title": "AI モデルを設定",
+    "step1Desc": "AstrBot で使用する AI モデルを設定します。",
+    "step2Title": "プラットフォームボットを設定",
+    "step2Desc": "AstrBot を QQ、Lark、WeCom、Telegram などの IM プラットフォームに接続します。",
+    "step3Title": "エージェントにコンピューターの使用を許可",
+    "step3Desc": "エージェントによるこのコンピューターへのアクセスと使用を許可するか設定します。",
+    "step3HelpTitle": "エージェントにコンピューターの使用を許可",
+    "step3HelpItem1": "エージェントは、ユーザーごとに分離されたワークスペースディレクトリやスキルにアクセスし、より複雑なタスクを実行できます。",
+    "step3HelpItem2": "AstrBot 管理者の場合、エージェントには Shell コマンドや Python コードの実行、およびローカルのすべてのディレクトリへのアクセスも許可されます。",
+    "step3HelpClose": "閉じる",
+    "step3SelectLabel": "コンピューターへのアクセス権限",
+    "step3Allow": "許可",
+    "step3Deny": "許可しない",
+    "configure": "設定する",
+    "save": "保存",
+    "skip": "スキップ",
+    "pending": "未対応",
+    "completed": "完了",
+    "skipped": "スキップ済み",
+    "platformLoadFailed": "プラットフォーム設定を読み込めませんでした",
+    "providerLoadFailed": "プロバイダー設定を読み込めませんでした",
+    "providerUpdateFailed": "default 設定ファイルのデフォルト会話プロバイダーを更新できませんでした",
+    "providerDefaultUpdated": "default 設定ファイルのデフォルト会話プロバイダーを {id} に設定しました",
+    "computerAccessUpdateFailed": "エージェントのコンピューターアクセス権限を更新できませんでした",
+    "computerAccessAllowed": "エージェントにコンピューターへのアクセスと使用を許可しました",
+    "computerAccessDenied": "エージェントによるコンピューターへのアクセスと使用を許可しませんでした",
+    "step3HelpItem3": "権限と機能をさらに細かく設定するには、「設定ファイル -> 一般設定 -> コンピューター使用機能」で設定してください。"
+  },
+  "resources": {
+    "title": "関連リソース",
+    "githubDesc": "AstrBot に Star を付けてください！",
+    "docsTitle": "ドキュメント",
+    "docsDesc": "AstrBot の公式ドキュメントをご覧ください。",
+    "afdianTitle": "Afdian",
+    "afdianDesc": "Afdian で AstrBot チームを支援できます。"
+  }
+}

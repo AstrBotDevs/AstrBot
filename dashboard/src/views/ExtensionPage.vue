@@ -101,6 +101,7 @@ const {
   filteredExtensions,
   filteredPlugins,
   filteredMarketPlugins,
+  getMarketPluginKey,
   sortedPlugins,
   RANDOM_PLUGINS_COUNT,
   randomPlugins,
@@ -215,11 +216,18 @@ const selectedMarketPlugin = computed(() => {
     ? pluginMarketData.value
     : [];
   const installedPlugin = selectedInstalledPlugin.value;
+  // Resolve by the unique market plugin key first; the `name` match is a
+  // fallback for legacy deep links, since multiple market entries can share
+  // the same metadata name.
+  const marketKeyMatch =
+    market.find((item) => getMarketPluginKey(item) === selectedPluginId.value) ||
+      null;
   const marketNameMatch =
     market.find((item) => item.name === selectedPluginId.value) || null;
+  const marketMatch = marketKeyMatch || marketNameMatch;
 
   if (selectedDetailTab.value === "market" || !installedPlugin) {
-    return marketNameMatch;
+    return marketMatch;
   }
 
   const repo = normalizeRepoUrl(installedPlugin.repo);
@@ -368,8 +376,8 @@ const updateDialogPluginLogo = computed(() => {
         ></div>
         <v-btn
           variant="text"
-          prepend-icon="mdi-github"
-          href="https://github.com/AstrBotDevs/AstrBot_Plugins_Collection"
+          prepend-icon="mdi-upload"
+          href="https://cloud.astrbot.app/publish"
           target="_blank"
           color="primary"
           class="text-none"

@@ -30,11 +30,15 @@ LINE_CONFIG_METADATA = {
         "description": "LINE Channel Access Token",
         "type": "string",
         "hint": "LINE Messaging API 的 channel access token。",
+        "secret": True,
+        "show_key": True,
     },
     "channel_secret": {
         "description": "LINE Channel Secret",
         "type": "string",
         "hint": "用于校验 LINE Webhook 签名。",
+        "secret": True,
+        "show_key": True,
     },
 }
 
@@ -57,6 +61,16 @@ LINE_I18N_RESOURCES = {
         "channel_secret": {
             "description": "LINE Channel Secret",
             "hint": "Used to verify LINE webhook signatures.",
+        },
+    },
+    "ja-JP": {
+        "channel_access_token": {
+            "description": "LINE チャネルアクセストークン",
+            "hint": "LINE Messaging API のチャネルアクセストークンです。",
+        },
+        "channel_secret": {
+            "description": "LINE チャネルシークレット",
+            "hint": "LINE Webhook の署名検証に使用します。",
         },
     },
 }
@@ -210,7 +224,21 @@ class LinePlatformAdapter(Platform):
         if source_type in {"group", "room"}:
             abm.type = MessageType.GROUP_MESSAGE
             container_id = group_id or room_id
-            abm.group = Group(group_id=container_id, group_name=container_id)
+            group_name = str(
+                source.get("groupName")
+                or source.get("roomName")
+                or event.get("groupName")
+                or event.get("roomName")
+                or ""
+            ).strip()
+            group_avatar = str(
+                source.get("pictureUrl") or event.get("pictureUrl") or ""
+            ).strip()
+            abm.group = Group(
+                group_id=container_id,
+                group_name=group_name or None,
+                group_avatar=group_avatar or None,
+            )
             abm.session_id = container_id
             sender_id = user_id or container_id
         elif source_type == "user":

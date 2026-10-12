@@ -10,8 +10,10 @@ async def helloworld(self, event: AstrMessageEvent):
     yield event.plain_result("Hello!")
     yield event.plain_result("你好！")
 
-    yield event.image_result("path/to/image.jpg") # 发送图片
-    yield event.image_result("https://example.com/image.jpg") # 发送 URL 图片，务必以 http 或 https 开头
+    yield event.image_result("path/to/image.jpg")  # 发送图片
+    yield event.image_result(
+        "https://example.com/image.jpg"
+    )  # 发送 URL 图片，务必以 http 或 https 开头
 ```
 
 ## 主动消息
@@ -22,6 +24,7 @@ async def helloworld(self, event: AstrMessageEvent):
 
 ```python
 from astrbot.api.event import MessageChain
+
 
 @filter.command("helloworld")
 async def helloworld(self, event: AstrMessageEvent):
@@ -43,14 +46,15 @@ AstrBot 支持发送富媒体消息，比如图片、语音、视频等。使用
 ```python
 import astrbot.api.message_components as Comp
 
+
 @filter.command("helloworld")
 async def helloworld(self, event: AstrMessageEvent):
     chain = [
-        Comp.At(qq=event.get_sender_id()), # At 消息发送者
+        Comp.At(qq=event.get_sender_id()),  # At 消息发送者
         Comp.Plain("来看这个图："),
-        Comp.Image.fromURL("https://example.com/image.jpg"), # 从 URL 发送图片
-        Comp.Image.fromFileSystem("path/to/image.jpg"), # 从本地文件目录发送图片
-        Comp.Plain("这是一个图片。")
+        Comp.Image.fromURL("https://example.com/image.jpg"),  # 从 URL 发送图片
+        Comp.Image.fromFileSystem("path/to/image.jpg"),  # 从本地文件目录发送图片
+        Comp.Plain("这是一个图片。"),
     ]
     yield event.chain_result(chain)
 ```
@@ -65,13 +69,13 @@ async def helloworld(self, event: AstrMessageEvent):
 **文件 File**
 
 ```py
-Comp.File(file="path/to/file.txt", name="file.txt") # 部分平台不支持
+Comp.File(file="path/to/file.txt", name="file.txt")  # 部分平台不支持
 ```
 
 **语音 Record**
 
 ```py
-path = "path/to/record.wav" # 暂时只接受 wav 格式，其他格式请自行转换
+path = "path/to/record.wav"  # 暂时只接受 wav 格式，其他格式请自行转换
 Comp.Record(file=path, url=path)
 ```
 
@@ -88,17 +92,15 @@ Comp.Video.fromURL(url="https://example.com/video.mp4")
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
 
+
 @filter.command("test")
 async def test(self, event: AstrMessageEvent):
     from astrbot.api.message_components import Video
+
     # fromFileSystem 需要用户的协议端和机器人端处于一个系统中。
-    video = Video.fromFileSystem(
-        path="test.mp4"
-    )
+    video = Video.fromFileSystem(path="test.mp4")
     # 更通用
-    video = Video.fromURL(
-        url="https://example.com/video.mp4"
-    )
+    video = Video.fromURL(url="https://example.com/video.mp4")
     yield event.chain_result([video])
 ```
 
@@ -113,16 +115,15 @@ async def test(self, event: AstrMessageEvent):
 ```py
 from astrbot.api.event import filter, AstrMessageEvent
 
+
 @filter.command("test")
 async def test(self, event: AstrMessageEvent):
     from astrbot.api.message_components import Node, Plain, Image
+
     node = Node(
         uin=905617992,
         name="Soulter",
-        content=[
-            Plain("hi"),
-            Image.fromFileSystem("test.jpg")
-        ]
+        content=[Plain("hi"), Image.fromFileSystem("test.jpg")],
     )
     yield event.chain_result([node])
 ```

@@ -57,7 +57,7 @@
 
 LINE 适配器仅支持 AstrBot 统一 Webhook 模式。
 
-保存后，在机器人卡片里点击「查看 Webhook 链接」，复制 URL。
+保存后，在 `机器人` 页选中刚创建的机器人，点击 `查看 Webhook 链接`，复制 URL。
 
 然后到 LINE Developers Console：
 

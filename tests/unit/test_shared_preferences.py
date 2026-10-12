@@ -148,8 +148,32 @@ async def test_concurrent_sync_writes_keep_submission_order(
 
 
 @pytest.mark.asyncio
-async def test_initialize_preloads_values_for_sync_reads(tmp_path):
+async def test_initialize_does_not_load_all_preferences(tmp_path, monkeypatch):
+    """Startup must not materialize the whole preferences table in memory."""
     database = SQLiteDatabase(str(tmp_path / "preload.db"))
+    await database.initialize()
+
+    def fail_on_unfiltered_load(scope=None, scope_id=None, key=None):
+        if scope is None and scope_id is None and key is None:
+            raise AssertionError("initialize() must not load all preferences")
+        return original_get_preferences(scope, scope_id, key)
+
+    original_get_preferences = database.get_preferences
+    monkeypatch.setattr(database, "get_preferences", fail_on_unfiltered_load)
+
+    store = SharedPreferences(database, tmp_path / "preferences.json")
+    try:
+        await store.initialize()
+        assert store._cache == {}
+    finally:
+        await store.close()
+        await database.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_sync_reads_fall_back_to_database_without_preload(tmp_path):
+    """Deprecated sync get() must read historical values written before startup."""
+    database = SQLiteDatabase(str(tmp_path / "fallback.db"))
     await database.initialize()
     await database.insert_preference_or_update(
         "umo",
@@ -160,7 +184,85 @@ async def test_initialize_preloads_values_for_sync_reads(tmp_path):
     store = SharedPreferences(database, tmp_path / "preferences.json")
     try:
         await store.initialize()
+        assert store._cache == {}
         assert store.get("provider", scope="umo", scope_id="session") == "provider-1"
+        # Sync fallback reads must not backfill the in-memory overlay.
+        assert store._cache == {}
     finally:
         await store.close()
         await database.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_sync_range_reads_historical_and_process_local_values(tmp_path):
+    """Deprecated range_get() must combine persisted and pending values."""
+    database = SQLiteDatabase(str(tmp_path / "range-fallback.db"))
+    await database.initialize()
+    await database.insert_preference_or_update(
+        "plugin",
+        "example",
+        "historical",
+        {"val": "from-database"},
+    )
+    store = SharedPreferences(database, tmp_path / "preferences.json")
+    try:
+        await store.initialize()
+        store.put(
+            "pending",
+            "from-overlay",
+            scope="plugin",
+            scope_id="example",
+        )
+
+        preferences = store.range_get("plugin", "example")
+        values = {item.key: item.value["val"] for item in preferences}
+
+        assert values == {
+            "historical": "from-database",
+            "pending": "from-overlay",
+        }
+        assert "historical" not in {cache_key for _, _, cache_key in store._cache}
+    finally:
+        await store.close()
+        await database.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_get_async_falls_back_to_database_without_caching(preferences):
+    store, database = preferences
+    await database.insert_preference_or_update(
+        "plugin",
+        "heavy_plugin",
+        "blob",
+        {"val": {"payload": [1, 2, 3]}},
+    )
+
+    assert store._cache == {}
+    value = await store.get_async("plugin", "heavy_plugin", "blob")
+    assert value == {"payload": [1, 2, 3]}
+    assert await store.get_async("plugin", "heavy_plugin", "missing", "d") == "d"
+    # Reads must not grow the in-memory overlay.
+    assert store._cache == {}
+
+
+@pytest.mark.asyncio
+async def test_sync_get_reads_persisted_value_with_exhausted_pool(preferences):
+    """Sync reads must not depend on the async connection pool."""
+    store, database = preferences
+    await database.insert_preference_or_update(
+        "global",
+        "global",
+        "inactivated_llm_tools",
+        {"val": ["tool-a"]},
+    )
+
+    pool = database.engine.pool
+    capacity = pool.size() + pool._max_overflow
+    connections = [await database.engine.connect() for _ in range(capacity)]
+    try:
+        assert store.get(
+            "inactivated_llm_tools", scope="global", scope_id="global"
+        ) == ["tool-a"]
+    finally:
+        for connection in connections:
+            await connection.close()

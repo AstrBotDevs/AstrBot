@@ -61,6 +61,18 @@ export default defineConfig(({ command }) => ({
     // Only run MDI subsetting during production builds, skip in dev server
     ...(command === 'build' ? [mdiSubset()] : []),
     t2iShikiRuntimeAsset(),
+    {
+      name: 'katex-woff2-only',
+      enforce: 'pre',
+      transform(source, id) {
+        if (!/\/katex\/dist\/katex(?:\.min)?\.css$/.test(id.split('?')[0])) return;
+        // Keep one font format per face instead of shipping three identical glyph sets.
+        return source.replace(/src:[^;}]+/g, (declaration) => {
+          const woff2 = declaration.match(/url\([^)]*\.woff2\)\s*format\(["']woff2["']\)/);
+          return woff2 ? `src:${woff2[0]}` : declaration;
+        });
+      },
+    },
     vue({
       template: {
         compilerOptions: {
@@ -82,10 +94,6 @@ export default defineConfig(({ command }) => ({
       {
         find: /^stream-monaco$/,
         replacement: fileURLToPath(new URL('./src/utils/streamMonacoDisabled.js', import.meta.url))
-      },
-      {
-        find: 'mermaid',
-        replacement: 'mermaid/dist/mermaid.js'
       },
       {
         find: '@',

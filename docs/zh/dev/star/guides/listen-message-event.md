@@ -24,15 +24,18 @@ AstrBot 接收消息平台下发的消息，并将其封装为 `AstrMessageEvent
 
 ```py{11}
 class AstrBotMessage:
-    '''AstrBot 的消息对象'''
+    """AstrBot 的消息对象"""
+
     type: MessageType  # 消息类型
     self_id: str  # 机器人的识别id
     session_id: str  # 会话id。取决于 unique_session 的设置。
     message_id: str  # 消息id
-    group_id: str = "" # 群组id，如果为私聊，则为空
+    group_id: str = ""  # 群组id，如果为私聊，则为空
     sender: MessageMember  # 发送者
     message: List[BaseMessageComponent]  # 消息链。比如 [Plain("Hello"), At(qq=123456)]
-    message_str: str  # 最直观的纯文本消息字符串，将消息链中的 Plain 消息（文本消息）连接起来
+    message_str: (
+        str  # 最直观的纯文本消息字符串，将消息链中的 Plain 消息（文本消息）连接起来
+    )
     raw_message: object
     timestamp: int  # 消息时间戳
 ```
@@ -73,15 +76,16 @@ class AstrBotMessage:
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context, Star
 
+
 class MyPlugin(Star):
     def __init__(self, context: Context):
         super().__init__(context)
 
-    @filter.command("helloworld") # from astrbot.api.event.filter import command
+    @filter.command("helloworld")  # from astrbot.api.event.filter import command
     async def helloworld(self, event: AstrMessageEvent):
-        '''这是 hello world 指令'''
+        """这是 hello world 指令"""
         user_name = event.get_sender_name()
-        message_str = event.message_str # 获取消息的纯文本内容
+        message_str = event.message_str  # 获取消息的纯文本内容
         yield event.plain_result(f"Hello, {user_name}!")
 ```
 
@@ -110,10 +114,12 @@ async def add(self, event: AstrMessageEvent, a: int, b: int):
 def math():
     pass
 
+
 @math.command("add")
 async def add(self, event: AstrMessageEvent, a: int, b: int):
     # /math add 1 2 -> 结果是: 3
     yield event.plain_result(f"结果是: {a + b}")
+
 
 @math.command("sub")
 async def sub(self, event: AstrMessageEvent, a: int, b: int):
@@ -134,29 +140,34 @@ async def sub(self, event: AstrMessageEvent, a: int, b: int):
 理论上，指令组可以无限嵌套！
 
 ```py
-'''
+"""
 math
 ├── calc
 │   ├── add (a(int),b(int),)
 │   ├── sub (a(int),b(int),)
 │   ├── help (无参数指令)
-'''
+"""
+
 
 @filter.command_group("math")
 def math():
     pass
 
-@math.group("calc") # 请注意，这里是 group，而不是 command_group
+
+@math.group("calc")  # 请注意，这里是 group，而不是 command_group
 def calc():
     pass
+
 
 @calc.command("add")
 async def add(self, event: AstrMessageEvent, a: int, b: int):
     yield event.plain_result(f"结果是: {a + b}")
 
+
 @calc.command("sub")
 async def sub(self, event: AstrMessageEvent, a: int, b: int):
     yield event.plain_result(f"结果是: {a - b}")
+
 
 @calc.command("help")
 async def calc_help(self, event: AstrMessageEvent):
@@ -171,7 +182,7 @@ async def calc_help(self, event: AstrMessageEvent):
 可以为指令或指令组添加不同的别名：
 
 ```python
-@filter.command("help", alias={'帮助', 'helpme'})
+@filter.command("help", alias={"帮助", "helpme"})
 async def help(self, event: AstrMessageEvent):
     yield event.plain_result("这是一个计算器插件，拥有 add, sub 指令。")
 ```
@@ -193,7 +204,7 @@ async def on_all_message(self, event: AstrMessageEvent):
 ```python
 @filter.event_message_type(filter.EventMessageType.PRIVATE_MESSAGE)
 async def on_private_message(self, event: AstrMessageEvent):
-    message_str = event.message_str # 获取消息的纯文本内容
+    message_str = event.message_str  # 获取消息的纯文本内容
     yield event.plain_result("收到了一条私聊消息。")
 ```
 
@@ -202,9 +213,11 @@ async def on_private_message(self, event: AstrMessageEvent):
 #### 消息平台
 
 ```python
-@filter.platform_adapter_type(filter.PlatformAdapterType.AIOCQHTTP | filter.PlatformAdapterType.QQOFFICIAL)
+@filter.platform_adapter_type(
+    filter.PlatformAdapterType.AIOCQHTTP | filter.PlatformAdapterType.QQOFFICIAL
+)
 async def on_aiocqhttp(self, event: AstrMessageEvent):
-    '''只接收 AIOCQHTTP 和 QQOFFICIAL 的消息'''
+    """只接收 AIOCQHTTP 和 QQOFFICIAL 的消息"""
     yield event.plain_result("收到了一条信息")
 ```
 
@@ -244,10 +257,10 @@ async def helloworld(self, event: AstrMessageEvent):
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
 
+
 @filter.on_astrbot_loaded()
 async def on_astrbot_loaded(self):
     print("AstrBot 初始化完成")
-
 ```
 
 #### 等待 LLM 请求时
@@ -258,6 +271,7 @@ async def on_astrbot_loaded(self):
 
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
+
 
 @filter.on_waiting_llm_request()
 async def on_waiting_llm(self, event: AstrMessageEvent):
@@ -280,12 +294,14 @@ ProviderRequest 对象包含了 LLM 请求的所有信息，包括请求的文�
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.provider import ProviderRequest
 
-@filter.on_llm_request()
-async def my_custom_hook_1(self, event: AstrMessageEvent, req: ProviderRequest): # 请注意有三个参数
-    print(req) # 打印请求的文本
-    req.system_prompt += "自定义 system_prompt" # 如果有其他替代方法，不建议使用此种方式来追加每轮对话都会改变的提示词，否则会破坏缓存，大大增加价格（约增加 7-20 倍的价格）。
-    req.extra_user_content_parts.append(...)
 
+@filter.on_llm_request()
+async def my_custom_hook_1(
+    self, event: AstrMessageEvent, req: ProviderRequest
+):  # 请注意有三个参数
+    print(req)  # 打印请求的文本
+    req.system_prompt += "自定义 system_prompt"  # 如果有其他替代方法，不建议使用此种方式来追加每轮对话都会改变的提示词，否则会破坏缓存，大大增加价格（约增加 7-20 倍的价格）。
+    req.extra_user_content_parts.append(...)
 ```
 
 > [!WARNING]
@@ -333,8 +349,11 @@ async def my_custom_hook_1(self, event: AstrMessageEvent, req: ProviderRequest):
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.provider import LLMResponse
 
+
 @filter.on_llm_response()
-async def on_llm_resp(self, event: AstrMessageEvent, resp: LLMResponse): # 请注意有三个参数
+async def on_llm_resp(
+    self, event: AstrMessageEvent, resp: LLMResponse
+):  # 请注意有三个参数
     print(resp)
 ```
 
@@ -351,8 +370,11 @@ from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.astr_agent_context import AstrAgentContext
 
+
 @filter.on_agent_begin()
-async def on_agent_begin(self, event: AstrMessageEvent, run_context: ContextWrapper[AstrAgentContext]):
+async def on_agent_begin(
+    self, event: AstrMessageEvent, run_context: ContextWrapper[AstrAgentContext]
+):
     print("Agent 开始运行")
 ```
 
@@ -369,6 +391,7 @@ async def on_agent_begin(self, event: AstrMessageEvent, run_context: ContextWrap
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.core.agent.tool import FunctionTool
+
 
 @filter.on_using_llm_tool()
 async def on_using_llm_tool(
@@ -396,6 +419,7 @@ from mcp.types import CallToolResult
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.core.agent.tool import FunctionTool
 
+
 @filter.on_llm_tool_respond()
 async def on_llm_tool_respond(
     self,
@@ -421,8 +445,14 @@ from astrbot.api.provider import LLMResponse
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.astr_agent_context import AstrAgentContext
 
+
 @filter.on_agent_done()
-async def on_agent_done(self, event: AstrMessageEvent, run_context: ContextWrapper[AstrAgentContext], resp: LLMResponse):
+async def on_agent_done(
+    self,
+    event: AstrMessageEvent,
+    run_context: ContextWrapper[AstrAgentContext],
+    resp: LLMResponse,
+):
     print(resp)
 ```
 
@@ -438,12 +468,13 @@ async def on_agent_done(self, event: AstrMessageEvent, run_context: ContextWrapp
 from astrbot.api.event import filter, AstrMessageEvent
 import astrbot.api.message_components as Comp
 
+
 @filter.on_decorating_result()
 async def on_decorating_result(self, event: AstrMessageEvent):
     result = event.get_result()
     chain = result.chain
-    print(chain) # 打印消息链
-    chain.append(Comp.Plain("!")) # 在消息链的最后添加一个感叹号
+    print(chain)  # 打印消息链
+    chain.append(Comp.Plain("!"))  # 在消息链的最后添加一个感叹号
 ```
 
 > 这里不能使用 yield 来发送消息。这个钩子只是用来装饰 event.get_result().chain 的。如需发送，请直接使用 `event.send()` 方法。
@@ -454,6 +485,7 @@ async def on_decorating_result(self, event: AstrMessageEvent):
 
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
+
 
 @filter.after_message_sent()
 async def after_message_sent(self, event: AstrMessageEvent):
@@ -477,10 +509,10 @@ async def helloworld(self, event: AstrMessageEvent):
 ```python{6}
 @filter.command("check_ok")
 async def check_ok(self, event: AstrMessageEvent):
-    ok = self.check() # 自己的逻辑
+    ok = self.check()  # 自己的逻辑
     if not ok:
         yield event.plain_result("检查失败")
-        event.stop_event() # 停止事件传播
+        event.stop_event()  # 停止事件传播
 ```
 
 当事件停止传播，后续所有步骤将不会被执行。

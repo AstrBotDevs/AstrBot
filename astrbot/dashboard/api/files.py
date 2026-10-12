@@ -1,10 +1,20 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+)
 from fastapi.responses import FileResponse
 
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import error, ok
+from astrbot.dashboard.schemas import ChatUploadInitRequest, ChatUploadSessionRequest
 from astrbot.dashboard.services.chat_service import ChatService, ChatServiceError
 from astrbot.dashboard.services.file_service import FileService, FileServiceError
 
@@ -49,13 +59,17 @@ async def _run_file(operation, *, error_message: str = "File access error"):
         return error(error_message)
 
 
-async def _upload_file(file: UploadFile, service: ChatService):
-    result = await _run_file(
-        lambda: service.save_uploaded_file(UploadFileAdapter(file))
-    )
+async def _run_chat_upload(operation):
+    result = await _run_file(operation)
     if isinstance(result, dict) and result.get("status") == "error":
         return result
     return ok(result)
+
+
+async def _upload_file(file: UploadFile, service: ChatService):
+    return await _run_chat_upload(
+        lambda: service.save_uploaded_file(UploadFileAdapter(file))
+    )
 
 
 @router.get("/files/tokens/{file_token}")
@@ -73,6 +87,76 @@ async def upload_file(
     service: ChatService = Depends(get_chat_service),
 ):
     return await _upload_file(file, service)
+
+
+@router.post("/files/upload/init")
+async def init_file_upload(
+    payload: ChatUploadInitRequest,
+    auth: AuthContext = Depends(require_file_scope),
+    service: ChatService = Depends(get_chat_service),
+):
+    return await _run_chat_upload(
+        lambda: service.upload_init(
+            payload.model_dump(exclude_none=True), owner=auth.username
+        )
+    )
+
+
+@router.post("/files/upload/chunk")
+async def upload_file_chunk(
+    upload_id: str = Form(...),
+    chunk_index: str = Form(...),
+    chunk: UploadFile = File(...),
+    auth: AuthContext = Depends(require_file_scope),
+    service: ChatService = Depends(get_chat_service),
+):
+    return await _run_chat_upload(
+        lambda: service.upload_chunk(
+            upload_id=upload_id,
+            chunk_index_str=chunk_index,
+            chunk_file=UploadFileAdapter(chunk),
+            owner=auth.username,
+        )
+    )
+
+
+@router.post("/files/upload/complete")
+async def complete_file_upload(
+    payload: ChatUploadSessionRequest,
+    auth: AuthContext = Depends(require_file_scope),
+    service: ChatService = Depends(get_chat_service),
+):
+    return await _run_chat_upload(
+        lambda: service.upload_complete(
+            payload.model_dump(exclude_none=True), owner=auth.username
+        )
+    )
+
+
+@router.post("/files/upload/abort")
+async def abort_file_upload(
+    payload: ChatUploadSessionRequest,
+    auth: AuthContext = Depends(require_file_scope),
+    service: ChatService = Depends(get_chat_service),
+):
+    return await _run_chat_upload(
+        lambda: service.upload_abort(
+            payload.model_dump(exclude_none=True), owner=auth.username
+        )
+    )
+
+
+@router.post("/files/upload/status")
+async def status_file_upload(
+    payload: ChatUploadSessionRequest,
+    auth: AuthContext = Depends(require_file_scope),
+    service: ChatService = Depends(get_chat_service),
+):
+    return await _run_chat_upload(
+        lambda: service.upload_status(
+            payload.model_dump(exclude_none=True), owner=auth.username
+        )
+    )
 
 
 @router.get("/files/content")

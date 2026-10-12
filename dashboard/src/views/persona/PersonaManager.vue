@@ -36,7 +36,7 @@
                 </v-list-item-title>
               </v-list-item>
               <v-list-item
-                v-if="!hasFolders"
+                v-if="!hasFolders || $vuetify.display.smAndDown"
                 prepend-icon="mdi-folder-plus"
                 @click="showCreateFolderDialog = true"
               >
@@ -199,7 +199,7 @@
         <v-card-title
           class="text-h3 pa-4 pb-0 pl-6 d-flex justify-space-between align-center"
         >
-          <span>{{ viewingPersona.persona_id }}</span>
+          <span>{{ personaDisplayName(viewingPersona) }}</span>
           <div class="d-flex align-center ga-1">
             <v-btn
               color="primary"
@@ -503,8 +503,9 @@ export default defineComponent({
   setup() {
     const { t } = useI18n();
     const { tm } = useModuleI18n("features/persona");
+    const { tm: sharedTm } = useModuleI18n("core.shared");
     const confirmDialog = useConfirmDialog();
-    return { t, tm, confirmDialog };
+    return { t, tm, sharedTm, confirmDialog };
   },
   data() {
     return {
@@ -618,6 +619,12 @@ export default defineComponent({
     },
 
     // Persona 操作
+    personaDisplayName(persona: Persona): string {
+      return persona.persona_id === "default"
+        ? this.sharedTm("personaSelector.defaultPersona")
+        : persona.persona_id;
+    },
+
     openCreatePersonaDialog() {
       this.editingPersona = null;
       this.showPersonaDialog = true;

@@ -280,6 +280,80 @@ async def test_c2c_stream_append_keeps_first_char_before_throttle_flush() -> Non
 
 
 @pytest.mark.asyncio
+async def test_c2c_stream_closes_with_state10_when_tail_buffer_empty() -> None:
+    """#10066: 中间分片把全文发完后生成器收尾时 buffer 为空，也必须补 state=10
+    收尾帧，否则 QQ 超时把整段回滚到首包几个字。"""
+    event = _make_c2c_event()
+    frames: list[tuple[int | None, str]] = []
+
+    async def fake_post_send(stream=None):
+        parts = []
+        if event.send_buffer:
+            for c in event.send_buffer.chain:
+                if isinstance(c, Plain) and c.text:
+                    parts.append(c.text)
+        frames.append((stream.get("state") if stream else None, "".join(parts)))
+        event.send_buffer = None
+        return {"id": "stream-1"}
+
+    async def gen():
+        yield MessageChain().message("不")
+        yield MessageChain().message("稀")
+        # 之后没有新 delta：生成器以空 buffer 收尾
+
+    from unittest.mock import patch
+
+    with (
+        patch.object(event, "_post_send", side_effect=fake_post_send),
+        patch("asyncio.get_running_loop") as mock_loop,
+    ):
+        # 第一个 delta 在 0.5s（不触发节流），第二个在 2.0s（触发中间分片并清空 buffer）
+        mock_loop.return_value.time.side_effect = [0.5, 2.0, 2.0, 2.0]
+        await event.send_streaming(gen())
+
+    # 中间分片带走全文后，收尾帧仍要以 state=10 发出（最小 "\n" 收尾）
+    assert (1, "不稀") in frames
+    assert frames[-1] == (10, "\n")
+
+
+@pytest.mark.asyncio
+async def test_c2c_stream_break_closes_open_segment_with_empty_buffer() -> None:
+    """#10066 同族：tool_call break 到达时 buffer 恰好为空但流已开，也要先补
+    state=10 收尾再开新段，否则该段同样会被 QQ 超时回滚。"""
+    event = _make_c2c_event()
+    frames: list[tuple[int | None, str]] = []
+
+    async def fake_post_send(stream=None):
+        parts = []
+        if event.send_buffer:
+            for c in event.send_buffer.chain:
+                if isinstance(c, Plain) and c.text:
+                    parts.append(c.text)
+        frames.append((stream.get("state") if stream else None, "".join(parts)))
+        event.send_buffer = None
+        return {"id": "stream-1"}
+
+    async def gen():
+        yield MessageChain().message("首段文本")
+        yield MessageChain(type="break")
+
+    from unittest.mock import patch
+
+    with (
+        patch.object(event, "_post_send", side_effect=fake_post_send),
+        patch("asyncio.get_running_loop") as mock_loop,
+    ):
+        # 2.0s 到达：首个 delta 立即触发中间分片并清空 buffer
+        mock_loop.return_value.time.side_effect = [2.0, 2.0, 2.0, 2.0]
+        await event.send_streaming(gen())
+
+    assert frames[0] == (1, "首段文本")
+    assert frames[1] == (10, "\n")
+    # break 后 buffer 空且新段未开：结尾不再多发收尾帧
+    assert len(frames) == 2
+
+
+@pytest.mark.asyncio
 async def test_group_stream_sends_once_after_all_deltas() -> None:
     event = _make_group_event()
     calls = 0
@@ -297,3 +371,40 @@ async def test_group_stream_sends_once_after_all_deltas() -> None:
 
     await event.send_streaming(gen())
     assert calls == 1
+
+
+@pytest.mark.asyncio
+async def test_c2c_stream_closes_when_tail_is_empty_plain() -> None:
+    """#10069 review: 结尾只剩空 Plain("") 的 buffer 也被视为空，照样补
+    state=10 收尾帧；否则 _post_send_one 拒掉空文本，流照样被超时回滚。"""
+    event = _make_c2c_event()
+    frames: list[tuple[int | None, str]] = []
+
+    async def fake_post_send(stream=None):
+        parts = []
+        if event.send_buffer:
+            for c in event.send_buffer.chain:
+                if isinstance(c, Plain) and c.text:
+                    parts.append(c.text)
+        frames.append((stream.get("state") if stream else None, "".join(parts)))
+        event.send_buffer = None
+        return {"id": "stream-1"}
+
+    async def gen():
+        yield MessageChain().message("不")
+        yield MessageChain().message("稀")
+        yield MessageChain(chain=[Plain("")])  # 空 delta 收尾
+
+    from unittest.mock import patch
+
+    with (
+        patch.object(event, "_post_send", side_effect=fake_post_send),
+        patch("asyncio.get_running_loop") as mock_loop,
+    ):
+        # 2.0s 触发中间分片冲掉全文，之后只剩空 delta
+        mock_loop.return_value.time.side_effect = [0.5, 2.0, 2.0, 2.0]
+        await event.send_streaming(gen())
+
+    # 中间分片带走全文，空 Plain 尾也照样补 state=10 最小收尾帧
+    assert frames[0] == (1, "不稀")
+    assert frames[-1] == (10, "\n")

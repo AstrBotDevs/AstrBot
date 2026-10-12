@@ -70,6 +70,16 @@ class BackupUploadSessionRequest(OpenModel):
     upload_id: str | None = None
 
 
+class ChatUploadInitRequest(OpenModel):
+    filename: str | None = None
+    total_size: int | None = None
+    content_type: str | None = None
+
+
+class ChatUploadSessionRequest(OpenModel):
+    upload_id: str | None = None
+
+
 class BackupImportRequest(OpenModel):
     confirmed: bool | None = None
 
@@ -129,9 +139,11 @@ class ChatFlags(BaseModel):
     enable_inline_genui: bool = True
     enable_default_system_prompt: bool = True
     enable_streaming: bool = True
+    enable_reasoning: bool = True
 
 
 class ChatMessageRegenerateRequest(OpenModel):
+    locale: str | None = None
     selected_provider: str | None = None
     selected_model: str | None = None
     enable_streaming: bool | None = None
@@ -145,6 +157,7 @@ class ChatThreadCreateRequest(OpenModel):
 
 
 class ChatThreadMessageRequest(OpenModel):
+    locale: str | None = None
     message: Any
     selected_provider: str | None = None
     selected_model: str | None = None
@@ -199,6 +212,7 @@ class GhProxyTestRequest(BaseModel):
 
 
 class OpenApiChatRequest(OpenModel):
+    locale: str | None = None
     message: Any = None
     session_id: str | None = None
     conversation_id: str | None = None
@@ -527,7 +541,6 @@ class ProviderConfigRequest(OpenModel):
         if self.capability and "provider_type" not in config:
             capability_map = {
                 "chat": "chat_completion",
-                "agent": "agent_runner",
                 "stt": "speech_to_text",
                 "tts": "text_to_speech",
                 "embedding": "embedding",

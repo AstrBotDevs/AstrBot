@@ -192,6 +192,8 @@ class DingtalkPlatformAdapter(Platform):
                         if index == 0 and id == abm.self_id:
                             leading_at_is_self = True
             abm.group_id = message.conversation_id
+            if abm.group:
+                abm.group.group_name = message.conversation_title
             abm.session_id = abm.group_id
         else:
             abm.session_id = abm.sender.user_id

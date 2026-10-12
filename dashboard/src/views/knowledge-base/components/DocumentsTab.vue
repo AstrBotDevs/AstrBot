@@ -12,6 +12,7 @@
     <!-- 文档列表 -->
     <v-card variant="outlined">
       <v-data-table-server :headers="headers" :items="documents" :loading="loading"
+        :items-per-page-options="[10, 25, 50, 100]"
         :items-per-page="pageSize" :page="page" :items-length="total"
         @update:page="onPageChange" @update:items-per-page="onItemsPerPageChange">
         <template #item.doc_name="{ item }">
@@ -240,9 +241,10 @@ import TavilyKeyDialog from './TavilyKeyDialog.vue'
 import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { configProfileApi, knowledgeApi, providerApi } from '@/api/v1'
-import { useModuleI18n } from '@/i18n/composables'
+import { useI18n, useModuleI18n } from '@/i18n/composables'
 
 const { tm: t } = useModuleI18n('features/knowledge-base/detail')
+const { locale } = useI18n()
 const router = useRouter()
 
 const props = defineProps<{
@@ -761,7 +763,7 @@ const formatFileSize = (bytes: number) => {
 
 const formatDate = (dateStr: string) => {
   if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleString('zh-CN', {
+  return new Date(dateStr).toLocaleString(locale.value, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
