@@ -324,53 +324,23 @@ def _decode_escaped_text(value: str) -> str:
     )
 
 
-def _modalities_support_image(provider: Any) -> bool:
-    """Return whether a chat provider can consume image input.
+def _context_supports_image(context: ContextWrapper[AstrAgentContext]) -> bool:
+    """Return whether the model selected for this agent turn accepts images.
 
-    Empty or missing ``modalities`` is treated as supporting images, matching
-    the behavior of the agent runner for backward compatibility.
-
-    Args:
-        provider: Chat provider instance, or None when unavailable.
-
-    Returns:
-        True when the provider accepts the image modality.
-    """
-    if provider is None:
-        return True
-    modalities = getattr(provider, "provider_config", {}).get("modalities", None)
-    if not modalities or not isinstance(modalities, list):
-        return True
-    return "image" in modalities
-
-
-async def _provider_supports_image(
-    context: ContextWrapper[AstrAgentContext],
-) -> bool:
-    """Check whether the current chat provider supports the image modality.
-
-    The check is fail-open: when the provider cannot be resolved, the original
-    behavior of handing the raw image back to the caller is preserved.
+    Reads the capability the agent runner published on the tool context.
+    Missing or unconfigured modalities are treated as supporting images, so the
+    raw image is preserved when the capability cannot be determined.
 
     Args:
         context: Tool execution context.
 
     Returns:
-        True when the active provider supports image input, or when the
-        modality cannot be determined.
+        True when the turn's model accepts the image modality.
     """
-    try:
-        from astrbot.core.provider.entities import ProviderType
-
-        umo = context.context.event.unified_msg_origin
-        pm = context.context.context.provider_manager
-        provider = await pm.get_using_provider_async(
-            ProviderType.CHAT_COMPLETION, umo=umo
-        )
-        return _modalities_support_image(provider)
-    except Exception as exc:
-        logger.debug(f"[ImageFallback] Provider modality check failed: {exc}")
+    modalities = getattr(context, "modalities", None)
+    if not modalities or not isinstance(modalities, list):
         return True
+    return "image" in modalities
 
 
 async def _caption_image_fallback(
@@ -554,16 +524,16 @@ class FileReadTool(FunctionTool):
                 if file_descriptor is not None:
                     os.close(file_descriptor)
 
-            # When the read result is an image but the active chat provider
-            # cannot consume image input, fall back to the configured caption
-            # provider so the model still receives a textual description.
+            # When the read result is an image but the model selected for this
+            # agent turn cannot consume image input, fall back to the configured
+            # caption provider so the model still receives a description.
             if (
                 isinstance(result, mcp.types.CallToolResult)
                 and result.content
                 and any(
                     isinstance(item, mcp.types.ImageContent) for item in result.content
                 )
-                and not await _provider_supports_image(context)
+                and not _context_supports_image(context)
             ):
                 # Prefer a data URI built from the already-compressed payload so
                 # that sandbox runtimes (where the file lives inside the

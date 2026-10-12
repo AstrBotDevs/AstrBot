@@ -975,6 +975,59 @@ async def test_tool_result_includes_all_calltoolresult_content(
 
 
 @pytest.mark.asyncio
+async def test_tool_execution_publishes_turn_model_modalities(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+):
+    """Tools must see the modalities of the provider actually used this turn."""
+    mock_provider.should_call_tools = True
+    mock_provider.max_calls_before_normal_response = 1
+    mock_provider.provider_config["modalities"] = ["text", "tool_use"]
+
+    run_context = ContextWrapper(context=None)
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=run_context,
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    assert run_context.modalities is None
+
+    async for _ in runner.step_until_done(3):
+        pass
+
+    assert run_context.modalities == ["text", "tool_use"]
+
+
+@pytest.mark.asyncio
+async def test_tool_execution_leaves_modalities_unknown_when_provider_unset(
+    runner, provider_request, mock_tool_executor, mock_hooks
+):
+    """An unconfigured provider leaves the capability unknown, not empty."""
+    provider = MockProvider()
+    provider.should_call_tools = True
+    provider.max_calls_before_normal_response = 1
+    provider.provider_config.pop("modalities", None)
+
+    run_context = ContextWrapper(context=None)
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=run_context,
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(3):
+        pass
+
+    assert run_context.modalities is None
+
+
+@pytest.mark.asyncio
 async def test_runner_replaces_runtime_image_context_before_provider_call(
     runner, provider_request, mock_hooks
 ):

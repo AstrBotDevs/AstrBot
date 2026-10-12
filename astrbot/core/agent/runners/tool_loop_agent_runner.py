@@ -1182,6 +1182,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     ) -> T.AsyncGenerator[_HandleFunctionToolsResult, None]:
         """处理函数工具调用。"""
         tool_call_result_blocks: list[ToolCallMessageSegment] = []
+        # Publish the modalities of the provider actually selected for this turn
+        # so tools can branch on model capabilities without re-resolving the
+        # session provider (which may differ after a fallback or explicit pick).
+        modalities = self.provider.provider_config.get("modalities", None)
+        self.run_context.modalities = (
+            modalities if isinstance(modalities, list) else None
+        )
         logger.info(f"Agent 使用工具: {llm_response.tools_call_name}")
 
         def _append_tool_call_result(tool_call_id: str, content: str) -> None:

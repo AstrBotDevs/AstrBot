@@ -75,23 +75,22 @@ def _make_vision_fallback_context(
     modalities: list[str] | None,
     caption_provider_id: str = "",
     caption_provider: Any = None,
-    main_provider_missing: bool = False,
     umo: str = "qq:friend:user-1",
 ) -> ContextWrapper:
-    """Build a Local host scope context with a stubbed provider manager.
+    """Build a Local host scope context with the turn model capability set.
 
-    Host scope is used so the read path stays free of POSIX-only restricted
-    access checks, letting the image fallback logic run on every platform.
+    Host scope keeps the read path free of POSIX-only restricted access checks
+    so the image fallback logic runs on every platform. ``modalities`` mirrors
+    what the agent runner publishes on the tool context for the current turn.
 
     Args:
-        modalities: Modalities reported by the active chat provider.
+        modalities: Modalities of the model selected for this agent turn.
         caption_provider_id: Configured dedicated image caption provider ID.
         caption_provider: Provider instance returned for the caption provider ID.
-        main_provider_missing: When True, no active chat provider is resolved.
         umo: Unified message origin used for the session.
 
     Returns:
-        A ContextWrapper wired with the requested provider behavior.
+        A ContextWrapper wired with the requested model capability.
     """
     provider_settings = {
         "computer_use_require_admin": True,
@@ -99,13 +98,7 @@ def _make_vision_fallback_context(
         "computer_use_local_permissions": {"admin": {"filesystem_scope": "host"}},
         "default_image_caption_provider_id": caption_provider_id,
     }
-    main_provider = (
-        None
-        if main_provider_missing
-        else SimpleNamespace(provider_config={"modalities": modalities})
-    )
     provider_manager = SimpleNamespace(
-        get_using_provider_async=AsyncMock(return_value=main_provider),
         get_provider_by_id=AsyncMock(return_value=caption_provider),
     )
     config_holder = SimpleNamespace(
@@ -118,7 +111,7 @@ def _make_vision_fallback_context(
         get_sender_id=lambda: "user-1",
     )
     astr_ctx = SimpleNamespace(context=config_holder, event=event)
-    return ContextWrapper(context=astr_ctx)
+    return ContextWrapper(context=astr_ctx, modalities=modalities)
 
 
 def _make_caption_provider(caption: str = "a red rectangle") -> Any:
@@ -926,7 +919,7 @@ async def test_file_read_tool_returns_image_call_tool_result_for_images(
 
 
 @pytest.mark.asyncio
-async def test_file_read_tool_captions_image_when_provider_lacks_image_modality(
+async def test_file_read_tool_captions_image_when_model_lacks_image_modality(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ):
@@ -948,8 +941,12 @@ async def test_file_read_tool_captions_image_when_provider_lacks_image_modality(
     assert result == "[Image description]: a red rectangle"
     caption_provider.text_chat.assert_awaited_once()
     captioned = caption_provider.text_chat.await_args.kwargs["image_urls"]
-    assert captioned == [captioned[0]]
-    assert captioned[0].startswith("data:image/jpeg;base64,")
+    assert len(captioned) == 1
+    prefix = "data:image/jpeg;base64,"
+    assert captioned[0].startswith(prefix)
+    payload = base64.b64decode(captioned[0][len(prefix) :])
+    assert payload.startswith(b"\xff\xd8\xff")
+    assert len(payload) > 100
 
 
 @pytest.mark.asyncio
@@ -976,7 +973,7 @@ async def test_file_read_tool_reports_missing_caption_provider(
 
 
 @pytest.mark.asyncio
-async def test_file_read_tool_returns_image_when_provider_supports_image(
+async def test_file_read_tool_returns_image_when_model_supports_image(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ):
@@ -1001,7 +998,7 @@ async def test_file_read_tool_returns_image_when_provider_supports_image(
 
 
 @pytest.mark.asyncio
-async def test_file_read_tool_returns_image_when_provider_is_unknown(
+async def test_file_read_tool_returns_image_when_model_capability_unknown(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ):
@@ -1014,7 +1011,6 @@ async def test_file_read_tool_returns_image_when_provider_is_unknown(
         _make_vision_fallback_context(
             modalities=None,
             caption_provider_id="vision-1",
-            main_provider_missing=True,
         ),
         path="sample.png",
     )
