@@ -173,7 +173,7 @@ export function useChunkedUpload(api: ChunkedUploadApi) {
             let received: number[] = [];
             if (uploadId) {
                 try {
-                    const data = await envelopeData(api.statusUpload({ upload_id: uploadId }));
+                    const data = envelopeData(await api.statusUpload({ upload_id: uploadId }));
                     received = data.received_chunks;
                 } catch {
                     // Session expired or unknown: fall back to a fresh one.
