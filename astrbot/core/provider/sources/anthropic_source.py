@@ -13,7 +13,13 @@ from anthropic.types.usage import Usage
 
 from astrbot import logger
 from astrbot.api.provider import Provider
-from astrbot.core.agent.message import AudioURLPart, ContentPart, ImageURLPart, TextPart
+from astrbot.core.agent.message import (
+    AudioURLPart,
+    ContentPart,
+    ImageURLPart,
+    TextPart,
+    VideoURLPart,
+)
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
@@ -1023,6 +1029,10 @@ class ProviderAnthropic(Provider):
                         content.append(image_dict)
                 elif isinstance(block, AudioURLPart):
                     content.append({"type": "text", "text": "[Audio]"})
+                elif isinstance(block, VideoURLPart):
+                    # No native video input here and history is replayed, so
+                    # degrade to a text placeholder instead of resolving base64.
+                    content.append({"type": "text", "text": "[Video]"})
                 else:
                     raise ValueError(f"不支持的额外内容块类型: {type(block)}")
 
