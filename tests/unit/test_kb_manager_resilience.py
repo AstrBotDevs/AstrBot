@@ -240,6 +240,7 @@ async def test_ensure_vec_db_clears_stale_init_error(
 
     helper = KBHelper.__new__(KBHelper)
     helper._vec_db_lock = asyncio.Lock()
+    helper._vec_db_generation = 0
     helper.kb = mock_knowledge_base
     helper.prov_mgr = mock_provider_manager
     helper.kb_db = mock_kb_db
@@ -286,6 +287,7 @@ async def test_ensure_vec_db_sets_init_error_on_failure(
 
     helper = KBHelper.__new__(KBHelper)
     helper._vec_db_lock = asyncio.Lock()
+    helper._vec_db_generation = 0
     helper.kb = mock_knowledge_base
     helper.prov_mgr = mock_provider_manager
     helper.kb_db = mock_kb_db
@@ -475,3 +477,166 @@ async def test_ensure_refreshes_providers_without_reloading_index(kb_helper):
         kb_helper.kb.embedding_provider_id = None
         with pytest.raises(ValueError, match="未配置"):
             await kb_helper._ensure_vec_db()
+
+
+@pytest.mark.asyncio
+async def test_provider_refresh_is_serialized_with_lookup(kb_helper):
+    first_lookup = asyncio.Event()
+    release_first = asyncio.Event()
+    second_started = asyncio.Event()
+    old_provider, new_provider = MagicMock(), MagicMock()
+    current_provider = old_provider
+    lookup_locks = []
+    vec_db = MagicMock()
+    vec_db.initialize = AsyncMock()
+
+    async def get_ep():
+        provider = current_provider
+        lookup_locks.append(kb_helper._vec_db_lock.locked())
+        if provider is old_provider:
+            first_lookup.set()
+            await release_first.wait()
+        return provider
+
+    async def get_rp():
+        lookup_locks.append(kb_helper._vec_db_lock.locked())
+        return None
+
+    async def second_ensure():
+        second_started.set()
+        return await kb_helper._ensure_vec_db()
+
+    kb_helper.get_ep = AsyncMock(side_effect=get_ep)
+    kb_helper.get_rp = AsyncMock(side_effect=get_rp)
+    with patch(
+        "astrbot.core.db.vec_db.faiss_impl.vec_db.FaissVecDB",
+        return_value=vec_db,
+    ) as factory:
+        first = asyncio.create_task(kb_helper._ensure_vec_db())
+        second = None
+        try:
+            await asyncio.wait_for(first_lookup.wait(), timeout=5)
+            current_provider = new_provider
+            second = asyncio.create_task(second_ensure())
+            await asyncio.wait_for(second_started.wait(), timeout=5)
+            assert kb_helper.get_ep.await_count == 1
+            release_first.set()
+            assert await asyncio.gather(first, second) == [vec_db, vec_db]
+            assert lookup_locks == [True, True, True, True]
+            assert vec_db.embedding_provider is new_provider
+            factory.assert_called_once()
+        finally:
+            release_first.set()
+            await asyncio.gather(
+                *[task for task in (first, second) if task is not None],
+                return_exceptions=True,
+            )
+
+
+@pytest.mark.asyncio
+async def test_terminate_waits_for_provider_lookup_and_closes_db(kb_helper):
+    lookup_started = asyncio.Event()
+    release_lookup = asyncio.Event()
+    terminate_started = asyncio.Event()
+    provider = await kb_helper.get_ep()
+    vec_db = MagicMock()
+    vec_db.initialize = AsyncMock()
+    vec_db.close = AsyncMock()
+
+    async def get_ep():
+        lookup_started.set()
+        await release_lookup.wait()
+        return provider
+
+    async def terminate():
+        terminate_started.set()
+        await kb_helper.terminate()
+
+    with patch(
+        "astrbot.core.db.vec_db.faiss_impl.vec_db.FaissVecDB",
+        return_value=vec_db,
+    ) as factory:
+        await kb_helper.initialize()
+        kb_helper.get_ep = AsyncMock(side_effect=get_ep)
+        ensure_task = asyncio.create_task(kb_helper._ensure_vec_db())
+        terminate_task = None
+        try:
+            await asyncio.wait_for(lookup_started.wait(), timeout=5)
+            terminate_task = asyncio.create_task(terminate())
+            await asyncio.wait_for(terminate_started.wait(), timeout=5)
+            assert not terminate_task.done()
+            release_lookup.set()
+            await asyncio.gather(ensure_task, terminate_task)
+            assert not hasattr(kb_helper, "vec_db")
+            vec_db.close.assert_awaited_once()
+            factory.assert_called_once()
+        finally:
+            release_lookup.set()
+            await asyncio.gather(
+                *[task for task in (ensure_task, terminate_task) if task is not None],
+                return_exceptions=True,
+            )
+
+
+@pytest.mark.asyncio
+async def test_ensure_queued_during_termination_does_not_reopen_db(kb_helper):
+    closing = asyncio.Event()
+    release_close = asyncio.Event()
+    ensure_started = asyncio.Event()
+    vec_db = MagicMock()
+    vec_db.initialize = AsyncMock()
+
+    async def close():
+        closing.set()
+        await release_close.wait()
+
+    async def ensure():
+        ensure_started.set()
+        return await kb_helper._ensure_vec_db()
+
+    vec_db.close = AsyncMock(side_effect=close)
+    with patch(
+        "astrbot.core.db.vec_db.faiss_impl.vec_db.FaissVecDB",
+        return_value=vec_db,
+    ) as factory:
+        await kb_helper.initialize()
+        kb_helper.get_ep = AsyncMock(return_value=await kb_helper.get_ep())
+        terminate_task = asyncio.create_task(kb_helper.terminate())
+        ensure_task = None
+        try:
+            await asyncio.wait_for(closing.wait(), timeout=5)
+            ensure_task = asyncio.create_task(ensure())
+            await asyncio.wait_for(ensure_started.wait(), timeout=5)
+            release_close.set()
+            await terminate_task
+            with pytest.raises(RuntimeError, match="terminated"):
+                await ensure_task
+            assert not hasattr(kb_helper, "vec_db")
+            kb_helper.get_ep.assert_not_awaited()
+            factory.assert_called_once()
+        finally:
+            release_close.set()
+            await asyncio.gather(
+                *[task for task in (terminate_task, ensure_task) if task is not None],
+                return_exceptions=True,
+            )
+
+
+@pytest.mark.asyncio
+async def test_explicit_initialize_after_termination_reopens_db(kb_helper):
+    old_db, new_db = MagicMock(), MagicMock()
+    old_db.initialize = AsyncMock()
+    old_db.close = AsyncMock()
+    new_db.initialize = AsyncMock()
+    with patch(
+        "astrbot.core.db.vec_db.faiss_impl.vec_db.FaissVecDB",
+        side_effect=[old_db, new_db],
+    ) as factory:
+        await kb_helper.initialize()
+        await kb_helper.terminate()
+        assert not hasattr(kb_helper, "vec_db")
+        await kb_helper.initialize()
+        assert kb_helper.vec_db is new_db
+        old_db.close.assert_awaited_once()
+        new_db.initialize.assert_awaited_once()
+        assert factory.call_count == 2
