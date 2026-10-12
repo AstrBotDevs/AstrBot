@@ -17,6 +17,10 @@ class ActiveEventRegistry:
 
     def __init__(self) -> None:
         self._events: dict[str, set[AstrMessageEvent]] = defaultdict(set)
+        # Key each event was registered under. Pipeline stages can rewrite
+        # session_id (unique_session isolation), so event.unified_msg_origin may
+        # already point elsewhere by the time unregister runs.
+        self._event_keys: dict[AstrMessageEvent, str] = {}
         self._agent_stop_callbacks: dict[AstrMessageEvent, Callable[[], None]] = {}
         self._background_tasks: dict[
             str, dict[asyncio.Task[None], AstrMessageEvent]
@@ -24,10 +28,26 @@ class ActiveEventRegistry:
         self._background_cancel_requested: set[asyncio.Task[None]] = set()
 
     def register(self, event: AstrMessageEvent) -> None:
-        self._events[event.unified_msg_origin].add(event)
+        """Track an active event under the unified message origin it has now.
+
+        Args:
+            event: Event that entered the pipeline.
+        """
+        umo = event.unified_msg_origin
+        self._event_keys[event] = umo
+        self._events[umo].add(event)
 
     def unregister(self, event: AstrMessageEvent) -> None:
-        umo = event.unified_msg_origin
+        """Release an active event and its Agent cancellation callback.
+
+        The event is removed from the bucket it was registered under, which is
+        not necessarily the one unified_msg_origin resolves to now: stages such
+        as WakingCheckStage rewrite session_id mid-pipeline for unique_session.
+
+        Args:
+            event: Event whose pipeline execution has finished.
+        """
+        umo = self._event_keys.pop(event, event.unified_msg_origin)
         self._agent_stop_callbacks.pop(event, None)
         self._events[umo].discard(event)
         if not self._events[umo]:

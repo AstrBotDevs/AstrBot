@@ -68,6 +68,21 @@ def test_unregister_removes_agent_stop_callback() -> None:
     callback.assert_not_called()
 
 
+def test_unregister_releases_the_key_used_at_registration() -> None:
+    """A session rewrite between register and unregister must not leak the event."""
+    registry = ActiveEventRegistry()
+    event = StubEvent("aiocqhttp:GroupMessage:12345")
+    registry.register(event)
+    assert registry.request_agent_stop_all("aiocqhttp:GroupMessage:12345") == 1
+
+    # WakingCheckStage rewrites session_id for unique_session, which changes umo.
+    event.unified_msg_origin = "aiocqhttp:GroupMessage:12345_67890"
+    registry.unregister(event)
+
+    assert not registry._events
+    assert not registry._event_keys
+
+
 def test_active_runner_wires_immediate_stop_callback() -> None:
     """Active Runner registration connects registry stop to Runner cancellation."""
     event = StubEvent("webchat:FriendMessage:webchat!alice!runner-session")
