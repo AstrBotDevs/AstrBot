@@ -119,3 +119,56 @@ test('ignores empty repoUrl and docUrl', () => {
 
   assert.equal(img.attr('src'), 'docs/demo.png');
 });
+
+for (const repoUrl of [
+  `${GITHUB_REPO}.git`,
+  `${GITHUB_REPO}.git/`,
+  'https://www.github.com/AstrBotDevs/AstrBot',
+  'https://www.github.com/AstrBotDevs/AstrBot.git',
+  'https://www.github.com/AstrBotDevs/AstrBot.git/',
+  'git@github.com:AstrBotDevs/AstrBot',
+  'git@github.com:AstrBotDevs/AstrBot.git',
+  'git@github.com:AstrBotDevs/AstrBot.git/',
+]) {
+  test(`resolves images and links for GitHub locator ${repoUrl}`, () => {
+    const img = createNode({ src: 'docs/demo.png' });
+    const link = createNode({ href: 'CHANGELOG.md' });
+    resolveRelativeUrls(createRoot({ images: [img], links: [link] }), { repoUrl });
+
+    assert.equal(
+      img.attr('src'),
+      'https://raw.githubusercontent.com/AstrBotDevs/AstrBot/HEAD/docs/demo.png',
+    );
+    assert.equal(
+      link.attr('href'),
+      'https://github.com/AstrBotDevs/AstrBot/blob/HEAD/CHANGELOG.md',
+    );
+  });
+}
+
+for (const repoUrl of [
+  'git@gitlab.com:team/project.git',
+  'https://www.github.com.example.com/team/project.git',
+  'git@github.com.example.com:team/project.git',
+]) {
+  test(`leaves images and links unchanged for unsupported locator ${repoUrl}`, () => {
+    const img = createNode({ src: 'docs/demo.png' });
+    const link = createNode({ href: 'CHANGELOG.md' });
+    resolveRelativeUrls(createRoot({ images: [img], links: [link] }), { repoUrl });
+
+    assert.equal(img.attr('src'), 'docs/demo.png');
+    assert.equal(link.attr('href'), 'CHANGELOG.md');
+  });
+}
+
+test('docUrl takes precedence over a GitHub clone locator', () => {
+  const img = createNode({ src: 'demo.png' });
+  const link = createNode({ href: 'CHANGELOG.md' });
+  resolveRelativeUrls(createRoot({ images: [img], links: [link] }), {
+    repoUrl: 'git@github.com:AstrBotDevs/AstrBot.git',
+    docUrl: 'https://example.com/docs/README.md',
+  });
+
+  assert.equal(img.attr('src'), 'https://example.com/docs/demo.png');
+  assert.equal(link.attr('href'), 'https://example.com/docs/CHANGELOG.md');
+});

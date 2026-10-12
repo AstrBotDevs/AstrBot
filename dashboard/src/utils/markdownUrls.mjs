@@ -1,4 +1,5 @@
-const GITHUB_REPO_PATTERN = /^https?:\/\/github\.com\/([^/\s]+)\/([^/\s#?]+?)\/?$/i;
+const GITHUB_REPO_PATTERN =
+  /^(?:https?:\/\/(?:www\.)?github\.com\/|git@github\.com:)([^/\s#?]+)\/([^/\s#?]+?)(?:\.git)?\/?$/i;
 const ABSOLUTE_URL_PATTERN = /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i;
 
 /**
@@ -16,7 +17,7 @@ const ABSOLUTE_URL_PATTERN = /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i;
  *
  * @param {HTMLElement} root Rendered markdown container.
  * @param {object} options
- * @param {string} options.repoUrl Plugin repository URL (e.g. GitHub repo).
+ * @param {string} options.repoUrl GitHub HTTP(S) or SCP-style repository locator.
  * @param {string} options.docUrl URL the markdown document was fetched from.
  */
 export function resolveRelativeUrls(root, { repoUrl = "", docUrl = "" } = {}) {
