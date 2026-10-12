@@ -87,23 +87,36 @@ DEFAULT_MODEL = "kimi-k3"
 _OPENCODE_SESSION_CTX: contextvars.ContextVar[str] = contextvars.ContextVar(
     "opencode_go_session", default=""
 )
+_OPENCODE_AUTH_CTX: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "opencode_go_auth", default=""
+)
 
 
-def _install_session_hook(client: httpx.AsyncClient) -> None:
-    """Attach the per-request session header hook to an httpx client.
+def _install_session_hook(
+    client: httpx.AsyncClient, *, inject_auth: bool = False
+) -> None:
+    """Attach per-request header hooks to an httpx client.
 
     Args:
         client: The httpx client used by one of the protocol delegates.
+        inject_auth: Whether to override the Authorization header with the
+            bearer token tracked in the auth context. Used for delegates so
+            key rotation is picked up; the outer client manages its own key
+            rotation and must not be overridden.
     """
 
-    async def _attach_session(request: httpx.Request) -> None:
+    async def _attach_headers(request: httpx.Request) -> None:
         session_id = _OPENCODE_SESSION_CTX.get()
         if session_id:
             request.headers[OPENCODE_GO_SESSION_HEADER] = session_id
+        if inject_auth:
+            auth = _OPENCODE_AUTH_CTX.get()
+            if auth:
+                request.headers["Authorization"] = auth
 
     client.event_hooks["request"] = [
         *client.event_hooks.get("request", []),
-        _attach_session,
+        _attach_headers,
     ]
 
 
@@ -137,7 +150,7 @@ class _OpenCodeAnthropic(ProviderAnthropic):
                 headers=self.custom_headers,
                 httpx_module=httpx_module,
             )
-        _install_session_hook(client)
+        _install_session_hook(client, inject_auth=True)
         return client
 
 
@@ -146,7 +159,7 @@ class _OpenCodeResponses(ProviderOpenAIResponses):
 
     def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient:
         client = super()._create_http_client(provider_config)
-        _install_session_hook(client)
+        _install_session_hook(client, inject_auth=True)
         return client
 
 
@@ -281,6 +294,8 @@ class ProviderOpenCodeGo(ProviderOpenAIOfficial):
         ).rstrip("/")
         try:
             headers = build_provider_headers(self.provider_config.get("custom_headers"))
+            # The gateway requires bearer authentication on /models as well.
+            headers["Authorization"] = f"Bearer {self.get_current_key()}"
             async with create_proxy_client(
                 "OpenCodeGo",
                 self.provider_config.get("proxy") or None,
@@ -379,6 +394,7 @@ class ProviderOpenCodeGo(ProviderOpenAIOfficial):
         """
         endpoint = await self._resolve_endpoint(model or self.get_model())
         _OPENCODE_SESSION_CTX.set(session_id or "")
+        _OPENCODE_AUTH_CTX.set(f"Bearer {self.get_current_key()}")
         try:
             if endpoint == ENDPOINT_MESSAGES:
                 return await self._get_anthropic().text_chat(
@@ -429,6 +445,7 @@ class ProviderOpenCodeGo(ProviderOpenAIOfficial):
                 **kwargs,
             )
         finally:
+            _OPENCODE_AUTH_CTX.set("")
             _OPENCODE_SESSION_CTX.set("")
 
     async def text_chat_stream(
@@ -467,6 +484,7 @@ class ProviderOpenCodeGo(ProviderOpenAIOfficial):
         """
         endpoint = await self._resolve_endpoint(model or self.get_model())
         _OPENCODE_SESSION_CTX.set(session_id or "")
+        _OPENCODE_AUTH_CTX.set(f"Bearer {self.get_current_key()}")
         try:
             if endpoint == ENDPOINT_MESSAGES:
                 async for chunk in self._get_anthropic().text_chat_stream(
@@ -519,3 +537,16 @@ class ProviderOpenCodeGo(ProviderOpenAIOfficial):
                     yield chunk
         finally:
             _OPENCODE_SESSION_CTX.set("")
+            _OPENCODE_AUTH_CTX.set("")
+
+    async def terminate(self) -> None:
+        """Close the outer client and any initialized protocol delegates.
+
+        Returns:
+            None.
+        """
+        if self._anthropic is not None:
+            await self._anthropic.terminate()
+        if self._responses is not None:
+            await self._responses.terminate()
+        await super().terminate()
