@@ -165,6 +165,8 @@ General settings for message platform adapters.
 
 Whether to enable **Isolate Conversation**. Defaults to `false`. On supported platforms, each group member has a separate conversation context when enabled. Unsupported platforms retain their existing context. Access to `/new` and `/reset` is controlled by [command permissions](../use/command.md), which follow conversation isolation by default.
 
+The setting also rewrites the session identifier of group messages, but **only on supported platforms** (unsupported ones are left unchanged): `session_id` becomes a platform-specific composite ID (on QQ, `sender ID_group ID`; on DingTalk, the `sender ID` alone), and `unified_msg_origin` changes along with it. Plugins that store or query data per group should use `event.get_group_id()` to get the raw group ID; see [Handling Message Events](./star/guides/listen-message-event).
+
 #### `platform_settings.rate_limit`
 
 Strategy when message rate exceeds limits. `time` is the window, `count` is the number of messages, and `strategy` is the limit strategy. `stall` means wait, `discard` means drop.
