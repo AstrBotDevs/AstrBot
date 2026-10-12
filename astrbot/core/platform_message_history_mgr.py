@@ -122,6 +122,21 @@ class PlatformMessageHistoryManager:
         history.reverse()
         return history
 
+    async def count(self, platform_id: str, user_id: str) -> int:
+        """Count history rows for a platform/user scope.
+
+        Args:
+            platform_id: Platform identifier used to partition history.
+            user_id: Platform user or session identifier.
+
+        Returns:
+            Number of matching history rows.
+        """
+        return await self.db.count_platform_message_history(
+            platform_id=platform_id,
+            user_id=user_id,
+        )
+
     async def delete(
         self, platform_id: str, user_id: str, offset_sec: int = 86400
     ) -> None:

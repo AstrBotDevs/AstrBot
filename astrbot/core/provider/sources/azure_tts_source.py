@@ -10,7 +10,7 @@ from xml.sax.saxutils import escape
 from httpx import AsyncClient, Timeout
 
 from astrbot import logger
-from astrbot.core.config.default import VERSION
+from astrbot.core.provider.headers import build_provider_headers
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.datetime_utils import generate_timestamp_id
 
@@ -25,6 +25,7 @@ AZURE_TTS_SUBSCRIPTION_KEY_PATTERN = r"^(?:[a-zA-Z0-9]{32}|[a-zA-Z0-9]{84})$"
 
 class OTTSProvider:
     def __init__(self, config: dict) -> None:
+        self.request_headers = build_provider_headers(config.get("custom_headers"))
         self.skey = config["OTTS_SKEY"]
         self.api_url = config["OTTS_URL"]
         self.auth_time_url = config["OTTS_AUTH_TIME"]
@@ -47,7 +48,9 @@ class OTTSProvider:
 
     async def __aenter__(self):
         self._client = AsyncClient(
-            timeout=self.timeout, proxy=self.proxy if self.proxy else None
+            headers=self.request_headers,
+            timeout=self.timeout,
+            proxy=self.proxy if self.proxy else None,
         )
         return self
 
@@ -93,7 +96,7 @@ class OTTSProvider:
                         "volume": voice_params["volume"],
                     },
                     headers={
-                        "User-Agent": f"AstrBot/{VERSION}",
+                        **self.request_headers,
                         "UAK": "AstrBot/AzureTTS",
                     },
                 )
@@ -148,7 +151,7 @@ class AzureNativeProvider(TTSProvider):
     async def __aenter__(self):
         self._client = AsyncClient(
             headers={
-                "User-Agent": f"AstrBot/{VERSION}",
+                **self.request_headers,
                 "Content-Type": "application/ssml+xml",
                 "X-Microsoft-OutputFormat": "riff-48khz-16bit-mono-pcm",
             },
@@ -194,7 +197,7 @@ class AzureNativeProvider(TTSProvider):
             content=ssml,
             headers={
                 "Authorization": f"Bearer {self.token}",
-                "User-Agent": f"AstrBot/{VERSION}",
+                **self.request_headers,
             },
         )
         response.raise_for_status()
@@ -211,6 +214,7 @@ class AzureTTSProvider(TTSProvider):
         super().__init__(provider_config, provider_settings)
         key_value = provider_config.get("azure_tts_subscription_key", "")
         self.provider = self._parse_provider(key_value, provider_config)
+        self._synthesis_lock = asyncio.Lock()
 
     def _parse_provider(
         self, key_value: str, config: dict
@@ -223,6 +227,7 @@ class AzureTTSProvider(TTSProvider):
                     raise ValueError("无效的other[...]格式，应形如 other[{...}]")
                 json_str = match.group(1).strip()
                 otts_config = json.loads(json_str)
+                otts_config.setdefault("custom_headers", config.get("custom_headers"))
                 required = {"OTTS_SKEY", "OTTS_URL", "OTTS_AUTH_TIME"}
                 if missing := required - otts_config.keys():
                     raise ValueError(f"缺少OTTS参数: {', '.join(missing)}")
@@ -241,8 +246,9 @@ class AzureTTSProvider(TTSProvider):
         raise ValueError("订阅密钥格式无效，应为32位或84位字母数字或other[...]格式")
 
     async def get_audio(self, text: str) -> str:
-        if isinstance(self.provider, OTTSProvider):
-            async with self.provider as provider:
+        # Both backends keep one mutable client; protect its entire lifetime.
+        async with self._synthesis_lock, self.provider as provider:
+            if isinstance(provider, OTTSProvider):
                 return await provider.get_audio(
                     text,
                     {
@@ -253,6 +259,5 @@ class AzureTTSProvider(TTSProvider):
                         "volume": self.provider_config.get("azure_tts_volume"),
                     },
                 )
-        else:
-            async with self.provider as provider:
+            else:
                 return await provider.get_audio(text)

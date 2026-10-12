@@ -33,9 +33,17 @@ from astrbot.core.utils.media_utils import (
     MEDIA_MIME_EXTENSIONS,
     detect_image_mime_type_async,
 )
+from astrbot.core.utils.upload import UploadTooLargeError
+from astrbot.dashboard.services.chunked_upload_service import (
+    ChunkedUploadError,
+    ChunkedUploadService,
+)
 
 SSE_HEARTBEAT = ": heartbeat\n\n"
 CHAT_RUN_SUBSCRIBER_QUEUE_SIZE = 256
+# Uploaded chat attachments larger than this are rejected.
+MAX_UPLOAD_FILE_SIZE_MB = 512
+MAX_UPLOAD_FILE_SIZE_BYTES = MAX_UPLOAD_FILE_SIZE_MB * 1024 * 1024
 WEBCHAT_IMAGE_MIME_TYPES = {
     ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg",
@@ -53,6 +61,42 @@ def sanitize_upload_filename(filename: str | None) -> str:
     if name in ("", ".", ".."):
         return generate_timestamp_id()
     return name
+
+
+def unique_attachment_filename(filename: str) -> str:
+    # Pasted screenshots are all named "image.png", so prefix the stored name
+    # to keep uploads apart, and stay within the 255-byte filename limit.
+    prefix = f"{generate_timestamp_id()}_"
+    budget = 255 - len(prefix.encode())
+    stem, suffix = os.path.splitext(filename)
+    if len(suffix.encode()) >= budget:
+        stem, suffix = filename, ""
+    stem = stem.encode()[: budget - len(suffix.encode())].decode(errors="ignore")
+    return f"{prefix}{stem}{suffix}"
+
+
+class LocalUploadFile:
+    """Adapt a merged local file to the upload contract save_uploaded_file() consumes.
+
+    Mirrors UploadFileAdapter (api/multipart.py) but sources bytes from a
+    local path; save() moves the file so the chunked-upload merge result
+    lands in the attachments directory without a second full copy.
+    """
+
+    def __init__(self, path: Path, filename: str, content_type: str | None) -> None:
+        self._path = path
+        self.filename = filename
+        self.content_type = content_type
+        self.headers: dict = {}
+        self.content_length = path.stat().st_size
+
+    async def save(
+        self, destination: str | Path, *, max_bytes: int | None = None
+    ) -> int:
+        if max_bytes is not None and self.content_length > max_bytes:
+            raise UploadTooLargeError(max_bytes)
+        await asyncio.to_thread(os.replace, self._path, destination)
+        return self.content_length
 
 
 def normalize_reasoning_message_parts(
@@ -518,6 +562,10 @@ class ChatService:
         self.chat_runs: dict[str, ChatRunState] = {}
         self.chat_runs_by_session: dict[str, set[str]] = {}
 
+        self.chunked_uploads = ChunkedUploadService(
+            os.path.join(get_astrbot_data_path(), "webchat", ".chunks")
+        )
+
     async def build_user_message_parts(self, message: str | list) -> list[dict]:
         return await build_webchat_message_parts(
             message,
@@ -596,6 +644,10 @@ class ChatService:
         return await self.resolve_attachment_file(attachment_id)
 
     async def save_uploaded_file(self, file) -> dict:
+        if (file.content_length or 0) > MAX_UPLOAD_FILE_SIZE_BYTES:
+            raise ChatServiceError(
+                f"File too large (limit {MAX_UPLOAD_FILE_SIZE_MB} MB)"
+            )
         filename = sanitize_upload_filename(file.filename)
         content_type = file.content_type or "application/octet-stream"
 
@@ -609,11 +661,18 @@ class ChatService:
             attach_type = "file"
 
         attachments_dir = Path(self.attachments_dir).resolve(strict=False)
-        file_path = (attachments_dir / filename).resolve(strict=False)
+        file_path = (attachments_dir / unique_attachment_filename(filename)).resolve(
+            strict=False
+        )
         if not file_path.is_relative_to(attachments_dir):
             raise ChatServiceError("Invalid filename")
 
-        await file.save(str(file_path))
+        try:
+            await file.save(str(file_path), max_bytes=MAX_UPLOAD_FILE_SIZE_BYTES)
+        except UploadTooLargeError as exc:
+            raise ChatServiceError(
+                f"File too large (limit {MAX_UPLOAD_FILE_SIZE_MB} MB)"
+            ) from exc
         if attach_type == "image":
             detected_mime_type = await detect_image_mime_type_async(
                 file_path,
@@ -631,6 +690,7 @@ class ChatService:
                         )
                     await asyncio.to_thread(file_path.rename, target_path)
                     file_path = target_path
+                    filename = os.path.splitext(filename)[0] + detected_suffix
         attachment = await self.db.insert_attachment(
             path=str(file_path),
             type=attach_type,
@@ -642,7 +702,8 @@ class ChatService:
 
         return {
             "attachment_id": attachment.attachment_id,
-            "filename": os.path.basename(attachment.path),
+            "filename": filename,
+            "stored_filename": os.path.basename(attachment.path),
             "type": attach_type,
         }
 
@@ -650,6 +711,118 @@ class ChatService:
         if "file" not in files:
             raise ChatServiceError("Missing key: file")
         return await self.save_uploaded_file(files["file"])
+
+    def upload_init(self, data: object, *, owner: str = "") -> dict:
+        payload = data if isinstance(data, dict) else {}
+        original_filename = str(payload.get("filename") or "")
+        total_size = payload.get("total_size", 0)
+
+        if not original_filename:
+            raise ChatServiceError("Missing key: filename")
+        if not isinstance(total_size, int) or total_size <= 0:
+            raise ChatServiceError("Invalid file size")
+        if total_size > MAX_UPLOAD_FILE_SIZE_BYTES:
+            raise ChatServiceError(
+                f"File too large (limit {MAX_UPLOAD_FILE_SIZE_MB} MB)"
+            )
+
+        self.chunked_uploads.ensure_cleanup_task_started()
+        try:
+            session = self.chunked_uploads.init_session(
+                owner=owner,
+                purpose="chat_attachment",
+                filename=sanitize_upload_filename(original_filename),
+                original_filename=original_filename,
+                total_size=total_size,
+                meta={
+                    "content_type": payload.get("content_type")
+                    or "application/octet-stream"
+                },
+            )
+        except ChunkedUploadError as exc:
+            raise ChatServiceError(str(exc)) from exc
+
+        return {
+            "upload_id": session.id,
+            "chunk_size": session.chunk_size,
+            "total_chunks": session.total_chunks,
+        }
+
+    async def upload_chunk(
+        self,
+        *,
+        upload_id: str | None,
+        chunk_index_str: str | None,
+        chunk_file: Any | None,
+        owner: str = "",
+    ) -> dict:
+        if not upload_id or chunk_index_str is None or not chunk_file:
+            raise ChatServiceError("Missing required parameters")
+
+        try:
+            chunk_index = int(chunk_index_str)
+        except ValueError as exc:
+            raise ChatServiceError("Invalid chunk_index") from exc
+
+        try:
+            return await self.chunked_uploads.save_chunk(
+                upload_id, chunk_index, chunk_file, owner=owner
+            )
+        except ChunkedUploadError as exc:
+            raise ChatServiceError(str(exc)) from exc
+
+    async def upload_complete(self, data: object, *, owner: str = "") -> dict:
+        payload = data if isinstance(data, dict) else {}
+        upload_id = payload.get("upload_id")
+        if not upload_id:
+            raise ChatServiceError("Missing key: upload_id")
+
+        try:
+            session = self.chunked_uploads.get_session(upload_id, owner=owner)
+            # Merge outside the chunk dir: assemble() removes that dir on success.
+            merged_path = self.chunked_uploads.chunks_root / f"{upload_id}.merged"
+            await self.chunked_uploads.assemble(upload_id, merged_path, owner=owner)
+        except ChunkedUploadError as exc:
+            raise ChatServiceError(str(exc)) from exc
+
+        try:
+            upload = LocalUploadFile(
+                merged_path,
+                session.filename,
+                session.meta.get("content_type"),
+            )
+            result = await self.save_uploaded_file(upload)
+        finally:
+            merged_path.unlink(missing_ok=True)
+
+        logger.info(
+            f"Chunked attachment upload completed: {session.filename}, "
+            f"size={session.total_size}, chunks={session.total_chunks}"
+        )
+        return result
+
+    async def upload_abort(self, data: object, *, owner: str = "") -> None:
+        payload = data if isinstance(data, dict) else {}
+        upload_id = payload.get("upload_id")
+        if not upload_id:
+            return
+
+        try:
+            if await self.chunked_uploads.abort(upload_id, owner=owner):
+                logger.info(f"Aborted chunked attachment upload: {upload_id}")
+        except ChunkedUploadError as exc:
+            raise ChatServiceError(str(exc)) from exc
+
+    def upload_status(self, data: object, *, owner: str = "") -> dict:
+        payload = data if isinstance(data, dict) else {}
+        upload_id = payload.get("upload_id")
+        if not upload_id:
+            raise ChatServiceError("Missing key: upload_id")
+
+        try:
+            return self.chunked_uploads.session_status(upload_id, owner=owner)
+        except ChunkedUploadError as exc:
+            raise ChatServiceError(str(exc)) from exc
 
     async def delete_threads_by_ids(self, thread_ids: list[str], creator: str) -> None:
         for thread_id in thread_ids:
@@ -1116,23 +1289,23 @@ class ChatService:
             )
 
         if platform_history_id == "webchat":
-            try:
-                platform_session = await self.db.get_platform_session_by_id(
-                    webchat_conv_id
-                )
-                if platform_session is None:
+            platform_session = await self.db.get_platform_session_by_id(webchat_conv_id)
+            if platform_session is not None and platform_session.creator != username:
+                raise ChatServiceError("Permission denied")
+            if platform_session is None:
+                try:
                     await self.db.create_platform_session(
                         creator=username,
                         platform_id="webchat",
                         session_id=webchat_conv_id,
                         is_group=0,
                     )
-            except Exception as exc:
-                logger.warning(
-                    "Failed to ensure WebChat platform session %s: %s",
-                    webchat_conv_id,
-                    exc,
-                )
+                except Exception as exc:
+                    logger.warning(
+                        "Failed to create WebChat platform session %s: %s",
+                        webchat_conv_id,
+                        exc,
+                    )
 
         message_id = str(uuid.uuid4())
         llm_checkpoint_id = post_data.get("_llm_checkpoint_id") or str(uuid.uuid4())
@@ -1185,6 +1358,7 @@ class ChatService:
                         "selected_provider": selected_provider,
                         "selected_model": selected_model,
                         "flags": flags,
+                        "locale": post_data.get("locale"),
                         "message_id": message_id,
                         "llm_checkpoint_id": llm_checkpoint_id,
                         "thread_selected_text": thread_selected_text,
@@ -1411,7 +1585,31 @@ class ChatService:
     ) -> list[dict]:
         return await self.get_sessions(username, platform_id)
 
-    async def get_session(self, username: str, session_id: str) -> dict:
+    async def get_session(
+        self,
+        username: str,
+        session_id: str,
+        page: int = 1,
+        page_size: int = 1000,
+    ) -> dict:
+        """Get one WebChat session and a page of its history.
+
+        Args:
+            username: Authenticated dashboard username.
+            session_id: WebChat session identifier.
+            page: One-based history page, with page one containing the newest rows.
+            page_size: Number of history records to return (at most 1000).
+
+        Returns:
+            Session metadata, history page, and pagination metadata.
+
+        Raises:
+            ChatServiceError: If pagination is invalid or the session is inaccessible.
+        """
+        if page < 1:
+            raise ChatServiceError("page must be at least 1")
+        if page_size < 1 or page_size > 1000:
+            raise ChatServiceError("page_size must be between 1 and 1000")
         session = await self.db.get_platform_session_by_id(session_id)
         if not session:
             raise ChatServiceError(f"Session {session_id} not found")
@@ -1425,8 +1623,12 @@ class ChatService:
         history_ls = await self.platform_history_mgr.get(
             platform_id=platform_id,
             user_id=session_id,
-            page=1,
-            page_size=1000,
+            page=page,
+            page_size=page_size,
+        )
+        total = await self.platform_history_mgr.count(
+            platform_id=platform_id,
+            user_id=session_id,
         )
         threads = await self.db.get_webchat_threads_by_parent_session(
             parent_session_id=session_id,
@@ -1434,7 +1636,20 @@ class ChatService:
         )
 
         response_data = {
+            "session": {
+                "session_id": session.session_id,
+                "platform_id": session.platform_id,
+                "creator": session.creator,
+                "display_name": session.display_name,
+                "is_group": session.is_group,
+                "created_at": to_utc_isoformat(session.created_at),
+                "updated_at": to_utc_isoformat(session.updated_at),
+            },
             "history": [serialize_history_entry(history) for history in history_ls],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "has_more": (page - 1) * page_size + len(history_ls) < total,
             "threads": [serialize_thread(thread) for thread in threads],
             "is_running": self.running_convs.get(session_id, False),
             "active_runs": self.get_active_chat_runs(username, session_id),
@@ -1580,6 +1795,7 @@ class ChatService:
             "session_id": thread.thread_id,
             "message": data.get("message", []),
             "flags": resolve_webchat_request_flags(data),
+            "locale": data.get("locale"),
             "selected_provider": data.get("selected_provider"),
             "selected_model": data.get("selected_model"),
             "_platform_history_id": "webchat_thread",
@@ -1818,6 +2034,7 @@ class ChatService:
             "session_id": session_id,
             "message": source_user_record.content.get("message", []),
             "flags": resolve_webchat_request_flags(data),
+            "locale": data.get("locale"),
             "selected_provider": data.get("selected_provider"),
             "selected_model": data.get("selected_model"),
             "_skip_user_history": True,

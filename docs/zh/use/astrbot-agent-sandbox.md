@@ -1,24 +1,170 @@
-# Agent 沙盒环境 ⛵️
+# Agent 沙盒环境
+
+## 这是什么？
+
+AstrBot 内置 AI 支持让 Agent 通过执行代码、读写文件等方式访问电脑环境。这在 AstrBot 内置 AI 中称为 “使用电脑能力”。
+
+目前，“使用电脑能力” 支持两种运行环境：
+
+- 本机环境：让 AstrBot Agent 在 AstrBot **所在的本机环境**中**直接**执行代码和文件操作，**直接**访问本机环境内的文件和命令。利用 macOS 的 `Seatbelt` 或 Linux 的 `bubblewrap(bwrap)` 技术，可以在本机环境中为 AstrBot Agent 提供**受限的文件访问和执行能力**，以保护本机环境的安全性，限制机器人的不同用户使用 AstrBot Agent 时的文件访问范围和联网权限，获得一定的安全性保证。
+- 第三方沙箱环境：让 AstrBot Agent 在**独立的环境**中执行代码和文件操作，避免直接访问宿主机或 AstrBot 容器内的文件和命令。由于是独立环境，因此可以直接限制机器人的不同用户使用 AstrBot Agent 时的文件访问范围和联网权限，获得更高的安全性保证。由于是独立的环境，第三方沙箱环境通常也需要额外部署和配置，并对机器性能有更高要求。
+
+您可以在 `配置文件 -> AI -> 能力 -> 使用电脑能力` 中选择 “运行环境” 为 “本机环境” 或者 “第三方沙箱环境”。
+
+如果选择“本机环境”，AstrBot 会尝试在本机环境中启用隔离能力。隔离能力的可用性取决于操作系统、内核、账户权限和系统安全策略等因素。请参见下文的 [本机环境](#local-environment) 章节。
+
+如果选择“第三方沙箱环境”，还需要选择对应的“沙箱环境驱动器”，并填写连接地址、访问令牌等配置。相见下文的 [第三方沙箱环境](#third-party-sandbox-environment) 章节。
+
+## 本机环境 {#local-environment}
+
+在 `配置文件 -> AI -> 能力 -> 使用电脑能力` 中，将“运行环境”设为“本机环境”（`local`）。
+
+本质上，AstrBot 会通过提供给 Agent 一系列工具（Shell、Python、文件工具等）来让 Agent 访问本机环境。
+
+> [!NOTE]
+> 如果您通过 Docker 运行 AstrBot，此处的“本机环境”指的是 AstrBot Docker 容器内的 Linux 环境，而不是宿主机的环境。Docker 容器内的文件访问范围和联网权限仍然受限于 Docker 容器的配置。
+
+具体的权限支持按普通成员和管理员分别设置，以矩阵的形式展示，见下图。
+
+![本地权限策略矩阵](./images/config-local-permissions-zh.png)
+
+当勾选 “允许执行代码” 时，AstrBot 会为 Agent 提供 `astrbot_execute_shell` 和 `astrbot_execute_python` 两个工具，以让 Agent 在本机环境中执行 Shell 和 Python 代码。
+
+当勾选 “允许联网” 时，AstrBot 会让 Agent 在执行 Shell/Python 时可以访问网络；否则，Agent 执行 Shell/Python 时会被限制网络访问。
 
 > [!TIP]
-> 此功能目前处于技术预览阶段，可能会存在一些 Bug。如果您遇到了问题，请在 [GitHub](https://github.com/AstrBotDevs/AstrBot/issues) 上提交 issue。
+> 这里的 “允许联网” 不是指 [网页搜索](/use/websearch) 的搜索功能，而是指 Agent 在执行 Shell/Python 时是否可以通过类似 `curl`, `wget` 等工具访问网络。
 
-在 `v4.12.0` 版本及之后，AstrBot 引入了 Agent 沙盒环境，以替代之前的代码执行器功能。沙盒环境给 Agent 提供了更安全、更灵活的代码执行和自动化操作能力。
+对于 “文件访问范围”，分为 “关闭”、“工作区” 和 “整个环境” 三种：
 
-![](https://files.astrbot.app/docs/source/images/astrbot-agent-sandbox/image.png)
+- **关闭**：Agent 无法访问任何文件，文件工具不可用。
+- **工作区**：Agent 只能访问对应用户会话（按 UMO 来划分）的以下目录：
+  - 工作区目录（在 `data/workspaces/<umo>/` 下）【**读写**】
+  - AstrBot 的临时目录（`data/temp/`）【**读写**】
+  - 系统临时目录（`<系统临时目录>/.astrbot/`）【**读写**】
+  - AstrBot 提供给 Agent 的的技能（Skills）目录 (`data/skills/`) 【普通成员**只读**，管理员**读写**】
+  - AstrBot 插件提供的技能（Skills）目录 (`data/plugins/<插件名>/skills/`) 【**只读**】
+  - AstrBot 内置插件提供的技能（Skills）目录 (`<AstrBot 运行安装目录>/builtin_stars/<插件名>/skills/`) 【**只读**】
+- **整个环境**：Agent 可以访问本机环境内的**所有文件**，文件工具可以在整个环境中操作。
 
-## 启用沙盒环境
+AstrBot 为 Agent 提供的文件工具包括 `astrbot_file_read_tool`, `astrbot_file_write_tool`, `astrbot_file_edit_tool` 和 `astrbot_grep_tool`，分别对应文件的读取、写入、编辑和搜索功能。Agent 可以通过这些工具访问本机环境内的文件。
 
-目前，AstrBot 的沙盒环境驱动器支持：
+以下是上述权限矩阵的一些逻辑上的限制：
 
-- `Shipyard Neo`（当前推荐）
-- `Shipyard`（旧方案，仍可继续使用）
-- `CUA`（本地或云端电脑使用沙盒，适合需要桌面操作的场景）
+- 当不勾选 “允许执行代码” 时，无法勾选 “允许联网”，因为**联网权限只在执行代码时生效**。
+- 当“文件访问范围”选择“关闭”时，无法勾选 “允许执行代码” 和 “允许联网”，因为**执行代码和联网权限都需要文件访问权限**。
 
-在当前版本的 AstrBot 控制台中，可在“AI 配置” -> “Agent Computer Use”中选择：
+如果您的环境**未满足本机隔离的要求**（如 Windows 系统暂不支持本地隔离、Linux 系统未安装 bubblewrap、macOS 系统未安装 Seatbelt 等），您会看到界面上没有显示 “允许联网” 选项，并且只能配置以下权限组合：
 
-- `Computer Use Runtime` = `sandbox`
-- `沙箱环境驱动器` = `Shipyard Neo`、`Shipyard` 或 `CUA`
+- 文件访问范围：关闭，允许执行代码：否
+- 文件访问范围：工作区，允许执行代码：否
+- 文件访问范围：整个环境，允许执行代码：否
+- 文件访问范围：整个环境，允许执行代码：是
+
+如果您发现您的环境未满足本机隔离的要求，您可以根据您的系统和环境参考下方的文档阅读，了解如何安装和配置。
+
+### macOS 用户 {#local-macos}
+
+Seatbelt 是 macOS 的内置沙箱机制。AstrBot 在 macOS 上使用 `/usr/bin/sandbox-exec` 来调用 Seatbelt，从而限制 Agent 的文件访问范围和联网权限。macOS 通常自带 `/usr/bin/sandbox-exec`。
+
+1. 在运行 AstrBot 的 Mac 上，确认系统工具存在：
+
+   ```bash
+   ls -l /usr/bin/sandbox-exec
+   ```
+
+2. 检查系统是否允许启动该工具：
+
+   ```bash
+   /usr/bin/sandbox-exec -p '(version 1) (allow default)' /usr/bin/true
+   ```
+
+   退出码为 `0` 表示这个简单检查通过；AstrBot 启动时还会用实际的工作区限制再检查一次。
+
+如果系统没有提供该工具，或当前系统策略不允许使用，可以改为使用[第三方沙箱环境](#third-party-sandbox-environment)。
+
+如果 AstrBot 运行在 Mac 上的 Docker 容器中，请使用下面的 [Docker 用户](#local-docker)步骤。宿主机上的 Seatbelt 不会直接用于 Linux 容器内的进程。
+
+### Linux 用户 {#local-linux}
+
+[bubblewrap](https://github.com/containers/bubblewrap) 是 Linux 上的用户空间沙箱工具。
+
+检查是否安装 bubblewrap 并且可用：
+
+```bash
+command -v bwrap
+bwrap --unshare-all --ro-bind / / --proc /proc --dev /dev /bin/sh -c 'echo "AstrBot is good to go!"'
+```
+
+如果正常输出 `AstrBot is good to go!`，说明 bubblewrap 安装成功且可用。
+
+如果没有安装 bubblewrap，可以按发行版安装：
+
+::: code-group
+
+```bash [Debian / Ubuntu]
+sudo apt update
+sudo apt install bubblewrap
+```
+
+```bash [Fedora]
+sudo dnf install bubblewrap
+```
+
+```bash [Arch Linux]
+sudo pacman -S bubblewrap
+```
+
+:::
+
+如果启动失败：
+
+- **找不到 `bwrap`**：检查是否装在运行 AstrBot 的同一环境，以及进程启动时的 `PATH`。
+- **`Operation not permitted` 或用户命名空间错误**：检查用户命名空间限制、AppArmor 和其他系统安全策略。可通过 `sysctl user.max_user_namespaces` 查看命名空间数量上限，通过 `sudo journalctl -k` 查看相关内核日志。
+- **AppArmor 拒绝**：按发行版要求为实际运行环境设置允许创建用户命名空间的策略。不要仅为通过检查而关闭整台机器的安全策略。
+- **容器部署**：继续阅读 [Docker 用户](#local-docker)，宿主机安装 `bwrap` 不能替代容器内安装。
+
+修复后重启 AstrBot。是否能使用工作区执行和联网控制，以 AstrBot 的启动检查结果为准，如果发现权限矩阵中出现了 `允许联网` 选项则说明本地隔离已成功启用。
+
+### Docker 用户 {#local-docker}
+
+AstrBot 的 Docker 镜像本质上是一个 Linux 容器。
+
+Docker 已提供容器级的隔离。在容器内，AstrBot 默认只能访问容器内的文件和挂载的卷，无法访问宿主机的文件系统。容器内的网络访问也受 Docker 网络配置限制。本地隔离是在容器内通过 bubblewrap 进一步限制**工作区文件访问和执行时联网**。如果只需要访问容器内和挂载的文件，可以继续使用“整个环境”。无需为了使用所有电脑能力而强制开启容器内的 bwrap。
+
+安装 bwrap 只是其中一步。在 Docker 容器中启用本地隔离能力的步骤**相对复杂**，**默认 Docker 部署不一定能启动它**，因为容器还受到宿主机的用户命名空间配置、seccomp、AppArmor 和容器权限限制。因此，如果需要隔离执行，建议使用 [第三方沙箱环境](#third-party-sandbox-environment)。如果仍需要在 Docker 容器中启用本地隔离，请自行参考网络上的资源，给容器配置 `seccomp` 等安全策略，允许容器内的 bwrap 创建用户命名空间。
+
+### Windows 用户 {#local-windows}
+
+目前 Windows 系统暂不支持本机隔离能力。您可以选择使用 [第三方沙箱环境](#third-party-sandbox-environment)。
+
+## 第三方沙箱环境 {#third-party-sandbox-environment}
+
+第三方沙箱环境是 AstrBot 提供的一种可选能力。它可以让 Agent 在**独立的环境**中执行代码和文件操作，避免直接访问宿主机或 AstrBot 容器内的文件和命令。目前支持的第三方沙箱环境驱动器包括：
+
+- **Shipyard Neo**：目前推荐使用的沙箱环境驱动器。它由 Bay、Ship、Gull 三部分组成，分别负责控制面 API、Python/Shell/文件系统能力和浏览器自动化能力。
+- **CUA**：面向电脑使用（Computer Use）的沙盒运行时。它可以直接创建一个 Linux、macOS、Windows、Android 等不同类型的沙盒，并暴露 Shell、截图、鼠标、键盘、文件系统等接口。
+- **Shipyard**：旧版沙箱环境驱动器，仍然保留，供兼容旧部署方案时参考。它由 Bay、Ship 两部分组成，分别负责控制面 API 和 Python/Shell/文件系统能力。
+
+> [!TIP]
+> 第三方沙箱能力仍处于技术预览阶段。遇到问题可在 [GitHub](https://github.com/AstrBotDevs/AstrBot/issues) 提交 issue。
+
+<span id="配置-astrbot-使用沙盒环境"></span>
+
+### 启用沙盒环境 {#启用沙盒环境}
+
+1. 在 `配置文件 -> AI -> 能力 -> 使用电脑能力` 中，将“运行环境”设为“第三方沙箱环境”（`sandbox`）。
+2. 选择“沙箱环境驱动器”：Shipyard Neo、Shipyard 或 CUA。
+3. **按下面对应驱动器的说明部署服务**，填写连接地址、令牌或镜像等配置。
+4. 点击页面右下角“保存”按钮，再测试是否可用。
+
+### 性能要求 {#性能要求}
+
+资源限制由驱动器及 profile 配置决定，不同方案不使用统一的 CPU 和内存上限。建议宿主机至少有 4 个 CPU 和 8 GB 内存。实际使用情况很大程度上取决于机器人的用户数、用户的使用频率和使用场景。
+
+<span id="推荐-使用-shipyard-neo"></span>
+
+### Shipyard Neo {#shipyard-neo}
 
 其中，`Shipyard Neo` 是当前默认驱动器。它由 Bay、Ship、Gull 三部分组成：
 
@@ -31,122 +177,11 @@
 > [!TIP]
 > `Shipyard Neo` 下浏览器能力并不是所有 profile 都有。只有 profile 支持 `browser` capability 时，AstrBot 才会挂载浏览器相关工具。典型 profile 如 `browser-python`。
 
-## CUA 运行时
-
-`CUA` 是一个面向电脑使用（Computer Use）的沙盒运行时。它可以通过统一的 Python SDK 创建 Linux、macOS、Windows、Android 等不同类型的沙盒，并暴露 Shell、截图、鼠标、键盘、文件系统等接口。
-
-在 AstrBot 中选择 `CUA` 驱动器后，Agent 可以在 CUA sandbox 中使用：
-
-- Shell 工具
-- Python 工具
-- 文件读取、写入、编辑和搜索工具
-- 截图工具
-- 鼠标点击工具
-- 键盘输入工具
-- 沙盒文件上传与下载工具
-
-> [!NOTE]
-> CUA 是可选运行时，AstrBot 默认安装不会强制安装它。如果选择了 `CUA` 但当前 Python 环境没有安装 `cua` 包，启动沙盒时会提示安装缺失。
-
-### 安装 CUA 依赖
-
-如果您通过源码或虚拟环境运行 AstrBot，请在 AstrBot 使用的 Python 环境中安装 CUA：
-
-```bash
-pip install cua
-```
-
-如果您使用 `uv` 管理 AstrBot 环境，可在 AstrBot 项目目录中执行：
-
-```bash
-uv pip install cua
-```
-
-CUA 本身还依赖具体运行方式：
-
-- 本地 Linux 容器通常需要 Docker 可用。
-- 本地 Linux/Windows VM 通常需要 QEMU 或 CUA 对应的本地运行时。
-- macOS VM 通常依赖 CUA/Lume 相关运行时。
-- 云端 CUA 需要可用的 CUA API Key。
-
-具体宿主机要求、镜像支持情况和本地运行时安装方式，请参考 [CUA 官方文档](https://cua.ai/docs)。
-
-### 在 AstrBot 中配置 CUA
-
-进入 WebUI：
-
-- `配置 -> 普通配置 -> 使用电脑能力`
-
-然后设置：
-
-- `Computer Use Runtime` = `sandbox`
-- `沙箱环境驱动器` = `CUA`
-
-CUA 相关配置项包括：
-
-- `CUA Image`：要启动的 CUA 镜像。常见值为 `linux`、`macos`、`windows`、`android`。默认 `linux`。
-- `CUA OS Type`：镜像的操作系统类型。默认 `linux`。它会影响 AstrBot 对 POSIX Shell fallback 的判断。
-- `CUA Sandbox TTL`：沙盒生命周期，单位为秒。默认 `3600`。
-- `CUA Telemetry Enabled`：是否启用 CUA 侧遥测。默认关闭。
-- `CUA Local Runtime`：是否使用本地运行时。默认开启。关闭后会按 CUA SDK 的云端方式创建沙盒。
-- `CUA API Key`：云端 CUA 所需的 API Key。仅在使用云端运行时时填写。
-
-一个最小本地 Linux 容器配置通常是：
-
-```text
-Computer Use Runtime = sandbox
-沙箱环境驱动器 = CUA
-CUA Image = linux
-CUA OS Type = linux
-CUA Local Runtime = true
-CUA Sandbox TTL = 3600
-```
-
-如果使用云端 CUA，可改为：
-
-```text
-Computer Use Runtime = sandbox
-沙箱环境驱动器 = CUA
-CUA Image = linux
-CUA OS Type = linux
-CUA Local Runtime = false
-CUA API Key = <your-cua-api-key>
-```
-
-> [!WARNING]
-> 不要把 CUA API Key 写入公开日志、截图或 issue。AstrBot 的运行日志不会输出该字段，但部署平台、Shell 历史和容器环境变量仍需自行保护。
-
-### 使用 CUA 时的注意事项
-
-- `linux` 镜像通常适合 Shell、Python、文件系统和桌面自动化测试。
-- 非 POSIX 镜像（如 `windows`、`android`）不一定支持 `sh`、`cat`、`ls`、`rm`、`base64` 等命令。AstrBot 对需要这些命令的 fallback 操作会返回明确错误。
-- 如果需要在 CUA sandbox 中打开浏览器或 GUI 程序，通常应使用 Shell 后台执行，例如显式传入 `background=true`，避免命令阻塞后续工具调用。
-- 直接把 sandbox 内的文件路径发送给用户通常不可行。应优先使用 AstrBot 的沙盒下载工具，将文件下载到 AstrBot 临时目录后再发送。
-- CUA 与 Shipyard Neo 的 workspace 语义不同。Shipyard Neo 固定使用 `/workspace`；CUA 的工作目录和文件路径取决于镜像与运行时。
-
-### 何时选择 CUA
-
-建议在以下场景选择 `CUA`：
-
-- 需要桌面截图、鼠标点击、键盘输入等 GUI 自动化能力。
-- 需要测试不同 OS 镜像中的行为，例如 Linux、Windows、Android。
-- 已经在本机或云端部署好 CUA 运行环境。
-
-如果只是需要稳定的 Python/Shell/文件系统沙盒，且不需要桌面 GUI 操作，通常优先选择 `Shipyard Neo`。它与 AstrBot 的 workspace、Skills 同步和长期运行模式更贴合。
-
-## 性能要求
-
-AstrBot 给每个沙盒环境限制最高 1 CPU 和 512 MB 内存。
-
-我们建议您的宿主机至少有 2 个 CPU 和 4 GB 内存，并开启 Swap，以保证多个沙盒环境实例可以稳定运行。
-
-## 推荐：使用 Shipyard Neo
-
-### 单独部署 Shipyard Neo（推荐）
+#### 单独部署 Shipyard Neo
 
 如果您准备长期使用 `Shipyard Neo`，更推荐将它**单独部署在一台资源更充足的机器上**，例如您的 homelab、局域网服务器，或独立云主机，然后再让 AstrBot 远程接入 Bay。
 
-原因是：`Shipyard Neo` 在启用浏览器能力时需要运行较重的浏览器运行时。对于资源紧张的云服务器，把 AstrBot 和 `Shipyard Neo` 部署在同一台机器上，通常会让 CPU 和内存压力都比较大，稳定性和体验都不理想。
+原因是：`Shipyard Neo` 在启用浏览器能力时需要运行较重的浏览器运行时。**对于资源紧张的云服务器**，把 AstrBot 和 `Shipyard Neo` 部署在同一台机器上，通常会让 CPU 和内存压力都比较大，稳定性和体验都不理想。
 
 大致步骤如下：
 
@@ -164,7 +199,7 @@ docker compose up -d
 - `Shipyard Neo API Endpoint` 填写对应地址，例如 `http://<your-host>:8114`
 - `Shipyard Neo Access Token` 填写 Bay API Key；如果 AstrBot 能访问 Bay 的 `credentials.json`，也可以留空让 AstrBot 自动发现
 
-### 参考：`config.yaml` 完整示例（附说明）
+#### 参考：`config.yaml` 完整示例（附说明）
 
 如果您准备自行调整 `Shipyard Neo` 的部署参数，可以直接参考下面这份基于 [`deploy/docker/config.yaml`](https://github.com/AstrBotDevs/shipyard-neo/blob/main/deploy/docker/config.yaml) 整理的完整示例。它保留了默认结构，并额外加上了中文注释，便于理解每个配置项的用途。
 
@@ -360,7 +395,7 @@ gc:
 - **资源较紧张时**：可先把 `warm_pool_size` 改小，甚至关闭 `warm_pool`
 - **如果需要代理访问外网**：配置顶层 `proxy`，或按 profile 单独覆盖
 
-### 关于 Shipyard Neo 的复用与持久化
+#### 关于 Shipyard Neo 的复用与持久化
 
 `Shipyard Neo` 中有几个重要概念：
 
@@ -372,57 +407,7 @@ gc:
 
 关于 TTL 与数据持久化的更详细说明，请参考下文的“关于 `Shipyard Neo Sandbox TTL`”与“关于沙盒环境的数据持久化”小节。
 
-## 旧方案：Shipyard
-
-以下内容为旧版 `Shipyard` 驱动器的部署与配置说明，仍然保留，供兼容旧部署方案时参考。
-
-### 使用 Docker Compose 部署 AstrBot 和 Shipyard
-
-如果您还没有部署 AstrBot，或者想更换为我们推荐的带沙盒环境的部署方式，推荐使用 Docker Compose 来部署 AstrBot，代码如下：
-
-```bash
-git clone https://github.com/AstrBotDevs/AstrBot
-cd AstrBot
-# 修改 compose-with-shipyard.yml 文件中的环境变量配置，例如 Shipyard 的 access token 等
-docker compose -f compose-with-shipyard.yml up -d
-docker pull soulter/shipyard-ship:latest
-```
-
-这会启动一个包含 AstrBot 主程序和沙盒环境的 Docker Compose 服务。
-
-### 单独部署 Shipyard
-
-如果您已经部署了 AstrBot，但没有部署沙盒环境，可以单独部署 Shipyard。
-
-代码如下：
-
-```bash
-mkdir astrbot-shipyard
-cd astrbot-shipyard
-wget https://raw.githubusercontent.com/AstrBotDevs/shipyard/refs/heads/main/pkgs/bay/docker-compose.yml -O docker-compose.yml
-# 修改 compose-with-shipyard.yml 文件中的环境变量配置，例如 Shipyard 的 access token 等
-docker compose -f docker-compose.yml up -d
-docker pull soulter/shipyard-ship:latest
-```
-
-部署成功后，上述命令会启动一个 Shipyard 服务，默认监听在 `http://<your-host>:8156`。
-
-> [!TIP]
-> 如果您使用 Docker 部署 AstrBot，您也可以修改上面的 Compose 文件，将 Shipyard 的网络与 AstrBot 放在同一个 Docker 网络中，这样就不需要暴露 Shipyard 的端口到宿主机。
-
-## 配置 AstrBot 使用沙盒环境
-
-> [!TIP]
-> 请确保您的 AstrBot 版本在 `v4.12.0` 及之后。
-
-在 AstrBot 控制台，进入 “AI 配置” -> “Agent Computer Use”。
-
-1. 将 `Computer Use Runtime` 设为 `sandbox`
-2. 在 `沙箱环境驱动器` 中选择 `Shipyard Neo` 或 `Shipyard`
-3. 根据驱动器填写对应配置项
-4. 点击右下角“保存”
-
-### 配置 Shipyard Neo
+#### 配置 Shipyard Neo
 
 如果您选择的是 `Shipyard Neo`，主要配置项如下：
 
@@ -438,7 +423,179 @@ docker pull soulter/shipyard-ship:latest
 - `Shipyard Neo Sandbox TTL`
   - sandbox 生命周期上限，默认值为 3600 秒（1 小时）
 
-### 配置 Shipyard（旧方案）
+#### 关于 `Shipyard Neo Sandbox TTL`
+
+在 `Shipyard Neo` 中：
+
+- TTL 表示 sandbox 生命周期上限
+- profile 还会定义一个独立的空闲超时（`idle_timeout`）
+- AstrBot 发起能力调用时，通常会刷新空闲超时，而不是直接延长 TTL
+- `keepalive` 只会延长空闲超时，不会自动启动新的 session，也不会延长 TTL
+
+<span id="关于沙盒环境的数据持久化"></span>
+
+#### 数据持久化 {#shipyard-neo-persistence}
+
+`Shipyard Neo` 的工作区根目录固定为 `/workspace`。
+
+其持久化由 Cargo 提供：
+
+- 文件系统数据保存在 Cargo 中，并挂载到 `/workspace`
+- 即使底层 Session 被停止或重建，Cargo 中的数据通常仍可保留
+- 对于带浏览器能力的 profile，浏览器状态也可能会一起持久化，例如 `/workspace/.browser/profile/`
+
+### CUA {#cua}
+
+[CUA](https://github.com/trycua/cua) 是一个面向电脑使用（Computer Use）的沙盒运行时。
+
+Agent 可以在 CUA sandbox 中使用多种能力，请见下表：
+
+| 能力 | 为 Agent 提供的工具名称 | 用途 |
+| --- | --- | --- |
+| Shell 执行 | `astrbot_execute_shell` | 执行命令、启动程序 |
+| Python 执行 | `astrbot_execute_ipython` | 执行 Python 代码 |
+| 文件读取 | `astrbot_file_read_tool` | 读取文件 |
+| 文件写入 | `astrbot_file_write_tool` | 创建或覆盖文件 |
+| 文件编辑 | `astrbot_file_edit_tool` | 替换文件中的指定文本 |
+| 文件搜索 | `astrbot_grep_tool` | 按模式搜索文件内容 |
+| 文件上传 | `astrbot_upload_file` | 将 AstrBot 所在环境的文件上传到沙箱 |
+| 文件下载 | `astrbot_download_file` | 从沙箱下载文件，可发送给用户 |
+| 桌面截图 | `astrbot_cua_screenshot` | 获取截图，供模型查看或发送给用户 |
+| 鼠标点击 | `astrbot_cua_mouse_click` | 按坐标点击，支持指定鼠标按键 |
+| 键盘输入 | `astrbot_cua_keyboard_type` | 向当前焦点输入文本 |
+
+> [!WARNING]
+> CUA 是可选运行时，AstrBot 默认安装不会强制安装它。如果您选择了 `CUA` 但当前 AstrBot 的 Python 环境没有安装 `cua` 包，启动沙盒时会提示安装缺失。
+
+#### 何时选择 CUA
+
+建议在以下场景选择 `CUA`：
+
+- 需要桌面截图、鼠标点击、键盘输入等 GUI 自动化能力。
+- 需要测试不同 OS 镜像中的行为，例如 Linux、Windows、Android。
+- 已经在本机或云端部署好 CUA 运行环境。
+
+如果只是需要稳定的 Python/Shell/文件系统沙盒，且不需要桌面 GUI 操作，通常优先选择 `Shipyard Neo`。它与 AstrBot 的 workspace、Skills 同步和长期运行模式更贴合。
+
+#### 安装 CUA 依赖
+
+您可以在 WebUI 的 “数据与日志” 页的 “日志” 中点击 “安装 Pip 库” 按钮，输入 `cua` 以安装 CUA 依赖。也可以按照下面的方式在 AstrBot 的 Python 环境中安装 CUA。
+
+- 如果您通过源码或虚拟环境运行 AstrBot，请在 AstrBot 使用的 Python 环境中安装 CUA：
+
+  ```bash
+  pip install cua
+  ```
+
+- 如果您使用 `uv` 管理 AstrBot 环境，可在 AstrBot 项目目录中执行：
+
+  ```bash
+  uv pip install cua
+  ```
+
+CUA 本身还依赖具体运行方式：
+
+- 本地 Linux 容器通常需要 Docker 可用。
+- 本地 Linux/Windows VM 通常需要 QEMU 或 CUA 对应的本地运行时。
+- macOS VM 通常依赖 CUA/Lume 相关运行时。
+- 云端 CUA 需要可用的 CUA API Key。
+
+具体宿主机要求、镜像支持情况和本地运行时安装方式，请参考 [CUA 官方文档](https://cua.ai/docs)。
+
+#### 在 AstrBot 中配置 CUA
+
+进入 WebUI：
+
+- `配置文件 -> AI -> 能力 -> 使用电脑能力`
+
+然后设置：
+
+- `运行环境`：`sandbox`
+- `沙箱环境驱动器`：`CUA`
+
+CUA 相关配置项包括：
+
+- `CUA Image`：要启动的 CUA 镜像。常见值为 `linux`、`macos`、`windows`、`android`。默认 `linux`。
+- `CUA OS Type`：镜像的操作系统类型。默认 `linux`。它会影响 AstrBot 对 POSIX Shell fallback 的判断。
+- `CUA Sandbox TTL`：沙盒生命周期，单位为秒。默认 `3600`。
+- `CUA Telemetry Enabled`：是否启用 CUA 侧遥测。默认关闭。
+- `CUA Local Runtime`：是否使用本地运行时。默认开启。关闭后会按 CUA SDK 的云端方式创建沙盒。
+- `CUA API Key`：云端 CUA 所需的 API Key。仅在使用云端运行时时填写。
+
+一个最小本地 Linux 容器配置通常是：
+
+```text
+Computer Use Runtime = sandbox
+沙箱环境驱动器 = CUA
+CUA Image = linux
+CUA OS Type = linux
+CUA Local Runtime = true
+CUA Sandbox TTL = 3600
+```
+
+如果使用云端 CUA，可改为：
+
+```text
+Computer Use Runtime = sandbox
+沙箱环境驱动器 = CUA
+CUA Image = linux
+CUA OS Type = linux
+CUA Local Runtime = false
+CUA API Key = <your-cua-api-key>
+```
+
+> [!WARNING]
+> 不要把 CUA API Key 写入公开日志、截图或 issue。
+
+#### 使用 CUA 时的注意事项
+
+- `linux` 镜像通常适合 Shell、Python、文件系统和桌面自动化测试。
+- 非 POSIX 镜像（如 `windows`、`android`）不一定支持 `sh`、`cat`、`ls`、`rm`、`base64` 等命令。AstrBot 对需要这些命令的 fallback 操作会返回明确错误。
+- 如果需要在 CUA sandbox 中打开浏览器或 GUI 程序，通常应使用 Shell 后台执行，例如显式传入 `background=true`，避免命令阻塞后续工具调用。
+- 直接把 sandbox 内的文件路径发送给用户通常不可行。应优先使用 AstrBot 的沙盒下载工具，将文件下载到 AstrBot 临时目录后再发送。
+- CUA 与 Shipyard Neo 的 workspace 语义不同。Shipyard Neo 固定使用 `/workspace`；CUA 的工作目录和文件路径取决于镜像与运行时。
+
+<span id="旧方案-shipyard"></span>
+
+### Shipyard（旧方案） {#shipyard}
+
+以下内容为旧版 `Shipyard` 驱动器的部署与配置说明，仍然保留，供兼容旧部署方案时参考。
+
+#### 使用 Docker Compose 部署 AstrBot 和 Shipyard
+
+如果您还没有部署 AstrBot，或者想更换为我们推荐的带沙盒环境的部署方式，推荐使用 Docker Compose 来部署 AstrBot，代码如下：
+
+```bash
+git clone https://github.com/AstrBotDevs/AstrBot
+cd AstrBot
+# 修改 compose-with-shipyard.yml 文件中的环境变量配置，例如 Shipyard 的 access token 等
+docker compose -f compose-with-shipyard.yml up -d
+docker pull soulter/shipyard-ship:latest
+```
+
+这会启动一个包含 AstrBot 主程序和沙盒环境的 Docker Compose 服务。
+
+#### 单独部署 Shipyard
+
+如果您已经部署了 AstrBot，但没有部署沙盒环境，可以单独部署 Shipyard。
+
+代码如下：
+
+```bash
+mkdir astrbot-shipyard
+cd astrbot-shipyard
+wget https://raw.githubusercontent.com/AstrBotDevs/shipyard/refs/heads/main/pkgs/bay/docker-compose.yml -O docker-compose.yml
+# Update the access token in docker-compose.yml
+docker compose -f docker-compose.yml up -d
+docker pull soulter/shipyard-ship:latest
+```
+
+部署成功后，上述命令会启动一个 Shipyard 服务，默认监听在 `http://<your-host>:8156`。
+
+> [!TIP]
+> 如果您使用 Docker 部署 AstrBot，您也可以修改上面的 Compose 文件，将 Shipyard 的网络与 AstrBot 放在同一个 Docker 网络中，这样就不需要暴露 Shipyard 的端口到宿主机。
+
+#### 配置 Shipyard（旧方案）
 
 如果您选择的是旧版 `Shipyard`，配置项如下：
 
@@ -452,16 +609,7 @@ docker pull soulter/shipyard-ship:latest
 - `Shipyard Ship 会话复用上限`
   - 定义每个沙箱环境实例可以复用的最大会话数，默认值为 10
 
-## 关于 `Shipyard Neo Sandbox TTL`
-
-在 `Shipyard Neo` 中：
-
-- TTL 表示 sandbox 生命周期上限
-- profile 还会定义一个独立的空闲超时（`idle_timeout`）
-- AstrBot 发起能力调用时，通常会刷新空闲超时，而不是直接延长 TTL
-- `keepalive` 只会延长空闲超时，不会自动启动新的 session，也不会延长 TTL
-
-## 关于 `Shipyard Ship 存活时间(秒)`
+#### 关于 `Shipyard Ship 存活时间(秒)`
 
 以下说明仅适用于旧版 `Shipyard`：
 
@@ -470,26 +618,8 @@ docker pull soulter/shipyard-ship:latest
 - 新的会话加入已有的沙箱环境实例时，该实例会自动延长存活时间到这个会话请求的 TTL。
 - 当对沙箱环境实例执行操作后，该实例会自动延长存活时间到当前时间加上 TTL。
 
-## 关于沙盒环境的数据持久化
-
-### Shipyard Neo
-
-`Shipyard Neo` 的工作区根目录固定为 `/workspace`。
-
-其持久化由 Cargo 提供：
-
-- 文件系统数据保存在 Cargo 中，并挂载到 `/workspace`
-- 即使底层 Session 被停止或重建，Cargo 中的数据通常仍可保留
-- 对于带浏览器能力的 profile，浏览器状态也可能会一起持久化，例如 `/workspace/.browser/profile/`
-
-### Shipyard（旧方案）
+#### 数据持久化 {#shipyard-persistence}
 
 Shipyard 会给每个会话分配一个工作目录，在 `/home/<会话唯一 ID>` 目录下。
 
 Shipyard 会自动将沙盒环境中的 /home 目录挂载到宿主机的 `${PWD}/data/shipyard/ship_mnt_data` 目录下，当沙盒环境实例被销毁后，如果某个会话继续请求调用沙箱，Shipyard 会重新创建一个新的沙盒环境实例，并将之前持久化的数据重新挂载进去，保证数据的连续性。
-
-## 其他同类社区插件
-
-### luosheng520qaq/astrobot_plugin_code_executor
-
-如果您资源有限，不希望使用沙盒环境来执行代码，可以尝试 luosheng520qaq 开发的 [astrobot_plugin_code_executor](https://github.com/luosheng520qaq/astrobot_plugin_code_executor) 插件。该插件会直接在宿主机上执行代码。插件已经尽力提升安全性，但仍需留意代码安全性问题。

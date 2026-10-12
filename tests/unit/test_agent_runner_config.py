@@ -137,7 +137,7 @@ def test_local_legacy_fields_are_fully_migrated():
         ]
     }
     assert _migrate_agent_runner_config(config, default_config)
-    assert config["config_version"] == 3
+    assert config["config_version"] == 4
     assert config["agent_runner"] == {
         "runner_type": "local",
         "config": {
@@ -522,6 +522,49 @@ def test_multiple_profiles_can_copy_one_provider_and_migration_is_idempotent():
     assert global_config["provider"] == []
     assert not finalize_config_migrations([global_config, *profiles])
     assert [global_config, *profiles] == first_result
+
+
+@pytest.mark.parametrize("config_version", [2, 3, 4, 5])
+@pytest.mark.parametrize("max_steps", [30, 64])
+@pytest.mark.parametrize("is_profile", [False, True])
+def test_agent_step_limit_upgrade_is_persisted_once(
+    tmp_path, monkeypatch, config_version, max_steps, is_profile
+):
+    profile_root = tmp_path / "profiles"
+    profile_root.mkdir()
+    monkeypatch.setattr(
+        "astrbot.core.utils.migra_helper.get_astrbot_config_path",
+        lambda: str(profile_root),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.utils.migra_helper.get_astrbot_data_path",
+        lambda: str(tmp_path),
+    )
+    default_path = tmp_path / "cmd_config.json"
+    default_path.write_text(json.dumps(DEFAULT_CONFIG), encoding="utf-8")
+    config_path = profile_root / "custom.json" if is_profile else default_path
+    config = copy.deepcopy(DEFAULT_CONFIG)
+    config["config_version"] = config_version
+    if config_version == 2:
+        config.pop("agent_runner")
+        config["provider_settings"]["max_agent_step"] = max_steps
+    else:
+        config["agent_runner"]["config"]["misc"]["max_steps"] = max_steps
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+
+    loaded = AstrBotConfig(config_path=str(config_path))
+    expected_steps = 128 if config_version < 4 and max_steps == 30 else max_steps
+    assert loaded["agent_runner"]["config"]["misc"]["max_steps"] == expected_steps
+    persisted = json.loads(config_path.read_text(encoding="utf-8-sig"))
+    assert persisted["config_version"] == max(config_version, 4)
+    assert persisted["agent_runner"]["config"]["misc"]["max_steps"] == expected_steps
+
+    loaded["agent_runner"]["config"]["misc"]["max_steps"] = 30
+    loaded.save_config()
+    for _ in range(2):
+        reloaded = AstrBotConfig(config_path=str(config_path))
+        assert reloaded["agent_runner"]["config"]["misc"]["max_steps"] == 30
+        assert not _migrate_agent_runner_config(reloaded)
 
 
 def test_new_agent_runner_config_is_authoritative_and_opaque_on_reload(tmp_path):

@@ -69,7 +69,10 @@ class DashScopeEmbeddingProvider(EmbeddingProvider):
             or self.model.startswith("tongyi-embedding-vision")
         )
 
-        kwargs: dict = {"base_address": self.base_url}
+        kwargs: dict = {
+            "base_address": self.base_url,
+            "headers": self.request_headers.copy(),
+        }
         if "embedding_dimensions" in self.provider_config:
             try:
                 dimensions = int(self.provider_config["embedding_dimensions"])

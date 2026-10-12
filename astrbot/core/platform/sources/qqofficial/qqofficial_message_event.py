@@ -27,7 +27,7 @@ from tenacity import (
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import File, Image, Plain, Record, Video
+from astrbot.api.message_components import At, File, Image, Plain, Record, Reply, Video
 from astrbot.api.platform import AstrBotMessage, Group, PlatformMetadata
 from astrbot.core.platform.sources.qqofficial.qqofficial_chunked_upload import (
     QQOFFICIAL_CHUNKED_UPLOAD_THRESHOLD,
@@ -216,6 +216,52 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         self.send_buffer = message
         await self._post_send()
 
+    async def _close_stream_segment(self, stream_payload: dict):
+        """以 state=10 收尾当前流式段；流已开但 buffer 恰好为空时补最小收尾帧。
+
+        QQ C2C 流式协议缺 state=10 会在超时后把整段回滚到首包（#10066）：
+        中间分片已把全文发完、结尾没有剩余内容时也必须补一个 "\n" 收尾帧，
+        否则客户端等不到结束帧，最终只显示首包几个字。
+        """
+        stream_payload["state"] = 10
+        has_content = self.send_buffer is not None and any(
+            (isinstance(c, Plain) and c.text) or not isinstance(c, Plain)
+            for c in self.send_buffer.chain
+        )
+        if not has_content:
+            # 只有空 Plain 的 buffer 也算空：_post_send_one 会拒掉空文本，
+            # 收尾帧照样缺席（#10069 review）
+            if stream_payload.get("id") is None:
+                # 从未发出任何分片，无流可收
+                return None
+            self.send_buffer = MessageChain(chain=[Plain(text="\n")])
+        return await self._post_send(stream=stream_payload)
+
+    @staticmethod
+    def _extract_self_ref_idx(message: object) -> str:
+        """取本条消息自身的引用 ID（REFIDX_...），用于出站引用回复。
+
+        QQ 官方文档：message_reference.message_id 对「非机器人发的消息」需从
+        消息事件的 message_scene.ext 数组的 msg_idx 字段获取；它与 message.id
+        （ROBOT1.0_...）不是同一个值，格式也不同。
+        """
+        try:
+            raw = getattr(message, "raw_data", None)
+            if not isinstance(raw, dict):
+                return ""
+            scene = raw.get("message_scene")
+            if not isinstance(scene, dict):
+                return ""
+            for item in scene.get("ext") or []:
+                text = str(item)
+                if text.startswith("msg_idx="):
+                    value = text[len("msg_idx=") :].strip()
+                    if value:
+                        return value
+        except Exception:
+            return ""
+        return ""
+
     async def send_streaming(self, generator, use_fallback: bool = False):
         """流式输出仅支持消息列表私聊（C2C），其他消息源退化为普通发送"""
         # 先标记事件层“已执行发送操作”，避免异常路径遗漏
@@ -241,9 +287,10 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
                 # tool_call break 信号：工具开始执行，先把已有 buffer 以 state=10 结束当前流式段
                 if chain.type == "break":
-                    if self.send_buffer:
-                        stream_payload["state"] = 10
-                        ret = await self._post_send(stream=stream_payload)
+                    if (self.send_buffer and self.send_buffer.chain) or (
+                        stream_payload.get("id") is not None
+                    ):
+                        ret = await self._close_stream_segment(stream_payload)
                         ret_id = self._extract_response_message_id(ret)
                         if ret_id is not None:
                             stream_payload["id"] = ret_id
@@ -275,9 +322,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     self.send_buffer = None  # 清空已发送的分片，避免下次重复发送旧内容
 
             if isinstance(source, botpy.message.C2CMessage):
-                # 结束流式对话，发送 buffer 中剩余内容
-                stream_payload["state"] = 10
-                ret = await self._post_send(stream=stream_payload)
+                # 结束流式对话，发送 buffer 中剩余内容（空尾也要补收尾帧）
+                ret = await self._close_stream_segment(stream_payload)
             else:
                 ret = await self._post_send()
 
@@ -329,13 +375,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         for component in message.chain:
             is_media = isinstance(component, Image | Record | Video | File)
             if is_media and current_has_media:
-                chunks.append(
-                    MessageChain(
-                        chain=current_chain,
-                        use_t2i_=message.use_t2i_,
-                        type=message.type,
-                    )
-                )
+                chunks.append(message.derive(current_chain))
                 current_chain = []
                 current_has_media = False
 
@@ -343,13 +383,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             current_has_media = current_has_media or is_media
 
         if current_chain or not message.chain:
-            chunks.append(
-                MessageChain(
-                    chain=current_chain,
-                    use_t2i_=message.use_t2i_,
-                    type=message.type,
-                )
-            )
+            chunks.append(message.derive(current_chain))
 
         return chunks
 
@@ -443,6 +477,30 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         if not isinstance(source, botpy.message.Message | botpy.message.DirectMessage):
             payload["msg_seq"] = random.randint(1, 10000)
+
+        # 出站引用回复：消息链里存在 Reply 组件时填 message_reference。
+        # 注意 botpy 在同时传 message_reference 与 file_image 时会主动去除前者（SDK 限制）。
+        _reply_id = next(
+            (
+                str(_component.id).strip()
+                for _component in (getattr(message_to_send, "chain", None) or [])
+                if isinstance(_component, Reply) and str(_component.id or "").strip()
+            ),
+            "",
+        )
+        if _reply_id:
+            # 调用方已经给出 REFIDX_... 时直接使用（插件可借此引用任意消息）；
+            # 否则回退到本条消息自身的 msg_idx。注意 message.id（ROBOT1.0_...）
+            # 不可直接用作 message_reference.message_id。
+            _ref_idx = (
+                _reply_id
+                if _reply_id.startswith("REFIDX_")
+                else QQOfficialMessageEvent._extract_self_ref_idx(
+                    self.message_obj.raw_message
+                )
+            )
+            if _ref_idx:
+                payload["message_reference"] = {"message_id": _ref_idx}
 
         ret = None
 
@@ -611,8 +669,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         return ret
 
+    @staticmethod
     async def _send_with_markdown_fallback(
-        self,
         send_func,
         payload: dict,
         plain_text: str,
@@ -638,7 +696,9 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
             # QQ 流式 markdown 分片校验：内容必须以换行结尾。
             # 某些边界场景服务端仍可能判定失败，这里做一次修正重试。
-            if stream and self.STREAM_MARKDOWN_NEWLINE_ERROR in str(err):
+            if stream and QQOfficialMessageEvent.STREAM_MARKDOWN_NEWLINE_ERROR in str(
+                err
+            ):
                 retry_payload = payload.copy()
 
                 markdown_payload = retry_payload.get("markdown")
@@ -657,7 +717,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 return await send_func(retry_payload)
 
             if (
-                self.MARKDOWN_NOT_ALLOWED_ERROR not in str(err)
+                QQOfficialMessageEvent.MARKDOWN_NOT_ALLOWED_ERROR not in str(err)
                 or not payload.get("markdown")
                 or not plain_text
             ):
@@ -908,6 +968,10 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         for i in message.chain:
             if isinstance(i, Plain):
                 plain_text += i.text
+            elif isinstance(i, At):
+                mention_id = str(i.qq) if i.qq else ""
+                if mention_id and mention_id != "all":
+                    plain_text += f'<qqbot-at-user id="{mention_id}" />'
             elif isinstance(i, Image) and not image_base64:
                 if not i.file:
                     raise ValueError("Unsupported image file format")

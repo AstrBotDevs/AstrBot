@@ -1,7 +1,11 @@
 <script setup>
 import { useCommonStore } from "@/stores/common";
 import { logApi } from "@/api/v1";
+import { useModuleI18n } from "@/i18n/composables";
+import { normalizeTextInput } from "@/utils/inputValue";
 import { EventSourcePolyfill } from "event-source-polyfill";
+
+const { tm } = useModuleI18n("features/console");
 </script>
 
 <template>
@@ -10,8 +14,9 @@ import { EventSourcePolyfill } from "event-source-polyfill";
     class="console-displayer-wrapper"
     :class="{ 'console-displayer-wrapper--workspace': workspaceMode }"
   >
-    <div class="filter-controls mb-2" v-if="showLevelBtns">
+    <div class="filter-controls mb-2" v-if="showLevelBtns || showSearch">
       <v-chip-group
+        v-if="showLevelBtns"
         v-model="selectedLevels"
         class="log-level-filters"
         column
@@ -32,6 +37,21 @@ import { EventSourcePolyfill } from "event-source-polyfill";
           {{ level }}
         </v-chip>
       </v-chip-group>
+      <v-text-field
+        v-if="showSearch"
+        :model-value="searchInput"
+        @update:model-value="searchInput = normalizeTextInput($event)"
+        class="log-search-field"
+        density="compact"
+        variant="solo-filled"
+        flat
+        hide-details
+        single-line
+        clearable
+        prepend-inner-icon="mdi-magnify"
+        :aria-label="tm('search.label')"
+        :placeholder="tm('search.placeholder')"
+      ></v-text-field>
       <v-spacer></v-spacer>
       <slot name="header-actions"></slot>
       <v-btn
@@ -73,6 +93,10 @@ export default {
         CRITICAL: "purple",
       },
       localLogCache: [],
+      searchInput: "",
+      // Trimmed keyword; an empty string disables filtering.
+      searchKeyword: "",
+      searchTimer: null,
       eventSource: null,
       retryTimer: null,
       retryAttempts: 0,
@@ -99,6 +123,10 @@ export default {
       type: Boolean,
       default: false,
     },
+    showSearch: {
+      type: Boolean,
+      default: false,
+    },
     autoScroll: {
       type: Boolean,
       default: true,
@@ -118,6 +146,22 @@ export default {
     hideUserChat() {
       this.refreshDisplay();
     },
+    searchInput: {
+      handler(value) {
+        if (this.searchTimer) {
+          clearTimeout(this.searchTimer);
+        }
+        this.searchTimer = setTimeout(() => {
+          this.searchTimer = null;
+          const keyword = (value || "").trim();
+          if (keyword === this.searchKeyword) {
+            return;
+          }
+          this.searchKeyword = keyword;
+          this.refreshDisplay();
+        }, 250);
+      },
+    },
   },
   async mounted() {
     await this.fetchLogHistory();
@@ -136,6 +180,10 @@ export default {
     if (this.retryTimer) {
       clearTimeout(this.retryTimer);
       this.retryTimer = null;
+    }
+    if (this.searchTimer) {
+      clearTimeout(this.searchTimer);
+      this.searchTimer = null;
     }
     this.retryAttempts = 0;
   },
@@ -227,6 +275,10 @@ export default {
       if (!newLogs || newLogs.length === 0) return;
 
       let hasUpdate = false;
+      const termElement = document.getElementById("term");
+      // Batch the rendered log elements into a single fragment so that a large
+      // history payload only triggers one reflow instead of one per log line.
+      const fragment = termElement ? document.createDocumentFragment() : null;
 
       newLogs.forEach((log) => {
         const exists = this.localLogCache.some(
@@ -242,9 +294,12 @@ export default {
 
           if (
             this.isLevelSelected(log.level) &&
-            !this.isHiddenByCategory(log)
+            !this.isHiddenByCategory(log) &&
+            this.matchesKeyword(log)
           ) {
-            this.printLog(log.data);
+            if (fragment) {
+              fragment.appendChild(this.buildLogElement(log.data));
+            }
           }
         }
       });
@@ -255,6 +310,13 @@ export default {
         const maxSize = this.commonStore.log_cache_max_len || 200;
         if (this.localLogCache.length > maxSize) {
           this.localLogCache.splice(0, this.localLogCache.length - maxSize);
+        }
+      }
+
+      if (fragment && fragment.childNodes.length > 0) {
+        termElement.appendChild(fragment);
+        if (this.autoScroll) {
+          termElement.scrollTop = termElement.scrollHeight;
         }
       }
     },
@@ -288,21 +350,72 @@ export default {
       return this.hideUserChat && log && log.category === "user_chat";
     },
 
+    matchesKeyword(log) {
+      if (!this.searchKeyword) {
+        return true;
+      }
+      const text = (log.data || "")
+        .replace(/\u001b\[[0-9;]*m/g, "")
+        .toLowerCase();
+      return text.includes(this.searchKeyword.toLowerCase());
+    },
+
+    // Appends `text` to `element`, wrapping keyword matches in a highlight span.
+    appendHighlightedText(element, text) {
+      const keyword = this.searchKeyword;
+      if (!keyword || !text) {
+        element.textContent = text || "";
+        return;
+      }
+
+      // Strip ANSI escape sequences first so highlight offsets line up with
+      // the same stripped text used by `matchesKeyword`, and so no control
+      // codes are rendered.
+      const cleanText = text.replace(/\u001b\[[0-9;]*m/g, "");
+      const lowerText = cleanText.toLowerCase();
+      const lowerKeyword = keyword.toLowerCase();
+      let cursor = 0;
+      let index = lowerText.indexOf(lowerKeyword);
+
+      while (index !== -1) {
+        if (index > cursor) {
+          element.appendChild(
+            document.createTextNode(cleanText.slice(cursor, index)),
+          );
+        }
+        const highlight = document.createElement("span");
+        highlight.className = "console-log-highlight";
+        highlight.textContent = cleanText.slice(index, index + keyword.length);
+        element.appendChild(highlight);
+        cursor = index + keyword.length;
+        index = lowerText.indexOf(lowerKeyword, cursor);
+      }
+
+      if (cursor < cleanText.length) {
+        element.appendChild(document.createTextNode(cleanText.slice(cursor)));
+      }
+    },
+
     refreshDisplay() {
       const termElement = document.getElementById("term");
-      if (termElement) {
-        termElement.innerHTML = "";
+      if (!termElement) return;
 
-        if (this.localLogCache && this.localLogCache.length > 0) {
-          this.localLogCache.forEach((logItem) => {
-            if (
-              this.isLevelSelected(logItem.level) &&
-              !this.isHiddenByCategory(logItem)
-            ) {
-              this.printLog(logItem.data);
-            }
-          });
+      termElement.innerHTML = "";
+      if (!this.localLogCache || this.localLogCache.length === 0) return;
+
+      const fragment = document.createDocumentFragment();
+      this.localLogCache.forEach((logItem) => {
+        if (
+          this.isLevelSelected(logItem.level) &&
+          !this.isHiddenByCategory(logItem) &&
+          this.matchesKeyword(logItem)
+        ) {
+          fragment.appendChild(this.buildLogElement(logItem.data));
         }
+      });
+      termElement.appendChild(fragment);
+      if (this.autoScroll) {
+        termElement.scrollTop = termElement.scrollHeight;
       }
     },
 
@@ -328,7 +441,7 @@ export default {
         /\[(DEBG|INFO|WARN|ERRO|CRIT|DEBUG|WARNING|ERROR|CRITICAL)\]/,
       );
       if (!levelMatch) {
-        element.innerText = `${log}`;
+        this.appendHighlightedText(element, log);
         return;
       }
 
@@ -339,15 +452,15 @@ export default {
 
       const prefixSpan = document.createElement("span");
       prefixSpan.className = "console-log-prefix";
-      prefixSpan.innerText = prefix;
+      this.appendHighlightedText(prefixSpan, prefix);
 
       const levelSpan = document.createElement("span");
       levelSpan.className = "console-log-level";
-      levelSpan.innerText = levelMatch[0];
+      this.appendHighlightedText(levelSpan, levelMatch[0]);
 
       const messageSpan = document.createElement("span");
       messageSpan.className = "console-log-message";
-      messageSpan.innerText = message;
+      this.appendHighlightedText(messageSpan, message);
 
       element.classList.add("console-log-line--structured");
       element.appendChild(prefixSpan);
@@ -355,15 +468,10 @@ export default {
       element.appendChild(messageSpan);
     },
 
-    printLog(log) {
-      let ele = document.getElementById("term");
-      if (!ele) {
-        return;
-      }
-
-      let span = document.createElement("pre");
+    buildLogElement(log) {
+      const span = document.createElement("pre");
       let style = this.logColorAnsiMap["default"];
-      for (let key in this.logColorAnsiMap) {
+      for (const key in this.logColorAnsiMap) {
         if (log.startsWith(key)) {
           style = this.logColorAnsiMap[key];
           log = log.replace(key, "").replace("\u001b[0m", "");
@@ -374,10 +482,7 @@ export default {
       span.style = style;
       span.classList.add("console-log-line", "fade-in");
       this.appendLogContent(span, log);
-      ele.appendChild(span);
-      if (this.autoScroll) {
-        ele.scrollTop = ele.scrollHeight;
-      }
+      return span;
     },
   },
 };
@@ -399,8 +504,20 @@ export default {
 }
 
 #console-wrapper:fullscreen {
+  --v-theme-on-surface: 255, 255, 255;
   background-color: #1e1e1e;
+  color: #fff;
   padding: 20px;
+}
+
+#console-wrapper:fullscreen :deep(.v-switch__track) {
+  --v-theme-surface-variant: 163, 163, 163;
+}
+
+#console-wrapper:fullscreen .log-search-field :deep(.v-field) {
+  --v-theme-surface: 36, 36, 36;
+  --v-theme-surface-variant: 36, 36, 36;
+  --v-theme-on-surface: 255, 255, 255;
 }
 
 .filter-controls {
@@ -409,6 +526,12 @@ export default {
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 8px;
+}
+
+.log-search-field {
+  flex: 0 1 260px;
+  max-width: 260px;
+  min-width: 160px;
 }
 
 .console-term {
@@ -505,6 +628,11 @@ export default {
   overflow-wrap: anywhere;
 }
 
+:deep(.console-log-highlight) {
+  background: rgba(255, 213, 79, 0.35);
+  border-radius: 2px;
+}
+
 @media (max-width: 768px) {
   .console-displayer-wrapper--workspace {
     border-radius: 14px;
@@ -526,9 +654,15 @@ export default {
     order: 1;
   }
 
+  .console-displayer-wrapper--workspace .log-search-field {
+    flex: 1 1 100%;
+    max-width: none;
+    order: 3;
+  }
+
   .console-displayer-wrapper--workspace :deep(.console-header-actions) {
     flex: 1 1 100%;
-    order: 3;
+    order: 4;
   }
 
   .console-displayer-wrapper--workspace .fullscreen-btn {

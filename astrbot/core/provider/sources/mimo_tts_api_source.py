@@ -103,7 +103,7 @@ class ProviderMiMoTTSAPI(TTSProvider):
     async def get_audio(self, text: str) -> str:
         response = await self.client.post(
             build_api_url(self.api_base),
-            headers=build_headers(self.chosen_api_key),
+            headers={**build_headers(self.chosen_api_key), **self.request_headers},
             json=self._build_payload(text),
         )
 

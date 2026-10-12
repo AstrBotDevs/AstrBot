@@ -1,4 +1,9 @@
 ﻿{
+    "configProfileDrawer": {
+            "title": "Изменить профиль",
+            "loadFailed": "Не удалось загрузить профиль",
+            "close": "Закрыть"
+        },
     "knowledgeBaseSelector": {
         "notSelected": "Не выбрано",
         "buttonText": "Выбрать базу знаний...",
@@ -39,6 +44,8 @@
         "allPluginsLabel": "Все плагины"
     },
     "providerSelector": {
+        "allSources": "Все источники",
+        "filterSource": "Фильтр по источнику провайдера",
         "notSelected": "Не выбрано",
         "defaultModel": "Модель по умолчанию",
         "model": "Модель",

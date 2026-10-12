@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import ast
 import asyncio
+import platform
 import re
+import shutil
+import tempfile
 import threading
 import time
 import traceback
@@ -16,6 +19,7 @@ import psutil
 from sqlmodel import col, func, select
 
 from astrbot.core import DEMO_MODE, logger
+from astrbot.core.computer.process_sandbox import SandboxSpec, create_process_sandbox
 from astrbot.core.config import VERSION
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -30,7 +34,7 @@ from astrbot.core.desktop_runtime import (
     is_desktop_session_auth_enabled,
 )
 from astrbot.core.umo_alias import build_umo_alias_map, serialize_umo_alias
-from astrbot.core.utils.astrbot_path import get_astrbot_path
+from astrbot.core.utils.astrbot_path import get_astrbot_path, get_astrbot_temp_path
 from astrbot.core.utils.auth_password import (
     is_default_dashboard_password,
     is_md5_dashboard_password,
@@ -54,11 +58,60 @@ class StatService:
         db_helper: BaseDatabase,
         core_lifecycle: AstrBotCoreLifecycle,
         config: AstrBotConfig,
+        *,
+        dashboard_static_folder: str | None = None,
     ) -> None:
         self.db_helper = db_helper
         self.core_lifecycle = core_lifecycle
         self.config = config
+        self.dashboard_static_folder = dashboard_static_folder
         self.storage_cleaner = StorageCleaner(config)
+
+        # Probe sandbox startup once; restart AstrBot to refresh this snapshot.
+        system = platform.system().lower()
+        sandbox = {"backend": None, "status": "unsupported"}
+        if system == "linux":
+            sandbox = {
+                "backend": "bubblewrap",
+                "status": "detected" if shutil.which("bwrap") else "missing",
+            }
+        elif system == "darwin":
+            sandbox = {
+                "backend": "seatbelt",
+                "status": (
+                    "detected"
+                    if shutil.which("sandbox-exec", path="/usr/bin")
+                    == "/usr/bin/sandbox-exec"
+                    else "missing"
+                ),
+            }
+        if sandbox["status"] == "detected":
+            try:
+                temp_root = Path(get_astrbot_temp_path())
+                temp_root.mkdir(parents=True, exist_ok=True)
+                with tempfile.TemporaryDirectory(
+                    prefix="sandbox-probe-", dir=temp_root
+                ) as workspace:
+                    result = create_process_sandbox().run(
+                        ["/bin/sh", "-c", ":"],
+                        SandboxSpec(workspace=Path(workspace)),
+                        timeout=5,
+                        output_limit=1024,
+                    )
+                if result.returncode != 0:
+                    raise RuntimeError(
+                        result.stderr.decode("utf-8", errors="replace").strip()
+                        or f"Sandbox probe exited with code {result.returncode}."
+                    )
+            except (OSError, RuntimeError) as exc:
+                sandbox.update(
+                    status="unavailable", error=str(exc)[:1024] or type(exc).__name__
+                )
+        self.runtime = {
+            "os": system,
+            "arch": platform.machine(),
+            "sandbox": sandbox,
+        }
 
     async def restart_core(self) -> None:
         if DEMO_MODE:
@@ -103,10 +156,13 @@ class StatService:
         if is_desktop_session_auth_enabled():
             return {
                 "version": VERSION,
-                "dashboard_version": await get_dashboard_version(),
+                "dashboard_version": await get_dashboard_version(
+                    self.dashboard_static_folder
+                ),
                 "change_pwd_hint": False,
                 "md5_pwd_hint": False,
                 "password_upgrade_required": False,
+                "runtime": self.runtime,
             }
         storage_upgraded = await is_password_storage_upgraded(
             self.db_helper,
@@ -120,10 +176,13 @@ class StatService:
         md5_pwd_hint = is_md5_dashboard_password(password)
         return {
             "version": VERSION,
-            "dashboard_version": await get_dashboard_version(),
+            "dashboard_version": await get_dashboard_version(
+                self.dashboard_static_folder
+            ),
             "change_pwd_hint": await self.is_default_cred(),
             "md5_pwd_hint": md5_pwd_hint,
             "password_upgrade_required": not storage_upgraded,
+            "runtime": self.runtime,
         }
 
     async def get_public_versions(
@@ -134,7 +193,7 @@ class StatService:
 
         Args:
             dashboard_static_folder: Static WebUI dist directory currently served by
-                the dashboard, when available.
+                the dashboard. Defaults to the directory configured on the service.
 
         Returns:
             Public WebUI and AstrBot version information.
@@ -167,12 +226,11 @@ class StatService:
 
         dashboard_version = None
         try:
-            if dashboard_static_folder:
-                dashboard_version = await get_dashboard_version(
-                    Path(dashboard_static_folder)
-                )
-            if dashboard_version is None:
-                dashboard_version = await get_dashboard_version()
+            dashboard_version = await get_dashboard_version(
+                dashboard_static_folder
+                if dashboard_static_folder is not None
+                else self.dashboard_static_folder
+            )
         except Exception as exc:
             logger.warning("Failed to read public WebUI version: %s", exc)
 
