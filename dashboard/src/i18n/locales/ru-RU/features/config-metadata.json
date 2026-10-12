@@ -1486,8 +1486,8 @@
                 "hint": "URL репозитория PyPI. По умолчанию: [https://mirrors.aliyun.com/pypi/simple/](https://mirrors.aliyun.com/pypi/simple/)"
             },
             "callback_api_base": {
-                "description": "Внешний адрес для Callback API",
-                "hint": "Используется для сервисов, требующих обратных выливов (например, в песочнице)."
+                "description": "Адрес обратного вызова MCP OAuth",
+                "hint": "Адрес используется для обратного вызова MCP OAuth 2.0 и других ссылок обратного вызова, которым нужен доступ к AstrBot. Например: https://example.com или http://localhost:6185. Оставьте пустым, чтобы использовать текущий адрес."
             },
             "disable_metrics": {
                 "description": "Отключить анонимную статистику",
