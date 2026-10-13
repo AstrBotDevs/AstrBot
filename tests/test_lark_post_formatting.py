@@ -6,6 +6,7 @@ import pytest
 import pytest_asyncio
 
 from astrbot.core.astr_main_agent import _process_quote_message, collect_initial_request
+from astrbot.core.message.components import Reply
 from astrbot.core.pipeline.process_stage.method.agent_sub_stages import third_party
 from astrbot.core.pipeline.waking_check import stage as waking
 from astrbot.core.platform.sources.lark.lark_adapter import LarkPlatformAdapter
@@ -25,7 +26,7 @@ def lark_message():
     adapter = LarkPlatformAdapter.__new__(LarkPlatformAdapter)
     adapter.config = {"id": "lark-test"}
     adapter.bot_open_id, adapter.bot_name = "ou_bot", "AstrBot"
-    adapter.handle_msg = AsyncMock()
+    adapter.commit_event = MagicMock()
     parent = SimpleNamespace(
         message_id="parent-1",
         sender=SimpleNamespace(id="ou_sender"),
@@ -151,19 +152,25 @@ async def test_lark_post_preserves_formatting(
 
     await adapter.convert_msg(event)
 
-    message = adapter.handle_msg.await_args.args[0]
-    parsed_event = adapter.create_event(message)
+    parsed_event = adapter.commit_event.call_args.args[0]
+    message = parsed_event.message_obj
     # Exercise the shared pipeline with the same text under each source type.
     parsed_event.platform_meta.name = platform
     if not quoted:
         parsed_event.message_obj.raw_message.message_type = message_type
     if quoted:
         reply = message.message[0]
+        assert type(reply) is Reply
         request = ProviderRequest()
         await _process_quote_message(parsed_event, request, "", MagicMock())
         assert request.extra_user_content_parts[0].text == (
             f"<Quoted Message>\n({reply.sender_nickname}): {expected}\n</Quoted Message>"
         )
+        # A marker for one reply must not affect another reply on the same event.
+        other_reply = Reply(id="other", message_str="  other  ")
+        assert await extract_quoted_message_text(parsed_event, other_reply) == "other"
+        parsed_event.platform_meta.name = "telegram"
+        assert await extract_quoted_message_text(parsed_event) == expected.strip()
     else:
         waking_stage.ctx.astrbot_config["wake_prefix"] = [wake_prefix]
         main_agent_build_config.provider_wake_prefix = provider_prefix
@@ -259,7 +266,7 @@ async def test_lark_commands_match_complete_message(
         else {"text": f" \t@_user_1 {body} @_user_1 "}
     )
     await adapter.convert_msg(event)
-    parsed_event = adapter.create_event(adapter.handle_msg.await_args.args[0])
+    parsed_event = adapter.commit_event.call_args.args[0]
     if mention and not title:
         assert parsed_event.message_str == (
             f"\n \t {body}@AstrBot" if message_type == "post" else f"{body} @AstrBot"
@@ -301,6 +308,6 @@ async def test_lark_non_post_quotes_keep_existing_text(
         {"content": [[{"tag": "text", "text": "Reply"}]]}
     )
     await adapter.convert_msg(event)
-    parsed_event = adapter.create_event(adapter.handle_msg.await_args.args[0])
+    parsed_event = adapter.commit_event.call_args.args[0]
 
     assert await extract_quoted_message_text(parsed_event) == expected

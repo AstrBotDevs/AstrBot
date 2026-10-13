@@ -101,7 +101,7 @@ class QuotedMessageExtractor:
         embedded_text = self._reply_parser.extract_text_from_reply_component(reply)
         if (
             getattr(getattr(self._event, "platform_meta", None), "name", None) == "lark"
-            and getattr(reply, "lark_message_type", None) == "post"
+            and self._event.get_extra("lark_quoted_post_id") == str(reply.id)
             and reply.message_str
             and reply.message_str.strip()
         ):

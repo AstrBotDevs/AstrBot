@@ -42,12 +42,6 @@ USER_NAME_CACHE_MAX_SIZE = 1000
 USER_NAME_LOOKUP_TIMEOUT_SECONDS = 5
 
 
-class LarkReply(Comp.Reply):
-    """Keep the quoted Lark message type alongside its parsed content."""
-
-    lark_message_type: str
-
-
 @register_platform_adapter(
     "lark", "飞书机器人官方 API 适配器", support_streaming_message=True
 )
@@ -413,7 +407,15 @@ class LarkPlatformAdapter(Platform):
     async def _build_reply_from_parent_id(
         self,
         parent_message_id: str,
-    ) -> Comp.Reply | None:
+    ) -> tuple[Comp.Reply, str] | None:
+        """Fetch a reply component and its original Lark message type.
+
+        Args:
+            parent_message_id: ID of the quoted message.
+
+        Returns:
+            Reply and source message type, or None if the message is unavailable.
+        """
         if self.lark_api.im is None:
             logger.error("[Lark] API Client im 模块未初始化")
             return None
@@ -475,8 +477,7 @@ class LarkPlatformAdapter(Platform):
             quoted_sender_id[:8] if quoted_sender_id != "unknown" else "unknown"
         )
 
-        return LarkReply(
-            lark_message_type=quoted_type,
+        reply = Comp.Reply(
             id=quoted_message_id,
             chain=quoted_chain,
             sender_id=quoted_sender_id,
@@ -485,6 +486,7 @@ class LarkPlatformAdapter(Platform):
             message_str=quoted_text,
             text=quoted_text,
         )
+        return reply, quoted_type
 
     async def _download_file_resource_to_temp(
         self,
@@ -608,10 +610,14 @@ class LarkPlatformAdapter(Platform):
         abm.message_str = ""
 
         at_list = {}
+        quoted_post_id = None
         if message.parent_id:
-            reply_seg = await self._build_reply_from_parent_id(message.parent_id)
-            if reply_seg:
+            quoted_reply = await self._build_reply_from_parent_id(message.parent_id)
+            if quoted_reply:
+                reply_seg, quoted_type = quoted_reply
                 abm.message.append(reply_seg)
+                if quoted_type == "post":
+                    quoted_post_id = str(reply_seg.id)
 
         if message.mentions:
             for m in message.mentions:
@@ -735,7 +741,7 @@ class LarkPlatformAdapter(Platform):
                 except Exception as exc:
                     logger.warning("[Lark] Failed to save private chat route: %s", exc)
 
-        await self.handle_msg(abm)
+        await self.handle_msg(abm, quoted_post_id=quoted_post_id)
 
     def create_event(self, message: AstrBotMessage) -> LarkMessageEvent:
         """Creates a Lark message event.
@@ -754,8 +760,19 @@ class LarkPlatformAdapter(Platform):
             bot=self.lark_api,
         )
 
-    async def handle_msg(self, abm: AstrBotMessage) -> None:
-        self.commit_event(self.create_event(abm))
+    async def handle_msg(
+        self, abm: AstrBotMessage, *, quoted_post_id: str | None = None
+    ) -> None:
+        """Queue a Lark event with metadata for preserving quoted post whitespace.
+
+        Args:
+            abm: Parsed message, including its reply component.
+            quoted_post_id: Quoted message ID, only when its source type is post.
+        """
+        event = self.create_event(abm)
+        if quoted_post_id is not None:
+            event.set_extra("lark_quoted_post_id", quoted_post_id)
+        self.commit_event(event)
 
     async def handle_webhook_event(self, event_data: dict) -> None:
         """处理 Webhook 事件
