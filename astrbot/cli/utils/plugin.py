@@ -87,6 +87,13 @@ def download_repository(
             response.raise_for_status()
             zip_content = BytesIO(response.content)
         with ZipFile(zip_content) as z:
+            base_dir = Path(temp_dir).resolve()
+            for member in z.namelist():
+                member_path = (base_dir / member).resolve()
+                if member_path != base_dir and not member_path.is_relative_to(base_dir):
+                    raise ValueError(
+                        f"Archive member escapes the extraction directory: {member}"
+                    )
             z.extractall(temp_dir)
             namelist = z.namelist()
             root_dir = Path(namelist[0]).parts[0] if namelist else ""

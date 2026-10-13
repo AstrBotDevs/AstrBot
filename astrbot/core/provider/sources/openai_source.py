@@ -1265,7 +1265,7 @@ class ProviderOpenAIOfficial(Provider):
                 if success:
                     break
 
-        if retry_cnt == max_retries - 1 or llm_response is None:
+        if llm_response is None:
             logger.error(f"API 调用失败，重试 {max_retries} 次仍然失败。")
             if last_exception is None:
                 raise Exception("未知错误")
@@ -1309,6 +1309,7 @@ class ProviderOpenAIOfficial(Provider):
 
         last_exception = None
         retry_cnt = 0
+        streamed = False
         for retry_cnt in range(max_retries):
             try:
                 self.client.api_key = chosen_key
@@ -1322,6 +1323,7 @@ class ProviderOpenAIOfficial(Provider):
                     **query_kwargs,
                 ):
                     yield response
+                streamed = True
                 break
             except Exception as e:
                 last_exception = e
@@ -1345,9 +1347,10 @@ class ProviderOpenAIOfficial(Provider):
                     image_fallback_used=image_fallback_used,
                 )
                 if success:
+                    streamed = True
                     break
 
-        if retry_cnt == max_retries - 1:
+        if not streamed:
             logger.error(f"API 调用失败，重试 {max_retries} 次仍然失败。")
             if last_exception is None:
                 raise Exception("未知错误")

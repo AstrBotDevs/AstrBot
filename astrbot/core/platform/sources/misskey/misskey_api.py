@@ -4,6 +4,7 @@ import random
 import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any, NoReturn
+from urllib.parse import urlparse
 
 try:
     import aiohttp
@@ -643,12 +644,35 @@ class MisskeyAPI:
             logger.error(f"[Misskey API] 列表文件失败: {e}")
             raise
 
+    def _is_same_instance_url(self, url: str) -> bool:
+        """判断 URL 是否指向当前 Misskey 实例。"""
+        try:
+            target = urlparse(url)
+            instance = urlparse(self.instance_url)
+        except ValueError:
+            return False
+        if not target.hostname or not instance.hostname:
+            return False
+        return (target.scheme, target.hostname, target.port) == (
+            instance.scheme,
+            instance.hostname,
+            instance.port,
+        )
+
     async def _download_with_existing_session(
         self,
         url: str,
         ssl_verify: bool = True,
     ) -> bytes | None:
-        """使用现有会话下载文件"""
+        """使用现有会话下载文件。
+
+        会话默认头带 `Authorization: Bearer <token>`，而 aiohttp 会把它附加到发往
+        *任意主机* 的请求上。因此只有指向本实例的 URL 才复用该会话；发往第三方媒体
+        主机的请求改用不带凭据的临时会话，避免 access token 外泄。
+        """
+        if not self._is_same_instance_url(url):
+            return await self._download_with_temp_session(url, ssl_verify=ssl_verify)
+
         if not (hasattr(self, "session") and self.session):
             raise APIConnectionError("No existing session available")
 

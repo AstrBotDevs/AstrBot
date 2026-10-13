@@ -1,6 +1,6 @@
 from collections.abc import Callable
 
-from .base import BaseChunker
+from .base import BaseChunker, validate_chunk_params
 
 
 class RecursiveCharacterChunker(BaseChunker):
@@ -56,6 +56,7 @@ class RecursiveCharacterChunker(BaseChunker):
 
         overlap = kwargs.get("chunk_overlap", self.chunk_overlap)
         chunk_size = kwargs.get("chunk_size", self.chunk_size)
+        validate_chunk_params(chunk_size, overlap)
 
         text_length = self.length_function(text)
         if text_length <= chunk_size:

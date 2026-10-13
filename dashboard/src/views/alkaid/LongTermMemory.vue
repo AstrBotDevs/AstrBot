@@ -254,7 +254,7 @@
 
 <script>
 import { pluginExtensionApi } from '@/api/v1';
-// import * as d3 from "d3"; // npm install d3
+import * as d3 from "d3";
 import { useModuleI18n } from '@/i18n/composables';
 import { normalizeTextInput } from '@/utils/inputValue';
 

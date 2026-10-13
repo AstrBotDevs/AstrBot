@@ -28,6 +28,12 @@ const open = (options) => {
   message.value = options.message || t('core.common.dialog.confirmMessage');
   isOpen.value = true;
 
+  if (resolvePromise) {
+    const previousResolve = resolvePromise;
+    resolvePromise = null;
+    previousResolve(false);
+  }
+
   return new Promise((resolve) => {
     resolvePromise = resolve; // ✅ 赋值 Promise 解析方法
   });
@@ -35,12 +41,20 @@ const open = (options) => {
 
 const handleConfirm = () => {
   isOpen.value = false;
-  if (resolvePromise) resolvePromise(true); // ✅ 解析 Promise
+  if (resolvePromise) {
+    const resolve = resolvePromise;
+    resolvePromise = null;
+    resolve(true); // ✅ 解析 Promise
+  }
 };
 
 const handleCancel = () => {
   isOpen.value = false;
-  if (resolvePromise) resolvePromise(false); // ✅ 解析 Promise
+  if (resolvePromise) {
+    const resolve = resolvePromise;
+    resolvePromise = null;
+    resolve(false); // ✅ 解析 Promise
+  }
 };
 
 defineExpose({ open }); // ✅ 确保 `confirmPlugin.ts` 可以访问 `open`
