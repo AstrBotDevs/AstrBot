@@ -516,14 +516,16 @@ class CronJobManager:
         req.conversation = conv
         req.contexts = json.loads(conv.history)
         cron_job_str = json.dumps(extras.get("cron_job", {}), ensure_ascii=False)
-        req.system_prompt += PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT.format(
-            cron_job=cron_job_str
-        )
+        # Keep changing task data after the stable system prompt and history.
+        req.system_prompt += PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT
         req.prompt = (
             "You are now responding to a scheduled task. "
             "Proceed according to your system instructions. "
             "Output using same language as previous conversation. "
-            "After completing your task, summarize and output your actions and results."
+            "After completing your task, summarize and output your actions and results.\n\n"
+            "# CRON JOB CONTEXT\n"
+            "The following object describes the scheduled task that triggered you:\n"
+            f"{cron_job_str}"
         )
         if delivery_session_str:
             if not req.func_tool:
