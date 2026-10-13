@@ -76,7 +76,7 @@ class StorageCleaner:
 
     def _build_status(self, target: str) -> dict:
         if target == self.TARGET_LOGS:
-            files = self._collect_log_files()
+            files = self.collect_log_files()
             primary_path = self._data_dir / "logs"
         elif target == self.TARGET_CACHE:
             files = self._collect_cache_files()
@@ -94,7 +94,7 @@ class StorageCleaner:
 
     def _cleanup_target(self, target: str) -> dict:
         if target == self.TARGET_LOGS:
-            files = self._collect_log_files()
+            files = self.collect_log_files()
             active_log_files = self._active_log_files()
         elif target == self.TARGET_CACHE:
             files = self._collect_cache_files()
@@ -151,7 +151,13 @@ class StorageCleaner:
             "failed_files": failed_files,
         }
 
-    def _collect_log_files(self) -> set[Path]:
+    def collect_log_files(self) -> set[Path]:
+        """Collect files under data/logs plus the configured log files.
+
+        Returns:
+            The log files, including rotated ones of the configured log and
+            trace log paths, even when those are outside data/logs.
+        """
         files = set(self._iter_files(self._data_dir / "logs"))
         for log_path in self._configured_log_paths():
             files.update(self._iter_log_family_files(log_path))

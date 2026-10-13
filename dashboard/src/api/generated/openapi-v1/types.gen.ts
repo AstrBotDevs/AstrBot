@@ -3725,6 +3725,10 @@ export type GetLogHistoryResponse = (string);
 
 export type GetLogHistoryError = unknown;
 
+export type ExportLogsResponse = ((Blob | File));
+
+export type ExportLogsError = unknown;
+
 export type GetTraceSettingsResponse = (SuccessEnvelope);
 
 export type GetTraceSettingsError = unknown;

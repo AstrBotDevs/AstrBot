@@ -166,6 +166,8 @@ Use the `Conversations` tab to find and manage saved conversation records:
 
 The `Logs` tab shows AstrBot runtime logs in real time. You can filter by log level and install missing Pip packages from this page. To view DEBUG logs, first set `Console Log Level` to `DEBUG` under `System Settings → General → Logs`.
 
+Click `Export Logs` in the top right to download a zip archive with the log files under `data/logs` (log files configured elsewhere through `Log File Path` and `Trace Log File Path` are included too) and the recent in-memory logs and traces, which you can hand to developers when reporting a problem. `Enable File Logging` is off by default. In that case no new log files are written, so the archive mostly has the recent in-memory logs (plus any older log files still on disk). For full logs, turn on `Enable File Logging` under `System Settings → General → Logs`, reproduce the problem, and then export. Logs may contain chat messages and user IDs, so check them before sharing publicly. The log and cache cleanup panel under `System Settings → General → Cache` has the same `Export Logs` button.
+
 ### Trace
 
 The `Trace` tab shows AstrBot execution traces in real time and is useful for debugging model-call paths and tool invocations. Use the switch at the top to enable or disable trace recording.
