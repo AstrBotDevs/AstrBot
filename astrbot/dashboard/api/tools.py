@@ -5,7 +5,10 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse
 
-from astrbot.core.agent.mcp_oauth import get_mcp_oauth_callback_base
+from astrbot.core.agent.mcp_oauth import (
+    get_mcp_oauth_callback_base,
+    get_shared_mcp_oauth_defaults,
+)
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import ApiError, ok
 from astrbot.dashboard.schemas import (
@@ -214,16 +217,7 @@ async def _start_mcp_oauth_authorization(
     )
     callback_base_url = str(callback_base_value).rstrip("/")
     callback_base_url = get_mcp_oauth_callback_base(config, callback_base_url)
-    oauth_defaults = {
-        key.removeprefix("mcp_oauth_"): core_lifecycle.astrbot_config.get(key)
-        for key in (
-            "mcp_oauth_client_name",
-            "mcp_oauth_scope",
-            "mcp_oauth_client_id",
-            "mcp_oauth_client_secret",
-        )
-        if core_lifecycle.astrbot_config.get(key)
-    }
+    oauth_defaults = get_shared_mcp_oauth_defaults()
     server_name = request.query_params.get("name")
 
     return await _run(

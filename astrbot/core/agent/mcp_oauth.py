@@ -93,25 +93,85 @@ def get_mcp_oauth_config(config: Mapping[str, Any]) -> MCPOAuthConfig | None:
     return MCPOAuthConfig.model_validate(oauth_config)
 
 
+_MCP_OAUTH_CALLBACK_PATH = "/mcp/oauth/callback"
+
+_MCP_OAUTH_SHARED_DEFAULT_KEYS = (
+    "mcp_oauth_client_name",
+    "mcp_oauth_scope",
+    "mcp_oauth_client_id",
+    "mcp_oauth_client_secret",
+)
+
+
+def get_shared_mcp_oauth_defaults() -> dict[str, Any]:
+    """Shared OAuth 2.0 settings from the global config.
+
+    These defaults fill in fields omitted by a server's own ``oauth2`` config so
+    that runtime connections, status checks, and authorization flows all derive
+    the same token-storage fingerprint.
+    """
+    from astrbot.core import astrbot_config  # deferred to avoid an import cycle
+
+    return {
+        key.removeprefix("mcp_oauth_"): astrbot_config.get(key)
+        for key in _MCP_OAUTH_SHARED_DEFAULT_KEYS
+        if astrbot_config.get(key)
+    }
+
+
+def _resolve_configured_redirect_uri(
+    oauth_config: MCPOAuthConfig | None,
+) -> str | None:
+    """Return the configured redirect_uri only when it targets the registered callback route.
+
+    The dashboard only handles ``/mcp/oauth/callback``; a configured URI with a
+    different path would never receive the OAuth callback.
+    """
+    configured = oauth_config.redirect_uri if oauth_config else None
+    if not configured:
+        return None
+    if urlparse(configured).path.rstrip("/") == _MCP_OAUTH_CALLBACK_PATH:
+        return configured
+    logger.warning(
+        "Ignoring MCP OAuth redirect_uri %s: the dashboard only handles %s; "
+        "falling back to the default callback address.",
+        configured,
+        _MCP_OAUTH_CALLBACK_PATH,
+    )
+    return None
+
+
 def get_mcp_oauth_redirect_uri(
     config: Mapping[str, Any], callback_base_url: str
 ) -> str:
     oauth_config = get_mcp_oauth_config(config)
-    return (
-        oauth_config.redirect_uri
-        if oauth_config and oauth_config.redirect_uri
-        else f"{callback_base_url.rstrip('/')}/mcp/oauth/callback"
-    )
+    configured = _resolve_configured_redirect_uri(oauth_config)
+    if configured:
+        return configured
+    return f"{callback_base_url.rstrip('/')}{_MCP_OAUTH_CALLBACK_PATH}"
 
 
-def sync_default_mcp_oauth_callback_base(config: dict[str, Any]) -> None:
+def sync_default_mcp_oauth_callback_base(
+    config: dict[str, Any],
+    previous_config: Mapping[str, Any] | None = None,
+) -> None:
     callback_base = str(config.get("callback_api_base") or "").rstrip("/")
     if not callback_base:
         return
 
-    default_redirect_uri = f"{callback_base}/mcp/oauth/callback"
+    default_redirect_uri = f"{callback_base}{_MCP_OAUTH_CALLBACK_PATH}"
     mcp_callback_base = str(config.get("mcp_oauth_callback_base") or "").rstrip("/")
     if not mcp_callback_base or mcp_callback_base == default_redirect_uri:
+        config["mcp_oauth_callback_base"] = callback_base
+        return
+
+    previous = previous_config if isinstance(previous_config, Mapping) else None
+    if previous is None:
+        return
+    previous_base = str(previous.get("callback_api_base") or "").rstrip("/")
+    if previous_base and mcp_callback_base == previous_base:
+        # The stored base was auto-populated from the previous shared callback
+        # address and is still managed by it; follow the new address.
         config["mcp_oauth_callback_base"] = callback_base
 
 
@@ -119,7 +179,7 @@ def get_mcp_oauth_callback_base(
     config: Mapping[str, Any], callback_base_url: str
 ) -> str:
     redirect_uri = get_mcp_oauth_redirect_uri(config, callback_base_url)
-    return redirect_uri.removesuffix("/mcp/oauth/callback")
+    return redirect_uri.removesuffix(_MCP_OAUTH_CALLBACK_PATH)
 
 
 def apply_mcp_oauth_defaults(
@@ -329,6 +389,16 @@ class MCPFileTokenStorage(TokenStorage):
                 exclude_none=True,
             )
             self._save_unlocked(payload)
+
+    async def snapshot(self) -> dict[str, Any]:
+        """Return a copy of the raw stored payload for later restore."""
+        async with self._lock:
+            return self._load_unlocked()
+
+    async def restore(self, payload: dict[str, Any]) -> None:
+        """Overwrite the stored payload with a previous snapshot."""
+        async with self._lock:
+            self._save_unlocked(dict(payload))
 
 
 def _get_token_endpoint_auth_method(oauth_config: MCPOAuthConfig) -> str:
@@ -588,7 +658,12 @@ async def create_mcp_http_auth(
     interactive_flow: MCPOAuthPendingFlow | None = None,
     oauth_defaults: Mapping[str, Any] | None = None,
 ) -> httpx.Auth | None:
-    prepared = apply_mcp_oauth_defaults(config, oauth_defaults or {})
+    prepared = apply_mcp_oauth_defaults(
+        config,
+        oauth_defaults
+        if oauth_defaults is not None
+        else get_shared_mcp_oauth_defaults(),
+    )
     if "url" not in prepared:
         return None
 
@@ -645,7 +720,7 @@ async def create_mcp_http_auth(
         interactive_flow.redirect_uri
         if interactive_flow
         else (
-            oauth_config.redirect_uri
+            _resolve_configured_redirect_uri(oauth_config)
             or await storage.get_redirect_uri()
             or "http://127.0.0.1/astrbot/mcp/oauth/callback/pending"
         )
@@ -681,13 +756,22 @@ async def create_mcp_http_auth(
     )
 
 
-async def get_mcp_oauth_state(config: Mapping[str, Any]) -> dict[str, Any]:
-    oauth_config = get_mcp_oauth_config(config)
+async def get_mcp_oauth_state(
+    config: Mapping[str, Any],
+    oauth_defaults: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    prepared = apply_mcp_oauth_defaults(
+        config,
+        oauth_defaults
+        if oauth_defaults is not None
+        else get_shared_mcp_oauth_defaults(),
+    )
+    oauth_config = get_mcp_oauth_config(prepared)
     authorized = (
         oauth_config is not None and oauth_config.grant_type == "client_credentials"
     )
     if oauth_config is not None and not authorized:
-        storage = MCPFileTokenStorage.from_mcp_config(config)
+        storage = MCPFileTokenStorage.from_mcp_config(prepared)
         tokens = await storage.get_tokens()
         authorized = tokens is not None
         if authorized and tokens is not None:
@@ -732,7 +816,10 @@ async def probe_mcp_http_oauth_connection(
     ) as client:
         probe_session_id = None
         if transport_type == "streamable_http":
-            response = await client.post(
+            # A streamable HTTP server may answer with an SSE body that stays
+            # open; read only the response head instead of buffering it.
+            async with client.stream(
+                "POST",
                 url,
                 headers={
                     **headers,
@@ -753,21 +840,28 @@ async def probe_mcp_http_oauth_connection(
                     },
                 },
                 auth=auth,
-            )
-            probe_session_id = response.headers.get("mcp-session-id")
+            ) as response:
+                status_code = response.status_code
+                reason_phrase = response.reason_phrase
+                probe_session_id = response.headers.get("mcp-session-id")
         else:
-            response = await client.get(
+            # SSE servers keep the event stream open; buffering the body would
+            # hang until timeout. Read only the response head.
+            async with client.stream(
+                "GET",
                 url,
                 headers={
                     **headers,
                     "Accept": "application/json, text/event-stream",
                 },
                 auth=auth,
-            )
+            ) as response:
+                status_code = response.status_code
+                reason_phrase = response.reason_phrase
 
-        if response.status_code != 200:
+        if status_code != 200:
             raise MCPOAuthError(
-                f"OAuth authorization probe failed: HTTP {response.status_code} {response.reason_phrase}",
+                f"OAuth authorization probe failed: HTTP {status_code} {reason_phrase}",
             )
 
         if probe_session_id:
@@ -808,6 +902,8 @@ class MCPOAuthManager:
                 self._flows.pop(flow_id, None)
 
     async def _run_flow(self, flow: MCPOAuthPendingFlow) -> None:
+        storage = MCPFileTokenStorage.from_mcp_config(flow.config)
+        snapshot = await storage.snapshot()
         try:
             auth = await create_mcp_http_auth(
                 flow.config,
@@ -824,6 +920,16 @@ class MCPOAuthManager:
                 request = getattr(exc, "request", None)
                 target = f" while requesting {request.url}" if request else ""
                 error_message = f"{exc.__class__.__name__}{target}"
+            # Token exchange may already have persisted tokens before the flow
+            # failed; restore the pre-flow payload so the reported failure stays
+            # consistent with the stored authorization state.
+            try:
+                await storage.restore(snapshot)
+            except Exception as restore_exc:  # noqa: BLE001
+                logger.warning(
+                    "Failed to restore MCP OAuth storage after a failed flow: %s",
+                    restore_exc,
+                )
             flow.error = error_message
             flow.status = "failed"
             flow.url_ready_event.set()
@@ -839,7 +945,12 @@ class MCPOAuthManager:
         server_name: str | None = None,
         force: bool = False,
     ) -> MCPOAuthPendingFlow:
-        prepared = apply_mcp_oauth_defaults(config, oauth_defaults or {})
+        resolved_defaults = (
+            oauth_defaults
+            if oauth_defaults is not None
+            else get_shared_mcp_oauth_defaults()
+        )
+        prepared = apply_mcp_oauth_defaults(config, resolved_defaults)
         oauth_config = get_mcp_oauth_config(prepared)
         if oauth_config is None:
             raise MCPOAuthError("OAuth 2.0 is not configured for this MCP server.")
@@ -863,7 +974,7 @@ class MCPOAuthManager:
             flow_id=flow_id,
             config=prepared,
             redirect_uri=redirect_uri,
-            oauth_defaults=dict(oauth_defaults or {}),
+            oauth_defaults=dict(resolved_defaults),
         )
         flow.task = asyncio.create_task(
             self._run_flow(flow),
@@ -878,7 +989,9 @@ class MCPOAuthManager:
         try:
             done, pending = await asyncio.wait(
                 {wait_url_task, wait_done_task},
-                timeout=15,
+                # Preparation performs provider requests (metadata discovery,
+                # client registration) bounded by the configured OAuth timeout.
+                timeout=float(oauth_config.timeout),
                 return_when=asyncio.FIRST_COMPLETED,
             )
             for task in pending:
