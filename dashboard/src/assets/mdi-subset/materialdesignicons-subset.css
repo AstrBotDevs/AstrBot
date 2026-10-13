@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 266 icons */
+/* Auto-generated MDI subset – 267 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -1042,6 +1042,10 @@
 
 .mdi-vector-point::before {
   content: "\F01C4";
+}
+
+.mdi-video-outline::before {
+  content: "\F0BDC";
 }
 
 .mdi-view-grid::before {

@@ -165,6 +165,7 @@
     "metadata": {
       "image": "画像入力",
       "audio": "音声入力",
+      "video": "動画入力",
       "toolUse": "ツール使用",
       "reasoning": "推論",
       "context": "{tokens} トークンのコンテキストウィンドウ",
