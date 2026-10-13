@@ -7,7 +7,7 @@ import uuid
 from collections.abc import AsyncGenerator, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from time import perf_counter, time
+from time import time
 from typing import Any
 
 from deprecated import deprecated
@@ -142,7 +142,6 @@ class AstrMessageEvent(abc.ABC):
         ):
             self._execution_active = True
             active_event_registry.register(self)
-            started = perf_counter()
             status = "success"
             error = None
             try:
@@ -157,7 +156,6 @@ class AstrMessageEvent(abc.ABC):
                         "pipeline_end",
                         kind="message",
                         status=status,
-                        duration_ms=round((perf_counter() - started) * 1000, 2),
                         stopped=self.is_stopped(),
                         error=error,
                     )

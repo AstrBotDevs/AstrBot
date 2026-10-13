@@ -1,5 +1,4 @@
 import inspect
-import time
 import traceback
 import typing as T
 
@@ -99,7 +98,6 @@ async def call_event_hook(
         plugin_display_name = plugin.display_name if plugin else None
         previous_source = event.get_extra("_trace_response_source")
         event.set_extra("_trace_response_source", f"plugin:{plugin_name}")
-        handler_started = time.perf_counter()
         handler_category = (
             "llm_tool" if hook_type == EventType.OnCallingFuncToolEvent else "hook"
         )
@@ -128,7 +126,6 @@ async def call_event_hook(
                 "handler_end",
                 kind="plugin_handler",
                 status="error",
-                duration_ms=round((time.perf_counter() - handler_started) * 1000, 2),
                 plugin=plugin_name,
                 plugin_display_name=plugin_display_name or plugin_name,
                 handler=handler.handler_name,
@@ -142,7 +139,6 @@ async def call_event_hook(
                 "handler_end",
                 kind="plugin_handler",
                 status="success",
-                duration_ms=round((time.perf_counter() - handler_started) * 1000, 2),
                 plugin=plugin_name,
                 plugin_display_name=plugin_display_name or plugin_name,
                 handler=handler.handler_name,

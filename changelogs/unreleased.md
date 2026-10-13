@@ -1,5 +1,7 @@
 # Unreleased
 
+- Remove persisted trace action/end-action and redundant duration attributes. Keep transition matching internal, set call kinds explicitly, retain handler types, and derive UI call completion and durations from canonical span timestamps/status. Preserve reads of legacy history.
+
 - Hide the redundant AdapterMessageEvent type label on plugin listener nodes; keep handler names, category chips, and hook event types.
 
 - Remove the standalone Select persona trace node and include its resolved persona ID in Agent request prepared details. Fold long trace titles and received/sent text previews with explicit expansion, without truncating recorded content.

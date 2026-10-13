@@ -1,6 +1,5 @@
 """本地 Agent 模式的 AstrBot 插件调用 Stage"""
 
-import time
 import traceback
 from collections.abc import AsyncGenerator
 from typing import Any
@@ -53,7 +52,6 @@ class StarRequestSubStage(Stage):
                 "_trace_response_source",
                 f"plugin:{md.name or handler.handler_module_path}",
             )
-            handler_started = time.perf_counter()
             # Match the component categories used by the plugin detail page.
             handler_category = (
                 "command"
@@ -86,9 +84,6 @@ class StarRequestSubStage(Stage):
                     "handler_end",
                     kind="plugin_handler",
                     status="success",
-                    duration_ms=round(
-                        (time.perf_counter() - handler_started) * 1000, 2
-                    ),
                     plugin=md.name or handler.handler_module_path,
                     plugin_display_name=md.display_name or md.name,
                     handler=handler.handler_name,
@@ -107,9 +102,6 @@ class StarRequestSubStage(Stage):
                     "handler_end",
                     kind="plugin_handler",
                     status="error",
-                    duration_ms=round(
-                        (time.perf_counter() - handler_started) * 1000, 2
-                    ),
                     plugin=md.name or handler.handler_module_path,
                     plugin_display_name=md.display_name or md.name,
                     handler=handler.handler_name,

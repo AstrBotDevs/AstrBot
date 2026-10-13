@@ -213,9 +213,9 @@ test("canonical span events retain their owning span for Agent folding", (t) => 
     trace: { trace_id: "trace", root_span_id: "root", state: "completed", attributes: {}, start_time_unix_nano: "1000000000" },
     spans: [
       { span_id: "root", parent_span_id: null, start_time_unix_nano: "1000000000", attributes: {} },
-      { span_id: "agent", parent_span_id: "root", start_time_unix_nano: "1100000000", attributes: { "astrbot.action": "agent_start" } },
+      { span_id: "agent", parent_span_id: "root", start_time_unix_nano: "1100000000", attributes: { "astrbot.kind": "agent" } },
       { span_id: "plugin", parent_span_id: "agent", start_time_unix_nano: "1200000000",
-        attributes: { "astrbot.action": "handler_start", "astrbot.kind": "plugin_handler", "astrbot.handler_category": "hook" },
+        attributes: { "astrbot.kind": "plugin_handler", "astrbot.handler_category": "hook" },
         events: [{ event_id: "event", span_id: "plugin", name: "astr_agent_prepare", time_unix_nano: "1300000000", attributes: {} }] },
     ],
   });
@@ -224,6 +224,26 @@ test("canonical span events retain their owning span for Agent folding", (t) => 
   assert.equal(state.timelineRows.value.length, 2);
   state.expandedAgents.add("agent");
   assert.equal(state.timelineRows.value.length, 4);
+});
+
+test("canonical span kinds drive call transitions and nanosecond timestamps determine duration", (t) => {
+  const state = setup(t, []);
+  const normalize = (attributes) => state.normalizeTracePayload({
+    trace: { trace_id: "trace", root_span_id: "root", state: "completed", attributes: {}, start_time_unix_nano: "1791909368256084000" },
+    spans: [{ span_id: "call", parent_span_id: "root", start_time_unix_nano: "1791909368256084000", end_time_unix_nano: "1791909368264126000", status: { code: 1 }, attributes }],
+  }).records;
+  for (const [kind, start, end] of [["plugin_handler", "handler_start", "handler_end"], ["agent", "agent_start", "agent_end"], ["tool", "agent_tool_call", "agent_tool_result"]]) {
+    const records = normalize({ "astrbot.kind": kind, "astrbot.handler_type": "AdapterMessageEvent" });
+    assert.deepEqual(Array.from(records, (record) => record.action), [start, end]);
+    assert.equal(records[1].fields.duration_ms, 8.042);
+    assert.equal(records[0].fields.handler_type, "AdapterMessageEvent");
+    assert.equal(records[0].fields.action, undefined);
+    assert.equal(records[0].fields.end_action, undefined);
+  }
+  const oldTool = normalize({ "astrbot.action": "agent_tool_call", "astrbot.end_action": "agent_tool_result", "astrbot.duration_ms": 999 });
+  assert.equal(oldTool[0].action, "agent_tool_call");
+  assert.equal(oldTool[1].action, "agent_tool_result");
+  assert.equal(oldTool[1].fields.duration_ms, 8.042);
 });
 
 test("missing parents and cyclic span links cannot hang the timeline or hide unrelated records", (t) => {

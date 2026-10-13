@@ -1,4 +1,3 @@
-import time
 from collections.abc import AsyncGenerator
 
 from astrbot.core import logger
@@ -50,7 +49,6 @@ class AgentRequestSubStage(Stage):
             )
             return
 
-        agent_started = time.perf_counter()
         previous_source = event.get_extra("_trace_response_source")
         event.set_extra("_trace_response_source", "core")
         agent_config = self.config.get("agent_runner", {})
@@ -71,7 +69,6 @@ class AgentRequestSubStage(Stage):
                 "agent_end",
                 kind="agent",
                 status="error",
-                duration_ms=round((time.perf_counter() - agent_started) * 1000, 2),
                 error=str(exc),
                 runner_type=agent_config.get("runner_type", "local"),
             )
@@ -81,7 +78,6 @@ class AgentRequestSubStage(Stage):
                 "agent_end",
                 kind="agent",
                 status="success",
-                duration_ms=round((time.perf_counter() - agent_started) * 1000, 2),
                 runner_type=agent_config.get("runner_type", "local"),
             )
         finally:

@@ -364,24 +364,37 @@ function normalizeTracePayload(payload) {
       continue;
     }
     const root = model.span_id === summary.root_span_id;
-    const action = root ? "event_received" : fields.action;
+    // Read legacy action metadata only when an old span has no call type.
+    const kind = root ? "message" : fields.kind || {
+      handler_start: "plugin_handler", agent_start: "agent", agent_tool_call: "tool",
+    }[fields.action];
+    const transitions = {
+      message: ["event_received", "pipeline_end"],
+      plugin_handler: ["handler_start", "handler_end"],
+      agent: ["agent_start", "agent_end"],
+      tool: ["agent_tool_call", "agent_tool_result"],
+    };
+    const [action, endAction] = transitions[kind] || [];
     if (!action) continue;
+    delete fields.action;
+    delete fields.end_action;
+    delete fields.duration_ms;
     const started = Number(model.start_time_unix_nano) / 1e9;
     records.push({
       span_id: summary.trace_id, record_id: model.span_id + ":start",
       operation_span_id: model.span_id, parent_span_id: model.parent_span_id,
       action, time: started,
-      fields: { ...fields, kind: root ? "message" : fields.kind, status: "running" },
-      kind: root ? "message" : fields.kind, model: inspectedModel,
+      fields: { ...fields, kind, status: "running" },
+      kind, model: inspectedModel,
     });
     if (model.end_time_unix_nano) {
       const ended = Number(model.end_time_unix_nano) / 1e9;
       records.push({
         span_id: summary.trace_id, record_id: model.span_id + ":end",
         operation_span_id: model.span_id, parent_span_id: model.parent_span_id,
-        action: root ? "pipeline_end" : fields.end_action,
-        time: ended, kind: fields.kind,
-        fields: { ...fields, duration_ms: Math.max(0, (ended - started) * 1000),
+        action: endAction,
+        time: ended, kind,
+        fields: { ...fields, duration_ms: Math.max(0, Number(BigInt(model.end_time_unix_nano) - BigInt(model.start_time_unix_nano)) / 1e6),
           status: model.status?.code === 2 ? "error" : "success",
           error: model.status?.message || fields.error },
         model: inspectedModel,

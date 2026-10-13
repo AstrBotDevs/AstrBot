@@ -172,6 +172,8 @@ The toolbar contains search, fullscreen, font-size controls, and `Install Pip pa
 
 ### Trace
 
+New spans identify calls with `astrbot.kind` and describe execution through timestamps and status. They no longer store `astrbot.action`, `astrbot.end_action`, or `astrbot.duration_ms`; duration is calculated from nanosecond timestamps and `astrbot.handler_type` remains. Existing trace history stays readable without rewriting stored records.
+
 Long titles show two lines and received/sent message previews show four lines by default. Overflowing text offers Show full text / Collapse. This only folds the display; recorded content is not truncated.
 
 Complete means the entire event has finished processing, not just its model request or response delivery. Ordinary messages and Cron tasks share the event execution lifecycle. Cron does not run through the message Pipeline; its trace ends after Agent execution and history saving, and failures or cancellations also close the trace with an error.

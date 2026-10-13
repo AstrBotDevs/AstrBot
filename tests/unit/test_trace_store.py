@@ -68,6 +68,16 @@ def test_standard_ids_parents_and_immutable_snapshots(capture):
         frame["span"]["span_id"]: frame["span"] for frame in capture if "span" in frame
     }
     assert len(spans) == 4
+    assert spans[trace.span_id]["attributes"]["astrbot.kind"] == "message"
+    assert spans[handler_id]["attributes"]["astrbot.kind"] == "plugin_handler"
+    assert spans[agent_id]["attributes"]["astrbot.kind"] == "agent"
+    assert any(span["attributes"]["astrbot.kind"] == "tool" for span in spans.values())
+    for frame in capture:
+        for model in (frame.get("span", {}), frame.get("event", {})):
+            assert (
+                not {"astrbot.action", "astrbot.end_action", "astrbot.duration_ms"}
+                & model.get("attributes", {}).keys()
+            )
     assert spans[handler_id]["parent_span_id"] == trace.span_id
     assert spans[agent_id]["parent_span_id"] == handler_id
     assert all(span["end_time_unix_nano"] for span in spans.values())
@@ -75,6 +85,44 @@ def test_standard_ids_parents_and_immutable_snapshots(capture):
     assert capture[0]["trace"]["state"] == "running"
     assert capture[-1]["trace"]["state"] == "completed"
     assert not trace._pending
+
+
+def test_internal_transitions_and_timing_are_not_persisted(capture):
+    """Keep call matching internal while preserving handler metadata.
+
+    Args:
+        capture: Immutable trace snapshots.
+    """
+    trace = TraceSpan("message")
+    with trace.context():
+        trace.record("event_received")
+        trace.record(
+            "handler_start",
+            handler_full_name="plugin.handler",
+            handler_type="AdapterMessageEvent",
+            duration_ms=999,
+        )
+        handler_id = current_trace_context.get().span_id
+        trace.record(
+            "handler_end",
+            handler_full_name="plugin.handler",
+            status="success",
+            duration_ms=999,
+        )
+        trace.record("pipeline_end", status="success", duration_ms=999)
+    handler = next(
+        frame["span"]
+        for frame in reversed(capture)
+        if frame.get("span", {}).get("span_id") == handler_id
+    )
+    assert handler["attributes"]["astrbot.kind"] == "plugin_handler"
+    assert handler["attributes"]["astrbot.handler_type"] == "AdapterMessageEvent"
+    assert handler["end_time_unix_nano"]
+    for frame in capture:
+        assert (
+            not {"astrbot.action", "astrbot.end_action", "astrbot.duration_ms"}
+            & frame.get("span", {}).get("attributes", {}).keys()
+        )
 
 
 @pytest.mark.asyncio
@@ -456,7 +504,9 @@ def test_log_cleanup_protects_databases(tmp_path):
     assert (logs / "old-custom-name-wal").exists()
 
 
-@pytest.mark.parametrize("relative_path", ["logs/traces.db", "other/history.db", "temp/history.db"])
+@pytest.mark.parametrize(
+    "relative_path", ["logs/traces.db", "other/history.db", "temp/history.db"]
+)
 def test_trace_usage_and_cleanup_preserve_running_traces(
     tmp_path, capture, monkeypatch, relative_path
 ):
@@ -515,7 +565,10 @@ def test_trace_usage_and_cleanup_preserve_running_traces(
         assert store.list_traces()["total"] == 0
         with sqlite3.connect(path) as connection:
             for table in ("traces", "spans", "events"):
-                assert connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] == 0
+                assert (
+                    connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                    == 0
+                )
     finally:
         store.close()
 
@@ -550,7 +603,9 @@ def test_trace_cleanup_barrier_preserves_later_writes(persisted, capture, monkey
         cleanup.start()
         # Inspect the synchronized queue to avoid timing-dependent sleeps.
         with persisted.queue.not_empty:
-            assert persisted.queue.not_empty.wait_for(lambda: bool(persisted.queue.queue), 5)
+            assert persisted.queue.not_empty.wait_for(
+                lambda: bool(persisted.queue.queue), 5
+            )
         assert persisted.append(new_frame)
         release.set()
         cleanup.join(5)

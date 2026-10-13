@@ -59,7 +59,7 @@ class TraceSpan:
         self._bytes = 0
         self._events = 0
         self._span_count = 1
-        self._pending: dict[str, tuple[dict, Any, TraceContext]] = {}
+        self._pending: dict[str, tuple[dict, Any, TraceContext, str]] = {}
         self._plugins: set[str] = set()
         self._summary = {
             "trace_id": self.trace_id,
@@ -96,7 +96,7 @@ class TraceSpan:
             "start_time_unix_nano": str(self._start_ns),
             "end_time_unix_nano": None,
             "status": {"code": 0},
-            "attributes": {"astrbot.action": "event_received"},
+            "attributes": {"astrbot.kind": "message"},
         }
 
     @contextmanager
@@ -152,15 +152,12 @@ class TraceSpan:
                         for key, value in span["attributes"].items()
                         if key
                         in {
-                            "astrbot.action",
-                            "astrbot.end_action",
                             "astrbot.kind",
                             "astrbot.plugin",
                             "astrbot.handler",
                             "astrbot.handler_full_name",
                             "astrbot.handler_category",
                             "astrbot.handler_type",
-                            "astrbot.duration_ms",
                             "astrbot.runner_type",
                         }
                     }
@@ -193,7 +190,11 @@ class TraceSpan:
             return
         now = time.time_ns()
         attrs = bounded_attributes(
-            {"astrbot." + key: value for key, value in fields.items()},
+            {
+                "astrbot." + key: value
+                for key, value in fields.items()
+                if key not in {"action", "end_action", "duration_ms"}
+            },
             max_bytes=MAX_TRACE_BYTES,
         )
         if attrs.get("astrbot.truncated"):
@@ -231,6 +232,11 @@ class TraceSpan:
                 self._summary["truncated"] = True
                 return
             span_id = secrets.token_hex(8)
+            call_kind = {
+                "handler_start": "plugin_handler",
+                "agent_start": "agent",
+                "agent_tool_call": "tool",
+            }[action]
             span = {
                 "trace_id": self.trace_id,
                 "span_id": span_id,
@@ -239,7 +245,7 @@ class TraceSpan:
                     str(
                         fields.get("handler_full_name")
                         or fields.get("tool_name")
-                        or action
+                        or call_kind
                     ),
                     256,
                 ),
@@ -249,13 +255,12 @@ class TraceSpan:
                 "status": {"code": 0},
                 "attributes": {
                     **attrs,
-                    "astrbot.action": action,
-                    "astrbot.end_action": starts[action],
+                    "astrbot.kind": call_kind,
                 },
             }
             context = TraceContext(self.trace_id, span_id)
             token = current_trace_context.set(context)
-            self._pending[span_id] = (span, token, context)
+            self._pending[span_id] = (span, token, context, starts[action])
             self._span_count += 1
             self._summary["span_count"] = self._span_count
             if action == "handler_start":
@@ -286,9 +291,9 @@ class TraceSpan:
         if action in starts.values() or action == "pipeline_end":
             target = parent
             while target in self._pending:
-                span, _, _ = self._pending[target]
+                span, _, _, end_action = self._pending[target]
                 if action == "pipeline_end" or (
-                    span["attributes"]["astrbot.end_action"] == action
+                    end_action == action
                     and (
                         action != "handler_end"
                         or span["attributes"].get("astrbot.handler_full_name")
@@ -302,7 +307,7 @@ class TraceSpan:
             # Close abandoned descendants before their ancestor. Their copied
             # contexts are invalidated even when an operation is cancelled.
             while parent in self._pending:
-                span, token, context = self._pending.pop(parent)
+                span, token, context, _ = self._pending.pop(parent)
                 is_target = parent == target and action != "pipeline_end"
                 span["end_time_unix_nano"] = str(now)
                 if is_target:
@@ -332,7 +337,7 @@ class TraceSpan:
             if action != "pipeline_end":
                 return
             self._finished = True
-            for span, _, context in self._pending.values():
+            for span, _, context, _ in self._pending.values():
                 context.active = False
                 span["end_time_unix_nano"] = str(now)
                 span["status"] = {
@@ -346,7 +351,6 @@ class TraceSpan:
             self._summary["end_time_unix_nano"] = str(now)
             self._root["end_time_unix_nano"] = str(now)
             self._root["attributes"].update(attrs)
-            self._root["attributes"]["astrbot.end_action"] = "pipeline_end"
             self._root["status"] = {"code": 2 if fields.get("status") == "error" else 1}
             if fields.get("error"):
                 self._root["status"]["message"] = bounded_text(
