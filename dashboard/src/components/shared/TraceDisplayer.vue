@@ -983,7 +983,7 @@ onBeforeUnmount(() => {
                     <template v-else>{{ handlerDetails[record.fields.plugin].descriptions[record.fields.handler_full_name || record.fields.handler] || tm("handlerDescription.empty") }}</template>
                   </div>
                 </v-tooltip>
-                · {{ record.fields.handler_type }}
+                <span v-if="record.fields.handler_type && record.fields.handler_type !== 'AdapterMessageEvent'"> · {{ record.fields.handler_type }}</span>
                 <span v-if="record.fields.duration_ms != null"> · {{ formatDuration(record.fields.duration_ms) }}</span>
               </div>
               <div v-else-if="record.kind === 'response'" class="timeline-subtitle">
