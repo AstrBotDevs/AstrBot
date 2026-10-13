@@ -1254,15 +1254,15 @@
       },
       "trace_db_path": {
         "description": "Trace Database Path",
-        "hint": "Dedicated SQLite relative to data, default logs/traces.db. Restart after changing the path."
+        "hint": "Relative paths start from the data directory, for example logs/traces.db. Absolute paths are also supported."
       },
       "trace_db_max_mb": {
         "description": "Trace Database Capacity Budget (MB)",
-        "hint": "Positive integer, default 80 MB. Evict old complete traces. WAL and checkpoints may temporarily add disk usage; this is not an instantaneous hard limit."
+        "hint": "Default: 80 MB. Old data is automatically cleared when this size is exceeded."
       },
       "trace_retention_days": {
         "description": "Trace Retention Days",
-        "hint": "Positive integer, default 7 days. Cleanup when age or capacity is reached."
+        "hint": "Default: 7 days. Old data is cleared when either the retention period or capacity is reached."
       },
       "pip_install_arg": {
         "description": "Additional pip Installation Arguments",

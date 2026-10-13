@@ -1355,15 +1355,15 @@
       },
       "trace_db_path": {
         "description": "トレースDBのパス",
-        "hint": "data を基準とする専用 SQLite。既定は logs/traces.db。変更後は再起動が必要です。"
+        "hint": "相対パスは data ディレクトリが基準です（例：logs/traces.db）。絶対パスも使用できます。"
       },
       "trace_db_max_mb": {
         "description": "トレースDB容量 (MB)",
-        "hint": "正の整数。既定は 80 MB。古いトレース単位で削除。WAL とチェックポイントにより一時的に増えるため、厳密な瞬間上限ではありません。"
+        "hint": "既定は 80 MB。超えると古いデータを自動的に削除します。"
       },
       "trace_retention_days": {
         "description": "トレース保持日数",
-        "hint": "正の整数。既定は 7 日。期限または容量で削除します。"
+        "hint": "既定は 7 日。保持期間または容量のどちらかに達すると古いデータを削除します。"
       },
       "pip_install_arg": {
         "description": "pip インストールの追加引数",

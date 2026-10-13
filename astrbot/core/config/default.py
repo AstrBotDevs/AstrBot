@@ -4802,17 +4802,17 @@ CONFIG_METADATA_3_SYSTEM = {
                     "trace_db_path": {
                         "description": "追踪数据库路径",
                         "type": "string",
-                        "hint": "独立 SQLite 数据库，相对 data 目录。默认 logs/traces.db；更改路径后重启生效。开启追踪即持久化，不再输出 JSONL。",
+                        "hint": "相对路径以 data 目录为基准，例如 logs/traces.db；支持绝对路径。",
                     },
                     "trace_db_max_mb": {
                         "description": "追踪数据库容量预算 (MB)",
                         "type": "int",
-                        "hint": "正整数，默认 80 MB。按完整追踪淘汰旧数据；WAL 与检查点可能暂时增加磁盘占用，非瞬时硬上限。不支持无限容量。",
+                        "hint": "默认 80 MB，超出后自动清除旧数据。",
                     },
                     "trace_retention_days": {
                         "description": "追踪保留天数",
                         "type": "int",
-                        "hint": "正整数，默认 7 天；保留期限或容量预算先达到者触发清理。运行中的追踪不会被常规清理。",
+                        "hint": "默认 7 天，期限或容量先达到者触发清理。",
                     },
                     "pip_install_arg": {
                         "description": "pip 安装额外参数",
