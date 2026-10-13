@@ -12,6 +12,11 @@
 
 ## Trace
 
+- Finish message and Cron traces through the shared event execution lifecycle, after awaited processing, delivery, and history saving. Close failures and cancellations without swallowing them; preserve the existing root completion signal.
+
+- Plugin handler triggered → Call plugin: compact the trace timeline with short titles, neutral category/metadata chips, platform IDs on a secondary line, relative times with exact timestamps on hover, and a consistent heading/chevron interaction instead of repeated View details rows.
+- Start Agent → Agent execution: collapse descendants using actual span ancestry, retain responses on the main line and error indicators on collapsed headers, and preserve chronological ordering for concurrent/interleaved branches. Folding does not alter trace/span/call counts.
+
 - Expose SQLite trace settings under Settings → General → Logs, replacing the obsolete JSONL settings whitelist.
 - Remove the per-field 4 KB text truncation limit for trace attributes while retaining whole-trace, writer-queue, and storage budgets.
 

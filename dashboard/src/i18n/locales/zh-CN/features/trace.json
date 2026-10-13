@@ -34,6 +34,12 @@
   "details": "查看详情",
   "selectTrace": "选择一条追踪查看完整执行链",
   "closeDetails": "关闭详情",
+  "compact": {
+    "pluginHandler": "调用插件",
+    "agentExecution": "Agent 执行",
+    "rawData": "原始数据",
+    "toggleAgent": "{action} Agent 内部执行链"
+  },
   "history": {
     "loadFailed": "读取追踪历史失败，请重试",
     "detailFailed": "读取追踪详情失败；记录可能已被清理，请重试",

@@ -37,9 +37,9 @@ function setup(t, records) {
     },
   });
   const names = new Set([
-    "selectedSpanId", "expandedGroups", "actionLabels", "selectedStats",
+    "selectedSpanId", "expandedGroups", "expandedAgents", "expandedDetails", "actionLabels", "selectedStats",
     "selectedRecords", "timelineGroups", "timelineRows", "timelineRecords",
-    "recordLabel", "recordSubtitle", "formatDuration",
+    "recordLabel", "recordSubtitle", "formatDuration", "normalizeTracePayload",
   ]);
   const statements = ast.statements.filter((node) =>
     ts.isFunctionDeclaration(node) ? names.has(node.name?.text) :
@@ -50,7 +50,7 @@ function setup(t, records) {
   vm.runInContext(statements.map((node) => node.getText(ast)).join("\n"), context);
   const stop = vm.runInContext(watcher.getText(ast), context);
   t.after(stop);
-  return vm.runInContext("({ selectedEvent, selectedSpanId, selectedStats, selectedRecords, timelineGroups, timelineRows, expandedGroups, recordLabel, recordSubtitle })", context);
+  return vm.runInContext("({ selectedEvent, selectedSpanId, selectedStats, selectedRecords, timelineGroups, timelineRows, expandedGroups, expandedAgents, expandedDetails, recordLabel, recordSubtitle, normalizeTracePayload })", context);
 }
 
 function handler(key, category = "listener", fields = {}) {
@@ -145,7 +145,98 @@ test("chips reuse profile runner names and classify responses by their sending o
   assert.equal(state.recordSubtitle({ action: "response_sent", fields: { source: "plugin:uninstalled" } }), "插件发送：uninstalled");
 });
 
+test("Agent folding follows span ancestry, keeps responses visible, and preserves interleaved branches", (t) => {
+  const state = setup(t, [
+    { key: "received", action: "event_received", operation_span_id: "root", parent_span_id: null, time: 1, fields: {} },
+    { key: "agent", action: "agent_start", operation_span_id: "agent", parent_span_id: "root", time: 1.01, kind: "agent", fields: {} },
+    { key: "persona", action: "sel_persona", owner_span_id: "agent", time: 1.02, fields: {} },
+    { ...handler("inner"), operation_span_id: "plugin", parent_span_id: "agent", time: 1.03, fields: { ...handler("inner").fields, status: "error" } },
+    { key: "tool", action: "agent_tool_call", operation_span_id: "tool", parent_span_id: "plugin", time: 1.04, fields: {} },
+    { ...handler("other"), operation_span_id: "other", parent_span_id: "root", time: 1.05 },
+    { key: "tool-result", action: "agent_tool_result", owner_span_id: "tool", time: 1.06, fields: {} },
+    { key: "response", action: "response_sent", kind: "response", owner_span_id: "agent", time: 1.07, fields: { message: "Reply", source: "core" } },
+    { key: "model-done", action: "astr_agent_complete", owner_span_id: "agent", time: 1.08, fields: {} },
+    { key: "agent:end", action: "agent_end", operation_span_id: "agent", parent_span_id: "root", time: 1.09, fields: { status: "success", duration_ms: 80 } },
+    { key: "done", action: "pipeline_end", operation_span_id: "root", parent_span_id: null, time: 1.1, fields: {} },
+  ]);
+  assert.deepEqual(Array.from(state.timelineRows.value, (row) => row.record.key), ["received", "agent", "other", "response", "done"]);
+  const agent = state.timelineRows.value[1];
+  assert.equal(agent.agentId, "agent");
+  assert.equal(agent.expanded, false);
+  assert.equal(agent.errors, 1);
+  assert.equal(agent.record.fields.duration_ms, 80);
+  assert.equal(state.selectedStats.value.handlers, 2);
+  assert.equal(state.selectedStats.value.responses, 1);
+  state.expandedAgents.add("agent");
+  assert.deepEqual(Array.from(state.timelineRows.value, (row) => row.record.key), [
+    "received", "agent", "persona", "inner", "tool", "other", "tool-result", "response", "model-done", "done",
+  ]);
+  assert.equal(state.timelineRows.value.find((row) => row.record.key === "tool-result").depth, 1);
+  assert.equal(state.timelineRows.value.find((row) => row.record.key === "other").depth, 0);
+  assert.equal(state.timelineRows.value.find((row) => row.record.key === "response").depth, 0);
+});
+
+test("nested and concurrent Agents fold independently, without grouping distinct spans", (t) => {
+  const state = setup(t, [
+    { key: "outer", action: "agent_start", operation_span_id: "outer", parent_span_id: "root", fields: {} },
+    { key: "inner", action: "agent_start", operation_span_id: "inner", parent_span_id: "outer", fields: {} },
+    { key: "parallel", action: "agent_start", operation_span_id: "parallel", parent_span_id: "root", fields: {} },
+    { key: "nested-event", action: "astr_agent_prepare", owner_span_id: "inner", fields: {} },
+    { key: "parallel-event", action: "astr_agent_prepare", owner_span_id: "parallel", fields: {} },
+  ]);
+  assert.deepEqual(Array.from(state.timelineRows.value, (row) => row.record.key), ["outer", "parallel"]);
+  state.expandedAgents.add("outer");
+  assert.deepEqual(Array.from(state.timelineRows.value, (row) => row.record.key), ["outer", "inner", "parallel"]);
+  state.expandedAgents.add("inner");
+  state.expandedAgents.add("parallel");
+  assert.deepEqual(Array.from(state.timelineRows.value, (row) => row.record.key), ["outer", "inner", "parallel", "nested-event", "parallel-event"]);
+  assert.equal(state.timelineRows.value.find((row) => row.record.key === "nested-event").depth, 2);
+});
+
+test("Agent expansion survives incoming descendants and resets with detail/group state on selection changes", async (t) => {
+  const state = setup(t, [{ key: "agent", action: "agent_start", operation_span_id: "agent", parent_span_id: "root", fields: {} }]);
+  state.expandedAgents.add("agent");
+  state.expandedDetails.add("agent");
+  state.selectedEvent.value.records.push({ key: "new-event", action: "astr_agent_prepare", owner_span_id: "agent", fields: {} });
+  assert.equal(state.timelineRows.value[0].expanded, true);
+  assert.equal(state.timelineRows.value.length, 2);
+  state.selectedSpanId.value = "other-trace";
+  await nextTick();
+  assert.equal(state.expandedAgents.size, 0);
+  assert.equal(state.expandedDetails.size, 0);
+  assert.equal(state.timelineRows.value.length, 1);
+});
+
+test("canonical span events retain their owning span for Agent folding", (t) => {
+  const state = setup(t, []);
+  const normalized = state.normalizeTracePayload({
+    trace: { trace_id: "trace", root_span_id: "root", state: "completed", attributes: {}, start_time_unix_nano: "1000000000" },
+    spans: [
+      { span_id: "root", parent_span_id: null, start_time_unix_nano: "1000000000", attributes: {} },
+      { span_id: "agent", parent_span_id: "root", start_time_unix_nano: "1100000000", attributes: { "astrbot.action": "agent_start" } },
+      { span_id: "plugin", parent_span_id: "agent", start_time_unix_nano: "1200000000",
+        attributes: { "astrbot.action": "handler_start", "astrbot.kind": "plugin_handler", "astrbot.handler_category": "hook" },
+        events: [{ event_id: "event", span_id: "plugin", name: "astr_agent_prepare", time_unix_nano: "1300000000", attributes: {} }] },
+    ],
+  });
+  assert.equal(normalized.records.find((record) => record.record_id === "event").owner_span_id, "plugin");
+  state.selectedEvent.value.records = normalized.records.sort((a, b) => a.time - b.time).map((record) => ({ ...record, key: record.record_id }));
+  assert.equal(state.timelineRows.value.length, 2);
+  state.expandedAgents.add("agent");
+  assert.equal(state.timelineRows.value.length, 4);
+});
+
+test("missing parents and cyclic span links cannot hang the timeline or hide unrelated records", (t) => {
+  const state = setup(t, [
+    { key: "missing", action: "astr_agent_prepare", owner_span_id: "absent", fields: {} },
+    { key: "cycle", action: "agent_start", operation_span_id: "cycle", parent_span_id: "cycle", fields: {} },
+    { ...handler("plugin"), operation_span_id: "plugin", parent_span_id: "plugin" },
+  ]);
+  assert.deepEqual(Array.from(state.timelineRows.value, (row) => row.record.key), ["missing", "cycle", "plugin"]);
+});
+
 test("group template and stacked icon styles compile, and all locales include group labels", () => {
+  assert.equal(translations.compact.pluginHandler, "调用插件");
   const template = compileTemplate({ source: descriptor.template.content, filename: "TraceDisplayer.vue", id: "trace-groups" });
   assert.deepEqual(template.errors, []);
   const styles = compileStyle({ source: descriptor.styles[0].content, filename: "TraceDisplayer.vue", id: "trace-groups", scoped: true });
@@ -153,10 +244,16 @@ test("group template and stacked icon styles compile, and all locales include gr
   assert.match(descriptor.template.content, /:aria-expanded="row.expanded"/);
   assert.match(descriptor.template.content, /row.group.records.slice\(0, 3\)/);
   assert.match(descriptor.template.content, /<v-chip[^>]*timeline-metadata-chip/);
+  assert.match(descriptor.template.content, /expandedAgents.delete\(row.agentId\)/);
+  assert.match(descriptor.template.content, /timeline-row-toggle/);
+  assert.doesNotMatch(descriptor.template.content, /timeline-group-expansion|tm\("details"\)/);
+  assert.match(descriptor.template.content, /<time :title="formatTime\(row.record.time\)">\+\{\{ formatDuration/);
+  assert.doesNotMatch(descriptor.template.content.match(/<div class="trace-timeline">[\s\S]*?<\/main>/)[0], /color="primary"/);
   for (const locale of ["en-US", "ja-JP", "ru-RU"]) {
     const data = JSON.parse(readFileSync(new URL(`../src/i18n/locales/${locale}/features/trace.json`, import.meta.url), "utf8").replace(/^\uFEFF/, ""));
     assert.deepEqual(Object.keys(data.groups).sort(), Object.keys(translations.groups).sort());
     assert.deepEqual(Object.keys(data.chips).sort(), Object.keys(translations.chips).sort());
     assert.deepEqual(Object.keys(data.columns).sort(), Object.keys(translations.columns).sort());
+    assert.deepEqual(Object.keys(data.compact).sort(), Object.keys(translations.compact).sort());
   }
 });

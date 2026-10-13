@@ -65,6 +65,8 @@ const failedPluginLogos = reactive(new Set());
 const failedPlatformLogos = reactive(new Set());
 const handlerDetails = reactive({});
 const expandedGroups = reactive(new Set());
+const expandedAgents = reactive(new Set());
+const expandedDetails = reactive(new Set());
 
 const actionLabels = {
   sel_persona: "selectPersona",
@@ -177,37 +179,91 @@ const selectedRecords = computed(() => selectedEvent.value ? timelineRecords(sel
 
 const timelineGroups = computed(() => {
   const groups = [];
-  for (const record of selectedRecords.value) {
-    const type = `${record.action}:${recordLabel(record)}`;
+  const records = selectedRecords.value;
+  const parents = new Map();
+  const agents = new Map();
+  records.forEach((record, index) => {
+    if (record.operation_span_id && record.parent_span_id !== undefined) {
+      parents.set(record.operation_span_id, record.parent_span_id);
+    }
+    if (record.action === "agent_start" && record.operation_span_id) {
+      agents.set(record.operation_span_id, index);
+    }
+  });
+  for (const [index, record] of records.entries()) {
+    const ancestors = [];
+    const visited = new Set(record.operation_span_id ? [record.operation_span_id] : []);
+    let ancestor = record.owner_span_id || parents.get(record.operation_span_id);
+    while (ancestor && !visited.has(ancestor)) {
+      visited.add(ancestor);
+      if (agents.has(ancestor) && agents.get(ancestor) < index) ancestors.unshift(ancestor);
+      ancestor = parents.get(ancestor);
+    }
+    // Responses stay on the main line even when their owning Agent is folded.
+    if (record.kind === "response") ancestors.length = 0;
+    const agentId = record.action === "agent_start" ? record.operation_span_id : null;
+    const type = `${record.action}:${recordLabel(record)}:${ancestors.join(":")}:${agentId || ""}`;
+    const fields = record.fields || {};
+    const category = record.kind === "plugin_handler" ? fields.handler_category || (
+      fields.handler_type === "OnCallingFuncToolEvent" ? "llm_tool" :
+      fields.handler_type && fields.handler_type !== "AdapterMessageEvent" ? "hook" : "listener"
+    ) : null;
     const previous = groups[groups.length - 1];
     // Only adjacent records are grouped, preserving the execution order.
     if (previous?.type === type) {
       previous.records.push(record);
     } else {
-      groups.push({ key: record.key, type, records: [record] });
+      groups.push({ key: record.key, type, records: [record], ancestors, agentId, category });
     }
   }
   return groups;
 });
 
-const timelineRows = computed(() => timelineGroups.value.flatMap((group) => {
-  if (group.records.length === 1) return [{ key: group.key, record: group.records[0] }];
-  const expanded = expandedGroups.has(group.key);
-  const errors = group.records.filter((record) => record.fields.status === "error").length;
-  const plugins = [...new Set(group.records.map((record) =>
-    record.fields.plugin_display_name || record.fields.plugin,
-  ).filter(Boolean))].join(", ");
-  const metadata = [...new Set(group.records.filter((record) =>
-    record.action === "agent_start" || record.kind === "response",
-  ).map((record) => record.action === "agent_start"
-    ? tm("chips.executionMode", { name: recordSubtitle(record) }) : recordSubtitle(record)))];
-  return [
-    { key: `${group.key}:group`, record: group.records[0], group, expanded, errors, plugins, metadata },
-    ...(expanded ? group.records.map((record) => ({ key: record.key, record, nested: true })) : []),
-  ];
-}));
+const timelineRows = computed(() => {
+  const rows = [];
+  const agentErrors = new Map();
+  for (const group of timelineGroups.value) {
+    for (const id of group.ancestors) {
+      agentErrors.set(id, (agentErrors.get(id) || 0) + group.records.filter((record) => record.fields.status === "error").length);
+    }
+  }
+  for (const group of timelineGroups.value) {
+    if (group.ancestors.some((id) => !expandedAgents.has(id))) continue;
+    const depth = group.ancestors.length;
+    const detailsExpanded = expandedDetails.has(group.key);
+    if (group.records.length === 1) {
+      const agentId = group.agentId;
+      rows.push({ key: group.key, record: group.records[0], category: group.category, depth,
+        agentId, expanded: agentId ? expandedAgents.has(agentId) : detailsExpanded,
+        detailsExpanded, errors: agentId ? (agentErrors.get(agentId) || 0) + Number(group.records[0].fields.status === "error") : 0 });
+      continue;
+    }
+    const expanded = expandedGroups.has(group.key);
+    const errors = group.records.filter((record) => record.fields.status === "error").length;
+    const plugins = [...new Set(group.records.map((record) =>
+      record.fields.plugin_display_name || record.fields.plugin,
+    ).filter(Boolean))].join(", ");
+    const metadata = [...new Set(group.records.filter((record) =>
+      record.action === "agent_start" || record.kind === "response",
+    ).map((record) => record.action === "agent_start"
+      ? tm("chips.executionMode", { name: recordSubtitle(record) }) : recordSubtitle(record)))];
+    rows.push({ key: `${group.key}:group`, record: group.records[0], group, expanded, errors, plugins, metadata, category: group.category, depth });
+    if (expanded) {
+      for (const record of group.records) {
+        const detailsExpanded = expandedDetails.has(record.key);
+        rows.push({ key: record.key, record, nested: true, depth: depth + 1,
+          category: group.category, detailsExpanded, expanded: detailsExpanded });
+      }
+    }
+  }
+  return rows;
+});
 
-watch(selectedSpanId, () => expandedGroups.clear());
+watch(selectedSpanId, () => {
+  expandedGroups.clear();
+  expandedAgents.clear();
+  expandedDetails.clear();
+});
 
 function timelineRecords(event) {
   const records = [];
@@ -301,6 +357,7 @@ function normalizeTracePayload(payload) {
     if (item.event) {
       records.push({
         span_id: summary.trace_id, record_id: model.event_id,
+        owner_span_id: model.span_id,
         action: model.name, time: Number(model.time_unix_nano) / 1e9,
         fields, kind: fields.kind, model: inspectedModel,
       });
@@ -641,7 +698,7 @@ function recordSubtitle(record) {
   if (record.action === "agent_tool_call") return fields.tool_name?.name || fields.tool_name || "tool";
   if (record.action === "event_received") return fields.message || "";
   if (record.fields?.error) return record.fields.error;
-  return fields.status || "";
+  return "";
 }
 
 function recordIcon(record) {
@@ -659,9 +716,6 @@ function recordClass(record) {
 function formatFields(fields) {
   if (!fields || Object.keys(fields).length === 0) return "";
   const safeFields = { ...fields };
-  if (typeof safeFields.system_prompt === "string" && safeFields.system_prompt.length > 1200) {
-    safeFields.system_prompt = `${safeFields.system_prompt.slice(0, 1200)}…`;
-  }
   try {
     return JSON.stringify(safeFields, null, 2);
   } catch {
@@ -849,7 +903,7 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="trace-timeline">
-          <div v-for="(row, index) in timelineRows" :key="row.key" class="timeline-record" :class="{ 'timeline-group': row.group, 'timeline-nested': row.nested }">
+          <div v-for="(row, index) in timelineRows" :key="row.key" class="timeline-record" :class="{ 'timeline-group': row.group, 'timeline-nested': row.nested, 'timeline-agent': row.agentId }" :style="{ '--timeline-depth': row.depth }">
             <div class="timeline-rail">
               <span class="timeline-icon-stack" :class="{ 'is-stacked': row.group && !row.expanded }">
               <span
@@ -880,32 +934,42 @@ onBeforeUnmount(() => {
             </div>
             <div class="timeline-content">
               <button
-                v-if="row.group"
                 type="button"
-                class="timeline-group-toggle"
+                class="timeline-row-toggle"
                 :aria-expanded="row.expanded"
-                @click="row.expanded ? expandedGroups.delete(row.group.key) : expandedGroups.add(row.group.key)"
+                :aria-label="row.agentId ? tm('compact.toggleAgent', { action: tm(row.expanded ? 'collapse' : 'expand') }) : undefined"
+                @click="row.group
+                  ? row.expanded ? expandedGroups.delete(row.group.key) : expandedGroups.add(row.group.key)
+                  : row.agentId
+                    ? row.expanded ? expandedAgents.delete(row.agentId) : expandedAgents.add(row.agentId)
+                    : row.expanded ? expandedDetails.delete(row.record.key) : expandedDetails.add(row.record.key)"
               >
                 <div class="timeline-heading">
-                  <span class="timeline-group-title">
-                    <strong>{{ recordLabel(row.record, true) }}</strong>
-                    <span class="timeline-group-count">{{ tm("groups.count", { count: row.group.records.length }) }}</span>
+                  <span class="timeline-title">
+                    <strong>{{ row.record.kind === 'plugin_handler' ? tm('compact.pluginHandler')
+                      : row.record.action === 'agent_start' ? tm('compact.agentExecution')
+                      : row.record.action === 'event_received' ? tm('actions.eventReceived')
+                      : recordLabel(row.record, Boolean(row.group)) }}</strong>
+                    <v-chip v-if="row.category" size="x-small" variant="tonal">{{ tm(`handlerCategories.${row.category}`) }}</v-chip>
+                    <span v-if="row.group" class="timeline-group-count">{{ tm("groups.count", { count: row.group.records.length }) }}</span>
+                    <span v-if="row.record.action === 'agent_start'" class="timeline-duration">{{ formatDuration(row.record.completed ? row.record.fields.duration_ms || 0 : Math.max(0, (clockNow - row.record.time) * 1000)) }}</span>
                     <span v-if="row.errors" class="timeline-group-errors">{{ tm("groups.errors", { count: row.errors }) }}</span>
                   </span>
-                  <time>{{ formatTime(row.record.time) }}</time>
-                </div>
-                <div class="timeline-subtitle timeline-group-summary">
-                  <v-chip v-if="row.plugins" class="timeline-metadata-chip" size="x-small" variant="tonal" color="primary" :title="row.plugins">{{ row.plugins }}</v-chip>
-                  <v-chip v-for="label in row.metadata" :key="label" class="timeline-metadata-chip" size="x-small" variant="tonal">{{ label }}</v-chip>
-                  <span class="timeline-group-expansion"><ChevronDown :size="13" :class="{ 'is-collapsed': !row.expanded }" aria-hidden="true" />{{ tm(row.expanded ? "collapse" : "expand") }}</span>
+                  <span class="timeline-heading-actions">
+                    <time :title="formatTime(row.record.time)">+{{ formatDuration(Math.max(0, (row.record.time - selectedEvent.first_time) * 1000)) }}</time>
+                    <ChevronDown :size="14" class="timeline-expansion-icon" :class="{ 'is-collapsed': !row.expanded }" aria-hidden="true" />
+                  </span>
                 </div>
               </button>
+              <div v-if="row.group" class="timeline-subtitle timeline-group-summary">
+                  <v-chip v-if="row.plugins" class="timeline-metadata-chip" size="x-small" variant="tonal" :title="row.plugins">{{ row.plugins }}</v-chip>
+                  <v-chip v-for="label in row.metadata" :key="label" class="timeline-metadata-chip" size="x-small" variant="tonal">{{ label }}</v-chip>
+              </div>
               <template v-else v-for="record in [row.record]" :key="record.key">
-              <div class="timeline-heading"><strong>{{ recordLabel(record) }}</strong><time>{{ formatTime(record.time) }}</time></div>
               <div v-if="record.kind === 'plugin_handler'" class="timeline-subtitle">
                 <v-tooltip :text="record.fields.plugin" location="top">
                   <template #activator="{ props }">
-                    <v-chip v-bind="props" class="trace-hover-name timeline-metadata-chip" size="x-small" variant="tonal" color="primary">{{ record.fields.plugin_display_name || record.fields.plugin || "Plugin" }}</v-chip>
+                    <v-chip v-bind="props" class="trace-hover-name timeline-metadata-chip" size="x-small" variant="tonal">{{ record.fields.plugin_display_name || record.fields.plugin || "Plugin" }}</v-chip>
                   </template>
                 </v-tooltip>
                 ·
@@ -927,10 +991,15 @@ onBeforeUnmount(() => {
                 <div v-if="record.fields.message" class="trace-response-outline">{{ record.fields.message }}</div>
               </div>
               <div v-else-if="record.action === 'agent_start'" class="timeline-subtitle">
-                <v-chip class="timeline-metadata-chip" size="x-small" variant="tonal" color="primary">{{ tm("chips.executionMode", { name: recordSubtitle(record) }) }}</v-chip>
+                <v-chip class="timeline-metadata-chip" size="x-small" variant="tonal">{{ tm("chips.executionMode", { name: recordSubtitle(record) }) }}</v-chip>
+              </div>
+              <div v-else-if="record.action === 'event_received'" class="timeline-subtitle">
+                <v-chip v-if="record.fields.platform_id" class="timeline-metadata-chip" size="x-small" variant="tonal" :title="record.fields.platform_id">{{ record.fields.platform_id }}</v-chip>
+                <div v-if="record.fields.message" class="trace-response-outline">{{ record.fields.message }}</div>
               </div>
               <div v-else-if="recordSubtitle(record)" class="timeline-subtitle">{{ recordSubtitle(record) }}</div>
-              <details v-if="formatFields(record.model || record.fields)" class="timeline-fields"><summary>{{ tm("details") }}</summary><pre>{{ formatFields(record.model || record.fields) }}</pre></details>
+              <details v-if="row.agentId && row.expanded" class="timeline-fields"><summary>{{ tm("compact.rawData") }}</summary><pre>{{ formatFields(record.model || record.fields) }}</pre></details>
+              <div v-else-if="row.detailsExpanded" class="timeline-fields"><pre>{{ formatFields(record.model || record.fields) }}</pre></div>
               </template>
             </div>
           </div>
@@ -942,27 +1011,27 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.trace-response-outline { margin-top: 6px; white-space: pre-wrap; overflow-wrap: anywhere; color: rgb(var(--v-theme-on-surface)); }
+.trace-response-outline { background: rgba(var(--v-theme-on-surface), 0.035); border-radius: 6px; color: rgb(var(--v-theme-on-surface)); font-size: 12px; margin-top: 7px; overflow-wrap: anywhere; padding: 8px 10px; white-space: pre-wrap; }
 .trace-hover-name { text-decoration-line: underline; text-decoration-style: dotted; text-underline-offset: 4px; cursor: help; }
 .trace-handler-description { max-width: min(400px, calc(100vw - 48px)); max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 .timeline-plugin-logo { border-radius: 50%; height: 19px; object-fit: contain; width: 19px; }
 .timeline-platform-logo { height: 19px; object-fit: contain; width: 19px; }
-.timeline-icon-stack { display: block; height: 23px; position: relative; width: 23px; }
+.timeline-icon-stack { display: block; height: 26px; position: relative; width: 26px; }
 .timeline-icon-stack.is-stacked { margin-top: 6px; }
 .is-stacked .timeline-icon { background: linear-gradient(var(--timeline-icon-background), var(--timeline-icon-background)), rgb(var(--v-theme-surface)); left: calc(var(--stack-index) * 3px); position: absolute; top: calc(var(--stack-index) * -3px); z-index: calc(3 - var(--stack-index)); }
-.timeline-group-toggle { background: transparent; border: 0; border-radius: 5px; color: inherit; cursor: pointer; display: block; padding: 0; text-align: left; width: 100%; }
-.timeline-group-toggle:hover .timeline-group-expansion { color: rgb(var(--v-theme-primary)); }
-.timeline-group-toggle:focus-visible { outline: 2px solid rgb(var(--v-theme-primary)); outline-offset: 4px; }
-.timeline-group-title { align-items: center; display: flex; flex-wrap: wrap; gap: 6px; }
+.timeline-row-toggle { background: transparent; border: 0; border-radius: 4px; color: inherit; cursor: pointer; display: block; min-height: 28px; padding: 0; text-align: left; width: 100%; }
+.timeline-row-toggle:hover { background: rgba(var(--v-theme-on-surface), 0.035); }
+.timeline-row-toggle:focus-visible { outline: 2px solid rgb(var(--v-theme-primary)); outline-offset: 3px; }
+.timeline-title { align-items: center; display: flex; flex-wrap: wrap; gap: 5px 7px; min-width: 0; }
+.timeline-heading-actions { align-items: center; display: inline-flex; flex: 0 0 auto; gap: 10px; }
+.timeline-duration { color: var(--trace-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
 .timeline-group-count { background: rgba(var(--v-theme-on-surface), 0.06); border-radius: 4px; color: var(--trace-muted); font-size: 10px; padding: 1px 5px; white-space: nowrap; }
-.timeline-group-errors { color: #ef4444; font-size: 10px; white-space: nowrap; }
+.timeline-group-errors { color: rgb(var(--v-theme-error)); font-size: 11px; white-space: nowrap; }
 .timeline-group-summary { align-items: center; display: flex; flex-wrap: wrap; gap: 6px 10px; }
 .timeline-metadata-chip { max-width: 100%; vertical-align: middle; }
 .timeline-metadata-chip :deep(.v-chip__content) { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.timeline-group-expansion { align-items: center; display: inline-flex; flex: 0 0 auto; font-size: 10px; gap: 3px; }
-.timeline-group-expansion svg { transition: transform 0.15s ease; }
-.timeline-group-expansion .is-collapsed { transform: rotate(-90deg); }
-.timeline-nested .timeline-content { border-left: 2px solid var(--trace-border); padding-left: 10px; }
+.timeline-expansion-icon { color: var(--trace-muted); transition: transform 0.15s ease; }
+.timeline-expansion-icon.is-collapsed { transform: rotate(-90deg); }
 .trace-explorer { --trace-border: rgba(var(--v-theme-on-surface), 0.1); --trace-muted: rgba(var(--v-theme-on-surface), 0.58); --trace-control-background: rgba(var(--v-theme-on-surface), 0.06); background: transparent; border: 0; border-radius: 0; display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; }
 .trace-explorer-toolbar { align-items: center; border-bottom: 1px solid var(--trace-border); display: flex; gap: 10px; min-height: 50px; padding: 8px 12px; }
 .trace-explorer-toolbar :deep(.v-btn) { background: var(--trace-control-background); height: 36px; }
@@ -990,7 +1059,7 @@ onBeforeUnmount(() => {
 @keyframes trace-connecting-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .trace-connecting-icon { animation: none; } }
 .trace-explorer-body { display: flex; flex: 1; min-height: 0; min-width: 0; overflow: hidden; position: relative; }
-.trace-list { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; overflow: hidden; }
+.trace-list { display: flex; flex-direction: column; flex: 1; isolation: isolate; min-height: 0; min-width: 0; overflow: hidden; }
 .has-detail .trace-list { border-right: 1px solid var(--trace-border); }
 .trace-list-table { background: transparent; border-radius: 0; flex: 1; min-height: 0; height: 100%; }
 .trace-page-footer { align-items: center; color: var(--trace-muted); display: flex; justify-content: center; padding: 8px; font-size: 12px; }
@@ -1008,10 +1077,12 @@ onBeforeUnmount(() => {
 .trace-status-badge { border-radius: 999px; font-size: 10px; padding: 3px 7px; text-transform: none; } .trace-status-badge.is-live { background: rgba(245, 158, 11, 0.14); color: #f59e0b; } .trace-status-badge.is-success { background: rgba(34, 197, 94, 0.14); color: #22c55e; } .trace-status-badge.is-error { background: rgba(239, 68, 68, 0.14); color: #ef4444; }
 .trace-stat-grid { display: grid; gap: 8px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 18px 0 22px; }
 .trace-stat { background: rgba(var(--v-theme-on-surface), 0.04); border: 1px solid var(--trace-border); border-radius: 8px; display: grid; gap: 4px; grid-template-columns: 16px 1fr; padding: 9px 10px; } .trace-stat svg { color: var(--trace-muted); grid-row: span 2; margin-top: 2px; } .trace-stat span { color: var(--trace-muted); font-size: 10px; } .trace-stat strong { font-size: 13px; font-weight: 650; }
-.trace-timeline { max-width: 900px; } .timeline-record { display: grid; gap: 11px; grid-template-columns: 24px minmax(0, 1fr); min-height: 58px; } .timeline-rail { align-items: center; display: flex; flex-direction: column; }
-.timeline-icon { --timeline-icon-background: rgba(var(--v-theme-on-surface), 0.06); align-items: center; background: var(--timeline-icon-background); border: 1px solid var(--trace-border); border-radius: 50%; display: inline-flex; height: 23px; justify-content: center; width: 23px; z-index: 1; } .timeline-icon.is-system { color: var(--trace-muted); } .timeline-icon.is-plugin { --timeline-icon-background: rgba(168, 85, 247, 0.13); color: #a855f7; } .timeline-icon.is-agent { --timeline-icon-background: rgba(59, 130, 246, 0.13); color: #3b82f6; } .timeline-icon.is-response { --timeline-icon-background: rgba(34, 197, 94, 0.13); color: #22c55e; } .timeline-icon.is-error { --timeline-icon-background: rgba(239, 68, 68, 0.13); color: #ef4444; }
-.timeline-line { background: var(--trace-border); flex: 1; width: 1px; } .timeline-content { border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.07); min-width: 0; padding: 2px 0 13px; } .timeline-heading { align-items: baseline; display: flex; gap: 10px; justify-content: space-between; } .timeline-heading strong { font-size: 12px; font-weight: 650; } .timeline-heading time { color: var(--trace-muted); font-family: var(--astrbot-font-cjk-mono), monospace; font-size: 10px; white-space: nowrap; } .timeline-subtitle { color: var(--trace-muted); font-size: 11px; line-height: 1.5; margin-top: 4px; overflow-wrap: anywhere; }
-.timeline-fields { margin-top: 6px; } .timeline-fields summary { color: var(--trace-muted); cursor: pointer; font-size: 10px; } .timeline-fields pre { background: rgba(var(--v-theme-on-surface), 0.04); border-radius: 6px; color: var(--trace-muted); font-size: 10px; line-height: 1.5; margin: 6px 0 0; max-height: 280px; overflow: auto; padding: 8px; white-space: pre-wrap; word-break: break-word; }
+.trace-timeline { max-width: 900px; } .timeline-record { display: grid; gap: 12px; grid-template-columns: 26px minmax(0, 1fr); margin-left: calc(min(var(--timeline-depth, 0), 3) * 18px); min-height: 44px; padding-top: 8px; } .timeline-rail { align-items: center; display: flex; flex-direction: column; }
+.timeline-icon { --timeline-icon-background: rgba(var(--v-theme-on-surface), 0.035); align-items: center; background: var(--timeline-icon-background); border: 1px solid var(--trace-border); border-radius: 50%; display: inline-flex; height: 26px; justify-content: center; width: 26px; z-index: 1; } .timeline-icon.is-system { color: var(--trace-muted); } .timeline-icon.is-plugin, .timeline-icon.is-agent { color: rgb(var(--v-theme-primary)); } .timeline-icon.is-response { color: rgb(var(--v-theme-success)); } .timeline-icon.is-error { --timeline-icon-background: rgba(var(--v-theme-error), 0.08); color: rgb(var(--v-theme-error)); }
+.timeline-line { background: var(--trace-border); flex: 1; width: 1px; } .timeline-content { min-width: 0; padding-bottom: 10px; } .timeline-heading { align-items: center; display: flex; gap: 10px; justify-content: space-between; } .timeline-heading strong { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; } .timeline-heading time { color: var(--trace-muted); font-family: var(--astrbot-font-cjk-mono), monospace; font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; } .timeline-subtitle { color: var(--trace-muted); font-size: 11px; line-height: 1.5; margin-top: 5px; overflow-wrap: anywhere; }
+.timeline-fields { margin-top: 7px; } .timeline-fields summary { color: var(--trace-muted); cursor: pointer; font-size: 11px; } .timeline-fields pre { background: rgba(var(--v-theme-on-surface), 0.035); border-radius: 6px; color: var(--trace-muted); font-size: 11px; line-height: 1.5; margin: 6px 0 0; max-height: 280px; overflow: auto; padding: 10px; white-space: pre-wrap; word-break: break-word; }
+@media (pointer: coarse) { .timeline-row-toggle { min-height: 44px; } }
+@media (prefers-reduced-motion: reduce) { .timeline-expansion-icon { transition: none; } }
 .trace-empty-state { align-items: center; color: var(--trace-muted); display: flex; flex-direction: column; font-size: 12px; gap: 8px; justify-content: center; min-height: 180px; }
 @media (max-width: 1100px) { .trace-detail { border-left: 1px solid var(--trace-border); bottom: 0; box-shadow: -8px 0 24px rgba(0, 0, 0, 0.12); max-width: none; min-width: 0; position: absolute; right: 0; top: 0; width: min(760px, 90%); z-index: 1; } }
 @media (max-width: 900px) { .trace-filter-panel { bottom: 0; box-shadow: 8px 0 24px rgba(0, 0, 0, 0.18); left: 0; max-width: 85%; position: absolute; top: 0; width: 220px; z-index: 3; } .trace-filter-backdrop { background: rgba(var(--v-theme-on-surface), 0.12); border: 0; display: block; inset: 0; position: absolute; z-index: 2; } .trace-detail { padding: 15px; } .trace-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

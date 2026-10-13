@@ -34,6 +34,12 @@
   "details": "詳細を表示",
   "selectTrace": "トレースを選択すると実行チェーンを確認できます",
   "closeDetails": "詳細を閉じる",
+  "compact": {
+    "pluginHandler": "プラグイン呼び出し",
+    "agentExecution": "Agent 実行",
+    "rawData": "元データ",
+    "toggleAgent": "Agent の実行チェーンを{action}"
+  },
   "history": {
     "loadFailed": "トレース履歴を読み込めません。再試行してください。",
     "detailFailed": "詳細を読み込めません。削除済みの可能性があります。再試行してください。",

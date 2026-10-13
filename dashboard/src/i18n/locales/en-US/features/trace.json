@@ -34,6 +34,12 @@
   "details": "View details",
   "selectTrace": "Select a trace to inspect the complete execution chain",
   "closeDetails": "Close details",
+  "compact": {
+    "pluginHandler": "Call plugin",
+    "agentExecution": "Agent execution",
+    "rawData": "Raw data",
+    "toggleAgent": "{action} the Agent execution chain"
+  },
   "history": {
     "loadFailed": "Failed to load trace history. Please retry.",
     "detailFailed": "Failed to load trace details; the trace may have been evicted. Please retry.",

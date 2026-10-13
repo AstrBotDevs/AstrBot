@@ -4,9 +4,10 @@ import hashlib
 import os
 import re
 import uuid
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Iterator
+from contextlib import contextmanager
 from contextvars import ContextVar
-from time import time
+from time import perf_counter, time
 from typing import Any
 
 from deprecated import deprecated
@@ -14,6 +15,7 @@ from deprecated import deprecated
 from astrbot import logger
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.db.po import Conversation
+from astrbot.core.log import log_context
 from astrbot.core.message.components import (
     At,
     AtAll,
@@ -27,6 +29,7 @@ from astrbot.core.message.components import (
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider.entities import ProviderRequest
+from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.trace import TraceSpan
 
@@ -114,6 +117,56 @@ class AstrMessageEvent(abc.ABC):
 
         # back_compability
         self.platform = platform_meta
+        self._execution_active = False
+
+    @contextmanager
+    def execution(self) -> Iterator[None]:
+        """Own event execution, context binding, and final trace completion.
+
+        The outermost scope finishes the event after all awaited processing,
+        delivery, and history work. Nested scopes do not finish it early.
+        The legacy pipeline_end action remains the root completion signal.
+
+        Yields:
+            Control to the event's execution entry point.
+
+        Raises:
+            BaseException: Any execution failure or cancellation, unchanged.
+        """
+        if self._execution_active:
+            yield
+            return
+        with (
+            log_context(self.get_platform_id(), self.get_platform_name()),
+            self.trace.context(),
+        ):
+            self._execution_active = True
+            active_event_registry.register(self)
+            started = perf_counter()
+            status = "success"
+            error = None
+            try:
+                yield
+            except BaseException as exc:
+                status = "error"
+                error = str(exc) or type(exc).__name__
+                raise
+            finally:
+                try:
+                    self.trace.record(
+                        "pipeline_end",
+                        kind="message",
+                        status=status,
+                        duration_ms=round((perf_counter() - started) * 1000, 2),
+                        stopped=self.is_stopped(),
+                        error=error,
+                    )
+                finally:
+                    try:
+                        self.cleanup_temporary_local_files()
+                    finally:
+                        active_event_registry.unregister(self)
+                        self._execution_active = False
 
     @property
     def unified_msg_origin(self) -> str:
