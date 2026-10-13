@@ -236,10 +236,13 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
                     logger.debug(f"dify workflow resp chunk: {chunk}")
                     match chunk["event"]:
                         case "error":
-                            raise Exception(
+                            logger.error(
                                 f"Dify workflow error (status: {chunk.get('status')}, "
                                 f"code: {chunk.get('code')}): "
                                 f"{chunk.get('message') or 'No error details provided.'}"
+                            )
+                            raise Exception(
+                                "Dify workflow execution failed. Please contact the administrator."
                             )
                         case "workflow_started":
                             logger.info(
@@ -269,9 +272,12 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
                                 "succeeded",
                                 "partial-succeeded",
                             ):
-                                raise Exception(
+                                logger.error(
                                     f"Dify workflow failed (status: {status}): "
                                     f"{chunk['data'].get('error') or 'No error details provided.'}"
+                                )
+                                raise Exception(
+                                    "Dify workflow execution failed. Please contact the administrator."
                                 )
                             if self.workflow_output_key not in chunk["data"]["outputs"]:
                                 raise Exception(
