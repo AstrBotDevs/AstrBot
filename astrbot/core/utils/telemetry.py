@@ -30,7 +30,9 @@ def bounded_text(value: str, limit: int = MAX_BODY_BYTES) -> str:
     )
 
 
-def bounded_attributes(fields: dict[str, Any]) -> dict[str, Any]:
+def bounded_attributes(
+    fields: dict[str, Any], *, max_bytes: int = MAX_ATTRIBUTE_BYTES
+) -> dict[str, Any]:
     """Convert application fields to bounded OTel attribute values.
 
     Nested objects are represented as JSON strings, not non-standard attribute
@@ -38,11 +40,12 @@ def bounded_attributes(fields: dict[str, Any]) -> dict[str, Any]:
 
     Args:
         fields: Application attributes with their final names.
+        max_bytes: Shared attribute budget, not a per-field text limit.
 
     Returns:
         Primitive attributes with an optional truncation marker.
     """
-    remaining = MAX_ATTRIBUTE_BYTES - 64
+    remaining = max_bytes - 64
     truncated = False
     result = {}
     for key, value in fields.items():
@@ -95,7 +98,7 @@ def bounded_attributes(fields: dict[str, Any]) -> dict[str, Any]:
                 continue
         if isinstance(value, str):
             original = value
-            value = bounded_text(value, min(4096, max(16, remaining - len(key) - 16)))
+            value = bounded_text(value, max(16, remaining - len(key) - 16))
             truncated |= value != original
         try:
             cost = len(

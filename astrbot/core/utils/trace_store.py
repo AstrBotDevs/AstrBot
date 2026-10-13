@@ -18,7 +18,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 logger = logging.getLogger("astrbot")
 QUEUE_BYTES = 4 * 1024 * 1024
-MAX_FRAME_BYTES = 64 * 1024
+MAX_FRAME_BYTES = 1024 * 1024
 
 
 class TraceStore:

@@ -193,7 +193,8 @@ class TraceSpan:
             return
         now = time.time_ns()
         attrs = bounded_attributes(
-            {"astrbot." + key: value for key, value in fields.items()}
+            {"astrbot." + key: value for key, value in fields.items()},
+            max_bytes=MAX_TRACE_BYTES,
         )
         if attrs.get("astrbot.truncated"):
             self._summary["truncated"] = True
@@ -306,7 +307,8 @@ class TraceSpan:
                 span["end_time_unix_nano"] = str(now)
                 if is_target:
                     span["attributes"] = bounded_attributes(
-                        {**span["attributes"], **attrs}
+                        {**span["attributes"], **attrs},
+                        max_bytes=MAX_TRACE_BYTES,
                     )
                     span["status"] = {
                         "code": 2 if fields.get("status") == "error" else 1

@@ -10,6 +10,9 @@
 
 ## Trace
 
+- Expose SQLite trace settings under Settings → General → Logs, replacing the obsolete JSONL settings whitelist.
+- Remove the per-field 4 KB text truncation limit for trace attributes while retaining whole-trace, writer-queue, and storage budgets.
+
 - Expand message traces to include plugin handlers and their categories, event hooks, Agent requests, response outlines, and completion status.
 - Trace table with expandable message rows → full-width tracing list with an opt-in execution timeline inspector. Columns: status chip, platform logo, timestamp, live duration, message, UMO, sender, and Spans.
 - Add a Filters sidebar with combinable Has errors / Has model calls / Has plugin calls conditions; counts refer to message traces, not internal steps.

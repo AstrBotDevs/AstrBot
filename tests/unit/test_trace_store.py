@@ -244,6 +244,28 @@ def test_database_pages_filters_details_and_restart(persisted, capture):
         restarted.close()
 
 
+@pytest.mark.parametrize("prompt", ["x" * 8192, "字" * 20000, "x" * 131072])
+def test_long_prompt_is_preserved_in_spans_events_and_database(
+    persisted, capture, prompt
+):
+    trace = TraceSpan("message")
+    with trace.context():
+        trace.record("event_received")
+        trace.record("agent_start", system_prompt=prompt)
+        trace.record("astr_agent_prepare", system_prompt=prompt)
+        trace.record("agent_end", status="success")
+        trace.record("pipeline_end", status="success")
+    assert capture[-1]["trace"]["truncated"] is False
+    for frame in capture:
+        assert persisted.append(frame)
+    assert persisted.flush()
+    detail = persisted.get_trace(trace.trace_id)
+    agent = next(span for span in detail["spans"] if span["parent_span_id"])
+    assert agent["attributes"]["astrbot.system_prompt"] == prompt
+    assert agent["events"][0]["attributes"]["astrbot.system_prompt"] == prompt
+    assert detail["trace"]["truncated"] is False
+
+
 def test_retention_deletes_whole_traces(persisted, capture):
     trace = TraceSpan("message")
     trace.record("event_received")
