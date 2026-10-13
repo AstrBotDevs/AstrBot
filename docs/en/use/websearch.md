@@ -27,7 +27,7 @@ These settings belong to the selected profile. Changing `default` does not enabl
 
 ## Choose a search provider
 
-AstrBot supports seven providers. Configure one to start; you do not need an account with every service.
+AstrBot supports eight providers. Configure one to start; you do not need an account with every service.
 
 | Provider | Get a key | Capabilities available in AstrBot |
 | --- | --- | --- |
@@ -38,12 +38,13 @@ AstrBot supports seven providers. Configure one to start; you do not need an acc
 | <span id="firecrawl">Firecrawl</span> | [Firecrawl](https://firecrawl.dev/) | Web search and page content extraction from a URL |
 | <span id="exa">Exa</span> | [Exa dashboard](https://dashboard.exa.ai/) | Keyword or semantic search, page contents, and filters such as domain and date |
 | <span id="anysearch">AnySearch</span> | [AnySearch console](https://anysearch.com/console/api-keys) | General search and specialized retrieval for research, code documentation, finance, legal information, and other domains |
+| <span id="keenable">Keenable</span> | [Keenable console](https://keenable.ai/console) | Web search, optionally limited to one site, and page content extraction from a URL |
 
-AnySearch uses anonymous mode with a daily free quota when its key list is empty. Other providers require their own keys. Check each service's website for current quotas, pricing, regional availability, and authorization requirements.
+AnySearch uses anonymous mode with a daily free quota when its key list is empty, and Keenable works without a key under a rate limit that a key raises. Other providers require their own keys. Check each service's website for current quotas, pricing, regional availability, and authorization requirements.
 
 ### Searching versus reading a link
 
-Searching a topic returns results from a search service. Summarizing a specific link requires extracting that page's contents. Tavily, Firecrawl, and Exa currently provide dedicated page extraction tools; choose one of them if reading links is a common task.
+Searching a topic returns results from a search service. Summarizing a specific link requires extracting that page's contents. Tavily, Firecrawl, Exa, and Keenable currently provide dedicated page extraction tools; choose one of them if reading links is a common task.
 
 Extraction cannot read every website. Pages behind a login or paywall, sites with anti-bot restrictions, and some pages rendered through scripts may fail.
 
