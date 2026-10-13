@@ -169,7 +169,7 @@ test("Agent folding follows span ancestry, keeps responses visible, and preserve
   assert.equal(state.selectedStats.value.responses, 1);
   state.expandedAgents.add("agent");
   assert.deepEqual(Array.from(state.timelineRows.value, (row) => row.record.key), [
-    "received", "agent", "persona", "inner", "tool", "other", "tool-result", "response", "model-done", "done",
+    "received", "agent", "inner", "tool", "other", "tool-result", "response", "model-done", "done",
   ]);
   assert.equal(state.timelineRows.value.find((row) => row.record.key === "tool-result").depth, 1);
   assert.equal(state.timelineRows.value.find((row) => row.record.key === "other").depth, 0);

@@ -172,11 +172,13 @@ The toolbar contains search, fullscreen, font-size controls, and `Install Pip pa
 
 ### Trace
 
+Long titles show two lines and received/sent message previews show four lines by default. Overflowing text offers Show full text / Collapse. This only folds the display; recorded content is not truncated.
+
 Complete means the entire event has finished processing, not just its model request or response delivery. Ordinary messages and Cron tasks share the event execution lifecycle. Cron does not run through the message Pipeline; its trace ends after Agent execution and history saving, and failures or cancellations also close the trace with an error.
 
 The detail timeline uses a compact grouped layout: "Plugin handler triggered (Type)" becomes "Call plugin" with a category chip, and "Start Agent" becomes "Agent execution". A consistent right-hand chevron replaces repeated standalone View details links; click a regular node's heading to inspect its raw data, or a plugin call group to expand its calls. Platform IDs move to secondary chips, metadata chips use neutral colors, and times show offsets from trace start with precise timestamps on hover.
 
-Agents fold their execution chain by default. Click Agent execution to expand persona selection, request preparation, tools, and plugin hooks; Raw data exposes the Agent's own fields. Folding follows actual span parent relationships, without capturing unrelated interleaved branches. Expansion preserves record order and final responses stay on the main line. Collapsed headers retain internal error indicators, and folding does not change call, response, or span counts.
+Agents fold their execution chain by default. Click Agent execution to expand request preparation, tools, and plugin hooks; Raw data exposes the Agent's own fields. Folding follows actual span parent relationships, without capturing unrelated interleaved branches. Expansion preserves record order and final responses stay on the main line. Collapsed headers retain internal error indicators, and folding does not change call, response, or span counts.
 
 ![Compact grouped timeline with a collapsed Agent (preview data)](images/trace-timeline-en.jpg)
 
@@ -201,7 +203,7 @@ Timeline chips show execution mode using the profile page's labels (`local` uses
 
 Consecutive nodes of the same type are collapsed by default, such as "Call plugin" with an "Event listener" chip, with a record count and stacked icons. Click to expand or collapse the individual records. Different handler categories and records separated by another node type remain separate, preserving execution order. Collapsed groups still show error counts, and summary cards continue to count actual calls.
 
-The message list and message-received node show the platform logo. The message-received node shows `platform_id` in a secondary chip. A generic icon is used when no logo matches or the image fails to load; text still indicates processing status. The `sel_persona` node is labeled "Select persona". The search placeholder is "Search messages, sessions, or plugins in X records". Summary cards show duration, plugin handler calls, and responses, without counting steps.
+The message list and message-received node show the platform logo. The message-received node shows `platform_id` in a secondary chip. A generic icon is used when no logo matches or the image fails to load; text still indicates processing status. The former standalone Select persona node is removed; the resolved `persona_id` appears in the Agent request prepared details. The search placeholder is "Search messages, sessions, or plugins in X records". Summary cards show duration, plugin handler calls, and responses, without counting steps.
 
 ## Command Management
 

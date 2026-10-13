@@ -34,6 +34,10 @@
   "details": "查看详情",
   "selectTrace": "选择一条追踪查看完整执行链",
   "closeDetails": "关闭详情",
+  "messagePreview": {
+    "expand": "展开全文",
+    "collapse": "收起"
+  },
   "compact": {
     "pluginHandler": "调用插件",
     "agentExecution": "Agent 执行",

@@ -21,6 +21,7 @@ import { logApi, traceApi, pluginApi, sessionApi } from "@/api/v1";
 import { useModuleI18n } from "@/i18n/composables";
 import { getPlatformIcon } from "@/utils/platformUtils";
 import defaultPluginIcon from "/favicon.svg";
+import TraceMessagePreview from "./TraceMessagePreview.vue";
 
 const { tm } = useModuleI18n("features/trace");
 const { tm: configTm } = useModuleI18n("features/config");
@@ -69,7 +70,6 @@ const expandedAgents = reactive(new Set());
 const expandedDetails = reactive(new Set());
 
 const actionLabels = {
-  sel_persona: "selectPersona",
   event_received: "eventReceived",
   pipeline_start: "pipelineStart",
   pipeline_end: "pipelineEnd",
@@ -268,7 +268,7 @@ watch(selectedSpanId, () => {
 function timelineRecords(event) {
   const records = [];
   for (const record of event.records) {
-    if (["stage_start", "stage_end", "pipeline_start", "wake_evaluated"].includes(record.action)) continue;
+    if (["stage_start", "stage_end", "pipeline_start", "wake_evaluated", "sel_persona"].includes(record.action)) continue;
     if (record.action === "response_ready" && event.records.some((item) => item.action === "response_sent")) continue;
     if (record.action === "handler_end" || record.action === "agent_end") {
       const startAction = record.action === "handler_end" ? "handler_start" : "agent_start";
@@ -872,9 +872,9 @@ onBeforeUnmount(() => {
 
       <main v-if="selectedEvent" class="trace-detail" @keydown.esc.stop="selectEvent(null)">
         <div class="trace-detail-header">
-          <div>
+          <div class="trace-detail-summary">
             <div class="trace-detail-kicker"><span class="trace-status-badge" :class="statusClass(selectedEvent)">{{ statusLabel(selectedEvent) }}</span><span>{{ shortSpan(selectedEvent.span_id) }}</span></div>
-            <h2>{{ selectedEvent.message_outline || tm("untitled") }}</h2>
+            <TraceMessagePreview :key="selectedEvent.span_id" class="trace-message-title" tag="h2" :lines="2" :text="selectedEvent.message_outline || tm('untitled')" />
             <p>
               <v-tooltip :text="selectedEvent.umo" location="top">
                 <template #activator="{ props }">
@@ -988,14 +988,14 @@ onBeforeUnmount(() => {
               </div>
               <div v-else-if="record.kind === 'response'" class="timeline-subtitle">
                 <v-chip class="timeline-metadata-chip" size="x-small" variant="tonal" :title="record.fields.source">{{ recordSubtitle(record) }}</v-chip>
-                <div v-if="record.fields.message" class="trace-response-outline">{{ record.fields.message }}</div>
+                <TraceMessagePreview v-if="record.fields.message" class="trace-response-outline" :text="record.fields.message" />
               </div>
               <div v-else-if="record.action === 'agent_start'" class="timeline-subtitle">
                 <v-chip class="timeline-metadata-chip" size="x-small" variant="tonal">{{ tm("chips.executionMode", { name: recordSubtitle(record) }) }}</v-chip>
               </div>
               <div v-else-if="record.action === 'event_received'" class="timeline-subtitle">
                 <v-chip v-if="record.fields.platform_id" class="timeline-metadata-chip" size="x-small" variant="tonal" :title="record.fields.platform_id">{{ record.fields.platform_id }}</v-chip>
-                <div v-if="record.fields.message" class="trace-response-outline">{{ record.fields.message }}</div>
+                <TraceMessagePreview v-if="record.fields.message" class="trace-response-outline" :text="record.fields.message" />
               </div>
               <div v-else-if="recordSubtitle(record)" class="timeline-subtitle">{{ recordSubtitle(record) }}</div>
               <details v-if="row.agentId && row.expanded" class="timeline-fields"><summary>{{ tm("compact.rawData") }}</summary><pre>{{ formatFields(record.model || record.fields) }}</pre></details>
@@ -1072,7 +1072,7 @@ onBeforeUnmount(() => {
 .trace-detail-actions { align-items: center; display: flex; flex: 0 0 auto; gap: 8px; }
 .trace-detail-header { align-items: flex-start; display: flex; gap: 16px; justify-content: space-between; }
 .trace-detail-kicker { align-items: center; color: var(--trace-muted); display: flex; font-size: 10px; gap: 8px; text-transform: uppercase; }
-.trace-detail-header h2 { font-size: 17px; font-weight: 650; margin: 8px 0 4px; overflow-wrap: anywhere; } .trace-detail-header p { color: var(--trace-muted); font-size: 11px; margin: 0; }
+.trace-detail-summary { flex: 1; min-width: 0; } .trace-message-title { font-size: 17px; font-weight: 650; margin: 8px 0 4px; } .trace-detail-header p { color: var(--trace-muted); font-size: 11px; margin: 0; overflow-wrap: anywhere; }
 .trace-detail-time { color: var(--trace-muted); font-family: var(--astrbot-font-cjk-mono), monospace; font-size: 11px; white-space: nowrap; }
 .trace-status-badge { border-radius: 999px; font-size: 10px; padding: 3px 7px; text-transform: none; } .trace-status-badge.is-live { background: rgba(245, 158, 11, 0.14); color: #f59e0b; } .trace-status-badge.is-success { background: rgba(34, 197, 94, 0.14); color: #22c55e; } .trace-status-badge.is-error { background: rgba(239, 68, 68, 0.14); color: #ef4444; }
 .trace-stat-grid { display: grid; gap: 8px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 18px 0 22px; }

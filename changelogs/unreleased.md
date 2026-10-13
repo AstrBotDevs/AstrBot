@@ -1,5 +1,7 @@
 # Unreleased
 
+- Remove the standalone Select persona trace node and include its resolved persona ID in Agent request prepared details. Fold long trace titles and received/sent text previews with explicit expansion, without truncating recorded content.
+
 - Log & Cache Cleanup → Log, Cache & Trace Cleanup: include trace database/sidecar usage, add Clear Trace Data, and include finished trace history in Clean All. Confirm irreversible removal, retain running traces, and compact through the existing database writer without unlinking live database files.
 
 ## Logs

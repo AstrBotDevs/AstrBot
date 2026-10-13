@@ -34,6 +34,10 @@
   "details": "View details",
   "selectTrace": "Select a trace to inspect the complete execution chain",
   "closeDetails": "Close details",
+  "messagePreview": {
+    "expand": "Show full text",
+    "collapse": "Collapse"
+  },
   "compact": {
     "pluginHandler": "Call plugin",
     "agentExecution": "Agent execution",

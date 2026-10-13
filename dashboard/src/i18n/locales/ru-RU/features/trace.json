@@ -34,6 +34,10 @@
   "details": "Подробности",
   "selectTrace": "Выберите трассировку, чтобы увидеть цепочку выполнения",
   "closeDetails": "Закрыть подробности",
+  "messagePreview": {
+    "expand": "Показать весь текст",
+    "collapse": "Свернуть"
+  },
   "compact": {
     "pluginHandler": "Вызов плагина",
     "agentExecution": "Выполнение Agent",
