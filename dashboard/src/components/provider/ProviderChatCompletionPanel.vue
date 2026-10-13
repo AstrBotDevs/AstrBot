@@ -11,6 +11,7 @@
           :available-source-types="availableSourceTypes"
           :tm="tm"
           :resolve-source-icon="resolveSourceIcon"
+          :is-monochrome-source-icon="isMonochromeSourceIcon"
           :get-source-display-name="getSourceDisplayName"
           @add-provider-source="addProviderSource"
           @select-provider-source="selectProviderSource"
@@ -24,10 +25,13 @@
         <div v-if="selectedProviderSource" class="provider-config-shell">
           <div class="provider-config-header">
             <div class="provider-config-headline">
-              <div class="provider-config-title">{{ selectedProviderSource.id }}</div>
-              <div class="provider-config-subtitle">
-                {{ selectedProviderSource.api_base || 'N/A' }}
-              </div>
+              <div class="provider-config-title">{{ getSourceDisplayName(selectedProviderSource) }}</div>
+              <ProviderSourceSubtitle
+                class="provider-config-subtitle"
+                :api-base="selectedProviderSource.api_base"
+                :sponsor="selectedSponsor"
+                :tm="tm"
+              />
             </div>
 
             <div class="provider-config-actions">
@@ -56,6 +60,7 @@
                 v-if="basicSourceConfig"
                 :iterable="basicSourceConfig"
                 :metadata="providerSourceSchema"
+                :field-links="providerSourceFieldLinks"
                 metadataKey="provider"
                 :is-editing="true"
               />
@@ -112,7 +117,10 @@
     </div>
 
     <v-dialog v-model="showManualModelDialog" max-width="400">
-      <v-card :title="tm('models.manualDialogTitle')">
+      <v-card>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+          {{ tm('models.manualDialogTitle') }}
+        </v-card-title>
         <v-card-text class="py-4">
           <v-text-field
             v-model="manualModelId"
@@ -134,13 +142,16 @@
         <v-card-actions class="pa-4">
           <v-spacer></v-spacer>
           <v-btn variant="text" @click="showManualModelDialog = false">取消</v-btn>
-          <v-btn color="primary" @click="confirmManualModel">添加</v-btn>
+          <v-btn color="primary" variant="tonal" @click="confirmManualModel">添加</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
     <v-dialog v-model="showProviderEditDialog" width="800">
-      <v-card :title="providerEditDialogTitle">
+      <v-card>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+          {{ providerEditDialogTitle }}
+        </v-card-title>
         <v-card-text class="py-4">
           <AstrBotConfig
             v-if="providerEditData"
@@ -161,6 +172,7 @@
           </v-btn>
           <v-btn
             color="primary"
+            variant="tonal"
             :loading="savingProviders.includes(providerEditData?.id)"
             @click="saveEditedProvider"
           >
@@ -177,10 +189,11 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useModuleI18n } from '@/i18n/composables'
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue'
 import ProviderModelsPanel from '@/components/provider/ProviderModelsPanel.vue'
+import ProviderSourceSubtitle from '@/components/provider/ProviderSourceSubtitle.vue'
 import ProviderSourcesPanel from '@/components/provider/ProviderSourcesPanel.vue'
 import { useProviderModelConfigDialog } from '@/composables/useProviderModelConfigDialog'
 import { useProviderSources } from '@/composables/useProviderSources'
@@ -206,6 +219,7 @@ function showMessage(message, color = 'success') {
 
 const {
   selectedProviderSource,
+  selectedSponsor,
   availableModels,
   loadingModels,
   savingSource,
@@ -223,6 +237,7 @@ const {
   advancedSourceConfig,
   manualProviderId,
   resolveSourceIcon,
+  isMonochromeSourceIcon,
   getSourceDisplayName,
   supportsImageInput,
   supportsAudioInput,
@@ -245,6 +260,17 @@ const {
   tm,
   showMessage
 })
+
+const providerSourceFieldLinks = computed(() => (
+  selectedProviderSource.value?.provider === 'ssycloud'
+    ? {
+        key: {
+          label: tm('providerSources.getApiKey'),
+          href: 'https://www.shengsuanyun.com/?from=CH_T70U2X9L'
+        }
+      }
+    : {}
+))
 
 const showManualModelDialog = ref(false)
 

@@ -9,14 +9,12 @@ import os
 import sys
 from asyncio import Queue
 from pathlib import Path
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
 
 # 使用 tests/fixtures/helpers.py 中的共享工具函数，避免重复定义
-from tests.fixtures.helpers import create_mock_llm_response, create_mock_message_component
 
 # 将项目根目录添加到 sys.path
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -109,6 +107,26 @@ def pytest_configure(config):
 @pytest.fixture
 def temp_dir(tmp_path: Path) -> Path:
     """创建临时目录用于测试。"""
+    return tmp_path
+
+
+@pytest.fixture
+def require_symlink(tmp_path: Path) -> Path:
+    """Skip the test when symlink creation is denied by the OS.
+
+    Windows only allows symbolic links with admin or developer-mode
+    privileges, so tests that build symlink fixtures cannot run there.
+    """
+    probe = tmp_path / ".symlink_probe"
+    try:
+        probe.symlink_to(tmp_path)
+    except OSError as exc:
+        # 1314 (ERROR_PRIVILEGE_NOT_HELD): Windows requires admin or
+        # developer mode. Anything else is a real error and must fail.
+        if getattr(exc, "winerror", None) == 1314:
+            pytest.skip("symlink creation is not permitted on this platform")
+        raise
+    probe.unlink()
     return tmp_path
 
 
@@ -307,6 +325,12 @@ async def mock_context(
 
     provider_manager = MagicMock()
     provider_manager.get_using_provider = MagicMock(return_value=mock_provider)
+    provider_manager.get_using_provider_async = AsyncMock(
+        side_effect=lambda *args, **kwargs: provider_manager.get_using_provider(
+            *args,
+            **kwargs,
+        )
+    )
     provider_manager.get_provider_by_id = MagicMock(return_value=mock_provider)
 
     platform_manager = MagicMock()

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import inspect
 import shlex
@@ -15,6 +16,7 @@ from .cua_defaults import CUA_CONFIG_KEYS, CUA_DEFAULT_CONFIG
 from .shipyard_search_file_util import search_files_via_shell
 
 _POSIX_OS_TYPES = {"linux", "darwin", "macos"}
+_CUA_SANDBOX_HEALTH_PROBE = "_astrbot_cua_ok_"
 
 _CUA_BACKGROUND_LAUNCHER = """
 import subprocess, sys, time
@@ -55,10 +57,18 @@ async def _write_base64_via_shell(
     encoded = base64.b64encode(data).decode("ascii")
     decoder = (
         "import base64,pathlib,sys; "
-        "pathlib.Path(sys.argv[1]).write_bytes(base64.b64decode(sys.stdin.read()))"
+        "path=pathlib.Path(sys.argv[1]); "
+        "path.parent.mkdir(parents=True, exist_ok=True); "
+        "path.write_bytes(base64.b64decode(sys.stdin.read()))"
+    )
+    chunk_size = 60_000
+    encoded_lines = "\n".join(
+        encoded[index : index + chunk_size]
+        for index in range(0, len(encoded), chunk_size)
     )
     return await shell.exec(
-        f"python3 -c {shlex.quote(decoder)} {shlex.quote(path)} <<'EOF'\n{encoded}\nEOF"
+        f"python3 -c {shlex.quote(decoder)} {shlex.quote(path)} <<'EOF'\n"
+        f"{encoded_lines}\nEOF"
     )
 
 
@@ -75,12 +85,14 @@ def _maybe_model_dump(value: Any) -> dict[str, Any]:
         return value
     if is_dataclass(value) and not isinstance(value, type):
         return asdict(value)
-    if hasattr(value, "model_dump"):
-        dumped = value.model_dump()
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        dumped = model_dump()
         if isinstance(dumped, dict):
             return dumped
-    if hasattr(value, "dict"):
-        dumped = value.dict()
+    dict_attr = getattr(value, "dict", None)
+    if callable(dict_attr):
+        dumped = dict_attr()
         if isinstance(dumped, dict):
             return dumped
     attr_payload = {
@@ -134,6 +146,11 @@ def _normalize_process_result(raw: Any) -> ProcessResult:
         exit_code = payload.get("returncode")
     if exit_code is None:
         exit_code = payload.get("return_code")
+    if exit_code is not None:
+        try:
+            exit_code = int(exit_code)
+        except Exception:
+            exit_code = None
     if exit_code is None:
         exit_code = 0 if not stderr else 1
     success = bool(payload.get("success", not stderr and exit_code in (0, None)))
@@ -875,4 +892,17 @@ class CuaBooter(ComputerBooter):
         Path(local_path).write_bytes(base64.b64decode(result.get("stdout", "")))
 
     async def available(self) -> bool:
-        return self._runtime is not None
+        if self._runtime is None:
+            return False
+        try:
+            result = await self._runtime.shell.exec(
+                f"echo {_CUA_SANDBOX_HEALTH_PROBE}", timeout=10
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.debug("[Computer] CUA sandbox health check failed: %s", exc)
+            return False
+        if result.get("exit_code") != 0:
+            return False
+        return _CUA_SANDBOX_HEALTH_PROBE in str(result.get("stdout", ""))

@@ -1,17 +1,14 @@
 import json
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
-from unittest.mock import AsyncMock
-
 
 import aiohttp
+
 from astrbot.api.platform import AstrBotMessage, MessageType
 from astrbot.core.message.components import (
     File,
     Record,
 )
-
-
-from pathlib import Path
 
 CURRENT_DIR = Path(__file__).parent
 TEST_DATA_DIR = CURRENT_DIR / "data"
@@ -32,7 +29,9 @@ class KookEventDataPath:
     RECONNECT_ERR = TEST_DATA_DIR / "kook_ws_event_reconnect_err.json"
     RESUME_ACK = TEST_DATA_DIR / "kook_ws_event_resume_ack.json"
     RESUME = TEST_DATA_DIR / "kook_ws_event_resume.json"
-    GROUP_SYSTEM_MESSAGE_UPDATE_ROLE = TEST_DATA_DIR / "kook_ws_event_group_system_message_update_role.json"
+    GROUP_SYSTEM_MESSAGE_UPDATE_ROLE = (
+        TEST_DATA_DIR / "kook_ws_event_group_system_message_update_role.json"
+    )
 
 
 class KookApiDataPath:

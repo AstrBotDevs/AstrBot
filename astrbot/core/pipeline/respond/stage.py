@@ -14,6 +14,27 @@ from astrbot.core.utils.path_util import path_Mapping
 from ..context import PipelineContext, call_event_hook
 from ..stage import Stage, register_stage
 
+DEFAULT_LOG_BASE = 2.6
+
+
+def _resolve_log_base(value: float | str | None) -> float:
+    """Return a log base that math.log accepts, or the documented default."""
+    try:
+        log_base = float(value)
+    except (TypeError, ValueError) as e:
+        logger.error(f"Failed to parse the segmented-reply log base: {e}")
+        return DEFAULT_LOG_BASE
+    if not math.isfinite(log_base) or log_base <= 1:
+        # math.log(words, 1) raises ZeroDivisionError and a non-positive base
+        # raises ValueError; both escape from _calc_comp_interval before the
+        # first send, so the whole reply is dropped.
+        logger.error(
+            f"Unusable segmented-reply log base: {log_base}, "
+            f"using the default {DEFAULT_LOG_BASE} instead.",
+        )
+        return DEFAULT_LOG_BASE
+    return log_base
+
 
 @register_stage
 class RespondStage(Stage):
@@ -72,7 +93,7 @@ class RespondStage(Stage):
         self.interval_method = ctx.astrbot_config["platform_settings"][
             "segmented_reply"
         ]["interval_method"]
-        self.log_base = float(
+        self.log_base = _resolve_log_base(
             ctx.astrbot_config["platform_settings"]["segmented_reply"]["log_base"],
         )
         self.interval = [1.5, 3.5]
@@ -84,8 +105,8 @@ class RespondStage(Stage):
             try:
                 self.interval = [float(t) for t in interval_str_ls]
             except BaseException as e:
-                logger.error(f"解析分段回复的间隔时间失败。{e}")
-            logger.info(f"分段回复间隔时间：{self.interval}")
+                logger.error(f"Failed to parse the segmented-reply interval: {e}")
+            logger.info(f"Segmented-reply interval: {self.interval}")
 
     async def _word_cnt(self, text: str) -> int:
         """分段回复 统计字数"""
@@ -138,7 +159,7 @@ class RespondStage(Stage):
             return False
 
         if event.get_platform_name() in [
-            "qq_official",
+            "qq_official_webhook",
             "weixin_official_account",
             "dingtalk",
         ]:
@@ -179,14 +200,44 @@ class RespondStage(Stage):
         if result.result_content_type == ResultContentType.STREAMING_FINISH:
             event.set_extra("_streaming_finished", True)
             return
+        if (
+            not result.chain
+            and result.result_content_type != ResultContentType.STREAMING_RESULT
+        ):
+            # 空消息链没有任何可发内容，直接返回，不打日志、也不触发 after_message_sent
+            return
+        sent_plain_texts = event.get_extra(
+            "_send_message_to_user_current_session_plain_texts",
+            [],
+        )
+        result_plain_text = result.get_plain_text().strip()
+        if (
+            result_plain_text
+            and isinstance(sent_plain_texts, list)
+            and result_plain_text in sent_plain_texts
+            and all(
+                comp.type
+                in {
+                    ComponentType.Plain,
+                    ComponentType.Reply,
+                    ComponentType.At,
+                }
+                for comp in result.chain
+            )
+        ):
+            logger.info(
+                "send_message_to_user already delivered the same text in this session, skip respond stage to avoid duplicate reply.",
+            )
+            return
 
         logger.info(
             f"Prepare to send - {event.get_sender_name()}/{event.get_sender_id()}: {event._outline_chain(result.chain)}",
+            extra={"category": "user_chat"},
         )
 
         if result.result_content_type == ResultContentType.STREAMING_RESULT:
             if result.async_stream is None:
-                logger.warning("async_stream 为空，跳过发送。")
+                logger.warning("async_stream is empty; skipping delivery.")
                 return
             # 流式结果直接交付平台适配器处理
             realtime_segmenting = (
@@ -196,7 +247,7 @@ class RespondStage(Stage):
                 )
                 == "realtime_segmenting"
             )
-            logger.info(f"应用流式输出({event.get_platform_id()})")
+            logger.info(f"Applying streaming output ({event.get_platform_id()}).")
             await event.send_streaming(result.async_stream, realtime_segmenting)
             return
         if len(result.chain) > 0:
@@ -211,10 +262,10 @@ class RespondStage(Stage):
             # 检查消息链是否为空
             try:
                 if await self._is_empty_message_chain(result.chain):
-                    logger.info("消息为空，跳过发送阶段")
+                    logger.info("The message is empty; skipping the respond stage.")
                     return
             except Exception as e:
-                logger.warning(f"空内容检查异常: {e}")
+                logger.warning(f"Empty-content validation failed: {e}")
 
             # 将 Plain 为空的消息段移除
             result.chain = [
@@ -238,7 +289,9 @@ class RespondStage(Stage):
                 if not result.chain or len(result.chain) == 0:
                     # may fix #2670
                     logger.warning(
-                        f"实际消息链为空, 跳过发送阶段。header_chain: {header_comps}, actual_chain: {result.chain}",
+                        "The effective message chain is empty; skipping the respond "
+                        f"stage. header_chain: {header_comps}, "
+                        f"actual_chain: {result.chain}",
                     )
                     return
                 for comp in result.chain:
@@ -252,7 +305,8 @@ class RespondStage(Stage):
                             header_comps.clear()
                     except Exception as e:
                         logger.error(
-                            f"发送消息链失败: chain = {MessageChain([comp])}, error = {e}",
+                            "Failed to send the message chain: "
+                            f"chain = {MessageChain([comp])}, error = {e}",
                             exc_info=True,
                         )
             else:
@@ -262,7 +316,8 @@ class RespondStage(Stage):
                 ):
                     # may fix #2670
                     logger.warning(
-                        f"消息链全为 Reply 和 At 消息段, 跳过发送阶段。chain: {result.chain}",
+                        "The message chain contains only Reply and At segments; "
+                        f"skipping the respond stage. chain: {result.chain}",
                     )
                     return
                 sep_comps = self._extract_comp(
@@ -276,7 +331,8 @@ class RespondStage(Stage):
                         await event.send(chain)
                     except Exception as e:
                         logger.error(
-                            f"发送消息链失败: chain = {chain}, error = {e}",
+                            f"Failed to send the message chain: chain = {chain}, "
+                            f"error = {e}",
                             exc_info=True,
                         )
                 chain = result.derive(result.chain)
@@ -285,7 +341,8 @@ class RespondStage(Stage):
                         await event.send(chain)
                     except Exception as e:
                         logger.error(
-                            f"发送消息链失败: chain = {chain}, error = {e}",
+                            f"Failed to send the message chain: chain = {chain}, "
+                            f"error = {e}",
                             exc_info=True,
                         )
 

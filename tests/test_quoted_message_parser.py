@@ -336,6 +336,28 @@ async def test_extract_quoted_message_images_file_url_with_query_string():
 
 
 @pytest.mark.asyncio
+async def test_extract_quoted_message_images_accepts_legacy_file_uri(tmp_path):
+    image_file = tmp_path / "quoted.png"
+    image_file.write_bytes(b"image")
+    file_uri = (
+        f"file:///{image_file.as_posix()}"
+        if image_file.as_posix().startswith("/")
+        else image_file.as_uri()
+    )
+    reply = Reply(id="placeholder", chain=[Image(file=file_uri)], message_str="")
+    object.__setattr__(reply, "id", None)
+    event = SimpleNamespace(
+        message_obj=SimpleNamespace(message=[reply]),
+        bot=SimpleNamespace(api=_FailIfCalledAPI()),
+        get_group_id=lambda: "",
+    )
+
+    images = await extract_quoted_message_images(event)
+
+    assert images == [str(image_file)]
+
+
+@pytest.mark.asyncio
 async def test_extract_quoted_message_images_non_image_local_path_is_ignored(tmp_path):
     non_image_file = tmp_path / "secret.txt"
     non_image_file.write_text("not an image", encoding="utf-8")

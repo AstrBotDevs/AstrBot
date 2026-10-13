@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 from deprecated import deprecated
 
 from astrbot.core.agent.hooks import BaseAgentRunHooks
-from astrbot.core.agent.message import Message
+from astrbot.core.agent.message import ContentPart, Message
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
@@ -16,10 +16,12 @@ from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.db import BaseDatabase
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
+from astrbot.core.llm_error_messages import LLM_ERROR_MESSAGES
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.platform import Platform
 from astrbot.core.platform.astr_message_event import AstrMessageEvent, MessageSesion
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, ProviderType
 from astrbot.core.provider.func_tool_manager import FunctionTool, FunctionToolManager
@@ -48,19 +50,84 @@ logger = logging.getLogger("astrbot")
 
 if TYPE_CHECKING:
     from astrbot.core.cron.manager import CronJobManager
+    from astrbot.core.utils.t2i.renderer import HtmlRenderer
 
 WebApiHandler = Callable[..., Awaitable[Any]]
 RegisteredWebApi = tuple[str, WebApiHandler, list[str], str]
+_PLUGIN_MODULE_FLAGS = {"builtin_stars", "plugins"}
+
+
+def _split_module_path(module_path: Any) -> list[str]:
+    if not isinstance(module_path, str) or not module_path:
+        return []
+    return module_path.split(".")
+
+
+def _plugin_root_from_module_parts(parts: list[str]) -> tuple[str, str] | None:
+    for index, part in enumerate(parts):
+        if part in _PLUGIN_MODULE_FLAGS and index + 1 < len(parts):
+            return part, parts[index + 1]
+    return None
+
+
+def _plugin_root_from_metadata(metadata: StarMetadata) -> str | None:
+    if metadata.root_dir_name:
+        return metadata.root_dir_name
+
+    root_info = _plugin_root_from_module_parts(_split_module_path(metadata.module_path))
+    return root_info[1] if root_info else None
+
+
+def _registered_plugin_module_path(root_dir_name: str, flag: str | None) -> str | None:
+    for metadata in reversed(star_registry):
+        if not metadata.module_path:
+            continue
+        if _plugin_root_from_metadata(metadata) != root_dir_name:
+            continue
+        if flag and flag not in _split_module_path(metadata.module_path):
+            continue
+        return metadata.module_path
+    return None
+
+
+def _legacy_plugin_module_path(parts: list[str]) -> str:
+    resolved_parts = []
+    for index, part in enumerate(parts):
+        resolved_parts.append(part)
+        if part in _PLUGIN_MODULE_FLAGS and index + 1 < len(parts):
+            resolved_parts.append(parts[index + 1])
+            resolved_parts.append("main")
+            break
+    return ".".join(resolved_parts)
+
+
+def _resolve_tool_handler_module_path(tool: FunctionTool) -> str:
+    module_path = getattr(tool, "__module__", None)
+    module_parts = _split_module_path(module_path)
+    if not module_parts:
+        return module_path if isinstance(module_path, str) else ""
+
+    root_info = _plugin_root_from_module_parts(module_parts)
+    if root_info:
+        flag, root_dir_name = root_info
+        registered_module_path = _registered_plugin_module_path(root_dir_name, flag)
+        return registered_module_path or _legacy_plugin_module_path(module_parts)
+
+    registered_module_path = _registered_plugin_module_path(module_parts[0], "plugins")
+    return registered_module_path or ".".join(module_parts)
 
 
 class PlatformManagerProtocol(Protocol):
     platform_insts: list[Platform]
+    get_insts: Callable[[], list[Platform]]
 
 
 class Context:
     """暴露给插件的接口上下文。"""
 
     registered_web_apis: list[RegisteredWebApi] = []
+    html_renderer: HtmlRenderer
+    """Text-to-image renderer, injected by the core lifecycle after creation."""
 
     # 向后兼容的变量
     _register_tasks: list[Awaitable] = []
@@ -157,10 +224,11 @@ class Context:
         prompt: str | None = None,
         image_urls: list[str] | None = None,
         audio_urls: list[str] | None = None,
+        extra_user_content_parts: list[ContentPart] | None = None,
         tools: ToolSet | None = None,
         system_prompt: str | None = None,
         contexts: list[Message] | None = None,
-        max_steps: int = 30,
+        max_steps: int = 128,
         tool_call_timeout: int = 120,
         **kwargs: Any,
     ) -> LLMResponse:
@@ -174,6 +242,7 @@ class Context:
             prompt: The prompt to send to the LLM, if `contexts` and `prompt` are both provided, `prompt` will be appended as the last user message
             image_urls: List of image URLs to include in the prompt, if `contexts` and `prompt` are both provided, `image_urls` will be appended to the last user message
             audio_urls: List of audio URLs or local paths to include in the prompt, if `contexts` and `prompt` are both provided, `audio_urls` will be appended to the last user message
+            extra_user_content_parts: Extra content parts appended to the user message. Use this for per-turn context that must not be persisted into the conversation history (e.g. `TextPart(text=...).mark_as_temp()`)
             tools: ToolSet of tools available to the LLM
             system_prompt: System prompt to guide the LLM's behavior, if provided, it will always insert as the first system message in the context
             contexts: context messages for the LLM
@@ -198,6 +267,11 @@ class Context:
             AstrAgentContext,
         )
         from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+        from astrbot.core.tools.computer_tools.util import (
+            LOCAL_NETWORK_POLICY_NOTICE,
+            get_local_permission_policy,
+            is_local_runtime,
+        )
 
         prov = await self.provider_manager.get_provider_by_id(chat_provider_id)
         if not prov or not isinstance(prov, Provider):
@@ -217,6 +291,7 @@ class Context:
             prompt=prompt,
             image_urls=image_urls or [],
             audio_urls=audio_urls or [],
+            extra_user_content_parts=extra_user_content_parts or [],
             func_tool=tools,
             contexts=context_,
             system_prompt=system_prompt or "",
@@ -226,6 +301,29 @@ class Context:
                 context=self,
                 event=event,
             )
+        run_context = AgentContextWrapper(
+            context=agent_context,
+            tool_call_timeout=tool_call_timeout,
+        )
+        if (
+            tools
+            and any(
+                (tool := tools.get_tool(name)) is not None and tool.active
+                for name in (
+                    "astrbot_execute_shell",
+                    "astrbot_shell_session",
+                    "astrbot_execute_python",
+                )
+            )
+            and is_local_runtime(run_context)
+        ):
+            local_policy = get_local_permission_policy(run_context)
+            if (
+                local_policy.allow_execution
+                and not local_policy.allow_network
+                and LOCAL_NETWORK_POLICY_NOTICE not in request.system_prompt
+            ):
+                request.system_prompt += f"\n{LOCAL_NETWORK_POLICY_NOTICE}\n"
         agent_runner = ToolLoopAgentRunner()
         tool_executor = FunctionToolExecutor()
 
@@ -247,10 +345,7 @@ class Context:
         await agent_runner.reset(
             provider=prov,
             request=request,
-            run_context=AgentContextWrapper(
-                context=agent_context,
-                tool_call_timeout=tool_call_timeout,
-            ),
+            run_context=run_context,
             tool_executor=tool_executor,
             agent_hooks=agent_hooks,
             streaming=streaming,
@@ -275,7 +370,7 @@ class Context:
         Raises:
             ProviderNotFoundError: 未找到。
         """
-        prov = self.get_using_provider(umo)
+        prov = await self.get_using_provider_async(umo)
         if not prov:
             raise ProviderNotFoundError("Provider not found")
         return prov.meta().id
@@ -294,6 +389,7 @@ class Context:
         """获取 LLM Tool Manager，其用于管理注册的所有的 Function-calling tools"""
         return self.provider_manager.llm_tools
 
+    @deprecated(reason="Use activate_llm_tool_async() instead.")
     def activate_llm_tool(self, name: str) -> bool:
         """激活一个已经注册的函数调用工具。
 
@@ -308,6 +404,24 @@ class Context:
         """
         return self.provider_manager.llm_tools.activate_llm_tool(name, star_map)
 
+    async def activate_llm_tool_async(self, name: str) -> bool:
+        """Asynchronously activate a registered function-calling tool.
+
+        Args:
+            name: Tool name.
+
+        Returns:
+            True when the tool was activated, or False when it was not found.
+
+        Note:
+            Registered tools are active by default.
+        """
+        return await self.provider_manager.llm_tools.activate_llm_tool_async(
+            name,
+            star_map,
+        )
+
+    @deprecated(reason="Use deactivate_llm_tool_async() instead.")
     def deactivate_llm_tool(self, name: str) -> bool:
         """停用一个已经注册的函数调用工具。
 
@@ -318,6 +432,17 @@ class Context:
             如果成功停用返回 True，如果没找到工具返回 False。
         """
         return self.provider_manager.llm_tools.deactivate_llm_tool(name)
+
+    async def deactivate_llm_tool_async(self, name: str) -> bool:
+        """Asynchronously deactivate a registered function-calling tool.
+
+        Args:
+            name: Tool name.
+
+        Returns:
+            True when the tool was deactivated, or False when it was not found.
+        """
+        return await self.provider_manager.llm_tools.deactivate_llm_tool_async(name)
 
     def get_provider_by_id(
         self,
@@ -339,7 +464,8 @@ class Context:
         prov = self.provider_manager.inst_map.get(provider_id)
         if provider_id and not prov:
             logger.warning(
-                f"没有找到 ID 为 {provider_id} 的提供商，这可能是由于您修改了提供商（模型）ID 导致的。"
+                f"Provider {provider_id} was not found. Its provider or model ID "
+                "may have been changed."
             )
         return prov
 
@@ -359,6 +485,7 @@ class Context:
         """获取所有用于 Embedding 任务的 Provider。"""
         return self.provider_manager.embedding_provider_insts
 
+    @deprecated(reason="Use get_using_provider_async() instead.")
     def get_using_provider(self, umo: str | None = None) -> Provider | None:
         """获取当前使用的用于文本生成任务的 LLM Provider(Chat_Completion 类型)。
 
@@ -384,6 +511,38 @@ class Context:
             )
         return prov
 
+    async def get_using_provider_async(
+        self,
+        umo: str | None = None,
+        *,
+        locale: str = "zh-CN",
+    ) -> Provider | None:
+        """Asynchronously get the current text-generation provider.
+
+        Args:
+            umo: Unified message origin used for session-specific preferences.
+            locale: Language for the built-in provider type error.
+
+        Returns:
+            Current chat provider, or None if no provider is available.
+
+        Raises:
+            ValueError: If the resolved provider is not a chat provider.
+        """
+        prov = await self.provider_manager.get_using_provider_async(
+            provider_type=ProviderType.CHAT_COMPLETION,
+            umo=umo,
+        )
+        if prov is None:
+            return None
+        if not isinstance(prov, Provider):
+            messages = LLM_ERROR_MESSAGES.get(locale, LLM_ERROR_MESSAGES["zh-CN"])
+            raise ValueError(
+                messages["invalidSessionProviderType"].format(provider_type=type(prov))
+            )
+        return prov
+
+    @deprecated(reason="Use get_using_tts_provider_async() instead.")
     def get_using_tts_provider(self, umo: str | None = None) -> TTSProvider | None:
         """获取当前使用的用于 TTS 任务的 Provider。
 
@@ -404,6 +563,30 @@ class Context:
             raise ValueError("返回的 Provider 不是 TTSProvider 类型")
         return prov
 
+    async def get_using_tts_provider_async(
+        self,
+        umo: str | None = None,
+    ) -> TTSProvider | None:
+        """Asynchronously get the current text-to-speech provider.
+
+        Args:
+            umo: Unified message origin used for session-specific preferences.
+
+        Returns:
+            Current TTS provider, or None if no provider is available.
+
+        Raises:
+            ValueError: If the resolved provider is not a TTS provider.
+        """
+        prov = await self.provider_manager.get_using_provider_async(
+            provider_type=ProviderType.TEXT_TO_SPEECH,
+            umo=umo,
+        )
+        if prov and not isinstance(prov, TTSProvider):
+            raise ValueError("返回的 Provider 不是 TTSProvider 类型")
+        return prov
+
+    @deprecated(reason="Use get_using_stt_provider_async() instead.")
     def get_using_stt_provider(self, umo: str | None = None) -> STTProvider | None:
         """获取当前使用的用于 STT 任务的 Provider。
 
@@ -417,6 +600,29 @@ class Context:
             ValueError: 返回的提供者不是 STTProvider 类型。
         """
         prov = self.provider_manager.get_using_provider(
+            provider_type=ProviderType.SPEECH_TO_TEXT,
+            umo=umo,
+        )
+        if prov and not isinstance(prov, STTProvider):
+            raise ValueError("返回的 Provider 不是 STTProvider 类型")
+        return prov
+
+    async def get_using_stt_provider_async(
+        self,
+        umo: str | None = None,
+    ) -> STTProvider | None:
+        """Asynchronously get the current speech-to-text provider.
+
+        Args:
+            umo: Unified message origin used for session-specific preferences.
+
+        Returns:
+            Current STT provider, or None if no provider is available.
+
+        Raises:
+            ValueError: If the resolved provider is not an STT provider.
+        """
+        prov = await self.provider_manager.get_using_provider_async(
             provider_type=ProviderType.SPEECH_TO_TEXT,
             umo=umo,
         )
@@ -471,6 +677,35 @@ class Context:
         for platform in self.platform_manager.platform_insts:
             if platform.meta().id == session.platform_name:
                 await platform.send_by_session(session, message_chain)
+                settings = self.get_config(umo=str(session)).get(
+                    "provider_ltm_settings",
+                    {},
+                )
+                if (
+                    session.message_type == MessageType.GROUP_MESSAGE
+                    and platform.meta().name != "webchat"
+                    and settings.get("group_message_history_enable", False)
+                ):
+                    try:
+                        await self.message_history_manager.insert_message_chain(
+                            platform_id=session.platform_id,
+                            user_id=str(session),
+                            message_chain=message_chain,
+                            role="bot",
+                            sender_id="bot",
+                            sender_name="bot",
+                            max_messages=max(
+                                1,
+                                int(
+                                    settings.get(
+                                        "group_message_history_max_cnt",
+                                        700,
+                                    )
+                                ),
+                            ),
+                        )
+                    except Exception:
+                        logger.exception("Failed to persist a proactive group message.")
                 return True
         logger.warning(
             f"cannot find platform for session {str(session)}, message not sent"
@@ -490,16 +725,7 @@ class Context:
         module_path = ""
         for tool in tools:
             if not module_path:
-                _parts = []
-                module_part = tool.__module__.split(".")
-                flags = ["builtin_stars", "plugins"]
-                for i, part in enumerate(module_part):
-                    _parts.append(part)
-                    if part in flags and i + 1 < len(module_part):
-                        _parts.append(module_part[i + 1])
-                        _parts.append("main")
-                        break
-                tool.handler_module_path = ".".join(_parts)
+                tool.handler_module_path = _resolve_tool_handler_module_path(tool)
                 module_path = tool.handler_module_path
             else:
                 tool.handler_module_path = module_path
@@ -508,7 +734,7 @@ class Context:
             )
 
             if tool.name in tool_name:
-                logger.warning("替换已存在的 LLM 工具: " + tool.name)
+                logger.warning("Replacing existing LLM tool: " + tool.name)
                 self.provider_manager.llm_tools.remove_func(tool.name)
             self.provider_manager.llm_tools.func_list.append(tool)
 
@@ -600,6 +826,7 @@ class Context:
         """
         self.provider_manager.provider_insts.append(provider)
 
+    @deprecated(reason="Use decorator-based tool registration instead.")
     def register_llm_tool(
         self,
         name: str,
@@ -632,6 +859,7 @@ class Context:
         star_handlers_registry.append(md)
         self.provider_manager.llm_tools.add_func(name, func_args, desc, func_obj)
 
+    @deprecated(reason="Use deactivate_llm_tool() to disable a tool instead.")
     def unregister_llm_tool(self, name: str) -> None:
         """[DEPRECATED]删除一个函数调用工具。
 
@@ -644,6 +872,7 @@ class Context:
         """
         self.provider_manager.llm_tools.remove_func(name)
 
+    @deprecated(reason="Use the command decorator (@filter.command) instead.")
     def register_commands(
         self,
         star_name: str,
@@ -685,6 +914,9 @@ class Context:
             )
         star_handlers_registry.append(md)
 
+    @deprecated(
+        reason="Start background tasks in the plugin's initialize() method instead."
+    )
     def register_task(self, task: Awaitable, desc: str) -> None:
         """[DEPRECATED]注册一个异步任务。
 

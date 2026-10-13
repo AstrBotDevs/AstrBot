@@ -5,9 +5,16 @@ import threading
 import time
 import weakref
 from concurrent.futures import ThreadPoolExecutor
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
+from astrbot.core.pipeline.process_stage.method.agent_sub_stages import internal
+from astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal import (
+    InternalAgentSubStage,
+)
+from astrbot.core.star.session_llm_manager import SessionServiceManager
 from astrbot.core.utils.session_lock import SessionLockManager
 
 
@@ -146,6 +153,69 @@ class TestConcurrency:
     """Tests for concurrent access."""
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("provider_enabled", "session_enabled"),
+        [(False, True), (True, False)],
+    )
+    async def test_waiting_llm_request_rechecks_enabled_status(
+        self,
+        monkeypatch,
+        provider_enabled,
+        session_enabled,
+    ):
+        """A queued request must honor LLM status changes made while waiting."""
+        session_id = "disabled-while-waiting"
+        manager = SessionLockManager()
+        typing_started = asyncio.Event()
+        config = {"provider_settings": {"enable": True}}
+        build_main_agent = AsyncMock(return_value=None)
+
+        async def send_typing():
+            typing_started.set()
+
+        event = SimpleNamespace(
+            unified_msg_origin=session_id,
+            message_str="hello",
+            message_obj=SimpleNamespace(message=[]),
+            get_extra=lambda _key: None,
+            get_sender_id=lambda: "user-1",
+            send_typing=send_typing,
+            send=AsyncMock(),
+            stop_typing=AsyncMock(),
+        )
+        stage = InternalAgentSubStage()
+        stage.streaming_response = False
+        stage.show_reasoning = False
+        stage.main_agent_cfg = internal.MainAgentBuildConfig(tool_call_timeout=1)
+        stage.ctx = SimpleNamespace(
+            plugin_manager=SimpleNamespace(
+                context=SimpleNamespace(get_config=lambda **_kwargs: config)
+            )
+        )
+
+        monkeypatch.setattr(internal, "session_lock_manager", manager)
+        monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
+        monkeypatch.setattr(internal, "build_main_agent", build_main_agent)
+        monkeypatch.setattr(
+            SessionServiceManager,
+            "should_process_llm_request",
+            AsyncMock(return_value=session_enabled),
+        )
+
+        async def process_request():
+            async for _ in stage.process(event, ""):
+                pass
+
+        async with manager.acquire_lock(session_id):
+            task = asyncio.create_task(process_request())
+            await asyncio.wait_for(typing_started.wait(), timeout=5)
+            config["provider_settings"]["enable"] = provider_enabled
+
+        await task
+
+        build_main_agent.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_concurrent_acquisitions_same_loop(self):
         """Test concurrent lock acquisitions on the same loop."""
         manager = SessionLockManager()
@@ -194,7 +264,9 @@ class TestConcurrency:
                 loop.close()
                 asyncio.set_event_loop(None)
 
-        threads = [threading.Thread(target=create_loop_and_get_manager) for _ in range(10)]
+        threads = [
+            threading.Thread(target=create_loop_and_get_manager) for _ in range(10)
+        ]
         for t in threads:
             t.start()
         for t in threads:
@@ -417,7 +489,9 @@ class TestIssue5464:
                 asyncio.set_event_loop(None)
 
         # Start 3 threads nearly simultaneously
-        threads = [threading.Thread(target=acquire_lock_in_loop, args=(i,)) for i in range(3)]
+        threads = [
+            threading.Thread(target=acquire_lock_in_loop, args=(i,)) for i in range(3)
+        ]
 
         start_time = time.time()
         for t in threads:

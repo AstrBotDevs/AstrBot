@@ -26,8 +26,8 @@ If you need to use the bot in group chats, you must disable the bot's [Privacy m
 ## 2. Configure AstrBot
 
 1. Enter the AstrBot admin panel
-2. Click `Bots` in the left sidebar
-3. In the interface on the right, click `+ Create Bot`
+2. Click `Platforms` in the left sidebar
+3. Click `Add Adapter` above the bot list
 4. Select `telegram`
 
 Fill in the configuration fields that appear:
@@ -36,11 +36,11 @@ Fill in the configuration fields that appear:
 - Enable: Check this option.
 - Bot Token: Your Telegram bot's `token`.
 
-Please ensure your network environment can access Telegram. You may need to configure a proxy using `Configuration -> Other Settings -> HTTP Proxy`.
+Please ensure your network environment can access Telegram. You may need to configure a proxy using `Settings → Network → Proxy & Dependency Sources → HTTP Proxy`.
 
 ## Streaming Output
 
-The Telegram platform supports streaming output. Enable the "Streaming Output" switch in "AI Configuration" -> "Other Settings".
+The Telegram platform supports streaming output. Open `Config`, select the configuration profile used by the Telegram bot, enable `Streaming Output` under `AI → Common Settings → Message Handling`, and click `Save Configuration`.
 
 ### Private Chat Streaming
 

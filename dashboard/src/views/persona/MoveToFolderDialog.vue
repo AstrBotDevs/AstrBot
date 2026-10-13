@@ -1,7 +1,7 @@
 <template>
     <v-dialog v-model="showDialog" max-width="500px" persistent>
         <v-card>
-            <v-card-title>
+            <v-card-title class="text-h3 pa-4 pb-0 pl-6">
                 <v-icon class="mr-2">mdi-folder-move</v-icon>
                 {{ tm('moveDialog.title') }}
             </v-card-title>
@@ -41,7 +41,7 @@
                 <v-btn variant="text" @click="closeDialog">
                     {{ tm('buttons.cancel') }}
                 </v-btn>
-                <v-btn color="primary" variant="flat" @click="submitMove" :loading="loading">
+                <v-btn color="primary" variant="tonal" @click="submitMove" :loading="loading">
                     {{ tm('buttons.move') }}
                 </v-btn>
             </v-card-actions>

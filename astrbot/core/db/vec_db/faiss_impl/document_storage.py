@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 
-from sqlalchemy import Column, Text, bindparam
+from sqlalchemy import Column, DateTime, Text, bindparam
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import Field, MetaData, SQLModel, col, func, select, text
@@ -34,11 +34,12 @@ class Document(BaseDocModel, table=True):
         primary_key=True,
         sa_column_kwargs={"autoincrement": True},
     )
-    doc_id: str = Field(nullable=False)
+    doc_id: str = Field(nullable=False, unique=True)
     text: str = Field(nullable=False)
     metadata_: str | None = Field(default=None, sa_column=Column("metadata", Text))
-    created_at: datetime | None = Field(default=None)
-    updated_at: datetime | None = Field(default=None)
+    # Retain the legacy local timestamps without reinterpreting them as UTC.
+    created_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=False))
+    updated_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=False))
 
 
 class DocumentStorage:
@@ -90,6 +91,12 @@ class DocumentStorage:
                 )
             except BaseException:
                 pass
+
+            await conn.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_doc_id_unique ON documents(doc_id)",
+                ),
+            )
 
             await self._initialize_fts5(conn)
             await conn.commit()

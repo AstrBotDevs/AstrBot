@@ -1,4 +1,5 @@
 from collections.abc import AsyncGenerator
+from typing import cast
 
 from astrbot.core import logger
 from astrbot.core.platform import AstrMessageEvent
@@ -10,7 +11,7 @@ from astrbot.core.utils.active_event_registry import active_event_registry
 
 from .bootstrap import ensure_builtin_stages_registered
 from .context import PipelineContext
-from .stage import registered_stages
+from .stage import Stage, registered_stages
 from .stage_order import STAGES_ORDER
 
 
@@ -23,7 +24,7 @@ class PipelineScheduler:
             key=lambda x: STAGES_ORDER.index(x.__name__),
         )  # 按照顺序排序
         self.ctx = context  # 上下文对象
-        self.stages = []  # 存储阶段实例
+        self.stages: list[Stage] = []  # 存储阶段实例
 
     async def initialize(self) -> None:
         """初始化管道调度器时, 初始化所有阶段"""
@@ -49,11 +50,12 @@ class PipelineScheduler:
 
             if isinstance(coroutine, AsyncGenerator):
                 # 如果返回的是异步生成器, 实现洋葱模型的核心
-                async for _ in coroutine:
+                agen = cast(AsyncGenerator[None], coroutine)
+                async for _ in agen:
                     # 此处是前置处理完成后的暂停点(yield), 下面开始执行后续阶段
                     if event.is_stopped():
                         logger.debug(
-                            f"阶段 {stage.__class__.__name__} 已终止事件传播。",
+                            f"Stage {stage.__class__.__name__} stopped event propagation.",
                         )
                         break
 
@@ -63,7 +65,7 @@ class PipelineScheduler:
                     # 此处是后续所有阶段处理完毕后返回的点, 执行后置处理
                     if event.is_stopped():
                         logger.debug(
-                            f"阶段 {stage.__class__.__name__} 已终止事件传播。",
+                            f"Stage {stage.__class__.__name__} stopped event propagation.",
                         )
                         break
             else:
@@ -72,7 +74,9 @@ class PipelineScheduler:
                 await coroutine
 
                 if event.is_stopped():
-                    logger.debug(f"阶段 {stage.__class__.__name__} 已终止事件传播。")
+                    logger.debug(
+                        f"Stage {stage.__class__.__name__} stopped event propagation."
+                    )
                     break
 
     async def execute(self, event: AstrMessageEvent) -> None:
@@ -90,7 +94,7 @@ class PipelineScheduler:
             if isinstance(event, WebChatMessageEvent | WecomAIBotMessageEvent):
                 await event.send(None)
 
-            logger.debug("pipeline 执行完毕。")
+            logger.debug("pipeline execution completed.")
         finally:
             event.cleanup_temporary_local_files()
             active_event_registry.unregister(event)

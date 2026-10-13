@@ -2,6 +2,7 @@
 
 import sys
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -321,6 +322,36 @@ class TestContextSanitizer:
         provider_view = manager.sanitizer.sanitize(processed)
         assert len(provider_view[1].content) == 1
         assert isinstance(provider_view[1].content[0], TextPart)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("drop_old_round", [False, True])
+    async def test_compression_rechecks_sanitized_budget(self, drop_old_round):
+        """Retain rounds once their provider projection fits the token budget."""
+        manager = ContextManager(ContextConfig(max_context_tokens=100))
+        retained_messages = [
+            Message(role="user", content="Previous question"),
+            Message(
+                role="assistant",
+                content=[ThinkPart(think="X" * 1000), TextPart(text="Answer")],
+            ),
+            Message(role="user", content="Current question"),
+        ]
+        messages = retained_messages
+        if drop_old_round:
+            messages = [
+                Message(role="user", content="X" * 1000),
+                Message(role="assistant", content="Old answer"),
+            ] + retained_messages
+        compressor = AsyncMock(return_value=messages)
+        compressor.should_compress = manager.compressor.should_compress
+        manager.compressor = compressor
+
+        result = await manager._run_compression(messages, prev_tokens=1000)
+
+        assert result == retained_messages
+        assert isinstance(result[1].content[0], ThinkPart)
+        assert result[-1] is retained_messages[-1]
+        compressor.assert_awaited_once_with(messages)
 
     def test_sanitize_dict_messages(self):
         """Sanitizer should support lists of plain dicts (such as OpenAI payload format)."""

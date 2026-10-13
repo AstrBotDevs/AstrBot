@@ -28,7 +28,7 @@ We still recommend the One-Click Launcher above because it is simpler, more auto
 The legacy installer is a `PowerShell` script, very small (<20KB). It requires `PowerShell` (usually built in on `Windows 10` and newer).
 
 > [!WARNING]
-> `Python 3.10` or later must be installed, and environment variables must be configured.
+> `Python 3.12` or later must be installed, and environment variables must be configured.
 
 > [!TIP]
 > If deployment fails, try Docker deployment or manual deployment instead.

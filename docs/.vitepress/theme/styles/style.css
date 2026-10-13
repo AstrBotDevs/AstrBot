@@ -149,7 +149,7 @@
 }
 
 .VPSidebarItem.is-link > .item > .link {
-  margin: 2px 0;
+  margin: 2px -10px;
   border-radius: 8px;
   padding: 0 10px;
   transition: none;

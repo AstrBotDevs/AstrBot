@@ -74,7 +74,7 @@ def _build_grep_command(
 
 
 def _quote_command(command: list[str]) -> str:
-    return " ".join(shlex.quote(part) for part in command)
+    return shlex.join(command)
 
 
 def build_search_command(

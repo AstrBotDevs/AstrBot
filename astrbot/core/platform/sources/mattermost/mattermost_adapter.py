@@ -12,6 +12,7 @@ from astrbot.api.event import MessageChain
 from astrbot.api.message_components import At, Plain
 from astrbot.api.platform import (
     AstrBotMessage,
+    Group,
     MessageMember,
     MessageType,
     Platform,
@@ -221,15 +222,18 @@ class MattermostPlatformAdapter(Platform):
             abm.type = MessageType.FRIEND_MESSAGE
         else:
             abm.type = MessageType.GROUP_MESSAGE
-            abm.group_id = channel_id
+            abm.group = Group(
+                group_id=channel_id,
+                group_name=(
+                    data.get("channel_display_name") or data.get("channel_name") or None
+                ),
+            )
 
         if file_ids:
-            (
-                attachment_components,
-                temp_paths,
-            ) = await self.client.parse_post_attachments(file_ids)
+            attachment_components, _ = await self.client.parse_post_attachments(
+                file_ids
+            )
             abm.message.extend(attachment_components)
-            setattr(abm, "temporary_file_paths", temp_paths)
 
         abm.message_str = self._build_message_str(
             abm.message,
@@ -305,15 +309,25 @@ class MattermostPlatformAdapter(Platform):
             return raw_value // 1000 if raw_value > 1_000_000_000_000 else raw_value
         return int(time.time())
 
-    async def handle_msg(self, message: AstrBotMessage) -> None:
-        message_event = MattermostMessageEvent(
+    def create_event(self, message: AstrBotMessage) -> MattermostMessageEvent:
+        """Creates a Mattermost message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created Mattermost message event.
+        """
+        return MattermostMessageEvent(
             message_str=message.message_str,
             message_obj=message,
             platform_meta=self.meta(),
             session_id=message.session_id,
             client=self.client,
         )
-        self.commit_event(message_event)
+
+    async def handle_msg(self, message: AstrBotMessage) -> None:
+        self.commit_event(self.create_event(message))
 
     async def terminate(self) -> None:
         self._running = False

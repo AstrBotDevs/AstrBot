@@ -14,7 +14,7 @@
 
       <v-row class="px-4">
         <v-col cols="12">
-          <v-card class="welcome-card pa-6" elevation="0" border>
+          <v-card class="welcome-card pa-6" elevation="0">
             <div class="mb-4 text-h3 font-weight-bold">
               {{ tm('onboard.title') }}
             </div>
@@ -97,7 +97,7 @@
 
       <v-row class="px-4 mt-4">
         <v-col cols="12">
-          <v-card class="welcome-card pa-6" elevation="0" border>
+          <v-card class="welcome-card pa-6" elevation="0">
             <div class="mb-4 text-h3 font-weight-bold">
               {{ tm('resources.title') }}
             </div>
@@ -151,7 +151,7 @@
 
       <v-row v-if="showAnnouncement" class="px-4 mb-4">
         <v-col cols="12">
-          <v-card class="welcome-card pa-6" elevation="0" border>
+          <v-card class="welcome-card pa-6" elevation="0">
             <div class="mb-4 text-h3 font-weight-bold">
               {{ tm('announcement.title') }}
             </div>
@@ -170,7 +170,7 @@
     <ProviderConfigDialog v-model="showProviderDialog" />
     <v-dialog v-model="showComputerAccessHelpDialog" max-width="640">
       <v-card>
-        <v-card-title class="text-h3 font-weight-bold pa-4">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
           {{ tm('onboard.step3HelpTitle') }}
         </v-card-title>
         <v-card-text>
@@ -196,6 +196,7 @@ import { computed, ref, watch, onMounted } from 'vue';
 import axios from 'axios';
 import AddNewPlatform from '@/components/platform/AddNewPlatform.vue';
 import ProviderConfigDialog from '@/components/chat/ProviderConfigDialog.vue';
+import { configProfileApi, providerApi, systemConfigApi } from '@/api/v1';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import { useToast } from '@/utils/toast';
 import { MarkdownRender } from 'markstream-vue';
@@ -328,14 +329,15 @@ const greetingText = computed(() => {
 });
 
 async function loadPlatformConfigBase() {
-  const res = await axios.get('/api/config/get');
-  platformMetadata.value = res.data.data.metadata || {};
-  platformConfigData.value = res.data.data.config || {};
+  const res = await systemConfigApi.runtime();
+  const payload = (res.data.data || {}) as any;
+  platformMetadata.value = payload.metadata || {};
+  platformConfigData.value = payload.config || {};
 }
 
 async function fetchDefaultConfig() {
-  const res = await axios.get('/api/config/abconf', { params: { id: 'default' } });
-  return res.data?.data?.config || {};
+  const res = await configProfileApi.get('default');
+  return (res.data?.data as any)?.config || {};
 }
 
 function getChatProvidersFromTemplatePayload(payload: any) {
@@ -357,7 +359,7 @@ function getChatProvidersFromTemplatePayload(payload: any) {
 }
 
 async function fetchChatProviders() {
-  const response = await axios.get('/api/config/provider/template');
+  const response = await providerApi.schema();
   if (response.data.status !== 'ok') {
     throw new Error(response.data.message || tm('onboard.providerLoadFailed'));
   }
@@ -378,18 +380,17 @@ async function syncDefaultConfigProviderIfNeeded() {
   if (!targetProviderId) return;
 
   const configData = await fetchDefaultConfig();
-  if (!configData.provider_settings) {
-    configData.provider_settings = {};
+  if (configData?.agent_runner?.runner_type !== 'local') {
+    return;
   }
+  const modelConfig = configData.agent_runner.config?.model;
+  if (!modelConfig) return;
 
-  if (configData.provider_settings.default_provider_id === targetProviderId) return;
+  if (modelConfig.provider_id === targetProviderId) return;
 
-  configData.provider_settings.default_provider_id = targetProviderId;
+  modelConfig.provider_id = targetProviderId;
 
-  const updateRes = await axios.post('/api/config/astrbot/update', {
-    conf_id: 'default',
-    config: configData
-  });
+  const updateRes = await configProfileApi.update('default', configData);
   if (updateRes.data.status !== 'ok') {
     throw new Error(updateRes.data.message || tm('onboard.providerUpdateFailed'));
   }
@@ -429,10 +430,7 @@ async function saveComputerAccessRuntime() {
 
     configData.provider_settings.computer_use_runtime = computerAccessRuntime.value;
 
-    const updateRes = await axios.post('/api/config/astrbot/update', {
-      conf_id: 'default',
-      config: configData
-    });
+    const updateRes = await configProfileApi.update('default', configData);
     if (updateRes.data.status !== 'ok') {
       throw new Error(updateRes.data.message || tm('onboard.computerAccessUpdateFailed'));
     }
@@ -561,6 +559,7 @@ watch(computerAccessRuntime, async (value, oldValue) => {
 
 .welcome-card {
   border-radius: 16px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 .welcome-announcement-markdown {

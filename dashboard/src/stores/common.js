@@ -1,5 +1,6 @@
 import { defineStore } from "pinia";
-import axios from "axios";
+import { logApi, pluginApi, statsApi } from "@/api/v1";
+import { fetchWithAuth } from "@/api/http";
 
 export const useCommonStore = defineStore("common", {
   state: () => ({
@@ -14,6 +15,7 @@ export const useCommonStore = defineStore("common", {
     dashboardVersion: "",
 
     pluginMarketData: [],
+    pluginMarketDataBySource: {},
   }),
   actions: {
     async createEventSource() {
@@ -26,11 +28,10 @@ export const useCommonStore = defineStore("common", {
       // 注意：这里如果之前改过 Polyfill 的话，可能需要保持原样
       // 如果是用 fetch 的话，这里是支持 Authorization Header 的
       const headers = {
-        "Content-Type": "multipart/form-data",
         Authorization: "Bearer " + localStorage.getItem("token"),
       };
 
-      fetch("/api/live-log", {
+      fetchWithAuth(logApi.liveUrl(), {
         method: "GET",
         headers,
         signal,
@@ -151,7 +152,7 @@ export const useCommonStore = defineStore("common", {
       return this.log_cache;
     },
     async fetchStartTime() {
-      const res = await axios.get("/api/stat/start-time");
+      const res = await statsApi.startTime();
       this.startTime = res.data.data.start_time;
       return this.startTime;
     },
@@ -163,7 +164,7 @@ export const useCommonStore = defineStore("common", {
       if (!force && this.astrbotVersion) {
         return this.astrbotVersion;
       }
-      const res = await axios.get("/api/stat/version");
+      const res = await statsApi.version();
       const data = res.data?.data || {};
       this.setAstrBotVersion(data.version, data.dashboard_version);
       return this.astrbotVersion;
@@ -177,31 +178,60 @@ export const useCommonStore = defineStore("common", {
     },
     async getPluginCollections(force = false, customSource = null) {
       // 获取插件市场数据
-      if (!force && this.pluginMarketData.length > 0 && !customSource) {
-        return Promise.resolve(this.pluginMarketData);
+      const sourceKey = String(customSource || "")
+        .trim()
+        .replace(/\/+$/, "");
+      if (!force) {
+        if (!sourceKey && this.pluginMarketData.length > 0) {
+          return Promise.resolve(this.pluginMarketData);
+        }
+        if (
+          sourceKey &&
+          Array.isArray(this.pluginMarketDataBySource[sourceKey])
+        ) {
+          return Promise.resolve(this.pluginMarketDataBySource[sourceKey]);
+        }
       }
 
-      // 构建URL
-      let url = force
-        ? "/api/plugin/market_list?force_refresh=true"
-        : "/api/plugin/market_list";
-      if (customSource) {
-        url +=
-          (url.includes("?") ? "&" : "?") +
-          `custom_registry=${encodeURIComponent(customSource)}`;
-      }
-
-      return axios
-        .get(url)
+      return pluginApi
+        .market({
+          force_refresh: force || undefined,
+          custom_registry: sourceKey || undefined,
+        })
         .then((res) => {
           let data = [];
           if (res.data.data && typeof res.data.data === "object") {
             for (let key in res.data.data) {
+              if (key === "$meta") {
+                continue;
+              }
+
               const pluginData = res.data.data[key];
+              const fallbackPluginName = String(key || "").includes("/")
+                ? ""
+                : String(key || "").trim();
+              const pluginAuthor = String(pluginData?.author || "").trim();
+              const pluginName =
+                String(pluginData?.name || "").trim() || fallbackPluginName;
+              const displayPluginName = pluginName || key;
+              const marketPluginId =
+                String(pluginData?.market_plugin_id || "").trim() ||
+                (pluginAuthor && pluginName
+                  ? `${pluginAuthor}/${pluginName}`
+                  : "");
+              const parsedDownloadCount = Number(pluginData?.download_count);
+              const downloadCount =
+                pluginData?.download_count === undefined ||
+                pluginData?.download_count === null ||
+                pluginData?.download_count === "" ||
+                !Number.isFinite(parsedDownloadCount)
+                  ? undefined
+                  : Math.max(0, Math.trunc(parsedDownloadCount));
 
               data.push({
                 ...pluginData,
-                name: pluginData.name || key, // 优先使用插件数据中的name字段，否则使用键名
+                name: displayPluginName, // 优先使用插件数据中的name字段，否则使用键名
+                market_plugin_id: marketPluginId,
                 desc: pluginData.desc,
                 short_desc: pluginData?.short_desc ? pluginData.short_desc : "",
                 author: pluginData.author,
@@ -213,6 +243,7 @@ export const useCommonStore = defineStore("common", {
                 logo: pluginData?.logo ? pluginData.logo : "",
                 pinned: pluginData?.pinned ? pluginData.pinned : false,
                 stars: pluginData?.stars ? pluginData.stars : 0,
+                download_count: downloadCount,
                 updated_at: pluginData?.updated_at ? pluginData.updated_at : "",
                 download_url: pluginData?.download_url
                   ? pluginData.download_url
@@ -239,7 +270,11 @@ export const useCommonStore = defineStore("common", {
             }
           }
 
-          this.pluginMarketData = data;
+          if (sourceKey) {
+            this.pluginMarketDataBySource[sourceKey] = data;
+          } else {
+            this.pluginMarketData = data;
+          }
           return data;
         })
         .catch((err) => {

@@ -1,6 +1,5 @@
 import os
 import re
-import uuid
 from typing import Annotated, Literal
 
 import ormsgpack
@@ -9,6 +8,7 @@ from pydantic import BaseModel, conint
 
 from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.datetime_utils import generate_timestamp_id
 
 from ..entities import ProviderType
 from ..provider import TTSProvider
@@ -65,9 +65,13 @@ class ProviderFishAudioTTSAPI(TTSProvider):
         if self.proxy:
             logger.info(f"[FishAudio TTS] 使用代理: {self.proxy}")
         self.headers = {
+            **self.request_headers,
             "Authorization": f"Bearer {self.chosen_api_key}",
         }
-        self.set_model(provider_config.get("model", ""))
+        # FishAudio API 要求 model 作为 HTTP header 发送，而非请求体字段
+        # 参考: https://github.com/fishaudio/fish-audio-python/blob/main/src/fishaudio/resources/tts.py
+        self.set_model(provider_config.get("model", "s2-pro"))
+        self.headers["model"] = self.get_model()
 
     async def _get_reference_id_by_character(self, character: str) -> str | None:
         """获取角色的reference_id
@@ -143,19 +147,26 @@ class ProviderFishAudioTTSAPI(TTSProvider):
 
     async def get_audio(self, text: str) -> str:
         temp_dir = get_astrbot_temp_path()
-        path = os.path.join(temp_dir, f"fishaudio_tts_api_{uuid.uuid4()}.wav")
+        path = os.path.join(
+            temp_dir, f"fishaudio_tts_api_{generate_timestamp_id()}.wav"
+        )
         self.headers["content-type"] = "application/msgpack"
         request = await self._generate_request(text)
-        async with AsyncClient(
-            base_url=self.api_base,
-            timeout=self.timeout,
-            proxy=self.proxy if self.proxy else None,
-        ).stream(
-            "POST",
-            "/tts",
-            headers=self.headers,
-            content=ormsgpack.packb(request, option=ormsgpack.OPT_SERIALIZE_PYDANTIC),
-        ) as response:
+        async with (
+            AsyncClient(
+                base_url=self.api_base,
+                timeout=self.timeout,
+                proxy=self.proxy if self.proxy else None,
+            ) as client,
+            client.stream(
+                "POST",
+                "/tts",
+                headers=self.headers,
+                content=ormsgpack.packb(
+                    request, option=ormsgpack.OPT_SERIALIZE_PYDANTIC
+                ),
+            ) as response,
+        ):
             if response.status_code == 200 and response.headers.get(
                 "content-type", ""
             ).startswith("audio/"):

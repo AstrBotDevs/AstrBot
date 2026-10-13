@@ -130,7 +130,9 @@ export default defineConfig({
                 link: "/start",
                 collapsed: true,
                 items: [
+                  { text: "MiraRouter", link: "/mirarouter" },
                   { text: "NewAPI", link: "/newapi" },
+                  { text: "胜算云", link: "/shengsuanyun" },
                   { text: "AIHubMix", link: "/aihubmix" },
                   { text: "PPIO 派欧云", link: "/ppio" },
                   { text: "硅基流动", link: "/siliconflow" },
@@ -159,21 +161,32 @@ export default defineConfig({
             base: "/use",
             items: [
               { text: "WebUI", link: "/webui" },
-              { text: "插件", link: "/plugin" },
+              { text: "AstrBot CLI", link: "/cli" },
               { text: "内置指令", link: "/command" },
-              { text: "工具使用 Tools", link: "/function-calling" },
-              { text: "技能 Skills", link: "/skills" },
-              { text: "使用电脑能力", link: "/computer" },
-              { text: "SubAgent 编排", link: "/subagent" },
-              { text: "主动型 Agent 能力", link: "/proactive-agent" },
-              { text: "MCP", link: "/mcp" },
-              { text: "网页搜索", link: "/websearch" },
-              { text: "知识库", link: "/knowledge-base" },
+              {
+                text: "插件",
+                collapsed: false,
+                items: [
+                  { text: "插件", link: "/plugin" },
+                  { text: "MCP", link: "/mcp" },
+                  { text: "技能 Skills", link: "/skills" },
+                ],
+              },
+              {
+                text: "AstrBot 内置 AI",
+                collapsed: false,
+                items: [
+                  { text: "Agent 沙盒环境", link: "/astrbot-agent-sandbox" },
+                  { text: "SubAgent 编排", link: "/subagent" },
+                  { text: "主动型能力", link: "/proactive-agent" },
+                  { text: "网页搜索", link: "/websearch" },
+                  { text: "知识库", link: "/knowledge-base" },
+                  { text: "上下文压缩", link: "/context-compress" },
+                ],
+              },
               { text: "自定义规则", link: "/custom-rules" },
-              { text: "Agent 执行器", link: "/agent-runner" },
+              { text: "Agent 执行方式", link: "/agent-runner" },
               { text: "统一 Webhook 模式", link: "/unified-webhook" },
-              { text: "自动上下文压缩", link: "/context-compress" },
-              { text: "Agent 沙箱环境", link: "/astrbot-agent-sandbox" },
             ],
           },
           {
@@ -191,7 +204,7 @@ export default defineConfig({
                   { text: "接收消息事件", link: "/guides/listen-message-event" },
                   { text: "发送消息", link: "/guides/send-message" },
                   { text: "插件配置", link: "/guides/plugin-config" },
-                  { text: "插件 Pages", link: "/guides/plugin-pages" },
+                  { text: "插件可视化视图", link: "/guides/plugin-pages" },
                   { text: "插件国际化", link: "/guides/plugin-i18n" },
                   { text: "调用 AI", link: "/guides/ai" },
                   { text: "存储", link: "/guides/storage" },
@@ -203,12 +216,25 @@ export default defineConfig({
                 ],
               },
               {
+                text: "插件市场规范",
+                base: "/dev/plugin-market",
+                collapsed: true,
+                items: [
+                  { text: "版本列表", link: "/" },
+                  { text: "2026-06-27", link: "/2026-06-27" },
+                ],
+              },
+              {
                 text: "接入平台适配器",
                 link: "/plugin-platform-adapter",
               },
               {
                 text: "AstrBot HTTP API",
                 link: "/openapi",
+              },
+              {
+                text: "API Scope 与接口对照",
+                link: "/openapi-scopes",
               },
               {
                 text: "AstrBot 配置文件",
@@ -221,6 +247,7 @@ export default defineConfig({
             base: "/others",
             collapsed: true,
             items: [
+              { text: "异常诊断", link: "/diagnostics" },
               { text: "自部署文转图", link: "/self-host-t2i" },
               { text: "插件下载不了?试试自建 GitHub 加速服务", link: "/github-proxy" },
             ],
@@ -250,7 +277,7 @@ export default defineConfig({
           pattern: 'https://github.com/AstrBotdevs/AstrBot/edit/master/docs/:path',
           text: '发现文档有问题？在 GitHub 上编辑此页',
         },
-        logo: '/logo_prod.png',
+        logo: '/favicon.svg',
         socialLinks: [
           { icon: "github", link: "https://github.com/AstrBotDevs/AstrBot" },
         ],
@@ -287,6 +314,7 @@ export default defineConfig({
             collapsed: false,
             items: [
               { text: "Package Manager", link: "/astrbot/package" },
+              { text: "Desktop Client", link: "/astrbot/desktop" },
               { text: "One-click Launcher", link: "/astrbot/launcher" },
               { text: "Docker", link: "/astrbot/docker" },
               { text: "Kubernetes", link: "/astrbot/kubernetes" },
@@ -373,7 +401,9 @@ export default defineConfig({
                 link: "/start",
                 collapsed: true,
                 items: [
+                  { text: "MiraRouter", link: "/mirarouter" },
                   { text: "NewAPI", link: "/newapi" },
+                  { text: "ShengSuanYun", link: "/shengsuanyun" },
                   { text: "AIHubMix", link: "/aihubmix" },
                   { text: "PPIO Cloud", link: "/ppio" },
                   { text: "SiliconFlow", link: "/siliconflow" },
@@ -403,21 +433,32 @@ export default defineConfig({
             collapsed: true,
             items: [
               { text: "WebUI", link: "/webui" },
-              { text: "Plugins", link: "/plugin" },
+              { text: "AstrBot CLI", link: "/cli" },
               { text: "Built-in Commands", link: "/command" },
-              { text: "Tool Use", link: "/function-calling" },
-              { text: "Anthropic Skills", link: "/skills" },
-              { text: "Computer Use", link: "/computer" },
-              { text: "SubAgent Orchestration", link: "/subagent" },
-              { text: "Proactive Tasks", link: "/proactive-agent" },
-              { text: "MCP", link: "/mcp" },
-              { text: "Web Search", link: "/websearch" },
-              { text: "Knowledge Base", link: "/knowledge-base" },
+              {
+                text: "Plugins",
+                collapsed: false,
+                items: [
+                  { text: "Plugins", link: "/plugin" },
+                  { text: "MCP", link: "/mcp" },
+                  { text: "Skills", link: "/skills" },
+                ],
+              },
+              {
+                text: "AstrBot Built-in AI",
+                collapsed: false,
+                items: [
+                  { text: "Agent Sandbox", link: "/astrbot-agent-sandbox" },
+                  { text: "SubAgent Orchestration", link: "/subagent" },
+                  { text: "Proactive Capabilities", link: "/proactive-agent" },
+                  { text: "Web Search", link: "/websearch" },
+                  { text: "Knowledge Base", link: "/knowledge-base" },
+                  { text: "Context Compression", link: "/context-compress" },
+                ],
+              },
               { text: "Custom Rules", link: "/custom-rules" },
-              { text: "Agent Runner", link: "/agent-runner" },
+              { text: "Agent Execution Mode", link: "/agent-runner" },
               { text: "Unified Webhook Mode", link: "/unified-webhook" },
-              { text: "Auto Context Compression", link: "/context-compress" },
-              { text: "Agent Sandbox", link: "/astrbot-agent-sandbox" },
             ],
           },
           {
@@ -435,7 +476,7 @@ export default defineConfig({
                   { text: "Listen to Message Events", link: "/guides/listen-message-event" },
                   { text: "Send Messages", link: "/guides/send-message" },
                   { text: "Plugin Configuration", link: "/guides/plugin-config" },
-                  { text: "Plugin Pages", link: "/guides/plugin-pages" },
+                  { text: "Plugin Views", link: "/guides/plugin-pages" },
                   { text: "Plugin Internationalization", link: "/guides/plugin-i18n" },
                   { text: "AI", link: "/guides/ai" },
                   { text: "Storage", link: "/guides/storage" },
@@ -445,12 +486,25 @@ export default defineConfig({
                 ],
               },
               {
+                text: "Plugin Market Specification",
+                base: "/en/dev/plugin-market",
+                collapsed: true,
+                items: [
+                  { text: "Versions", link: "/" },
+                  { text: "2026-06-27", link: "/2026-06-27" },
+                ],
+              },
+              {
                 text: "Platform Adapter Integration",
                 link: "/plugin-platform-adapter",
               },
               {
                 text: "AstrBot HTTP API",
                 link: "/openapi",
+              },
+              {
+                text: "API Scope–Endpoint Reference",
+                link: "/openapi-scopes",
               },
               {
                 text: "AstrBot Configuration File",
@@ -463,6 +517,7 @@ export default defineConfig({
             base: "/en/others",
             collapsed: true,
             items: [
+              { text: "Diagnostics", link: "/diagnostics" },
               { text: "Self-hosted HTML to Image", link: "/self-host-t2i" },
             ],
           },
@@ -488,7 +543,7 @@ export default defineConfig({
           pattern: 'https://github.com/AstrBotdevs/AstrBot/edit/master/docs/:path',
           text: 'Edit this page on GitHub',
         },
-        logo: '/logo_prod.png',
+        logo: '/favicon.svg',
         socialLinks: [
           { icon: "github", link: "https://github.com/AstrBotDevs/AstrBot" },
         ],

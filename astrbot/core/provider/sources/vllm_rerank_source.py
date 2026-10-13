@@ -1,7 +1,5 @@
 import aiohttp
 
-from astrbot import logger
-
 from ..entities import ProviderType, RerankResult
 from ..provider import RerankProvider
 from ..register import register_provider_adapter
@@ -28,7 +26,7 @@ class VLLMRerankProvider(RerankProvider):
         self.timeout = provider_config.get("timeout", 20)
         self.model = provider_config.get("rerank_model", "BAAI/bge-reranker-base")
 
-        h = {}
+        h = self.request_headers.copy()
         if self.auth_key:
             h["Authorization"] = f"Bearer {self.auth_key}"
         self.client = aiohttp.ClientSession(
@@ -42,6 +40,9 @@ class VLLMRerankProvider(RerankProvider):
         documents: list[str],
         top_n: int | None = None,
     ) -> list[RerankResult]:
+        if not documents:
+            return []
+
         payload = {
             "query": query,
             "documents": documents,
@@ -55,21 +56,27 @@ class VLLMRerankProvider(RerankProvider):
             rerank_url,
             json=payload,
         ) as response:
+            response.raise_for_status()
             response_data = await response.json()
-            results = response_data.get("results", [])
+            if not isinstance(response_data, dict):
+                raise ValueError("Rerank API response must be a JSON object")
 
-            if not results:
-                logger.warning(
-                    f"Rerank API 返回了空的列表数据。原始响应: {response_data}",
+            results = response_data.get("results")
+            if not isinstance(results, list) or not results:
+                raise ValueError(
+                    "Rerank API response must contain a non-empty 'results' list"
                 )
 
-            return [
-                RerankResult(
-                    index=result["index"],
-                    relevance_score=result["relevance_score"],
-                )
-                for result in results
-            ]
+            try:
+                return [
+                    RerankResult(
+                        index=result["index"],
+                        relevance_score=result["relevance_score"],
+                    )
+                    for result in results
+                ]
+            except (KeyError, TypeError) as exc:
+                raise ValueError("Rerank API returned invalid result data") from exc
 
     async def terminate(self) -> None:
         """关闭客户端会话"""

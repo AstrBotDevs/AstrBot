@@ -1,8 +1,6 @@
 FROM python:3.12-slim
 WORKDIR /AstrBot
 
-COPY . /AstrBot/
-
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     build-essential \
@@ -13,6 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
     ffmpeg \
     libavcodec-extra \
+    fonts-noto-cjk \
     curl \
     gnupg \
     git \
@@ -22,12 +21,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
+COPY . /AstrBot/
+
 RUN python -m pip install uv \
     && echo "3.12" > .python-version \
     && uv lock \
     && uv export --format requirements.txt --output-file requirements.txt --frozen \
     && uv pip install -r requirements.txt --no-cache-dir --system \
-    && uv pip install socksio uv pilk --no-cache-dir --system
+    && uv pip install socksio uv pilk --no-cache-dir --system \
+    && uv pip install -e . --no-deps --system \
+    && touch /AstrBot/.astrbot
 
 EXPOSE 6185
 

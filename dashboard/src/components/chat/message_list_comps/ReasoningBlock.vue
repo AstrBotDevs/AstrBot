@@ -7,15 +7,21 @@
       @click="handlePrimaryAction"
     >
       <span class="reasoning-title">
-        {{ tm("reasoning.thinking") }}
+        <ThinkingIndicator v-if="isStreaming && !hasNonReasoningContent">
+          {{ reasoningTitle }}
+        </ThinkingIndicator>
+        <template v-else>{{ reasoningTitle }}</template>
       </span>
-      <v-icon
-        size="22"
+      <ChevronRight
+        :size="20"
+        :stroke-width="1.75"
+        aria-hidden="true"
         class="reasoning-icon"
-        :class="{ 'rotate-90': !openInSidebar && isExpanded }"
-      >
-        mdi-chevron-right
-      </v-icon>
+        :class="{
+          'rotate-90': !openInSidebar && isExpanded,
+          'reasoning-icon--thinking': isStreaming && !hasNonReasoningContent,
+        }"
+      />
     </button>
 
     <div
@@ -26,11 +32,16 @@
         :parts="renderParts"
         :reasoning="reasoning"
         :is-dark="isDark"
+        :is-streaming="isStreaming"
       />
     </div>
 
     <transition :name="previewTransitionName" mode="out-in">
-      <div v-if="showStreamingPreview" :key="previewKey" class="reasoning-preview">
+      <div
+        v-if="showStreamingPreview"
+        :key="previewKey"
+        class="reasoning-preview"
+      >
         {{ previewText }}
       </div>
     </transition>
@@ -39,8 +50,14 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import type { MessagePart } from "@/composables/useMessages";
+import { ChevronRight } from "@lucide/vue";
+import {
+  reasoningActivityCounts,
+  reasoningActivityTitle,
+  type MessagePart,
+} from "@/composables/useMessages";
 import { useModuleI18n } from "@/i18n/composables";
+import ThinkingIndicator from "@/components/chat/ThinkingIndicator.vue";
 import ReasoningTimeline from "@/components/chat/message_list_comps/ReasoningTimeline.vue";
 
 const props = defineProps<{
@@ -73,6 +90,14 @@ const renderParts = computed<MessagePart[]>(() => {
 });
 
 const openInSidebar = computed(() => Boolean(props.openInSidebar));
+
+const activityCounts = computed(() =>
+  reasoningActivityCounts(renderParts.value, props.reasoning || ""),
+);
+
+const reasoningTitle = computed(() =>
+  reasoningActivityTitle(activityCounts.value, tm),
+);
 
 const thinkingText = computed(() =>
   renderParts.value
@@ -195,6 +220,7 @@ onBeforeUnmount(() => {
 }
 
 .reasoning-header {
+  width: fit-content;
   max-width: 100%;
   border: 0;
   padding: 0;
@@ -202,25 +228,47 @@ onBeforeUnmount(() => {
   color: inherit;
   cursor: pointer;
   user-select: none;
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 8px;
   font: inherit;
+  font-size: 1rem;
+  line-height: 1.7;
   text-align: left;
+}
+
+@media (min-width: 761px) {
+  .reasoning-header {
+    font-size: 0.9375rem;
+    line-height: 1.75;
+  }
 }
 
 .reasoning-header:hover {
   color: rgba(var(--v-theme-on-surface), 0.88);
 }
 
-.reasoning-header--trigger {
-  align-items: flex-start;
-}
-
 .reasoning-icon {
   color: currentcolor;
   transition: transform 0.2s ease;
   flex-shrink: 0;
+  align-self: center;
+}
+
+.reasoning-icon--thinking {
+  color: rgba(var(--v-theme-on-surface), 0.45);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reasoning-icon--thinking {
+    color: rgba(var(--v-theme-on-surface), 0.6);
+  }
+}
+
+@media (forced-colors: active) {
+  .reasoning-icon--thinking {
+    color: CanvasText;
+  }
 }
 
 .reasoning-title {

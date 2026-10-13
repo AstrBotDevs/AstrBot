@@ -22,7 +22,7 @@
 
         <v-dialog v-model="dialog" max-width="480">
             <v-card>
-                <v-card-title class="d-flex align-center justify-space-between">
+                <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center justify-space-between">
                     <span>选择配置文件</span>
                     <v-btn icon variant="text" @click="closeDialog">
                         <v-icon>mdi-close</v-icon>
@@ -42,7 +42,7 @@
                             variant="text"
                             @click="tempSelectedConfig = config.id"
                         >
-                            <v-list-item-title>{{ config.name }}</v-list-item-title>
+                            <v-list-item-title>{{ configDisplayName(config) }}</v-list-item-title>
                             <v-list-item-subtitle class="text-caption text-grey">
                                 {{ config.id }}
                             </v-list-item-subtitle>
@@ -60,6 +60,7 @@
                     <v-btn variant="text" @click="closeDialog">取消</v-btn>
                     <v-btn
                         color="primary"
+                        variant="tonal"
                         @click="confirmSelection"
                         :disabled="!tempSelectedConfig"
                         :loading="saving"
@@ -74,7 +75,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import axios from 'axios';
+import { configProfileApi, configRouteApi } from '@/api/v1';
 import { useToast } from '@/utils/toast';
 import { useModuleI18n } from '@/i18n/composables';
 import {
@@ -108,6 +109,7 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{ 'config-changed': [ConfigChangedPayload] }>();
 
 const { tm } = useModuleI18n('features/chat');
+const { tm: tmConfig } = useModuleI18n('features/config');
 
 const configOptions = ref<ConfigInfo[]>([]);
 const loadingConfigs = ref(false);
@@ -147,9 +149,17 @@ const targetUmo = computed(() => {
     return `${props.platformId}:${messageType.value}:${sessionKey.value}`;
 });
 
+function configDisplayName(config: ConfigInfo): string {
+    if (config.id === 'default') {
+        return tmConfig('configSelection.defaultConfig');
+    }
+    return config.name || config.id;
+}
+
 const selectedConfigLabel = computed(() => {
-    const target = configOptions.value.find((item) => item.id === selectedConfigId.value);
-    return target?.name || selectedConfigId.value || 'default';
+    const id = selectedConfigId.value || 'default';
+    const target = configOptions.value.find((item) => item.id === id);
+    return configDisplayName(target ?? { id, name: id });
 });
 
 function openDialog() {
@@ -164,8 +174,11 @@ function closeDialog() {
 async function fetchConfigList() {
     loadingConfigs.value = true;
     try {
-        const res = await axios.get('/api/config/abconfs');
-        configOptions.value = res.data.data?.info_list || [];
+        const res = await configProfileApi.list();
+        configOptions.value = (res.data.data?.info_list || []).map((item: any) => ({
+            id: String(item.id || ''),
+            name: String(item.name || item.id || 'default')
+        }));
     } catch (error) {
         console.error('加载配置文件列表失败', error);
         configOptions.value = [];
@@ -176,7 +189,7 @@ async function fetchConfigList() {
 
 async function fetchRoutingEntries() {
     try {
-        const res = await axios.get('/api/config/umo_abconf_routes');
+        const res = await configRouteApi.list();
         const routing = res.data.data?.routing || {};
         routingEntries.value = Object.entries(routing).map(([pattern, confId]) => ({
             pattern,
@@ -214,10 +227,9 @@ async function getAgentRunnerType(confId: string): Promise<string> {
         return configCache.value[confId];
     }
     try {
-        const res = await axios.get('/api/config/abconf', {
-            params: { id: confId }
-        });
-        const type = res.data.data?.config?.provider_settings?.agent_runner_type || 'local';
+        const res = await configProfileApi.get(confId);
+        const config = ((res.data.data as any).config || {}) as any;
+        const type = config?.agent_runner?.runner_type || 'local';
         configCache.value[confId] = type;
         return type;
     } catch (error) {
@@ -244,12 +256,11 @@ async function applySelectionToBackend(confId: string): Promise<boolean> {
     }
     saving.value = true;
     try {
-        await axios.post('/api/config/umo_abconf_route/update', {
-            umo: targetUmo.value,
-            conf_id: confId
-        });
+        await configRouteApi.upsert(targetUmo.value, { config_id: confId });
         const filtered = routingEntries.value.filter((entry) => entry.pattern !== targetUmo.value);
-        filtered.push({ pattern: targetUmo.value, confId });
+        if (confId !== 'default') {
+            filtered.push({ pattern: targetUmo.value, confId });
+        }
         routingEntries.value = filtered;
         return true;
     } catch (error) {

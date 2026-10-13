@@ -6,9 +6,11 @@ from sys import maxsize
 import astrbot.api.message_components as Comp
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, filter
-from astrbot.api.message_components import Image, Plain
+from astrbot.api.message_components import Image, Json, Plain
 from astrbot.api.provider import LLMResponse, ProviderRequest
 from astrbot.core import logger
+from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core.utils.session_waiter import (
     FILTERS,
     USER_SESSIONS,
@@ -17,7 +19,7 @@ from astrbot.core.utils.session_waiter import (
     session_waiter,
 )
 
-from .long_term_memory import LongTermMemory
+from .group_chat_context import GroupChatContext
 
 
 def _iter_message_components(event: AstrMessageEvent):
@@ -30,11 +32,14 @@ def _iter_message_components(event: AstrMessageEvent):
 class Main(star.Star):
     def __init__(self, context: star.Context) -> None:
         self.context = context
-        self.ltm = None
+        self.group_chat_context = None
         try:
-            self.ltm = LongTermMemory(self.context.astrbot_config_mgr, self.context)
+            self.group_chat_context = GroupChatContext(
+                self.context.astrbot_config_mgr,
+                self.context,
+            )
         except BaseException as e:
-            logger.error(f"聊天增强 err: {e}")
+            logger.error(f"group chat context init failed: {e}")
 
     @filter.event_message_type(filter.EventMessageType.ALL, priority=maxsize)
     async def handle_session_control_agent(self, event: AstrMessageEvent) -> None:
@@ -133,50 +138,111 @@ class Main(star.Star):
         except Exception as e:
             logger.error("handle_empty_mention error: " + str(e))
 
-    def ltm_enabled(self, event: AstrMessageEvent):
-        ltmse = self.context.get_config(umo=event.unified_msg_origin)[
+    def group_context_enabled(self, event: AstrMessageEvent):
+        group_context_settings = self.context.get_config(umo=event.unified_msg_origin)[
             "provider_ltm_settings"
         ]
-        return ltmse["group_icl_enable"] or ltmse["active_reply"]["enable"]
+        return (
+            group_context_settings["group_icl_enable"]
+            or group_context_settings["active_reply"]["enable"]
+        )
+
+    @filter.platform_adapter_type(
+        filter.PlatformAdapterType.ALL,
+        priority=maxsize - 2,
+    )
+    async def persist_group_message(self, event: AstrMessageEvent) -> None:
+        """Persist an incoming message for an enabled group session.
+
+        Args:
+            event: Current platform message event.
+        """
+        if (
+            event.get_message_type() != MessageType.GROUP_MESSAGE
+            or event.get_platform_name() == "webchat"
+        ):
+            return
+
+        settings = self.context.get_config(umo=event.unified_msg_origin).get(
+            "provider_ltm_settings",
+            {},
+        )
+        if not settings.get("group_message_history_enable", False):
+            return
+
+        try:
+            max_messages = max(
+                1,
+                int(settings.get("group_message_history_max_cnt", 700)),
+            )
+        except (TypeError, ValueError):
+            max_messages = 700
+
+        try:
+            history = await self.context.message_history_manager.insert_message_chain(
+                platform_id=event.get_platform_id(),
+                user_id=event.unified_msg_origin,
+                message_chain=MessageChain(chain=list(event.get_messages())),
+                role="user",
+                sender_id=event.get_sender_id(),
+                sender_name=event.get_sender_name(),
+                max_messages=max_messages,
+            )
+            if history and history.id is not None:
+                event.set_extra("_current_platform_message_history_id", history.id)
+        except Exception:
+            logger.exception("Failed to persist an incoming group message.")
 
     @filter.platform_adapter_type(filter.PlatformAdapterType.ALL)
     async def on_message(self, event: AstrMessageEvent):
-        """群聊记忆增强"""
+        """群聊上下文感知"""
         message_components = _iter_message_components(event)
-        has_image_or_plain = False
+        has_context_content = False
         for comp in message_components:
-            if isinstance(comp, Plain) or isinstance(comp, Image):
-                has_image_or_plain = True
+            if isinstance(comp, Plain | Image | Json):
+                has_context_content = True
                 break
 
-        if self.ltm_enabled(event) and self.ltm and has_image_or_plain:
-            need_active = await self.ltm.need_active_reply(event)
+        group_context_enabled = False
+        if self.group_chat_context:
+            try:
+                group_context_enabled = self.group_context_enabled(event)
+            except BaseException as e:
+                logger.error(f"group chat context: {e}")
+
+        if group_context_enabled and self.group_chat_context and has_context_content:
+            need_active = await self.group_chat_context.need_active_reply(event)
 
             group_icl_enable = self.context.get_config(umo=event.unified_msg_origin)[
                 "provider_ltm_settings"
             ]["group_icl_enable"]
             if group_icl_enable:
-                """记录对话"""
-                try:
-                    await self.ltm.handle_message(event)
-                except BaseException as e:
-                    logger.error(e)
+                # Skip recording if a command handler matched (e.g. /reset,
+                # /help, /new). Slash commands are bot instructions, not group
+                # chat context that should be injected into future LLM requests.
+                if not event.get_extra("handlers_parsed_params", {}):
+                    try:
+                        await self.group_chat_context.handle_message(event)
+                    except BaseException as e:
+                        logger.error(e)
 
             if need_active:
-                """主动回复"""
-                provider = self.context.get_using_provider(event.unified_msg_origin)
+                provider = await self.context.get_using_provider_async(
+                    event.unified_msg_origin
+                )
                 if not provider:
                     logger.error("未找到任何 LLM 提供商。请先配置。无法主动回复")
                     return
                 try:
-                    conv = None
                     session_curr_cid = await self.context.conversation_manager.get_curr_conversation_id(
                         event.unified_msg_origin,
                     )
 
                     if not session_curr_cid:
                         logger.error(
-                            "当前未处于对话状态，无法主动回复，请确保 平台设置->会话隔离(unique_session) 未开启，并使用 /switch 序号 切换或者 /new 创建一个会话。",
+                            "No active conversation is available for proactive replies. "
+                            "Disable Isolate Conversation in Config -> Platforms & Messages "
+                            "-> General, then use /new to create a conversation.",
                         )
                         return
 
@@ -184,6 +250,10 @@ class Main(star.Star):
                         event.unified_msg_origin,
                         session_curr_cid,
                     )
+
+                    if not conv:
+                        logger.error("未找到对话，无法主动回复")
+                        return
 
                     prompt = event.message_str
                     image_urls = []
@@ -193,10 +263,6 @@ class Main(star.Star):
                                 image_urls.append(await comp.convert_to_file_path())
                             except Exception:
                                 logger.exception("主动回复处理图片失败")
-
-                    if not conv:
-                        logger.error("未找到对话，无法主动回复")
-                        return
 
                     yield event.request_llm(
                         prompt=prompt,
@@ -208,35 +274,76 @@ class Main(star.Star):
                     logger.error(traceback.format_exc())
                     logger.error(f"主动回复失败: {e}")
 
+    @filter.on_llm_response()
+    async def persist_llm_response(
+        self,
+        event: AstrMessageEvent,
+        response: LLMResponse,
+    ) -> None:
+        """Persist the final LLM response for an enabled group session.
+
+        Args:
+            event: Current platform message event.
+            response: Complete response produced when the agent finishes.
+        """
+        if (
+            event.get_message_type() != MessageType.GROUP_MESSAGE
+            or event.get_platform_name() == "webchat"
+        ):
+            return
+
+        settings = self.context.get_config(umo=event.unified_msg_origin).get(
+            "provider_ltm_settings",
+            {},
+        )
+        if not settings.get("group_message_history_enable", False):
+            return
+
+        chain = response.result_chain
+        if not chain and response.completion_text:
+            chain = MessageChain().message(response.completion_text)
+        if not chain or not chain.chain:
+            return
+
+        try:
+            max_messages = max(
+                1,
+                int(settings.get("group_message_history_max_cnt", 700)),
+            )
+        except (TypeError, ValueError):
+            max_messages = 700
+
+        try:
+            await self.context.message_history_manager.insert_message_chain(
+                platform_id=event.get_platform_id(),
+                user_id=event.unified_msg_origin,
+                message_chain=chain,
+                role="bot",
+                sender_id=event.get_self_id() or "bot",
+                sender_name="bot",
+                max_messages=max_messages,
+            )
+        except Exception:
+            logger.exception("Failed to persist an outgoing group message.")
+
     @filter.on_llm_request()
     async def decorate_llm_req(
         self, event: AstrMessageEvent, req: ProviderRequest
     ) -> None:
         """在请求 LLM 前注入人格信息、Identifier、时间、回复内容等 System Prompt"""
-        if self.ltm and self.ltm_enabled(event):
+        if self.group_chat_context and self.group_context_enabled(event):
             try:
-                await self.ltm.on_req_llm(event, req)
+                await self.group_chat_context.on_req_llm(event, req)
             except BaseException as e:
-                logger.error(f"ltm: {e}")
-
-    @filter.on_llm_response()
-    async def record_llm_resp_to_ltm(
-        self, event: AstrMessageEvent, resp: LLMResponse
-    ) -> None:
-        """在 LLM 响应后记录对话"""
-        if self.ltm and self.ltm_enabled(event):
-            try:
-                await self.ltm.after_req_llm(event, resp)
-            except Exception as e:
-                logger.error(f"ltm: {e}")
+                logger.error(f"group chat context: {e}")
 
     @filter.after_message_sent()
     async def after_message_sent(self, event: AstrMessageEvent) -> None:
         """消息发送后处理"""
-        if self.ltm and self.ltm_enabled(event):
+        if self.group_chat_context and self.group_context_enabled(event):
             try:
-                clean_session = event.get_extra("_clean_ltm_session", False)
+                clean_session = event.get_extra("_clean_group_context_session", False)
                 if clean_session:
-                    await self.ltm.remove_session(event)
+                    await self.group_chat_context.remove_session(event)
             except Exception as e:
-                logger.error(f"ltm: {e}")
+                logger.error(f"group chat context: {e}")

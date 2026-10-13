@@ -1,6 +1,6 @@
 /**
  * 通用文件夹管理组件类型定义
- * 
+ *
  * 这是一个可复用的文件夹管理系统，可用于管理各种类型的项目（如 persona、模板、知识库等）
  */
 
@@ -49,21 +49,24 @@ export interface DropEventData {
 export interface FolderOperations {
   // 加载文件夹树
   loadFolderTree: () => Promise<FolderTreeNode[]>;
-  
+
   // 加载指定文件夹的子文件夹
   loadSubFolders: (parentId: string | null) => Promise<Folder[]>;
-  
+
   // 创建文件夹
   createFolder: (data: CreateFolderData) => Promise<Folder>;
-  
+
   // 更新文件夹
   updateFolder: (data: UpdateFolderData) => Promise<void>;
-  
+
   // 删除文件夹
   deleteFolder: (folderId: string) => Promise<void>;
-  
+
   // 移动文件夹
-  moveFolder?: (folderId: string, targetParentId: string | null) => Promise<void>;
+  moveFolder?: (
+    folderId: string,
+    targetParentId: string | null,
+  ) => Promise<void>;
 }
 
 /**
@@ -123,19 +126,19 @@ export interface ContextMenuEvent {
 export interface FolderI18nKeys {
   // 搜索框
   searchPlaceholder?: string;
-  
+
   // 根目录
   rootFolder?: string;
-  
+
   // 侧边栏标题
   sidebarTitle?: string;
-  
+
   // 空状态
   noFolders?: string;
-  
+
   // 文件夹标题
   foldersTitle?: string;
-  
+
   // 按钮
   buttons?: {
     create?: string;
@@ -144,18 +147,18 @@ export interface FolderI18nKeys {
     delete?: string;
     move?: string;
   };
-  
+
   // 表单
   form?: {
     name?: string;
     description?: string;
   };
-  
+
   // 验证
   validation?: {
     nameRequired?: string;
   };
-  
+
   // 右键菜单
   contextMenu?: {
     open?: string;
@@ -163,7 +166,7 @@ export interface FolderI18nKeys {
     moveTo?: string;
     delete?: string;
   };
-  
+
   // 对话框
   dialogs?: {
     createTitle?: string;
@@ -174,7 +177,7 @@ export interface FolderI18nKeys {
     moveTitle?: string;
     moveDescription?: string;
   };
-  
+
   // 消息
   messages?: {
     createSuccess?: string;
@@ -194,7 +197,7 @@ export interface FolderI18nKeys {
 export interface BaseFolderProps {
   // i18n 翻译函数
   t?: (key: string, params?: Record<string, any>) => string;
-  
+
   // i18n 键配置
   i18nKeys?: FolderI18nKeys;
 }
@@ -216,10 +219,10 @@ export interface SelectableItem {
 export interface FolderItemSelectorOperations<T extends SelectableItem> {
   // 加载文件夹树
   loadFolderTree: () => Promise<FolderTreeNode[]>;
-  
+
   // 加载指定文件夹下的项目
   loadItemsInFolder: (folderId: string | null) => Promise<T[]>;
-  
+
   // 创建项目（可选）
   createItem?: (data: any) => Promise<T>;
 }
@@ -232,19 +235,19 @@ export interface FolderItemSelectorLabels {
   dialogTitle?: string;
   notSelected?: string;
   buttonText?: string;
-  
+
   // 项目列表
   noItems?: string;
   defaultItem?: string;
   noDescription?: string;
   emptyFolder?: string;
-  
+
   // 按钮
   createButton?: string;
   editButton?: string;
   confirmButton?: string;
   cancelButton?: string;
-  
+
   // 文件夹
   rootFolder?: string;
 }

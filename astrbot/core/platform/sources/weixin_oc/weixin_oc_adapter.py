@@ -29,6 +29,11 @@ from astrbot.api.platform import (
 from astrbot.core import astrbot_config
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.media_utils import (
+    MEDIA_MIME_EXTENSIONS,
+    MediaResolver,
+    detect_image_mime_type_async,
+)
 
 from .weixin_oc_client import WeixinOCClient
 from .weixin_oc_event import WeixinOCMessageEvent
@@ -108,6 +113,9 @@ class WeixinOCAdapter(Platform):
     REPLY_MATCH_WINDOW_MS = 60_000
     RECENT_SESSION_CACHE_TTL_S = 1_800
     MAX_RECENT_MESSAGE_SESSIONS = 500
+    # Aiohttp reads ClientTimeout(total=0) as "no timeout", and the dashboard
+    # writes 0 when a numeric field is cleared, so a timeout must stay positive.
+    MIN_TIMEOUT_MS = 1_000
 
     def __init__(
         self,
@@ -122,15 +130,20 @@ class WeixinOCAdapter(Platform):
             platform_config.get("weixin_oc_base_url", "https://ilinkai.weixin.qq.com")
         ).rstrip("/")
         self.bot_type = str(platform_config.get("weixin_oc_bot_type", "3"))
-        self.qr_poll_interval = max(
+        self.qr_poll_interval = self._get_int_config(
+            "weixin_oc_qr_poll_interval",
             1,
-            int(platform_config.get("weixin_oc_qr_poll_interval", 1)),
+            1,
         )
-        self.long_poll_timeout_ms = int(
-            platform_config.get("weixin_oc_long_poll_timeout_ms", 35_000),
+        self.long_poll_timeout_ms = self._get_int_config(
+            "weixin_oc_long_poll_timeout_ms",
+            35_000,
+            self.MIN_TIMEOUT_MS,
         )
-        self.api_timeout_ms = int(
-            platform_config.get("weixin_oc_api_timeout_ms", 15_000),
+        self.api_timeout_ms = self._get_int_config(
+            "weixin_oc_api_timeout_ms",
+            120_000,
+            self.MIN_TIMEOUT_MS,
         )
         self.cdn_base_url = str(
             platform_config.get(
@@ -152,6 +165,7 @@ class WeixinOCAdapter(Platform):
         self._qr_expired_count = 0
         self._context_tokens: dict[str, str] = {}
         self._context_tokens_dirty = False
+        self._context_tokens_revision = 0
         self._typing_states: dict[str, TypingSessionState] = {}
         self._last_inbound_error = ""
         self._recent_message_cache_size = self._get_int_config(
@@ -559,6 +573,7 @@ class WeixinOCAdapter(Platform):
 
     async def _save_account_state(self) -> None:
         normalized_context_tokens = self._normalize_context_tokens(self._context_tokens)
+        context_tokens_revision = self._context_tokens_revision
         self.config["weixin_oc_token"] = self.token or ""
         self.config["weixin_oc_account_id"] = self.account_id or ""
         self.config["weixin_oc_sync_buf"] = self._sync_buf
@@ -580,8 +595,9 @@ class WeixinOCAdapter(Platform):
             break
 
         self._sync_client_state()
-        astrbot_config.save_config()
-        self._context_tokens_dirty = False
+        committed = await astrbot_config.save_config_async()
+        if committed and context_tokens_revision == self._context_tokens_revision:
+            self._context_tokens_dirty = False
 
     def _is_login_session_valid(
         self, login_session: OpenClawLoginSession | None
@@ -756,11 +772,16 @@ class WeixinOCAdapter(Platform):
                 )
             else:
                 content = await self.client.download_cdn_bytes(encrypted_query_param)
+            mime_type = await detect_image_mime_type_async(
+                content,
+                default_mime_type=None,
+            )
+            suffix = MEDIA_MIME_EXTENSIONS.get(mime_type or "", ".jpg")
             image_path = self._save_inbound_media(
                 content,
                 prefix="weixin_oc_img",
-                file_name="image.jpg",
-                fallback_suffix=".jpg",
+                file_name=f"image{suffix}",
+                fallback_suffix=suffix,
             )
             return Image.fromFileSystem(str(image_path))
 
@@ -823,7 +844,12 @@ class WeixinOCAdapter(Platform):
                 file_name="voice.silk",
                 fallback_suffix=".silk",
             )
-            return Record.fromFileSystem(str(voice_path))
+            path_wav = await MediaResolver(
+                str(voice_path),
+                media_type="audio",
+                default_suffix=".wav",
+            ).to_path(target_format="wav")
+            return Record(file=path_wav, url=path_wav)
 
         return None
 
@@ -965,6 +991,7 @@ class WeixinOCAdapter(Platform):
         self.account_id = None
         self._sync_buf = ""
         self._context_tokens = {}
+        self._context_tokens_revision += 1
         self._context_tokens_dirty = False
         self._login_session = None
         await self._save_account_state()
@@ -1492,6 +1519,7 @@ class WeixinOCAdapter(Platform):
             previous_context_token = self._context_tokens.get(from_user_id)
             if previous_context_token != context_token:
                 self._context_tokens[from_user_id] = context_token
+                self._context_tokens_revision += 1
                 self._context_tokens_dirty = True
 
         item_list = cast(list[dict[str, Any]], msg.get("item_list", []))
@@ -1554,15 +1582,7 @@ class WeixinOCAdapter(Platform):
             message_str=text,
         )
 
-        self.commit_event(
-            WeixinOCMessageEvent(
-                message_str=text,
-                message_obj=abm,
-                platform_meta=self.meta(),
-                session_id=abm.session_id,
-                platform=self,
-            )
-        )
+        self.commit_event(self.create_event(abm))
 
     async def _poll_inbound_updates(self) -> None:
         data = await self.client.request_json(
@@ -1679,6 +1699,23 @@ class WeixinOCAdapter(Platform):
 
     def meta(self) -> PlatformMetadata:
         return self.metadata
+
+    def create_event(self, message: AstrBotMessage) -> WeixinOCMessageEvent:
+        """Creates a Weixin OC message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created Weixin OC message event.
+        """
+        return WeixinOCMessageEvent(
+            message_str=message.message_str,
+            message_obj=message,
+            platform_meta=self.meta(),
+            session_id=message.session_id,
+            platform=self,
+        )
 
     async def run(self) -> None:
         try:

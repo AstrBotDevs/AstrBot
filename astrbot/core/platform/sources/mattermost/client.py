@@ -10,6 +10,7 @@ from astrbot.api import logger
 from astrbot.api.event import MessageChain
 from astrbot.api.message_components import At, File, Image, Plain, Record, Reply, Video
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.media_utils import MediaResolver, detect_image_mime_type_async
 
 
 class MattermostClient:
@@ -71,6 +72,84 @@ class MattermostClient:
 
     async def get_channel(self, channel_id: str) -> dict[str, Any]:
         return await self.get_json(f"channels/{channel_id}")
+
+    async def get_channel_stats(self, channel_id: str) -> dict[str, Any]:
+        """Gets aggregate statistics for a channel.
+
+        Args:
+            channel_id: Mattermost channel identifier.
+
+        Returns:
+            Channel statistics returned by Mattermost.
+        """
+        return await self.get_json(f"channels/{channel_id}/stats")
+
+    async def get_channel_members(
+        self,
+        channel_id: str,
+        *,
+        page: int,
+        per_page: int,
+    ) -> list[dict[str, Any]]:
+        """Gets one page of channel membership records.
+
+        Args:
+            channel_id: Mattermost channel identifier.
+            page: Zero-based page index.
+            per_page: Maximum records requested per page.
+
+        Returns:
+            Channel membership records for the requested page.
+
+        Raises:
+            RuntimeError: If Mattermost rejects the request or returns invalid JSON.
+        """
+        session = await self.ensure_session()
+        path = f"channels/{channel_id}/members"
+        url = f"{self.base_url}/api/v4/{path}"
+        async with session.get(
+            url,
+            headers=self._headers(),
+            params={"page": page, "per_page": per_page},
+        ) as resp:
+            if resp.status >= 400:
+                body = await resp.text()
+                raise RuntimeError(
+                    f"Mattermost GET {path} failed: {resp.status} {body}"
+                )
+            data = await resp.json()
+            if not isinstance(data, list):
+                raise RuntimeError(f"Mattermost GET {path} returned non-list JSON")
+            return [item for item in data if isinstance(item, dict)]
+
+    async def get_users_by_ids(
+        self,
+        user_ids: list[str],
+    ) -> list[dict[str, Any]]:
+        """Gets user profiles in one Mattermost batch request.
+
+        Args:
+            user_ids: Mattermost user identifiers to resolve.
+
+        Returns:
+            User profiles visible to the bot.
+
+        Raises:
+            RuntimeError: If Mattermost rejects the request or returns invalid JSON.
+        """
+        session = await self.ensure_session()
+        path = "users/ids"
+        url = f"{self.base_url}/api/v4/{path}"
+        async with session.post(url, headers=self._headers(), json=user_ids) as resp:
+            if resp.status >= 400:
+                body = await resp.text()
+                raise RuntimeError(
+                    f"Mattermost POST {path} failed: {resp.status} {body}"
+                )
+            data = await resp.json()
+            if not isinstance(data, list):
+                raise RuntimeError(f"Mattermost POST {path} returned non-list JSON")
+            return [item for item in data if isinstance(item, dict)]
 
     async def get_file_info(self, file_id: str) -> dict[str, Any]:
         return await self.get_json(f"files/{file_id}/info")
@@ -167,12 +246,19 @@ class MattermostClient:
                 path = await segment.convert_to_file_path()
                 file_path = Path(path)
                 file_bytes = await asyncio.to_thread(file_path.read_bytes)
+                mime_type = (
+                    await detect_image_mime_type_async(
+                        file_bytes,
+                        default_mime_type=None,
+                    )
+                    or mimetypes.guess_type(file_path.name)[0]
+                )
                 file_ids.append(
                     await self.upload_file(
                         channel_id,
                         file_bytes,
                         file_path.name,
-                        mimetypes.guess_type(file_path.name)[0] or "image/jpeg",
+                        mime_type or "image/jpeg",
                     )
                 )
             elif isinstance(segment, (File, Record, Video)):
@@ -241,7 +327,12 @@ class MattermostClient:
             if mime_type.startswith("image/"):
                 components.append(Image.fromFileSystem(str(file_path)))
             elif mime_type.startswith("audio/"):
-                components.append(Record.fromFileSystem(str(file_path)))
+                path_wav = await MediaResolver(
+                    str(file_path),
+                    media_type="audio",
+                    default_suffix=".wav",
+                ).to_path(target_format="wav")
+                components.append(Record(file=path_wav, url=path_wav))
             elif mime_type.startswith("video/"):
                 components.append(Video.fromFileSystem(str(file_path)))
             else:

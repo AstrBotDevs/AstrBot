@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-
 # ═══════════════════════════════════════════════════════════════
 # _wait_until_ready
 # ═══════════════════════════════════════════════════════════════
@@ -284,11 +283,12 @@ class TestGetBooterRebuild:
             _self._fs = SimpleNamespace()  # type: ignore[assignment]
             _self._python = SimpleNamespace()  # type: ignore[assignment]
 
-        with patch.object(
-            ShipyardNeoBooter, "boot", _fake_boot
-        ), patch(
-            "astrbot.core.computer.computer_client._sync_skills_to_sandbox",
-            AsyncMock(),
+        with (
+            patch.object(ShipyardNeoBooter, "boot", _fake_boot),
+            patch(
+                "astrbot.core.computer.computer_client._sync_skills_to_sandbox",
+                AsyncMock(),
+            ),
         ):
             await get_booter(ctx, "session-1")
 
@@ -327,12 +327,15 @@ class TestGetBooterRebuild:
             async def shutdown(self, **kwargs):
                 pass
 
-        with patch(
-            "astrbot.core.computer.booters.shipyard.ShipyardBooter",
-            _FakeShipyardBooter,
-        ), patch(
-            "astrbot.core.computer.computer_client._sync_skills_to_sandbox",
-            AsyncMock(),
+        with (
+            patch(
+                "astrbot.core.computer.booters.shipyard.ShipyardBooter",
+                _FakeShipyardBooter,
+            ),
+            patch(
+                "astrbot.core.computer.computer_client._sync_skills_to_sandbox",
+                AsyncMock(),
+            ),
         ):
             from astrbot.core.computer.computer_client import get_booter
 

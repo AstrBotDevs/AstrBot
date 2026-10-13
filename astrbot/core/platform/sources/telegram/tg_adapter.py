@@ -19,6 +19,7 @@ from astrbot.api import logger
 from astrbot.api.event import MessageChain
 from astrbot.api.platform import (
     AstrBotMessage,
+    Group,
     MessageMember,
     MessageType,
     Platform,
@@ -32,7 +33,7 @@ from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file
-from astrbot.core.utils.media_utils import convert_audio_to_wav
+from astrbot.core.utils.media_utils import MediaResolver
 
 from .tg_event import TelegramPlatformEvent
 
@@ -44,6 +45,8 @@ else:
 
 @register_platform_adapter("telegram", "telegram 适配器")
 class TelegramPlatformAdapter(Platform):
+    _FORUM_TOPIC_NAME_CACHE_MAX_SIZE = 1000
+
     def __init__(
         self,
         platform_config: dict,
@@ -117,6 +120,7 @@ class TelegramPlatformAdapter(Platform):
         self._polling_recovery_threshold = 3
         self._polling_failure_window = 60.0
         self._application_started = False
+        self._forum_topic_names: dict[tuple[str, int | None], str] = {}
         self._build_application()
 
         # Media group handling
@@ -286,12 +290,19 @@ class TelegramPlatformAdapter(Platform):
                 await asyncio.sleep(self._polling_restart_delay)
 
     def _on_polling_error(self, error: Exception) -> None:
+        # Non-network errors (e.g. Conflict when two bot instances poll the
+        # same token) have a clear cause; log a concise message instead of a
+        # full traceback to avoid filling the log.
+        if not isinstance(error, NetworkError):
+            logger.error(
+                f"Telegram polling request failed: {type(error).__name__}: {error!s}"
+            )
+            return
+
         logger.error(
             f"Telegram polling request failed: {type(error).__name__}: {error!s}",
             exc_info=error,
         )
-        if not isinstance(error, NetworkError):
-            return
 
         if self._loop is None:
             return
@@ -461,10 +472,11 @@ class TelegramPlatformAdapter(Platform):
             if update.message.caption and update.message.caption_entities:
                 for entity in update.message.caption_entities:
                     if entity.type == "mention":
-                        name = update.message.caption[
-                            entity.offset + 1 : entity.offset + entity.length
-                        ]
-                        message.message.append(Comp.At(qq=name, name=name))
+                        name = update.message.parse_caption_entity(entity)[1:]
+                        mention = Comp.At(qq=name, name=name)
+                        if name.lower() == message.self_id.lower():
+                            mention.qq = message.self_id
+                        message.message.append(mention)
 
         message = AstrBotMessage()
         message.session_id = str(update.message.chat.id)
@@ -474,11 +486,69 @@ class TelegramPlatformAdapter(Platform):
             message.type = MessageType.FRIEND_MESSAGE
         else:
             message.type = MessageType.GROUP_MESSAGE
-            message.group_id = str(update.message.chat.id)
-            if update.message.is_topic_message and update.message.message_thread_id:
+            chat_id = str(update.message.chat.id)
+            group_id = chat_id
+            is_forum = getattr(update.message.chat, "is_forum", False) is True
+            raw_thread_id = (
+                update.message.message_thread_id
+                if update.message.is_topic_message
+                else None
+            )
+            thread_id = (
+                raw_thread_id
+                if raw_thread_id and not (is_forum and raw_thread_id == 1)
+                else None
+            )
+            if thread_id is not None:
                 # Telegram Topic Group: include thread id to isolate per-topic sessions.
-                message.group_id += "#" + str(update.message.message_thread_id)
-                message.session_id = message.group_id
+                group_id += "#" + str(thread_id)
+                message.session_id = group_id
+
+            chat_title = getattr(update.message.chat, "title", None)
+            group_name = chat_title if isinstance(chat_title, str) else None
+            topic_name = None
+            topic_created = getattr(update.message, "forum_topic_created", None)
+            topic_edited = getattr(update.message, "forum_topic_edited", None)
+            discovered_topic_name = getattr(topic_created, "name", None)
+            if not isinstance(discovered_topic_name, str):
+                discovered_topic_name = getattr(topic_edited, "name", None)
+            if not isinstance(discovered_topic_name, str):
+                reply_message = update.message.reply_to_message
+                reply_topic_created = getattr(
+                    reply_message, "forum_topic_created", None
+                )
+                discovered_topic_name = getattr(reply_topic_created, "name", None)
+
+            topic_key = None
+            if thread_id is not None:
+                topic_key = (chat_id, thread_id)
+            elif is_forum:
+                topic_key = (chat_id, None)
+
+            if topic_key is not None:
+                cached_topic_name = self._forum_topic_names.pop(topic_key, None)
+                if (
+                    isinstance(discovered_topic_name, str)
+                    and discovered_topic_name.strip()
+                ):
+                    cached_topic_name = discovered_topic_name.strip()
+                if cached_topic_name:
+                    self._forum_topic_names[topic_key] = cached_topic_name
+                    if (
+                        len(self._forum_topic_names)
+                        > self._FORUM_TOPIC_NAME_CACHE_MAX_SIZE
+                    ):
+                        oldest_topic_key = next(iter(self._forum_topic_names))
+                        del self._forum_topic_names[oldest_topic_key]
+                topic_name = cached_topic_name
+
+            if group_name and topic_name:
+                group_name = f"{group_name}-{topic_name}"
+            message.group = Group(
+                group_id=group_id,
+                group_name=group_name,
+            )
+            message._telegram_topic_name = topic_name
         message.message_id = str(update.message.message_id)
         _from_user = update.message.from_user
         if not _from_user:
@@ -506,15 +576,22 @@ class TelegramPlatformAdapter(Platform):
             reply_abm = await self.convert_message(reply_update, context, False)
 
             if reply_abm:
+                quote_text = update.message.quote.text if update.message.quote else None
+                reply_chain = reply_abm.message
+                reply_message_str = reply_abm.message_str
+                if quote_text:
+                    reply_chain = [Comp.Plain(quote_text)]
+                    reply_message_str = quote_text
+
                 message.message.append(
                     Comp.Reply(
                         id=reply_abm.message_id,
-                        chain=reply_abm.message,
+                        chain=reply_chain,
                         sender_id=reply_abm.sender.user_id,
                         sender_nickname=reply_abm.sender.nickname,
                         time=reply_abm.timestamp,
-                        message_str=reply_abm.message_str,
-                        text=reply_abm.message_str,
+                        message_str=reply_message_str,
+                        text=reply_message_str,
                         qq=reply_abm.sender.user_id,
                     ),
                 )
@@ -522,6 +599,23 @@ class TelegramPlatformAdapter(Platform):
         if update.message.text:
             # 处理文本消息
             plain_text = update.message.text
+            if update.message.entities:
+                # Entity offsets refer to the original text in UTF-16 code units.
+                text_utf16 = plain_text.encode("utf-16-le")
+                text_parts = []
+                last_end = 0
+                for entity in update.message.entities:
+                    if entity.type == "mention":
+                        name = update.message.parse_entity(entity)[1:]
+                        mention = Comp.At(qq=name, name=name)
+                        if name.lower() == message.self_id.lower():
+                            mention.qq = message.self_id
+                            text_parts.append(text_utf16[last_end : entity.offset * 2])
+                            last_end = (entity.offset + entity.length) * 2
+                        message.message.append(mention)
+                text_parts.append(text_utf16[last_end:])
+                plain_text = b"".join(text_parts).decode("utf-16-le")
+
             if (
                 message.type == MessageType.GROUP_MESSAGE
                 and update.message
@@ -542,20 +636,6 @@ class TelegramPlatformAdapter(Platform):
                             f" {command_parts[1]}" if len(command_parts) > 1 else ""
                         )
 
-            if update.message.entities:
-                for entity in update.message.entities:
-                    if entity.type == "mention":
-                        name = plain_text[
-                            entity.offset + 1 : entity.offset + entity.length
-                        ]
-                        message.message.append(Comp.At(qq=name, name=name))
-                        # 如果mention是当前bot则移除；否则保留
-                        if name.lower() == context.bot.username.lower():
-                            plain_text = (
-                                plain_text[: entity.offset]
-                                + plain_text[entity.offset + entity.length :]
-                            )
-
             if plain_text:
                 message.message.append(Comp.Plain(plain_text))
             message.message_str = plain_text
@@ -571,15 +651,34 @@ class TelegramPlatformAdapter(Platform):
             temp_dir = get_astrbot_temp_path()
             temp_path = os.path.join(temp_dir, file_basename)
             await download_file(cast(str, file.file_path), path=temp_path)
-            path_wav = os.path.join(
-                temp_dir,
-                f"{file_basename}.wav",
-            )
-            path_wav = await convert_audio_to_wav(temp_path, path_wav)
+            path_wav = await MediaResolver(
+                temp_path,
+                media_type="audio",
+                default_suffix=".wav",
+            ).to_path(target_format="wav")
 
             record = Comp.Record(file=path_wav, url=path_wav)
             record.path = path_wav
             message.message = [record]
+
+        elif update.message.audio:
+            # Audio files use their own Bot API field and do not fall back to document.
+            file = await update.message.audio.get_file()
+
+            file_basename = os.path.basename(cast(str, file.file_path))
+            temp_dir = get_astrbot_temp_path()
+            temp_path = os.path.join(temp_dir, file_basename)
+            await download_file(cast(str, file.file_path), path=temp_path)
+            path_wav = await MediaResolver(
+                temp_path,
+                media_type="audio",
+                default_suffix=".wav",
+            ).to_path(target_format="wav")
+
+            record = Comp.Record(file=path_wav, url=path_wav)
+            record.path = path_wav
+            message.message.append(record)
+            _apply_caption()
 
         elif update.message.photo:
             photo = update.message.photo[-1]  # get the largest photo
@@ -589,10 +688,18 @@ class TelegramPlatformAdapter(Platform):
 
         elif update.message.sticker:
             # 将sticker当作图片处理
-            file = await update.message.sticker.get_file()
-            message.message.append(Comp.Image(file=file.file_path, url=file.file_path))
-            if update.message.sticker.emoji:
-                sticker_text = f"Sticker: {update.message.sticker.emoji}"
+            sticker = update.message.sticker
+            if sticker.is_animated or sticker.is_video:
+                # .tgs/.webm stickers are not bitmaps; use the static thumbnail.
+                file = await sticker.thumbnail.get_file() if sticker.thumbnail else None
+            else:
+                file = await sticker.get_file()
+            if file:
+                message.message.append(
+                    Comp.Image(file=file.file_path, url=file.file_path)
+                )
+            if sticker.emoji:
+                sticker_text = f"Sticker: {sticker.emoji}"
                 message.message_str = sticker_text
                 message.message.append(Comp.Plain(sticker_text))
 
@@ -621,6 +728,17 @@ class TelegramPlatformAdapter(Platform):
             else:
                 message.message.append(Comp.Video(file=file_path, path=file.file_path))
                 _apply_caption()
+
+        elif update.message.video_note:
+            # Video notes carry no file_name and cannot have a caption.
+            file = await update.message.video_note.get_file()
+            file_path = file.file_path
+            if file_path is None:
+                logger.warning(
+                    "Telegram video note file_path is None, cannot save the file.",
+                )
+            else:
+                message.message.append(Comp.Video(file=file_path, path=file_path))
 
         return message
 
@@ -736,15 +854,25 @@ class TelegramPlatformAdapter(Platform):
                 f"Failed to process media group {media_group_id}", exc_info=True
             )
 
-    async def handle_msg(self, message: AstrBotMessage) -> None:
-        message_event = TelegramPlatformEvent(
+    def create_event(self, message: AstrBotMessage) -> TelegramPlatformEvent:
+        """Creates a Telegram message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created Telegram message event.
+        """
+        return TelegramPlatformEvent(
             message_str=message.message_str,
             message_obj=message,
             platform_meta=self.meta(),
             session_id=message.session_id,
             client=self.client,
         )
-        self.commit_event(message_event)
+
+    async def handle_msg(self, message: AstrBotMessage) -> None:
+        self.commit_event(self.create_event(message))
 
     def get_client(self) -> ExtBot:
         return self.client
