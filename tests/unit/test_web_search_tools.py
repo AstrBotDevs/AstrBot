@@ -1736,3 +1736,64 @@ async def test_keenable_extract_tool_rejects_empty_url(monkeypatch):
 
     assert result == "Error: url must be a non-empty string."
     assert session.calls == []
+
+
+@pytest.mark.asyncio
+async def test_keenable_search_treats_null_key_setting_as_keyless(monkeypatch):
+    session = _install_keenable_session(
+        monkeypatch,
+        [_TavilyResponse(status=200, jsonData={"results": []})],
+    )
+
+    await tools._keenable_search({"websearch_keenable_key": None}, {"query": "q"})
+
+    assert session.calls[0]["url"] == "https://api.keenable.ai/v1/search/public"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "url", ["file:///etc/passwd", "ftp://example.com/x", "example.com/page"]
+)
+async def test_keenable_extract_tool_rejects_non_http_urls(monkeypatch, url):
+    session = _install_keenable_session(monkeypatch, [_TavilyResponse(status=200)])
+    tool = tools.KeenableExtractWebPageTool()
+
+    result = await tool.call(_context_with_provider_settings({}), url=url)
+
+    assert result == "Error: url must be an http or https URL."
+    assert session.calls == []
+
+
+def test_dashboard_citations_include_keenable_results():
+    from astrbot.dashboard.services.chat_service import extract_web_search_refs
+    from astrbot.dashboard.services.live_chat_service import LiveChatService
+
+    parts = [
+        {
+            "type": "tool_call",
+            "tool_calls": [
+                {
+                    "name": "web_search_keenable",
+                    "result": json.dumps(
+                        {
+                            "results": [
+                                {
+                                    "title": "AstrBot",
+                                    "url": "https://github.com/AstrBotDevs/AstrBot",
+                                    "snippet": "Agentic chatbot framework.",
+                                    "index": "ab12.1",
+                                }
+                            ]
+                        }
+                    ),
+                }
+            ],
+        }
+    ]
+    text = "AstrBot is a chatbot framework <ref>ab12.1</ref>."
+
+    for extract in (extract_web_search_refs, LiveChatService.extract_web_search_refs):
+        refs = extract(text, parts)
+        assert [ref["url"] for ref in refs["used"]] == [
+            "https://github.com/AstrBotDevs/AstrBot"
+        ]

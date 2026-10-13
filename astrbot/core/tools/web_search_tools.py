@@ -3,6 +3,7 @@ import json
 import uuid
 from dataclasses import dataclass as std_dataclass
 from dataclasses import field
+from urllib.parse import urlparse
 
 import aiohttp
 from pydantic import Field
@@ -1484,7 +1485,7 @@ async def _keenable_request(
         Exception: If the request fails after all configured keys are exhausted,
             or if a non-retryable HTTP error is returned.
     """
-    keys = provider_settings.get("websearch_keenable_key", [])
+    keys = provider_settings.get("websearch_keenable_key") or []
 
     last_error = None
     for _ in range(len(keys) or 1):
@@ -1630,6 +1631,8 @@ class KeenableExtractWebPageTool(FunctionTool[AstrAgentContext]):
         url = str(kwargs.get("url", "")).strip()
         if not url:
             return "Error: url must be a non-empty string."
+        if urlparse(url).scheme.lower() not in ("http", "https"):
+            return "Error: url must be an http or https URL."
 
         params: dict = {"url": url}
         try:
