@@ -1861,7 +1861,7 @@ export const statsApi = {
   storage() {
     return typed<OpenConfig>(openApiV1.getStorageStatus());
   },
-  cleanupStorage(target?: string) {
+  cleanupStorage(target: 'logs' | 'cache' | 'traces' | 'all' = 'all') {
     return typed<OpenConfig>(
       openApiV1.cleanupStorage({
         body: target ? { target } : undefined,

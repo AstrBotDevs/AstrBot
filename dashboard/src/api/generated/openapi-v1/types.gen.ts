@@ -690,6 +690,12 @@ export type SkillUploadRequest = {
     overwrite?: boolean;
 };
 
+export type StorageCleanupRequest = {
+    target?: 'logs' | 'cache' | 'traces' | 'all';
+};
+
+export type target = 'logs' | 'cache' | 'traces' | 'all';
+
 export type SuccessEnvelope = {
     status: "ok";
     message?: string;
@@ -3480,7 +3486,7 @@ export type GetStorageStatusResponse = (SuccessEnvelope);
 export type GetStorageStatusError = unknown;
 
 export type CleanupStorageData = {
-    body?: DynamicConfig;
+    body?: StorageCleanupRequest;
 };
 
 export type CleanupStorageResponse = (SuccessEnvelope);

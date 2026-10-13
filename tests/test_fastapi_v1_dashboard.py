@@ -4389,3 +4389,33 @@ async def test_v1_persistent_trace_routes(asgi_client, monkeypatch, tmp_path):
         ).status_code == 200
     finally:
         store.close()
+
+
+@pytest.mark.asyncio
+async def test_v1_trace_storage_cleanup_target(asgi_client, monkeypatch):
+    """Validate trace cleanup requests without touching application data."""
+    usage = {
+        "logs": {"size_bytes": 10},
+        "cache": {"size_bytes": 20},
+        "traces": {"size_bytes": 30},
+        "total_bytes": 60,
+    }
+    cleanup = AsyncMock(return_value={"removed_traces": 3, "status": usage})
+    monkeypatch.setattr(stat_service.StatService, "cleanup_storage", cleanup)
+    monkeypatch.setattr(stat_service.StatService, "get_storage_status", AsyncMock(return_value=usage))
+    token = jwt.encode(
+        {"username": "astrbot", "exp": int(time.time()) + 600},
+        JWT_SECRET, algorithm="HS256",
+    )
+    headers = {"Authorization": f"Bearer {token}"}
+    assert (await asgi_client.post("/api/v1/stats/storage/cleanup", json={"target": "traces"})).status_code == 401
+    response = await asgi_client.post(
+        "/api/v1/stats/storage/cleanup", json={"target": "traces"}, headers=headers,
+    )
+    assert response.status_code == 200
+    assert response.json()["data"]["removed_traces"] == 3
+    cleanup.assert_awaited_once_with("traces")
+    response = await asgi_client.get("/api/v1/stats/storage", headers=headers)
+    assert response.json()["data"]["total_bytes"] == 60
+    assert response.json()["data"]["traces"]["size_bytes"] == 30
+    assert (await asgi_client.post("/api/v1/stats/storage/cleanup", json={"target": "invalid"}, headers=headers)).status_code == 422

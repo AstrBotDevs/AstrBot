@@ -9,6 +9,8 @@ import sqlite3
 import threading
 import time
 from collections.abc import Mapping
+from concurrent.futures import Future
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from contextlib import closing
 from pathlib import Path
 from queue import Empty, Full, Queue
@@ -105,6 +107,32 @@ class TraceStore:
             logger.error(
                 "Trace database writer did not finish within the shutdown deadline."
             )
+
+    def clear_history(self) -> dict:
+        """Clear finished history using the same queue as trace writes.
+
+        Running traces are retained so their later updates remain complete.
+
+        Returns:
+            The number of removed message traces.
+
+        Raises:
+            RuntimeError: If the writer is unavailable or cleanup times out.
+        """
+        if not self._ready.wait(5) or self._failed or self._stop.is_set():
+            raise RuntimeError(self.last_error or "Trace writer is unavailable.")
+        result = Future()
+        try:
+            self.queue.put((result, 0), timeout=5)
+        except Full as exc:
+            raise RuntimeError("Trace cleanup queue is full.") from exc
+        try:
+            return result.result(timeout=15)
+        except FutureTimeoutError as exc:
+            result.cancel()
+            raise RuntimeError(
+                "Trace cleanup timed out; check storage status."
+            ) from exc
 
     def _prune(self, connection: sqlite3.Connection, force: bool = False) -> None:
         """Evict complete traces as units and reclaim reusable database pages.
@@ -310,11 +338,15 @@ class TraceStore:
                     continue
                 items = [first]
                 for _ in range(31):
+                    # Cleanup is a barrier: never batch later writes before it.
+                    if isinstance(items[-1][0], Future):
+                        break
                     try:
                         items.append(self.queue.get_nowait())
                     except Empty:
                         break
                 batch = [json.loads(item) for item, _ in items if isinstance(item, str)]
+                written = False
                 try:
                     wal = Path(str(self.path) + "-wal")
                     if wal.exists() and wal.stat().st_size > QUEUE_BYTES:
@@ -331,15 +363,33 @@ class TraceStore:
                             raise
                         self._prune(connection, force=True)
                         self._write(connection, batch)
+                    written = True
                     if batch:
                         self.last_error = None
                     if time.monotonic() - last_prune >= 10:
                         self._prune(connection)
                         last_prune = time.monotonic()
+                    command = items[-1][0]
+                    if (
+                        isinstance(command, Future)
+                        and command.set_running_or_notify_cancel()
+                    ):
+                        with connection:
+                            removed = connection.execute(
+                                "DELETE FROM traces WHERE state != 'running'"
+                            ).rowcount
+                        connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                        connection.execute("VACUUM")
+                        connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                        self.last_error = None
+                        command.set_result({"removed_traces": removed})
                 except Exception as exc:
                     self.last_error = str(exc)
-                    self.dropped += len(batch)
+                    self.dropped += len(batch) if not written else 0
                     logger.error("Trace database write failed: %s", exc)
+                    for item, _ in items:
+                        if isinstance(item, Future) and not item.done():
+                            item.set_exception(exc)
                 finally:
                     for item, size in items:
                         with self._lock:
@@ -361,6 +411,8 @@ class TraceStore:
                     self.dropped += int(size > 0)
                 if isinstance(item, threading.Event):
                     item.set()
+                elif isinstance(item, Future) and not item.done():
+                    item.set_exception(RuntimeError(self.last_error))
                 self.queue.task_done()
         finally:
             self._ready.set()

@@ -172,6 +172,8 @@ The toolbar contains search, fullscreen, font-size controls, and `Install Pip pa
 
 ### Trace
 
+Under Settings → General, Log & Cache Cleanup is now Log, Cache & Trace Cleanup. Total usage includes the trace database and its sidecar files. The menu adds Clear Trace Data, and Clean All includes historical traces. Confirmation warns that completed/interrupted traces are permanently removed while running traces are retained; the database file is not deleted directly. Clean Logs and Clean Cache do not clear traces.
+
 Configure the trace database path, capacity budget (MB), and retention days under Settings → General → Logs. Defaults are `logs/traces.db`, 80 MB, and 7 days; restart the backend after changing the path. Start/pause recording from the trace toolbar. Top-level text fields such as system prompts have no separate 4 KB truncation limit; whole-trace content and node budgets still apply.
 
 The trace tab has no outer gray card; its toolbar and list sit directly on the page with only the necessary separators. The former hint and switch are replaced by a toolbar button showing Pause (enabled and connected), Connecting (enabled but disconnected), or Start (disabled). Filters, recording, and refresh use matching light-gray icon-and-text buttons sharing the input's background color, all 36px high. Search fills the remaining width, pushing actions to the right. Its placeholder includes the message count instead of a separate counter. Click to pause or resume. Updates show loading and prevent repeated clicks; failures preserve the previous state and display an error. Pausing retains the list and open details in both themes.

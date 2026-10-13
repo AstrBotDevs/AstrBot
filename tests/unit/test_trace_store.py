@@ -7,6 +7,7 @@ import re
 import sqlite3
 import threading
 import time
+from pathlib import Path
 
 import pytest
 
@@ -453,3 +454,112 @@ def test_log_cleanup_protects_databases(tmp_path):
     assert not (logs / "astrbot.log").exists()
     assert (logs / "old-custom-name").exists()
     assert (logs / "old-custom-name-wal").exists()
+
+
+@pytest.mark.parametrize("relative_path", ["logs/traces.db", "other/history.db", "temp/history.db"])
+def test_trace_usage_and_cleanup_preserve_running_traces(
+    tmp_path, capture, monkeypatch, relative_path
+):
+    """Count all sidecars and clear history without removing active files."""
+    from astrbot.core.utils import trace_store as storage_module
+
+    path = tmp_path / relative_path
+    store = TraceStore(path, {})
+    monkeypatch.setattr(storage_module, "get_trace_store", lambda *_: store)
+    try:
+        finished = TraceSpan("finished", message_outline="x" * 3000)
+        finished.record("event_received")
+        finished.record("response_sent", message="x" * 30000)
+        finished.record("pipeline_end", status="success")
+        running = TraceSpan("running")
+        running.record("event_received")
+        for frame in capture:
+            assert store.append(frame)
+        assert store.flush()
+        log = tmp_path / "logs" / "astrbot.log"
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.write_bytes(b"x" * 128)
+        cleaner = StorageCleaner(
+            {"trace_db_path": relative_path},
+            data_dir=tmp_path,
+            temp_dir=tmp_path / "temp",
+        )
+        before = cleaner.get_status()
+        expected = sum(
+            sidecar.stat().st_size
+            for suffix in ("", "-wal", "-shm", "-journal")
+            if (sidecar := Path(str(path) + suffix)).exists()
+        )
+        assert before["traces"]["size_bytes"] == expected
+        assert before["logs"]["size_bytes"] == 128
+        assert before["cache"]["size_bytes"] == 0
+        assert before["total_bytes"] == expected + 128
+        result = cleaner.cleanup("traces")
+        assert result["removed_traces"] == 1
+        assert result["deleted_files"] == result["truncated_files"] == 0
+        assert store.get_trace(finished.trace_id) is None
+        assert store.get_trace(running.trace_id)["trace"]["state"] == "running"
+        assert log.read_bytes() == b"x" * 128
+        assert path.exists()
+        # Even a database placed inside temp is protected from cache cleanup.
+        cleaner.cleanup("cache")
+        assert path.exists()
+        running.record("pipeline_end", status="success")
+        assert store.append(capture[-1])
+        assert store.flush()
+        assert store.get_trace(running.trace_id)["trace"]["state"] == "completed"
+        result = cleaner.cleanup("all")
+        assert result["removed_traces"] == 1
+        assert result["status"]["traces"]["size_bytes"] > 0
+        assert result["status"]["logs"]["size_bytes"] == 0
+        assert store.list_traces()["total"] == 0
+        with sqlite3.connect(path) as connection:
+            for table in ("traces", "spans", "events"):
+                assert connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] == 0
+    finally:
+        store.close()
+
+
+def test_trace_cleanup_barrier_preserves_later_writes(persisted, capture, monkeypatch):
+    """Ensure a cleanup command never deletes writes queued after it."""
+    old = TraceSpan("old")
+    old.record("event_received")
+    old.record("pipeline_end", status="success")
+    old_frame = capture[-1]
+    new = TraceSpan("new")
+    new.record("event_received")
+    new.record("pipeline_end", status="success")
+    new_frame = capture[-1]
+    entered = threading.Event()
+    release = threading.Event()
+    original_write = persisted._write
+
+    def held_write(connection, batch):
+        """Hold the first write while cleanup and another write are queued."""
+        if not entered.is_set():
+            entered.set()
+            assert release.wait(5)
+        original_write(connection, batch)
+
+    monkeypatch.setattr(persisted, "_write", held_write)
+    results = []
+    cleanup = threading.Thread(target=lambda: results.append(persisted.clear_history()))
+    try:
+        assert persisted.append(old_frame)
+        assert entered.wait(5)
+        cleanup.start()
+        # Inspect the synchronized queue to avoid timing-dependent sleeps.
+        with persisted.queue.not_empty:
+            assert persisted.queue.not_empty.wait_for(lambda: bool(persisted.queue.queue), 5)
+        assert persisted.append(new_frame)
+        release.set()
+        cleanup.join(5)
+        assert not cleanup.is_alive()
+        assert results[0]["removed_traces"] == 1
+        assert persisted.flush()
+        assert persisted.get_trace(old.trace_id) is None
+        assert persisted.get_trace(new.trace_id)["trace"]["state"] == "completed"
+    finally:
+        release.set()
+        if cleanup.ident is not None:
+            cleanup.join(5)

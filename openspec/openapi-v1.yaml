@@ -4656,6 +4656,7 @@ paths:
       tags: [Stats]
       summary: Get storage status
       operationId: getStorageStatus
+      description: Returns log, cache, and trace database usage (including trace sidecars), plus total bytes.
       x-astrbot-scope: system
       responses:
         "200":
@@ -4666,13 +4667,14 @@ paths:
       tags: [Stats]
       summary: Clean storage
       operationId: cleanupStorage
+      description: Clears logs, cache, finished trace history, or all three. Running traces are retained.
       x-astrbot-scope: system
       requestBody:
         required: false
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/DynamicConfig"
+              $ref: "#/components/schemas/StorageCleanupRequest"
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -5584,6 +5586,14 @@ components:
           type: string
         data: {}
       additionalProperties: false
+
+    StorageCleanupRequest:
+      type: object
+      properties:
+        target:
+          type: string
+          enum: [logs, cache, traces, all]
+          default: all
 
     DynamicConfig:
       type: object

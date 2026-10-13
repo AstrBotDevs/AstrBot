@@ -2815,6 +2815,7 @@ export const getStartTime = <ThrowOnError extends boolean = false>(options?: Opt
 
 /**
  * Get storage status
+ * Returns log, cache, and trace database usage (including trace sidecars), plus total bytes.
  */
 export const getStorageStatus = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
     return (options?.client ?? client).get<GetStorageStatusResponse, GetStorageStatusError, ThrowOnError>({
@@ -2825,6 +2826,7 @@ export const getStorageStatus = <ThrowOnError extends boolean = false>(options?:
 
 /**
  * Clean storage
+ * Clears logs, cache, finished trace history, or all three. Running traces are retained.
  */
 export const cleanupStorage = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<CleanupStorageData, ThrowOnError>) => {
     return (options?.client ?? client).post<CleanupStorageResponse, CleanupStorageError, ThrowOnError>({

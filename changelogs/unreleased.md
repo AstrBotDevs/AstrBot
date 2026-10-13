@@ -1,5 +1,7 @@
 # Unreleased
 
+- Log & Cache Cleanup → Log, Cache & Trace Cleanup: include trace database/sidecar usage, add Clear Trace Data, and include finished trace history in Clean All. Confirm irreversible removal, retain running traces, and compact through the existing database writer without unlinking live database files.
+
 ## Logs
 
 - Add structured source, plugin, platform, and category metadata for in-memory log filtering.
