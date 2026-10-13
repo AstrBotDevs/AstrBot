@@ -19,6 +19,7 @@ from astrbot.core.agent.message import (
     TextPart,
     ToolCall,
 )
+from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.sources.request_retry import retry_provider_request
 
@@ -105,6 +106,93 @@ class TestContextManager:
         return messages
 
     # ==================== Basic Initialization Tests ====================
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("reuse_tools", [False, True])
+    async def test_summary_tool_reuse_keeps_only_text(self, reuse_tools):
+        handler = AsyncMock()
+        tools = ToolSet(
+            tools=[
+                FunctionTool(
+                    name="unexpected_tool",
+                    description="A test tool",
+                    parameters={"type": "object", "properties": {}},
+                    handler=handler,
+                )
+            ]
+        )
+        provider = MockProvider()
+        provider.text_chat = AsyncMock(
+            return_value=LLMResponse(
+                role="tool",
+                completion_text="Useful summary",
+                tools_call_name=["unexpected_tool"],
+                tools_call_args=[{}],
+                tools_call_ids=["unexpected_call"],
+            )
+        )
+        manager = ContextManager(
+            ContextConfig(
+                max_context_tokens=300,
+                llm_compress_provider=provider,
+                llm_compress_reuse_tools=reuse_tools,
+                custom_token_counter=CharTokenCounter(),
+            )
+        )
+        messages = [
+            Message(role="system", content="Keep context."),
+            Message(role="user", content="a" * 150),
+            Message(role="assistant", content="b" * 150),
+            Message(role="user", content="Continue."),
+        ]
+
+        result = await manager.process(messages, func_tool=tools)
+
+        provider.text_chat.assert_awaited_once()
+        kwargs = provider.text_chat.await_args.kwargs
+        assert (kwargs.get("func_tool") is tools) == reuse_tools
+        assert "tool_choice" not in kwargs
+        assert "model" not in kwargs
+        assert "system_prompt" not in kwargs
+        assert kwargs["request_max_retries"] == 1
+        assert kwargs["contexts"][0] == {"role": "system", "content": "Keep context."}
+        assert (
+            "without calling tools" in kwargs["contexts"][-1]["content"]
+        ) == reuse_tools
+        assert any("Useful summary" in str(m.content) for m in result)
+        assert all("unexpected_call" not in str(m) for m in result)
+        assert result[-1] == messages[-1]
+        handler.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_summary_with_only_tool_calls_keeps_history_without_retry(self):
+        from astrbot.core.agent.context.compressor import LLMSummaryCompressor
+
+        provider = MockProvider()
+        provider.text_chat = AsyncMock(
+            return_value=LLMResponse(
+                role="tool",
+                tools_call_name=["unexpected_tool"],
+                tools_call_args=[{}],
+                tools_call_ids=["unexpected_call"],
+            )
+        )
+        tools = ToolSet(
+            tools=[
+                FunctionTool(
+                    name="unexpected_tool",
+                    description="A test tool",
+                    parameters={"type": "object", "properties": {}},
+                )
+            ]
+        )
+        compressor = LLMSummaryCompressor(provider=provider)
+        messages = self.create_messages(6)
+
+        result = await compressor(messages, func_tool=tools)
+
+        assert result is messages
+        provider.text_chat.assert_awaited_once()
 
     def test_init_with_minimal_config(self):
         """Test initialization with minimal configuration."""
@@ -576,7 +664,9 @@ class TestContextManager:
 
     @pytest.mark.asyncio
     async def test_trusted_usage_triggers_compression_before_provider_call(self):
-        config = ContextConfig(max_context_tokens=100, truncate_turns=1)
+        config = ContextConfig(
+            max_context_tokens=100, truncate_turns=1, llm_compress_reuse_tools=True
+        )
         manager = ContextManager(config)
         messages = [self.create_message("user", "short")]
         compressed = [self.create_message("user", "compressed")]
@@ -584,7 +674,9 @@ class TestContextManager:
         mock_compressor.should_compress = MagicMock(side_effect=[True, False])
         manager.compressor = mock_compressor
 
-        result = await manager.process(messages, trusted_token_usage=83)
+        result = await manager.process(
+            messages, trusted_token_usage=83, func_tool=ToolSet()
+        )
 
         first_check = mock_compressor.should_compress.call_args_list[0]
         assert first_check.args == (messages, 83, 100)

@@ -1,4 +1,9 @@
+from typing import TYPE_CHECKING
+
 from astrbot import logger
+
+if TYPE_CHECKING:
+    from ..tool import ToolSet
 
 from ..message import Message
 from .compressor import LLMSummaryCompressor, TruncateByTurnsCompressor
@@ -44,12 +49,18 @@ class ContextManager:
             )
 
     async def process(
-        self, messages: list[Message], trusted_token_usage: int = 0
+        self,
+        messages: list[Message],
+        trusted_token_usage: int = 0,
+        *,
+        func_tool: "ToolSet | None" = None,
     ) -> list[Message]:
         """Process the messages.
 
         Args:
             messages: The original message list.
+            trusted_token_usage: Trusted token count from the previous request.
+            func_tool: Effective tools for the current request, if any.
 
         Returns:
             The processed message list.
@@ -74,7 +85,9 @@ class ContextManager:
                 if self.compressor.should_compress(
                     result, total_tokens, self.config.max_context_tokens
                 ):
-                    result = await self._run_compression(result, total_tokens)
+                    result = await self._run_compression(
+                        result, total_tokens, func_tool
+                    )
 
             return result
         except Exception as e:
@@ -82,7 +95,10 @@ class ContextManager:
             return messages
 
     async def _run_compression(
-        self, messages: list[Message], prev_tokens: int
+        self,
+        messages: list[Message],
+        prev_tokens: int,
+        func_tool: "ToolSet | None" = None,
     ) -> list[Message]:
         """
         Compress/truncate the messages.
@@ -95,13 +111,19 @@ class ContextManager:
         Args:
             messages: The original message list.
             prev_tokens: The token count before compression.
+            func_tool: Effective tools for the current request, if any.
 
         Returns:
             The compressed/truncated message list.
         """
         logger.debug("Compress triggered, starting compression...")
 
-        messages = await self.compressor(messages)
+        if self.config.llm_compress_reuse_tools and isinstance(
+            self.compressor, LLMSummaryCompressor
+        ):
+            messages = await self.compressor(messages, func_tool=func_tool)
+        else:
+            messages = await self.compressor(messages)
 
         # double check
         tokens_after_summary = self.token_counter.count_tokens(messages)

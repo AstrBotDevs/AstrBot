@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from ...provider.modalities import (
     log_context_sanitize_stats,
@@ -18,6 +18,7 @@ else:
         logger = logging.getLogger("astrbot")
 
 if TYPE_CHECKING:
+    from astrbot.core.agent.tool import ToolSet
     from astrbot.core.provider.provider import Provider
 
 from ..context.truncator import ContextTruncator
@@ -203,12 +204,21 @@ class LLMSummaryCompressor:
 
         return rounds[:recent_start], rounds[recent_start:]
 
-    async def __call__(self, messages: list[Message]) -> list[Message]:
+    async def __call__(
+        self, messages: list[Message], *, func_tool: "ToolSet | None" = None
+    ) -> list[Message]:
         """Use LLM to generate a summary of the conversation history.
 
         Uses round-based splitting to preserve user-assistant turn boundaries.
         On LLM failure, returns the original messages unchanged (caller should
         fall back to truncation).
+
+        Args:
+            messages: The original message list.
+            func_tool: Current tool definitions to reuse for the summary request.
+
+        Returns:
+            Compressed messages, or the original messages if no summary is available.
         """
         from .round_utils import split_into_rounds
 
@@ -261,7 +271,13 @@ class LLMSummaryCompressor:
                     "Generate a summary of our previous conversation history.\n"
                     f"<extra_instruction>\n{self.instruction_text}\n\n"
                     f"{self.TASK_CONTINUATION_INSTRUCTION}</extra_instruction>\n"
-                    "Respond ONLY with the summary content, without any additional text or formatting."
+                    "Respond ONLY with the summary content, without "
+                    + (
+                        "calling tools, taking any other action, or adding "
+                        if func_tool
+                        else ""
+                    )
+                    + "any additional text or formatting."
                 ),
             )
         )
@@ -275,10 +291,14 @@ class LLMSummaryCompressor:
         # falls back to truncation, so retrying (e.g. on an exhausted quota)
         # would only hold up the reply.
         try:
-            response = await self.provider.text_chat(
-                contexts=sanitized_summary_contexts,
-                request_max_retries=1,
-            )
+            payload: dict[str, Any] = {
+                "contexts": sanitized_summary_contexts,
+                "request_max_retries": 1,
+            }
+            if func_tool:
+                payload["func_tool"] = func_tool
+            response = await self.provider.text_chat(**payload)
+            # Tool calls are never executed or included in the replacement history.
             summary_content = (response.completion_text or "").strip()
         except Exception as e:
             logger.error(f"Failed to generate summary: {e}")
