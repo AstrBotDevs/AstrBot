@@ -6,7 +6,7 @@ from sys import maxsize
 import astrbot.api.message_components as Comp
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, filter
-from astrbot.api.message_components import Image, Json, Plain
+from astrbot.api.message_components import At, Image, Json, Plain
 from astrbot.api.provider import LLMResponse, ProviderRequest
 from astrbot.core import logger
 from astrbot.core.message.message_event_result import MessageChain
@@ -199,7 +199,8 @@ class Main(star.Star):
         message_components = _iter_message_components(event)
         has_context_content = False
         for comp in message_components:
-            if isinstance(comp, Plain | Image | Json):
+            # Mention-only triggers also need a record boundary for prior context.
+            if isinstance(comp, Plain | Image | Json | At):
                 has_context_content = True
                 break
 
