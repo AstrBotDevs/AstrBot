@@ -64,6 +64,11 @@
     "loadFailed": "Не удалось загрузить настройки трассировки. Обновите страницу.",
     "updateFailed": "Не удалось изменить запись трассировок. Повторите попытку."
   },
+  "tokens": {
+    "title": "Tokens",
+    "breakdown": "Вход: {input} (чтение кэша: {cached})\nВыход: {output}",
+    "unavailable": "Нет данных об использовании токенов"
+  },
   "classification": {
     "agent": "Agent",
     "command": "Команда"

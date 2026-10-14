@@ -64,6 +64,11 @@
     "loadFailed": "Failed to load trace settings. Refresh to retry.",
     "updateFailed": "Failed to change trace recording. Please retry."
   },
+  "tokens": {
+    "title": "Tokens",
+    "breakdown": "Input: {input} (cache read: {cached})\nOutput: {output}",
+    "unavailable": "No reported token usage available"
+  },
   "classification": {
     "agent": "Agent",
     "command": "Command"

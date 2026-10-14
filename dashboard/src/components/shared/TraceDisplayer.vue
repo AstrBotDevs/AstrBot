@@ -5,6 +5,7 @@ import {
   Check,
   ChevronDown,
   Clock3,
+  Hash,
   LoaderCircle,
   Pause,
   Play,
@@ -175,6 +176,26 @@ const selectedStats = computed(() => {
     ).length,
     responses: timelineRecords(event).filter((record) => record.kind === "response").length,
   };
+});
+
+const selectedTokenUsage = computed(() => {
+  const latest = new Map();
+  for (const record of selectedEvent.value?.records || []) {
+    if (record.action !== "astr_agent_complete" && record.kind !== "agent") continue;
+    const usage = record.fields?.stats?.token_usage;
+    if (!usage || !["input_other", "input_cached", "output"].every((key) => Number.isSafeInteger(usage[key]) && usage[key] >= 0)) continue;
+    // Runner stats are cumulative snapshots, not per-request deltas.
+    latest.set(record.owner_span_id || record.operation_span_id || "root", usage);
+  }
+  if (!latest.size) return null;
+  let input = 0, output = 0, cached = 0;
+  for (const usage of latest.values()) {
+    input += usage.input_other + usage.input_cached;
+    output += usage.output;
+    cached += usage.input_cached;
+  }
+  const total = input + output;
+  return total > 0 ? { total, input, output, cached } : null;
 });
 
 const selectedRecords = computed(() => selectedEvent.value ? timelineRecords(selectedEvent.value) : []);
@@ -926,10 +947,16 @@ onBeforeUnmount(() => {
           {{ detailError }}
           <v-btn size="small" variant="text" @click="loadTraceDetail(selectedSpanId)">{{ tm("refresh") }}</v-btn>
         </v-alert>
-        <div v-if="!detailBusy && !detailError" class="trace-stat-grid">
+        <div v-if="!detailBusy && !detailError" class="trace-stat-grid" :class="{ 'has-tokens': matchesFilter(selectedEvent, 'models') }">
           <div class="trace-stat"><Clock3 :size="15" /><span>{{ tm("duration") }}</span><strong>{{ selectedStats.duration }}</strong></div>
           <div class="trace-stat"><PlugZap :size="15" /><span>{{ tm("handlers") }}</span><strong>{{ selectedStats.handlers }}</strong></div>
           <div class="trace-stat"><Send :size="15" /><span>{{ tm("responses") }}</span><strong>{{ selectedStats.responses }}</strong></div>
+          <v-tooltip v-if="matchesFilter(selectedEvent, 'models')" location="top">
+            <template #activator="{ props }">
+              <div v-bind="props" class="trace-stat" tabindex="0"><Hash :size="15" /><span>{{ tm("tokens.title") }}</span><strong>{{ selectedTokenUsage ? selectedTokenUsage.total.toLocaleString() : "—" }}</strong></div>
+            </template>
+            <div class="trace-token-breakdown">{{ selectedTokenUsage ? tm('tokens.breakdown', { input: selectedTokenUsage.input.toLocaleString(), output: selectedTokenUsage.output.toLocaleString(), cached: selectedTokenUsage.cached.toLocaleString() }) : tm('tokens.unavailable') }}</div>
+          </v-tooltip>
         </div>
 
         <div class="trace-timeline">
@@ -1107,6 +1134,8 @@ onBeforeUnmount(() => {
 .trace-detail-time { color: var(--trace-muted); font-family: var(--astrbot-font-cjk-mono), monospace; font-size: 11px; white-space: nowrap; }
 .trace-status-badge { border-radius: 999px; font-size: 10px; padding: 3px 7px; text-transform: none; } .trace-status-badge.is-live { background: rgba(245, 158, 11, 0.14); color: #f59e0b; } .trace-status-badge.is-success { background: rgba(34, 197, 94, 0.14); color: #22c55e; } .trace-status-badge.is-error { background: rgba(239, 68, 68, 0.14); color: #ef4444; }
 .trace-stat-grid { display: grid; gap: 8px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 18px 0 22px; }
+.trace-stat-grid.has-tokens { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.trace-token-breakdown { white-space: pre-line; }
 .trace-stat { background: rgba(var(--v-theme-on-surface), 0.04); border: 0; border-radius: 8px; display: grid; gap: 4px; grid-template-columns: 16px 1fr; padding: 9px 10px; } .trace-stat svg { color: var(--trace-muted); grid-row: span 2; margin-top: 2px; } .trace-stat span { color: var(--trace-muted); font-size: 10px; } .trace-stat strong { font-size: 13px; font-weight: 650; }
 .trace-timeline { max-width: 900px; } .timeline-record { display: grid; gap: 12px; grid-template-columns: 26px minmax(0, 1fr); margin-left: calc(min(var(--timeline-depth, 0), 3) * 18px); min-height: 44px; padding-top: 8px; } .timeline-rail { align-items: center; display: flex; flex-direction: column; }
 .timeline-icon { --timeline-icon-background: rgba(var(--v-theme-on-surface), 0.035); align-items: center; background: var(--timeline-icon-background); border: 1px solid var(--trace-border); border-radius: 50%; display: inline-flex; height: 26px; justify-content: center; width: 26px; z-index: 1; } .timeline-icon.is-system { color: var(--trace-muted); } .timeline-icon.is-plugin, .timeline-icon.is-agent { color: rgb(var(--v-theme-primary)); } .timeline-icon.is-response { color: rgb(var(--v-theme-success)); } .timeline-icon.is-error { --timeline-icon-background: rgba(var(--v-theme-error), 0.08); color: rgb(var(--v-theme-error)); }
@@ -1116,6 +1145,6 @@ onBeforeUnmount(() => {
 @media (prefers-reduced-motion: reduce) { .timeline-expansion-icon { transition: none; } }
 .trace-empty-state { align-items: center; color: var(--trace-muted); display: flex; flex-direction: column; font-size: 12px; gap: 8px; justify-content: center; min-height: 180px; }
 @media (max-width: 1100px) { .trace-detail { border-left: 1px solid var(--trace-border); bottom: 0; box-shadow: -8px 0 24px rgba(0, 0, 0, 0.12); max-width: none; min-width: 0; position: absolute; right: 0; top: 0; width: min(760px, 90%); z-index: 1; } }
-@media (max-width: 900px) { .trace-filter-panel { bottom: 0; box-shadow: 8px 0 24px rgba(0, 0, 0, 0.18); left: 0; max-width: 85%; position: absolute; top: 0; width: 220px; z-index: 3; } .trace-filter-backdrop { background: rgba(var(--v-theme-on-surface), 0.12); border: 0; display: block; inset: 0; position: absolute; z-index: 2; } .trace-detail { padding: 15px; } .trace-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 900px) { .trace-filter-panel { bottom: 0; box-shadow: 8px 0 24px rgba(0, 0, 0, 0.18); left: 0; max-width: 85%; position: absolute; top: 0; width: 220px; z-index: 3; } .trace-filter-backdrop { background: rgba(var(--v-theme-on-surface), 0.12); border: 0; display: block; inset: 0; position: absolute; z-index: 2; } .trace-detail { padding: 15px; } .trace-stat-grid, .trace-stat-grid.has-tokens { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 640px) { .trace-explorer-toolbar { flex-wrap: wrap; } .filter-toggle-btn { order: 1; } .trace-search { flex: 1 1 160px; max-width: none; order: 1; } .trace-recording-btn { order: 2; } .refresh-button { margin-left: auto; order: 2; } .trace-detail { width: 100%; } .trace-detail-time { display: none; } }
 </style>

@@ -172,6 +172,8 @@ The toolbar contains search, fullscreen, font-size controls, and `Install Pip pa
 
 ### Trace
 
+Traces containing Agent calls add a borderless Tokens statistics card. Its total sums this execution's input (including cached input) and output; hover or focus to inspect input, output, and cached-input counts. Only the latest cumulative snapshot per Agent is used, and separate Agents are summed. Unavailable usage shows an em dash rather than a reported zero.
+
 The Type column precedes UMO. Blue Agent indicates an Agent call; green Command indicates a command-handler call. Both can appear independently on the same trace. Ordinary listeners and event hooks do not count as commands. Summaries provide these flags; legacy command flags are derived for the current page without opening each trace's details.
 
 New spans identify calls with `astrbot.kind` and describe execution through timestamps and status. They no longer store `astrbot.action`, `astrbot.end_action`, or `astrbot.duration_ms`; duration is calculated from nanosecond timestamps and `astrbot.handler_type` remains. Existing trace history stays readable without rewriting stored records.

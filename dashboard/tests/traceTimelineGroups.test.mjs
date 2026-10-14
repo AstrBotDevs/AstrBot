@@ -37,7 +37,7 @@ function setup(t, records) {
     },
   });
   const names = new Set([
-    "selectedSpanId", "expandedGroups", "expandedAgents", "expandedDetails", "actionLabels", "selectedStats",
+    "selectedSpanId", "expandedGroups", "expandedAgents", "expandedDetails", "actionLabels", "selectedStats", "selectedTokenUsage",
     "selectedRecords", "timelineGroups", "timelineRows", "timelineRecords",
     "recordLabel", "recordSubtitle", "formatDuration", "normalizeTracePayload",
   ]);
@@ -50,7 +50,7 @@ function setup(t, records) {
   vm.runInContext(statements.map((node) => node.getText(ast)).join("\n"), context);
   const stop = vm.runInContext(watcher.getText(ast), context);
   t.after(stop);
-  return vm.runInContext("({ selectedEvent, selectedSpanId, selectedStats, selectedRecords, timelineGroups, timelineRows, expandedGroups, expandedAgents, expandedDetails, recordLabel, recordSubtitle, normalizeTracePayload })", context);
+  return vm.runInContext("({ selectedEvent, selectedSpanId, selectedStats, selectedTokenUsage, selectedRecords, timelineGroups, timelineRows, expandedGroups, expandedAgents, expandedDetails, recordLabel, recordSubtitle, normalizeTracePayload })", context);
 }
 
 function handler(key, category = "listener", fields = {}) {
@@ -224,6 +224,27 @@ test("canonical span events retain their owning span for Agent folding", (t) => 
   assert.equal(state.timelineRows.value.length, 2);
   state.expandedAgents.add("agent");
   assert.equal(state.timelineRows.value.length, 4);
+});
+
+test("token card uses the latest cumulative snapshot per Agent and includes cached input once", (t) => {
+  const state = setup(t, [
+    { action: "astr_agent_complete", owner_span_id: "agent-a", fields: { stats: { token_usage: { input_other: 50, input_cached: 10, output: 20 } } } },
+    { action: "astr_agent_complete", owner_span_id: "agent-a", fields: { stats: { token_usage: { input_other: 100, input_cached: 40, output: 30 } } } },
+    { action: "astr_agent_complete", owner_span_id: "agent-b", fields: { stats: { token_usage: { input_other: 10, input_cached: 5, output: 15 } } } },
+    { action: "handler_start", kind: "plugin_handler", fields: { stats: { token_usage: { input_other: 999, input_cached: 999, output: 999 } } } },
+  ]);
+  assert.deepEqual(JSON.parse(JSON.stringify(state.selectedTokenUsage.value)), { total: 200, input: 155, output: 45, cached: 45 });
+});
+
+test("missing or invalid usage is not represented as a reported zero", (t) => {
+  const state = setup(t, []);
+  assert.equal(state.selectedTokenUsage.value, null);
+  state.selectedEvent.value.records.push({ action: "astr_agent_complete", fields: { stats: { token_usage: { input_other: 0, input_cached: 0, output: 0 } } } });
+  assert.equal(state.selectedTokenUsage.value, null);
+  state.selectedEvent.value.records.push({ action: "astr_agent_complete", fields: { stats: { token_usage: { input_other: -1, input_cached: 0, output: 12 } } } });
+  assert.equal(state.selectedTokenUsage.value, null);
+  state.selectedEvent.value.records.push({ action: "astr_agent_complete", fields: { stats: { token_usage: { input_other: 8, input_cached: 2, output: 5 } } } });
+  assert.equal(state.selectedTokenUsage.value.total, 15);
 });
 
 test("canonical span kinds drive call transitions and nanosecond timestamps determine duration", (t) => {

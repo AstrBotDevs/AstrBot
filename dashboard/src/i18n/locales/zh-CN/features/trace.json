@@ -64,6 +64,11 @@
     "loadFailed": "读取追踪设置失败，请刷新页面重试",
     "updateFailed": "切换追踪记录失败，请重试"
   },
+  "tokens": {
+    "title": "Tokens",
+    "breakdown": "输入: {input} (缓存读: {cached})\n输出: {output}",
+    "unavailable": "暂无已上报的 Token 用量"
+  },
   "classification": {
     "agent": "Agent",
     "command": "指令"
