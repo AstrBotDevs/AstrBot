@@ -12,6 +12,8 @@ from astrbot.core.agent.runners.deerflow.deerflow_api_client import DeerFlowAPIC
 from astrbot.core.db.po import ProviderStat
 from astrbot.core.utils.active_event_registry import active_event_registry
 
+from .utils.i18n import t
+
 THIRD_PARTY_AGENT_RUNNER_KEY = {
     "dify": "dify_conversation_id",
     "coze": "coze_conversation_id",
@@ -135,9 +137,7 @@ class ConversationCommands:
 
         message.set_extra("_clean_group_context_session", True)
         message.set_result(
-            MessageEventResult().message(
-                "✅ The current conversation context has been cleared."
-            )
+            MessageEventResult().message(await t(self.context, umo, "reset.success"))
         )
 
     async def stop(self, message: AstrMessageEvent) -> None:
@@ -157,13 +157,13 @@ class ConversationCommands:
         if stopped_count > 0:
             message.set_result(
                 MessageEventResult().message(
-                    f"✅ Requested to stop {stopped_count} running tasks."
+                    await t(self.context, umo, "stop.done", count=stopped_count)
                 )
             )
             return
 
         message.set_result(
-            MessageEventResult().message("✅ No running tasks in the current session.")
+            MessageEventResult().message(await t(self.context, umo, "stop.none"))
         )
 
     async def new_conv(self, message: AstrMessageEvent) -> None:
@@ -193,7 +193,12 @@ class ConversationCommands:
 
         message.set_result(
             MessageEventResult().message(
-                f"✅ Switched to new conversation: {cid[:4]}."
+                await t(
+                    self.context,
+                    message.unified_msg_origin,
+                    "new.success",
+                    cid=cid[:4],
+                )
             ),
         )
 
@@ -204,9 +209,7 @@ class ConversationCommands:
 
         if not cid:
             message.set_result(
-                MessageEventResult().message(
-                    "❌ You are not in a conversation. Use /new to create one."
-                ),
+                MessageEventResult().message(await t(self.context, umo, "no_conv")),
             )
             return
 
@@ -235,9 +238,7 @@ class ConversationCommands:
 
         if stats.record_count == 0:
             message.set_result(
-                MessageEventResult().message(
-                    "📊 No stats available for this conversation yet."
-                ),
+                MessageEventResult().message(await t(self.context, umo, "stats.none")),
             )
             return
 
@@ -246,12 +247,15 @@ class ConversationCommands:
         total_output = stats.total_output
         total_tokens = total_input_other + total_input_cached + total_output
 
-        ret = (
-            f"📊 Conversation Token usage (ID: {cid[:8]}...)\n"
-            f"Total:          {total_tokens:,}\n"
-            f"Input (cached): {total_input_cached:,}\n"
-            f"Input (other):  {total_input_other:,}\n"
-            f"Output:         {total_output:,}\n"
+        ret = await t(
+            self.context,
+            umo,
+            "stats.header",
+            cid=cid[:8],
+            total=total_tokens,
+            cached=total_input_cached,
+            other=total_input_other,
+            output=total_output,
         )
 
         message.set_result(MessageEventResult().message(ret))
