@@ -782,6 +782,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
+  <v-defaults-provider :defaults="{ VSelect: { menuProps: { contentClass: 'trace-menu' } } }">
   <div class="trace-explorer">
     <div class="trace-explorer-toolbar">
       <v-btn
@@ -886,7 +887,7 @@ onBeforeUnmount(() => {
         >
           <template #header.spans><span :title="tm('columns.spansHint')">Spans</span></template>
           <template #item.status="{ item: { event } }">
-            <v-chip size="small" variant="flat" :color="event.status === 'error' ? 'error' : event.status === 'success' ? 'success' : 'warning'">{{ statusLabel(event) }}</v-chip>
+            <v-chip size="small" variant="flat" :color="event.status === 'error' ? 'error' : event.status === 'success' ? 'success' : '#1976D2'">{{ statusLabel(event) }}</v-chip>
           </template>
           <template #item.platform="{ item: { event } }">
             <span class="trace-item-platform" :title="event.platform_id || event.platform_name">
@@ -912,7 +913,7 @@ onBeforeUnmount(() => {
             </div>
           </template>
           <template #item.umo="{ item: { event } }">
-            <v-tooltip :text="event.umo" location="top">
+            <v-tooltip :text="event.umo" location="top" content-class="trace-tooltip">
               <template #activator="{ props }">
                 <span v-bind="props" class="trace-cell-text" :class="{ 'trace-hover-name': umoNames[event.umo] && umoNames[event.umo] !== event.umo }">{{ umoNames[event.umo] || event.umo || "-" }}</span>
               </template>
@@ -933,7 +934,7 @@ onBeforeUnmount(() => {
             <div class="trace-detail-kicker"><span class="trace-status-badge" :class="statusClass(selectedEvent)">{{ statusLabel(selectedEvent) }}</span><span>{{ shortSpan(selectedEvent.span_id) }}</span></div>
             <TraceMessagePreview :key="selectedEvent.span_id" class="trace-message-title" tag="h2" :lines="2" :text="selectedEvent.message_outline || tm('untitled')" />
             <p>
-              <v-tooltip :text="selectedEvent.umo" location="top">
+              <v-tooltip :text="selectedEvent.umo" location="top" content-class="trace-tooltip">
                 <template #activator="{ props }">
                   <span v-bind="props" :class="{ 'trace-hover-name': umoNames[selectedEvent.umo] && umoNames[selectedEvent.umo] !== selectedEvent.umo }">{{ umoNames[selectedEvent.umo] || selectedEvent.umo || "-" }}</span>
                 </template>
@@ -957,7 +958,7 @@ onBeforeUnmount(() => {
           <div class="trace-stat"><Clock3 :size="15" /><span>{{ tm("duration") }}</span><strong>{{ selectedStats.duration }}</strong></div>
           <div class="trace-stat"><PlugZap :size="15" /><span>{{ tm("handlers") }}</span><strong>{{ selectedStats.handlers }}</strong></div>
           <div class="trace-stat"><Send :size="15" /><span>{{ tm("responses") }}</span><strong>{{ selectedStats.responses }}</strong></div>
-          <v-tooltip v-if="matchesFilter(selectedEvent, 'models')" location="top">
+          <v-tooltip v-if="matchesFilter(selectedEvent, 'models')" location="top" content-class="trace-tooltip">
             <template #activator="{ props }">
               <div v-bind="props" class="trace-stat" tabindex="0"><Hash :size="15" /><span>{{ tm("tokens.title") }}</span><strong>{{ selectedTokenUsage ? selectedTokenUsage.total >= 1000000 ? (selectedTokenUsage.total / 1000000).toFixed(2) + " M" : (selectedTokenUsage.total / 1000).toFixed(2) + " k" : "—" }}</strong></div>
             </template>
@@ -1030,13 +1031,13 @@ onBeforeUnmount(() => {
               </div>
               <template v-else v-for="record in [row.record]" :key="record.key">
               <div v-if="record.kind === 'plugin_handler'" class="timeline-subtitle">
-                <v-tooltip :text="record.fields.plugin" location="top">
+                <v-tooltip :text="record.fields.plugin" location="top" content-class="trace-tooltip">
                   <template #activator="{ props }">
                     <v-chip v-bind="props" class="trace-hover-name timeline-metadata-chip" size="x-small" variant="tonal">{{ record.fields.plugin_display_name || record.fields.plugin || "Plugin" }}</v-chip>
                   </template>
                 </v-tooltip>
                 ·
-                <v-tooltip location="top" @update:model-value="(open) => open && loadHandlerDescription(record)">
+                <v-tooltip location="top" content-class="trace-tooltip" @update:model-value="(open) => open && loadHandlerDescription(record)">
                   <template #activator="{ props }">
                     <span v-bind="props" class="trace-hover-name" tabindex="0">{{ record.fields.handler }}</span>
                   </template>
@@ -1071,9 +1072,13 @@ onBeforeUnmount(() => {
     </div>
     </div>
   </div>
+  </v-defaults-provider>
 </template>
 
 <style scoped>
+.trace-explorer :deep(button), .trace-explorer :deep(input), .trace-explorer :deep(select), .trace-explorer :deep(textarea), .trace-explorer :deep(.v-btn), .trace-explorer :deep(.v-chip), .trace-explorer :deep(.v-field), .trace-explorer :deep(.v-table) { font-family: inherit; }
+:global(.trace-tooltip) { font-family: system-ui, sans-serif; }
+:global(.trace-menu) { font-family: system-ui, sans-serif; }
 .trace-response-outline { background: rgba(var(--v-theme-on-surface), 0.035); border-radius: 6px; color: rgb(var(--v-theme-on-surface)); font-size: 12px; margin-top: 7px; overflow-wrap: anywhere; padding: 8px 10px; white-space: pre-wrap; }
 .trace-hover-name { text-decoration-line: underline; text-decoration-style: dotted; text-underline-offset: 4px; cursor: help; }
 .trace-handler-description { max-width: min(400px, calc(100vw - 48px)); max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -1095,7 +1100,7 @@ onBeforeUnmount(() => {
 .timeline-metadata-chip :deep(.v-chip__content) { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .timeline-expansion-icon { color: var(--trace-muted); transition: transform 0.15s ease; }
 .timeline-expansion-icon.is-collapsed { transform: rotate(-90deg); }
-.trace-explorer { --trace-border: rgba(var(--v-theme-on-surface), 0.1); --trace-muted: rgba(var(--v-theme-on-surface), 0.58); --trace-control-background: rgba(var(--v-theme-on-surface), 0.06); background: transparent; border: 0; border-radius: 0; display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; }
+.trace-explorer { --trace-border: rgba(var(--v-theme-on-surface), 0.1); --trace-muted: rgba(var(--v-theme-on-surface), 0.58); --trace-control-background: rgba(var(--v-theme-on-surface), 0.06); font-family: system-ui, sans-serif; background: transparent; border: 0; border-radius: 0; display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; }
 .trace-explorer-toolbar { align-items: center; border-bottom: 1px solid var(--trace-border); display: flex; gap: 10px; min-height: 50px; padding: 8px 12px; }
 .trace-explorer-toolbar :deep(.v-btn) { background: var(--trace-control-background); height: 36px; }
 .trace-explorer-toolbar :deep(.v-btn__underlay) { display: none; }
@@ -1137,15 +1142,15 @@ onBeforeUnmount(() => {
 .trace-detail-header { align-items: flex-start; display: flex; gap: 16px; justify-content: space-between; }
 .trace-detail-kicker { align-items: center; color: var(--trace-muted); display: flex; font-size: 10px; gap: 8px; text-transform: uppercase; }
 .trace-detail-summary { flex: 1; min-width: 0; } .trace-message-title { font-size: 17px; font-weight: 650; margin: 8px 0 4px; } .trace-detail-header p { color: var(--trace-muted); font-size: 11px; margin: 0; overflow-wrap: anywhere; }
-.trace-detail-time { color: var(--trace-muted); font-family: var(--astrbot-font-cjk-mono), monospace; font-size: 11px; white-space: nowrap; }
-.trace-status-badge { border-radius: 999px; font-size: 10px; padding: 3px 7px; text-transform: none; } .trace-status-badge.is-live { background: rgba(245, 158, 11, 0.14); color: #f59e0b; } .trace-status-badge.is-success { background: rgba(34, 197, 94, 0.14); color: #22c55e; } .trace-status-badge.is-error { background: rgba(239, 68, 68, 0.14); color: #ef4444; }
+.trace-detail-time { color: var(--trace-muted); font-family: inherit; font-size: 11px; white-space: nowrap; }
+.trace-status-badge { border-radius: 999px; font-size: 10px; padding: 3px 7px; text-transform: none; } .trace-status-badge.is-live { background: rgba(25, 118, 210, 0.14); color: #1976D2; } .trace-status-badge.is-success { background: rgba(34, 197, 94, 0.14); color: #22c55e; } .trace-status-badge.is-error { background: rgba(239, 68, 68, 0.14); color: #ef4444; }
 .trace-stat-grid { display: grid; gap: 8px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 18px 0 22px; }
 .trace-stat-grid.has-tokens { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .trace-token-breakdown { white-space: pre-line; }
 .trace-stat { background: rgba(var(--v-theme-on-surface), 0.04); border: 0; border-radius: 8px; display: grid; gap: 4px; grid-template-columns: 16px 1fr; padding: 9px 10px; } .trace-stat svg { color: var(--trace-muted); grid-row: span 2; margin-top: 2px; } .trace-stat span { color: var(--trace-muted); font-size: 10px; } .trace-stat strong { font-size: 13px; font-weight: 650; }
 .trace-timeline { max-width: 900px; } .timeline-record { display: grid; gap: 12px; grid-template-columns: 26px minmax(0, 1fr); margin-left: calc(min(var(--timeline-depth, 0), 3) * 18px); min-height: 44px; padding-top: 8px; } .timeline-rail { align-items: center; display: flex; flex-direction: column; }
 .timeline-icon { --timeline-icon-background: rgba(var(--v-theme-on-surface), 0.035); align-items: center; background: var(--timeline-icon-background); border: 1px solid var(--trace-border); border-radius: 50%; display: inline-flex; height: 26px; justify-content: center; width: 26px; z-index: 1; } .timeline-icon.is-system { color: var(--trace-muted); } .timeline-icon.is-plugin, .timeline-icon.is-agent { color: rgb(var(--v-theme-primary)); } .timeline-icon.is-response { color: rgb(var(--v-theme-success)); } .timeline-icon.is-error { --timeline-icon-background: rgba(var(--v-theme-error), 0.08); color: rgb(var(--v-theme-error)); }
-.timeline-line { background: var(--trace-border); flex: 1; width: 1px; } .timeline-content { min-width: 0; padding-bottom: 10px; } .timeline-heading { align-items: center; display: flex; gap: 10px; justify-content: space-between; } .timeline-heading strong { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; } .timeline-heading time { color: var(--trace-muted); font-family: var(--astrbot-font-cjk-mono), monospace; font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; } .timeline-subtitle { color: var(--trace-muted); font-size: 11px; line-height: 1.5; margin-top: 5px; overflow-wrap: anywhere; }
+.timeline-line { background: var(--trace-border); flex: 1; width: 1px; } .timeline-content { min-width: 0; padding-bottom: 10px; } .timeline-heading { align-items: center; display: flex; gap: 10px; justify-content: space-between; } .timeline-heading strong { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; } .timeline-heading time { color: var(--trace-muted); font-family: inherit; font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; } .timeline-subtitle { color: var(--trace-muted); font-size: 11px; line-height: 1.5; margin-top: 5px; overflow-wrap: anywhere; }
 .timeline-fields { margin-top: 7px; } .timeline-fields summary { color: var(--trace-muted); cursor: pointer; font-size: 11px; } .timeline-fields pre { background: rgba(var(--v-theme-on-surface), 0.035); border-radius: 6px; color: var(--trace-muted); font-size: 11px; line-height: 1.5; margin: 6px 0 0; max-height: 280px; overflow: auto; padding: 10px; white-space: pre-wrap; word-break: break-word; }
 @media (pointer: coarse) { .timeline-row-toggle { min-height: 44px; } }
 @media (prefers-reduced-motion: reduce) { .timeline-expansion-icon { transition: none; } }

@@ -59,6 +59,13 @@ function canonical(id, stamp = "2000000000", completed = true) {
   };
 }
 
+test("trace text uses system fonts and running status is blue", () => {
+  assert.match(descriptor.styles[0].content, /font-family: system-ui, sans-serif/);
+  assert.match(descriptor.styles[0].content, /:global\(\.trace-tooltip\)/);
+  assert.doesNotMatch(descriptor.styles[0].content, /astrbot-font-cjk-mono|Outfit/);
+  assert.match(descriptor.template.content, /event.status === 'success' \? 'success' : '#1976D2'/);
+});
+
 test("timestamps include zero-padded month and day with milliseconds", () => {
   const node = ast.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === "formatTime");
   const formatTime = vm.runInNewContext(node.getText(ast) + "; formatTime");

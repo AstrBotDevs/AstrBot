@@ -172,6 +172,8 @@ The toolbar contains search, fullscreen, font-size controls, and `Install Pip pa
 
 ### Trace
 
+Trace text and tooltips use the system UI font rather than Outfit. Running status is blue; completed and error statuses remain green and red.
+
 List and detail timestamps include month and day using `MM-DD HH:mm:ss.SSS` in the browser's local time zone; timeline timestamp tooltips use the same format.
 
 Traces containing Agent calls add a borderless Tokens statistics card. Its total sums this execution's input (including cached input) and output, displayed with two-decimal k/M notation while the tooltip retains exact counts; hover or focus to inspect input, output, and cached-input counts. Only the latest cumulative snapshot per Agent is used, and separate Agents are summed. Unavailable usage shows an em dash rather than a reported zero.

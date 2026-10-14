@@ -1,5 +1,7 @@
 # Unreleased
 
+- Use native system fonts throughout trace text and tooltips instead of Outfit, without changing text sizing or icon fonts. Change running status chips and detail badges from amber to blue.
+
 - Include month and day in trace timestamps (MM-DD HH:mm:ss.SSS), including detail timestamps and timeline tooltips.
 
 - Add independent Group chat / Private chat chips to the trace Type column, using summary message types with a legacy UMO fallback and leaving unknown types unlabeled.
