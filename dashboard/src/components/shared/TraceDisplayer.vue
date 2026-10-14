@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Search,
   Send,
+  UserRound,
   Workflow,
   X,
 } from "@lucide/vue";
@@ -933,14 +934,20 @@ onBeforeUnmount(() => {
           <div class="trace-detail-summary">
             <div class="trace-detail-kicker"><span class="trace-status-badge" :class="statusClass(selectedEvent)">{{ statusLabel(selectedEvent) }}</span><span>{{ shortSpan(selectedEvent.span_id) }}</span></div>
             <TraceMessagePreview :key="selectedEvent.span_id" class="trace-message-title" tag="h2" :lines="2" :text="selectedEvent.message_outline || tm('untitled')" />
-            <p>
+            <div class="trace-detail-meta">
+            <p class="trace-detail-meta-row" aria-label="UMO">
+              <Hash :size="14" aria-hidden="true" />
               <v-tooltip :text="selectedEvent.umo" location="top" content-class="trace-tooltip">
                 <template #activator="{ props }">
                   <span v-bind="props" :class="{ 'trace-hover-name': umoNames[selectedEvent.umo] && umoNames[selectedEvent.umo] !== selectedEvent.umo }">{{ umoNames[selectedEvent.umo] || selectedEvent.umo || "-" }}</span>
                 </template>
               </v-tooltip>
-              · {{ selectedEvent.sender_name || "-" }}
             </p>
+            <p class="trace-detail-meta-row" :aria-label="tm('columns.sender')">
+              <UserRound :size="14" aria-hidden="true" />
+              <span>{{ selectedEvent.sender_name || "-" }}</span>
+            </p>
+            </div>
           </div>
           <div class="trace-detail-actions">
             <div class="trace-detail-time">{{ formatTime(selectedEvent.first_time) }}</div>
@@ -1076,6 +1083,10 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.trace-detail-meta { display: grid; gap: 5px; }
+.trace-detail-meta-row { align-items: flex-start; display: flex; gap: 7px; }
+.trace-detail-meta-row > svg { flex: 0 0 auto; margin-top: 1px; }
+.trace-detail-meta-row > span { min-width: 0; }
 .trace-explorer :deep(button), .trace-explorer :deep(input), .trace-explorer :deep(select), .trace-explorer :deep(textarea), .trace-explorer :deep(.v-btn), .trace-explorer :deep(.v-chip), .trace-explorer :deep(.v-field), .trace-explorer :deep(.v-table) { font-family: inherit; }
 :global(.trace-tooltip) { font-family: system-ui, sans-serif; }
 :global(.trace-menu) { font-family: system-ui, sans-serif; }

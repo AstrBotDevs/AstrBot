@@ -1,5 +1,7 @@
 # Unreleased
 
+- Present trace-detail UMO and sender on separate icon-and-value rows instead of a dot-separated line, preserving UMO alias tooltips.
+
 - Use native system fonts throughout trace text and tooltips instead of Outfit, without changing text sizing or icon fonts. Change running status chips and detail badges from amber to blue.
 
 - Include month and day in trace timestamps (MM-DD HH:mm:ss.SSS), including detail timestamps and timeline tooltips.

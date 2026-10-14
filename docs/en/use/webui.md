@@ -172,6 +172,8 @@ The toolbar contains search, fullscreen, font-size controls, and `Install Pip pa
 
 ### Trace
 
+Below the detail title, UMO and sender appear on separate icon-and-value rows. UMO aliases retain their hover tooltip showing the full identifier.
+
 Trace text and tooltips use the system UI font rather than Outfit. Running status is blue; completed and error statuses remain green and red.
 
 List and detail timestamps include month and day using `MM-DD HH:mm:ss.SSS` in the browser's local time zone; timeline timestamp tooltips use the same format.
