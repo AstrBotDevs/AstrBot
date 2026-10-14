@@ -59,6 +59,14 @@ function canonical(id, stamp = "2000000000", completed = true) {
   };
 }
 
+test("timestamps include zero-padded month and day with milliseconds", () => {
+  const node = ast.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === "formatTime");
+  const formatTime = vm.runInNewContext(node.getText(ast) + "; formatTime");
+  const timestamp = new Date(2026, 9, 4, 8, 9, 10, 7).getTime() / 1000;
+  assert.match(formatTime(timestamp), /^10-04 .+\.007$/);
+  assert.equal(formatTime(0), "-");
+});
+
 test("chat type prefers summary metadata and falls back to legacy UMO", (t) => {
   const state = setup(t);
   const trace = canonical("c".repeat(32));

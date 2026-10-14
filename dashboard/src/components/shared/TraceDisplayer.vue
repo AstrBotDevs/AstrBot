@@ -156,7 +156,7 @@ const traceRows = computed(() => filteredEvents.value.map((event) => ({
 const traceHeaders = computed(() => [
   { title: tm("columns.status"), key: "status", width: 120 },
   { title: tm("columns.platform"), key: "platform", width: 80, minWidth: 80, headerProps: { class: "text-no-wrap" } },
-  { title: tm("columns.timestamp"), key: "timestamp", width: 160 },
+  { title: tm("columns.timestamp"), key: "timestamp", width: 200, minWidth: 200 },
   { title: tm("columns.duration"), key: "duration", width: 120 },
   { title: tm("columns.message"), key: "message", minWidth: 240 },
   { title: tm("columns.category"), key: "category", width: 220, minWidth: 220, headerProps: { class: "text-no-wrap" } },
@@ -641,7 +641,9 @@ function clearSearch() {
 function formatTime(timestamp) {
   if (!timestamp) return "-";
   const date = new Date(timestamp * 1000);
-  return `${date.toLocaleTimeString([], { hour12: false })}.${String(date.getMilliseconds()).padStart(3, "0")}`;
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${month}-${day} ${date.toLocaleTimeString([], { hour12: false })}.${String(date.getMilliseconds()).padStart(3, "0")}`;
 }
 
 function formatDuration(duration) {
