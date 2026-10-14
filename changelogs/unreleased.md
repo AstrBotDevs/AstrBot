@@ -1,5 +1,7 @@
 # Unreleased
 
+- Reduce trace table header and cell text to 12px without changing timeline text or table density.
+
 - Load more → Vuetify server-side datatable pagination: support page navigation and 25/50/100 rows, reset on search/filter changes, and retain only the current page. Keep first-page live refresh without inserting into historical pages. Remove borders from the three trace statistics blocks while retaining their subtle backgrounds.
 
 - Remove persisted trace action/end-action and redundant duration attributes. Keep transition matching internal, set call kinds explicitly, retain handler types, and derive UI call completion and durations from canonical span timestamps/status. Preserve reads of legacy history.
