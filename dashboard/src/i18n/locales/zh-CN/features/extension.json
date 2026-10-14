@@ -57,7 +57,7 @@
     "back": "返回",
     "selectFile": "选择文件",
     "refresh": "刷新",
-    "updateAll": "更新全部插件",
+    "updateAll": "批量更新插件",
     "pin": "置顶",
     "unpin": "取消置顶",
     "deleteSource": "删除源",
@@ -255,8 +255,8 @@
       "confirm": "强制更新"
     },
     "updateAllConfirm": {
-      "title": "确认更新全部插件",
-      "message": "确定要更新全部 {count} 个插件吗？此操作可能需要一些时间。",
+      "title": "确认更新插件",
+      "message": "请选择要更新的插件，当前已勾选 {count} 个。",
       "confirm": "确认更新"
     },
     "sourceBinding": {
@@ -292,7 +292,7 @@
     "fillUrlOrFile": "请填写插件链接或上传插件文件",
     "dontFillBoth": "请不要同时填写插件链接和上传文件",
     "supportedFormats": "支持 .zip 格式的插件文件",
-    "updateAllSuccess": "所有可更新的插件都已更新！",
+    "updateAllSuccess": "所选插件都已更新！",
     "updateAllFailed": "有 {failed}/{total} 个插件更新失败:",
     "noUpdatesAvailable": "当前没有可更新的插件",
     "updateDisabled": "该插件缺少可用的安装源或仓库地址，无法更新或重新安装",

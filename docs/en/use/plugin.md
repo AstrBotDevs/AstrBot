@@ -135,6 +135,8 @@ On the **Installed** page, you can:
 | Handlers | Inspect the commands, tools, and other handlers registered by the plugin. |
 | Delete | Uninstall a plugin. The dialog lets you separately choose whether to also delete its configuration and persistent data. |
 
+Click **Batch Update Plugins** in the lower-right corner to open a dialog listing all available plugin updates, selected by default. Uncheck plugins you want to skip, then click **Confirm Update** to update only the selected plugins. Confirmation is disabled when no plugins are selected.
+
 Pay attention to the options for deleting plugin configuration files and persistent data. Leave the corresponding option unchecked if you want to retain settings or business data.
 
 ## Plugins, MCP, and Skills
