@@ -2259,3 +2259,56 @@ async def test_query_filters_empty_list_content_assistant_message(monkeypatch):
         assert messages[1] == {"role": "user", "content": "again"}
     finally:
         await provider.terminate()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("configured", "expected"),
+    [
+        (30, 30),
+        (120, 120),
+        ("120", 120),
+        (0, 120),
+        ("", 120),
+        (None, 120),
+        ("abc", 120),
+        (-5, 1),
+    ],
+)
+async def test_timeout_is_resolved_into_a_usable_request_timeout(configured, expected):
+    """The provider ``timeout`` field must not disable OpenAI requests.
+
+    The dashboard's numeric field writes ``0`` when the box is cleared
+    (``toNumber`` maps ``parseFloat('')`` to ``0``) and ``timeout`` is declared
+    without a slider or minimum, so the value reaches this provider unsanitized.
+    Measured against a local server that answers in 3 s, the raw ``0`` made
+    httpx raise ``APITimeoutError`` immediately, and ``""`` raised ``ValueError``
+    from the constructor -- which ProviderManager logs as a bare "Unknown cause"
+    before dropping the provider, so every OpenAI-compatible provider
+    (10 adapters subclass this one) stops responding.
+    """
+    provider = _make_provider({"timeout": configured})
+    try:
+        assert provider.timeout == expected
+        assert provider.client.timeout == expected
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_absent_timeout_field_keeps_the_default_timeout():
+    provider = _make_provider()
+    try:
+        assert provider.timeout == 120
+        assert provider.client.timeout == 120
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_openai_compatible_subclasses_inherit_the_timeout_fallback():
+    provider = _make_groq_provider({"timeout": 0})
+    try:
+        assert provider.timeout == 120
+    finally:
+        await provider.terminate()
