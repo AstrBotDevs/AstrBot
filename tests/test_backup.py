@@ -250,6 +250,26 @@ class TestAstrBotExporter:
 class TestAstrBotImporter:
     """AstrBotImporter 类测试"""
 
+    @pytest.mark.asyncio
+    async def test_restore_empty_directory(self, tmp_path, mock_main_db, monkeypatch):
+        plugins = tmp_path / "plugins"
+        plugins.mkdir()
+        (plugins / "added_later.txt").write_text("later", encoding="utf-8")
+        monkeypatch.setattr(
+            "astrbot.core.backup.importer.get_backup_directories",
+            lambda: {"plugins": plugins},
+        )
+        result = ImportResult()
+        with zipfile.ZipFile(tmp_path / "empty.zip", "w") as zf:
+            restored = await AstrBotImporter(main_db=mock_main_db)._import_directories(
+                zf, {"version": "1.1", "directories": ["plugins"]}, result
+            )
+
+        assert restored == {"plugins": 0}
+        assert list(plugins.iterdir()) == []
+        assert (tmp_path / "plugins.bak" / "added_later.txt").read_text() == "later"
+        assert result.warnings == []
+
     def test_init(self, mock_main_db, mock_kb_manager, temp_data_dir):
         """测试初始化"""
         importer = AstrBotImporter(

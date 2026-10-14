@@ -1900,7 +1900,11 @@ class PluginManager:
                 plugin_dir_path,
                 plugin_name,
             )
-        await self.reload(plugin_name)
+        success, error = await self.reload(plugin_name)
+        if not success:
+            raise RuntimeError(
+                error or f"Plugin {plugin_name} reload failed after update."
+            )
 
     async def turn_off_plugin(self, plugin_name: str) -> None:
         """禁用一个插件。

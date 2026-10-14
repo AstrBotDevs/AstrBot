@@ -905,9 +905,6 @@ class AstrBotImporter:
                     if name.startswith(archive_prefix) and name != archive_prefix
                 ]
 
-                if not dir_files:
-                    continue
-
                 # 备份现有目录（如果存在）
                 if target_dir.exists():
                     backup_path = Path(f"{target_dir}.bak")
