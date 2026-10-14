@@ -6,6 +6,7 @@ import random
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Literal, cast
+from urllib.parse import urlsplit
 
 import httpx
 from google import genai
@@ -1055,7 +1056,57 @@ class ProviderGoogleGenAI(Provider):
                 and m.name
             ]
         except APIError as e:
+            if self._uses_custom_api_base():
+                try:
+                    return await retry_provider_request(
+                        "Gemini",
+                        lambda: self._fetch_relay_models(),
+                    )
+                except Exception as relay_error:
+                    raise Exception(
+                        "Failed to fetch Gemini model list from the native API "
+                        f"({e.message}) or OpenAI-compatible relay "
+                        f"({relay_error})"
+                    )
             raise Exception(f"Failed to fetch Gemini model list: {e.message}")
+
+    def _get_relay_models_url(self) -> str:
+        assert self.api_base
+        base_url = self.api_base.rstrip("/")
+        if base_url.endswith("/models"):
+            return base_url
+        if base_url.endswith(("/v1", "/openai")):
+            return f"{base_url}/models"
+        return f"{base_url}/v1/models"
+
+    def _uses_custom_api_base(self) -> bool:
+        return bool(self.api_base) and (
+            urlsplit(self.api_base).hostname != "generativelanguage.googleapis.com"
+        )
+
+    def _get_relay_models_headers(self) -> dict[str, str]:
+        headers = dict(self.request_headers)
+        if self.chosen_api_key and not any(
+            name.lower() == "authorization" for name in headers
+        ):
+            headers["Authorization"] = f"Bearer {self.chosen_api_key}"
+        return headers
+
+    async def _fetch_relay_models(self) -> list[str]:
+        assert self._http_client
+        response = await self._http_client.get(
+            self._get_relay_models_url(),
+            headers=self._get_relay_models_headers(),
+        )
+        response.raise_for_status()
+        payload = response.json()
+        models = payload.get("data", []) if isinstance(payload, dict) else payload
+
+        return [
+            str(model["id"])
+            for model in models
+            if isinstance(model, dict) and model.get("id")
+        ]
 
     def get_current_key(self) -> str:
         return self.chosen_api_key
