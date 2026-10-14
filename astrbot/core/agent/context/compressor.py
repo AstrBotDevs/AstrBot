@@ -222,6 +222,10 @@ class LLMSummaryCompressor:
         """
         from .round_utils import split_into_rounds
 
+        modalities = self.provider.provider_config.get("modalities", None)
+        if isinstance(modalities, list) and modalities and "tool_use" not in modalities:
+            func_tool = None
+
         rounds = split_into_rounds(messages)
         message_rounds = [
             [seg for seg in rnd if isinstance(seg, Message)] for rnd in rounds
@@ -283,7 +287,7 @@ class LLMSummaryCompressor:
         )
         sanitized_summary_contexts, sanitize_stats = sanitize_contexts_by_modalities(
             summary_contexts,
-            self.provider.provider_config.get("modalities", None),
+            modalities,
         )
         log_context_sanitize_stats(sanitize_stats)
 

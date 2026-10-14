@@ -165,6 +165,104 @@ class TestContextManager:
         handler.assert_not_awaited()
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("modalities", "supports_tools"),
+        [
+            (["text"], False),
+            (["text", "tool_use"], True),
+            ([], True),
+            (None, True),
+            ("missing", True),
+        ],
+    )
+    async def test_summary_tool_reuse_respects_compression_provider_capabilities(
+        self, modalities, supports_tools
+    ):
+        provider = MockProvider()
+        if modalities == "missing":
+            provider.provider_config.pop("modalities")
+        else:
+            provider.provider_config["modalities"] = modalities
+
+        async def generate_summary(**kwargs):
+            if not supports_tools and kwargs.get("func_tool"):
+                raise ValueError("This summary provider does not support tools")
+            return LLMResponse(role="assistant", completion_text="Useful summary")
+
+        provider.text_chat = AsyncMock(side_effect=generate_summary)
+        tools = ToolSet(
+            tools=[
+                FunctionTool(
+                    name="test_tool",
+                    description="A test tool",
+                    parameters={"type": "object", "properties": {}},
+                )
+            ]
+        )
+        manager = ContextManager(
+            ContextConfig(
+                max_context_tokens=300,
+                llm_compress_provider=provider,
+                llm_compress_reuse_tools=True,
+                custom_token_counter=CharTokenCounter(),
+            )
+        )
+        messages = [
+            Message(role="user", content="a" * 150),
+            Message(role="assistant", content="b" * 150),
+            Message(role="user", content="Continue."),
+        ]
+
+        result = await manager.process(messages, func_tool=tools)
+
+        provider.text_chat.assert_awaited_once()
+        kwargs = provider.text_chat.await_args.kwargs
+        assert (kwargs.get("func_tool") is tools) == supports_tools
+        if not supports_tools:
+            assert "func_tool" not in kwargs
+        assert (
+            "without calling tools" in kwargs["contexts"][-1]["content"]
+        ) == supports_tools
+        assert any("Useful summary" in str(m.content) for m in result)
+        assert result[-1] == messages[-1]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("reuse_tools", [False, True])
+    async def test_custom_summary_subclass_keeps_messages_only_signature(
+        self, reuse_tools
+    ):
+        from astrbot.core.agent.context.compressor import LLMSummaryCompressor
+
+        compressed = [Message(role="user", content="Custom summary")]
+        calls = []
+
+        class LegacySummaryCompressor(LLMSummaryCompressor):
+            async def __call__(self, messages):
+                calls.append(messages)
+                return compressed
+
+        provider = MockProvider()
+        provider.text_chat = AsyncMock()
+        custom_compressor = LegacySummaryCompressor(provider=provider)
+        manager = ContextManager(
+            ContextConfig(
+                max_context_tokens=100,
+                llm_compress_provider=provider,
+                llm_compress_reuse_tools=reuse_tools,
+                custom_compressor=custom_compressor,
+            )
+        )
+        messages = [Message(role="user", content="x" * 500)]
+
+        with patch("astrbot.core.agent.context.manager.logger") as mock_logger:
+            result = await manager.process(messages, func_tool=ToolSet())
+
+        assert calls == [messages]
+        assert result == compressed
+        mock_logger.error.assert_not_called()
+        provider.text_chat.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_summary_with_only_tool_calls_keeps_history_without_retry(self):
         from astrbot.core.agent.context.compressor import LLMSummaryCompressor
 

@@ -118,8 +118,10 @@ class ContextManager:
         """
         logger.debug("Compress triggered, starting compression...")
 
-        if self.config.llm_compress_reuse_tools and isinstance(
-            self.compressor, LLMSummaryCompressor
+        if (
+            self.config.llm_compress_reuse_tools
+            and self.config.custom_compressor is None
+            and isinstance(self.compressor, LLMSummaryCompressor)
         ):
             messages = await self.compressor(messages, func_tool=func_tool)
         else:
