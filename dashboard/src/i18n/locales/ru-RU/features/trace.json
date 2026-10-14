@@ -71,7 +71,9 @@
   },
   "classification": {
     "agent": "Agent",
-    "command": "Команда"
+    "command": "Команда",
+    "group": "Групповой чат",
+    "private": "Личный чат"
   },
   "columns": {
     "category": "Тип",

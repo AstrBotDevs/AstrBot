@@ -71,7 +71,9 @@
   },
   "classification": {
     "agent": "Agent",
-    "command": "コマンド"
+    "command": "コマンド",
+    "group": "グループチャット",
+    "private": "個人チャット"
   },
   "columns": {
     "category": "種類",

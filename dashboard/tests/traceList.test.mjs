@@ -59,6 +59,21 @@ function canonical(id, stamp = "2000000000", completed = true) {
   };
 }
 
+test("chat type prefers summary metadata and falls back to legacy UMO", (t) => {
+  const state = setup(t);
+  const trace = canonical("c".repeat(32));
+  trace.attributes["astrbot.umo"] = "platform:GroupMessage:session:with:colons";
+  trace.attributes["astrbot.message_type"] = "FriendMessage";
+  state.processNewTraces([{ trace }]);
+  assert.equal(state.events.value[0].message_type, "FriendMessage");
+  const legacy = canonical("d".repeat(32));
+  legacy.attributes["astrbot.umo"] = "platform:GroupMessage:session";
+  state.processNewTraces([{ trace: legacy }]);
+  assert.equal(state.events.value[0].message_type, "GroupMessage");
+  state.processNewTraces([record("raw", "event_received", 3, { message_type: "OtherMessage" })]);
+  assert.equal(state.events.value[0].message_type, "OtherMessage");
+});
+
 test("canonical live updates keep summaries only and count real spans, not events", async (t) => {
   const state = setup(t);
   const trace = canonical("a".repeat(32));

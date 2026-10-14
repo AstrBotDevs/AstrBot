@@ -71,7 +71,9 @@
   },
   "classification": {
     "agent": "Agent",
-    "command": "指令"
+    "command": "指令",
+    "group": "群聊",
+    "private": "私聊"
   },
   "columns": {
     "category": "类型",

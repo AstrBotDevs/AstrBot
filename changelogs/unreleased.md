@@ -1,5 +1,7 @@
 # Unreleased
 
+- Add independent Group chat / Private chat chips to the trace Type column, using summary message types with a legacy UMO fallback and leaving unknown types unlabeled.
+
 - Reduce trace table header height to 40px using Vuetify's native header-height variable; preserve body row and pager sizing.
 
 - Show the Tokens card total with two-decimal k/M notation while keeping precise counts in its tooltip.

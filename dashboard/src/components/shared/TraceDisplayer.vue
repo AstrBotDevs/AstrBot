@@ -159,7 +159,7 @@ const traceHeaders = computed(() => [
   { title: tm("columns.timestamp"), key: "timestamp", width: 160 },
   { title: tm("columns.duration"), key: "duration", width: 120 },
   { title: tm("columns.message"), key: "message", minWidth: 240 },
-  { title: tm("columns.category"), key: "category", width: 150, minWidth: 150, headerProps: { class: "text-no-wrap" } },
+  { title: tm("columns.category"), key: "category", width: 220, minWidth: 220, headerProps: { class: "text-no-wrap" } },
   { title: "UMO", key: "umo", minWidth: 240 },
   { title: tm("columns.sender"), key: "sender", minWidth: 120 },
   { title: "Spans", key: "spans", width: 80 },
@@ -347,6 +347,7 @@ function normalizeTracePayload(payload) {
   const meta = {
     span_id: summary.trace_id, name: summary.name, model_version: 3,
     umo: attrs["astrbot.umo"] || "", sender_name: attrs["astrbot.sender_name"] || "",
+    message_type: attrs["astrbot.message_type"] || attrs["astrbot.umo"]?.split(":")[1] || "",
     message_outline: attrs["astrbot.message_outline"] || "",
     plugin_names: attrs["astrbot.plugins"] || "",
     platform_id: attrs["astrbot.platform_id"] || "",
@@ -459,6 +460,7 @@ function processNewTraces(newTraces) {
       }
     } else {
       event.umo = event.umo || trace.umo || "";
+      event.message_type = trace.fields?.message_type || event.message_type || event.umo.split(":")[1] || "";
       event.sender_name = event.sender_name || trace.sender_name || "";
       event.message_outline = event.message_outline || trace.message_outline || "";
       event.platform_id = trace.fields?.platform_id || event.platform_id;
@@ -903,6 +905,8 @@ onBeforeUnmount(() => {
             <div class="trace-category-chips">
               <v-chip v-if="matchesFilter(event, 'models')" size="small" variant="flat" color="#1976D2">{{ tm("classification.agent") }}</v-chip>
               <v-chip v-if="event.has_commands ?? event.records.some((record) => record.kind === 'plugin_handler' && record.fields.handler_category === 'command')" size="small" variant="flat" color="#2E7D32">{{ tm("classification.command") }}</v-chip>
+              <v-chip v-if="event.message_type === 'GroupMessage'" size="small" variant="tonal">{{ tm("classification.group") }}</v-chip>
+              <v-chip v-else-if="event.message_type === 'FriendMessage'" size="small" variant="tonal">{{ tm("classification.private") }}</v-chip>
             </div>
           </template>
           <template #item.umo="{ item: { event } }">

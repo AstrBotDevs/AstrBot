@@ -71,7 +71,9 @@
   },
   "classification": {
     "agent": "Agent",
-    "command": "Command"
+    "command": "Command",
+    "group": "Group chat",
+    "private": "Private chat"
   },
   "columns": {
     "category": "Type",
