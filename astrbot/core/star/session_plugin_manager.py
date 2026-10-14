@@ -3,9 +3,47 @@
 from astrbot.core import logger, sp
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
+_SESSION_DISABLED_PLUGINS_EXTRA_KEY = "session_disabled_plugins"
+
 
 class SessionPluginManager:
     """管理会话级别的插件启停状态"""
+
+    @staticmethod
+    async def get_disabled_plugins(event: AstrMessageEvent) -> set[str]:
+        """返回事件所属会话通过会话级规则禁用的插件名称集合。
+
+        结果会缓存在事件 extras 上，同一事件内不会重复查询数据库。
+        事件对象可能不实现 set_extra（例如测试中的轻量事件），此时不做缓存。
+
+        Args:
+            event: 消息事件。
+
+        Returns:
+            会话禁用的插件名称集合，可能为空集合。
+        """
+        set_extra = getattr(event, "set_extra", None)
+        cached = event.get_extra(_SESSION_DISABLED_PLUGINS_EXTRA_KEY)
+        if cached is not None:
+            return cached
+
+        session_id = getattr(event, "unified_msg_origin", None)
+        if not session_id:
+            if set_extra is not None:
+                set_extra(_SESSION_DISABLED_PLUGINS_EXTRA_KEY, set())
+            return set()
+
+        session_plugin_config = await sp.get_async(
+            scope="umo",
+            scope_id=session_id,
+            key="session_plugin_config",
+            default={},
+        )
+        session_config = session_plugin_config.get(session_id, {})
+        disabled_plugins = set(session_config.get("disabled_plugins", []))
+        if set_extra is not None:
+            set_extra(_SESSION_DISABLED_PLUGINS_EXTRA_KEY, disabled_plugins)
+        return disabled_plugins
 
     @staticmethod
     async def is_plugin_enabled_for_session(
@@ -62,17 +100,10 @@ class SessionPluginManager:
         """
         from astrbot.core.star.star import star_map
 
-        session_id = event.unified_msg_origin
+        session_id = getattr(event, "unified_msg_origin", None)
         filtered_handlers = []
 
-        session_plugin_config = await sp.get_async(
-            scope="umo",
-            scope_id=session_id,
-            key="session_plugin_config",
-            default={},
-        )
-        session_config = session_plugin_config.get(session_id, {})
-        disabled_plugins = session_config.get("disabled_plugins", [])
+        disabled_plugins = await SessionPluginManager.get_disabled_plugins(event)
 
         for handler in handlers:
             # 获取处理器对应的插件
