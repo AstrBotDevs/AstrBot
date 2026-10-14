@@ -29,6 +29,7 @@ dependencies = [
   "google-genai>=1.56.0",
   "httpx[socks]>=0.28.1",
   "lark-oapi>=1.4.15",
+  "markdown-it-py>=3.0.0",
   "mcp>=1.8.0,<2",
   "openai>=1.78.0",
   "ormsgpack>=1.9.1",
@@ -77,6 +78,7 @@ dependencies = [
 [dependency-groups]
 dev = [
   "commitizen>=4.9.1",
+  "mdit-py-plugins>=0.4.0",
   "pytest>=8.4.1",
   "pytest-asyncio>=1.1.0",
   "pytest-cov>=6.2.1",
