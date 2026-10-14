@@ -154,7 +154,7 @@ const traceRows = computed(() => filteredEvents.value.map((event) => ({
 
 const traceHeaders = computed(() => [
   { title: tm("columns.status"), key: "status", width: 120 },
-  { title: tm("columns.platform"), key: "platform", width: 112, minWidth: 112, headerProps: { class: "text-no-wrap" } },
+  { title: tm("columns.platform"), key: "platform", width: 80, minWidth: 80, headerProps: { class: "text-no-wrap" } },
   { title: tm("columns.timestamp"), key: "timestamp", width: 160 },
   { title: tm("columns.duration"), key: "duration", width: 120 },
   { title: tm("columns.message"), key: "message", minWidth: 240 },
@@ -857,7 +857,7 @@ onBeforeUnmount(() => {
         >
           <template #header.spans><span :title="tm('columns.spansHint')">Spans</span></template>
           <template #item.status="{ item: { event } }">
-            <v-chip size="small" variant="tonal" :color="event.status === 'error' ? 'error' : event.status === 'success' ? 'success' : 'warning'">{{ statusLabel(event) }}</v-chip>
+            <v-chip size="small" variant="flat" :color="event.status === 'error' ? 'error' : event.status === 'success' ? 'success' : 'warning'">{{ statusLabel(event) }}</v-chip>
           </template>
           <template #item.platform="{ item: { event } }">
             <span class="trace-item-platform" :title="event.platform_id || event.platform_name">
