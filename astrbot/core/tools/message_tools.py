@@ -346,6 +346,16 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             return f"error: failed to send message to session {target_session}: {exc}"
         if not sent:
             return f"error: failed to find platform for session {target_session}."
+        context.context.event.trace.record(
+            "response_sent",
+            kind="response",
+            source="core",
+            message=context.context.event._outline_chain(message_chain.chain),
+            component_types=[str(component.type) for component in message_chain.chain],
+            component_count=len(message_chain.chain),
+            message_type=message_chain.type,
+            target_umo=str(target_session),
+        )
         if str(target_session) == current_session:
             context.context.event._has_send_oper = True
             sent_plain_text = message_chain.get_plain_text().strip()

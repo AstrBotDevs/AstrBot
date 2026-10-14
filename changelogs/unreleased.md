@@ -1,5 +1,7 @@
 # Unreleased
 
+- Record successful send_message_to_user deliveries as response events on the originating trace, including message-chain outlines and destination UMO. Do not record failed sends as delivered responses; leave cron Agent instrumentation unchanged.
+
 - Present trace-detail UMO and sender on separate icon-and-value rows instead of a dot-separated line, preserving UMO alias tooltips.
 
 - Use native system fonts throughout trace text and tooltips instead of Outfit, without changing text sizing or icon fonts. Change running status chips and detail badges from amber to blue.
