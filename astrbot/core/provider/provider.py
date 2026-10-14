@@ -176,7 +176,18 @@ class Provider(AbstractProvider):
         raise NotImplementedError()
 
     async def pop_record(self, context: list) -> None:
-        """弹出 context 第一条非系统提示词对话记录"""
+        """Pop the oldest non-system conversation records from the context.
+
+        Tool calls are kept atomic with their responses: once an ``assistant``
+        record carrying ``tool_calls`` is popped, the ``tool`` records answering
+        it are removed as well. Otherwise the context keeps an orphaned ``tool``
+        record, and OpenAI-compatible APIs reject the whole request with HTTP 400
+        ("Messages with role 'tool' must be a response to a preceding message
+        with 'tool_calls'").
+
+        Args:
+            context: Conversation records, each a dict containing a ``role`` key.
+        """
         poped = 0
         indexs_to_pop = []
         for idx, record in enumerate(context):
@@ -189,6 +200,19 @@ class Provider(AbstractProvider):
 
         for idx in reversed(indexs_to_pop):
             context.pop(idx)
+
+        # Drop tool records that lost their preceding assistant(tool_calls).
+        kept: list = []
+        in_tool_block = False
+        for record in context:
+            role = record.get("role")
+            if role == "tool":
+                if in_tool_block:
+                    kept.append(record)
+                continue
+            in_tool_block = role == "assistant" and bool(record.get("tool_calls"))
+            kept.append(record)
+        context[:] = kept
 
     def _ensure_message_to_dicts(
         self,
