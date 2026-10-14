@@ -101,18 +101,35 @@ class ContextManager:
         """
         logger.debug("Compress triggered, starting compression...")
 
-        messages = await self.compressor(messages)
+        compressed = await self.compressor(messages)
 
-        # double check
-        tokens_after_summary = self.token_counter.count_tokens(messages)
+        if compressed is None:
+            # The summary failed and the history was not shortened. Keep the
+            # pre-compression count, which carries the real API usage when
+            # available: re-estimating the unchanged list can land below the
+            # trigger and skip the truncation fallback entirely.
+            logger.warning(
+                "Context summary failed, falling back to dropping the oldest rounds..."
+            )
+            tokens_after_summary = prev_tokens
+        elif compressed is messages:
+            # Nothing was summarized (e.g. only system messages, or everything
+            # is recent context); the list is unchanged, so the count is too.
+            tokens_after_summary = prev_tokens
+        else:
+            messages = compressed
+            # double check
+            tokens_after_summary = self.token_counter.count_tokens(messages)
 
-        # calculate compress rate
-        compress_rate = (tokens_after_summary / self.config.max_context_tokens) * 100
-        logger.info(
-            f"Compress completed."
-            f" {prev_tokens} -> {tokens_after_summary} tokens,"
-            f" compression rate: {compress_rate:.2f}%.",
-        )
+            # calculate compress rate
+            compress_rate = (
+                tokens_after_summary / self.config.max_context_tokens
+            ) * 100
+            logger.info(
+                f"Compress completed."
+                f" {prev_tokens} -> {tokens_after_summary} tokens,"
+                f" compression rate: {compress_rate:.2f}%.",
+            )
 
         # last check
         if not self.compressor.should_compress(

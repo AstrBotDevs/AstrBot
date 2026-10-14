@@ -1,5 +1,6 @@
 """Comprehensive tests for ContextManager."""
 
+import logging
 import sys
 from pathlib import Path
 from typing import Literal
@@ -140,7 +141,7 @@ class TestContextManager:
         assert isinstance(manager.compressor, TruncateByTurnsCompressor)
 
     @pytest.mark.asyncio
-    async def test_llm_compressor_keeps_history_when_summary_is_empty(self):
+    async def test_llm_compressor_returns_none_when_summary_is_empty(self):
         from astrbot.core.agent.context.compressor import LLMSummaryCompressor
 
         provider = MockProvider()
@@ -153,7 +154,7 @@ class TestContextManager:
         with patch("astrbot.core.agent.context.compressor.logger") as mock_logger:
             result = await compressor(messages)
 
-        assert result == messages
+        assert result is None
         mock_logger.warning.assert_called_once_with(
             "LLM context compression returned an empty summary."
         )
@@ -694,8 +695,58 @@ class TestContextManager:
 
         result = await compressor(messages)
 
-        assert result is messages
+        assert result is None
         assert provider.attempts == 1
+
+    @pytest.mark.asyncio
+    async def test_failed_summary_trims_when_only_real_usage_exceeds_limit(
+        self, caplog
+    ):
+        """A failed summary must not wave an over-limit history through.
+
+        The estimate of the unchanged history sits under the trigger, so the
+        post-compression recheck alone would return early. The real usage
+        reported by the previous API call is what triggered compression, and
+        the fallback has to honor it.
+        """
+        config = ContextConfig(
+            max_context_tokens=1000,
+            llm_compress_provider=FailingProvider(),  # type: ignore[arg-type]
+        )
+        manager = ContextManager(config)
+        messages = self._rounds_with_tool_chain("f" * 20)
+
+        with caplog.at_level(logging.INFO):
+            result = await manager.process(messages, trusted_token_usage=900)
+
+        # The oldest round is dropped and the tool chain stays paired, same
+        # as the estimate-triggered failure fallback above.
+        assert result == [messages[0], *messages[3:]]
+        assert "falling back to dropping the oldest rounds" in caplog.text
+        assert "Compress completed" not in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_unchanged_history_keeps_trusted_usage_count(self):
+        """A compressor that returns the list unchanged (nothing meaningful
+        to summarize) must not downgrade the count to a lower estimate."""
+
+        class PassthroughCompressor:
+            def should_compress(self, messages, current_tokens, max_tokens):
+                return max_tokens > 0 and current_tokens / max_tokens > 0.82
+
+            async def __call__(self, messages):
+                return messages
+
+        config = ContextConfig(
+            max_context_tokens=1000,
+            custom_compressor=PassthroughCompressor(),  # type: ignore[arg-type]
+        )
+        manager = ContextManager(config)
+        messages = self._rounds_with_tool_chain("f" * 20)
+
+        result = await manager.process(messages, trusted_token_usage=900)
+
+        assert result == [messages[0], *messages[3:]]
 
     # ==================== Combined Truncation and Compression Tests ====================
 
