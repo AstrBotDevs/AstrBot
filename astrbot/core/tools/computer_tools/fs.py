@@ -38,8 +38,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, cast
 
-import mcp.types
-
 from astrbot.api import FunctionTool, logger
 from astrbot.api.event import MessageChain
 from astrbot.core.agent.run_context import ContextWrapper
@@ -324,98 +322,6 @@ def _decode_escaped_text(value: str) -> str:
     )
 
 
-def _context_supports_image(context: ContextWrapper[AstrAgentContext]) -> bool:
-    """Return whether the model selected for this agent turn accepts images.
-
-    Reads the capability the agent runner published on the tool context.
-    Missing or unconfigured modalities are treated as supporting images, so the
-    raw image is preserved when the capability cannot be determined.
-
-    Args:
-        context: Tool execution context.
-
-    Returns:
-        True when the turn's model accepts the image modality.
-    """
-    modalities = getattr(context, "modalities", None)
-    if not modalities or not isinstance(modalities, list):
-        return True
-    return "image" in modalities
-
-
-async def _caption_image_fallback(
-    context: ContextWrapper[AstrAgentContext],
-    image_ref: str,
-) -> str | None:
-    """Describe an image as text using the configured caption provider.
-
-    Args:
-        context: Tool execution context.
-        image_ref: Image reference passed to the caption provider, either a
-            local file path or a ``data:image/...;base64,`` URI.
-
-    Returns:
-        The image description, or None when captioning is not possible. The
-        reason is logged only; callers must keep the raw image on None so the
-        agent runner can still cache it and hand the model a usable file path.
-    """
-    from astrbot.core.provider.provider import Provider
-
-    umo = context.context.event.unified_msg_origin
-    try:
-        cfg = context.context.context.get_config(umo=umo)
-    except Exception as exc:
-        logger.warning(f"[ImageFallback] Failed to load config for umo={umo}: {exc}")
-        cfg = {}
-    provider_settings = (
-        cfg.get("provider_settings", {}) if isinstance(cfg, dict) else {}
-    )
-    caption_provider_id = str(
-        provider_settings.get("default_image_caption_provider_id", "") or ""
-    ).strip()
-    if not caption_provider_id:
-        logger.debug(
-            "[ImageFallback] No image caption provider configured; keeping the raw image."
-        )
-        return None
-
-    pm = context.context.context.provider_manager
-    try:
-        caption_provider = await pm.get_provider_by_id(caption_provider_id)
-    except Exception as exc:
-        logger.warning(
-            f"[ImageFallback] Failed to get caption provider "
-            f"{caption_provider_id}: {exc}"
-        )
-        caption_provider = None
-
-    if not isinstance(caption_provider, Provider):
-        logger.warning(
-            f"[ImageFallback] Image caption provider `{caption_provider_id}` is "
-            "unavailable; keeping the raw image."
-        )
-        return None
-
-    caption_prompt = str(
-        provider_settings.get("image_caption_prompt", "Please describe the image.")
-        or "Please describe the image."
-    ).strip()
-    try:
-        llm_resp = await caption_provider.text_chat(
-            prompt=caption_prompt,
-            image_urls=[image_ref],
-        )
-    except Exception as exc:
-        logger.error(f"[ImageFallback] Image captioning failed: {exc}")
-        return None
-
-    caption = (getattr(llm_resp, "completion_text", None) or "").strip()
-    if not caption:
-        logger.warning("[ImageFallback] Image caption provider returned empty text.")
-        return None
-    return f"[Image description]: {caption}"
-
-
 @builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG)
 @dataclass
 class FileReadTool(FunctionTool):
@@ -505,7 +411,7 @@ class FileReadTool(FunctionTool):
                     access="read",
                 )
             try:
-                result = await read_file_tool_result(
+                return await read_file_tool_result(
                     sb,
                     local_mode=local_env,
                     path=normalized_path,
@@ -524,50 +430,6 @@ class FileReadTool(FunctionTool):
             finally:
                 if file_descriptor is not None:
                     os.close(file_descriptor)
-
-            # When the read result is an image but the model selected for this
-            # agent turn cannot consume image input, fall back to the configured
-            # caption provider so the model still receives a description.
-            if (
-                isinstance(result, mcp.types.CallToolResult)
-                and result.content
-                and any(
-                    isinstance(item, mcp.types.ImageContent) for item in result.content
-                )
-                and not _context_supports_image(context)
-            ):
-                # Prefer a data URI built from the already-compressed payload so
-                # that sandbox runtimes (where the file lives inside the
-                # container) can be captioned without host filesystem access.
-                image_ref = normalized_path
-                for item in result.content:
-                    if isinstance(item, mcp.types.ImageContent) and item.data:
-                        mime = item.mimeType or "image/jpeg"
-                        image_ref = f"data:{mime};base64,{item.data}"
-                        break
-                caption = await _caption_image_fallback(context, image_ref)
-                if caption is not None:
-                    return caption
-                # Captioning was not possible. Keep the raw image so the agent
-                # runner still caches it and hands the model a usable path, and
-                # attach the reason as an extra text part.
-                result = mcp.types.CallToolResult(
-                    content=[
-                        *result.content,
-                        mcp.types.TextContent(
-                            type="text",
-                            text=(
-                                "[Image caption unavailable] The model selected for "
-                                "this turn cannot read images, and no image caption "
-                                "provider produced a description. Set "
-                                "provider_settings.default_image_caption_provider_id "
-                                "to receive a text description of image files."
-                            ),
-                        ),
-                    ]
-                )
-
-            return result
         except IsADirectoryError:
             return (
                 f"Error: '{normalized_path}' is a directory, not a file. "

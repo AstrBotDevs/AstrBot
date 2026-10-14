@@ -17,13 +17,6 @@ class ContextWrapper(Generic[TContext]):
     messages: list[Message] = Field(default_factory=list)
     """This field stores the llm message context for the agent run, agent runners will maintain this field automatically."""
     tool_call_timeout: int = 120  # Default tool call timeout in seconds
-    modalities: list[str] | None = None
-    """Modalities supported by the provider selected for the current agent turn.
-
-    ``None`` means unknown; tools should treat it as supporting all modalities.
-    Agent runners maintain this field so tools can branch on the capabilities of
-    the provider actually in use without re-resolving the session provider.
-    """
 
 
 NoContext = ContextWrapper[None]
