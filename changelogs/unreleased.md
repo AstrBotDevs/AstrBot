@@ -1,5 +1,7 @@
 # Unreleased
 
+- Show the Tokens card total with two-decimal k/M notation while keeping precise counts in its tooltip.
+
 - Add an Agent-only Tokens statistics card with input/output/cache breakdown, latest-snapshot deduplication, and an unavailable-state placeholder instead of a misleading zero.
 
 - Add Type before UMO in the trace table, with independent blue Agent and green Command chips. Persist command flags in summaries and derive legacy flags for the current page; use explicit colors because the generic Vuetify color pack is disabled.

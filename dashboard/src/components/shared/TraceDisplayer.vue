@@ -953,7 +953,7 @@ onBeforeUnmount(() => {
           <div class="trace-stat"><Send :size="15" /><span>{{ tm("responses") }}</span><strong>{{ selectedStats.responses }}</strong></div>
           <v-tooltip v-if="matchesFilter(selectedEvent, 'models')" location="top">
             <template #activator="{ props }">
-              <div v-bind="props" class="trace-stat" tabindex="0"><Hash :size="15" /><span>{{ tm("tokens.title") }}</span><strong>{{ selectedTokenUsage ? selectedTokenUsage.total.toLocaleString() : "—" }}</strong></div>
+              <div v-bind="props" class="trace-stat" tabindex="0"><Hash :size="15" /><span>{{ tm("tokens.title") }}</span><strong>{{ selectedTokenUsage ? selectedTokenUsage.total >= 1000000 ? (selectedTokenUsage.total / 1000000).toFixed(2) + " M" : (selectedTokenUsage.total / 1000).toFixed(2) + " k" : "—" }}</strong></div>
             </template>
             <div class="trace-token-breakdown">{{ selectedTokenUsage ? tm('tokens.breakdown', { input: selectedTokenUsage.input.toLocaleString(), output: selectedTokenUsage.output.toLocaleString(), cached: selectedTokenUsage.cached.toLocaleString() }) : tm('tokens.unavailable') }}</div>
           </v-tooltip>

@@ -278,6 +278,9 @@ test("missing parents and cyclic span links cannot hang the timeline or hide unr
 
 test("group template and stacked icon styles compile, and all locales include group labels", () => {
   assert.equal(translations.compact.pluginHandler, "调用插件");
+  assert.match(descriptor.template.content, /selectedTokenUsage.total >= 1000000/);
+  assert.match(descriptor.template.content, /toFixed\(2\) \+ " M"/);
+  assert.match(descriptor.template.content, /toFixed\(2\) \+ " k"/);
   assert.match(descriptor.template.content, /v-if="record.fields.handler_type && record.fields.handler_type !== 'AdapterMessageEvent'"/);
   const template = compileTemplate({ source: descriptor.template.content, filename: "TraceDisplayer.vue", id: "trace-groups" });
   assert.deepEqual(template.errors, []);
