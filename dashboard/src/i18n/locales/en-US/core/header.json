@@ -55,6 +55,9 @@
       "latestLabel": "Latest version"
     },
     "progress": {
+      "restartUnconfirmed": "Restart could not be confirmed",
+      "restartRecovery": "No restart confirmation was received within 90 seconds. Check the server logs and restart AstrBot using your deployment tools if needed. You can check again or refresh manually; this does not confirm that the update succeeded.",
+      "checkAgain": "Check again",
       "target": "Target version: ",
       "preparing": "Preparing update...",
       "dashboard": "Download WebUI",
