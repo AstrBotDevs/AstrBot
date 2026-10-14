@@ -49,5 +49,11 @@ class AgentRequestSubStage(Stage):
             )
             return
 
+        if event.get_extra("provider_request") is None and event.get_extra(
+            "_llm_no_reply_prefix", False
+        ):
+            logger.debug("skip llm request: message matches configured no-reply prefix")
+            return
+
         async for resp in self.agent_sub_stage.process(event, self.prov_wake_prefix):
             yield resp
