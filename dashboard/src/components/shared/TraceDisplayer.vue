@@ -42,7 +42,8 @@ const detailBusy = ref(false);
 const historyError = ref("");
 const detailError = ref("");
 const totalRecords = ref(0);
-const nextCursor = ref(null);
+const historyPage = ref(1);
+const pageSize = ref(50);
 const storageWarning = ref(false);
 let metadataLoaded = false;
 let historyRequest = 0;
@@ -469,8 +470,7 @@ function processNewTraces(newTraces) {
   }
 }
 
-async function fetchTraceHistory(reset = true, reloadMetadata = false, preserveLoaded = false) {
-  if (!reset && (historyBusy.value || !nextCursor.value || events.value.length >= maxItems)) return;
+async function fetchTraceHistory(reset = true, reloadMetadata = false) {
   const request = ++historyRequest;
   historyBusy.value = true;
   historyError.value = "";
@@ -497,7 +497,7 @@ async function fetchTraceHistory(reset = true, reloadMetadata = false, preserveL
   }
   try {
     const response = await traceApi.history({
-      limit: 50, cursor: reset ? undefined : nextCursor.value,
+      limit: pageSize.value, page: historyPage.value,
       query: searchText.value.trim().slice(0, 256),
       errors: selectedFilters.value.includes("errors"),
       models: selectedFilters.value.includes("models"),
@@ -506,15 +506,13 @@ async function fetchTraceHistory(reset = true, reloadMetadata = false, preserveL
     if (request !== historyRequest) return;
     if (response.data?.status !== "ok") throw new Error("Trace history request failed");
     const data = response.data.data;
-    if (reset && !preserveLoaded) {
-      const keep = new Set((data.traces || []).map((trace) => trace.trace_id));
-      if (selectedSpanId.value) keep.add(selectedSpanId.value);
-      events.value = events.value.filter((event) => keep.has(event.span_id));
-      for (const id of eventIndex.keys()) if (!keep.has(id)) eventIndex.delete(id);
-    }
+    const keep = new Set((data.traces || []).map((trace) => trace.trace_id));
+    events.value = events.value.filter((event) => keep.has(event.span_id));
+    if (selectedSpanId.value) keep.add(selectedSpanId.value);
+    for (const id of eventIndex.keys()) if (!keep.has(id)) eventIndex.delete(id);
     processNewTraces((data.traces || []).map((trace) => ({ trace })));
     totalRecords.value = data.total || 0;
-    nextCursor.value = data.cursor;
+    historyPage.value = data.page || historyPage.value;
     storageWarning.value = Boolean(data.storage?.error || data.storage?.dropped);
     if (reset && selectedSpanId.value) loadTraceDetail(selectedSpanId.value);
   } catch (error) {
@@ -546,6 +544,7 @@ async function loadTraceDetail(traceId) {
 }
 
 watch([searchText, selectedFilters], () => {
+  historyPage.value = 1;
   if (queryTimer) clearTimeout(queryTimer);
   queryTimer = setTimeout(() => fetchTraceHistory(), 250);
 }, { deep: true });
@@ -562,19 +561,19 @@ function connectSSE() {
   source.onopen = () => {
     connected.value = true;
     retryAttempts.value = 0;
-    fetchTraceHistory(true, false, true);
+    fetchTraceHistory();
   };
   source.onmessage = (event) => {
     if (event.lastEventId) lastEventId.value = event.lastEventId;
     try {
       const payload = JSON.parse(event.data);
       if (payload?.type === "trace") {
-        processNewTraces([payload]);
+        if (eventIndex.has(payload.trace?.trace_id || payload.span_id)) processNewTraces([payload]);
         if (payload.storage_accepted === false) storageWarning.value = true;
-        if (payload.span && (!payload.span.parent_span_id || selectedFilters.value.length) && !historyRefreshTimer) {
+        if (historyPage.value === 1 && payload.span && (!payload.span.parent_span_id || selectedFilters.value.length) && !historyRefreshTimer) {
           historyRefreshTimer = setTimeout(() => {
             historyRefreshTimer = null;
-            fetchTraceHistory(true, false, true);
+            fetchTraceHistory();
           }, 1000);
         }
       }
@@ -816,14 +815,27 @@ onBeforeUnmount(() => {
     <div class="trace-explorer-body" :class="{ 'has-detail': selectedEvent }">
       <section class="trace-list" :aria-label="tm('traceList')">
         <div v-if="loading" class="trace-empty-state">{{ tm("loading") }}</div>
-        <div v-else-if="filteredEvents.length === 0" class="trace-empty-state"><Activity :size="22" aria-hidden="true" /><span>{{ tm("empty") }}</span></div>
-        <v-data-table
+        <v-data-table-server
           v-else
           class="trace-list-table"
           :headers="traceHeaders"
           :items="traceRows"
           item-value="event.span_id"
-          :items-per-page="-1"
+          :page="historyPage"
+          :items-per-page="pageSize"
+          :items-length="totalRecords"
+          :items-per-page-options="[25, 50, 100]"
+          :items-per-page-text="tm('pagination.perPage')"
+          :page-text="tm('pagination.range')"
+          :loading="historyBusy"
+          :no-data-text="tm('empty')"
+          @update:options="({ page, itemsPerPage }) => {
+            if (page === historyPage && itemsPerPage === pageSize) return;
+            historyPage = itemsPerPage !== pageSize ? 1 : page;
+            pageSize = itemsPerPage;
+            selectEvent(null);
+            fetchTraceHistory();
+          }"
           :mobile="false"
           hover
           :row-props="({ item }) => ({
@@ -841,7 +853,6 @@ onBeforeUnmount(() => {
           @click:row="(_, { item }) => selectEvent(item.event.span_id)"
           fixed-header
           height="100%"
-          hide-default-footer
           disable-sort
         >
           <template #header.spans><span :title="tm('columns.spansHint')">Spans</span></template>
@@ -876,11 +887,7 @@ onBeforeUnmount(() => {
           <template #item.spans="{ item }">
             <span :title="tm('columns.spansHint')">{{ item.spans }}</span>
           </template>
-        </v-data-table>
-        <div v-if="nextCursor" class="trace-page-footer">
-          <v-btn v-if="events.length < maxItems" size="small" variant="tonal" :loading="historyBusy" @click="fetchTraceHistory(false)">{{ tm("history.loadMore") }}</v-btn>
-          <span v-else>{{ tm("history.limitHint", { count: maxItems }) }}</span>
-        </div>
+        </v-data-table-server>
       </section>
 
       <main v-if="selectedEvent" class="trace-detail" @keydown.esc.stop="selectEvent(null)">
@@ -1075,7 +1082,6 @@ onBeforeUnmount(() => {
 .trace-list { display: flex; flex-direction: column; flex: 1; isolation: isolate; min-height: 0; min-width: 0; overflow: hidden; }
 .has-detail .trace-list { border-right: 1px solid var(--trace-border); }
 .trace-list-table { background: transparent; border-radius: 0; flex: 1; min-height: 0; height: 100%; }
-.trace-page-footer { align-items: center; color: var(--trace-muted); display: flex; justify-content: center; padding: 8px; font-size: 12px; }
 .trace-list-table :deep(.trace-list-row.selected) { background: rgba(var(--v-theme-primary), 0.1); }
 .trace-list-table :deep(.trace-list-row:focus-visible) { outline: 2px solid rgb(var(--v-theme-primary)); outline-offset: -2px; }
 .trace-cell-text { display: block; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1089,7 +1095,7 @@ onBeforeUnmount(() => {
 .trace-detail-time { color: var(--trace-muted); font-family: var(--astrbot-font-cjk-mono), monospace; font-size: 11px; white-space: nowrap; }
 .trace-status-badge { border-radius: 999px; font-size: 10px; padding: 3px 7px; text-transform: none; } .trace-status-badge.is-live { background: rgba(245, 158, 11, 0.14); color: #f59e0b; } .trace-status-badge.is-success { background: rgba(34, 197, 94, 0.14); color: #22c55e; } .trace-status-badge.is-error { background: rgba(239, 68, 68, 0.14); color: #ef4444; }
 .trace-stat-grid { display: grid; gap: 8px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 18px 0 22px; }
-.trace-stat { background: rgba(var(--v-theme-on-surface), 0.04); border: 1px solid var(--trace-border); border-radius: 8px; display: grid; gap: 4px; grid-template-columns: 16px 1fr; padding: 9px 10px; } .trace-stat svg { color: var(--trace-muted); grid-row: span 2; margin-top: 2px; } .trace-stat span { color: var(--trace-muted); font-size: 10px; } .trace-stat strong { font-size: 13px; font-weight: 650; }
+.trace-stat { background: rgba(var(--v-theme-on-surface), 0.04); border: 0; border-radius: 8px; display: grid; gap: 4px; grid-template-columns: 16px 1fr; padding: 9px 10px; } .trace-stat svg { color: var(--trace-muted); grid-row: span 2; margin-top: 2px; } .trace-stat span { color: var(--trace-muted); font-size: 10px; } .trace-stat strong { font-size: 13px; font-weight: 650; }
 .trace-timeline { max-width: 900px; } .timeline-record { display: grid; gap: 12px; grid-template-columns: 26px minmax(0, 1fr); margin-left: calc(min(var(--timeline-depth, 0), 3) * 18px); min-height: 44px; padding-top: 8px; } .timeline-rail { align-items: center; display: flex; flex-direction: column; }
 .timeline-icon { --timeline-icon-background: rgba(var(--v-theme-on-surface), 0.035); align-items: center; background: var(--timeline-icon-background); border: 1px solid var(--trace-border); border-radius: 50%; display: inline-flex; height: 26px; justify-content: center; width: 26px; z-index: 1; } .timeline-icon.is-system { color: var(--trace-muted); } .timeline-icon.is-plugin, .timeline-icon.is-agent { color: rgb(var(--v-theme-primary)); } .timeline-icon.is-response { color: rgb(var(--v-theme-success)); } .timeline-icon.is-error { --timeline-icon-background: rgba(var(--v-theme-error), 0.08); color: rgb(var(--v-theme-error)); }
 .timeline-line { background: var(--trace-border); flex: 1; width: 1px; } .timeline-content { min-width: 0; padding-bottom: 10px; } .timeline-heading { align-items: center; display: flex; gap: 10px; justify-content: space-between; } .timeline-heading strong { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; } .timeline-heading time { color: var(--trace-muted); font-family: var(--astrbot-font-cjk-mono), monospace; font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; } .timeline-subtitle { color: var(--trace-muted); font-size: 11px; line-height: 1.5; margin-top: 5px; overflow-wrap: anywhere; }

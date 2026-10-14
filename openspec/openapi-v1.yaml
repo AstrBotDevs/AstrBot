@@ -5098,8 +5098,12 @@ paths:
           in: query
           schema: {type: integer, minimum: 1, maximum: 100, default: 50}
         - name: cursor
+          description: Legacy keyset cursor; use page for numbered pagination.
           in: query
           schema: {type: string, maxLength: 64}
+        - name: page
+          in: query
+          schema: {type: integer, minimum: 1, default: 1}
         - name: query
           in: query
           schema: {type: string, maxLength: 256, default: ""}

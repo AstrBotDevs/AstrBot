@@ -688,7 +688,7 @@ export const apiKeyApi = {
 };
 
 export const traceApi = {
-  history(query?: { limit?: number; cursor?: string; query?: string; errors?: boolean; models?: boolean; plugins?: boolean }) {
+  history(query?: { limit?: number; page?: number; cursor?: string; query?: string; errors?: boolean; models?: boolean; plugins?: boolean }) {
     return typed<OpenConfig>(openApiV1.listTraces({ query }));
   },
   detail(traceId: string) {

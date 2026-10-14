@@ -265,6 +265,17 @@ def test_database_pages_filters_details_and_restart(persisted, capture):
     assert persisted.flush()
     first = persisted.list_traces(limit=2)
     second = persisted.list_traces(limit=2, cursor=first["cursor"])
+    numbered = persisted.list_traces(limit=2, page=2)
+    assert numbered["page"] == 2
+    assert [item["trace_id"] for item in numbered["traces"]] == [
+        item["trace_id"] for item in second["traces"]
+    ]
+    assert persisted.list_traces(limit=2, page=999)["page"] == 2
+    assert persisted.list_traces(limit=2, errors=True, page=999)["page"] == 1
+    with pytest.raises(ValueError):
+        persisted.list_traces(page=0)
+    with pytest.raises(ValueError):
+        persisted.list_traces(page=2, cursor=first["cursor"])
     assert first["total"] == 4
     assert len(first["traces"]) == len(second["traces"]) == 2
     assert {item["trace_id"] for item in first["traces"]}.isdisjoint(

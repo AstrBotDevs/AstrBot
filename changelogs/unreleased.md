@@ -1,5 +1,7 @@
 # Unreleased
 
+- Load more → Vuetify server-side datatable pagination: support page navigation and 25/50/100 rows, reset on search/filter changes, and retain only the current page. Keep first-page live refresh without inserting into historical pages. Remove borders from the three trace statistics blocks while retaining their subtle backgrounds.
+
 - Remove persisted trace action/end-action and redundant duration attributes. Keep transition matching internal, set call kinds explicitly, retain handler types, and derive UI call completion and durations from canonical span timestamps/status. Preserve reads of legacy history.
 
 - Hide the redundant AdapterMessageEvent type label on plugin listener nodes; keep handler names, category chips, and hook event types.

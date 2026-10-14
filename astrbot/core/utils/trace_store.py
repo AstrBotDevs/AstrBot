@@ -423,16 +423,18 @@ class TraceStore:
         self,
         *,
         limit: int = 50,
+        page: int = 1,
         cursor: str | None = None,
         query: str = "",
         errors: bool = False,
         models: bool = False,
         plugins: bool = False,
     ) -> dict:
-        """Read one keyset page of summaries, never all stored span bodies.
+        """Read one numbered or keyset page, never all stored span bodies.
 
         Args:
             limit: Maximum summaries, capped at 100.
+            page: One-based page number; mutually exclusive with a cursor.
             cursor: Previous page's timestamp and trace ID.
             query: Message, session, sender, or plugin search.
             errors: Require an error.
@@ -444,11 +446,13 @@ class TraceStore:
 
         Raises:
             RuntimeError: If initialization failed.
-            ValueError: If the cursor is invalid.
+            ValueError: If the page or cursor is invalid.
         """
         if not self._ready.wait(5) or self._failed:
             raise RuntimeError(self.last_error or "Trace database is not ready.")
         limit = min(100, max(1, limit))
+        if page < 1 or (cursor and page != 1):
+            raise ValueError("Invalid trace page.")
         conditions, values = [], []
         for key, enabled in (
             ("has_errors", errors),
@@ -473,6 +477,7 @@ class TraceStore:
             total = connection.execute(
                 "SELECT COUNT(*) FROM traces" + where, values
             ).fetchone()[0]
+            page = min(page, max(1, (total + limit - 1) // limit))
             if cursor:
                 stamp, trace_id = cursor.split(":", 1)
                 if len(trace_id) != 32 or any(
@@ -485,12 +490,13 @@ class TraceStore:
             rows = connection.execute(
                 "SELECT data, start_ns, trace_id FROM traces"
                 + where
-                + " ORDER BY start_ns DESC, trace_id DESC LIMIT ?",
-                [*values, limit + 1],
+                + " ORDER BY start_ns DESC, trace_id DESC LIMIT ? OFFSET ?",
+                [*values, limit + 1, (page - 1) * limit],
             ).fetchall()
         return {
             "traces": [json.loads(row[0]) for row in rows[:limit]],
             "total": total,
+            "page": page,
             "cursor": f"{rows[limit - 1][1]}:{rows[limit - 1][2]}"
             if len(rows) > limit
             else None,

@@ -3733,10 +3733,14 @@ export type GetLogHistoryError = unknown;
 
 export type ListTracesData = {
     query?: {
+        /**
+         * Legacy keyset cursor; use page for numbered pagination.
+         */
         cursor?: string;
         errors?: boolean;
         limit?: number;
         models?: boolean;
+        page?: number;
         plugins?: boolean;
         query?: string;
     };

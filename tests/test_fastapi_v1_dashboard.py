@@ -4372,6 +4372,14 @@ async def test_v1_persistent_trace_routes(asgi_client, monkeypatch, tmp_path):
         )
         assert response.status_code == 200
         assert response.json()["data"]["total"] == 1
+        response = await asgi_client.get(
+            "/api/v1/trace/history", params={"limit": 1, "page": 999}, headers=headers
+        )
+        assert response.json()["data"]["page"] == 1
+        assert len(response.json()["data"]["traces"]) == 1
+        assert (
+            await asgi_client.get("/api/v1/trace/history?page=0", headers=headers)
+        ).status_code == 422
         response = await asgi_client.get(f"/api/v1/trace/{trace_id}", headers=headers)
         assert response.status_code == 200
         assert response.json()["data"]["spans"][0]["span_id"] == span_id

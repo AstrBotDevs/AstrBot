@@ -31,7 +31,7 @@ function setup(t) {
     "eventIndex", "maxItems", "selectedEvent", "normalizedSearch", "filteredEvents", "traceRows", "traceHeaders",
     "processNewTraces", "normalizeTracePayload", "matchesFilter", "recordSearchText", "timelineRecords", "formatDuration", "selectEvent",
     "fetchTraceHistory", "loadTraceDetail", "historyBusy", "detailBusy", "historyError", "detailError",
-    "totalRecords", "nextCursor", "storageWarning", "metadataLoaded", "historyRequest", "detailRequest", "plugins", "loading",
+    "totalRecords", "historyPage", "pageSize", "storageWarning", "metadataLoaded", "historyRequest", "detailRequest", "plugins", "loading",
   ]);
   const statements = ast.statements.filter((node) =>
     ts.isFunctionDeclaration(node) ? names.has(node.name?.text) :
@@ -41,7 +41,7 @@ function setup(t) {
   vm.runInContext(statements.map((node) => node.getText(ast)).join("\n"), context);
   const watcher = ast.statements.find((node) => node.getText(ast).startsWith("watch(filteredEvents,"));
   t.after(vm.runInContext(watcher.getText(ast), context));
-  return { focused, historyRequests, detailRequests, ...vm.runInContext("({ events, selectedSpanId, selectedEvent, selectedFilters, traceRows, traceHeaders, clockNow, processNewTraces, selectEvent, searchText, fetchTraceHistory, loadTraceDetail, totalRecords, nextCursor, historyBusy, detailBusy, historyError, detailError })", context) };
+  return { focused, historyRequests, detailRequests, ...vm.runInContext("({ events, selectedSpanId, selectedEvent, selectedFilters, traceRows, traceHeaders, clockNow, processNewTraces, selectEvent, searchText, fetchTraceHistory, loadTraceDetail, totalRecords, historyPage, pageSize, historyBusy, detailBusy, historyError, detailError })", context) };
 }
 
 function record(span, action, time, fields = {}) {
@@ -84,7 +84,7 @@ test("canonical live updates keep summaries only and count real spans, not event
   assert.equal(state.events.value[0].records.length, 0);
 });
 
-test("history uses keyset pages and ignores a superseded search response", async (t) => {
+test("history replaces numbered pages and ignores a superseded search response", async (t) => {
   const state = setup(t);
   const first = state.fetchTraceHistory();
   await new Promise((resolve) => setImmediate(resolve));
@@ -93,13 +93,15 @@ test("history uses keyset pages and ignores a superseded search response", async
   } } });
   await first;
   assert.equal(state.totalRecords.value, 51);
-  const more = state.fetchTraceHistory(false);
-  assert.equal(state.historyRequests[1].options.cursor, "next");
+  state.historyPage.value = 2;
+  const more = state.fetchTraceHistory();
+  assert.equal(state.historyRequests[1].options.page, 2);
+  assert.equal(state.historyRequests[1].options.limit, 50);
   state.historyRequests[1].resolve({ data: { status: "ok", data: {
     traces: [canonical("b".repeat(32))], total: 51, cursor: null, storage: {},
   } } });
   await more;
-  assert.equal(state.events.value.length, 2);
+  assert.equal(state.events.value.length, 1);
   const oldRequest = state.fetchTraceHistory();
   state.searchText.value = "New";
   const newRequest = state.fetchTraceHistory();
@@ -215,8 +217,11 @@ test("Vuetify datatable keeps the requested columns and explicit detail selectio
   assert.equal(zh.columns.duration, "时长");
   assert.match(descriptor.template.content, /<v-data-table/);
   assert.match(descriptor.template.content, /item-value="event.span_id"/);
-  assert.match(descriptor.template.content, /:items-per-page="-1"/);
-  assert.match(descriptor.template.content, /hide-default-footer/);
+  assert.match(descriptor.template.content, /<v-data-table-server/);
+  assert.match(descriptor.template.content, /:items-per-page="pageSize"/);
+  assert.match(descriptor.template.content, /:page="historyPage"/);
+  assert.match(descriptor.template.content, /:items-length="totalRecords"/);
+  assert.doesNotMatch(descriptor.template.content, /hide-default-footer|history.loadMore/);
   assert.doesNotMatch(descriptor.template.content, /#item=/);
   for (const key of ["status", "platform", "timestamp", "duration", "message", "umo", "sender", "spans"]) {
     assert.match(descriptor.template.content, new RegExp("#item\\." + key + "="));

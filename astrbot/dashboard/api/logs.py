@@ -91,6 +91,7 @@ async def get_trace_settings(
 @router.get("/trace/history")
 async def list_traces(
     limit: int = Query(default=50, ge=1, le=100),
+    page: int = Query(default=1, ge=1),
     cursor: str | None = Query(default=None, max_length=64),
     query: str = Query(default="", max_length=256),
     errors: bool = False,
@@ -104,6 +105,7 @@ async def list_traces(
         return ok(
             await service.get_trace_history(
                 limit=limit,
+                page=page,
                 cursor=cursor,
                 query=query,
                 errors=errors,

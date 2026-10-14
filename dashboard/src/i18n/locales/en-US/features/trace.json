@@ -34,6 +34,10 @@
   "details": "View details",
   "selectTrace": "Select a trace to inspect the complete execution chain",
   "closeDetails": "Close details",
+  "pagination": {
+    "perPage": "Rows per page",
+    "range": "{0}–{1} of {2}"
+  },
   "messagePreview": {
     "expand": "Show full text",
     "collapse": "Collapse"

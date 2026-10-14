@@ -81,7 +81,7 @@ class LogService:
         """Read a bounded database page.
 
         Args:
-            **filters: Validated cursor, keyword, and feature filters.
+            **filters: Validated page/cursor, keyword, and feature filters.
 
         Returns:
             Trace summaries and pagination metadata.

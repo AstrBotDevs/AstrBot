@@ -34,6 +34,10 @@
   "details": "詳細を表示",
   "selectTrace": "トレースを選択すると実行チェーンを確認できます",
   "closeDetails": "詳細を閉じる",
+  "pagination": {
+    "perPage": "ページあたりの件数",
+    "range": "{2} 件中 {0}–{1} 件"
+  },
   "messagePreview": {
     "expand": "全文を表示",
     "collapse": "折りたたむ"

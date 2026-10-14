@@ -34,6 +34,10 @@
   "details": "查看详情",
   "selectTrace": "选择一条追踪查看完整执行链",
   "closeDetails": "关闭详情",
+  "pagination": {
+    "perPage": "每页条数",
+    "range": "第 {0}–{1} 条，共 {2} 条"
+  },
   "messagePreview": {
     "expand": "展开全文",
     "collapse": "收起"
