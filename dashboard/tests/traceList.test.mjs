@@ -257,7 +257,7 @@ test("native table rows retain trace identity, selection, and keyboard activatio
   assert.equal(rowProps({ item: { event: { span_id: "second" } } }).class.selected, false);
 });
 
-test("table uses compact 13px text while density, spacing, and hover use Vuetify defaults", () => {
+test("table uses 13px text and 40px headers while body density and hover use Vuetify defaults", () => {
   const table = descriptor.template.content.match(/<v-data-table[\s\S]*?>/)[0];
   assert.match(table, /\s+hover\s/);
   assert.doesNotMatch(table, /density=/);
@@ -265,6 +265,7 @@ test("table uses compact 13px text while density, spacing, and hover use Vuetify
   const tableStyle = descriptor.styles[0].content.match(/\.trace-list-table\s*\{([^}]+)\}/)[1];
   assert.match(descriptor.styles[0].content, /\.trace-list\s*\{[^}]*isolation:\s*isolate/);
   assert.doesNotMatch(tableStyle, /font-size|padding|font-family/);
+  assert.match(tableStyle, /--v-table-header-height: 40px/);
   assert.match(descriptor.styles[0].content, /:deep\(th\), \.trace-list-table :deep\(td\) \{ font-size: 13px;/);
   assert.deepEqual(compileTemplate({ source: descriptor.template.content, filename: "TraceDisplayer.vue", id: "trace-native" }).errors, []);
   assert.deepEqual(compileStyle({ source: descriptor.styles[0].content, filename: "TraceDisplayer.vue", id: "trace-native", scoped: true }).errors, []);

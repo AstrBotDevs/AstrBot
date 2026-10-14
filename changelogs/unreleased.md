@@ -1,5 +1,7 @@
 # Unreleased
 
+- Reduce trace table header height to 40px using Vuetify's native header-height variable; preserve body row and pager sizing.
+
 - Show the Tokens card total with two-decimal k/M notation while keeping precise counts in its tooltip.
 
 - Add an Agent-only Tokens statistics card with input/output/cache breakdown, latest-snapshot deduplication, and an unavailable-state placeholder instead of a misleading zero.

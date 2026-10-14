@@ -1118,7 +1118,7 @@ onBeforeUnmount(() => {
 .trace-explorer-body { display: flex; flex: 1; min-height: 0; min-width: 0; overflow: hidden; position: relative; }
 .trace-list { display: flex; flex-direction: column; flex: 1; isolation: isolate; min-height: 0; min-width: 0; overflow: hidden; }
 .has-detail .trace-list { border-right: 1px solid var(--trace-border); }
-.trace-list-table { background: transparent; border-radius: 0; flex: 1; min-height: 0; height: 100%; }
+.trace-list-table { --v-table-header-height: 40px; background: transparent; border-radius: 0; flex: 1; min-height: 0; height: 100%; }
 .trace-list-table :deep(th), .trace-list-table :deep(td) { font-size: 13px; }
 .trace-list-table :deep(.trace-list-row.selected) { background: rgba(var(--v-theme-primary), 0.1); }
 .trace-list-table :deep(.trace-list-row:focus-visible) { outline: 2px solid rgb(var(--v-theme-primary)); outline-offset: -2px; }
