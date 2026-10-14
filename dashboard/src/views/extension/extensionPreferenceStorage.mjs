@@ -1,4 +1,9 @@
 export const PINNED_EXTENSIONS_STORAGE_KEY = "astrbot.pinnedExtensions";
+export const PLUGIN_CARD_DENSITY_STORAGE_KEY = "astrbot.pluginCardDensity";
+export const PLUGIN_CARD_DENSITY = Object.freeze({
+  DETAILED: "detailed",
+  COMPACT: "compact",
+});
 
 const getStorageForRead = (storageOverride) => {
   if (storageOverride === null) {
@@ -82,6 +87,59 @@ export const writePinnedExtensions = (names, storage) => {
     targetStorage.setItem(
       PINNED_EXTENSIONS_STORAGE_KEY,
       JSON.stringify(normalizePinnedExtensions(names)),
+    );
+  } catch {
+    // Ignore restricted storage environments.
+  }
+};
+
+/**
+ * Read the saved plugin card density.
+ *
+ * Args:
+ *   storage: Optional storage override used by tests or restricted runtimes.
+ *
+ * Returns:
+ *   The saved density, or the detailed density when unavailable or invalid.
+ */
+export const readPluginCardDensity = (storage) => {
+  const targetStorage = getStorageForRead(storage);
+  if (!targetStorage) {
+    return PLUGIN_CARD_DENSITY.DETAILED;
+  }
+
+  try {
+    const saved = targetStorage.getItem(PLUGIN_CARD_DENSITY_STORAGE_KEY);
+    return Object.values(PLUGIN_CARD_DENSITY).includes(saved)
+      ? saved
+      : PLUGIN_CARD_DENSITY.DETAILED;
+  } catch {
+    return PLUGIN_CARD_DENSITY.DETAILED;
+  }
+};
+
+/**
+ * Persist the plugin card density.
+ *
+ * Args:
+ *   density: Density value to store. Unsupported values use the detailed mode.
+ *   storage: Optional storage override used by tests or restricted runtimes.
+ *
+ * Returns:
+ *   Nothing.
+ */
+export const writePluginCardDensity = (density, storage) => {
+  const targetStorage = getStorageForWrite(storage);
+  if (!targetStorage) {
+    return;
+  }
+
+  try {
+    targetStorage.setItem(
+      PLUGIN_CARD_DENSITY_STORAGE_KEY,
+      Object.values(PLUGIN_CARD_DENSITY).includes(density)
+        ? density
+        : PLUGIN_CARD_DENSITY.DETAILED,
     );
   } catch {
     // Ignore restricted storage environments.

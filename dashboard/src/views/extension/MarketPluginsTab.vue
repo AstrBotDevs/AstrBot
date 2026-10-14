@@ -45,8 +45,6 @@ const {
   forceUpdateDialog,
   updateAllConfirmDialog,
   changelogDialog,
-  getInitialListViewMode,
-  isListView,
   pluginSearch,
   loading_,
   currentPage,

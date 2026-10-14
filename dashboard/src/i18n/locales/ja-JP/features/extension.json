@@ -27,8 +27,9 @@
     "all": "すべて"
   },
   "views": {
-    "card": "カード表示",
-    "list": "リスト表示"
+    "displayDensity": "プラグイン表示密度",
+    "detailed": "詳細モード",
+    "compact": "コンパクトモード"
   },
   "buttons": {
     "showSystemPlugins": "システムプラグインを表示",

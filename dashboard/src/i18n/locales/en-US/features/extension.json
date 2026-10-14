@@ -27,8 +27,9 @@
     "all": "All"
   },
   "views": {
-    "card": "Card View",
-    "list": "List View"
+    "displayDensity": "Plugin display density",
+    "detailed": "Detailed mode",
+    "compact": "Compact mode"
   },
   "buttons": {
     "showSystemPlugins": "Show System Extensions",

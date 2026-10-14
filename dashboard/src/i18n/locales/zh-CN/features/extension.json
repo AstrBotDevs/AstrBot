@@ -27,8 +27,9 @@
     "all": "全部"
   },
   "views": {
-    "card": "卡片视图",
-    "list": "列表视图"
+    "displayDensity": "插件显示密度",
+    "detailed": "详细模式",
+    "compact": "紧凑模式"
   },
   "buttons": {
     "showSystemPlugins": "显示系统插件",
