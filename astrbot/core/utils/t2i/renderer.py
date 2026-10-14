@@ -57,7 +57,7 @@ class HtmlRenderer:
                     template_name=template_name,
                     endpoint=endpoint,
                 )
-            except BaseException as e:
+            except Exception as e:
                 logger.error(
                     f"Failed to render image via AstrBot API: {e}. Falling back to local rendering.",
                 )
