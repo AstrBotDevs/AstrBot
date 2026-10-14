@@ -1,6 +1,6 @@
 # Unreleased
 
-- Reduce trace table header and cell text to 12px without changing timeline text or table density.
+- Set trace table header and cell text to 13px without changing timeline text or table density.
 
 - Load more → Vuetify server-side datatable pagination: support page navigation and 25/50/100 rows, reset on search/filter changes, and retain only the current page. Keep first-page live refresh without inserting into historical pages. Remove borders from the three trace statistics blocks while retaining their subtle backgrounds.
 
