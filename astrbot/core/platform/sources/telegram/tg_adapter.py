@@ -467,7 +467,17 @@ class TelegramPlatformAdapter(Platform):
             if not update.message:
                 return
             if update.message.caption:
-                message.message_str = update.message.caption
+                caption_utf16 = update.message.caption.encode("utf-16-le")
+                # Insert from the end to preserve Telegram's UTF-16 offsets.
+                for entity in reversed(update.message.caption_entities or ()):
+                    if entity.type == "text_link" and entity.url:
+                        end = (entity.offset + entity.length) * 2
+                        caption_utf16 = (
+                            caption_utf16[:end]
+                            + f" ({entity.url})".encode("utf-16-le")
+                            + caption_utf16[end:]
+                        )
+                message.message_str = caption_utf16.decode("utf-16-le")
                 message.message.append(Comp.Plain(message.message_str))
             if update.message.caption and update.message.caption_entities:
                 for entity in update.message.caption_entities:
@@ -580,6 +590,33 @@ class TelegramPlatformAdapter(Platform):
                 reply_chain = reply_abm.message
                 reply_message_str = reply_abm.message_str
                 if quote_text:
+                    quote_utf16 = quote_text.encode("utf-16-le")
+                    original = update.message.reply_to_message
+                    original_utf16 = (original.text or original.caption or "").encode(
+                        "utf-16-le"
+                    )
+                    start = update.message.quote.position * 2
+                    end = start + len(quote_utf16)
+                    # Telegram omits links from quote entities; use the matched source.
+                    if original_utf16[start:end] == quote_utf16:
+                        for entity in reversed(
+                            original.entities or original.caption_entities or ()
+                        ):
+                            link_start = entity.offset * 2
+                            link_end = (entity.offset + entity.length) * 2
+                            if (
+                                entity.type == "text_link"
+                                and entity.url
+                                and link_start < end
+                                and link_end > start
+                            ):
+                                offset = min(link_end, end) - start
+                                quote_utf16 = (
+                                    quote_utf16[:offset]
+                                    + f" ({entity.url})".encode("utf-16-le")
+                                    + quote_utf16[offset:]
+                                )
+                    quote_text = quote_utf16.decode("utf-16-le")
                     reply_chain = [Comp.Plain(quote_text)]
                     reply_message_str = quote_text
 
@@ -613,6 +650,11 @@ class TelegramPlatformAdapter(Platform):
                             text_parts.append(text_utf16[last_end : entity.offset * 2])
                             last_end = (entity.offset + entity.length) * 2
                         message.message.append(mention)
+                    elif entity.type == "text_link" and entity.url:
+                        end = (entity.offset + entity.length) * 2
+                        text_parts.append(text_utf16[last_end:end])
+                        text_parts.append(f" ({entity.url})".encode("utf-16-le"))
+                        last_end = end
                 text_parts.append(text_utf16[last_end:])
                 plain_text = b"".join(text_parts).decode("utf-16-le")
 
