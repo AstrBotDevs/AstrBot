@@ -87,6 +87,53 @@ def test_standard_ids_parents_and_immutable_snapshots(capture):
     assert not trace._pending
 
 
+def test_agent_and_command_types_are_independent_and_persisted(persisted, capture):
+    """Keep listener hooks distinct while preserving both call classifications.
+
+    Args:
+        persisted: Isolated trace database.
+        capture: Immutable trace snapshots.
+    """
+    trace = TraceSpan("message")
+    with trace.context():
+        trace.record(
+            "handler_start",
+            handler_full_name="plugin.listener",
+            handler_category="listener",
+        )
+        trace.record(
+            "handler_end", handler_full_name="plugin.listener", status="success"
+        )
+        assert trace._summary["has_commands"] is False
+        trace.record(
+            "handler_start",
+            handler_full_name="plugin.command",
+            handler_category="command",
+        )
+        trace.record(
+            "handler_end", handler_full_name="plugin.command", status="success"
+        )
+        assert trace._summary["has_commands"] is True
+        assert trace._summary["has_models"] is False
+        trace.record("agent_start")
+        trace.record("agent_end", status="success")
+        trace.record("pipeline_end", status="success")
+    for frame in capture:
+        assert persisted.append(frame)
+    assert persisted.flush()
+    summary = persisted.list_traces()["traces"][0]
+    assert summary["has_commands"] is True and summary["has_models"] is True
+    with sqlite3.connect(persisted.path) as connection:
+        summary.pop("has_commands")
+        connection.execute(
+            "UPDATE traces SET data=? WHERE trace_id=?",
+            (json.dumps(summary), trace.trace_id),
+        )
+    legacy = persisted.list_traces()["traces"][0]
+    assert legacy["has_commands"] is True
+    assert persisted.get_trace(trace.trace_id)["trace"].get("has_commands") is None
+
+
 def test_internal_transitions_and_timing_are_not_persisted(capture):
     """Keep call matching internal while preserving handler metadata.
 

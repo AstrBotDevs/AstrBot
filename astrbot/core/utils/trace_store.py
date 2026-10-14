@@ -493,8 +493,31 @@ class TraceStore:
                 + " ORDER BY start_ns DESC, trace_id DESC LIMIT ? OFFSET ?",
                 [*values, limit + 1, (page - 1) * limit],
             ).fetchall()
+            summaries = [json.loads(row[0]) for row in rows[:limit]]
+            # Older summaries predate command flags; derive only those flags
+            # from this page's indexed spans without loading full trace detail.
+            legacy = {
+                summary["trace_id"]: summary
+                for summary in summaries
+                if "has_commands" not in summary
+            }
+            if legacy:
+                placeholders = ",".join("?" for _ in legacy)
+                for trace_id, data in connection.execute(
+                    f"SELECT trace_id, data FROM spans WHERE trace_id IN ({placeholders})",
+                    list(legacy),
+                ):
+                    if (
+                        json.loads(data)
+                        .get("attributes", {})
+                        .get("astrbot.handler_category")
+                        == "command"
+                    ):
+                        legacy[trace_id]["has_commands"] = True
+                for summary in legacy.values():
+                    summary.setdefault("has_commands", False)
         return {
-            "traces": [json.loads(row[0]) for row in rows[:limit]],
+            "traces": summaries,
             "total": total,
             "page": page,
             "cursor": f"{rows[limit - 1][1]}:{rows[limit - 1][2]}"

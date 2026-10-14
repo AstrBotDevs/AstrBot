@@ -207,7 +207,7 @@ test("Vuetify datatable keeps the requested columns and explicit detail selectio
   const state = setup(t);
   assert.deepEqual(Array.from(state.traceHeaders.value, (header) => header.title), [
     "columns.status", "columns.platform", "columns.timestamp",
-    "columns.duration", "columns.message", "UMO", "columns.sender", "Spans",
+    "columns.duration", "columns.message", "columns.category", "UMO", "columns.sender", "Spans",
   ]);
   const platformHeader = state.traceHeaders.value.find((header) => header.key === "platform");
   assert.equal(platformHeader.width, 80);
@@ -216,6 +216,9 @@ test("Vuetify datatable keeps the requested columns and explicit detail selectio
   assert.match(descriptor.template.content, /<v-chip size="small" variant="flat" :color="event.status/);
   const zh = JSON.parse(readFileSync(new URL("../src/i18n/locales/zh-CN/features/trace.json", import.meta.url), "utf8"));
   assert.equal(zh.columns.duration, "时长");
+  assert.equal(zh.columns.category, "类型");
+  assert.match(descriptor.template.content, /matchesFilter\(event, 'models'\)[^>]*color="#1976D2"/);
+  assert.match(descriptor.template.content, /event.has_commands \?\?[^>]*color="#2E7D32"/);
   assert.match(descriptor.template.content, /<v-data-table/);
   assert.match(descriptor.template.content, /item-value="event.span_id"/);
   assert.match(descriptor.template.content, /<v-data-table-server/);
@@ -224,7 +227,7 @@ test("Vuetify datatable keeps the requested columns and explicit detail selectio
   assert.match(descriptor.template.content, /:items-length="totalRecords"/);
   assert.doesNotMatch(descriptor.template.content, /hide-default-footer|history.loadMore/);
   assert.doesNotMatch(descriptor.template.content, /#item=/);
-  for (const key of ["status", "platform", "timestamp", "duration", "message", "umo", "sender", "spans"]) {
+  for (const key of ["status", "platform", "timestamp", "duration", "message", "category", "umo", "sender", "spans"]) {
     assert.match(descriptor.template.content, new RegExp("#item\\." + key + "="));
   }
   assert.match(descriptor.template.content, /@click:row="\(_, \{ item \}\) => selectEvent\(item.event.span_id\)"/);

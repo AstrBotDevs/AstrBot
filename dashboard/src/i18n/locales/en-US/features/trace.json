@@ -64,7 +64,12 @@
     "loadFailed": "Failed to load trace settings. Refresh to retry.",
     "updateFailed": "Failed to change trace recording. Please retry."
   },
+  "classification": {
+    "agent": "Agent",
+    "command": "Command"
+  },
   "columns": {
+    "category": "Type",
     "duration": "Duration",
     "status": "Status",
     "platform": "Platform",

@@ -1,5 +1,7 @@
 # Unreleased
 
+- Add Type before UMO in the trace table, with independent blue Agent and green Command chips. Persist command flags in summaries and derive legacy flags for the current page; use explicit colors because the generic Vuetify color pack is disabled.
+
 - Use flat status chips in the trace table and narrow the platform column to 80px, retaining a non-wrapping header.
 
 - Set trace table header and cell text to 13px without changing timeline text or table density.

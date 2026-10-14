@@ -64,7 +64,12 @@
     "loadFailed": "トレース設定の取得に失敗しました。ページを更新してください。",
     "updateFailed": "トレース記録の切り替えに失敗しました。再試行してください。"
   },
+  "classification": {
+    "agent": "Agent",
+    "command": "コマンド"
+  },
   "columns": {
+    "category": "種類",
     "duration": "実行時間",
     "status": "状態",
     "platform": "プラットフォーム",

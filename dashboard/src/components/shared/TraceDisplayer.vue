@@ -158,6 +158,7 @@ const traceHeaders = computed(() => [
   { title: tm("columns.timestamp"), key: "timestamp", width: 160 },
   { title: tm("columns.duration"), key: "duration", width: 120 },
   { title: tm("columns.message"), key: "message", minWidth: 240 },
+  { title: tm("columns.category"), key: "category", width: 150, minWidth: 150, headerProps: { class: "text-no-wrap" } },
   { title: "UMO", key: "umo", minWidth: 240 },
   { title: tm("columns.sender"), key: "sender", minWidth: 120 },
   { title: "Spans", key: "spans", width: 80 },
@@ -333,6 +334,9 @@ function normalizeTracePayload(payload) {
     last_time: Number(summary.end_time_unix_nano) / 1e9 || time,
     completed: finished, status: summary.has_errors ? "error" : finished ? "success" : "running",
     has_models: summary.has_models, has_plugins: summary.has_plugins,
+    has_commands: summary.has_commands ?? (payload.spans
+      ? payload.spans.some((span) => span.attributes?.["astrbot.handler_category"] === "command")
+      : undefined),
     span_count: summary.span_count, truncated: summary.truncated,
     model_updated_ns: String(summary.updated_time_unix_nano || summary.start_time_unix_nano),
   };
@@ -874,6 +878,12 @@ onBeforeUnmount(() => {
           <template #item.message="{ item: { event } }">
             <span class="trace-cell-text" :title="event.message_outline || tm('untitled')">{{ event.message_outline || tm("untitled") }}</span>
           </template>
+          <template #item.category="{ item: { event } }">
+            <div class="trace-category-chips">
+              <v-chip v-if="matchesFilter(event, 'models')" size="small" variant="flat" color="#1976D2">{{ tm("classification.agent") }}</v-chip>
+              <v-chip v-if="event.has_commands ?? event.records.some((record) => record.kind === 'plugin_handler' && record.fields.handler_category === 'command')" size="small" variant="flat" color="#2E7D32">{{ tm("classification.command") }}</v-chip>
+            </div>
+          </template>
           <template #item.umo="{ item: { event } }">
             <v-tooltip :text="event.umo" location="top">
               <template #activator="{ props }">
@@ -1086,6 +1096,7 @@ onBeforeUnmount(() => {
 .trace-list-table :deep(.trace-list-row.selected) { background: rgba(var(--v-theme-primary), 0.1); }
 .trace-list-table :deep(.trace-list-row:focus-visible) { outline: 2px solid rgb(var(--v-theme-primary)); outline-offset: -2px; }
 .trace-cell-text { display: block; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trace-category-chips { align-items: center; display: flex; flex-wrap: nowrap; gap: 6px; }
 .trace-item-platform { align-items: center; color: var(--trace-muted); display: inline-flex; height: 20px; justify-content: center; vertical-align: middle; width: 20px; }
 .trace-item-platform img { height: 20px; object-fit: contain; width: 20px; }
 .trace-detail { background: rgb(var(--v-theme-surface)); flex: 0 0 58%; max-width: 850px; min-height: 0; min-width: 360px; overflow: auto; padding: 18px 22px 28px; }

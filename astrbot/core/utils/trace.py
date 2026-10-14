@@ -71,6 +71,7 @@ class TraceSpan:
             "has_errors": False,
             "has_models": False,
             "has_plugins": False,
+            "has_commands": False,
             "span_count": 1,
             "truncated": False,
             "attributes": bounded_attributes(
@@ -265,6 +266,8 @@ class TraceSpan:
             self._summary["span_count"] = self._span_count
             if action == "handler_start":
                 self._summary["has_plugins"] = True
+                if fields.get("handler_category") == "command":
+                    self._summary["has_commands"] = True
                 if len(self._plugins) < MAX_SPANS:
                     self._plugins.add(
                         bounded_text(str(fields.get("plugin") or ""), 256)

@@ -64,7 +64,12 @@
     "loadFailed": "读取追踪设置失败，请刷新页面重试",
     "updateFailed": "切换追踪记录失败，请重试"
   },
+  "classification": {
+    "agent": "Agent",
+    "command": "指令"
+  },
   "columns": {
+    "category": "类型",
     "duration": "时长",
     "status": "状态",
     "platform": "平台",
