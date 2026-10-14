@@ -6512,14 +6512,11 @@ components:
     BackupExportRequest:
       type: object
       properties:
-        include:
+        components:
           type: array
           items:
             type: string
-        exclude:
-          type: array
-          items:
-            type: string
+          description: Component ids to export. Omitted exports everything.
       additionalProperties: false
 
     BackupUploadRequest:
@@ -6610,6 +6607,11 @@ components:
         confirmed:
           type: boolean
           default: true
+        components:
+          type: array
+          items:
+            type: string
+          description: Component ids to restore. Omitted restores all available.
       additionalProperties: false
 
     UpdateRequest:

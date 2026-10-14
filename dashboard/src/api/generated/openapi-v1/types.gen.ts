@@ -7,12 +7,18 @@ export type BackupChunkUploadRequest = {
 };
 
 export type BackupExportRequest = {
-    include?: Array<(string)>;
-    exclude?: Array<(string)>;
+    /**
+     * Component ids to export. Omitted exports everything.
+     */
+    components?: Array<(string)>;
 };
 
 export type BackupImportRequest = {
     confirmed?: boolean;
+    /**
+     * Component ids to restore. Omitted restores all available.
+     */
+    components?: Array<(string)>;
 };
 
 export type BackupRenameRequest = {

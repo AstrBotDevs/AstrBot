@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
+from fastapi import APIRouter, Body, Depends, File, Form, Query, Request, UploadFile
 from fastapi.responses import FileResponse
 
 from astrbot.core import logger
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import error, ok
 from astrbot.dashboard.schemas import (
+    BackupExportRequest,
     BackupImportRequest,
     BackupRenameRequest,
     BackupUploadInitRequest,
@@ -70,7 +71,7 @@ async def _run(operation, *, prefix: str):
     except BackupServiceError as exc:
         return error(str(exc))
     except Exception as exc:
-        logger.error("%s: %s", prefix, exc, exc_info=True)
+        logger.error("Backup API operation failed: %s", exc, exc_info=True)
         return error(f"{prefix}: {exc!s}")
 
 
@@ -100,7 +101,7 @@ def _download_backup(
     except BackupServiceError as exc:
         return error(str(exc))
     except Exception as exc:
-        logger.error("下载备份失败: %s", exc, exc_info=True)
+        logger.error("Failed to download backup: %s", exc, exc_info=True)
         return error(f"下载备份失败: {exc!s}")
 
 
@@ -132,10 +133,15 @@ async def list_dashboard_backups(
 
 @router.post("/backups")
 async def create_backup(
+    payload: BackupExportRequest | None = Body(default=None),
     _auth: AuthContext = Depends(require_system_scope),
     service: BackupService = Depends(get_service),
 ):
-    return await _run(service.export_backup, prefix="创建备份失败")
+    # Body is optional: a bare POST keeps the legacy full-backup behavior.
+    return await _run(
+        lambda: service.export_backup(_model_dict(payload) if payload else {}),
+        prefix="创建备份失败",
+    )
 
 
 @legacy_router.post("/export")

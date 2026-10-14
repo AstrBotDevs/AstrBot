@@ -1,11 +1,14 @@
 """备份功能单元测试"""
 
+import hashlib
 import json
 import os
 import re
+import struct
 import zipfile
+import zlib
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -221,6 +224,10 @@ class TestAstrBotExporter:
         result = MagicMock()
         result.scalars.return_value.all.return_value = []
         session.execute = AsyncMock(return_value=result)
+        stream = MagicMock()
+        stream.mappings.return_value.__aiter__.return_value = []
+        stream.close = AsyncMock()
+        session.stream = AsyncMock(return_value=stream)
 
         mock_main_db.get_db.return_value = AsyncMock(
             __aenter__=AsyncMock(return_value=session),
@@ -274,7 +281,7 @@ class TestAstrBotImporter:
 
         # 使用一个明显不同的主版本
         manifest = {"astrbot_version": "0.0.1"}
-        with pytest.raises(ValueError, match="主版本不兼容"):
+        with pytest.raises(ValueError, match="Incompatible major version"):
             importer._validate_version(manifest)
 
     def test_validate_version_minor_diff_allowed(self):
@@ -294,7 +301,7 @@ class TestAstrBotImporter:
         importer = AstrBotImporter(main_db=MagicMock())
 
         manifest = {}
-        with pytest.raises(ValueError, match="缺少版本信息"):
+        with pytest.raises(ValueError, match="missing version information"):
             importer._validate_version(manifest)
 
     def test_convert_datetime_fields(self):
@@ -480,7 +487,7 @@ class TestAstrBotImporter:
                 warning_mock.call_count == PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT + 1
             )
             assert any(
-                "告警已达到上限" in str(call.args[0])
+                "warning limit reached" in str(call.args[0])
                 for call in warning_mock.call_args_list
             )
 
@@ -616,7 +623,7 @@ class TestAstrBotImporter:
         result = await importer.import_all(str(tmp_path / "nonexistent.zip"))
 
         assert result.success is False
-        assert any("不存在" in err for err in result.errors)
+        assert any("does not exist" in err for err in result.errors)
 
     @pytest.mark.asyncio
     async def test_import_invalid_zip(self, mock_main_db, tmp_path):
@@ -629,7 +636,7 @@ class TestAstrBotImporter:
         result = await importer.import_all(str(invalid_zip))
 
         assert result.success is False
-        assert any("无效" in err or "ZIP" in err for err in result.errors)
+        assert any("Invalid" in err or "ZIP" in err for err in result.errors)
 
     @pytest.mark.asyncio
     async def test_import_missing_manifest(self, mock_main_db, tmp_path):
@@ -663,13 +670,17 @@ class TestAstrBotImporter:
         result = await importer.import_all(str(zip_path))
 
         assert result.success is False
-        assert any("主版本不兼容" in err for err in result.errors)
+        assert any("Incompatible major version" in err for err in result.errors)
 
     @pytest.mark.asyncio
     async def test_import_replace_fails_when_clear_main_db_fails(
         self, mock_main_db, tmp_path
     ):
-        """测试 replace 模式下主库清空失败会直接终止导入"""
+        """测试 replace 模式下主库清空失败会直接终止导入
+
+        清表已并入 _import_main_database 的导入事务（原子性），因此
+        DatabaseClearError 现在从 _import_main_database 抛出。
+        """
         zip_path = tmp_path / "valid_backup.zip"
         manifest = {
             "version": "1.1",
@@ -682,17 +693,19 @@ class TestAstrBotImporter:
             zf.writestr("databases/main_db.json", json.dumps(main_data))
 
         importer = AstrBotImporter(main_db=mock_main_db)
-        importer._clear_main_db = AsyncMock(
-            side_effect=DatabaseClearError("清空表 platform_stats 失败: db locked")
+        importer._import_main_database = AsyncMock(
+            side_effect=DatabaseClearError(
+                "Failed to clear table platform_stats: db locked"
+            )
         )
-        importer._import_main_database = AsyncMock(return_value={})
 
         result = await importer.import_all(str(zip_path), mode="replace")
 
         assert result.success is False
-        assert any("清空主数据库失败" in err for err in result.errors)
-        assert any("清空表 platform_stats 失败" in err for err in result.errors)
-        importer._import_main_database.assert_not_awaited()
+        assert any("Failed to clear main database" in err for err in result.errors)
+        assert any(
+            "Failed to clear table platform_stats" in err for err in result.errors
+        )
 
 
 class TestSecureFilename:
@@ -871,7 +884,7 @@ class TestPreCheck:
         result = importer.pre_check("/nonexistent/file.zip")
 
         assert result.valid is False
-        assert "不存在" in result.error
+        assert "does not exist" in result.error
 
     def test_pre_check_invalid_zip(self, mock_main_db, tmp_path):
         """测试预检查无效的 ZIP 文件"""
@@ -882,7 +895,7 @@ class TestPreCheck:
         result = importer.pre_check(str(invalid_zip))
 
         assert result.valid is False
-        assert "ZIP" in result.error or "无效" in result.error
+        assert "ZIP" in result.error or "Invalid" in result.error
 
     def test_pre_check_missing_manifest(self, mock_main_db, tmp_path):
         """测试预检查缺少 manifest 的 ZIP 文件"""
@@ -897,20 +910,24 @@ class TestPreCheck:
         assert "manifest" in result.error.lower()
 
     def test_pre_check_version_match(self, mock_main_db, tmp_path):
-        """测试预检查版本匹配"""
+        """测试预检查版本匹配
+
+        摘要字段按 ZIP 实际条目推导（has_knowledge_bases / has_config
+        不再是 manifest 自报字段），因此 zip 内需要放入对应条目。
+        """
         zip_path = tmp_path / "backup.zip"
         manifest = {
             "version": "1.1",
             "astrbot_version": VERSION,
             "created_at": "2024-01-01T12:00:00",
             "tables": {"platform_stats": 1},
-            "has_knowledge_bases": True,
-            "has_config": True,
             "directories": ["plugins"],
         }
 
         with zipfile.ZipFile(zip_path, "w") as zf:
             zf.writestr("manifest.json", json.dumps(manifest))
+            zf.writestr("databases/kb_metadata.json", json.dumps({}))
+            zf.writestr("config/cmd_config.json", json.dumps({}))
 
         importer = AstrBotImporter(main_db=mock_main_db)
         result = importer.pre_check(str(zip_path))
@@ -921,6 +938,29 @@ class TestPreCheck:
         assert result.backup_version == VERSION
         # confirm_message 现在由前端生成，后端不再生成
         assert result.backup_summary["has_knowledge_bases"] is True
+        assert result.backup_summary["has_config"] is True
+
+    def test_pre_check_summary_derived_from_real_entries(self, mock_main_db, tmp_path):
+        """摘要只信实际条目：manifest 自报布尔字段不被采信（幽灵字段回归）"""
+        zip_path = tmp_path / "backup.zip"
+        manifest = {
+            "version": "1.1",
+            "astrbot_version": VERSION,
+            "tables": {},
+            "has_knowledge_bases": True,  # 自报字段：不应影响推导结果
+            "has_config": True,
+        }
+
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("manifest.json", json.dumps(manifest))
+
+        importer = AstrBotImporter(main_db=mock_main_db)
+        result = importer.pre_check(str(zip_path))
+
+        assert result.valid is True
+        # zip 中没有 KB/配置条目，即使 manifest 自报也为 False
+        assert result.backup_summary["has_knowledge_bases"] is False
+        assert result.backup_summary["has_config"] is False
 
     def test_pre_check_minor_version_diff(self, mock_main_db, tmp_path):
         """测试预检查小版本差异"""
@@ -1069,6 +1109,10 @@ class TestBackupIntegration:
         result = MagicMock()
         result.scalars.return_value.all.return_value = []
         session.execute = AsyncMock(return_value=result)
+        stream = MagicMock()
+        stream.mappings.return_value.__aiter__.return_value = []
+        stream.close = AsyncMock()
+        session.stream = AsyncMock(return_value=stream)
 
         mock_db.get_db.return_value = AsyncMock(
             __aenter__=AsyncMock(return_value=session),
@@ -1458,3 +1502,997 @@ class TestBackupUploadLimits:
             {"upload_id": upload_id}, owner="alice"
         )
         assert result["size"] == 100
+
+
+def _make_working_mock_db():
+    """Mock DB whose get_db()/session.begin() support the async CM protocol."""
+    session = AsyncMock()
+    session.begin = MagicMock(
+        return_value=AsyncMock(
+            __aenter__=AsyncMock(return_value=session),
+            __aexit__=AsyncMock(return_value=None),
+        )
+    )
+    db = MagicMock()
+    db.get_db = MagicMock(
+        return_value=AsyncMock(
+            __aenter__=AsyncMock(return_value=session),
+            __aexit__=AsyncMock(return_value=None),
+        )
+    )
+    return db, session
+
+
+def _sha256(data: bytes) -> str:
+    return f"sha256:{hashlib.sha256(data).hexdigest()}"
+
+
+def _component_checksum(entries: dict[str, str]) -> str:
+    """Replicate the exporter's per-component digest for hand-built zips."""
+    lines = sorted(f"{p}:{h}" for p, h in entries.items())
+    return "sha256:" + hashlib.sha256("\n".join(lines).encode("utf-8")).hexdigest()
+
+
+class TestSelectiveExport:
+    """选择性导出测试"""
+
+    @pytest.mark.parametrize(
+        ("source", "relative_name", "archive_prefix"),
+        [
+            ("webchat", "imgs/legacy.png", "directories/webchat"),
+            ("plugins", "example/main.py", "directories/plugins"),
+            ("kb_media", "media/image.png", "files/kb_media/kb1"),
+        ],
+    )
+    def test_windows_archive_paths_match_checksums(
+        self, tmp_path, monkeypatch, source, relative_name, archive_prefix
+    ):
+        """Keep ZIP names and checksum keys portable for Windows source paths."""
+        root = tmp_path / source
+        file_path = root / relative_name
+        file_path.parent.mkdir(parents=True)
+        file_path.write_bytes(b"backup-content")
+        exporter = AstrBotExporter(main_db=MagicMock())
+        monkeypatch.setattr(
+            "astrbot.core.backup.exporter.get_backup_directories",
+            lambda: {source: root},
+        )
+        archive = tmp_path / "backup.zip"
+        relative_to = Path.relative_to
+        with zipfile.ZipFile(archive, "w") as zf, monkeypatch.context() as context:
+            # Simulate Windows separators while retaining real local file I/O.
+            context.setattr(
+                Path,
+                "relative_to",
+                lambda path, *other: PureWindowsPath(*relative_to(path, *other).parts),
+            )
+            if source == "kb_media":
+                helper = MagicMock(kb_dir=root, kb_medias_dir=root / "media")
+                exporter._export_kb_media_files(zf, helper, "kb1")
+            else:
+                exporter._export_directories(zf, [source])
+
+        entry = f"{archive_prefix}/{relative_name}"
+        with zipfile.ZipFile(archive) as zf:
+            assert zf.namelist() == [entry]
+            assert exporter._checksums == {entry: _sha256(zf.read(entry))}
+
+    @pytest.mark.asyncio
+    async def test_export_selective_components(self, temp_backup_dir, temp_data_dir):
+        """只导出勾选组件，manifest 记录实际写入的组件与聚合 hash"""
+        db, _ = _make_working_mock_db()
+        exporter = AstrBotExporter(
+            main_db=db,
+            kb_manager=None,
+            config_path=str(temp_data_dir / "cmd_config.json"),
+        )
+
+        zip_path = await exporter.export_all(
+            output_dir=str(temp_backup_dir), components=["cmd_config"]
+        )
+
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            namelist = zf.namelist()
+            manifest = json.loads(zf.read("manifest.json"))
+
+        assert "databases/main_db.json" not in namelist
+        assert "config/cmd_config.json" in namelist
+        assert manifest["components"] == ["cmd_config"]
+        assert set(manifest["component_checksums"]) == {"cmd_config"}
+        assert "config/cmd_config.json" in manifest["checksums"]
+        assert manifest["version"] == "1.2"
+        assert exporter.exported_components == ["cmd_config"]
+
+    @pytest.mark.asyncio
+    async def test_export_invalid_components_rejected(
+        self, temp_backup_dir, temp_data_dir
+    ):
+        """空列表或全无效组件 id 被拒绝"""
+        exporter = AstrBotExporter(
+            main_db=MagicMock(),
+            kb_manager=None,
+            config_path=str(temp_data_dir / "cmd_config.json"),
+        )
+        with pytest.raises(ValueError):
+            await exporter.export_all(output_dir=str(temp_backup_dir), components=[])
+        with pytest.raises(ValueError):
+            await exporter.export_all(
+                output_dir=str(temp_backup_dir), components=["nope"]
+            )
+
+    @pytest.mark.asyncio
+    async def test_export_mid_write_failure_cleans_up_zip(
+        self, temp_backup_dir, temp_data_dir
+    ):
+        """回归：条目写入中途失败 -> 整个导出失败，半成品 ZIP 被清理"""
+        src = temp_data_dir / "att.bin"
+        src.write_bytes(b"x" * (2 << 20))
+
+        db, _ = _make_working_mock_db()
+        exporter = AstrBotExporter(
+            main_db=db,
+            kb_manager=None,
+            config_path=str(temp_data_dir / "cmd_config.json"),
+        )
+        exporter._export_attachment_records = AsyncMock(
+            return_value=[{"path": str(src), "attachment_id": "x"}]
+        )
+
+        real_open = zipfile.ZipFile.open
+
+        class _Boom:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def write(self, data):
+                raise OSError("disk on fire")
+
+        def fake_open(zf, name, mode="r", *args, **kwargs):
+            if mode == "w":
+                return _Boom()
+            return real_open(zf, name, mode, *args, **kwargs)
+
+        with patch.object(zipfile.ZipFile, "open", fake_open):
+            with pytest.raises(RuntimeError, match="mid-write"):
+                await exporter.export_all(
+                    output_dir=str(temp_backup_dir), components=["attachments"]
+                )
+
+        # 半成品 ZIP 已被清理，不留无法通过完整性校验的产物
+        assert list(temp_backup_dir.glob("*.zip")) == []
+
+
+class TestSelectiveImport:
+    """选择性导入与两阶段预检测试"""
+
+    async def _full_backup(self, tmp_path, temp_data_dir):
+        """用真实 exporter 造一份 database + cmd_config 备份"""
+        db, _ = _make_working_mock_db()
+        exporter = AstrBotExporter(
+            main_db=db,
+            kb_manager=None,
+            config_path=str(temp_data_dir / "cmd_config.json"),
+        )
+        exporter._export_main_database = AsyncMock(
+            return_value={"platform_stats": [], "conversations": [], "attachments": []}
+        )
+        return await exporter.export_all(
+            output_dir=str(tmp_path / "bk"), components=["database", "cmd_config"]
+        )
+
+    @pytest.mark.asyncio
+    async def test_import_selective_restore_only_selected(
+        self, tmp_path, temp_data_dir
+    ):
+        """只恢复勾选组件：配置被替换，主库完全不被触碰"""
+        zip_path = await self._full_backup(tmp_path, temp_data_dir)
+
+        target = tmp_path / "restore_cfg.json"
+        target.write_text(json.dumps({"old": "config"}))
+        db, session = _make_working_mock_db()
+        importer = AstrBotImporter(main_db=db, kb_manager=None, config_path=str(target))
+
+        result = await importer.import_all(zip_path, components=["cmd_config"])
+
+        assert result.success, result.errors
+        assert json.loads(target.read_text()) == {"test": "config"}
+        assert result.imported_files.get("config") == 1
+        session.execute.assert_not_awaited()  # 主库未被触碰
+
+    @pytest.mark.asyncio
+    async def test_import_empty_components_rejected(self, tmp_path, temp_data_dir):
+        """components=[] 显式拒绝（与 None 的全量语义区分）"""
+        zip_path = await self._full_backup(tmp_path, temp_data_dir)
+        db, _ = _make_working_mock_db()
+        importer = AstrBotImporter(main_db=db, kb_manager=None)
+
+        result = await importer.import_all(zip_path, components=[])
+        assert result.success is False
+        assert result.errors
+
+    @pytest.mark.asyncio
+    async def test_import_all_invalid_components_rejected(
+        self, tmp_path, temp_data_dir
+    ):
+        """请求的组件全部无效时报错且不执行任何修改"""
+        zip_path = await self._full_backup(tmp_path, temp_data_dir)
+        db, _ = _make_working_mock_db()
+        importer = AstrBotImporter(main_db=db, kb_manager=None)
+
+        result = await importer.import_all(zip_path, components=["nope1", "nope2"])
+        assert result.success is False
+        assert any(
+            "None of the requested components can be restored" in e
+            for e in result.errors
+        )
+
+    @pytest.mark.asyncio
+    async def test_import_corrupt_config_aborts_zero_modification(
+        self, tmp_path, temp_data_dir
+    ):
+        """配置条目 hash 不匹配（硬失败）-> 中止，已有文件零改动"""
+        zip_path = await self._full_backup(tmp_path, temp_data_dir)
+        bad = tmp_path / "bad.zip"
+        with zipfile.ZipFile(zip_path) as zin, zipfile.ZipFile(bad, "w") as zout:
+            for item in zin.namelist():
+                data = zin.read(item)
+                if item == "config/cmd_config.json":
+                    data = b'{"tampered": true}'
+                zout.writestr(item, data)
+
+        victim = tmp_path / "victim.json"
+        victim.write_text(json.dumps({"precious": "data"}))
+        db, _ = _make_working_mock_db()
+        importer = AstrBotImporter(main_db=db, kb_manager=None, config_path=str(victim))
+
+        result = await importer.import_all(str(bad), components=["cmd_config"])
+        assert result.success is False
+        assert any("checksum" in e for e in result.errors)
+        assert json.loads(victim.read_text()) == {"precious": "data"}
+
+    async def _legacy_zip(self, tmp_path, main_data: dict) -> str:
+        """造一份无 checksum 的旧格式（v1.1）备份"""
+        zip_path = tmp_path / "legacy.zip"
+        manifest = {
+            "version": "1.1",
+            "astrbot_version": VERSION,
+            "tables": {"main_db": list(main_data.keys())},
+        }
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("manifest.json", json.dumps(manifest))
+            zf.writestr("databases/main_db.json", json.dumps(main_data))
+        return str(zip_path)
+
+    @pytest.mark.asyncio
+    async def test_import_invalid_datetime_aborts_before_modification(self, tmp_path):
+        """非法日期：严格归一化 + model_validate 在清库前拦截（零修改）"""
+        zip_path = await self._legacy_zip(
+            tmp_path,
+            {
+                "conversations": [
+                    {
+                        "conversation_id": "c1",
+                        "platform_id": "p",
+                        "user_id": "u",
+                        "created_at": "not-a-date",
+                    }
+                ]
+            },
+        )
+        db, session = _make_working_mock_db()
+        importer = AstrBotImporter(main_db=db, kb_manager=None)
+
+        result = await importer.import_all(zip_path, components=["database"])
+        assert result.success is False
+        assert any("Record validation failed" in e for e in result.errors)
+        session.execute.assert_not_awaited()  # 清库未发生
+
+    @pytest.mark.asyncio
+    async def test_import_missing_required_field_aborts(self, tmp_path):
+        """缺必需字段：普通构造能过、model_validate 拒绝（零修改）"""
+        zip_path = await self._legacy_zip(tmp_path, {"conversations": [{}]})
+        db, session = _make_working_mock_db()
+        importer = AstrBotImporter(main_db=db, kb_manager=None)
+
+        result = await importer.import_all(zip_path, components=["database"])
+        assert result.success is False
+        assert any("Record validation failed" in e for e in result.errors)
+        session.execute.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_import_broken_component_three_states(self, tmp_path, temp_data_dir):
+        """回归：UI 排除 broken 后返回 warning；默认恢复与显式选中 broken 中止"""
+        zip_path = await self._full_backup(tmp_path, temp_data_dir)
+        # 删掉 main_db.json 条目，制造"已声明但损坏"的 database
+        broken_zip = tmp_path / "broken.zip"
+        with zipfile.ZipFile(zip_path) as zin, zipfile.ZipFile(broken_zip, "w") as zout:
+            for item in zin.namelist():
+                if item == "databases/main_db.json":
+                    continue
+                zout.writestr(item, zin.read(item))
+
+        db, _ = _make_working_mock_db()
+        importer = AstrBotImporter(
+            main_db=db,
+            kb_manager=None,
+            config_path=str(tmp_path / "cfg.json"),
+        )
+
+        # 默认恢复：遇 broken 中止
+        result = await importer.import_all(str(broken_zip))
+        assert result.success is False
+        assert any("missing entries" in e for e in result.errors)
+
+        # 显式排除 broken：恢复可用组件，result 带 warning 注明（不静默）
+        result = await importer.import_all(str(broken_zip), components=["cmd_config"])
+        assert result.success, result.errors
+        assert any("excluded from this restore" in w for w in result.warnings)
+
+        # 显式选中 broken 硬失败组件：修改前中止，不允许降格跳过
+        result = await importer.import_all(
+            str(broken_zip), components=["database", "cmd_config"]
+        )
+        assert result.success is False
+        assert any("missing entries" in e for e in result.errors)
+
+    @pytest.mark.asyncio
+    async def test_import_legacy_roundtrip_from_real_export(
+        self, tmp_path, temp_data_dir
+    ):
+        """真实 exporter 产物降级为旧格式后仍可恢复（缺失 checksum 走降级警告）"""
+        zip_path = await self._full_backup(tmp_path, temp_data_dir)
+
+        # 把 v1.2 manifest 降级成 v1.1：去掉新字段和 checksums
+        legacy = tmp_path / "legacy_full.zip"
+        with zipfile.ZipFile(zip_path) as zin, zipfile.ZipFile(legacy, "w") as zout:
+            for item in zin.namelist():
+                data = zin.read(item)
+                if item == "manifest.json":
+                    manifest = json.loads(data)
+                    manifest["version"] = "1.1"
+                    for key in ("components", "component_checksums", "checksums"):
+                        manifest.pop(key, None)
+                    data = json.dumps(manifest).encode()
+                zout.writestr(item, data)
+
+        target = tmp_path / "restore.json"
+        db, _ = _make_working_mock_db()
+        importer = AstrBotImporter(main_db=db, kb_manager=None, config_path=str(target))
+
+        result = await importer.import_all(str(legacy))
+        assert result.success, result.errors
+        assert json.loads(target.read_text()) == {"test": "config"}
+        assert result.imported_files.get("config") == 1
+        # 旧格式降级有聚合警告，不静默
+        assert any("no checksum" in w for w in result.warnings)
+
+    @pytest.mark.asyncio
+    async def test_import_main_db_single_transaction(self):
+        """清表与插入在同一 session.begin() 事务内（原子性结构验证）"""
+        db, session = _make_working_mock_db()
+        importer = AstrBotImporter(main_db=db, kb_manager=None)
+
+        await importer._import_main_database({"platform_stats": []}, clear=True)
+
+        assert session.begin.call_count == 1
+        # 13 张表各一次 delete，空数据无插入
+        assert session.execute.await_count == len(MAIN_DB_MODELS)
+        session.add.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_import_main_db_clear_failure_raises_clear_error(self):
+        """清表失败抛 DatabaseClearError（事务回滚，旧数据保留）"""
+        db, session = _make_working_mock_db()
+        session.execute = AsyncMock(side_effect=Exception("db locked"))
+        importer = AstrBotImporter(main_db=db, kb_manager=None)
+
+        with pytest.raises(DatabaseClearError):
+            await importer._import_main_database({"platform_stats": []}, clear=True)
+
+    @pytest.mark.asyncio
+    async def test_import_corrupt_attachment_preserves_existing(
+        self, tmp_path, temp_data_dir
+    ):
+        """坏附件（软失败）：跳过且结果带 warning，恢复前的原文件不受损"""
+        attachments_dir = temp_data_dir / "attachments"
+        victim = attachments_dir / "abc.jpg"
+        victim.write_bytes(b"original-bytes")
+
+        zip_path = tmp_path / "att.zip"
+        manifest = {
+            "version": "1.2",
+            "astrbot_version": VERSION,
+            "components": ["attachments"],
+            "checksums": {"files/attachments/abc.jpg": "sha256:wrong"},
+            "component_checksums": {"attachments": "sha256:whatever"},
+            "directories": [],
+        }
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("manifest.json", json.dumps(manifest))
+            zf.writestr("files/attachments/abc.jpg", b"tampered-bytes")
+
+        db, _ = _make_working_mock_db()
+        importer = AstrBotImporter(
+            main_db=db,
+            kb_manager=None,
+            config_path=str(temp_data_dir / "cmd_config.json"),
+        )
+
+        result = await importer.import_all(str(zip_path), components=["attachments"])
+        assert result.success, result.errors
+        assert any("verification failed" in w for w in result.warnings)
+        # 原文件未被覆盖、未被删除
+        assert victim.read_bytes() == b"original-bytes"
+
+    @pytest.mark.asyncio
+    async def test_v12_missing_checksum_soft_component_skipped(self, tmp_path):
+        """v1.2 软失败组件条目缺 checksum（清单级错误）-> 整个组件跳过并记 error"""
+        zip_path = tmp_path / "v12_bad.zip"
+        manifest = {
+            "version": "1.2",
+            "astrbot_version": VERSION,
+            "components": ["attachments"],
+            "checksums": {},  # 条目缺 checksum：v1.2 不允许降级
+            "component_checksums": {},
+            "directories": [],
+        }
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("manifest.json", json.dumps(manifest))
+            zf.writestr("files/attachments/a.jpg", b"data")
+
+        db, _ = _make_working_mock_db()
+        importer = AstrBotImporter(
+            main_db=db,
+            kb_manager=None,
+            config_path=str(tmp_path / "cfg.json"),
+        )
+
+        result = await importer.import_all(str(zip_path), components=["attachments"])
+        assert result.success is False
+        assert any("checksum" in e for e in result.errors)
+
+
+class TestImportTaskResultRetention:
+    """服务层：失败任务保留完整结果"""
+
+    @pytest.fixture
+    def backup_service(self, tmp_path):
+        service = BackupService(db=MagicMock(), core_lifecycle=MagicMock())
+        service.backup_dir = str(tmp_path / "backups")
+        service.data_dir = str(tmp_path / "data")
+        return service
+
+    @pytest.mark.asyncio
+    async def test_failed_import_task_keeps_full_result(self, backup_service, tmp_path):
+        """导入失败时 result（含 warnings/errors）完整保留，可通过进度接口查询"""
+        zip_path = tmp_path / "broken.zip"
+        manifest = {
+            "version": "1.2",
+            "astrbot_version": VERSION,
+            "components": ["database"],  # 声明了 database 但条目缺失
+            "checksums": {},
+            "component_checksums": {},
+            "directories": [],
+        }
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("manifest.json", json.dumps(manifest))
+
+        backup_service._init_task("t1", "import")
+        await backup_service.background_import_task("t1", str(zip_path))
+
+        progress = backup_service.get_progress("t1")
+        assert progress["status"] == "failed"
+        # 完整 result 保留：errors 说明中止原因
+        assert progress["result"] is not None
+        assert any("missing entries" in e for e in progress["result"]["errors"])
+        assert progress["error"]
+
+
+class TestPreVerifyEdgeCases:
+    """预检边界情况回归测试（评审修正 2/3/4/5）"""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "bad_entry", ["files/attachments/a.bin", "config/cmd_config.json"]
+    )
+    async def test_deflate_error_classified_by_component(self, tmp_path, bad_entry):
+        """Preserve existing files and apply the component policy to broken DEFLATE."""
+        entries = {
+            "files/attachments/a.bin": b"attachment data" * 20,
+            "config/cmd_config.json": b'{"restored": true}',
+        }
+        checksums = {name: _sha256(content) for name, content in entries.items()}
+        manifest = {
+            "version": "1.2",
+            "astrbot_version": VERSION,
+            "components": ["attachments", "cmd_config"],
+            "checksums": checksums,
+            "component_checksums": {
+                "attachments": _component_checksum(
+                    {"files/attachments/a.bin": checksums["files/attachments/a.bin"]}
+                ),
+                "cmd_config": _component_checksum(
+                    {"config/cmd_config.json": checksums["config/cmd_config.json"]}
+                ),
+            },
+        }
+        zip_path = tmp_path / "deflate.zip"
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("manifest.json", json.dumps(manifest))
+            for name, content in entries.items():
+                zf.writestr(name, content)
+            header_offset = zf.getinfo(bad_entry).header_offset
+
+        archive = bytearray(zip_path.read_bytes())
+        name_size, extra_size = struct.unpack_from("<HH", archive, header_offset + 26)
+        data_offset = header_offset + 30 + name_size + extra_size
+        # Set DEFLATE's block type to the reserved value without changing ZIP metadata.
+        archive[data_offset] = (archive[data_offset] & 0xF8) | 0x07
+        zip_path.write_bytes(archive)
+        with zipfile.ZipFile(zip_path) as zf, pytest.raises(zlib.error):
+            zf.read(bad_entry)
+
+        config = tmp_path / "cmd_config.json"
+        config.write_bytes(b'{"old": true}')
+        attachments_dir = tmp_path / "attachments"
+        attachments_dir.mkdir()
+        attachment = attachments_dir / "a.bin"
+        attachment.write_bytes(b"old attachment")
+        importer = AstrBotImporter(main_db=MagicMock(), config_path=str(config))
+
+        result = await importer.import_all(
+            str(zip_path), components=manifest["components"]
+        )
+
+        assert attachment.read_bytes() == b"old attachment"
+        if bad_entry.startswith("files/"):
+            assert result.success, result.errors
+            assert result.warnings
+            assert config.read_bytes() == entries["config/cmd_config.json"]
+        else:
+            assert not result.success
+            assert any(bad_entry in error for error in result.errors)
+            assert config.read_bytes() == b'{"old": true}'
+
+    @pytest.mark.asyncio
+    async def test_missing_entry_with_corruption_preserves_directory(self, tmp_path):
+        """Skip an incomplete directory before moving it, even with another bad file."""
+        plugins = tmp_path / "plugins"
+        plugins.mkdir()
+        (plugins / "existing.py").write_bytes(b"existing plugin")
+        checksums = {
+            "directories/plugins/a.py": _sha256(b"original a"),
+            "directories/plugins/b.py": _sha256(b"original b"),
+        }
+        manifest = {
+            "version": "1.2",
+            "astrbot_version": VERSION,
+            "components": ["plugins"],
+            "directories": ["plugins"],
+            "checksums": checksums,
+            "component_checksums": {"plugins": _component_checksum(checksums)},
+        }
+        zip_path = tmp_path / "incomplete.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("manifest.json", json.dumps(manifest))
+            zf.writestr("directories/plugins/a.py", b"corrupted a")
+
+        importer = AstrBotImporter(main_db=MagicMock())
+        with patch(
+            "astrbot.core.backup.importer.get_backup_directories",
+            return_value={"plugins": str(plugins)},
+        ):
+            result = await importer.import_all(str(zip_path), components=["plugins"])
+
+        assert not result.success
+        assert any("directories/plugins/b.py" in error for error in result.errors)
+        assert result.imported_directories == {}
+        assert (plugins / "existing.py").read_bytes() == b"existing plugin"
+        assert list(plugins.iterdir()) == [plugins / "existing.py"]
+        assert not (tmp_path / "plugins.bak").exists()
+
+    @pytest.mark.asyncio
+    async def test_entry_read_error_classified_by_component(
+        self, tmp_path, temp_data_dir
+    ):
+        """回归：条目读取错误（如 CRC）按组件分类，软失败不拖垮整个任务"""
+        att_content = b"att-bytes"
+        cfg_content = json.dumps({"k": "v"}).encode()
+        att_hash = _sha256(att_content)
+        cfg_hash = _sha256(cfg_content)
+        manifest = {
+            "version": "1.2",
+            "astrbot_version": VERSION,
+            "components": ["attachments", "cmd_config"],
+            "checksums": {
+                "files/attachments/abc.jpg": att_hash,
+                "config/cmd_config.json": cfg_hash,
+            },
+            "component_checksums": {
+                "attachments": _component_checksum(
+                    {"files/attachments/abc.jpg": att_hash}
+                ),
+                "cmd_config": _component_checksum({"config/cmd_config.json": cfg_hash}),
+            },
+            "directories": [],
+        }
+        zip_path = tmp_path / "att_crc.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("manifest.json", json.dumps(manifest))
+            zf.writestr("files/attachments/abc.jpg", att_content)
+            zf.writestr("config/cmd_config.json", cfg_content)
+
+        db, _ = _make_working_mock_db()
+        importer = AstrBotImporter(
+            main_db=db, kb_manager=None, config_path=str(tmp_path / "cfg.json")
+        )
+
+        real_hash = AstrBotImporter._hash_entry
+
+        def flaky_hash(self, zf, name):
+            if name.startswith("files/attachments/"):
+                raise zipfile.BadZipFile("Bad CRC-32")
+            return real_hash(self, zf, name)
+
+        with patch.object(AstrBotImporter, "_hash_entry", flaky_hash):
+            result = await importer.import_all(
+                str(zip_path), components=["attachments", "cmd_config"]
+            )
+
+        # 软失败组件跳过并告警，正常组件不受影响
+        assert result.success, result.errors
+        assert any("attachments" in w for w in result.warnings)
+        assert result.imported_files.get("config") == 1
+
+    @pytest.mark.asyncio
+    async def test_entry_read_error_hard_component_aborts(self, tmp_path):
+        """条目读取错误落在硬失败组件上时中止导入"""
+        cfg_content = json.dumps({"k": "v"}).encode()
+        cfg_hash = _sha256(cfg_content)
+        manifest = {
+            "version": "1.2",
+            "astrbot_version": VERSION,
+            "components": ["cmd_config"],
+            "checksums": {"config/cmd_config.json": cfg_hash},
+            "component_checksums": {
+                "cmd_config": _component_checksum({"config/cmd_config.json": cfg_hash})
+            },
+            "directories": [],
+        }
+        zip_path = tmp_path / "cfg_crc.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("manifest.json", json.dumps(manifest))
+            zf.writestr("config/cmd_config.json", cfg_content)
+
+        db, _ = _make_working_mock_db()
+        importer = AstrBotImporter(
+            main_db=db, kb_manager=None, config_path=str(tmp_path / "cfg.json")
+        )
+        with patch.object(
+            AstrBotImporter,
+            "_hash_entry",
+            side_effect=zipfile.BadZipFile("Bad CRC-32"),
+        ):
+            result = await importer.import_all(str(zip_path), components=["cmd_config"])
+
+        assert result.success is False
+        assert any("Failed to read entry" in e for e in result.errors)
+
+    @pytest.mark.asyncio
+    async def test_v12_version_without_components_rejected(self, tmp_path):
+        """回归：version=1.2 但缺 components/checksums 的备份不得走旧格式降级"""
+        cfg_content = json.dumps({"k": "v"}).encode()
+        manifest = {
+            "version": "1.2",  # 声明 1.2 但缺 components/checksums 字段
+            "astrbot_version": VERSION,
+            "directories": [],
+        }
+        zip_path = tmp_path / "v12_malformed.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("manifest.json", json.dumps(manifest))
+            zf.writestr("config/cmd_config.json", cfg_content)
+
+        victim = tmp_path / "victim.json"
+        victim.write_text(json.dumps({"precious": "data"}))
+        db, _ = _make_working_mock_db()
+        importer = AstrBotImporter(main_db=db, kb_manager=None, config_path=str(victim))
+
+        result = await importer.import_all(str(zip_path), components=["cmd_config"])
+        assert result.success is False
+        assert any("checksum" in e for e in result.errors)
+        # 零修改
+        assert json.loads(victim.read_text()) == {"precious": "data"}
+
+    @pytest.mark.asyncio
+    async def test_null_json_config_rejected(self, tmp_path):
+        """回归：JSON 内容为 null 明确报错，不得返回无警告的成功"""
+        cfg_content = b"null"
+        cfg_hash = _sha256(cfg_content)
+        manifest = {
+            "version": "1.2",
+            "astrbot_version": VERSION,
+            "components": ["cmd_config"],
+            "checksums": {"config/cmd_config.json": cfg_hash},
+            "component_checksums": {
+                "cmd_config": _component_checksum({"config/cmd_config.json": cfg_hash})
+            },
+            "directories": [],
+        }
+        zip_path = tmp_path / "null_cfg.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("manifest.json", json.dumps(manifest))
+            zf.writestr("config/cmd_config.json", cfg_content)
+
+        db, _ = _make_working_mock_db()
+        importer = AstrBotImporter(
+            main_db=db, kb_manager=None, config_path=str(tmp_path / "cfg.json")
+        )
+
+        result = await importer.import_all(str(zip_path), components=["cmd_config"])
+        assert result.success is False
+        assert any("null" in e for e in result.errors)
+
+    @pytest.mark.asyncio
+    async def test_pre_verify_reports_per_component_progress(
+        self, tmp_path, temp_data_dir
+    ):
+        """预检在工作线程逐组件执行并向 UI 回报进度"""
+        db0, _ = _make_working_mock_db()
+        exporter = AstrBotExporter(
+            main_db=db0,
+            kb_manager=None,
+            config_path=str(temp_data_dir / "cmd_config.json"),
+        )
+        exporter._export_main_database = AsyncMock(
+            return_value={"platform_stats": [], "conversations": [], "attachments": []}
+        )
+        zip_path = await exporter.export_all(
+            output_dir=str(tmp_path / "bk"), components=["database", "cmd_config"]
+        )
+
+        db, _ = _make_working_mock_db()
+        importer = AstrBotImporter(
+            main_db=db, kb_manager=None, config_path=str(tmp_path / "cfg.json")
+        )
+
+        calls = []
+
+        async def record(stage, current, total, message):
+            calls.append((stage, message))
+
+        result = await importer.import_all(
+            zip_path,
+            components=["cmd_config", "database"],
+            progress_callback=record,
+        )
+        assert result.success, result.errors
+        validate_msgs = [m for s, m in calls if s == "validate"]
+        assert any("正在校验组件" in m for m in validate_msgs)
+
+
+def _write_webchat_backup(path, entries, *, version="1.2", checksums=None):
+    """Write a legacy WebChat archive for restoration tests.
+
+    Args:
+        path: Destination ZIP path.
+        entries: Archive entry names mapped to file bytes.
+        version: Backup manifest format version.
+        checksums: Optional expected hashes, including missing or corrupt entries.
+    """
+    manifest = {
+        "version": version,
+        "astrbot_version": VERSION,
+        "directories": ["webchat"],
+    }
+    if version == "1.2":
+        hashes = (
+            checksums
+            if checksums is not None
+            else {name: _sha256(data) for name, data in entries.items()}
+        )
+        manifest.update(
+            components=["attachments"],
+            checksums=hashes,
+            component_checksums={
+                "attachments": _component_checksum(
+                    {
+                        name: value
+                        for name, value in hashes.items()
+                        if name.startswith(
+                            ("files/attachments/", "directories/webchat/imgs/")
+                        )
+                    }
+                )
+            },
+        )
+    with zipfile.ZipFile(path, "w") as zf:
+        zf.writestr("manifest.json", json.dumps(manifest))
+        for name, data in entries.items():
+            zf.writestr(name, data)
+
+
+class TestLegacyWebChatAttachments:
+    """Keep legacy images restorable without copying upload sessions."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("with_regular_attachment", [False, True])
+    async def test_export_and_restore_images_without_upload_fragments(
+        self,
+        tmp_path,
+        temp_data_dir,
+        temp_backup_dir,
+        monkeypatch,
+        with_regular_attachment,
+    ):
+        """Export both file sources while keeping fragments out of the archive."""
+        webchat = temp_data_dir / "webchat"
+        (webchat / "imgs").mkdir(parents=True)
+        image = webchat / "imgs" / "legacy.png"
+        image.write_bytes(b"legacy-image")
+        (webchat / ".chunks").mkdir()
+        fragment = webchat / ".chunks" / "live.part"
+        fragment.write_bytes(b"active-upload")
+        (webchat / "other.txt").write_bytes(b"unrelated-data")
+        monkeypatch.setattr(
+            "astrbot.core.backup.constants.get_astrbot_webchat_path",
+            lambda: str(webchat),
+        )
+        regular = temp_data_dir / "attachments" / "regular.txt"
+        regular.write_bytes(b"regular-file")
+        rows = (
+            [{"attachment_id": "regular", "path": str(regular)}]
+            if with_regular_attachment
+            else []
+        )
+        exporter = AstrBotExporter(
+            MagicMock(), config_path=str(temp_data_dir / "cmd_config.json")
+        )
+        exporter._export_attachment_records = AsyncMock(return_value=rows)
+        archive = await exporter.export_all(
+            output_dir=str(temp_backup_dir), components=["attachments"]
+        )
+        with zipfile.ZipFile(archive) as zf:
+            names = set(zf.namelist())
+            assert "directories/webchat/imgs/legacy.png" in names
+            assert not any(".chunks/" in name for name in names)
+            assert "directories/webchat/other.txt" not in names
+            assert ("files/attachments/regular.txt" in names) == with_regular_attachment
+        importer = AstrBotImporter(
+            MagicMock(), config_path=str(temp_data_dir / "cmd_config.json")
+        )
+        check = importer.pre_check(archive)
+        assert check.available_components == ["attachments"]
+        image.write_bytes(b"current-image")
+        regular.unlink()
+        result = await importer.import_all(
+            archive, components=check.available_components
+        )
+        assert result.success, result.errors
+        assert image.read_bytes() == b"legacy-image"
+        assert fragment.read_bytes() == b"active-upload"
+        assert (webchat / "other.txt").read_bytes() == b"unrelated-data"
+        if with_regular_attachment:
+            assert regular.read_bytes() == b"regular-file"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("version", ["1.1", "1.2"])
+    async def test_restore_images_ignores_upload_fragments(
+        self, tmp_path, monkeypatch, version
+    ):
+        """Published legacy and current formats restore images without upload state."""
+        webchat = tmp_path / "webchat"
+        (webchat / "imgs").mkdir(parents=True)
+        (webchat / "imgs" / "previous.png").write_bytes(b"previous")
+        (webchat / ".chunks").mkdir()
+        (webchat / ".chunks" / "active.part").write_bytes(b"active")
+        monkeypatch.setattr(
+            "astrbot.core.backup.constants.get_astrbot_webchat_path",
+            lambda: str(webchat),
+        )
+        archive = tmp_path / "old.zip"
+        _write_webchat_backup(
+            archive,
+            {
+                "directories/webchat/imgs/old.png": b"old-image",
+                "directories/webchat/.chunks/saved.part": b"obsolete-upload",
+            },
+            version=version,
+        )
+        importer = AstrBotImporter(MagicMock())
+        check = importer.pre_check(str(archive))
+        assert check.available_components == ["attachments"]
+        assert any("upload fragments" in warning for warning in check.warnings)
+        result = await importer.import_all(str(archive), components=["attachments"])
+        assert result.success, result.errors
+        assert (webchat / "imgs" / "old.png").read_bytes() == b"old-image"
+        assert (webchat / "imgs.bak" / "previous.png").read_bytes() == b"previous"
+        assert (webchat / ".chunks" / "active.part").read_bytes() == b"active"
+        assert not (webchat / ".chunks" / "saved.part").exists()
+        assert not webchat.with_suffix(".bak").exists()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("selection", [None, ["attachments"]])
+    async def test_fragments_only_never_clear_images(
+        self, tmp_path, monkeypatch, selection
+    ):
+        """An upload-only backup has no restorable component and changes no files."""
+        webchat = tmp_path / "webchat"
+        (webchat / "imgs").mkdir(parents=True)
+        image = webchat / "imgs" / "keep.png"
+        image.write_bytes(b"keep")
+        monkeypatch.setattr(
+            "astrbot.core.backup.constants.get_astrbot_webchat_path",
+            lambda: str(webchat),
+        )
+        archive = tmp_path / "fragments.zip"
+        _write_webchat_backup(
+            archive,
+            {
+                "directories/webchat/.chunks/saved.part": b"obsolete-upload",
+            },
+            version="1.1",
+        )
+        importer = AstrBotImporter(MagicMock())
+        check = importer.pre_check(str(archive))
+        assert check.available_components == []
+        assert check.broken_components == []
+        assert any("no restorable data" in warning for warning in check.warnings)
+        result = await importer.import_all(str(archive), components=selection)
+        assert not result.success
+        assert image.read_bytes() == b"keep"
+        assert not (webchat / "imgs.bak").exists()
+
+    @pytest.mark.asyncio
+    async def test_missing_declared_image_is_still_broken(self, tmp_path, monkeypatch):
+        """Fragments cannot disguise an image removed from a declared component."""
+        webchat = tmp_path / "webchat"
+        monkeypatch.setattr(
+            "astrbot.core.backup.constants.get_astrbot_webchat_path",
+            lambda: str(webchat),
+        )
+        archive = tmp_path / "missing.zip"
+        fragment = "directories/webchat/.chunks/saved.part"
+        _write_webchat_backup(
+            archive,
+            {fragment: b"fragment"},
+            checksums={
+                fragment: _sha256(b"fragment"),
+                "directories/webchat/imgs/missing.png": _sha256(b"missing"),
+            },
+        )
+        importer = AstrBotImporter(MagicMock())
+        check = importer.pre_check(str(archive))
+        assert check.available_components == []
+        assert check.broken_components == ["attachments"]
+        result = await importer.import_all(str(archive))
+        assert not result.success
+        assert not webchat.exists()
+
+    @pytest.mark.asyncio
+    async def test_corrupt_images_preserve_existing_directory(
+        self, tmp_path, monkeypatch
+    ):
+        """A wholly corrupt image set does not replace existing legacy images."""
+        webchat = tmp_path / "webchat"
+        (webchat / "imgs").mkdir(parents=True)
+        image = webchat / "imgs" / "keep.png"
+        image.write_bytes(b"keep")
+        monkeypatch.setattr(
+            "astrbot.core.backup.constants.get_astrbot_webchat_path",
+            lambda: str(webchat),
+        )
+        archive = tmp_path / "corrupt.zip"
+        name = "directories/webchat/imgs/keep.png"
+        _write_webchat_backup(
+            archive, {name: b"tampered"}, checksums={name: _sha256(b"expected")}
+        )
+        result = await AstrBotImporter(MagicMock()).import_all(str(archive))
+        assert any("verification failed" in warning for warning in result.warnings)
+        assert any(
+            "existing images were preserved" in warning for warning in result.warnings
+        )
+        assert image.read_bytes() == b"keep"
+        assert not (webchat / "imgs.bak").exists()
