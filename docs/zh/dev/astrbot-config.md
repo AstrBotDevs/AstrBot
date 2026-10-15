@@ -50,6 +50,8 @@ AstrBot 默认配置如下：
         "friend_message_needs_wake_prefix": False,
         "ignore_bot_self_message": False,
         "ignore_at_all": False,
+        "ignore_at_bot": False,
+        "ignore_reply": False,
     },
     "provider": [],
     "provider_settings": {
@@ -249,6 +251,16 @@ ID 白名单。填写后，将只处理所填写的 ID 发来的消息事件。�
 #### `platform_settings.ignore_at_all`
 
 是否忽略 @ 全体成员的消息。默认为 `false`。启用后，机器人将不会响应包含 @ 全体成员的消息。
+
+#### `platform_settings.ignore_at_bot`
+
+是否禁用 @ 机器人唤醒。默认为 `false`。启用后，@ 机器人不再单独唤醒机器人，也不会触发空 @ 等待。带唤醒前缀的消息、私聊规则及插件规则仍然有效。
+
+#### `platform_settings.ignore_reply`
+
+是否禁用回复机器人消息唤醒。默认为 `false`。启用后，回复机器人消息不再单独唤醒机器人，其他唤醒方式仍然有效。平台可能同时提供回复和 @ 消息段；需要同时禁用时，请一并启用 `ignore_at_bot`。
+
+若希望群聊只通过唤醒前缀触发默认 AI 对话，请将 `ignore_at_bot`、`ignore_reply` 和 `ignore_at_all` 均设为 `true`，并设置非空唤醒前缀。插件仍按自身的过滤规则执行。
 
 ### `provider`
 

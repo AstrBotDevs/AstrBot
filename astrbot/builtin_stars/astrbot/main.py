@@ -64,6 +64,7 @@ class Main(star.Star):
             is_empty_mention = (
                 isinstance(messages[0], Comp.At)
                 and str(messages[0].qq) == str(event.get_self_id())
+                and not p_settings.get("ignore_at_bot", False)
                 and p_settings.get("empty_mention_waiting", True)
             )
             is_wake_prefix_only = (
@@ -118,9 +119,14 @@ class Main(star.Star):
             ) -> None:
                 if not event.message_str or not event.message_str.strip():
                     return
+                # Preserve prefix waking when bot mentions cannot wake the next event.
+                if is_wake_prefix_only and p_settings.get("ignore_at_bot", False):
+                    event.message_str = messages[0].text + event.message_str
                 event.message_obj.message.insert(
                     0,
-                    Comp.At(qq=event.get_self_id(), name=event.get_self_id()),
+                    Comp.Plain(text=messages[0].text)
+                    if is_wake_prefix_only and p_settings.get("ignore_at_bot", False)
+                    else Comp.At(qq=event.get_self_id(), name=event.get_self_id()),
                 )
                 new_event = copy.copy(event)
                 self.context.get_event_queue().put_nowait(new_event)
