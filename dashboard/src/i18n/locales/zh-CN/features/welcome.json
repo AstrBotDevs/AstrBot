@@ -9,6 +9,11 @@
   "announcement": {
     "title": "公告"
   },
+  "pythonWarning": {
+    "title": "Python 版本偏低",
+    "description": "当前运行 Python {current},低于 AstrBot 建议的 {required} 或更高版本。旧版本可能导致部分新功能及插件无法使用,建议升级 Python 并重启 AstrBot。",
+    "unknownVersion": "未知版本"
+  },
   "onboard": {
     "title": "快速引导",
     "subtitle": "欢迎页可直接完成初始化。",
