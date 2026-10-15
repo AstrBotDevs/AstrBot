@@ -1908,7 +1908,7 @@ async def test_plugin_detail_includes_scanned_page_component(
             "name": PLUGIN_PAGE_DEMO_PAGE_NAME,
             "title": PLUGIN_PAGE_DEMO_PAGE_NAME,
             "page_name": PLUGIN_PAGE_DEMO_PAGE_NAME,
-            "i18n_key": f"pages.{PLUGIN_PAGE_DEMO_PAGE_NAME}",
+            "i18n_key": f"views.{PLUGIN_PAGE_DEMO_PAGE_NAME}",
             "description": "Plugin Page entry",
             "plugin_name": PLUGIN_PAGE_DEMO_NAME,
             "plugin_marketplace_name": PLUGIN_PAGE_DEMO_NAME.replace("_", "-"),
@@ -1935,7 +1935,7 @@ async def test_plugin_page_entry_returns_signed_content_path(
     assert data["status"] == "ok"
     assert data["data"]["name"] == PLUGIN_PAGE_DEMO_PAGE_NAME
     assert data["data"]["title"] == PLUGIN_PAGE_DEMO_PAGE_NAME
-    assert data["data"]["i18n_key"] == f"pages.{PLUGIN_PAGE_DEMO_PAGE_NAME}"
+    assert data["data"]["i18n_key"] == f"views.{PLUGIN_PAGE_DEMO_PAGE_NAME}"
     assert data["data"]["content_path"].startswith(
         f"/api/v1/plugins/{PLUGIN_PAGE_DEMO_NAME}/views/{PLUGIN_PAGE_DEMO_PAGE_NAME}/_t/"
     )
