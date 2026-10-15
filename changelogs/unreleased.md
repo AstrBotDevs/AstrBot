@@ -1,5 +1,7 @@
 # Unreleased
 
+- Prefix Agent model, persona, and tool-call chips with box, heart, and wrench icons; use a consistent 5px icon-to-label gap for trace metadata chips, including plugin names.
+
 - Add a puzzle icon before plugin names in grouped and individual trace plugin chips, retaining timeline plugin logos.
 
 - Add model and persona ID chips to Agent execution headings, show provider IDs on model hover, and count actual tool calls separately for each Agent while folded or expanded.

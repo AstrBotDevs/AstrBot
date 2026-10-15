@@ -2,10 +2,12 @@
 import {
   Activity,
   Bot,
+  Box,
   Check,
   ChevronDown,
   Clock3,
   Hash,
+  Heart,
   LoaderCircle,
   Pause,
   Play,
@@ -16,6 +18,7 @@ import {
   Send,
   UserRound,
   Workflow,
+  Wrench,
   X,
 } from "@lucide/vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
@@ -1043,13 +1046,13 @@ onBeforeUnmount(() => {
                     <template v-if="row.agentInfo">
                       <v-tooltip v-for="model in row.agentInfo.models" :key="model.id + ':' + model.provider" location="top" content-class="trace-tooltip">
                         <template #activator="{ props }">
-                          <v-chip v-bind="props" class="timeline-metadata-chip" size="x-small" variant="tonal">{{ model.id }}</v-chip>
+                          <v-chip v-bind="props" class="timeline-metadata-chip" size="x-small" variant="tonal"><template #prepend><Box :size="12" aria-hidden="true" /></template>{{ model.id }}</v-chip>
                         </template>
                         <div>{{ model.id }}</div>
                         <div v-if="model.provider">{{ tm("chips.provider", { id: model.provider }) }}</div>
                       </v-tooltip>
-                      <v-chip v-for="persona in row.agentInfo.personas" :key="persona" class="timeline-metadata-chip" size="x-small" variant="tonal" :title="tm('chips.persona', { id: persona })">{{ persona }}</v-chip>
-                      <v-chip v-if="row.agentInfo.toolCalls" size="x-small" variant="tonal">{{ tm("chips.toolCalls", { count: row.agentInfo.toolCalls }) }}</v-chip>
+                      <v-chip v-for="persona in row.agentInfo.personas" :key="persona" class="timeline-metadata-chip" size="x-small" variant="tonal" :title="tm('chips.persona', { id: persona })"><template #prepend><Heart :size="12" aria-hidden="true" /></template>{{ persona }}</v-chip>
+                      <v-chip v-if="row.agentInfo.toolCalls" class="timeline-metadata-chip" size="x-small" variant="tonal"><template #prepend><Wrench :size="12" aria-hidden="true" /></template>{{ tm("chips.toolCalls", { count: row.agentInfo.toolCalls }) }}</v-chip>
                     </template>
                     <v-chip v-if="row.category" size="x-small" variant="tonal">{{ tm(`handlerCategories.${row.category}`) }}</v-chip>
                     <span v-if="row.group" class="timeline-group-count">{{ tm("groups.count", { count: row.group.records.length }) }}</span>
@@ -1138,6 +1141,7 @@ onBeforeUnmount(() => {
 .timeline-group-errors { color: rgb(var(--v-theme-error)); font-size: 11px; white-space: nowrap; }
 .timeline-group-summary { align-items: center; display: flex; flex-wrap: wrap; gap: 6px 10px; }
 .timeline-metadata-chip { max-width: 100%; vertical-align: middle; }
+.timeline-metadata-chip :deep(.v-chip__prepend) { margin-inline-end: 5px; }
 .timeline-title .timeline-metadata-chip { max-width: 200px; }
 .timeline-metadata-chip :deep(.v-chip__content) { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .timeline-expansion-icon { color: var(--trace-muted); transition: transform 0.15s ease; }
