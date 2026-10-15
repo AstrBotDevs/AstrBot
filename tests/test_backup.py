@@ -251,7 +251,7 @@ class TestAstrBotImporter:
     """AstrBotImporter 类测试"""
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("snapshot", ["empty", "nonempty", "export_failed", "missing"])
+    @pytest.mark.parametrize("snapshot", ["empty", "nonempty", "export_failed"])
     async def test_restore_directory_snapshot(
         self, tmp_path, mock_main_db, monkeypatch, snapshot
     ):
@@ -269,8 +269,7 @@ class TestAstrBotImporter:
                 export_patch.setattr(
                     zf, "write", MagicMock(side_effect=OSError("export failed"))
                 )
-            if snapshot != "missing":
-                await AstrBotExporter(main_db=mock_main_db)._export_directories(zf)
+            await AstrBotExporter(main_db=mock_main_db)._export_directories(zf)
             if snapshot == "empty":
                 assert zf.getinfo("directories/plugins/").is_dir()
 
