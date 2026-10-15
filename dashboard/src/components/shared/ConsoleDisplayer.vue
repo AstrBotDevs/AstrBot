@@ -1,6 +1,5 @@
 <script setup>
-import { useCommonStore } from "@/stores/common";
-import { logApi } from "@/api/v1";
+import { logApi, pluginApi } from "@/api/v1";
 import { useModuleI18n } from "@/i18n/composables";
 import { normalizeTextInput } from "@/utils/inputValue";
 import { EventSourcePolyfill } from "event-source-polyfill";
@@ -16,7 +15,7 @@ const { tm } = useModuleI18n("features/console");
   >
     <div class="filter-controls mb-2" v-if="showLevelBtns || showSearch">
       <v-chip-group
-        v-if="showLevelBtns"
+        v-if="showLevelBtns && !workspaceMode"
         v-model="selectedLevels"
         class="log-level-filters"
         column
@@ -37,6 +36,18 @@ const { tm } = useModuleI18n("features/console");
           {{ level }}
         </v-chip>
       </v-chip-group>
+      <v-btn
+        v-if="workspaceMode"
+        class="filter-toggle-btn"
+        size="small"
+        :variant="filtersOpen || hasActiveFilters ? 'tonal' : 'text'"
+        :aria-expanded="filtersOpen"
+        @click="filtersOpen = !filtersOpen"
+      >
+        <v-icon icon="mdi-filter-variant" size="17" />
+        <span>{{ tm("filters.button") }}</span>
+        <span v-if="hasActiveFilters" class="filter-status-dot" />
+      </v-btn>
       <v-text-field
         v-if="showSearch"
         :model-value="searchInput"
@@ -63,16 +74,126 @@ const { tm } = useModuleI18n("features/console");
       ></v-btn>
     </div>
 
-    <div id="term" class="console-term"></div>
+    <div class="console-body">
+      <aside v-if="workspaceMode && filtersOpen" class="console-filter-panel">
+        <div class="console-filter-heading">
+          <span>{{ tm("filters.title") }}</span>
+          <v-btn
+            v-if="hasActiveFilters"
+            size="small"
+            variant="text"
+            :aria-label="tm('filters.reset')"
+            @click="resetFilters"
+          >
+            {{ tm("filters.reset") }}
+          </v-btn>
+        </div>
+
+        <div class="console-filter-block console-filter-block--first">
+          <div class="console-filter-label">{{ tm("filters.level") }}</div>
+          <label
+            v-for="(level, index) in logLevels"
+            :key="level"
+            class="console-filter-option"
+          >
+            <v-checkbox-btn
+              v-model="selectedLevels"
+              :value="index"
+              density="compact"
+              hide-details
+            />
+            <span
+              class="level-indicator"
+              :style="{ backgroundColor: getLevelIndicatorColor(level) }"
+            />
+            <span>{{ level }}</span>
+          </label>
+        </div>
+
+        <div class="console-filter-block">
+          <div class="console-filter-label">{{ tm("filters.source") }}</div>
+          <v-radio-group
+            v-model="selectedSource"
+            hide-details
+            density="compact"
+          >
+            <v-radio :label="tm('filters.allSources')" value="all" />
+            <v-radio :label="tm('filters.core')" value="core" />
+            <v-radio :label="tm('filters.plugins')" value="plugin" />
+          </v-radio-group>
+        </div>
+
+        <div class="console-filter-block">
+          <div class="console-filter-label">{{ tm("filters.plugin") }}</div>
+          <v-select
+            v-model="selectedPlugin"
+            :items="pluginOptions"
+            density="compact"
+            variant="solo-filled"
+            flat
+            hide-details
+            clearable
+            item-title="title"
+            item-value="value"
+            :disabled="selectedSource === 'core' || pluginOptions.length === 0"
+            :placeholder="tm('filters.allPlugins')"
+          >
+            <template #item="{ props: itemProps, item }">
+              <v-list-item v-bind="itemProps" :subtitle="item.raw.subtitle" />
+            </template>
+          </v-select>
+        </div>
+
+        <div class="console-filter-block">
+          <div class="console-filter-label">{{ tm("filters.platform") }}</div>
+          <v-select
+            v-model="selectedPlatform"
+            :items="platformOptions"
+            density="compact"
+            variant="solo-filled"
+            flat
+            hide-details
+            clearable
+            item-title="title"
+            item-value="value"
+            :placeholder="tm('filters.allPlatforms')"
+          />
+        </div>
+
+        <div class="console-filter-block console-filter-block--last">
+          <v-switch
+            :model-value="hideUserChat"
+            :label="tm('hideUserChat.label')"
+            hide-details
+            density="compact"
+            inset
+            color="primary"
+            @update:model-value="$emit('update:hideUserChat', $event)"
+          />
+        </div>
+      </aside>
+
+      <div
+        id="term"
+        class="console-term"
+        :style="{ '--console-log-font-size': `${fontSize}px` }"
+      ></div>
+    </div>
   </div>
 </template>
 
 <script>
+import { useModuleI18n as useConsoleI18n } from "@/i18n/composables";
+
+const { tm: translateConsole } = useConsoleI18n("features/console");
+
 export default {
   name: "ConsoleDisplayer",
+  emits: ["update:hideUserChat"],
   data() {
     return {
       isFullscreen: false,
+      filtersOpen: false,
       logColorAnsiMap: {
         "\u001b[1;34m": "color: #6cb6d9; font-weight: bold;",
         "\u001b[1;36m": "color: #72c4cc; font-weight: bold;",
@@ -93,6 +214,12 @@ export default {
         CRITICAL: "purple",
       },
       localLogCache: [],
+      maxLogCacheLength: 1000,
+      nextLogId: 1,
+      pluginDisplayNames: {},
+      selectedSource: "all",
+      selectedPlugin: null,
+      selectedPlatform: null,
       searchInput: "",
       // Trimmed keyword; an empty string disables filtering.
       searchKeyword: "",
@@ -106,8 +233,58 @@ export default {
     };
   },
   computed: {
-    commonStore() {
-      return useCommonStore();
+    hasActiveFilters() {
+      return (
+        this.selectedLevels.length !== this.logLevels.length ||
+        this.selectedSource !== "all" ||
+        Boolean(this.selectedPlugin) ||
+        Boolean(this.selectedPlatform) ||
+        this.hideUserChat
+      );
+    },
+    pluginOptions() {
+      const pluginNames = Array.from(
+        new Set(
+          this.localLogCache
+            .map((log) => log.plugin_name)
+            .filter((name) => typeof name === "string" && name.length > 0),
+        ),
+      );
+      return pluginNames
+        .map((value) => ({
+          title: this.pluginDisplayNames[value] || value,
+          subtitle: value,
+          value,
+        }))
+        .sort(
+          (a, b) =>
+            a.title.localeCompare(b.title) || a.value.localeCompare(b.value),
+        );
+    },
+    platformOptions() {
+      const platforms = new Map();
+      let hasUnscopedLogs = false;
+      this.localLogCache.forEach((log) => {
+        if (!log.platform_id) {
+          hasUnscopedLogs = true;
+          return;
+        }
+        const type = log.platform_type ? ` (${log.platform_type})` : "";
+        platforms.set(log.platform_id, {
+          title: `${log.platform_id}${type}`,
+          value: log.platform_id,
+        });
+      });
+      const options = Array.from(platforms.values()).sort((a, b) =>
+        a.title.localeCompare(b.title),
+      );
+      if (hasUnscopedLogs) {
+        options.unshift({
+          title: translateConsole("filters.unscopedPlatform"),
+          value: "__unscoped__",
+        });
+      }
+      return options;
     },
   },
   props: {
@@ -127,9 +304,9 @@ export default {
       type: Boolean,
       default: false,
     },
-    autoScroll: {
-      type: Boolean,
-      default: true,
+    fontSize: {
+      type: Number,
+      default: 12,
     },
     workspaceMode: {
       type: Boolean,
@@ -144,6 +321,18 @@ export default {
       deep: true,
     },
     hideUserChat() {
+      this.refreshDisplay();
+    },
+    selectedSource(value) {
+      if (value === "core") {
+        this.selectedPlugin = null;
+      }
+      this.refreshDisplay();
+    },
+    selectedPlugin() {
+      this.refreshDisplay();
+    },
+    selectedPlatform() {
       this.refreshDisplay();
     },
     searchInput: {
@@ -165,6 +354,9 @@ export default {
   },
   async mounted() {
     await this.fetchLogHistory();
+    if (this.workspaceMode) {
+      await this.fetchPluginDisplayNames();
+    }
     this.connectSSE();
     document.addEventListener("fullscreenchange", this.handleFullscreenChange);
   },
@@ -276,6 +468,12 @@ export default {
 
       let hasUpdate = false;
       const termElement = document.getElementById("term");
+      const shouldStickToBottom =
+        !termElement ||
+        termElement.scrollHeight -
+          termElement.scrollTop -
+          termElement.clientHeight <=
+          24;
       // Batch the rendered log elements into a single fragment so that a large
       // history payload only triggers one reflow instead of one per log line.
       const fragment = termElement ? document.createDocumentFragment() : null;
@@ -289,16 +487,13 @@ export default {
         );
 
         if (!exists) {
+          log._renderId = this.nextLogId++;
           this.localLogCache.push(log);
           hasUpdate = true;
 
-          if (
-            this.isLevelSelected(log.level) &&
-            !this.isHiddenByCategory(log) &&
-            this.matchesKeyword(log)
-          ) {
+          if (this.isLogVisible(log)) {
             if (fragment) {
-              fragment.appendChild(this.buildLogElement(log.data));
+              fragment.appendChild(this.buildLogElement(log));
             }
           }
         }
@@ -307,15 +502,22 @@ export default {
       if (hasUpdate) {
         this.localLogCache.sort((a, b) => a.time - b.time);
 
-        const maxSize = this.commonStore.log_cache_max_len || 200;
-        if (this.localLogCache.length > maxSize) {
-          this.localLogCache.splice(0, this.localLogCache.length - maxSize);
+        if (this.localLogCache.length > this.maxLogCacheLength) {
+          const removed = this.localLogCache.splice(
+            0,
+            this.localLogCache.length - this.maxLogCacheLength,
+          );
+          removed.forEach((log) => {
+            termElement
+              ?.querySelector(`[data-log-id="${log._renderId}"]`)
+              ?.remove();
+          });
         }
       }
 
       if (fragment && fragment.childNodes.length > 0) {
         termElement.appendChild(fragment);
-        if (this.autoScroll) {
+        if (shouldStickToBottom) {
           termElement.scrollTop = termElement.scrollHeight;
         }
       }
@@ -332,8 +534,44 @@ export default {
       }
     },
 
+    async fetchPluginDisplayNames() {
+      try {
+        const res = await pluginApi.list();
+        const displayNames = {};
+        for (const plugin of res.data?.data || []) {
+          const name = String(plugin?.name || "").trim();
+          const displayName = String(plugin?.display_name || "").trim();
+          if (name && displayName) {
+            displayNames[name] = displayName;
+          }
+        }
+        this.pluginDisplayNames = displayNames;
+      } catch (err) {
+        console.warn("Failed to load plugin display names:", err);
+      }
+    },
+
     getLevelColor(level) {
       return this.levelColors[level] || "grey";
+    },
+
+    getLevelIndicatorColor(level) {
+      const colors = {
+        DEBUG: "#9aa0a6",
+        INFO: "#67b7dc",
+        WARNING: "#d4ad45",
+        ERROR: "#df6262",
+        CRITICAL: "#bb68d5",
+      };
+      return colors[level] || "#9aa0a6";
+    },
+
+    resetFilters() {
+      this.selectedLevels = this.logLevels.map((_, index) => index);
+      this.selectedSource = "all";
+      this.selectedPlugin = null;
+      this.selectedPlatform = null;
+      this.$emit("update:hideUserChat", false);
     },
 
     isLevelSelected(level) {
@@ -348,6 +586,38 @@ export default {
 
     isHiddenByCategory(log) {
       return this.hideUserChat && log && log.category === "user_chat";
+    },
+
+    matchesSource(log) {
+      if (this.selectedSource === "all") {
+        return true;
+      }
+      return (log.source || "core") === this.selectedSource;
+    },
+
+    matchesPlugin(log) {
+      return !this.selectedPlugin || log.plugin_name === this.selectedPlugin;
+    },
+
+    matchesPlatform(log) {
+      if (!this.selectedPlatform) {
+        return true;
+      }
+      if (this.selectedPlatform === "__unscoped__") {
+        return !log.platform_id;
+      }
+      return log.platform_id === this.selectedPlatform;
+    },
+
+    isLogVisible(log) {
+      return (
+        this.isLevelSelected(log.level) &&
+        !this.isHiddenByCategory(log) &&
+        this.matchesSource(log) &&
+        this.matchesPlugin(log) &&
+        this.matchesPlatform(log) &&
+        this.matchesKeyword(log)
+      );
     },
 
     matchesKeyword(log) {
@@ -400,22 +670,26 @@ export default {
       const termElement = document.getElementById("term");
       if (!termElement) return;
 
+      const shouldStickToBottom =
+        termElement.scrollHeight -
+          termElement.scrollTop -
+          termElement.clientHeight <=
+        24;
+      const previousScrollTop = termElement.scrollTop;
       termElement.innerHTML = "";
       if (!this.localLogCache || this.localLogCache.length === 0) return;
 
       const fragment = document.createDocumentFragment();
       this.localLogCache.forEach((logItem) => {
-        if (
-          this.isLevelSelected(logItem.level) &&
-          !this.isHiddenByCategory(logItem) &&
-          this.matchesKeyword(logItem)
-        ) {
-          fragment.appendChild(this.buildLogElement(logItem.data));
+        if (this.isLogVisible(logItem)) {
+          fragment.appendChild(this.buildLogElement(logItem));
         }
       });
       termElement.appendChild(fragment);
-      if (this.autoScroll) {
+      if (shouldStickToBottom) {
         termElement.scrollTop = termElement.scrollHeight;
+      } else {
+        termElement.scrollTop = previousScrollTop;
       }
     },
 
@@ -468,8 +742,10 @@ export default {
       element.appendChild(messageSpan);
     },
 
-    buildLogElement(log) {
+    buildLogElement(logItem) {
       const span = document.createElement("pre");
+      span.dataset.logId = String(logItem._renderId);
+      let log = logItem.data || "";
       let style = this.logColorAnsiMap["default"];
       for (const key in this.logColorAnsiMap) {
         if (log.startsWith(key)) {
@@ -523,37 +799,148 @@ export default {
 .filter-controls {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px;
   margin-bottom: 8px;
 }
 
 .log-search-field {
-  flex: 0 1 260px;
-  max-width: 260px;
+  flex: 1 1 360px;
+  max-width: 520px;
   min-width: 160px;
+}
+
+.filter-toggle-btn {
+  flex: 0 0 auto;
+}
+
+.filter-toggle-btn :deep(.v-btn__content) {
+  gap: 5px;
+}
+
+.filter-status-dot {
+  background: rgb(var(--v-theme-primary));
+  border-radius: 50%;
+  height: 6px;
+  width: 6px;
+}
+
+.console-body {
+  display: flex;
+  flex: 1 1 auto;
+  gap: 10px;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
 }
 
 .console-term {
   background-color: #1e1e1e;
   border-radius: 8px;
-  height: 100%;
-  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
   overflow-x: auto;
+  overflow-y: auto;
   padding: 16px;
 }
 
 .console-displayer-wrapper--workspace .filter-controls {
   flex: 0 0 auto;
-  gap: 8px 12px;
+  gap: 8px;
   margin-bottom: 10px !important;
   min-height: 42px;
+  overflow-x: auto;
   padding: 0 2px;
+  scrollbar-width: none;
 }
 
-.console-displayer-wrapper--workspace .log-level-filters {
-  flex: 0 1 auto;
-  min-width: 0;
+.console-displayer-wrapper--workspace .filter-controls::-webkit-scrollbar {
+  display: none;
+}
+
+.console-filter-panel {
+  background: rgba(var(--v-theme-surface), 0.96);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.09);
+  border-radius: 12px;
+  flex: 0 0 238px;
+  overflow-y: auto;
+  padding: 14px;
+  width: 238px;
+}
+
+.console-filter-heading {
+  align-items: center;
+  display: flex;
+  font-size: 0.95rem;
+  font-weight: 650;
+  justify-content: space-between;
+  min-height: 32px;
+}
+
+.console-filter-heading .v-btn {
+  margin-inline-end: -8px;
+}
+
+.console-filter-block {
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.console-filter-block--first {
+  margin-top: 8px;
+}
+
+.console-filter-block--last {
+  padding-top: 8px;
+}
+
+.console-filter-label {
+  color: rgba(var(--v-theme-on-surface), 0.62);
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  margin-bottom: 5px;
+}
+
+.console-filter-option {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  font-size: 0.78rem;
+  min-height: 30px;
+}
+
+.console-filter-option :deep(.v-selection-control) {
+  min-height: 30px;
+}
+
+.level-indicator {
+  border-radius: 50%;
+  flex: 0 0 auto;
+  height: 7px;
+  margin: 0 8px 0 2px;
+  width: 7px;
+}
+
+.console-filter-panel :deep(.v-radio-group .v-selection-control) {
+  min-height: 30px;
+}
+
+.console-filter-panel :deep(.v-label) {
+  font-size: 0.78rem;
+  opacity: 0.88;
+}
+
+.console-filter-panel :deep(.v-field) {
+  border-radius: 9px;
+  font-size: 0.78rem;
+}
+
+.console-filter-panel :deep(.v-switch .v-selection-control) {
+  min-height: 34px;
 }
 
 .console-displayer-wrapper--workspace .console-term {
@@ -580,10 +967,6 @@ export default {
   background: rgba(255, 255, 255, 0.04);
 }
 
-.console-displayer-wrapper--workspace :deep(.console-log-prefix) {
-  opacity: 0.64;
-}
-
 .console-displayer-wrapper--workspace :deep(.console-log-level) {
   font-weight: 700;
 }
@@ -596,12 +979,19 @@ export default {
   color: rgba(255, 255, 255, 0.7) !important;
 }
 
+#console-wrapper:fullscreen .console-filter-panel {
+  --v-theme-on-surface: 255, 255, 255;
+  --v-theme-surface: 38, 38, 38;
+  background: #262626;
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
 :deep(.console-log-line) {
   display: block;
   margin: 0 0 2px;
   font-family: SFMono-Regular, Menlo, Monaco, Consolas,
     var(--astrbot-font-cjk-mono), monospace;
-  font-size: 12px;
+  font-size: var(--console-log-font-size, 12px);
   white-space: pre-wrap;
 }
 
@@ -640,33 +1030,23 @@ export default {
   }
 
   .console-displayer-wrapper--workspace .filter-controls {
-    align-items: flex-start;
     gap: 6px;
     padding: 0;
   }
 
-  .console-displayer-wrapper--workspace .filter-controls > .v-spacer {
-    display: none;
-  }
-
-  .console-displayer-wrapper--workspace .log-level-filters {
-    flex: 1 1 calc(100% - 38px);
-    order: 1;
-  }
-
   .console-displayer-wrapper--workspace .log-search-field {
-    flex: 1 1 100%;
-    max-width: none;
-    order: 3;
+    flex: 1 1 220px;
+    min-width: 150px;
   }
 
-  .console-displayer-wrapper--workspace :deep(.console-header-actions) {
-    flex: 1 1 100%;
-    order: 4;
-  }
-
-  .console-displayer-wrapper--workspace .fullscreen-btn {
-    order: 2;
+  .console-filter-panel {
+    bottom: 0;
+    box-shadow: 8px 0 24px rgba(0, 0, 0, 0.18);
+    left: 0;
+    max-width: 82%;
+    position: absolute;
+    top: 0;
+    z-index: 3;
   }
 
   .console-displayer-wrapper--workspace .console-term {

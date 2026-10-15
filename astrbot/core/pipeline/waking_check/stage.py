@@ -100,7 +100,12 @@ class WakingCheckStage(Stage):
             return
 
         # 设置 sender 身份
-        event.message_str = event.message_str.strip()
+        preserve_whitespace = event.get_platform_name() == "lark" and (
+            getattr(event.message_obj.raw_message, "message_type", None) == "post"
+        )
+        message_str = event.message_str.strip()
+        if not preserve_whitespace:
+            event.message_str = message_str
         api_key_allow_admin_role = event.get_extra("_api_key_allow_admin_role")
         for admin_id in self.ctx.astrbot_config["admins_id"]:
             if (
@@ -115,7 +120,7 @@ class WakingCheckStage(Stage):
         messages = event.get_messages()
         is_wake = False
         for wake_prefix in wake_prefixes:
-            if event.message_str.startswith(wake_prefix):
+            if message_str.startswith(wake_prefix):
                 if (
                     not event.is_private_chat()
                     and isinstance(messages[0], At)
@@ -127,7 +132,13 @@ class WakingCheckStage(Stage):
                 is_wake = True
                 event.is_at_or_wake_command = True
                 event.is_wake = True
-                event.message_str = event.message_str[len(wake_prefix) :].strip()
+                if preserve_whitespace:
+                    if wake_prefix:
+                        event.message_str = event.message_str.lstrip()[
+                            len(wake_prefix) :
+                        ]
+                else:
+                    event.message_str = message_str[len(wake_prefix) :].strip()
                 break
         if not is_wake:
             # 检查是否有at消息 / at全体成员消息 / 引用了bot的消息

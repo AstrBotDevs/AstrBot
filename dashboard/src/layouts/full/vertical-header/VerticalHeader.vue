@@ -910,7 +910,6 @@ getVersion();
 checkUpdate();
 initPasswordWarningFromStorage();
 
-commonStore.createEventSource(); // log
 commonStore.getStartTime();
 
 onUnmounted(() => {

@@ -438,6 +438,7 @@ class CronJobManager:
         )
         from astrbot.core.astr_main_agent_resources import (
             PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT,
+            PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT,
         )
         from astrbot.core.tools.message_tools import SendMessageToUserTool
 
@@ -516,15 +517,9 @@ class CronJobManager:
         req.conversation = conv
         req.contexts = json.loads(conv.history)
         cron_job_str = json.dumps(extras.get("cron_job", {}), ensure_ascii=False)
-        req.system_prompt += PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT.format(
-            cron_job=cron_job_str
-        )
-        req.prompt = (
-            "You are now responding to a scheduled task. "
-            "Proceed according to your system instructions. "
-            "Output using same language as previous conversation. "
-            "After completing your task, summarize and output your actions and results."
-        )
+        req.system_prompt += PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT
+        # Keep per-run metadata after history so it does not invalidate its cache.
+        req.prompt = PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(cron_job=cron_job_str)
         if delivery_session_str:
             if not req.func_tool:
                 req.func_tool = ToolSet()
