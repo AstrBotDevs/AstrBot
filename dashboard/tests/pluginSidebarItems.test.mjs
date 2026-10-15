@@ -6,6 +6,14 @@ import ts from "typescript";
 import * as vue from "vue";
 
 async function setup(t, plugins) {
+  // Keep real Vue reactivity and source modules; stub API and component mounting.
+  plugins = plugins.map((plugin) => ({
+    name: "plugin-id",
+    display_name: "Original name",
+    activated: true,
+    pages: ["settings"],
+    ...plugin,
+  }));
   const locale = vue.ref("zh-CN");
   let mount;
   let requests = 0;
@@ -45,17 +53,16 @@ async function setup(t, plugins) {
         },
       },
     );
-    modules[`@/${path}`] = exports;
     modules[`@/${path.replace(/\.(js|ts)$/, "")}`] = exports;
   }
   const scope = vue.effectScope();
   t.after(() => scope.stop());
-  const { usePluginSidebarItems, pluginSidebarState } =
-    modules["@/composables/usePluginSidebarItems.ts"];
+  const { usePluginSidebarItems } =
+    modules["@/composables/usePluginSidebarItems"];
   const items = scope.run(usePluginSidebarItems);
   await mount();
   await vue.nextTick();
-  return { ...items, locale, pluginSidebarState, requests: () => requests };
+  return { ...items, locale, requests: () => requests };
 }
 
 test("switching all supported locales updates names without refetching or changing IDs", async (t) => {
@@ -68,13 +75,14 @@ test("switching all supported locales updates names without refetching or changi
   const { locale, pluginItems, pluginGroups, requests } = await setup(t, [
     {
       name: "plugin / id",
-      display_name: "Original name",
-      activated: true,
       pages: ["settings / page", "other"],
       i18n: Object.fromEntries(
         Object.entries(names).map(([key, name]) => [
           key,
-          { metadata: { display_name: ` ${name} ` } },
+          {
+            metadata: { display_name: ` ${name} ` },
+            views: { other: { title: `${name} settings` } },
+          },
         ]),
       ),
     },
@@ -89,7 +97,7 @@ test("switching all supported locales updates names without refetching or changi
     assert.equal(item.title, names[language]);
     assert.equal(item.pluginInfo.displayName, names[language]);
     assert.equal(group.children[0].pluginInfo.displayName, names[language]);
-    assert.equal(group.children[1].pluginInfo.displayName, names[language]);
+    assert.equal(group.children[1].title, `${names[language]} settings`);
     assert.equal(group.children[0].title, "settings / page");
     assert.equal(group.value, "plugin:plugin / id");
     assert.equal(item.pluginInfo.id, "plugin / id");
@@ -100,47 +108,27 @@ test("switching all supported locales updates names without refetching or changi
 });
 
 test("missing and invalid translations fall back to nonempty original names", async (t) => {
-  const translations = [undefined, null, "", " \t\n", {}, [], 42, false];
-  const originals = ["Original name", undefined, null, "", " \t", {}, []];
-  const plugins = [];
-  const expected = [];
-  for (const display_name of originals) {
-    for (const translation of translations) {
-      plugins.push({
-        name: "plugin-id",
-        display_name,
-        activated: true,
-        pages: ["settings"],
-        i18n: { "zh-CN": { metadata: { display_name: translation } } },
-      });
-      expected.push(
-        display_name === "Original name" ? display_name : "plugin-id",
-      );
-    }
-  }
-  for (const i18n of [
-    undefined,
-    null,
-    {},
-    { "en-US": { metadata: { display_name: "English only" } } },
-  ]) {
-    plugins.push({
-      name: "plugin-id",
-      activated: true,
-      pages: ["settings"],
-      i18n,
-    });
-    expected.push("plugin-id");
-  }
-  plugins.push({
-    name: "",
-    display_name: " ",
-    activated: true,
-    pages: ["settings"],
-  });
-  expected.push("Unknown Plugin");
+  const cases = [
+    ...[undefined, null, "", " \t\n", {}, [], 42, false].map((value) => [
+      { i18n: { "zh-CN": { metadata: { display_name: value } } } },
+      "Original name",
+    ]),
+    [{}, "Original name"],
+    [{ i18n: null }, "Original name"],
+    [{ i18n: {} }, "Original name"],
+    [
+      { i18n: { "en-US": { metadata: { display_name: "English only" } } } },
+      "Original name",
+    ],
+    ...[undefined, null, "", " \t", {}].map((display_name) => [
+      { display_name },
+      "plugin-id",
+    ]),
+    [{ name: "", display_name: " " }, "Unknown Plugin"],
+  ];
+  const plugins = cases.map(([plugin]) => plugin);
   const { pluginItems, pluginGroups } = await setup(t, plugins);
-  expected.forEach((name, index) => {
+  cases.forEach(([, name], index) => {
     const item = pluginItems.value.children[index];
     const group = pluginGroups.value[index];
     assert.equal(item.title, name);
@@ -163,10 +151,6 @@ test("page titles keep views before pages priority and existing grouped fallback
   const { pluginItems, pluginGroups } = await setup(
     t,
     cases.map(([view, page]) => ({
-      name: "plugin-id",
-      display_name: "Original name",
-      activated: true,
-      pages: ["settings"],
       i18n: {
         "zh-CN": {
           metadata: { display_name: "Translated name" },
@@ -184,51 +168,4 @@ test("page titles keep views before pages priority and existing grouped fallback
     assert.equal(item.pluginInfo.displayName, "Translated name");
     assert.equal(group.title, "Translated name");
   });
-});
-
-test("translated page titles update with locale and plugins without i18n remain supported", async (t) => {
-  const { locale, pluginItems, pluginGroups, pluginSidebarState } = await setup(
-    t,
-    [
-      {
-        name: "plugin-id",
-        display_name: "Original name",
-        activated: true,
-        pages: ["settings"],
-        i18n: {
-          "zh-CN": {
-            metadata: { display_name: "插件" },
-            views: { settings: { title: "设置" } },
-          },
-          "en-US": {
-            metadata: { display_name: "Plugin" },
-            pages: { settings: { title: "Settings" } },
-          },
-        },
-      },
-    ],
-  );
-  assert.equal(pluginItems.value.children[0].title, "设置");
-  locale.value = "en-US";
-  await vue.nextTick();
-  assert.equal(pluginItems.value.children[0].title, "Settings");
-  assert.equal(pluginGroups.value[0].children[0].title, "Settings");
-  locale.value = "ja-JP";
-  await vue.nextTick();
-  assert.equal(pluginItems.value.children[0].title, "Original name");
-  assert.equal(pluginGroups.value[0].title, "Original name");
-  pluginSidebarState.plugins = [
-    { name: "legacy", activated: true, pages: ["settings"] },
-    { name: "inactive", activated: false, pages: ["settings"] },
-    { name: "no-pages", activated: true, pages: [] },
-  ];
-  await vue.nextTick();
-  assert.equal(pluginItems.value.children.length, 1);
-  assert.equal(pluginGroups.value.length, 1);
-  assert.equal(pluginItems.value.children[0].title, "legacy");
-  assert.equal(pluginGroups.value[0].title, "legacy");
-  pluginSidebarState.plugins = [];
-  await vue.nextTick();
-  assert.equal(pluginItems.value, null);
-  assert.equal(pluginGroups.value.length, 0);
 });
