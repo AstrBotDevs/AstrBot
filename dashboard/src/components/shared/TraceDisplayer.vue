@@ -10,6 +10,7 @@ import {
   Pause,
   Play,
   PlugZap,
+  Puzzle,
   RefreshCw,
   Search,
   Send,
@@ -1062,14 +1063,14 @@ onBeforeUnmount(() => {
                 </div>
               </button>
               <div v-if="row.group" class="timeline-subtitle timeline-group-summary">
-                  <v-chip v-if="row.plugins" class="timeline-metadata-chip" size="x-small" variant="tonal" :title="row.plugins">{{ row.plugins }}</v-chip>
+                  <v-chip v-if="row.plugins" class="timeline-metadata-chip" size="x-small" variant="tonal" :title="row.plugins"><template #prepend><Puzzle :size="12" aria-hidden="true" /></template>{{ row.plugins }}</v-chip>
                   <v-chip v-for="label in row.metadata" :key="label" class="timeline-metadata-chip" size="x-small" variant="tonal">{{ label }}</v-chip>
               </div>
               <template v-else v-for="record in [row.record]" :key="record.key">
               <div v-if="record.kind === 'plugin_handler'" class="timeline-subtitle">
                 <v-tooltip :text="record.fields.plugin" location="top" content-class="trace-tooltip">
                   <template #activator="{ props }">
-                    <v-chip v-bind="props" class="trace-hover-name timeline-metadata-chip" size="x-small" variant="tonal">{{ record.fields.plugin_display_name || record.fields.plugin || "Plugin" }}</v-chip>
+                    <v-chip v-bind="props" class="trace-hover-name timeline-metadata-chip" size="x-small" variant="tonal"><template #prepend><Puzzle :size="12" aria-hidden="true" /></template>{{ record.fields.plugin_display_name || record.fields.plugin || "Plugin" }}</v-chip>
                   </template>
                 </v-tooltip>
                 ·

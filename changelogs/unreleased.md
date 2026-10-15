@@ -1,5 +1,7 @@
 # Unreleased
 
+- Add a puzzle icon before plugin names in grouped and individual trace plugin chips, retaining timeline plugin logos.
+
 - Add model and persona ID chips to Agent execution headings, show provider IDs on model hover, and count actual tool calls separately for each Agent while folded or expanded.
 
 - Record successful send_message_to_user deliveries as response events on the originating trace, including message-chain outlines and destination UMO. Do not record failed sends as delivered responses; leave cron Agent instrumentation unchanged.
