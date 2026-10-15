@@ -1,8 +1,13 @@
 """备份功能单元测试"""
 
+import asyncio
+import errno
+import hashlib
 import json
 import os
 import re
+import threading
+import time
 import zipfile
 from datetime import datetime
 from pathlib import Path
@@ -1458,3 +1463,663 @@ class TestBackupUploadLimits:
             {"upload_id": upload_id}, owner="alice"
         )
         assert result["size"] == 100
+
+
+class TestBackupExportDoesNotBlockEventLoop:
+    """测试备份导出不会阻塞事件循环（归档操作在专用工作线程中执行）"""
+
+    @staticmethod
+    def _make_exporter(data_dir: Path) -> AstrBotExporter:
+        """构造一个不访问真实用户数据的导出器
+
+        Args:
+            data_dir: 作为备份数据源的临时数据目录
+
+        Returns:
+            AstrBotExporter: 只依赖 mock 数据库与临时配置目录的导出器实例
+        """
+        session = AsyncMock()
+        result = MagicMock()
+        result.scalars.return_value.all.return_value = []
+        session.execute = AsyncMock(return_value=result)
+
+        mock_db = MagicMock()
+        mock_db.get_db.return_value = AsyncMock(
+            __aenter__=AsyncMock(return_value=session),
+            __aexit__=AsyncMock(return_value=None),
+        )
+        return AstrBotExporter(
+            main_db=mock_db,
+            kb_manager=None,
+            config_path=str(data_dir / "cmd_config.json"),
+        )
+
+    @staticmethod
+    def _make_compressible_plugin_dir(data_dir: Path, blob_count: int = 4) -> Path:
+        """创建不可压缩的大文件目录，保证 DEFLATE 有可测量的计算量
+
+        Args:
+            data_dir: 作为备份数据源的临时数据目录
+            blob_count: 生成的随机数据文件数量，每个 16 MiB
+
+        Returns:
+            Path: 插件目录路径
+        """
+        plugin_dir = data_dir / "plugins"
+        plugin_dir.mkdir(exist_ok=True)
+        for index in range(blob_count):
+            (plugin_dir / f"blob_{index}.bin").write_bytes(os.urandom(16 * 1024 * 1024))
+        return plugin_dir
+
+    @staticmethod
+    async def _watch_event_loop_gaps(gaps: list[float], stop: asyncio.Event) -> None:
+        """以 5ms 心跳采样事件循环停顿，写入 ``gaps``
+
+        Args:
+            gaps: 每次心跳实际间隔的收集列表
+            stop: 置位后心跳退出
+        """
+        last = time.monotonic()
+        while not stop.is_set():
+            await asyncio.sleep(0.005)
+            now = time.monotonic()
+            gaps.append(now - last)
+            last = now
+
+    @pytest.mark.asyncio
+    async def test_archive_writes_leave_event_loop_thread(self, tmp_path, monkeypatch):
+        """归档写入必须发生在非事件循环线程中（线程守卫回归测试）"""
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (data_dir / "cmd_config.json").write_text(json.dumps({"test": "config"}))
+        plugin_dir = data_dir / "plugins"
+        plugin_dir.mkdir()
+        for index in range(5):
+            (plugin_dir / f"plugin_{index}.txt").write_text(f"content-{index}" * 100)
+        (plugin_dir / "nested").mkdir()
+        (plugin_dir / "nested" / "deep.txt").write_text("deep content" * 100)
+
+        monkeypatch.setattr(
+            "astrbot.core.backup.exporter.get_backup_directories",
+            lambda: {"plugins": str(plugin_dir)},
+        )
+
+        exporter = self._make_exporter(data_dir)
+        backup_dir = tmp_path / "backups"
+
+        write_threads: set[int] = set()
+        real_write = zipfile.ZipFile.write
+        real_writestr = zipfile.ZipFile.writestr
+
+        def spy_write(*args, **kwargs):
+            write_threads.add(threading.get_ident())
+            return real_write(*args, **kwargs)
+
+        def spy_writestr(*args, **kwargs):
+            write_threads.add(threading.get_ident())
+            return real_writestr(*args, **kwargs)
+
+        monkeypatch.setattr(zipfile.ZipFile, "write", spy_write)
+        monkeypatch.setattr(zipfile.ZipFile, "writestr", spy_writestr)
+
+        loop_thread_id = threading.get_ident()
+        zip_path = await exporter.export_all(output_dir=str(backup_dir))
+
+        assert os.path.exists(zip_path)
+        # 归档写入确实发生过，且全部离开了事件循环线程
+        assert write_threads
+        assert loop_thread_id not in write_threads
+
+        # 产物仍然完整可读
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            namelist = zf.namelist()
+            assert "manifest.json" in namelist
+            assert "directories/plugins/plugin_0.txt" in namelist
+            assert "directories/plugins/nested/deep.txt" in namelist
+
+    @pytest.mark.asyncio
+    async def test_event_loop_stays_responsive_during_export(
+        self, tmp_path, monkeypatch
+    ):
+        """导出压缩期间事件循环心跳既要有足够采样、也不能长时间停顿
+
+        采样数量断言是回归守卫的核心：未修复的实现会把事件循环整段冻结，心跳任务
+        一次都跑不到，只在导出结束后才采样到一两段间隔。没有这条断言时，空采样集
+        会让下面的停顿断言退化成恒真。
+        """
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (data_dir / "cmd_config.json").write_text(json.dumps({"test": "config"}))
+        plugin_dir = self._make_compressible_plugin_dir(data_dir)
+
+        monkeypatch.setattr(
+            "astrbot.core.backup.exporter.get_backup_directories",
+            lambda: {"plugins": str(plugin_dir)},
+        )
+
+        exporter = self._make_exporter(data_dir)
+        backup_dir = tmp_path / "backups"
+
+        gaps: list[float] = []
+        stop_heartbeat = asyncio.Event()
+        heartbeat_task = asyncio.create_task(
+            self._watch_event_loop_gaps(gaps, stop_heartbeat)
+        )
+
+        started = time.monotonic()
+        try:
+            zip_path = await exporter.export_all(output_dir=str(backup_dir))
+        finally:
+            # 采样窗口包含导出结束后的收尾阶段，因此覆盖的是整段导出墙钟时间
+            wall_time = time.monotonic() - started
+            stop_heartbeat.set()
+            await heartbeat_task
+
+        assert os.path.exists(zip_path)
+
+        # 事件循环必须真的被调度过：阻塞式实现下心跳一次都跑不到
+        assert len(gaps) >= 20, f"事件循环仅采样到 {len(gaps)} 次心跳，导出期间被冻结"
+        covered = sum(gaps)
+        assert covered > wall_time * 0.8, (
+            f"心跳仅覆盖 {covered:.3f}s / 导出墙钟 {wall_time:.3f}s"
+        )
+
+        max_gap = max(gaps)
+        assert max_gap < 0.5, f"事件循环最长停顿 {max_gap:.3f}s"
+
+    @pytest.mark.asyncio
+    async def test_export_failure_shuts_down_executor_and_cleans_zip(
+        self, tmp_path, monkeypatch
+    ):
+        """导出失败时异常向上抛出、执行器被回收且不留残缺 ZIP"""
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (data_dir / "cmd_config.json").write_text(json.dumps({"test": "config"}))
+        plugin_dir = data_dir / "plugins"
+        plugin_dir.mkdir()
+        (plugin_dir / "plugin.txt").write_text("content")
+
+        monkeypatch.setattr(
+            "astrbot.core.backup.exporter.get_backup_directories",
+            lambda: {"plugins": str(plugin_dir)},
+        )
+
+        def boom(zf):
+            raise RuntimeError("simulated directory export failure")
+
+        monkeypatch.setattr(
+            "astrbot.core.backup.exporter._write_backup_directories", boom
+        )
+
+        exporter = self._make_exporter(data_dir)
+        backup_dir = tmp_path / "backups"
+
+        with pytest.raises(RuntimeError, match="simulated directory export failure"):
+            await exporter.export_all(output_dir=str(backup_dir))
+
+        # 执行器已释放，且失败路径清理了残缺 ZIP
+        assert exporter._archive_executor is None
+        assert list(backup_dir.glob("*.zip")) == []
+
+    @pytest.mark.asyncio
+    async def test_archive_helper_requires_active_executor(self):
+        """未处于 export_all 中时归档转发必须显式报错，而非回退到默认线程池"""
+        exporter = AstrBotExporter(main_db=MagicMock())
+
+        with pytest.raises(RuntimeError, match="export_all"):
+            await exporter._run_in_archive_thread(lambda: None)
+
+    @pytest.mark.asyncio
+    async def test_concurrent_export_on_same_instance_is_rejected(
+        self, tmp_path, monkeypatch
+    ):
+        """同一实例上的并发导出必须立即失败，且不影响首个导出"""
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (data_dir / "cmd_config.json").write_text(json.dumps({"test": "config"}))
+        plugin_dir = self._make_compressible_plugin_dir(data_dir, blob_count=1)
+
+        monkeypatch.setattr(
+            "astrbot.core.backup.exporter.get_backup_directories",
+            lambda: {"plugins": str(plugin_dir)},
+        )
+
+        exporter = self._make_exporter(data_dir)
+        backup_dir = tmp_path / "backups"
+
+        # 让首个导出停在归档线程里，保证第二个调用确实与之并发
+        write_started = threading.Event()
+        release_write = threading.Event()
+        real_write = zipfile.ZipFile.write
+
+        def blocking_write(*args, **kwargs):
+            write_started.set()
+            release_write.wait(timeout=30)
+            return real_write(*args, **kwargs)
+
+        monkeypatch.setattr(zipfile.ZipFile, "write", blocking_write)
+
+        first_task = asyncio.create_task(
+            exporter.export_all(output_dir=str(backup_dir))
+        )
+        try:
+            assert await asyncio.to_thread(write_started.wait, 30)
+
+            with pytest.raises(RuntimeError, match="already running"):
+                await exporter.export_all(output_dir=str(backup_dir))
+
+            # 拒绝发生在动用实例状态之前：首个导出的执行器仍然有效
+            assert exporter._archive_executor is not None
+        finally:
+            release_write.set()
+
+        zip_path = await first_task
+        assert os.path.exists(zip_path)
+        assert exporter._archive_executor is None
+
+        # 只有首个导出产物，被拒绝的调用没有留下残缺 ZIP
+        assert [path.name for path in backup_dir.glob("*.zip")] == [
+            os.path.basename(zip_path)
+        ]
+        with zipfile.ZipFile(zip_path) as zf:
+            assert zf.testzip() is None
+
+    @pytest.mark.asyncio
+    async def test_cancellation_closes_archive_and_keeps_loop_responsive(
+        self, tmp_path, monkeypatch
+    ):
+        """导出中途取消：归档被正确关闭、不留残缺 ZIP、事件循环不被拖住"""
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (data_dir / "cmd_config.json").write_text(json.dumps({"test": "config"}))
+        plugin_dir = self._make_compressible_plugin_dir(data_dir, blob_count=1)
+
+        monkeypatch.setattr(
+            "astrbot.core.backup.exporter.get_backup_directories",
+            lambda: {"plugins": str(plugin_dir)},
+        )
+
+        exporter = self._make_exporter(data_dir)
+        backup_dir = tmp_path / "backups"
+
+        write_started = asyncio.Event()
+        real_write = zipfile.ZipFile.write
+
+        def signalling_write(*args, **kwargs):
+            write_started.set()
+            return real_write(*args, **kwargs)
+
+        monkeypatch.setattr(zipfile.ZipFile, "write", signalling_write)
+
+        gaps: list[float] = []
+        stop_heartbeat = asyncio.Event()
+        heartbeat_task = asyncio.create_task(
+            self._watch_event_loop_gaps(gaps, stop_heartbeat)
+        )
+
+        export_task = asyncio.create_task(
+            exporter.export_all(output_dir=str(backup_dir))
+        )
+        try:
+            await asyncio.wait_for(write_started.wait(), timeout=30)
+            gaps.clear()
+
+            export_task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await export_task
+            cancelled_gaps = list(gaps)
+        finally:
+            stop_heartbeat.set()
+            await heartbeat_task
+
+        # 取消后的收尾不能把事件循环拖住（旧实现会同步等待压缩结束）
+        assert cancelled_gaps
+        assert max(cancelled_gaps) < 0.5, (
+            f"取消期间事件循环最长停顿 {max(cancelled_gaps):.3f}s"
+        )
+
+        # 残缺 ZIP 已被清理，不会留下看似可读的损坏文件
+        assert list(backup_dir.glob("*.zip")) == []
+        assert exporter._archive_executor is None
+        assert not [
+            thread
+            for thread in threading.enumerate()
+            if thread.name.startswith("astrbot-backup-zip")
+        ]
+
+        # 同一数据目录上的新实例仍能正常导出
+        retry_exporter = self._make_exporter(data_dir)
+        zip_path = await retry_exporter.export_all(output_dir=str(backup_dir))
+        with zipfile.ZipFile(zip_path) as zf:
+            assert zf.testzip() is None
+            assert "manifest.json" in zf.namelist()
+
+    @pytest.mark.asyncio
+    async def test_export_structure_is_stable(self, tmp_path, monkeypatch):
+        """归档结构稳定：成员清单一致、校验和与内容匹配、目录统计正确"""
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (data_dir / "cmd_config.json").write_text(json.dumps({"test": "config"}))
+        plugin_dir = data_dir / "plugins"
+        plugin_dir.mkdir()
+        (plugin_dir / "plugin.txt").write_text("content" * 10)
+        (plugin_dir / "nested").mkdir()
+        (plugin_dir / "nested" / "deep.txt").write_text("deep" * 10)
+        monkeypatch.setattr(
+            "astrbot.core.backup.exporter.get_backup_directories",
+            lambda: {"plugins": str(plugin_dir)},
+        )
+
+        first_dir = tmp_path / "backups-a"
+        second_dir = tmp_path / "backups-b"
+        first_zip = await self._make_exporter(data_dir).export_all(
+            output_dir=str(first_dir)
+        )
+        second_zip = await self._make_exporter(data_dir).export_all(
+            output_dir=str(second_dir)
+        )
+
+        with (
+            zipfile.ZipFile(first_zip) as first,
+            zipfile.ZipFile(second_zip) as second,
+        ):
+            # 归档完整可用，且同一份数据的两次导出结构完全一致
+            assert first.testzip() is None
+            assert second.testzip() is None
+            assert first.namelist() == second.namelist()
+            assert set(first.namelist()) == {
+                "databases/main_db.json",
+                "config/cmd_config.json",
+                "directories/plugins/plugin.txt",
+                "directories/plugins/nested/deep.txt",
+                "manifest.json",
+            }
+
+            first_manifest = json.loads(first.read("manifest.json"))
+            second_manifest = json.loads(second.read("manifest.json"))
+            # exported_at 每次不同，其余结构必须逐字节一致
+            first_manifest.pop("exported_at")
+            second_manifest.pop("exported_at")
+            assert first_manifest == second_manifest
+
+            # manifest 中的校验和与归档内实际内容逐项一致
+            assert first_manifest["checksums"]
+            for path, checksum in first_manifest["checksums"].items():
+                assert path in first.namelist()
+                digest = hashlib.sha256(first.read(path)).hexdigest()
+                assert checksum == f"sha256:{digest}"
+
+            assert first_manifest["statistics"]["directories"] == {
+                "plugins": {"files": 2, "size": 110}
+            }
+
+
+class _TeardownInterrupt(BaseException):
+    """模拟 KeyboardInterrupt/SystemExit 这类不继承 Exception 的收尾中断"""
+
+
+class TestBackupExportTeardown:
+    """导出收尾语义：归档收尾失败与取消都不得掩盖真正的导出错误"""
+
+    @staticmethod
+    def _make_exporter(data_dir: Path) -> AstrBotExporter:
+        """构造一个不访问真实用户数据的导出器
+
+        Args:
+            data_dir: 作为备份数据源的临时数据目录
+
+        Returns:
+            AstrBotExporter: 只依赖 mock 数据库与临时配置目录的导出器实例
+        """
+        session = AsyncMock()
+        result = MagicMock()
+        result.scalars.return_value.all.return_value = []
+        session.execute = AsyncMock(return_value=result)
+
+        mock_db = MagicMock()
+        mock_db.get_db.return_value = AsyncMock(
+            __aenter__=AsyncMock(return_value=session),
+            __aexit__=AsyncMock(return_value=None),
+        )
+        return AstrBotExporter(
+            main_db=mock_db,
+            kb_manager=None,
+            config_path=str(data_dir / "cmd_config.json"),
+        )
+
+    @staticmethod
+    def _make_data_dir(tmp_path: Path) -> Path:
+        """创建带配置文件与插件目录的临时数据目录
+
+        Args:
+            tmp_path: pytest 提供的临时目录
+
+        Returns:
+            Path: 已填充的数据目录
+        """
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (data_dir / "cmd_config.json").write_text(json.dumps({"test": "config"}))
+        plugin_dir = data_dir / "plugins"
+        plugin_dir.mkdir()
+        (plugin_dir / "plugin.txt").write_text("content")
+        return data_dir
+
+    @staticmethod
+    def _fail_end_record(*args, **kwargs):
+        """模拟中央目录写入失败，即 ENOSPC/EIO/配额耗尽真正暴露的位置"""
+        raise OSError(errno.ENOSPC, "No space left on device")
+
+    @pytest.mark.asyncio
+    async def test_close_failure_is_reported_as_export_failure(
+        self, tmp_path, monkeypatch
+    ):
+        """收尾失败时 export_all 必须抛异常、清理残缺 ZIP 并释放执行器
+
+        修复前该失败只被记成日志：export_all 正常返回路径，磁盘上留下一个
+        无法打开的 ZIP，调用方据此上报“备份成功”，用户在导入时才发现损坏。
+        """
+        data_dir = self._make_data_dir(tmp_path)
+        monkeypatch.setattr(
+            "astrbot.core.backup.exporter.get_backup_directories",
+            lambda: {"plugins": str(data_dir / "plugins")},
+        )
+        monkeypatch.setattr(zipfile.ZipFile, "_write_end_record", self._fail_end_record)
+
+        exporter = self._make_exporter(data_dir)
+        backup_dir = tmp_path / "backups"
+
+        with pytest.raises(OSError) as excinfo:
+            await exporter.export_all(output_dir=str(backup_dir))
+
+        assert excinfo.value.errno == errno.ENOSPC
+        # 残缺 ZIP 不得留在输出目录，否则调用方会拿它当成功产物上报
+        assert list(backup_dir.glob("*.zip")) == []
+        # 实例必须仍然可用，不能因为收尾失败而永远卡在“already running”
+        # 即：正常结束时执行器已被释放，再入保护不会拒绝后续调用
+        with monkeypatch.context() as retry_finalisation:
+            retry_finalisation.setattr(
+                zipfile.ZipFile, "_write_end_record", self._fail_end_record
+            )
+            with pytest.raises(OSError) as retry_excinfo:
+                await exporter.export_all(output_dir=str(backup_dir))
+        assert retry_excinfo.value.errno == errno.ENOSPC
+        assert list(backup_dir.glob("*.zip")) == []
+
+    @pytest.mark.asyncio
+    async def test_close_failure_keeps_original_error_as_cause(
+        self, tmp_path, monkeypatch
+    ):
+        """导出本身出错且收尾也失败时，两个错误都要能追溯"""
+        data_dir = self._make_data_dir(tmp_path)
+        monkeypatch.setattr(
+            "astrbot.core.backup.exporter.get_backup_directories",
+            lambda: {"plugins": str(data_dir / "plugins")},
+        )
+
+        def boom(zf):
+            raise RuntimeError("simulated directory export failure")
+
+        monkeypatch.setattr(
+            "astrbot.core.backup.exporter._write_backup_directories", boom
+        )
+        monkeypatch.setattr(zipfile.ZipFile, "_write_end_record", self._fail_end_record)
+
+        exporter = self._make_exporter(data_dir)
+        backup_dir = tmp_path / "backups"
+
+        with pytest.raises(OSError) as excinfo:
+            await exporter.export_all(output_dir=str(backup_dir))
+
+        assert excinfo.value.errno == errno.ENOSPC
+        assert isinstance(excinfo.value.__cause__, RuntimeError)
+        assert "simulated directory export failure" in str(excinfo.value.__cause__)
+        assert list(backup_dir.glob("*.zip")) == []
+
+    @pytest.mark.asyncio
+    async def test_base_exception_in_teardown_still_releases_instance(
+        self, tmp_path, monkeypatch
+    ):
+        """收尾抛出 BaseException 时执行器仍必须释放，实例不能被永久锁死
+
+        修复前收尾只捕获 Exception：BaseException（KeyboardInterrupt/SystemExit）
+        会直接冲出 finally，跳过 ``self._archive_executor = None``，此后同一实例上的
+        每次 export_all 都会以“already running”被拒绝。
+        """
+        data_dir = self._make_data_dir(tmp_path)
+        monkeypatch.setattr(
+            "astrbot.core.backup.exporter.get_backup_directories",
+            lambda: {"plugins": str(data_dir / "plugins")},
+        )
+
+        def interrupt_end_record(*args, **kwargs):
+            raise _TeardownInterrupt("simulated interrupt while finalising the archive")
+
+        exporter = self._make_exporter(data_dir)
+        backup_dir = tmp_path / "backups"
+
+        # 只在首次导出注入故障，之后要验证同一实例可以继续工作
+        with monkeypatch.context() as failing_finalisation:
+            failing_finalisation.setattr(
+                zipfile.ZipFile, "_write_end_record", interrupt_end_record
+            )
+            with pytest.raises(_TeardownInterrupt):
+                await exporter.export_all(output_dir=str(backup_dir))
+
+        # 执行器必须已释放：这正是再入保护检查的状态
+        assert exporter._archive_executor is None
+
+        # 同一实例仍然可用，而不是从此永远抛 "already running"
+        zip_path = await exporter.export_all(output_dir=str(backup_dir))
+        with zipfile.ZipFile(zip_path) as zf:
+            assert zf.testzip() is None
+
+    @pytest.mark.asyncio
+    async def test_successful_export_still_returns_usable_archive(
+        self, tmp_path, monkeypatch
+    ):
+        """成功路径不受影响：仍然返回路径，且归档完整可读"""
+        data_dir = self._make_data_dir(tmp_path)
+        monkeypatch.setattr(
+            "astrbot.core.backup.exporter.get_backup_directories",
+            lambda: {"plugins": str(data_dir / "plugins")},
+        )
+
+        exporter = self._make_exporter(data_dir)
+        backup_dir = tmp_path / "backups"
+
+        zip_path = await exporter.export_all(output_dir=str(backup_dir))
+
+        assert os.path.exists(zip_path)
+        with zipfile.ZipFile(zip_path) as zf:
+            assert zf.testzip() is None
+            assert "manifest.json" in zf.namelist()
+
+        # 导出器释放了归档执行器：同一实例可以立刻再导出一份完整备份
+        second_zip_path = await exporter.export_all(output_dir=str(backup_dir))
+        assert os.path.exists(second_zip_path)
+        with zipfile.ZipFile(second_zip_path) as zf:
+            assert zf.testzip() is None
+            assert "manifest.json" in zf.namelist()
+
+    @pytest.mark.asyncio
+    async def test_real_error_wins_over_cancellation_during_teardown(
+        self, tmp_path, monkeypatch
+    ):
+        """收尾期间被取消时，真正的导出错误必须胜出
+
+        修复前收尾无条件重抛 CancelledError：调用方的 ``except Exception`` 看不到
+        真正的失败原因，任务会一直停在 processing。
+        """
+        data_dir = self._make_data_dir(tmp_path)
+        monkeypatch.setattr(
+            "astrbot.core.backup.exporter.get_backup_directories",
+            lambda: {"plugins": str(data_dir / "plugins")},
+        )
+
+        # 本用例需要收尾的 close 停在归档线程里，以便在收尾期间投递取消
+        close_started = threading.Event()
+        release_close = threading.Event()
+        real_close = zipfile.ZipFile.close
+
+        # 记录本次导出自己的归档实例。按位置取出（当且仅当本次导出真的调用过它，
+        # 出口才有值），因此取值前后都不需要额外的时序假设。
+        archive_holder: list[zipfile.ZipFile] = []
+
+        def boom(zf):
+            # 这里拿到的就是本次导出自己打开的归档实例，先记下来
+            # （即收尾 close 的同步时机），再抛出真正的导出错误
+            archive_holder.append(zf)
+            raise RuntimeError("simulated directory export failure")
+
+        # 同步必须锚定「本次导出的那个归档实例」：``close`` 是类级补丁，而
+        # ``ZipFile.__del__`` 同样会调用它——同批次先跑完的用例留下的归档一旦被 gc
+        # 回收，就会替真正的收尾把 ``close_started`` 提前置位（实测这正是修复前
+        # ~67s = 两个 30s 超时的来源：一次陈旧 close、一次真正的 close）。取消因此
+        # 打在 ``await asyncio.shield(open_task)`` 这个「打开」等待上，而那时还没有
+        # 任何导出错误，收尾只能重抛 CancelledError，用例随之失败。
+        # 因此这里只对本次导出的归档阻塞并置位，其余实例一律直接透传给真实 close，
+        # 不发信号也不阻塞：同步点唯一，且不依赖 gc 时机或用例顺序。
+        def blocking_close(zf_self):
+            if not archive_holder or zf_self is not archive_holder[0]:
+                return real_close(zf_self)
+            close_started.set()
+            release_close.wait(timeout=10)
+            return real_close(zf_self)
+
+        monkeypatch.setattr(zipfile.ZipFile, "close", blocking_close)
+
+        exporter = self._make_exporter(data_dir)
+        backup_dir = tmp_path / "backups"
+
+        # 只在首次导出注入故障，之后要验证同一实例可以继续工作
+        with monkeypatch.context() as failing_export:
+            failing_export.setattr(
+                "astrbot.core.backup.exporter._write_backup_directories", boom
+            )
+
+            export_task = asyncio.create_task(
+                exporter.export_all(output_dir=str(backup_dir))
+            )
+            try:
+                # 本地临时目录导出只需数秒，10s 足够；不再各花 30s 死等
+                assert await asyncio.to_thread(close_started.wait, 10)
+                export_task.cancel()
+            finally:
+                release_close.set()
+
+            # 真正的失败必须原样上报，而不是被收尾吸收的取消顶替
+            with pytest.raises(RuntimeError, match="simulated directory export failure"):
+                await export_task
+
+        # 残留 ZIP 必须被清理
+        assert list(backup_dir.glob("*.zip")) == []
+
+        # 执行器必须已释放：这正是再入保护检查的状态
+        assert exporter._archive_executor is None
+
+        # 可观测证据：同一实例的后续导出立刻成功，而不是永远抛 "already running"
+        zip_path = await exporter.export_all(output_dir=str(backup_dir))
+        with zipfile.ZipFile(zip_path) as zf:
+            assert zf.testzip() is None
+            assert "manifest.json" in zf.namelist()
