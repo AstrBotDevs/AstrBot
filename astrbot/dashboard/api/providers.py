@@ -150,6 +150,20 @@ async def delete_provider_source_by_id(
     return ok(message="删除 provider source 成功")
 
 
+@router.put("/provider-sources/order")
+async def reorder_provider_sources(
+    request: Request,
+    _auth: AuthContext = Depends(require_provider_scope),
+    service: ProviderConfigService = Depends(get_service),
+):
+    body = await _json_or_empty(request)
+    ordered_ids = body.get("ordered_ids")
+    if not isinstance(ordered_ids, list) or not ordered_ids:
+        raise ValueError("缺少 ordered_ids")
+    service.reorder_provider_sources([str(source_id) for source_id in ordered_ids])
+    return ok(message="更新提供商源顺序成功")
+
+
 @router.get("/provider-sources/models")
 async def list_provider_source_models_by_id(
     source_id: str = Query(...),

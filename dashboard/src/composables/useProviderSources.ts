@@ -521,6 +521,58 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     isSourceModified.value = true
   }
 
+  async function reorderProviderSources(orderedVisibleIds: string[]) {
+    const all = providerSources.value || []
+    if (!orderedVisibleIds.length || !all.length) return
+
+    const byId = new Map(all.map((source) => [String(source.id), source]))
+    const visible = orderedVisibleIds
+      .map((id) => byId.get(String(id)))
+      .filter((source) => Boolean(source))
+    if (visible.length !== orderedVisibleIds.length) return
+
+    // 面板一次只显示一类提供商源，其余类型的源留在原来的槽位上
+    const visibleIdSet = new Set(visible.map((source) => String(source.id)))
+    const slots: number[] = []
+    all.forEach((source, index) => {
+      if (visibleIdSet.has(String(source.id))) slots.push(index)
+    })
+    if (slots.length !== visible.length) return
+
+    const next = [...all]
+    slots.forEach((slot, index) => {
+      next[slot] = visible[index]
+    })
+
+    // 草稿不在后端那份集合里，混进去会让整单重排被拒（后端要求 id 集合与现有源完全一致），
+    // 所以只提交已持久化的 id，草稿留在本地不动
+    const persistedIds = next
+      .filter((source) => !source[unsavedProviderSourceMarker])
+      .map((source) => String(source.id))
+    if (!persistedIds.length) return
+
+    try {
+      const response = await providerApi.reorderSources(persistedIds)
+      if (response.data.status !== 'ok') {
+        throw new Error(response.data.message || tm('providerSources.reorderError'))
+      }
+      // 请求挂着的这段时间里可能又加了源：按 id 把新出现的接在后面，别拿旧快照把它盖掉
+      const orderedIdSet = new Set(next.map((source) => String(source.id)))
+      const appeared = (providerSources.value || []).filter(
+        (source) => !orderedIdSet.has(String(source.id))
+      )
+      providerSources.value = [...next, ...appeared]
+      showMessage(response.data.message || tm('providerSources.reorderSuccess'))
+    } catch (error: any) {
+      showMessage(
+        error.response?.data?.message || error.message || tm('providerSources.reorderError'),
+        'error'
+      )
+      // 保存失败时回到配置里的真实顺序
+      await loadProviderTemplate()
+    }
+  }
+
   async function deleteProviderSource(source: any) {
     const confirmed = await askForConfirmation(
       tm('providerSources.deleteConfirm', { id: source.id })
@@ -839,6 +891,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     selectProviderSource,
     addProviderSource,
     deleteProviderSource,
+    reorderProviderSources,
     saveProviderSource,
     fetchAvailableModels,
     buildModelProviderConfig,

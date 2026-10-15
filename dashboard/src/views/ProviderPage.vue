@@ -56,6 +56,7 @@
               @delete-provider-source="selectedProviderType === 'chat_completion'
                 ? deleteProviderSource($event)
                 : deleteLegacyProvider($event)"
+              @reorder-provider-sources="handleReorderProviderSources"
             />
           </div>
 
@@ -364,6 +365,7 @@ const {
   selectProviderSource,
   addProviderSource,
   deleteProviderSource,
+  reorderProviderSources,
   saveProviderSource,
   fetchAvailableModels,
   buildModelProviderConfig,
@@ -395,6 +397,12 @@ const displayedLegacyProviders = computed(() => [
     (provider) => provider.provider_type === selectedProviderType.value
   )
 ])
+
+// 拖动排序只针对「提供商源」；旧版提供商列表（providers）不参与
+const handleReorderProviderSources = (orderedIds) => {
+  if (selectedProviderType.value !== 'chat_completion') return
+  void reorderProviderSources(orderedIds)
+}
 
 const {
   showProviderEditDialog,
