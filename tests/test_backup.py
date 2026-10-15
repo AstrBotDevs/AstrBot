@@ -251,24 +251,54 @@ class TestAstrBotImporter:
     """AstrBotImporter 类测试"""
 
     @pytest.mark.asyncio
-    async def test_restore_empty_directory(self, tmp_path, mock_main_db, monkeypatch):
+    @pytest.mark.parametrize("snapshot", ["empty", "nonempty", "export_failed", "missing"])
+    async def test_restore_directory_snapshot(
+        self, tmp_path, mock_main_db, monkeypatch, snapshot
+    ):
         plugins = tmp_path / "plugins"
         plugins.mkdir()
+        if snapshot in {"nonempty", "export_failed"}:
+            (plugins / "original.txt").write_text("original", encoding="utf-8")
+        monkeypatch.setattr(
+            "astrbot.core.backup.exporter.get_backup_directories",
+            lambda: {"plugins": plugins},
+        )
+        archive = tmp_path / "snapshot.zip"
+        with zipfile.ZipFile(archive, "w") as zf, monkeypatch.context() as export_patch:
+            if snapshot == "export_failed":
+                export_patch.setattr(
+                    zf, "write", MagicMock(side_effect=OSError("export failed"))
+                )
+            if snapshot != "missing":
+                await AstrBotExporter(main_db=mock_main_db)._export_directories(zf)
+            if snapshot == "empty":
+                assert zf.getinfo("directories/plugins/").is_dir()
+
         (plugins / "added_later.txt").write_text("later", encoding="utf-8")
+        before_restore = {path.name: path.read_bytes() for path in plugins.iterdir()}
         monkeypatch.setattr(
             "astrbot.core.backup.importer.get_backup_directories",
             lambda: {"plugins": plugins},
         )
         result = ImportResult()
-        with zipfile.ZipFile(tmp_path / "empty.zip", "w") as zf:
+        with zipfile.ZipFile(archive) as zf:
             restored = await AstrBotImporter(main_db=mock_main_db)._import_directories(
-                zf, {"version": "1.1", "directories": ["plugins"]}, result
+                zf, {"version": "1.1", "directories": ["plugins", "plugins"]}, result
             )
 
-        assert restored == {"plugins": 0}
-        assert list(plugins.iterdir()) == []
-        assert (tmp_path / "plugins.bak" / "added_later.txt").read_text() == "later"
-        assert result.warnings == []
+        backup = tmp_path / "plugins.bak"
+        if snapshot in {"empty", "nonempty"}:
+            assert restored == {"plugins": int(snapshot == "nonempty")}
+            assert {path.name: path.read_bytes() for path in backup.iterdir()} == before_restore
+            assert {path.name: path.read_bytes() for path in plugins.iterdir()} == (
+                {"original.txt": b"original"} if snapshot == "nonempty" else {}
+            )
+            assert result.warnings == []
+        else:
+            assert restored == {}
+            assert not backup.exists()
+            assert {path.name: path.read_bytes() for path in plugins.iterdir()} == before_restore
+            assert len(result.warnings) == 1
 
     def test_init(self, mock_main_db, mock_kb_manager, temp_data_dir):
         """测试初始化"""

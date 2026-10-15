@@ -887,7 +887,7 @@ class AstrBotImporter:
         backed_up_dirs = manifest.get("directories", [])
         backup_directories = get_backup_directories()
 
-        for dir_name in backed_up_dirs:
+        for dir_name in dict.fromkeys(backed_up_dirs):
             if dir_name not in backup_directories:
                 result.add_warning(f"未知的目录类型: {dir_name}")
                 continue
@@ -900,10 +900,14 @@ class AstrBotImporter:
             try:
                 # 获取该目录下的所有文件
                 dir_files = [
-                    name
-                    for name in zf.namelist()
-                    if name.startswith(archive_prefix) and name != archive_prefix
+                    name for name in zf.namelist() if name.startswith(archive_prefix)
                 ]
+
+                if not dir_files:
+                    result.add_warning(
+                        f"No archived content for directory {dir_name}; keeping existing data."
+                    )
+                    continue
 
                 # 备份现有目录（如果存在）
                 if target_dir.exists():

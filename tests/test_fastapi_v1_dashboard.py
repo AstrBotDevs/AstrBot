@@ -3250,6 +3250,9 @@ async def test_v1_plugin_update_reports_reload_result(
     body = response.json()
     result = body["data"]["results"][0] if batch else body
     assert result["status"] == ("ok" if reload_success else "error")
+    manager._updater.update.assert_awaited_once_with(
+        plugin, proxy="", download_url="", repo_url=""
+    )
     manager.reload.assert_awaited_once_with("demo")
     if reload_success:
         refresh.assert_awaited_once_with("demo", {})
