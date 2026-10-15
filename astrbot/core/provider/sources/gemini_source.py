@@ -378,6 +378,7 @@ class ProviderGoogleGenAI(Provider):
                 contents.append(content_cls(parts=part))
 
         gemini_contents: list[types.Content] = []
+        tool_call_names: dict[str, str] = {}
         for message in payloads["messages"]:
             role, content = message["role"], message.get("content")
 
@@ -444,8 +445,12 @@ class ProviderGoogleGenAI(Provider):
 
                 if "tool_calls" in message:
                     for tool in message["tool_calls"]:
+                        tool_call_id = tool.get("id")
+                        function_name = tool["function"]["name"]
+                        if tool_call_id:
+                            tool_call_names[tool_call_id] = function_name
                         part = types.Part.from_function_call(
-                            name=tool["function"]["name"],
+                            name=function_name,
                             args=json.loads(tool["function"]["arguments"]),
                         )
                         # we should set thought_signature back to part if exists
@@ -467,7 +472,12 @@ class ProviderGoogleGenAI(Provider):
                 append_or_extend(gemini_contents, parts, types.ModelContent)
 
             elif role == "tool":
-                func_name = message.get("name", message["tool_call_id"])
+                tool_call_id = message["tool_call_id"]
+                func_name = (
+                    message.get("name")
+                    or tool_call_names.get(tool_call_id)
+                    or tool_call_id
+                )
                 part = types.Part.from_function_response(
                     name=func_name,
                     response={
