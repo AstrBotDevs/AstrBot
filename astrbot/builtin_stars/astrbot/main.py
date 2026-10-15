@@ -55,7 +55,9 @@ class Main(star.Star):
         """处理只有一个 @ 或仅有唤醒前缀的消息，并等待用户下一条内容。"""
         try:
             messages = event.get_messages()
-            cfg = self.context.get_config(umo=event.unified_msg_origin)
+            cfg = self.context.get_config(
+                umo=event.get_extra("_waking_check_umo", event.unified_msg_origin)
+            )
             p_settings = cfg["platform_settings"]
             wake_prefix = cfg.get("wake_prefix", [])
             if len(messages) != 1:

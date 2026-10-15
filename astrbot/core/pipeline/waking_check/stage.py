@@ -89,6 +89,9 @@ class WakingCheckStage(Stage):
         self,
         event: AstrMessageEvent,
     ) -> None | AsyncGenerator[None, None]:
+        # Keep the configuration routing origin before session isolation changes it.
+        event.set_extra("_waking_check_umo", event.unified_msg_origin)
+
         # apply unique session
         event.set_extra("_session_isolated", False)
         if self.unique_session and event.message_obj.type == MessageType.GROUP_MESSAGE:
