@@ -81,11 +81,20 @@ class ProviderGeminiTTSAPI(TTSProvider):
         ):
             raise Exception("No audio content returned from Gemini TTS API.")
 
-        with wave.open(path, "wb") as wf:
-            wf.setnchannels(1)
-            wf.setsampwidth(2)
-            wf.setframerate(24000)
-            wf.writeframes(response.candidates[0].content.parts[0].inline_data.data)
+        audio_data = response.candidates[0].content.parts[0].inline_data.data
+        # Newer TTS models (e.g. gemini-3.8-flash-tts) return a complete WAV file with a
+        # trailing C2PA chunk, while older ones return raw 24 kHz 16-bit mono PCM.
+        # Wrapping a WAV file in another WAV header makes its header and the C2PA
+        # metadata play back as noise.
+        if audio_data[:4] == b"RIFF" and audio_data[8:12] == b"WAVE":
+            with open(path, "wb") as f:
+                f.write(audio_data)
+        else:
+            with wave.open(path, "wb") as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                wf.setframerate(24000)
+                wf.writeframes(audio_data)
 
         return path
 
