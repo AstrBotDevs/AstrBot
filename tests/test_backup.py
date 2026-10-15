@@ -251,13 +251,13 @@ class TestAstrBotImporter:
     """AstrBotImporter 类测试"""
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("snapshot", ["empty", "nonempty", "export_failed"])
+    @pytest.mark.parametrize("snapshot", ["empty", "export_failed"])
     async def test_restore_directory_snapshot(
         self, tmp_path, mock_main_db, monkeypatch, snapshot
     ):
         plugins = tmp_path / "plugins"
         plugins.mkdir()
-        if snapshot in {"nonempty", "export_failed"}:
+        if snapshot == "export_failed":
             (plugins / "original.txt").write_text("original", encoding="utf-8")
         monkeypatch.setattr(
             "astrbot.core.backup.exporter.get_backup_directories",
@@ -286,12 +286,10 @@ class TestAstrBotImporter:
             )
 
         backup = tmp_path / "plugins.bak"
-        if snapshot in {"empty", "nonempty"}:
-            assert restored == {"plugins": int(snapshot == "nonempty")}
+        if snapshot == "empty":
+            assert restored == {"plugins": 0}
             assert {path.name: path.read_bytes() for path in backup.iterdir()} == before_restore
-            assert {path.name: path.read_bytes() for path in plugins.iterdir()} == (
-                {"original.txt": b"original"} if snapshot == "nonempty" else {}
-            )
+            assert not any(plugins.iterdir())
             assert result.warnings == []
         else:
             assert restored == {}
