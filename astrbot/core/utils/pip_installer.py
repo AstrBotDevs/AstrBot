@@ -1,4 +1,5 @@
 import asyncio
+import codecs
 import contextlib
 import importlib
 import importlib.metadata as importlib_metadata
@@ -27,7 +28,10 @@ from astrbot.core.utils.requirements_utils import (
     extract_requirement_names,
     parse_package_install_input,
 )
-from astrbot.core.utils.runtime_env import is_packaged_desktop_runtime
+from astrbot.core.utils.runtime_env import (
+    is_frozen_runtime,
+    is_packaged_desktop_runtime,
+)
 
 logger = logging.getLogger("astrbot")
 
@@ -1109,8 +1113,57 @@ class PipInstaller:
 
         return result_code
 
+    async def _run_pip_subprocess(self, args: list[str]) -> int:
+        """Run pip without leaving its process-wide state in AstrBot.
+
+        Args:
+            args: Arguments passed to pip in the active Python environment.
+
+        Returns:
+            The pip process exit code.
+
+        Raises:
+            DependencyConflictError: Pip reports conflicting dependencies.
+        """
+        process = await asyncio.create_subprocess_exec(
+            sys.executable,
+            "-u",
+            "-m",
+            "pip",
+            *args,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+        )
+        stream = _StreamingLogWriter(logger.info, max_lines=_MAX_PIP_OUTPUT_LINES)
+        decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+        try:
+            assert process.stdout is not None
+            while chunk := await process.stdout.read(8192):
+                stream.write(decoder.decode(chunk))
+            stream.write(decoder.decode(b"", final=True))
+            stream.flush()
+            result_code = await process.wait()
+        except BaseException:
+            if process.returncode is None:
+                with contextlib.suppress(ProcessLookupError):
+                    process.kill()
+            await process.wait()
+            raise
+
+        if result_code != 0:
+            conflict = _classify_pip_failure(stream.lines)
+            if conflict:
+                raise conflict
+        return result_code
+
     async def _run_pip_with_classification(self, args: list[str]) -> None:
-        result_code = await self._run_pip_in_process(args)
+        # Frozen executables may not support `-m pip`; preserve the desktop
+        # compatibility path while isolating pip in ordinary Python runtimes.
+        if is_frozen_runtime() or is_packaged_desktop_runtime():
+            result_code = await self._run_pip_in_process(args)
+        else:
+            result_code = await self._run_pip_subprocess(args)
         if result_code != 0:
             raise PipInstallError(
                 f"Installation failed with error code {result_code}",
