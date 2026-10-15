@@ -27,6 +27,9 @@ class Embeddings:
     def get_dim(self):
         return 2
 
+    async def get_embedding(self, content):
+        return [1.0, 0.0]
+
     async def get_embeddings_batch(self, contents, **kwargs):
         return [[1.0, 0.0] for _ in contents]
 
@@ -100,7 +103,7 @@ async def test_batch_deletes_all_chunks_with_one_index_save_and_stats_refresh(st
         ) as save,
         patch.object(db, "update_kb_stats", wraps=db.update_kb_stats) as stats,
     ):
-        assert await helper.delete_documents(["a", "b", "a"]) == 2
+        assert await helper.delete_documents(["a", "b", "a"]) == (2, True)
         save.assert_awaited_once()
         stats.assert_awaited_once()
     assert await db.count_documents_by_kb("kb") == 0
@@ -172,8 +175,12 @@ async def test_failed_batch_retains_metadata_and_can_be_retried(stores, stage):
     assert len(await db.list_media_by_doc("a")) == 1
     if stage in {"vector", "index"}:
         assert Path(vec.index_store_path).read_bytes() == before
-    assert await helper.delete_documents(["a", "b"]) == 2
-    assert await helper.delete_documents(["a", "b"]) == 0
+        assert vec.embedding_storage.index.ntotal == 4
+        assert len(await vec.retrieve("alpha", k=10)) == 4
+        assert await vec.count_documents() == 4
+        assert await vec.document_storage.search_sparse(["alpha"], limit=10)
+    assert await helper.delete_documents(["a", "b"]) == (2, True)
+    assert await helper.delete_documents(["a", "b"]) == (0, True)
     assert await vec.count_documents() == 1
     assert faiss.read_index(vec.index_store_path).ntotal == 1
 
@@ -242,7 +249,7 @@ def test_partial_index_file_write_never_replaces_existing_file(tmp_path):
 
 @pytest.mark.asyncio
 async def test_service_deduplicates_and_dispatches_one_batch():
-    helper = SimpleNamespace(delete_documents=AsyncMock(return_value=2))
+    helper = SimpleNamespace(delete_documents=AsyncMock(return_value=(2, True)))
     service = KnowledgeBaseService.__new__(KnowledgeBaseService)
     service.core_lifecycle = SimpleNamespace(
         kb_manager=SimpleNamespace(get_kb=AsyncMock(return_value=helper))
@@ -250,7 +257,7 @@ async def test_service_deduplicates_and_dispatches_one_batch():
     data, _ = await service.delete_documents(
         {"kb_id": "kb", "document_ids": ["a", "b", "a"]}
     )
-    assert data == {"deleted_count": 2}
+    assert data == {"deleted_count": 2, "stats_refreshed": True}
     helper.delete_documents.assert_awaited_once_with(["a", "b"])
     for invalid in [[], [""], [1], "a", ["a"] * 501]:
         with pytest.raises(KnowledgeBaseServiceError):
@@ -319,7 +326,7 @@ async def test_batch_cleans_more_than_one_thousand_chunks(stores):
             wraps=vec.document_storage._delete_fts_rows_batch,
         ) as fts,
     ):
-        assert await helper.delete_documents(["a", "b"]) == 2
+        assert await helper.delete_documents(["a", "b"]) == (2, True)
         save.assert_awaited_once()
         assert remove.await_count == 3
         assert [len(call.args[0]) for call in remove.await_args_list] == [500, 500, 103]
@@ -375,13 +382,17 @@ async def test_later_cleanup_batch_failure_remains_retryable(stores, stage):
     assert await vec.count_documents() == 505
     if stage == "vectors":
         assert Path(vec.index_store_path).read_bytes() == before
+        assert vec.embedding_storage.index.ntotal == 505
+        distances, ids = await vec.embedding_storage.search(np.array([1, 0]), k=600)
+        assert sum(ids[0] != -1) == 505
+        assert len(await vec.retrieve("alpha", k=10)) == 10
     else:
         assert faiss.read_index(vec.index_store_path).ntotal == 1
         assert await vec.document_storage.search_sparse(["alpha"], limit=10)
     with patch.object(
         vec.embedding_storage, "save_index", wraps=vec.embedding_storage.save_index
     ) as save:
-        assert await helper.delete_documents(["a", "b"]) == 2
+        assert await helper.delete_documents(["a", "b"]) == (2, True)
         save.assert_awaited_once()
     assert await vec.count_documents() == 1
     assert faiss.read_index(vec.index_store_path).ntotal == 1
@@ -396,7 +407,7 @@ async def test_retry_recovers_chunks_left_by_legacy_metadata_first_deletion(stor
     db, vec, helper = stores
     async with db.get_db() as session, session.begin():
         await session.execute(delete(KBDocument).where(col(KBDocument.doc_id) == "a"))
-    assert await helper.delete_documents(["a", "b"]) == 1
+    assert await helper.delete_documents(["a", "b"]) == (1, True)
     assert await vec.count_documents() == 1
     assert await db.list_media_by_doc("a") == []
 
@@ -411,13 +422,12 @@ async def test_statistics_failure_is_retryable_after_content_cleanup(stores):
         patch.object(
             db, "update_kb_stats", AsyncMock(side_effect=RuntimeError("stats failure"))
         ),
-        pytest.raises(RuntimeError),
     ):
-        await helper.delete_documents(["a", "b"])
+        assert await helper.delete_documents(["a", "b"]) == (2, False)
     kb = await db.get_kb_by_id("kb")
     assert (kb.doc_count, kb.chunk_count) == (2, 3)
     with patch.object(db, "update_kb_stats", wraps=db.update_kb_stats) as stats:
-        assert await helper.delete_documents(["a", "b"]) == 0
+        assert await helper.delete_documents(["a", "b"]) == (0, True)
         stats.assert_awaited_once()
     async with db.get_db() as session:
         from sqlalchemy import select
@@ -527,3 +537,160 @@ async def test_upload_and_delete_share_real_initialized_store(stores):
     assert await vec.count_documents() == 2
     assert vec.embedding_storage.index.ntotal == 2
     assert faiss.read_index(vec.index_store_path).ntotal == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fails", [False, True])
+async def test_retrieval_waits_for_complete_deletion_or_index_restore(stores, fails):
+    _, vec, helper = stores
+    entered, release = asyncio.Event(), asyncio.Event()
+    save_index = vec.embedding_storage.save_index
+
+    async def paused_save():
+        entered.set()
+        await release.wait()
+        if fails:
+            raise OSError("disk full")
+        await save_index()
+
+    with patch.object(vec.embedding_storage, "save_index", paused_save):
+        deleting = asyncio.create_task(helper.delete_documents(["a", "b"]))
+        await asyncio.wait_for(entered.wait(), 2)
+        assert vec.embedding_storage.index.ntotal == 1
+        searching = asyncio.create_task(vec.retrieve("alpha", k=10))
+        await asyncio.sleep(0)
+        assert not searching.done()
+        release.set()
+        if fails:
+            with pytest.raises(OSError, match="disk full"):
+                await asyncio.wait_for(deleting, 2)
+        else:
+            await asyncio.wait_for(deleting, 2)
+        results = await asyncio.wait_for(searching, 2)
+    assert len(results) == (4 if fails else 1)
+    assert vec.embedding_storage.index.ntotal == (4 if fails else 1)
+
+
+@pytest.mark.asyncio
+async def test_failed_restore_blocks_damaged_index_and_allows_later_cleanup(stores):
+    db, vec, helper = stores
+    before = Path(vec.index_store_path).read_bytes()
+    with (
+        patch.object(
+            vec.embedding_storage,
+            "save_index",
+            AsyncMock(side_effect=OSError("disk full")),
+        ),
+        patch.object(
+            vec.embedding_storage, "_read_index", side_effect=OSError("disk unreadable")
+        ),
+    ):
+        with pytest.raises(OSError, match="disk full"):
+            await helper.delete_documents(["a", "b"])
+        assert vec.embedding_storage.index is None
+        with pytest.raises(OSError, match="disk unreadable"):
+            await vec.retrieve("alpha", k=10)
+        with pytest.raises(OSError, match="disk unreadable"):
+            await helper.delete_documents(["a", "b"])
+        assert vec.embedding_storage.index is None
+    assert Path(vec.index_store_path).read_bytes() == before
+    assert await db.count_documents_by_kb("kb") == 2
+    assert await vec.count_documents() == 4
+    assert len(await vec.retrieve("alpha", k=10)) == 4
+    assert await helper.delete_documents(["a", "b"]) == (2, True)
+    assert len(await vec.retrieve("alpha", k=10)) == 1
+
+
+@pytest.mark.asyncio
+async def test_cancelled_deletion_restores_vectors_before_unlocking(stores):
+    db, vec, helper = stores
+    entered = asyncio.Event()
+
+    async def paused_save():
+        entered.set()
+        await asyncio.Event().wait()
+
+    with patch.object(vec.embedding_storage, "save_index", paused_save):
+        deleting = asyncio.create_task(helper.delete_documents(["a", "b"]))
+        await asyncio.wait_for(entered.wait(), 2)
+        assert vec.embedding_storage.index.ntotal == 1
+        deleting.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await deleting
+    assert vec.embedding_storage.index.ntotal == 4
+    assert len(await vec.retrieve("alpha", k=10)) == 4
+    assert await db.count_documents_by_kb("kb") == 2
+    assert await helper.delete_documents(["a", "b"]) == (2, True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("single", [False, True])
+@pytest.mark.parametrize("stage", ["stats", "refresh", "content"])
+async def test_route_distinguishes_completed_deletion_from_cleanup_failure(
+    stores, single, stage
+):
+    import httpx
+    from fastapi import FastAPI
+
+    from astrbot.dashboard.api.knowledge_bases import (
+        get_service,
+        require_kb_scope,
+        router,
+    )
+
+    db, vec, helper = stores
+    await db.update_kb_stats(kb_id="kb", vec_db=vec)
+    service = KnowledgeBaseService.__new__(KnowledgeBaseService)
+    service.core_lifecycle = SimpleNamespace(
+        kb_manager=SimpleNamespace(get_kb=AsyncMock(return_value=helper))
+    )
+    app = FastAPI()
+    app.include_router(router, prefix="/api/v1")
+    app.dependency_overrides[get_service] = lambda: service
+    app.dependency_overrides[require_kb_scope] = lambda: None
+    target, method = {
+        "stats": (db, "update_kb_stats"),
+        "refresh": (helper, "refresh_kb"),
+        "content": (vec.embedding_storage, "save_index"),
+    }[stage]
+    with patch.object(
+        target, method, AsyncMock(side_effect=RuntimeError("injected failure"))
+    ):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            if single:
+                response = await client.delete("/api/v1/knowledge-bases/kb/documents/a")
+            else:
+                response = await client.post(
+                    "/api/v1/knowledge-bases/kb/documents/batch-delete",
+                    json={"document_ids": ["a", "b"]},
+                )
+    payload = response.json()
+    if stage == "content":
+        assert payload["status"] == "error"
+        assert await db.count_documents_by_kb("kb") == 2
+        assert len(await vec.retrieve("alpha", k=10)) == 4
+    else:
+        assert payload["status"] == "ok"
+        assert payload["data"] == {
+            "deleted_count": 1 if single else 2,
+            "stats_refreshed": False,
+            "warning": "stats_refresh_failed",
+        }
+        assert await db.get_document_with_metadata("a") is None
+        assert await db.list_media_by_doc("a") == []
+        assert not await vec.document_storage.get_documents(
+            metadata_filters={"kb_doc_id": "a"}
+        )
+        assert await vec.document_storage.search_sparse(["alpha"], limit=10) == []
+        assert len(await vec.retrieve("alpha", k=10)) == (2 if single else 1)
+        if stage == "stats":
+            kb = await db.get_kb_by_id("kb")
+            assert (kb.doc_count, kb.chunk_count) == (2, 3)
+    assert await helper.delete_documents(["a", "b"]) == (
+        2 if stage == "content" else 1 if single else 0,
+        True,
+    )
+    kb = await db.get_kb_by_id("kb")
+    assert (kb.doc_count, kb.chunk_count) == (0, 0)

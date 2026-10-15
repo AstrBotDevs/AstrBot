@@ -47,6 +47,7 @@
     "uploadSuccess": "Document uploaded successfully",
     "uploadFailed": "Failed to upload document",
     "deleteSuccess": "Document deleted successfully",
+    "deleteStatsWarning": "Documents deleted, but statistics could not be refreshed. Displayed counts may be outdated.",
     "deleteFailed": "Failed to delete document",
     "batchDelete": "Batch delete",
     "batchDeleteTitle": "Confirm batch deletion",

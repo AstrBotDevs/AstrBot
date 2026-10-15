@@ -20,7 +20,7 @@ function setup(deleteDocuments = async () => ({ data: { status: 'ok' } })) {
     defineProps: () => props,
     defineEmits: () => (...args) => refreshes.push(args),
     useRouter: () => ({ push() {} }),
-    useToast: () => ({ success: text => notifications.push({ text, color: 'success' }), error: text => notifications.push({ text, color: 'error' }) }),
+    useToast: () => ({ warning: text => notifications.push({ text, color: 'warning' }), success: text => notifications.push({ text, color: 'success' }), error: text => notifications.push({ text, color: 'error' }) }),
     useI18n: () => ({ locale: ref('en-US') }),
     useModuleI18n: () => ({ tm: (key, args) => `${key}:${JSON.stringify(args || {})}` }),
     onMounted() {}, onUnmounted() {},
@@ -156,3 +156,50 @@ for (const outcome of ['ok', 'error', 'network']) {
     assert.equal(state.snackbar.value.show, false);
   });
 }
+
+
+for (const single of [false, true]) {
+  test(`completed deletion with stale statistics shows one global warning (single=${single})`, async () => {
+    const { state, notifications, list, refreshes } = setup(async () => ({
+      data: { status: 'ok', data: { deleted_count: 1, stats_refreshed: false, warning: 'stats_refresh_failed' } },
+    }));
+    state.documents.value = [{ doc_id: 'a', doc_name: 'A' }];
+    state.selectedDocumentIds.value = ['a'];
+    list([]);
+    if (single) {
+      state.deleteTarget.value = { doc_id: 'a' };
+      state.showDeleteDialog.value = true;
+      await state.deleteDocument();
+      assert.equal(state.showDeleteDialog.value, false);
+    } else {
+      state.confirmBatchDelete();
+      await state.deleteSelectedDocuments();
+      assert.equal(state.showBatchDeleteDialog.value, false);
+      assert.equal(state.selectedDocumentIds.value.length, 0);
+    }
+    assert.deepEqual(notifications, [{ text: 'documents.deleteStatsWarning:{}', color: 'warning' }]);
+    assert.equal(state.documents.value.length, 0);
+    assert.equal(refreshes.length, 1);
+  });
+}
+
+test('content failure keeps remaining documents selected for another submission', async () => {
+  const { state, notifications } = setup(async () => ({ data: { status: 'error', message: 'Cleanup incomplete' } }));
+  state.documents.value = [{ doc_id: 'a', doc_name: 'A' }, { doc_id: 'b', doc_name: 'B' }];
+  state.selectedDocumentIds.value = ['a', 'b'];
+  state.confirmBatchDelete();
+  await state.deleteSelectedDocuments();
+  assert.equal(state.showBatchDeleteDialog.value, true);
+  assert.deepEqual(Array.from(state.selectedDocumentIds.value), ['a', 'b']);
+  assert.equal(state.batchDeleteTargets.value.length, 2);
+  assert.equal(notifications.at(-1).color, 'error');
+});
+
+test('success notification uses the actual removed count', async () => {
+  const { state, notifications } = setup(async () => ({ data: { status: 'ok', data: { deleted_count: 1, stats_refreshed: true } } }));
+  state.documents.value = [{ doc_id: 'a', doc_name: 'A' }, { doc_id: 'b', doc_name: 'B' }];
+  state.selectedDocumentIds.value = ['a', 'b'];
+  state.confirmBatchDelete();
+  await state.deleteSelectedDocuments();
+  assert.equal(notifications.at(-1).text, 'documents.batchDeleteSuccess:{"count":1}');
+});

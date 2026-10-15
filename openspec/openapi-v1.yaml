@@ -3851,7 +3851,7 @@ paths:
     post:
       tags: [Knowledge Base]
       summary: Delete multiple knowledge base documents
-      description: Idempotent cleanup of up to 500 document IDs in one knowledge base. A failed operation can be retried with the same IDs.
+      description: Idempotent cleanup of up to 500 document IDs in one knowledge base. A failed operation can be retried with the same IDs. On success, data contains deleted_count and stats_refreshed; warning is stats_refresh_failed when deletion completed but statistics could not be refreshed.
       operationId: deleteKnowledgeDocuments
       x-astrbot-scope: kb
       parameters:
@@ -3881,6 +3881,7 @@ paths:
     delete:
       tags: [Knowledge Base]
       summary: Delete a knowledge base document
+      description: On success, data contains deleted_count and stats_refreshed; warning is stats_refresh_failed when deletion completed but statistics could not be refreshed.
       operationId: deleteKnowledgeDocument
       x-astrbot-scope: kb
       parameters:

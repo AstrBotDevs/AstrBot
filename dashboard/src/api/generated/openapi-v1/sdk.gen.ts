@@ -2324,7 +2324,7 @@ export const importKnowledgeDocumentFromUrl = <ThrowOnError extends boolean = fa
 
 /**
  * Delete multiple knowledge base documents
- * Idempotent cleanup of up to 500 document IDs in one knowledge base. A failed operation can be retried with the same IDs.
+ * Idempotent cleanup of up to 500 document IDs in one knowledge base. A failed operation can be retried with the same IDs. On success, data contains deleted_count and stats_refreshed; warning is stats_refresh_failed when deletion completed but statistics could not be refreshed.
  */
 export const deleteKnowledgeDocuments = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DeleteKnowledgeDocumentsData, ThrowOnError>) => {
     return (options?.client ?? client).post<DeleteKnowledgeDocumentsResponse, DeleteKnowledgeDocumentsError, ThrowOnError>({
@@ -2345,6 +2345,7 @@ export const getKnowledgeDocument = <ThrowOnError extends boolean = false>(optio
 
 /**
  * Delete a knowledge base document
+ * On success, data contains deleted_count and stats_refreshed; warning is stats_refresh_failed when deletion completed but statistics could not be refreshed.
  */
 export const deleteKnowledgeDocument = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DeleteKnowledgeDocumentData, ThrowOnError>) => {
     return (options?.client ?? client).delete<DeleteKnowledgeDocumentResponse, DeleteKnowledgeDocumentError, ThrowOnError>({

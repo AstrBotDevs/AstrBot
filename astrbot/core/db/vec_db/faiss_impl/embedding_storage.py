@@ -138,8 +138,25 @@ class EmbeddingStorage:
             if bridge_path is not None:
                 bridge_path.unlink(missing_ok=True)
 
+    def reload_index(self) -> None:
+        """Discard the active index and reload the last persisted version.
+
+        Leaves the index unavailable if reading fails, so subsequent operations
+        retry loading rather than use vectors from an interrupted deletion.
+
+        Raises:
+            RuntimeError: No persisted index is available.
+            OSError: Reading the persisted index fails.
+        """
+        self.index = None
+        if not self.path:
+            raise RuntimeError("No persisted FAISS index is available")
+        self.index = self._read_index(self.path)
+
     async def insert(self, vector: np.ndarray, id: int) -> None:
         """插入向量"""
+        if self.index is None:
+            self.reload_index()
         assert self.index is not None, "FAISS index is not initialized."
         if vector.shape[0] != self.dimension:
             raise ValueError(
@@ -150,6 +167,8 @@ class EmbeddingStorage:
 
     async def insert_batch(self, vectors: np.ndarray, ids: list[int]) -> None:
         """批量插入向量"""
+        if self.index is None:
+            self.reload_index()
         assert self.index is not None, "FAISS index is not initialized."
         if len(vectors.shape) != 2:
             raise ValueError(
@@ -167,6 +186,8 @@ class EmbeddingStorage:
 
         接受 1D (d,) 或 2D (1, d) 向量，自动展平为 Faiss 期望的 (1, d)。
         """
+        if self.index is None:
+            self.reload_index()
         assert self.index is not None, "FAISS index is not initialized."
         vector = np.asarray(vector, dtype=np.float32).ravel()
         if vector.shape[0] != self.dimension:
@@ -187,6 +208,8 @@ class EmbeddingStorage:
             RuntimeError: FAISS cannot remove the requested IDs.
             OSError: Persisting the updated index fails.
         """
+        if self.index is None:
+            self.reload_index()
         assert self.index is not None, "FAISS index is not initialized."
         self.index.remove_ids(np.array(ids, dtype=np.int64))
         if persist:

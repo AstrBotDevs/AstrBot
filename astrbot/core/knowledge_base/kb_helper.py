@@ -631,32 +631,41 @@ class KBHelper:
         doc = await self.kb_db.get_document_by_id(doc_id)
         return doc
 
-    async def delete_document(self, doc_id: str) -> None:
+    async def delete_document(self, doc_id: str) -> tuple[int, bool]:
         """Delete one document through the batch cleanup path.
 
         Args:
             doc_id: Document ID to delete.
-        """
-        await self.delete_documents([doc_id])
 
-    async def delete_documents(self, doc_ids: list[str]) -> int:
+        Returns:
+            Number of existing records removed and whether statistics refreshed.
+        """
+        return await self.delete_documents([doc_id])
+
+    async def delete_documents(self, doc_ids: list[str]) -> tuple[int, bool]:
         """Delete a set of documents and refresh statistics once.
 
         Args:
             doc_ids: Document IDs to delete from this knowledge base.
 
         Returns:
-            Number of existing document records removed.
+            Number of existing records removed and whether statistics refreshed.
         """
         if not doc_ids:
-            return 0
+            return 0, True
         await self._ensure_vec_db()
         count = await self.kb_db.delete_documents_by_ids(
             doc_ids, self.vec_db, kb_id=self.kb.kb_id
         )
-        await self.kb_db.update_kb_stats(kb_id=self.kb.kb_id, vec_db=self.vec_db)
-        await self.refresh_kb()
-        return count
+        try:
+            await self.kb_db.update_kb_stats(kb_id=self.kb.kb_id, vec_db=self.vec_db)
+            await self.refresh_kb()
+        except Exception:
+            logger.exception(
+                "Documents deleted but knowledge base statistics refresh failed"
+            )
+            return count, False
+        return count, True
 
     async def delete_chunk(self, chunk_id: str, doc_id: str) -> None:
         """删除单个文本块及其相关数据"""

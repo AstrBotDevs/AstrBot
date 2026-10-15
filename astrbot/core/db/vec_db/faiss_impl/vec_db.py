@@ -240,19 +240,20 @@ class FaissVecDB(BaseVecDB):
 
         """
         embedding = await self.embedding_provider.get_embedding(query)
-        scores, indices = await self.embedding_storage.search(
-            vector=np.array(embedding).astype("float32"),
-            k=fetch_k if metadata_filters else k,
-        )
-        if len(indices[0]) == 0 or indices[0][0] == -1:
-            return []
-        # normalize scores
-        scores[0] = 1.0 - (scores[0] / 2.0)
-        # NOTE: maybe the size is less than k.
-        fetched_docs = await self.document_storage.get_documents(
-            metadata_filters=metadata_filters or {},
-            ids=indices[0],
-        )
+        async with self._write_lock:
+            scores, indices = await self.embedding_storage.search(
+                vector=np.array(embedding).astype("float32"),
+                k=fetch_k if metadata_filters else k,
+            )
+            if len(indices[0]) == 0 or indices[0][0] == -1:
+                return []
+            # normalize scores
+            scores[0] = 1.0 - (scores[0] / 2.0)
+            # NOTE: maybe the size is less than k.
+            fetched_docs = await self.document_storage.get_documents(
+                metadata_filters=metadata_filters or {},
+                ids=indices[0],
+            )
         if not fetched_docs:
             return []
         result_docs: list[Result] = []
@@ -352,23 +353,36 @@ class FaissVecDB(BaseVecDB):
         if self.document_storage.engine is None:
             raise RuntimeError("Document storage is not initialized")
         async with self._write_lock:
-            after_id = 0
-            while True:
-                docs = await self.document_storage.get_documents(
-                    metadata_filters=metadata_filters,
-                    offset=None,
-                    limit=DOCUMENT_DELETE_BATCH_SIZE,
-                    after_id=after_id,
-                )
-                if not docs:
-                    break
-                await self.embedding_storage.delete(
-                    [doc["id"] for doc in docs], persist=False
-                )
-                after_id = docs[-1]["id"]
-                del docs
-            # Keep chunk metadata intact until all vector removals are persisted.
-            await self.embedding_storage.save_index()
+            if self.embedding_storage.index is None:
+                self.embedding_storage.reload_index()
+            try:
+                after_id = 0
+                while True:
+                    docs = await self.document_storage.get_documents(
+                        metadata_filters=metadata_filters,
+                        offset=None,
+                        limit=DOCUMENT_DELETE_BATCH_SIZE,
+                        after_id=after_id,
+                    )
+                    if not docs:
+                        break
+                    await self.embedding_storage.delete(
+                        [doc["id"] for doc in docs], persist=False
+                    )
+                    after_id = docs[-1]["id"]
+                    del docs
+                # Keep chunk metadata intact until all vector removals are persisted.
+                await self.embedding_storage.save_index()
+            except BaseException:
+                # Release the damaged index before reading to avoid a full copy.
+                # Include cancellation and failures in any removal batch.
+                try:
+                    self.embedding_storage.reload_index()
+                except Exception:
+                    logger.exception(
+                        "Failed to restore FAISS index after deletion failure"
+                    )
+                raise
             await self.document_storage.delete_documents(
                 metadata_filters=metadata_filters
             )

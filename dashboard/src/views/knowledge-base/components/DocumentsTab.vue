@@ -768,7 +768,14 @@ const deleteSelectedDocuments = async () => {
       selectedDocumentIds.value = []
       batchDeleteTargets.value = []
       showBatchDeleteDialog.value = false
-      toast.success(t('documents.batchDeleteSuccess', { count: targets.length }))
+      if (response.data.data?.stats_refreshed === false) {
+        toast.warning(t('documents.deleteStatsWarning'))
+      } else {
+        const deletedCount = response.data.data?.deleted_count
+        toast.success(t('documents.batchDeleteSuccess', {
+          count: typeof deletedCount === 'number' ? deletedCount : targets.length
+        }))
+      }
     }
   } catch (error) {
     console.error('Failed to delete documents:', error)
@@ -806,7 +813,11 @@ const deleteDocument = async () => {
     const response = await knowledgeApi.deleteDocument(props.kbId, deleteTarget.value.doc_id)
 
     if (response.data.status === 'ok') {
-      toast.success(t('documents.deleteSuccess'))
+      if (response.data.data?.stats_refreshed === false) {
+        toast.warning(t('documents.deleteStatsWarning'))
+      } else {
+        toast.success(t('documents.deleteSuccess'))
+      }
       showDeleteDialog.value = false
       // If current page becomes empty after delete and is not the first page, go back one page
       if (documents.value.length === 1 && page.value > 1) {
