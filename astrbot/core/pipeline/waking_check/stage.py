@@ -69,6 +69,12 @@ class WakingCheckStage(Stage):
             "ignore_at_all",
             False,
         )
+        self.ignore_at_bot = self.ctx.astrbot_config["platform_settings"].get(
+            "ignore_at_bot", False
+        )
+        self.ignore_reply = self.ctx.astrbot_config["platform_settings"].get(
+            "ignore_reply", False
+        )
         self.disable_builtin_commands = self.ctx.astrbot_config.get(
             "disable_builtin_commands", False
         )
@@ -83,6 +89,9 @@ class WakingCheckStage(Stage):
         self,
         event: AstrMessageEvent,
     ) -> None | AsyncGenerator[None, None]:
+        # Keep the configuration routing origin before session isolation changes it.
+        event.set_extra("_waking_check_umo", event.unified_msg_origin)
+
         # apply unique session
         event.set_extra("_session_isolated", False)
         if self.unique_session and event.message_obj.type == MessageType.GROUP_MESSAGE:
@@ -146,11 +155,13 @@ class WakingCheckStage(Stage):
                 if (
                     (
                         isinstance(message, At)
+                        and not self.ignore_at_bot
                         and (str(message.qq) == str(event.get_self_id()))
                     )
                     or (isinstance(message, AtAll) and not self.ignore_at_all)
                     or (
                         isinstance(message, Reply)
+                        and not self.ignore_reply
                         and str(message.sender_id) == str(event.get_self_id())
                     )
                 ):

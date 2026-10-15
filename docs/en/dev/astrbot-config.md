@@ -50,6 +50,8 @@ The default AstrBot configuration is as follows:
         "friend_message_needs_wake_prefix": False,
         "ignore_bot_self_message": False,
         "ignore_at_all": False,
+        "ignore_at_bot": False,
+        "ignore_reply": False,
     },
     "provider": [],
     "provider_settings": {
@@ -249,6 +251,16 @@ Whether to ignore messages sent by the bot itself. Default is `false`. When enab
 #### `platform_settings.ignore_at_all`
 
 Whether to ignore @all messages. Default is `false`. When enabled, the bot won't respond to messages containing @all.
+
+#### `platform_settings.ignore_at_bot`
+
+Whether to disable waking on bot mentions. Default is `false`. When enabled, mentioning the bot alone neither wakes it nor starts empty-mention waiting. Messages with a wake prefix, private chat rules, and plugin rules still apply.
+
+#### `platform_settings.ignore_reply`
+
+Whether to disable waking on replies to the bot. Default is `false`. When enabled, replying to the bot alone no longer wakes it; other wake methods still apply. Platforms may include both reply and mention components, so also enable `ignore_at_bot` to disable both triggers.
+
+To require a wake prefix for default AI conversations in group chats, set `ignore_at_bot`, `ignore_reply`, and `ignore_at_all` to `true` and configure a non-empty wake prefix. Plugins still follow their own filter rules.
 
 ### `provider`
 

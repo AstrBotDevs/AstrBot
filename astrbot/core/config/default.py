@@ -132,6 +132,8 @@ DEFAULT_CONFIG = {
         "friend_message_needs_wake_prefix": False,
         "ignore_bot_self_message": False,
         "ignore_at_all": False,
+        "ignore_at_bot": False,
+        "ignore_reply": False,
     },
     "provider_sources": [],  # provider sources
     "provider": [],  # models from provider_sources
@@ -1191,6 +1193,14 @@ CONFIG_METADATA_2 = {
                     "ignore_bot_self_message": {
                         "type": "bool",
                         "hint": "某些平台会将自身账号在其他 APP 端发送的消息也当做消息事件下发导致给自己发消息时唤醒机器人",
+                    },
+                    "ignore_at_bot": {
+                        "type": "bool",
+                        "hint": "启用后，@ 机器人不再单独触发唤醒，不影响唤醒前缀、私聊和插件规则。",
+                    },
+                    "ignore_reply": {
+                        "type": "bool",
+                        "hint": "启用后，回复机器人消息不再单独触发唤醒，不影响唤醒前缀、私聊和插件规则。",
                     },
                     "ignore_at_all": {
                         "type": "bool",
@@ -4401,6 +4411,16 @@ CONFIG_METADATA_3 = {
                     "platform_settings.ignore_bot_self_message": {
                         "description": "是否忽略机器人自身的消息",
                         "type": "bool",
+                    },
+                    "platform_settings.ignore_at_bot": {
+                        "description": "禁用 @ 机器人唤醒",
+                        "type": "bool",
+                        "hint": "启用后，@ 机器人不再单独触发唤醒，不影响唤醒前缀、私聊和插件规则。",
+                    },
+                    "platform_settings.ignore_reply": {
+                        "description": "禁用回复机器人唤醒",
+                        "type": "bool",
+                        "hint": "启用后，回复机器人消息不再单独触发唤醒，不影响唤醒前缀、私聊和插件规则。",
                     },
                     "platform_settings.ignore_at_all": {
                         "description": "是否忽略 @ 全体成员事件",

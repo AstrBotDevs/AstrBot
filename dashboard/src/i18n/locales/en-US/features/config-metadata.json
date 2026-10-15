@@ -1022,6 +1022,14 @@
         "ignore_bot_self_message": {
           "description": "Ignore Bot's Own Messages"
         },
+        "ignore_at_bot": {
+          "description": "Disable Wake on Bot Mention",
+          "hint": "When enabled, mentioning the bot no longer triggers waking by itself. Wake prefixes, private chat rules, and plugin rules still apply."
+        },
+        "ignore_reply": {
+          "description": "Disable Wake on Reply to Bot",
+          "hint": "When enabled, replying to the bot no longer triggers waking by itself. Wake prefixes, private chat rules, and plugin rules still apply."
+        },
         "ignore_at_all": {
           "description": "Ignore @All Events"
         },

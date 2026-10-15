@@ -1043,6 +1043,14 @@
         "ignore_bot_self_message": {
           "description": "是否忽略机器人自身的消息"
         },
+        "ignore_at_bot": {
+          "description": "禁用 @ 机器人唤醒",
+          "hint": "启用后，@ 机器人不再单独触发唤醒，不影响唤醒前缀、私聊和插件规则。"
+        },
+        "ignore_reply": {
+          "description": "禁用回复机器人唤醒",
+          "hint": "启用后，回复机器人消息不再单独触发唤醒，不影响唤醒前缀、私聊和插件规则。"
+        },
         "ignore_at_all": {
           "description": "是否忽略 @ 全体成员事件"
         },
