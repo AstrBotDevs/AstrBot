@@ -291,8 +291,7 @@ const timelineRows = computed(() => {
     ).filter(Boolean))].join(", ");
     const metadata = [...new Set(group.records.filter((record) =>
       record.action === "agent_start" || record.kind === "response",
-    ).map((record) => record.action === "agent_start"
-      ? tm("chips.executionMode", { name: recordSubtitle(record) }) : recordSubtitle(record)))];
+    ).map((record) => recordSubtitle(record)))];
     rows.push({ key: `${group.key}:group`, record: group.records[0], group, expanded, errors, plugins, metadata, category: group.category, depth });
     if (expanded) {
       for (const record of group.records) {
@@ -1095,7 +1094,7 @@ onBeforeUnmount(() => {
                 <TraceMessagePreview v-if="record.fields.message" class="trace-response-outline" :text="record.fields.message" />
               </div>
               <div v-else-if="record.action === 'agent_start'" class="timeline-subtitle">
-                <v-chip class="timeline-metadata-chip" size="x-small" variant="tonal">{{ tm("chips.executionMode", { name: recordSubtitle(record) }) }}</v-chip>
+                <v-chip class="timeline-metadata-chip" size="x-small" variant="tonal">{{ recordSubtitle(record) }}</v-chip>
               </div>
               <div v-else-if="record.action === 'event_received'" class="timeline-subtitle">
                 <v-chip v-if="record.fields.platform_id" class="timeline-metadata-chip" size="x-small" variant="tonal" :title="record.fields.platform_id">{{ record.fields.platform_id }}</v-chip>

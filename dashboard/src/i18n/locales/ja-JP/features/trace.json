@@ -89,7 +89,6 @@
     "provider": "プロバイダー: {id}",
     "persona": "ペルソナ: {id}",
     "toolCalls": "ツール呼び出し {count} 回",
-    "executionMode": "実行方式: {name}",
     "systemSender": "システムから送信",
     "pluginSender": "プラグインから送信: {name}",
     "unknownSender": "送信元不明"

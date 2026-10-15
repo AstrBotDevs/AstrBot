@@ -89,7 +89,6 @@
     "provider": "Провайдер: {id}",
     "persona": "Персона: {id}",
     "toolCalls": "Вызовов инструментов: {count}",
-    "executionMode": "Режим выполнения: {name}",
     "systemSender": "Отправлено системой",
     "pluginSender": "Отправлено плагином: {name}",
     "unknownSender": "Неизвестный отправитель"

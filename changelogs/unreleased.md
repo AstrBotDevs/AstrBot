@@ -1,5 +1,7 @@
 # Unreleased
 
+- Remove the execution-mode prefix from Agent chips, retaining only the configured runner's display name.
+
 - Prefix Agent model, persona, and tool-call chips with box, heart, and wrench icons; use a consistent 5px icon-to-label gap for trace metadata chips, including plugin names.
 
 - Add a puzzle icon before plugin names in grouped and individual trace plugin chips, retaining timeline plugin logos.

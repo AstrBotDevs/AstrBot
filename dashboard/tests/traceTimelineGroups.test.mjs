@@ -163,7 +163,7 @@ test("chips reuse profile runner names and classify responses by their sending o
     { key: "plugin", action: "response_sent", kind: "response", fields: { source: "plugin:weather" } },
   ]);
   const rows = state.timelineRows.value;
-  assert.deepEqual(Array.from(rows[0].metadata), ["执行方式：AstrBot 内置 AI", "执行方式：Dify"]);
+  assert.deepEqual(Array.from(rows[0].metadata), ["AstrBot 内置 AI", "Dify"]);
   assert.deepEqual(Array.from(rows[1].metadata), ["系统发送", "插件发送：Weather Forecast"]);
   assert.equal(state.recordSubtitle({ action: "agent_start", fields: { runner_type: "custom_runner" } }), "custom_runner");
   assert.equal(state.recordSubtitle({ action: "response_sent", fields: { source: "unknown" } }), "来源未知");

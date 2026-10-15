@@ -89,7 +89,6 @@
     "provider": "提供商：{id}",
     "persona": "人格：{id}",
     "toolCalls": "{count} 次工具调用",
-    "executionMode": "执行方式：{name}",
     "systemSender": "系统发送",
     "pluginSender": "插件发送：{name}",
     "unknownSender": "来源未知"

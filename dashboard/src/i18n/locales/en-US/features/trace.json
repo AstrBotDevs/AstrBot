@@ -89,7 +89,6 @@
     "provider": "Provider: {id}",
     "persona": "Persona: {id}",
     "toolCalls": "{count} tool calls",
-    "executionMode": "Execution mode: {name}",
     "systemSender": "Sent by system",
     "pluginSender": "Sent by plugin: {name}",
     "unknownSender": "Unknown sender"
