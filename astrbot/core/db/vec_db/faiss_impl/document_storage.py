@@ -18,6 +18,7 @@ from astrbot.core.knowledge_base.retrieval.tokenizer import (
 
 FTS_TABLE_NAME = "documents_fts"
 FTS_REBUILD_BATCH_SIZE = 1000
+DOCUMENT_DELETE_BATCH_SIZE = 500
 
 
 class BaseDocModel(SQLModel, table=False):
@@ -235,6 +236,7 @@ class DocumentStorage:
         ids: list | None = None,
         offset: int | None = 0,
         limit: int | None = 100,
+        after_id: int | None = None,
     ) -> list[dict]:
         """Retrieve documents by metadata filters and ids.
 
@@ -243,6 +245,7 @@ class DocumentStorage:
             ids (list | None): Optional list of document IDs to filter.
             offset (int | None): Offset for pagination.
             limit (int | None): Limit for pagination.
+            after_id: Exclusive internal ID boundary for ordered keyset batches.
 
         Returns:
             list: The list of documents that match the filters.
@@ -267,6 +270,9 @@ class DocumentStorage:
                 valid_ids = [int(i) for i in ids if i != -1]
                 if valid_ids:
                     query = query.where(col(Document.id).in_(valid_ids))
+
+            if after_id is not None:
+                query = query.where(col(Document.id) > after_id).order_by(Document.id)
 
             if limit is not None:
                 query = query.limit(limit)
@@ -430,15 +436,19 @@ class DocumentStorage:
                     field.in_(val) if isinstance(val, list) else field == val
                 )
 
-            result = await session.execute(query)
-            documents = result.scalars().all()
-
-            await self._delete_fts_rows_batch(session, documents)
-            await session.execute(
-                delete(Document)
-                .where(col(Document.id).in_(query.with_only_columns(Document.id)))
-                .execution_options(synchronize_session=False)
-            )
+            query = query.order_by(Document.id).limit(DOCUMENT_DELETE_BATCH_SIZE)
+            while True:
+                result = await session.execute(query)
+                documents = result.scalars().all()
+                if not documents:
+                    break
+                await self._delete_fts_rows_batch(session, documents)
+                await session.execute(
+                    delete(Document)
+                    .where(col(Document.id).in_([doc.id for doc in documents]))
+                    .execution_options(synchronize_session=False)
+                )
+                del documents
 
     async def count_documents(self, metadata_filters: dict | None = None) -> int:
         """Count documents in the database.

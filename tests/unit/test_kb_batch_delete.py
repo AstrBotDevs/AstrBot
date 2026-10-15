@@ -10,6 +10,9 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.sql.dml import Delete
 
+from astrbot.core.db.vec_db.faiss_impl.document_storage import (
+    DOCUMENT_DELETE_BATCH_SIZE,
+)
 from astrbot.core.db.vec_db.faiss_impl.embedding_storage import EmbeddingStorage
 from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
 from astrbot.core.knowledge_base.kb_db_sqlite import KBSQLiteDatabase
@@ -298,12 +301,90 @@ async def test_batch_cleans_more_than_one_thousand_chunks(stores):
     await vec.insert_batch(
         ["bulk alpha"] * 1100, [{"kb_id": "kb", "kb_doc_id": "a"}] * 1100
     )
+    with (
+        patch.object(
+            vec.embedding_storage, "save_index", wraps=vec.embedding_storage.save_index
+        ) as save,
+        patch.object(
+            vec.embedding_storage, "delete", wraps=vec.embedding_storage.delete
+        ) as remove,
+        patch.object(
+            vec.document_storage,
+            "get_documents",
+            wraps=vec.document_storage.get_documents,
+        ) as fetch,
+        patch.object(
+            vec.document_storage,
+            "_delete_fts_rows_batch",
+            wraps=vec.document_storage._delete_fts_rows_batch,
+        ) as fts,
+    ):
+        assert await helper.delete_documents(["a", "b"]) == 2
+        save.assert_awaited_once()
+        assert remove.await_count == 3
+        assert [len(call.args[0]) for call in remove.await_args_list] == [500, 500, 103]
+        assert all(call.kwargs == {"persist": False} for call in remove.await_args_list)
+        assert fetch.await_count == 4
+        boundaries = [call.kwargs["after_id"] for call in fetch.await_args_list]
+        assert boundaries == sorted(set(boundaries))
+        assert all(
+            call.kwargs["limit"] == DOCUMENT_DELETE_BATCH_SIZE
+            for call in fetch.await_args_list
+        )
+        assert all(call.kwargs["offset"] is None for call in fetch.await_args_list)
+        assert [len(call.args[1]) for call in fts.await_args_list] == [500, 500, 103]
+    assert await vec.count_documents() == 1
+    assert vec.embedding_storage.index.ntotal == 1
+    assert faiss.read_index(vec.index_store_path).ntotal == 1
+    assert await db.count_documents_by_kb("kb") == 0
+    assert await vec.document_storage.search_sparse(["alpha"], limit=10) == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stage", ["vectors", "fts"])
+async def test_later_cleanup_batch_failure_remains_retryable(stores, stage):
+    db, vec, helper = stores
+    await vec.insert_batch(
+        ["bulk alpha"] * 501, [{"kb_id": "kb", "kb_doc_id": "a"}] * 501
+    )
+    before = Path(vec.index_store_path).read_bytes()
+    calls = 0
+    original = (
+        vec.embedding_storage.delete
+        if stage == "vectors"
+        else vec.document_storage._delete_fts_rows_batch
+    )
+
+    async def fail_second(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise RuntimeError("second batch failure")
+        return await original(*args, **kwargs)
+
+    storage = vec.embedding_storage if stage == "vectors" else vec.document_storage
+    method = "delete" if stage == "vectors" else "_delete_fts_rows_batch"
+    with (
+        patch.object(storage, method, fail_second),
+        pytest.raises(RuntimeError, match="second batch failure"),
+    ):
+        await helper.delete_documents(["a", "b"])
+    assert calls == 2
+    assert await db.count_documents_by_kb("kb") == 2
+    assert len(await db.list_media_by_doc("a")) == 1
+    assert await vec.count_documents() == 505
+    if stage == "vectors":
+        assert Path(vec.index_store_path).read_bytes() == before
+    else:
+        assert faiss.read_index(vec.index_store_path).ntotal == 1
+        assert await vec.document_storage.search_sparse(["alpha"], limit=10)
     with patch.object(
         vec.embedding_storage, "save_index", wraps=vec.embedding_storage.save_index
     ) as save:
         assert await helper.delete_documents(["a", "b"]) == 2
         save.assert_awaited_once()
     assert await vec.count_documents() == 1
+    assert faiss.read_index(vec.index_store_path).ntotal == 1
     assert await vec.document_storage.search_sparse(["alpha"], limit=10) == []
 
 
@@ -322,7 +403,10 @@ async def test_retry_recovers_chunks_left_by_legacy_metadata_first_deletion(stor
 
 @pytest.mark.asyncio
 async def test_statistics_failure_is_retryable_after_content_cleanup(stores):
-    db, _, helper = stores
+    db, vec, helper = stores
+    await db.update_kb_stats(kb_id="kb", vec_db=vec)
+    kb = await db.get_kb_by_id("kb")
+    assert (kb.doc_count, kb.chunk_count) == (2, 3)
     with (
         patch.object(
             db, "update_kb_stats", AsyncMock(side_effect=RuntimeError("stats failure"))
@@ -330,7 +414,11 @@ async def test_statistics_failure_is_retryable_after_content_cleanup(stores):
         pytest.raises(RuntimeError),
     ):
         await helper.delete_documents(["a", "b"])
-    assert await helper.delete_documents(["a", "b"]) == 0
+    kb = await db.get_kb_by_id("kb")
+    assert (kb.doc_count, kb.chunk_count) == (2, 3)
+    with patch.object(db, "update_kb_stats", wraps=db.update_kb_stats) as stats:
+        assert await helper.delete_documents(["a", "b"]) == 0
+        stats.assert_awaited_once()
     async with db.get_db() as session:
         from sqlalchemy import select
         from sqlmodel import col

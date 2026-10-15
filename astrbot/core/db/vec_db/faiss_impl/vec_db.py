@@ -9,7 +9,7 @@ from astrbot.core.exceptions import KnowledgeBaseUploadError
 from astrbot.core.provider.provider import EmbeddingProvider, RerankProvider
 
 from ..base import BaseVecDB, Result
-from .document_storage import DocumentStorage
+from .document_storage import DOCUMENT_DELETE_BATCH_SIZE, DocumentStorage
 from .embedding_storage import EmbeddingStorage
 
 
@@ -352,13 +352,23 @@ class FaissVecDB(BaseVecDB):
         if self.document_storage.engine is None:
             raise RuntimeError("Document storage is not initialized")
         async with self._write_lock:
-            docs = await self.document_storage.get_documents(
-                metadata_filters=metadata_filters,
-                offset=None,
-                limit=None,
-            )
-            doc_ids: list[int] = [doc["id"] for doc in docs]
-            await self.embedding_storage.delete(doc_ids)
+            after_id = 0
+            while True:
+                docs = await self.document_storage.get_documents(
+                    metadata_filters=metadata_filters,
+                    offset=None,
+                    limit=DOCUMENT_DELETE_BATCH_SIZE,
+                    after_id=after_id,
+                )
+                if not docs:
+                    break
+                await self.embedding_storage.delete(
+                    [doc["id"] for doc in docs], persist=False
+                )
+                after_id = docs[-1]["id"]
+                del docs
+            # Keep chunk metadata intact until all vector removals are persisted.
+            await self.embedding_storage.save_index()
             await self.document_storage.delete_documents(
                 metadata_filters=metadata_filters
             )

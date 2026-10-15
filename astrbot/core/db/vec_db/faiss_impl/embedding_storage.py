@@ -176,11 +176,12 @@ class EmbeddingStorage:
         distances, indices = self.index.search(vector.reshape(1, -1), k)
         return distances, indices
 
-    async def delete(self, ids: list[int]) -> None:
-        """Remove vectors and persist once; missing IDs are harmless.
+    async def delete(self, ids: list[int], *, persist: bool = True) -> None:
+        """Remove vectors, optionally deferring persistence for a batch.
 
         Args:
             ids: Internal vector IDs to remove.
+            persist: Save immediately unless the caller will save the whole batch.
 
         Raises:
             RuntimeError: FAISS cannot remove the requested IDs.
@@ -188,7 +189,8 @@ class EmbeddingStorage:
         """
         assert self.index is not None, "FAISS index is not initialized."
         self.index.remove_ids(np.array(ids, dtype=np.int64))
-        await self.save_index()
+        if persist:
+            await self.save_index()
 
     async def save_index(self) -> None:
         """保存索引（兼容含非 ASCII 字符的 Windows 路径）"""
