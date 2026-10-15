@@ -351,6 +351,10 @@ export type KnowledgeBaseRequest = {
     top_m_final?: number;
 };
 
+export type KnowledgeDocumentBatchDeleteRequest = {
+    document_ids: Array<(string)>;
+};
+
 export type KnowledgeDocumentImportRequest = {
     paths: Array<(string)>;
     parser?: string;
@@ -2978,6 +2982,17 @@ export type ImportKnowledgeDocumentFromUrlData = {
 export type ImportKnowledgeDocumentFromUrlResponse = (SuccessEnvelope);
 
 export type ImportKnowledgeDocumentFromUrlError = unknown;
+
+export type DeleteKnowledgeDocumentsData = {
+    body: KnowledgeDocumentBatchDeleteRequest;
+    path: {
+        kb_id: string;
+    };
+};
+
+export type DeleteKnowledgeDocumentsResponse = (SuccessEnvelope);
+
+export type DeleteKnowledgeDocumentsError = unknown;
 
 export type GetKnowledgeDocumentData = {
     path: {

@@ -47,7 +47,12 @@
         "uploadSuccess": "Файл успешно загружен",
         "uploadFailed": "Ошибка загрузки",
         "deleteSuccess": "Файл удален",
-        "deleteFailed": "Ошибка удаления"
+        "deleteFailed": "Ошибка удаления",
+    "batchDelete": "Массовое удаление",
+    "batchDeleteTitle": "Подтвердите массовое удаление",
+    "batchDeleteConfirm": "Удалить выбранные документы ({count})?",
+    "batchDeleteSuccess": "Удалено документов: {count}",
+    "batchDeleteFailed": "Удаление не завершено."
     },
     "upload": {
         "title": "Добавление контента",

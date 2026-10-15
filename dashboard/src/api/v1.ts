@@ -1535,6 +1535,14 @@ export const knowledgeApi = {
       }),
     );
   },
+  deleteDocuments(kbId: string, documentIds: string[]) {
+    return typed<OpenConfig>(
+      openApiV1.deleteKnowledgeDocuments({
+        path: { kb_id: kbId },
+        body: { document_ids: documentIds },
+      }),
+    );
+  },
   deleteDocument(kbId: string, documentId: string) {
     return typed<OpenConfig>(
       openApiV1.deleteKnowledgeDocument({

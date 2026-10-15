@@ -47,7 +47,12 @@
     "uploadSuccess": "Document uploaded successfully",
     "uploadFailed": "Failed to upload document",
     "deleteSuccess": "Document deleted successfully",
-    "deleteFailed": "Failed to delete document"
+    "deleteFailed": "Failed to delete document",
+    "batchDelete": "Batch delete",
+    "batchDeleteTitle": "Confirm batch deletion",
+    "batchDeleteConfirm": "Delete the {count} selected documents?",
+    "batchDeleteSuccess": "Deleted {count} documents",
+    "batchDeleteFailed": "Deletion did not complete."
   },
   "upload": {
     "title": "Upload Document",

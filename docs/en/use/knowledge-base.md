@@ -140,6 +140,7 @@ Under `Custom Rules`, assign knowledge bases and a retrieval count to a specific
 - **Update material**: Delete the outdated document and upload its replacement so contradictory versions are not retrieved together. Keep copies of the originals.
 - **Tune retrieval**: Under `Settings`, adjust dense and sparse retrieval counts or select a rerank provider. Dense retrieval focuses on semantic similarity; sparse retrieval focuses on word matching.
 - **Rename carefully**: Profiles select knowledge bases by name, so update affected profiles after renaming one.
+- **Delete multiple documents**: In `Documents`, select individual documents or use the header checkbox to select the current page, then click `Batch delete` and confirm. Changing the page, page size, or search clears the selection; uploading documents cannot be selected. If deletion does not complete, an error is shown, the list and counts are refreshed, and the selection is cleared. Check the refreshed list for remaining documents.
 - **Delete carefully**: Deleting a document removes its chunks. Deleting a knowledge base removes its documents and index. These operations cannot be undone; keep backups first.
 
 ## Troubleshooting

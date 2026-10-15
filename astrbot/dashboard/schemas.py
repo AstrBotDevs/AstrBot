@@ -282,6 +282,12 @@ class KnowledgeBaseCreateRequest(KnowledgeBaseRequest):
     )
 
 
+class KnowledgeDocumentBatchDeleteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    document_ids: list[str] = Field(min_length=1, max_length=500)
+
+
 class KnowledgeBaseImportRequest(OpenModel):
     documents: list[dict[str, Any]] | None = None
     batch_size: int | None = None

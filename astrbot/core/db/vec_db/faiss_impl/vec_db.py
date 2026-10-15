@@ -1,3 +1,4 @@
+import asyncio
 import time
 import uuid
 
@@ -22,6 +23,7 @@ class FaissVecDB(BaseVecDB):
         embedding_provider: EmbeddingProvider,
         rerank_provider: RerankProvider | None = None,
     ) -> None:
+        self._write_lock = asyncio.Lock()
         self.doc_store_path = doc_store_path
         self.index_store_path = index_store_path
         self.embedding_provider = embedding_provider
@@ -49,12 +51,15 @@ class FaissVecDB(BaseVecDB):
         vector = await self.embedding_provider.get_embedding(content)
         vector = np.array(vector, dtype=np.float32)
 
-        # 使用 DocumentStorage 的方法插入文档
-        int_id = await self.document_storage.insert_document(str_id, content, metadata)
+        async with self._write_lock:
+            # 使用 DocumentStorage 的方法插入文档
+            int_id = await self.document_storage.insert_document(
+                str_id, content, metadata
+            )
 
-        # 插入向量到 FAISS
-        await self.embedding_storage.insert(vector, int_id)
-        return int_id
+            # 插入向量到 FAISS
+            await self.embedding_storage.insert(vector, int_id)
+            return int_id
 
     async def insert_batch(
         self,
@@ -186,31 +191,32 @@ class FaissVecDB(BaseVecDB):
                 },
             )
 
-        # DocumentStorage and FAISS cannot share a transaction. If FAISS
-        # write fails after documents are committed, compensate by deleting.
-        int_ids = await self.document_storage.insert_documents_batch(
-            ids,
-            contents,
-            metadatas,
-        )
-        try:
-            if len(int_ids) != content_count:
-                raise KnowledgeBaseUploadError(
-                    stage="storage",
-                    user_message=(
-                        f"存储失败：写入文档索引后返回的内部 ID 数量与文本分块数量不一致"
-                        f"（期望 {content_count}，实际 {len(int_ids)}）。"
-                    ),
-                    details={
-                        "expected_contents": content_count,
-                        "actual_int_ids": len(int_ids),
-                    },
-                )
-            await self.embedding_storage.insert_batch(vectors_array, int_ids)
-        except Exception:
-            await self._rollback_partial_insert(ids=ids, int_ids=int_ids)
-            raise
-        return int_ids
+        async with self._write_lock:
+            # DocumentStorage and FAISS cannot share a transaction. If FAISS
+            # write fails after documents are committed, compensate by deleting.
+            int_ids = await self.document_storage.insert_documents_batch(
+                ids,
+                contents,
+                metadatas,
+            )
+            try:
+                if len(int_ids) != content_count:
+                    raise KnowledgeBaseUploadError(
+                        stage="storage",
+                        user_message=(
+                            f"存储失败：写入文档索引后返回的内部 ID 数量与文本分块数量不一致"
+                            f"（期望 {content_count}，实际 {len(int_ids)}）。"
+                        ),
+                        details={
+                            "expected_contents": content_count,
+                            "actual_int_ids": len(int_ids),
+                        },
+                    )
+                await self.embedding_storage.insert_batch(vectors_array, int_ids)
+            except Exception:
+                await self._rollback_partial_insert(ids=ids, int_ids=int_ids)
+                raise
+            return int_ids
 
     async def retrieve(
         self,
@@ -312,15 +318,12 @@ class FaissVecDB(BaseVecDB):
 
     async def delete(self, doc_id: str) -> None:
         """删除一条文档块（chunk）"""
-        # 获得对应的 int id
-        result = await self.document_storage.get_document_by_doc_id(doc_id)
-        int_id = result["id"] if result else None
-        if int_id is None:
-            return
-
-        # 使用 DocumentStorage 的删除方法
-        await self.document_storage.delete_document_by_doc_id(doc_id)
-        await self.embedding_storage.delete([int_id])
+        async with self._write_lock:
+            result = await self.document_storage.get_document_by_doc_id(doc_id)
+            if result is None:
+                return
+            await self.embedding_storage.delete([result["id"]])
+            await self.document_storage.delete_document_by_doc_id(doc_id)
 
     async def close(self) -> None:
         await self.document_storage.close()
@@ -338,12 +341,24 @@ class FaissVecDB(BaseVecDB):
         return count
 
     async def delete_documents(self, metadata_filters: dict) -> None:
-        """根据元数据过滤器删除文档"""
-        docs = await self.document_storage.get_documents(
-            metadata_filters=metadata_filters,
-            offset=None,
-            limit=None,
-        )
-        doc_ids: list[int] = [doc["id"] for doc in docs]
-        await self.embedding_storage.delete(doc_ids)
-        await self.document_storage.delete_documents(metadata_filters=metadata_filters)
+        """Delete matching chunks and vectors in one serialized write.
+
+        Args:
+            metadata_filters: Scalar equality or list membership filters.
+
+        Raises:
+            RuntimeError: Document storage is not initialized or deletion fails.
+        """
+        if self.document_storage.engine is None:
+            raise RuntimeError("Document storage is not initialized")
+        async with self._write_lock:
+            docs = await self.document_storage.get_documents(
+                metadata_filters=metadata_filters,
+                offset=None,
+                limit=None,
+            )
+            doc_ids: list[int] = [doc["id"] for doc in docs]
+            await self.embedding_storage.delete(doc_ids)
+            await self.document_storage.delete_documents(
+                metadata_filters=metadata_filters
+            )

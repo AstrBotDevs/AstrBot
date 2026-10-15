@@ -320,18 +320,57 @@ class KBSQLiteDatabase:
         return metadata_map
 
     async def delete_document_by_id(self, doc_id: str, vec_db: "FaissVecDB") -> None:
-        """删除单个文档及其相关数据（包括多媒体记录）"""
+        """Delete one document through the batch cleanup path.
+
+        Args:
+            doc_id: Document ID.
+            vec_db: Vector store belonging to the document's knowledge base.
+        """
+        await self.delete_documents_by_ids([doc_id], vec_db)
+
+    async def delete_documents_by_ids(
+        self, doc_ids: list[str], vec_db: "FaissVecDB", kb_id: str | None = None
+    ) -> int:
+        """Delete document content before removing its retryable metadata.
+
+        Args:
+            doc_ids: Document IDs to delete; duplicates are ignored.
+            vec_db: Vector store for the target knowledge base.
+            kb_id: Optional knowledge base boundary for ownership validation.
+
+        Returns:
+            Number of existing document records removed.
+
+        Raises:
+            ValueError: An existing document belongs to another knowledge base.
+        """
+        doc_ids = list(dict.fromkeys(doc_ids))
+        if not doc_ids:
+            return 0
+        async with self.get_db() as session:
+            result = await session.execute(
+                select(KBDocument).where(col(KBDocument.doc_id).in_(doc_ids))
+            )
+            documents = result.scalars().all()
+            if kb_id is not None and any(doc.kb_id != kb_id for doc in documents):
+                raise ValueError("所选文档不属于当前知识库")
+        filters: dict = {"kb_doc_id": doc_ids}
+        if kb_id is not None:
+            filters["kb_id"] = kb_id
+        # Missing metadata may come from an earlier failed deletion. Still
+        # clean matching chunks so retrying the same IDs remains effective.
+        await vec_db.delete_documents(metadata_filters=filters)
         async with self.get_db() as session, session.begin():
-            # 删除多媒体记录
-            delete_media_stmt = delete(KBMedia).where(col(KBMedia.doc_id) == doc_id)
-            await session.execute(delete_media_stmt)
-
-            # 删除文档记录
-            delete_stmt = delete(KBDocument).where(col(KBDocument.doc_id) == doc_id)
-            await session.execute(delete_stmt)
-
-        # 在 vec db 中删除相关向量
-        await vec_db.delete_documents(metadata_filters={"kb_doc_id": doc_id})
+            media_delete = delete(KBMedia).where(col(KBMedia.doc_id).in_(doc_ids))
+            document_delete = delete(KBDocument).where(
+                col(KBDocument.doc_id).in_(doc_ids)
+            )
+            if kb_id is not None:
+                media_delete = media_delete.where(col(KBMedia.kb_id) == kb_id)
+                document_delete = document_delete.where(col(KBDocument.kb_id) == kb_id)
+            await session.execute(media_delete)
+            result = await session.execute(document_delete)
+            return result.rowcount
 
     # ===== 多媒体查询 =====
 

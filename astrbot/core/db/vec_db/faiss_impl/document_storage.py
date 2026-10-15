@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 
-from sqlalchemy import Column, DateTime, Text, bindparam
+from sqlalchemy import Column, DateTime, Text, bindparam, delete
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import Field, MetaData, SQLModel, col, func, select, text
@@ -258,9 +258,10 @@ class DocumentStorage:
             query = select(Document)
 
             for key, val in metadata_filters.items():
+                field = func.json_extract(Document.metadata_, f"$.{key}")
                 query = query.where(
-                    text(f"json_extract(metadata, '$.{key}') = :filter_{key}"),
-                ).params(**{f"filter_{key}": val})
+                    field.in_(val) if isinstance(val, list) else field == val
+                )
 
             if ids is not None and len(ids) > 0:
                 valid_ids = [int(i) for i in ids if i != -1]
@@ -424,16 +425,20 @@ class DocumentStorage:
             query = select(Document)
 
             for key, val in metadata_filters.items():
+                field = func.json_extract(Document.metadata_, f"$.{key}")
                 query = query.where(
-                    text(f"json_extract(metadata, '$.{key}') = :filter_{key}"),
-                ).params(**{f"filter_{key}": val})
+                    field.in_(val) if isinstance(val, list) else field == val
+                )
 
             result = await session.execute(query)
             documents = result.scalars().all()
 
             await self._delete_fts_rows_batch(session, documents)
-            for doc in documents:
-                await session.delete(doc)
+            await session.execute(
+                delete(Document)
+                .where(col(Document.id).in_(query.with_only_columns(Document.id)))
+                .execution_options(synchronize_session=False)
+            )
 
     async def count_documents(self, metadata_filters: dict | None = None) -> int:
         """Count documents in the database.
@@ -734,13 +739,16 @@ class DocumentStorage:
         if not rowids:
             return set()
 
-        result = await session.execute(
-            text(
-                f"SELECT rowid FROM {FTS_TABLE_NAME} WHERE rowid IN :rowids"
-            ).bindparams(bindparam("rowids", expanding=True)),
-            {"rowids": rowids},
-        )
-        return {int(row[0]) for row in result.fetchall()}
+        existing: set[int] = set()
+        for offset in range(0, len(rowids), 900):
+            result = await session.execute(
+                text(
+                    f"SELECT rowid FROM {FTS_TABLE_NAME} WHERE rowid IN :rowids"
+                ).bindparams(bindparam("rowids", expanding=True)),
+                {"rowids": rowids[offset : offset + 900]},
+            )
+            existing.update(int(row[0]) for row in result.fetchall())
+        return existing
 
     async def get_user_ids(self) -> list[str]:
         """Retrieve all user IDs from the documents table.

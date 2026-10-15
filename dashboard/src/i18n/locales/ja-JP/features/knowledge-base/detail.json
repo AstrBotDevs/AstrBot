@@ -47,7 +47,12 @@
     "uploadSuccess": "ドキュメントをアップロードしました",
     "uploadFailed": "ドキュメントのアップロードに失敗しました",
     "deleteSuccess": "ドキュメントを削除しました",
-    "deleteFailed": "ドキュメントの削除に失敗しました"
+    "deleteFailed": "ドキュメントの削除に失敗しました",
+    "batchDelete": "一括削除",
+    "batchDeleteTitle": "一括削除の確認",
+    "batchDeleteConfirm": "選択した {count} 件の文書を削除しますか？",
+    "batchDeleteSuccess": "{count} 件の文書を削除しました",
+    "batchDeleteFailed": "削除が完了しませんでした。"
   },
   "upload": {
     "title": "ドキュメントをアップロード",

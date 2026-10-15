@@ -10,6 +10,7 @@ These tests use lazy imports and mocks to avoid circular import issues
 in the astrbot core module chain.
 """
 
+import asyncio
 import sys
 import types
 from pathlib import Path
@@ -237,6 +238,7 @@ async def test_ensure_vec_db_clears_stale_init_error(
     mock_provider_manager.get_provider_by_id.return_value = mock_embedding_provider
 
     helper = KBHelper.__new__(KBHelper)
+    helper._vec_db_init_lock = asyncio.Lock()
     helper.kb = mock_knowledge_base
     helper.prov_mgr = mock_provider_manager
     helper.kb_db = mock_kb_db
@@ -282,6 +284,7 @@ async def test_ensure_vec_db_sets_init_error_on_failure(
     mock_provider_manager.get_provider_by_id.return_value = None
 
     helper = KBHelper.__new__(KBHelper)
+    helper._vec_db_init_lock = asyncio.Lock()
     helper.kb = mock_knowledge_base
     helper.prov_mgr = mock_provider_manager
     helper.kb_db = mock_kb_db

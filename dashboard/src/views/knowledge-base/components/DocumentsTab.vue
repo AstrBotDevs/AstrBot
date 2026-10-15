@@ -2,16 +2,24 @@
   <div class="documents-tab">
     <!-- 操作栏 -->
     <div class="action-bar mb-4">
-      <v-btn prepend-icon="mdi-upload" color="primary" variant="outlined" @click="showUploadDialog = true">
-        {{ t('documents.upload') }}
-      </v-btn>
+      <div class="document-actions">
+        <v-btn prepend-icon="mdi-upload" color="primary" variant="outlined" @click="showUploadDialog = true">
+          {{ t('documents.upload') }}
+        </v-btn>
+        <v-btn v-if="selectedDocumentIds.length > 0" prepend-icon="mdi-delete" color="error"
+          variant="tonal" :disabled="loading || deleting || batchDeleting"
+          @click="confirmBatchDelete">
+          {{ t('documents.batchDelete') }} ({{ selectedDocumentIds.length }})
+        </v-btn>
+      </div>
       <v-text-field v-model="searchQuery" prepend-inner-icon="mdi-magnify" :placeholder="'搜索文档...'" variant="outlined"
         density="compact" hide-details clearable style="max-width: 300px" />
     </div>
 
     <!-- 文档列表 -->
     <v-card variant="outlined">
-      <v-data-table-server :headers="headers" :items="documents" :loading="loading"
+      <v-data-table-server v-model="selectedDocumentIds" item-value="doc_id" item-selectable="selectable"
+        show-select select-strategy="page" :headers="headers" :items="selectableDocuments" :loading="loading"
         :items-per-page-options="[10, 25, 50, 100]"
         :items-per-page="pageSize" :page="page" :items-length="total"
         @update:page="onPageChange" @update:items-per-page="onItemsPerPageChange">
@@ -47,7 +55,8 @@
 
         <template #item.actions="{ item }">
           <v-btn icon="mdi-eye" variant="text" size="small" color="info" @click="viewDocument(item)" />
-          <v-btn icon="mdi-delete" variant="text" size="small" color="error" @click="confirmDelete(item)" />
+          <v-btn icon="mdi-delete" variant="text" size="small" color="error"
+            :disabled="item.uploading || loading || deleting || batchDeleting" @click="confirmDelete(item)" />
         </template>
 
         <template #no-data>
@@ -226,6 +235,32 @@
       </v-card>
     </v-dialog>
 
+    <v-dialog v-model="showBatchDeleteDialog" max-width="520px" :persistent="batchDeleting">
+      <v-card>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ t('documents.batchDeleteTitle') }}</v-card-title>
+        <v-card-text class="pa-6">
+          <p>{{ t('documents.batchDeleteConfirm', { count: batchDeleteTargets.length }) }}</p>
+          <v-list density="compact">
+            <v-list-item v-for="doc in batchDeleteTargets" :key="doc.doc_id"
+              :title="doc.doc_name" />
+          </v-list>
+          <v-alert type="error" variant="tonal" density="compact">
+            {{ t('documents.deleteWarning') }}
+          </v-alert>
+        </v-card-text>
+        <v-card-actions class="pa-4">
+          <v-spacer />
+          <v-btn variant="text" :disabled="batchDeleting" @click="showBatchDeleteDialog = false">
+            {{ t('upload.cancel') }}
+          </v-btn>
+          <v-btn color="error" variant="tonal" :loading="batchDeleting"
+            :disabled="batchDeleteTargets.length === 0" @click="deleteSelectedDocuments">
+            {{ t('documents.delete') }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- 消息提示 -->
     <v-snackbar v-model="snackbar.show" :color="snackbar.color">
       {{ snackbar.text }}
@@ -242,10 +277,12 @@ import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { configProfileApi, knowledgeApi, providerApi } from '@/api/v1'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
+import { useToast } from '@/utils/toast'
 
 const { tm: t } = useModuleI18n('features/knowledge-base/detail')
 const { locale } = useI18n()
 const router = useRouter()
+const toast = useToast()
 
 const props = defineProps<{
   kbId: string
@@ -259,6 +296,14 @@ const loading = ref(false)
 const uploading = ref(false)
 const deleting = ref(false)
 const documents = ref<any[]>([])
+const selectedDocumentIds = ref<string[]>([])
+const batchDeleting = ref(false)
+const showBatchDeleteDialog = ref(false)
+const batchDeleteTargets = ref<{ doc_id: string; doc_name: string }[]>([])
+const selectableDocuments = computed(() => documents.value.map(doc => ({
+  ...doc,
+  selectable: !doc.uploading && !loading.value && !deleting.value && !batchDeleting.value,
+})))
 const page = ref(1)
 const pageSize = ref(10)
 const total = ref(0)
@@ -358,6 +403,8 @@ const loadDocuments = async () => {
       const data = response.data.data
       documents.value = data.items || []
       total.value = data.total || 0
+      selectedDocumentIds.value = selectedDocumentIds.value.filter(id =>
+        documents.value.some(doc => doc.doc_id === id && !doc.uploading))
     }
   } catch (error) {
     if (requestId !== documentsRequestId) return
@@ -372,11 +419,17 @@ const loadDocuments = async () => {
 
 // Handle pagination
 const onPageChange = (newPage: number) => {
+  if (batchDeleting.value) return
+  selectedDocumentIds.value = []
+  documents.value = []
   page.value = newPage
   loadDocuments()
 }
 
 const onItemsPerPageChange = (newSize: number) => {
+  if (batchDeleting.value) return
+  selectedDocumentIds.value = []
+  documents.value = []
   pageSize.value = newSize
   page.value = 1
   loadDocuments()
@@ -692,6 +745,52 @@ const viewDocument = (doc: any) => {
   })
 }
 
+const confirmBatchDelete = () => {
+  if (loading.value || deleting.value || batchDeleting.value) return
+  batchDeleteTargets.value = documents.value
+    .filter(doc => !doc.uploading && selectedDocumentIds.value.includes(doc.doc_id))
+    .map(doc => ({ doc_id: doc.doc_id, doc_name: doc.doc_name }))
+  if (batchDeleteTargets.value.length === 0) return
+  showBatchDeleteDialog.value = true
+}
+
+const deleteSelectedDocuments = async () => {
+  if (batchDeleting.value || batchDeleteTargets.value.length === 0) return
+  const kbId = props.kbId
+  const targets = [...batchDeleteTargets.value]
+  batchDeleting.value = true
+  try {
+    const response = await knowledgeApi.deleteDocuments(kbId, targets.map(doc => doc.doc_id))
+    if (props.kbId !== kbId) return
+    if (response.data.status !== 'ok') {
+      toast.error(response.data.message || t('documents.batchDeleteFailed'))
+    } else {
+      selectedDocumentIds.value = []
+      batchDeleteTargets.value = []
+      showBatchDeleteDialog.value = false
+      toast.success(t('documents.batchDeleteSuccess', { count: targets.length }))
+    }
+  } catch (error) {
+    console.error('Failed to delete documents:', error)
+    if (props.kbId === kbId) {
+      toast.error(t('documents.batchDeleteFailed'))
+    }
+  } finally {
+    if (props.kbId === kbId) {
+      // A failed response can follow a partial cleanup or a lost response.
+      // Refresh the list and statistics to reflect any completed cleanup.
+      await loadDocuments()
+      const lastPage = Math.max(1, Math.ceil(total.value / pageSize.value))
+      if (page.value > lastPage) {
+        page.value = lastPage
+        await loadDocuments()
+      }
+      emit('refresh')
+    }
+    batchDeleting.value = false
+  }
+}
+
 // 确认删除
 const confirmDelete = (doc: any) => {
   deleteTarget.value = doc
@@ -707,7 +806,7 @@ const deleteDocument = async () => {
     const response = await knowledgeApi.deleteDocument(props.kbId, deleteTarget.value.doc_id)
 
     if (response.data.status === 'ok') {
-      showSnackbar(t('documents.deleteSuccess'))
+      toast.success(t('documents.deleteSuccess'))
       showDeleteDialog.value = false
       // If current page becomes empty after delete and is not the first page, go back one page
       if (documents.value.length === 1 && page.value > 1) {
@@ -716,12 +815,16 @@ const deleteDocument = async () => {
       await loadDocuments()
       emit('refresh')
     } else {
-      showSnackbar(response.data.message || t('documents.deleteFailed'), 'error')
+      toast.error(response.data.message || t('documents.deleteFailed'))
     }
   } catch (error) {
     console.error('Failed to delete document:', error)
-    showSnackbar(t('documents.deleteFailed'), 'error')
+    toast.error(t('documents.deleteFailed'))
   } finally {
+    if (showDeleteDialog.value) {
+      await loadDocuments()
+      emit('refresh')
+    }
     deleting.value = false
   }
 }
@@ -813,10 +916,23 @@ const onTavilyKeySet = () => {
 
 // Reset to page 1 and reload when search text changes
 watch(searchQuery, (_value, _oldValue, onCleanup) => {
+  selectedDocumentIds.value = []
+  documents.value = []
   page.value = 1
+  loading.value = true
   documentsRequestId += 1
   const timeoutId = window.setTimeout(loadDocuments, 300)
   onCleanup(() => window.clearTimeout(timeoutId))
+})
+
+watch(() => props.kbId, () => {
+  selectedDocumentIds.value = []
+  documents.value = []
+  batchDeleteTargets.value = []
+  showBatchDeleteDialog.value = false
+  showDeleteDialog.value = false
+  page.value = 1
+  loadDocuments()
 })
 
 onMounted(() => {
@@ -852,6 +968,12 @@ onUnmounted(() => {
   align-items: center;
   gap: 16px;
   flex-wrap: wrap;
+}
+
+.document-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
 .upload-dropzone {

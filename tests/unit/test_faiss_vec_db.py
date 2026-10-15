@@ -28,6 +28,7 @@ class DelayedEmbeddingProvider(EmbeddingProvider):
 @pytest.mark.asyncio
 async def test_insert_batch_skips_empty_contents() -> None:
     vec_db = FaissVecDB.__new__(FaissVecDB)
+    vec_db._write_lock = asyncio.Lock()
     vec_db.embedding_provider = AsyncMock()
     vec_db.document_storage = AsyncMock()
     vec_db.embedding_storage = AsyncMock()
@@ -45,6 +46,7 @@ async def test_insert_batch_raises_friendly_error_for_embedding_count_mismatch()
     None
 ):
     vec_db = FaissVecDB.__new__(FaissVecDB)
+    vec_db._write_lock = asyncio.Lock()
     vec_db.embedding_provider = AsyncMock()
     vec_db.embedding_provider.get_embeddings_batch.return_value = [[0.1, 0.2]]
     vec_db.document_storage = AsyncMock()
@@ -81,6 +83,7 @@ async def test_insert_batch_uses_embedding_contents_without_changing_storage(
     expected_embedding_contents: list[str],
 ) -> None:
     vec_db = FaissVecDB.__new__(FaissVecDB)
+    vec_db._write_lock = asyncio.Lock()
     vec_db.embedding_provider = AsyncMock()
     vec_db.embedding_provider.get_embeddings_batch.return_value = [
         [0.1, 0.2],
@@ -116,6 +119,7 @@ async def test_insert_batch_uses_embedding_contents_without_changing_storage(
 @pytest.mark.asyncio
 async def test_insert_batch_rejects_embedding_content_count_mismatch() -> None:
     vec_db = FaissVecDB.__new__(FaissVecDB)
+    vec_db._write_lock = asyncio.Lock()
     vec_db.embedding_provider = AsyncMock()
     vec_db.document_storage = AsyncMock()
     vec_db.embedding_storage = AsyncMock()
