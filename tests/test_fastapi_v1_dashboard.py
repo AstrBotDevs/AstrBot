@@ -3215,19 +3215,24 @@ async def test_plugin_service_update_github_source_uses_plugin_repo(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("batch", [False, True])
-async def test_v1_plugin_update_reports_reload_failure(
+@pytest.mark.parametrize(
+    ("batch", "reload_success"), [(False, False), (True, False), (False, True)]
+)
+async def test_v1_plugin_update_reports_reload_result(
     asgi_app: FastAPI,
     asgi_client: httpx.AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
     batch: bool,
+    reload_success: bool,
 ):
     service = asgi_app.state.services.plugins
     plugin = SimpleNamespace(reserved=False, root_dir_name=None)
     manager = SimpleNamespace(
         context=SimpleNamespace(get_registered_star=lambda name: plugin),
         _updater=SimpleNamespace(update=AsyncMock()),
-        reload=AsyncMock(return_value=(False, "initialize failed")),
+        reload=AsyncMock(
+            return_value=(reload_success, None if reload_success else "initialize failed")
+        ),
     )
     manager.update_plugin = MethodType(PluginManager.update_plugin, manager)
     monkeypatch.setattr(service, "plugin_manager", manager)
@@ -3244,9 +3249,12 @@ async def test_v1_plugin_update_reports_reload_failure(
 
     body = response.json()
     result = body["data"]["results"][0] if batch else body
-    assert result["status"] == "error"
+    assert result["status"] == ("ok" if reload_success else "error")
     manager.reload.assert_awaited_once_with("demo")
-    refresh.assert_not_awaited()
+    if reload_success:
+        refresh.assert_awaited_once_with("demo", {})
+    else:
+        refresh.assert_not_awaited()
 
 
 @pytest.mark.asyncio
