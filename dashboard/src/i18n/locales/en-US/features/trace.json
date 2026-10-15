@@ -86,6 +86,9 @@
     "spansHint": "Actual spans including the message root, excluding events. Collapsing does not change the count."
   },
   "chips": {
+    "provider": "Provider: {id}",
+    "persona": "Persona: {id}",
+    "toolCalls": "{count} tool calls",
     "executionMode": "Execution mode: {name}",
     "systemSender": "Sent by system",
     "pluginSender": "Sent by plugin: {name}",

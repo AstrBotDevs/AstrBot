@@ -1,5 +1,7 @@
 # Unreleased
 
+- Add model and persona ID chips to Agent execution headings, show provider IDs on model hover, and count actual tool calls separately for each Agent while folded or expanded.
+
 - Record successful send_message_to_user deliveries as response events on the originating trace, including message-chain outlines and destination UMO. Do not record failed sends as delivered responses; leave cron Agent instrumentation unchanged.
 
 - Present trace-detail UMO and sender on separate icon-and-value rows instead of a dot-separated line, preserving UMO alias tooltips.

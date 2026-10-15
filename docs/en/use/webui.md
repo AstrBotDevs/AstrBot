@@ -172,6 +172,8 @@ The toolbar contains search, fullscreen, font-size controls, and `Install Pip pa
 
 ### Trace
 
+The Agent execution heading shows chips for recorded model and persona IDs, plus the number of actual tool calls when nonzero. Hover over a model chip to see its provider ID. These remain visible when the execution chain is collapsed; nested and parallel Agents are counted separately, and unavailable metadata is omitted.
+
 Below the detail title, UMO and sender appear on separate icon-and-value rows. UMO aliases retain their hover tooltip showing the full identifier.
 
 Trace text and tooltips use the system UI font rather than Outfit. Running status is blue; completed and error statuses remain green and red.

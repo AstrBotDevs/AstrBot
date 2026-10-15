@@ -64,6 +64,31 @@ function handler(key, category = "listener", fields = {}) {
   };
 }
 
+test("Agent title metadata remains visible when folded and stays isolated per Agent", (t) => {
+  const state = setup(t, [
+    { key: "outer", action: "agent_start", operation_span_id: "outer", parent_span_id: "root", fields: {} },
+    { key: "prepare", action: "astr_agent_prepare", owner_span_id: "outer", fields: { chat_provider: { id: "provider-a", model: "model-a" }, persona_id: "persona-a", tools: ["unused", "search"] } },
+    { key: "prepare-again", action: "astr_agent_prepare", owner_span_id: "outer", fields: { chat_provider: { id: "provider-a", model: "model-a" }, persona_id: "persona-a" } },
+    { key: "call", action: "agent_tool_call", operation_span_id: "tool", parent_span_id: "outer", fields: {} },
+    { key: "result", action: "agent_tool_result", owner_span_id: "tool", fields: {} },
+    { key: "inner", action: "agent_start", operation_span_id: "inner", parent_span_id: "outer", fields: {} },
+    { key: "inner-prepare", action: "astr_agent_prepare", owner_span_id: "inner", fields: { chat_provider: { id: "provider-b", model: "model-b" }, persona_id: "persona-b" } },
+    { key: "inner-tool", action: "agent_tool_call", operation_span_id: "inner-tool", parent_span_id: "inner", fields: {} },
+    { key: "parallel", action: "agent_start", operation_span_id: "parallel", parent_span_id: "root", fields: {} },
+  ]);
+  const outer = state.timelineRows.value.find((row) => row.agentId === "outer");
+  assert.equal(outer.expanded, false);
+  assert.deepEqual(JSON.parse(JSON.stringify(outer.agentInfo)), {
+    models: [{ id: "model-a", provider: "provider-a" }], personas: ["persona-a"], toolCalls: 1,
+  });
+  assert.equal(state.timelineRows.value.find((row) => row.agentId === "parallel").agentInfo, undefined);
+  state.expandedAgents.add("outer");
+  const inner = state.timelineRows.value.find((row) => row.agentId === "inner");
+  assert.equal(inner.agentInfo.models[0].id, "model-b");
+  assert.equal(inner.agentInfo.personas[0], "persona-b");
+  assert.equal(inner.agentInfo.toolCalls, 1);
+});
+
 test("collapse adjacent handlers by category without reordering separated records", (t) => {
   const state = setup(t, [
     { key: "received", action: "event_received", fields: { platform_id: "qq" } },

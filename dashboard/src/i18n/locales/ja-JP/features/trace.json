@@ -86,6 +86,9 @@
     "spansHint": "メッセージのルートを含む実際の Span 数。イベントは含まず、折りたたんでも変わりません。"
   },
   "chips": {
+    "provider": "プロバイダー: {id}",
+    "persona": "ペルソナ: {id}",
+    "toolCalls": "ツール呼び出し {count} 回",
     "executionMode": "実行方式: {name}",
     "systemSender": "システムから送信",
     "pluginSender": "プラグインから送信: {name}",

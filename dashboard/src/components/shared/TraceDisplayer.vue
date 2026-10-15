@@ -246,9 +246,26 @@ const timelineGroups = computed(() => {
 const timelineRows = computed(() => {
   const rows = [];
   const agentErrors = new Map();
+  const agentMetadata = new Map();
   for (const group of timelineGroups.value) {
     for (const id of group.ancestors) {
       agentErrors.set(id, (agentErrors.get(id) || 0) + group.records.filter((record) => record.fields.status === "error").length);
+    }
+    // Attribute metadata to the nearest Agent, including through plugin/tool spans.
+    const owner = group.ancestors.at(-1);
+    if (!owner) continue;
+    if (!agentMetadata.has(owner)) agentMetadata.set(owner, { models: [], personas: [], toolCalls: 0 });
+    const metadata = agentMetadata.get(owner);
+    for (const record of group.records) {
+      if (record.action === "astr_agent_prepare") {
+        const provider = record.fields.chat_provider;
+        if (provider?.model && !metadata.models.some((model) => model.id === provider.model && model.provider === provider.id)) {
+          metadata.models.push({ id: provider.model, provider: provider.id || "" });
+        }
+        const persona = record.fields.persona_id;
+        if (persona && !metadata.personas.includes(persona)) metadata.personas.push(persona);
+      }
+      if (record.action === "agent_tool_call") metadata.toolCalls += 1;
     }
   }
   for (const group of timelineGroups.value) {
@@ -258,7 +275,8 @@ const timelineRows = computed(() => {
     if (group.records.length === 1) {
       const agentId = group.agentId;
       rows.push({ key: group.key, record: group.records[0], category: group.category, depth,
-        agentId, expanded: agentId ? expandedAgents.has(agentId) : detailsExpanded,
+        agentId, agentInfo: agentId ? agentMetadata.get(agentId) : null,
+        expanded: agentId ? expandedAgents.has(agentId) : detailsExpanded,
         detailsExpanded, errors: agentId ? (agentErrors.get(agentId) || 0) + Number(group.records[0].fields.status === "error") : 0 });
       continue;
     }
@@ -1021,6 +1039,17 @@ onBeforeUnmount(() => {
                       : row.record.action === 'agent_start' ? tm('compact.agentExecution')
                       : row.record.action === 'event_received' ? tm('actions.eventReceived')
                       : recordLabel(row.record, Boolean(row.group)) }}</strong>
+                    <template v-if="row.agentInfo">
+                      <v-tooltip v-for="model in row.agentInfo.models" :key="model.id + ':' + model.provider" location="top" content-class="trace-tooltip">
+                        <template #activator="{ props }">
+                          <v-chip v-bind="props" class="timeline-metadata-chip" size="x-small" variant="tonal">{{ model.id }}</v-chip>
+                        </template>
+                        <div>{{ model.id }}</div>
+                        <div v-if="model.provider">{{ tm("chips.provider", { id: model.provider }) }}</div>
+                      </v-tooltip>
+                      <v-chip v-for="persona in row.agentInfo.personas" :key="persona" class="timeline-metadata-chip" size="x-small" variant="tonal" :title="tm('chips.persona', { id: persona })">{{ persona }}</v-chip>
+                      <v-chip v-if="row.agentInfo.toolCalls" size="x-small" variant="tonal">{{ tm("chips.toolCalls", { count: row.agentInfo.toolCalls }) }}</v-chip>
+                    </template>
                     <v-chip v-if="row.category" size="x-small" variant="tonal">{{ tm(`handlerCategories.${row.category}`) }}</v-chip>
                     <span v-if="row.group" class="timeline-group-count">{{ tm("groups.count", { count: row.group.records.length }) }}</span>
                     <span v-if="row.record.action === 'agent_start'" class="timeline-duration">{{ formatDuration(row.record.completed ? row.record.fields.duration_ms || 0 : Math.max(0, (clockNow - row.record.time) * 1000)) }}</span>
@@ -1108,6 +1137,7 @@ onBeforeUnmount(() => {
 .timeline-group-errors { color: rgb(var(--v-theme-error)); font-size: 11px; white-space: nowrap; }
 .timeline-group-summary { align-items: center; display: flex; flex-wrap: wrap; gap: 6px 10px; }
 .timeline-metadata-chip { max-width: 100%; vertical-align: middle; }
+.timeline-title .timeline-metadata-chip { max-width: 200px; }
 .timeline-metadata-chip :deep(.v-chip__content) { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .timeline-expansion-icon { color: var(--trace-muted); transition: transform 0.15s ease; }
 .timeline-expansion-icon.is-collapsed { transform: rotate(-90deg); }

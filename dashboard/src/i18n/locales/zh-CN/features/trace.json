@@ -86,6 +86,9 @@
     "spansHint": "实际 Span 数（含消息根 Span），不包含事件；折叠不影响计数。"
   },
   "chips": {
+    "provider": "提供商：{id}",
+    "persona": "人格：{id}",
+    "toolCalls": "{count} 次工具调用",
     "executionMode": "执行方式：{name}",
     "systemSender": "系统发送",
     "pluginSender": "插件发送：{name}",
