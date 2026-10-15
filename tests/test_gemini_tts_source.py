@@ -32,6 +32,7 @@ async def test_get_audio_writes_playable_wav(payload, tmp_path, monkeypatch):
             candidates=[SimpleNamespace(content=SimpleNamespace(parts=[part]))]
         )
 
+    await provider.client.aclose()
     provider.client = SimpleNamespace(
         models=SimpleNamespace(generate_content=fake_generate_content)
     )
