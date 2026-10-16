@@ -101,6 +101,16 @@
       </tbody>
     </v-table>
 
+    <v-alert v-for="role in executionBlockedRoles" :key="role" type="warning" variant="tonal" density="compact">
+      {{ tm('executionBlocked', {
+        role: tm(`roles.${role}`),
+        reason: isolationFailureReason,
+        scope: tm(`scopes.${policy(role).filesystem_scope}`)
+      }) }}
+    </v-alert>
+    <v-alert v-if="isolationUnavailable" type="info" variant="tonal" density="compact">
+      {{ tm('unrestrictedExecutionNotice') }}
+    </v-alert>
     <v-alert v-if="memberHasElevatedAccess" type="warning" variant="tonal" density="compact">
       {{ tm('memberWarning') }}
     </v-alert>
@@ -141,8 +151,19 @@ const executionUnavailableHint = computed(() => isolationUnavailable.value ? tm(
     dependency: runtime.value.sandbox.backend === 'seatbelt' ? 'sandbox-exec' : 'bwrap'
   }
 ) : '')
+const isolationFailureReason = computed(() => {
+  if (!isolationUnavailable.value) return ''
+  const reason = tm(`runtime.isolationFailure.${runtime.value.sandbox.status}`, {
+    backend: runtime.value.sandbox.backend === 'seatbelt' ? 'Seatbelt' : 'bubblewrap',
+    dependency: runtime.value.sandbox.backend === 'seatbelt' ? 'sandbox-exec' : 'bwrap'
+  })
+  return runtime.value.sandbox.error ? `${reason} ${runtime.value.sandbox.error}` : reason
+})
 const roles = ['member', 'admin']
 const defaults = computed(() => localPermissionDefaults)
+const executionBlockedRoles = computed(() => roles.filter(role =>
+  isolationUnavailable.value && policy(role, false).allow_execution && !policy(role).allow_execution
+))
 
 onMounted(async () => {
   try {
@@ -155,7 +176,7 @@ onMounted(async () => {
   }
 })
 
-function policy(role) {
+function policy(role, applyRuntime = true) {
   const resolved = {
     ...defaults.value[role],
     ...(props.modelValue?.[role] || {})
@@ -165,9 +186,9 @@ function policy(role) {
   }
   resolved.allow_execution = resolved.filesystem_scope !== 'none' && resolved.allow_execution === true
   resolved.allow_network = resolved.allow_execution && resolved.allow_network === true
-  if (isolationUnavailable.value && resolved.allow_execution &&
+  if (applyRuntime && isolationUnavailable.value && resolved.allow_execution &&
       (resolved.filesystem_scope !== 'host' || !resolved.allow_network)) {
-    return { ...defaults.value[role] }
+    return { ...resolved, allow_execution: false, allow_network: false }
   }
   return resolved
 }

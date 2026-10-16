@@ -509,7 +509,7 @@ def _build_local_mode_prompt() -> str:
             "PowerShell 7-only syntax or assume Unix commands like cat/ls/grep are available."
         )
     return (
-        "You have access to the host local environment and can execute shell commands and Python code. "
+        "Local computer tools are available subject to your role's file and execution permissions. "
         f"Current operating system: {system_name}. "
         f"{shell_hint} "
         "Local shell commands automatically return a managed session when they "
@@ -1877,6 +1877,13 @@ async def build_main_agent(
         local_policy = get_local_permission_policy(
             AgentContextWrapper(context=astr_agent_ctx)
         )
+        if (
+            local_policy.execution_disabled_reason
+            and local_policy.execution_disabled_reason not in (req.system_prompt or "")
+        ):
+            req.system_prompt = (
+                f"{req.system_prompt or ''}\n{local_policy.execution_disabled_reason}\n"
+            )
         if (
             local_policy.allow_execution
             and not local_policy.allow_network

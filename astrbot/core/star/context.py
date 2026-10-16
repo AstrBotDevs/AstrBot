@@ -319,6 +319,11 @@ class Context:
         ):
             local_policy = get_local_permission_policy(run_context)
             if (
+                local_policy.execution_disabled_reason
+                and local_policy.execution_disabled_reason not in request.system_prompt
+            ):
+                request.system_prompt += f"\n{local_policy.execution_disabled_reason}\n"
+            if (
                 local_policy.allow_execution
                 and not local_policy.allow_network
                 and LOCAL_NETWORK_POLICY_NOTICE not in request.system_prompt

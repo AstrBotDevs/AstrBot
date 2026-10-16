@@ -329,6 +329,8 @@
         },
         "runtimeUnknown": "Runtime information is unavailable.",
         "memberWarning": "Members have network access or file access across the entire environment.",
+        "executionBlocked": "Code execution for {role} is disabled because the saved restrictions require local isolation. {reason} File access remains {scope}; saved permissions have not changed. Restore isolation and restart AstrBot to use the saved execution policy.",
+        "unrestrictedExecutionNotice": "Without local isolation, enabling code execution requires Entire environment file access and also allows execution network access.",
         "runtime": {
           "os": "OS",
           "arch": "Architecture",
@@ -344,6 +346,11 @@
             "missing": "Install {dependency} to enable all local isolation features.",
             "unavailable": "Configure {backend} to enable all local isolation features.",
             "unsupported": "Learn about local isolation support."
+          },
+          "isolationFailure": {
+            "missing": "Missing {dependency}.",
+            "unavailable": "{backend} failed its startup probe.",
+            "unsupported": "Local process isolation is not supported on this platform."
           },
           "executionUnavailable": {
             "missing": "Missing {dependency}; code execution cannot be enabled when File access scope is set to Workspace.",

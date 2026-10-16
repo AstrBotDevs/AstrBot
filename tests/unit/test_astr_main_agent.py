@@ -1562,6 +1562,7 @@ class TestEnsurePersonaAndSkills:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("role", ["admin", "member"])
+    @pytest.mark.parametrize("isolation_status", ["detected", "missing", "unavailable", "unsupported"])
     @pytest.mark.parametrize(
         ("allow_execution", "allow_network"),
         [(True, False), (True, True), (False, False)],
@@ -1575,10 +1576,11 @@ class TestEnsurePersonaAndSkills:
         role,
         allow_execution,
         allow_network,
+        isolation_status,
     ):
         monkeypatch.setattr(
             "astrbot.core.tools.computer_tools.util.get_process_sandbox_status",
-            lambda: {"status": "detected"},
+            lambda: {"status": isolation_status},
         )
         module = ama
         persona = {"name": "locked", "prompt": "No tools.", "tools": []}
@@ -1641,7 +1643,8 @@ class TestEnsurePersonaAndSkills:
             assert "yield_time_ms" in shell_tool.parameters["properties"]
             assert result.provider_request.system_prompt.count(
                 module.LOCAL_NETWORK_POLICY_NOTICE
-            ) == int(allow_execution and not allow_network)
+            ) == int(allow_execution and not allow_network and isolation_status == "detected")
+            assert ("The saved execution restrictions require isolation" in result.provider_request.system_prompt) == (allow_execution and isolation_status != "detected")
         finally:
             if result.reset_coro:
                 result.reset_coro.close()

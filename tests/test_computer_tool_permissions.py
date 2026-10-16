@@ -246,29 +246,36 @@ def test_local_permission_policy_denies_disabled_execution():
 
 
 @pytest.mark.parametrize("role", ["member", "admin", "unexpected"])
-@pytest.mark.parametrize("status", ["missing", "unavailable", "unsupported"])
-@pytest.mark.parametrize("scope", ["workspace", "host"])
-def test_local_tools_fall_back_to_legacy_permissions(monkeypatch, role, status, scope):
-    """Unavailable isolation restores role-based execution and file access."""
-    monkeypatch.setattr(util, "get_process_sandbox_status", lambda: {"status": status})
+@pytest.mark.parametrize("status", ["detected", "missing", "unavailable", "unsupported"])
+@pytest.mark.parametrize("scope", ["none", "workspace", "host"])
+@pytest.mark.parametrize("execution", [False, True])
+@pytest.mark.parametrize("network", [False, True])
+def test_local_policy_never_widens_saved_permissions(
+    monkeypatch, role, status, scope, execution, network
+):
+    """Check every policy combination without granting permissions on failure."""
+    monkeypatch.setattr(util, "get_process_sandbox_status", lambda: {
+        "status": status, "backend": "bubblewrap", "error": "probe diagnostic",
+    })
     policy_role = "admin" if role == "admin" else "member"
-    configured = {
-        policy_role: {
-            "allow_execution": True,
-            "allow_network": False,
-            "filesystem_scope": scope,
-        }
-    }
-    context = _make_local_run_context(role, configured)
+    saved = {"allow_execution": execution, "allow_network": network, "filesystem_scope": scope}
+    context = _make_local_run_context(role, {policy_role: saved.copy()})
+    requires_isolation = scope != "none" and execution and (scope != "host" or not network)
+    blocked = requires_isolation and status != "detected"
 
     resolved, error = check_local_execution_permission(context, "Shell execution")
 
-    assert resolved.allow_execution == (role == "admin")
-    assert resolved.allow_network == (role == "admin")
-    assert resolved.filesystem_scope == ("host" if role == "admin" else "workspace")
-    assert (error is None) == (role == "admin")
-    assert configured[policy_role]["filesystem_scope"] == scope
-    assert configured[policy_role]["allow_network"] is False
+    assert resolved.filesystem_scope == scope
+    assert resolved.allow_execution == (scope != "none" and execution and not blocked)
+    assert resolved.allow_network == (resolved.allow_execution and network)
+    assert (resolved.execution_disabled_reason is not None) == blocked
+    assert (error is not None) == (not resolved.allow_execution)
+    if blocked:
+        assert "Local isolation unavailable" in error
+        assert "Do not bypass" in error
+        assert "Saved permissions have not been changed" in error
+        assert f"scope ({scope})" in error
+    assert context.context.context.get_config("test")["provider_settings"]["computer_use_local_permissions"][policy_role] == saved
 
 
 @pytest.mark.parametrize("status", ["missing", "unavailable", "unsupported"])
@@ -300,12 +307,94 @@ def test_unavailable_isolation_preserves_disabled_local_access(monkeypatch, role
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("role", ["member", "admin"])
+@pytest.mark.parametrize(
+    ("status", "detail"),
+    [
+        ({"status": "missing", "backend": "bubblewrap"}, "bubblewrap is not installed"),
+        ({"status": "unsupported", "backend": None}, "not supported on this platform"),
+        ({"status": "unavailable", "backend": "seatbelt", "error": "SandboxTimeoutError"}, "seatbelt failed its startup probe: SandboxTimeoutError"),
+    ],
+)
+@pytest.mark.parametrize("scope,network", [("workspace", False), ("workspace", True), ("host", False)])
+@pytest.mark.parametrize(
+    "tool,kwargs",
+    [
+        (shell.LocalExecuteShellTool, {"command": "echo forbidden"}),
+        (shell.ShellSessionTool, {"action": "list"}),
+        (python.LocalPythonTool, {"code": "print('forbidden')"}),
+    ],
+)
+async def test_isolation_failure_is_explained_to_llm_before_starting_tools(
+    monkeypatch, role, status, detail, scope, network, tool, kwargs
+):
+    """Reject restricted execution with its actual cause for both roles."""
+    monkeypatch.setattr(util, "get_process_sandbox_status", lambda: status)
+    booter = Mock(side_effect=AssertionError("Denied execution must not get a booter"))
+    monkeypatch.setattr(shell, "get_booter", booter)
+    monkeypatch.setattr(shell, "get_local_booter", booter)
+    monkeypatch.setattr(python, "get_local_booter", booter)
+    context = _make_local_run_context(role, {
+        role: {"allow_execution": True, "allow_network": network, "filesystem_scope": scope},
+    })
+
+    result = await tool().call(context, **kwargs)
+
+    assert result.startswith("error: Local isolation unavailable.")
+    assert detail in result
+    assert "Code execution and execution network access are disabled" in result
+    assert f"scope ({scope})" in result
+    assert "Do not bypass" in result
+    booter.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["member", "admin"])
+@pytest.mark.parametrize("tool_name", ["shell", "python"])
+async def test_sandbox_launch_failure_never_retries_without_isolation(
+    monkeypatch, tmp_path, role, tool_name
+):
+    """Fail closed when isolation breaks after a successful cached startup probe."""
+    factory = Mock(side_effect=RuntimeError("Isolation backend stopped working"))
+    monkeypatch.setattr(local, "create_process_sandbox", factory)
+    direct_process = AsyncMock(side_effect=AssertionError("Must not launch directly"))
+    direct_run = Mock(side_effect=AssertionError("Must not run directly"))
+    monkeypatch.setattr(local.asyncio, "create_subprocess_shell", direct_process)
+    monkeypatch.setattr(local.asyncio, "create_subprocess_exec", direct_process)
+    monkeypatch.setattr(local.subprocess, "run", direct_run)
+    context = _make_local_run_context(role, {
+        role: {"allow_execution": True, "allow_network": False, "filesystem_scope": "workspace"},
+    })
+    context.context.event.get_sender_id = lambda: "user-1"
+    context.tool_call_timeout = 30
+    settings = context.context.context.get_config("test")
+    settings["admins_id"] = ["user-1"]
+    context.context.context.get_config = lambda umo: settings
+    booter = SimpleNamespace(shell=local.LocalShellComponent(), python=local.LocalPythonComponent())
+    monkeypatch.setattr(shell, "get_booter", AsyncMock(return_value=booter))
+    monkeypatch.setattr(python, "get_local_booter", lambda: booter)
+    monkeypatch.setattr(shell, "workspace_root_for_context", AsyncMock(return_value=tmp_path))
+    monkeypatch.setattr(python, "workspace_root_for_context", AsyncMock(return_value=tmp_path))
+
+    if tool_name == "shell":
+        result = await shell.LocalExecuteShellTool().call(context, command="echo forbidden")
+    else:
+        result = await python.LocalPythonTool().call(context, code="print('forbidden')")
+
+    assert result.startswith("Error executing")
+    assert "Isolation backend stopped working" in result
+    factory.assert_called_once()
+    direct_process.assert_not_called()
+    direct_run.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["member", "admin"])
 @pytest.mark.parametrize("status", ["missing", "unavailable", "unsupported"])
 @pytest.mark.parametrize("tool_name", ["shell", "python"])
-async def test_execution_tools_use_legacy_fallback(
+async def test_default_execution_does_not_require_isolation(
     monkeypatch, tmp_path, role, status, tool_name
 ):
-    """Run administrators directly and deny members before starting a process."""
+    """Keep role defaults usable without changing permissions on either role."""
     monkeypatch.setattr(util, "get_process_sandbox_status", lambda: {"status": status})
     sandbox_factory = Mock(side_effect=AssertionError("Fallback must not launch isolation"))
     monkeypatch.setattr(local, "create_process_sandbox", sandbox_factory)

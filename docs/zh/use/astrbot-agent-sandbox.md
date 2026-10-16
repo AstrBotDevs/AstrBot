@@ -63,13 +63,24 @@ AstrBot 为 Agent 提供的文件工具包括 `astrbot_file_read_tool`, `astrbot
 - 当不勾选 “允许执行代码” 时，无法勾选 “允许联网”，因为**联网权限只在执行代码时生效**。
 - 当“文件访问范围”选择“关闭”时，无法勾选 “允许执行代码” 和 “允许联网”，因为**执行代码和联网权限都需要文件访问权限**。
 
-保存配置不会因为本机隔离不可用而失败，包括欢迎页将“允许 Agent 使用电脑”设为“是”的操作。工具调用时会检查隔离能力；如果缺少 bubblewrap、沙箱因容器权限等限制无法启动，或系统不支持隔离，仅对需要隔离执行代码的权限配置回退到以下权限：
+保存配置不会因为本机隔离不可用而失败，包括欢迎页将“允许 Agent 使用电脑”设为“是”的操作。工具调用时会检查隔离能力；缺少 bubblewrap、启动探测失败（包括超时或容器权限限制），或系统不支持隔离时，**普通成员和管理员需要隔离的执行配置都会拒绝执行，不会放宽权限**：
 
-- **普通成员**：不允许执行代码，文件访问范围为工作区。
-- **管理员**：允许执行代码，文件访问范围为整个环境，执行时允许联网。
-- 不需要隔离的配置按原配置生效，包括不执行代码的工作区文件访问，以及允许联网的整个环境代码执行。文件访问范围显式设为“关闭”的角色仍保持关闭。回退不会改写保存的权限配置；恢复隔离能力并重启 AstrBot 后，工具会重新使用配置的权限。
+- 停用代码执行和执行环境联网，文件范围保持原配置；“工作区”不会自动扩大为“整个环境”。
+- 不需要隔离的配置按原配置生效，包括不执行代码的工作区文件访问，以及允许联网的整个环境代码执行。文件范围显式设为“关闭”的角色仍保持关闭。
+- 保存的权限配置不会被改写。恢复隔离能力并重启 AstrBot 后，工具会重新使用保存的执行策略。
+- 权限矩阵会标出受影响的角色，解释停用原因、实际文件范围和保存配置未变。LLM 的系统提示以及 Shell、Python、Shell 会话工具的拒绝响应也包含这些说明。缺少依赖、系统不支持、启动失败分别返回对应原因；启动失败还会带上探测错误详情。
 
-隔离不可用时，权限矩阵隐藏“允许联网”列。原权限矩阵左下角的安装或配置隔离工具入口已移除；相关设置说明可直接参阅下方各操作系统和 Docker 章节。
+隔离不可用时，权限矩阵隐藏“允许联网”列，并说明主动开启“整个环境”的代码执行也会允许执行环境联网。原权限矩阵左下角的安装或配置隔离工具入口已移除；相关设置说明可直接参阅下方各操作系统和 Docker 章节。
+
+例如，管理员保存了“工作区内执行”，但缺少 bubblewrap 时，LLM 收到的 Shell 工具响应为：
+
+```text
+error: Local isolation unavailable. Shell execution was blocked. The saved execution restrictions require isolation, but bubblewrap is not installed. Code execution and execution network access are disabled; file access keeps its configured scope (workspace). Saved permissions have not been changed. Ask the administrator to restore isolation and restart AstrBot. Do not bypass this restriction using another tool, command, or runtime.
+```
+
+这条规则对管理员和普通成员一致。角色默认值仅用于没有保存对应权限配置的情况，不会用于替换无法满足隔离条件的已保存策略。
+
+![管理员受限执行因隔离探测失败而停用](./images/config-local-permissions-isolation-unavailable-zh.jpg)
 
 ### macOS 用户 {#local-macos}
 

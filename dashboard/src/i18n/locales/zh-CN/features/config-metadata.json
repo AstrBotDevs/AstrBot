@@ -345,6 +345,8 @@
         },
         "runtimeUnknown": "运行环境信息不可用。",
         "memberWarning": "普通成员已获得联网或整个环境访问权限。",
+        "executionBlocked": "{role}保存的执行限制需要本地隔离，当前已停用代码执行。原因：{reason} 文件范围仍为“{scope}”，保存的权限配置未改变。恢复隔离能力并重启 AstrBot 后，才能按原策略执行代码。",
+        "unrestrictedExecutionNotice": "本地隔离不可用时，开启代码执行需要将文件范围设为“整个环境”，同时也会允许执行环境联网。",
         "runtime": {
           "os": "操作系统",
           "arch": "架构",
@@ -360,6 +362,11 @@
             "missing": "安装 {dependency} 以获得完整的本地隔离功能。",
             "unavailable": "配置 {backend}，启用完整的本地隔离功能。",
             "unsupported": "了解本地隔离支持情况。"
+          },
+          "isolationFailure": {
+            "missing": "缺少 {dependency}。",
+            "unavailable": "{backend} 启动探测失败。",
+            "unsupported": "当前系统不支持本地进程隔离。"
           },
           "executionUnavailable": {
             "missing": "缺少 {dependency}，无法在“文件访问范围”选择“工作区”时允许执行代码。",

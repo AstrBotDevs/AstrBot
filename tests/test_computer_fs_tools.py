@@ -573,6 +573,37 @@ async def test_restricted_local_member_rejects_workspace_hardlink_alias(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("role", ["member", "admin"])
+@pytest.mark.parametrize("status", ["missing", "unavailable", "unsupported"])
+@pytest.mark.parametrize(
+    "tool_type,arguments",
+    [
+        (fs_tools.FileReadTool, {}),
+        (fs_tools.FileWriteTool, {"content": "changed"}),
+        (fs_tools.FileEditTool, {"old": "original", "new": "changed"}),
+        (fs_tools.GrepTool, {"pattern": "original"}),
+    ],
+)
+async def test_isolation_failure_does_not_expand_workspace_file_access(
+    monkeypatch, tmp_path, role, status, tool_type, arguments
+):
+    """Keep both roles inside their saved file scope after execution is disabled."""
+    _setup_local_fs_tools(monkeypatch, tmp_path)
+    monkeypatch.setattr(computer_util, "get_process_sandbox_status", lambda: {"status": status})
+    outside = tmp_path / "outside.txt"
+    outside.write_text("original secret", encoding="utf-8")
+    context = _make_context(role=role, local_permissions={role: {
+        "filesystem_scope": "workspace", "allow_execution": True, "allow_network": True,
+    }})
+
+    result = await tool_type().call(context, path=str(outside), **arguments)
+
+    assert "access is restricted for this user" in result
+    assert "original secret" not in result
+    assert outside.read_text(encoding="utf-8") == "original secret"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["member", "admin"])
 @pytest.mark.parametrize(
     ("tool_type", "arguments"),
     [

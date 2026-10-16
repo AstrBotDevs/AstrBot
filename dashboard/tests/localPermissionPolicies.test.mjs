@@ -19,7 +19,7 @@ function setup(status, modelValue = {}) {
   });
   const script = descriptor.script.content.replace('export const', 'const');
   const setupScript = descriptor.scriptSetup.content.replace(/^import .*$/gm, '');
-  const component = vm.runInContext(`${script}\n${setupScript}\n;({ policy, updatePermission, runtime })`, scope);
+  const component = vm.runInContext(`${script}\n${setupScript}\n;({ policy, updatePermission, runtime, executionBlockedRoles, isolationFailureReason })`, scope);
   component.runtime.value = { os: status === 'unsupported' ? 'windows' : 'linux', sandbox: { status } };
   return {
     component,
@@ -49,15 +49,31 @@ test('unavailable isolation preserves compatible policies and disabled access', 
   }
 });
 
-test('only incompatible execution policies show the role fallback', () => {
-  for (const scope of ['workspace', 'host']) {
-    const configured = { filesystem_scope: scope, allow_execution: true, allow_network: false };
-    const original = structuredClone(configured);
-    const { policy } = setup('unavailable', { member: configured, admin: configured });
-    assert.deepEqual(policy('member'), { filesystem_scope: 'workspace', allow_execution: false, allow_network: false });
-    assert.deepEqual(policy('admin'), { filesystem_scope: 'host', allow_execution: true, allow_network: true });
-    assert.deepEqual(configured, original);
+test('unavailable isolation disables execution without widening any saved policy', () => {
+  for (const status of ['missing', 'unavailable', 'unsupported']) {
+    for (const [scope, network] of [['workspace', false], ['workspace', true], ['host', false]]) {
+      const configured = { filesystem_scope: scope, allow_execution: true, allow_network: network };
+      const original = structuredClone(configured);
+      const { component, policy } = setup(status, { member: configured, admin: configured });
+      for (const role of ['member', 'admin']) {
+        assert.deepEqual(policy(role), { filesystem_scope: scope, allow_execution: false, allow_network: false });
+      }
+      assert.deepEqual(Array.from(component.executionBlockedRoles.value), ['member', 'admin']);
+      component.runtime.value.sandbox.error = 'Probe timed out after 5 seconds';
+      assert.match(component.isolationFailureReason.value, /Probe timed out after 5 seconds/);
+      assert.deepEqual(configured, original);
+      component.runtime.value.sandbox.status = 'detected';
+      assert.deepEqual(policy('admin'), original);
+      assert.deepEqual(Array.from(component.executionBlockedRoles.value), []);
+    }
   }
+});
+
+test('editing another role does not overwrite an execution policy blocked by isolation', () => {
+  const configured = { filesystem_scope: 'workspace', allow_execution: true, allow_network: false };
+  const { component, saved } = setup('missing', { admin: configured });
+  component.updatePermission('member', { filesystem_scope: 'none' });
+  assert.deepEqual(saved().admin, configured);
 });
 
 test('choosing entire-environment execution synchronizes the hidden network permission', () => {

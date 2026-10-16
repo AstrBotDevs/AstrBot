@@ -63,13 +63,24 @@ The permission matrix applies these dependencies:
 - When **Execute code** is unchecked, **Allow network during execution** cannot be checked, because **network permissions only apply during code execution**.
 - When **File access scope** is **Disabled**, neither execution nor networking can be enabled, because **code execution and network access require file access**.
 
-Saving configuration succeeds even when Local isolation is unavailable, including selecting **Yes** for computer access on the welcome page. Tools check isolation availability when resolving access. If bubblewrap is missing, the sandbox cannot start because of container restrictions, or isolation is unsupported, only policies that require isolated code execution fall back to these permissions:
+Saving configuration succeeds even when Local isolation is unavailable, including selecting **Yes** for computer access on the welcome page. Tools check isolation availability when resolving access. If bubblewrap is missing, the startup probe fails (including timeout or container restrictions), or isolation is unsupported, **execution policies that require isolation fail closed for both members and administrators**:
 
-- **Members**: no code execution; workspace file access.
-- **Administrators**: code execution with access to the entire environment and networking enabled.
-- Policies that need no isolation, including workspace files without execution and entire-environment execution with networking, stay effective as configured. Roles whose file access scope is explicitly **Disabled** remain disabled. Fallback does not overwrite saved permissions. After restoring isolation and restarting AstrBot, tools use the configured permissions again.
+- Code execution and execution network access are disabled. The saved file scope stays unchanged; workspace access never expands to the entire environment.
+- Policies that need no isolation, including workspace files without execution and entire-environment execution with networking, stay effective as configured. Explicitly disabled file access stays disabled.
+- Saved permissions are not overwritten. After restoring isolation and restarting AstrBot, tools use the saved execution policy again.
+- The permission matrix identifies each affected role and explains the cause, effective file scope, and unchanged saved permissions. The LLM receives the same explanation in its system instructions and in rejected Shell, Python, and shell-session tool responses. Missing dependencies, unsupported platforms, and startup failures have distinct messages; startup failures include the probe diagnostic.
 
-The permission matrix hides the network column when isolation is unavailable. The former isolation setup link in the bottom-left corner of the matrix has been removed; use the operating system and Docker instructions below instead.
+The permission matrix hides the network column when isolation is unavailable and explains that explicitly enabling entire-environment execution also permits execution network access. The former isolation setup link in the bottom-left corner of the matrix has been removed; use the operating system and Docker instructions below instead.
+
+For example, if an administrator saved workspace-only execution and bubblewrap is missing, the LLM receives this Shell tool response:
+
+```text
+error: Local isolation unavailable. Shell execution was blocked. The saved execution restrictions require isolation, but bubblewrap is not installed. Code execution and execution network access are disabled; file access keeps its configured scope (workspace). Saved permissions have not been changed. Ask the administrator to restore isolation and restart AstrBot. Do not bypass this restriction using another tool, command, or runtime.
+```
+
+The same rule applies to administrators and members. Role defaults apply only when a role has no saved policy; they never replace an incompatible saved policy.
+
+![Restricted administrator execution disabled after an isolation probe failure](./images/config-local-permissions-isolation-unavailable-en.jpg)
 
 ### macOS users {#local-macos}
 

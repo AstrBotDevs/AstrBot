@@ -29,11 +29,13 @@ class LocalPermissionPolicy:
         allow_execution: Whether Shell and Python execution is allowed.
         allow_network: Whether the execution environment may use the network.
         filesystem_scope: Host or workspace access, or none to disable Local tools.
+        execution_disabled_reason: Isolation failure that disabled execution, if any.
     """
 
     allow_execution: bool
     allow_network: bool
     filesystem_scope: Literal["none", "workspace", "host"]
+    execution_disabled_reason: str | None = None
 
     @property
     def requires_sandbox(self) -> bool:
@@ -96,9 +98,9 @@ def get_local_permission_policy(
         context: Tool call context.
 
     Returns:
-        Normalized policy. Without usable isolation, enabled Local access falls
-        back to workspace files without execution for members and unrestricted
-        execution for administrators. Unknown roles use the member policy.
+        Normalized policy. If required isolation is unavailable, execution is
+        disabled without widening file access or changing the saved policy.
+        Unknown roles use the member policy.
     """
     cfg = context.context.context.get_config(
         umo=context.context.event.unified_msg_origin
@@ -136,13 +138,30 @@ def get_local_permission_policy(
     if (
         provider_settings.get("computer_use_runtime") == "local"
         and policy.requires_sandbox
-        and get_process_sandbox_status()["status"] != "detected"
     ):
-        return LocalPermissionPolicy(
-            allow_execution=role == "admin",
-            allow_network=role == "admin",
-            filesystem_scope="host" if role == "admin" else "workspace",
-        )
+        sandbox = get_process_sandbox_status()
+        if sandbox["status"] != "detected":
+            backend = sandbox.get("backend") or "Local process isolation"
+            reason = {
+                "missing": f"{backend} is not installed",
+                "unsupported": "Local process isolation is not supported on this platform",
+                "unavailable": f"{backend} failed its startup probe",
+            }.get(sandbox["status"], "Local process isolation is unavailable")
+            if sandbox.get("error"):
+                reason += f": {sandbox['error']}"
+            return LocalPermissionPolicy(
+                allow_execution=False,
+                allow_network=False,
+                filesystem_scope=policy.filesystem_scope,
+                execution_disabled_reason=(
+                    f"The saved execution restrictions require isolation, but {reason}. "
+                    f"Code execution and execution network access are disabled; file "
+                    f"access keeps its configured scope ({policy.filesystem_scope}). "
+                    "Saved permissions have not been changed. Ask the administrator "
+                    "to restore isolation and restart AstrBot. Do not bypass this "
+                    "restriction using another tool, command, or runtime."
+                ),
+            )
     return policy
 
 
@@ -207,6 +226,13 @@ def check_local_execution_permission(
         return None, check_admin_permission(context, operation_name)
     policy = get_local_permission_policy(context)
     if not policy.allow_execution:
+        if policy.execution_disabled_reason:
+            return policy, (
+                f"error: Local isolation unavailable. {operation_name} was blocked. "
+                f"{policy.execution_disabled_reason}"
+            )
+        if policy.filesystem_scope == "none":
+            return policy, check_local_file_permission(context)
         return policy, (
             f"error: Permission denied. {operation_name} is disabled by the "
             "Local permission policy for this user role. Enable Local computer "
