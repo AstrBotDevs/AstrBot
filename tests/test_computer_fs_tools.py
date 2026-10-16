@@ -604,7 +604,7 @@ async def test_restricted_file_access_preserves_files_when_native_open_fails(
     result = await tool_type().call(
         _make_context(
             role=role,
-            local_permissions={role: {"filesystem_scope": "workspace"}},
+            local_permissions={role: {"filesystem_scope": "workspace", "allow_execution": False}},
         ),
         **arguments,
     )

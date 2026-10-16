@@ -163,9 +163,12 @@ function policy(role) {
   if (!['none', 'workspace', 'host'].includes(resolved.filesystem_scope)) {
     resolved.filesystem_scope = defaults.value[role].filesystem_scope
   }
-  resolved.allow_execution = resolved.filesystem_scope !== 'none' && resolved.allow_execution === true &&
-    !(isolationUnavailable.value && resolved.filesystem_scope === 'workspace')
+  resolved.allow_execution = resolved.filesystem_scope !== 'none' && resolved.allow_execution === true
   resolved.allow_network = resolved.allow_execution && resolved.allow_network === true
+  if (isolationUnavailable.value && resolved.allow_execution &&
+      (resolved.filesystem_scope !== 'host' || !resolved.allow_network)) {
+    return { ...defaults.value[role] }
+  }
   return resolved
 }
 

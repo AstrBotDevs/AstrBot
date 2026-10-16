@@ -1568,6 +1568,7 @@ class TestEnsurePersonaAndSkills:
     )
     async def test_persona_empty_tools_keeps_local_runtime_builtin_tools(
         self,
+        monkeypatch,
         mock_event,
         mock_context,
         mock_provider,
@@ -1575,6 +1576,10 @@ class TestEnsurePersonaAndSkills:
         allow_execution,
         allow_network,
     ):
+        monkeypatch.setattr(
+            "astrbot.core.tools.computer_tools.util.get_process_sandbox_status",
+            lambda: {"status": "detected"},
+        )
         module = ama
         persona = {"name": "locked", "prompt": "No tools.", "tools": []}
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(

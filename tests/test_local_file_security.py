@@ -15,7 +15,9 @@ def test_workspace_file_descriptors_support_each_access_mode(tmp_path, access):
     target.write_text("original", encoding="utf-8")
 
     descriptor = open_file_in_allowed_roots(str(target), (workspace,), access=access)
-    with os.fdopen(descriptor, {"read": "r", "write": "w", "edit": "r+"}[access], encoding="utf-8") as file_obj:
+    with os.fdopen(
+        descriptor, {"read": "r", "write": "w", "edit": "r+"}[access], encoding="utf-8"
+    ) as file_obj:
         assert not os.get_inheritable(file_obj.fileno())
         if access != "write":
             assert file_obj.read() == "original"
@@ -23,7 +25,9 @@ def test_workspace_file_descriptors_support_each_access_mode(tmp_path, access):
             file_obj.seek(0)
             file_obj.truncate()
             file_obj.write("updated")
-    assert target.read_text(encoding="utf-8") == ("original" if access == "read" else "updated")
+    assert target.read_text(encoding="utf-8") == (
+        "original" if access == "read" else "updated"
+    )
 
 
 def test_workspace_file_creation_is_relative_to_checked_directories(tmp_path):
@@ -94,7 +98,9 @@ def test_checked_descriptor_survives_parent_directory_replacement(tmp_path):
         file_obj.write("updated file")
     if (workspace / "moved").exists():
         assert target.read_text(encoding="utf-8") == "replacement"
-        assert (workspace / "moved" / "file.txt").read_text(encoding="utf-8") == "updated file"
+        assert (workspace / "moved" / "file.txt").read_text(
+            encoding="utf-8"
+        ) == "updated file"
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Requires Windows directory junctions.")
@@ -109,13 +115,16 @@ def test_windows_workspace_open_rejects_directory_junctions(tmp_path, create):
     junction = workspace / "junction"
     subprocess.run(
         ["cmd", "/c", "mklink", "/J", str(junction), str(outside)],
-        check=True, capture_output=True,
+        check=True,
+        capture_output=True,
     )
     try:
         with pytest.raises(PermissionError):
             open_file_in_allowed_roots(
                 str(junction / ("new.txt" if create else "secret.txt")),
-                (workspace,), access="write", create_parents=create,
+                (workspace,),
+                access="write",
+                create_parents=create,
             )
         assert secret.read_text(encoding="utf-8") == "secret"
         assert not (outside / "new.txt").exists()
@@ -125,9 +134,13 @@ def test_windows_workspace_open_rejects_directory_junctions(tmp_path, create):
 
 @pytest.mark.skipif(os.name != "nt", reason="Requires Windows native paths.")
 @pytest.mark.parametrize("name", ["file.txt:stream", "file.txt.", "file.txt "])
-def test_windows_workspace_open_rejects_alternate_streams_and_ambiguous_names(tmp_path, name):
+def test_windows_workspace_open_rejects_alternate_streams_and_ambiguous_names(
+    tmp_path, name
+):
     with pytest.raises(PermissionError, match="unsafe restricted Windows path"):
-        open_file_in_allowed_roots(str(tmp_path / name), (tmp_path,), access="write", create_parents=True)
+        open_file_in_allowed_roots(
+            str(tmp_path / name), (tmp_path,), access="write", create_parents=True
+        )
     assert list(tmp_path.iterdir()) == []
 
 
@@ -136,7 +149,9 @@ def test_workspace_open_rejects_paths_outside_root(tmp_path, access):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     with pytest.raises(PermissionError, match="outside restricted roots"):
-        open_file_in_allowed_roots(str(tmp_path / "outside.txt"), (workspace,), access=access)
+        open_file_in_allowed_roots(
+            str(tmp_path / "outside.txt"), (workspace,), access=access
+        )
 
 
 def test_workspace_open_rejects_directory_as_file(tmp_path):

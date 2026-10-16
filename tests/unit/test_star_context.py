@@ -34,6 +34,11 @@ async def test_tool_loop_agent_adds_network_policy_to_system_prompt(
     monkeypatch, runtime, allow_network, tool_state, existing_notice, expected_count,
     tool_class,
 ):
+    monkeypatch.setattr(
+        "astrbot.core.tools.computer_tools.util.get_process_sandbox_status",
+        lambda: {"status": "detected"},
+    )
+
     async def finished_steps(_max_steps):
         for response in ():
             yield response
