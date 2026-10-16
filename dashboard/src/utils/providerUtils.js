@@ -1,4 +1,6 @@
 import mirarouterIcon from '@/assets/images/provider_logos/mirarouter.svg?no-inline';
+// Official ModelBest favicon from https://modelbest.cn/favicon.ico.
+import modelbestIcon from '@/assets/images/provider_logos/modelbest.png';
 
 /**
  * 提供商相关的工具函数
@@ -12,6 +14,7 @@ import mirarouterIcon from '@/assets/images/provider_logos/mirarouter.svg?no-inl
 export function getProviderIcon(type) {
   const icons = {
     'mirarouter': mirarouterIcon,
+    'modelbest': modelbestIcon,
     'openai': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/openai.svg',
     'azure': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/azure.svg',
     'xai': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/xai.svg',
