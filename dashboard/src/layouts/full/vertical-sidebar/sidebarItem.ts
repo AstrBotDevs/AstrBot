@@ -5,7 +5,6 @@ import {
   Box,
   Clock3,
   Database,
-  Hand,
   Heart,
   PencilRuler,
   Puzzle,
@@ -48,11 +47,6 @@ export const EXTENSION_GROUP_KEY = 'core.navigation.groups.extension';
 const sidebarItem: menu[] = [
   {
     header: SYSTEM_GROUP_KEY,
-  },
-  {
-    title: 'core.navigation.welcome',
-    icon: markRaw(Hand),
-    to: '/welcome',
   },
   {
     title: 'core.navigation.platforms',
