@@ -27,7 +27,7 @@
 
 ## 选择搜索提供商
 
-当前支持以下七种接入方式。先选一个完成配置即可，无需同时申请所有服务。
+当前支持以下八种接入方式。先选一个完成配置即可，无需同时申请所有服务。
 
 | 提供商 | Key 申请入口 | AstrBot 提供的能力 |
 | --- | --- | --- |
@@ -38,6 +38,7 @@
 | <span id="firecrawl">Firecrawl</span> | [Firecrawl](https://firecrawl.dev/) | 网页搜索、按 URL 提取网页正文 |
 | <span id="exa">Exa</span> | [Exa 控制台](https://dashboard.exa.ai/) | 关键词或语义搜索、按 URL 获取正文，支持域名、日期等筛选 |
 | <span id="anysearch">AnySearch</span> | [AnySearch 控制台](https://anysearch.com/console/api-keys) | 通用搜索，以及学术、代码文档、金融、法律等垂直领域检索 |
+| <span id="serply">Serply</span> | [Serply](https://serply.io) | Google 网页搜索，并可通过 `search_type` 参数使用 Google 新闻和 Google 学术（[API 文档](https://serply.io/docs)） |
 
 AnySearch 的 Key 留空时会使用匿名模式，服务提供每日免费额度。其他提供商需要填写相应的 Key。服务的额度、收费、可用地区和授权方式以各自官网为准。
 
