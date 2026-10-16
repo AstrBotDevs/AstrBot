@@ -4,6 +4,7 @@
 """
 
 import time
+import unicodedata
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -32,6 +33,28 @@ class RetrievalResult:
     content: str
     score: float
     metadata: dict
+
+
+def _strip_invisible_chars(text: str) -> str:
+    """Remove control and format characters from a retrieval query.
+
+    Control (Cc, except tab/newline/CR) and format (Cf) characters are
+    invisible payloads that some embedding providers reject with HTTP 400
+    (e.g. SiliconFlow code 20015), typically originating from sticker /
+    image-caption pipelines.
+
+    Args:
+        text: Raw query text.
+
+    Returns:
+        The query with invisible characters removed.
+
+    """
+    return "".join(
+        ch
+        for ch in text
+        if ch not in "\t\n\r" and unicodedata.category(ch) not in ("Cc", "Cf")
+    )
 
 
 class RetrievalManager:
@@ -87,6 +110,16 @@ class RetrievalManager:
             List[RetrievalResult]: 检索结果列表
 
         """
+        # Remove invisible characters and skip retrieval when nothing
+        # remains, so invalid queries never reach the embedding provider.
+        query = _strip_invisible_chars(query).strip()
+        if not query:
+            logger.debug(
+                "Knowledge base retrieval skipped: query is empty after "
+                "removing invisible characters.",
+            )
+            return []
+
         if not kb_ids:
             return []
 
@@ -229,7 +262,8 @@ class RetrievalManager:
                 all_results.extend(vec_results)
             except Exception as e:
                 logger.error(
-                    f"知识库 {kb_id} 稠密检索失败: {type(e).__name__}: {e}",
+                    f"知识库 {kb_id} 稠密检索失败: {type(e).__name__}: {e} "
+                    f"(query={query!r}, query_length={len(query)})",
                     exc_info=True,
                 )
                 # skip the faulty KB and continue
