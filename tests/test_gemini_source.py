@@ -51,6 +51,8 @@ async def test_gemini_thinking_level_is_serialized_on_every_request(
         "gemini-4-argon",
         "gemini-4-argon-preview",
         "gemini-4-other",
+        "gemini-4.0-flash",
+        "gemini-4.1-flash-preview",
     ],
 )
 @pytest.mark.parametrize("level", ["MINIMAL", "minimal", "INVALID"])
@@ -71,7 +73,14 @@ async def test_gemini_restricted_thinking_level_falls_back_to_medium(
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "model",
-    ["gemini-3.8-flash", "gemini-4-argon", "gemini-4-argon-preview", "gemini-4-other"],
+    [
+        "gemini-3.8-flash",
+        "gemini-4-argon",
+        "gemini-4-argon-preview",
+        "gemini-4-other",
+        "gemini-4.0-flash",
+        "gemini-4.1-flash-preview",
+    ],
 )
 @pytest.mark.parametrize("level", ["LOW", "MEDIUM", "HIGH", "low"])
 async def test_gemini_new_models_thinking_levels(

@@ -287,7 +287,9 @@ class ProviderGoogleGenAI(Provider):
                 thinking_config = types.ThinkingConfig(
                     thinking_budget=thinking_budget,
                 )
-        elif model_name.startswith(("gemini-3-", "gemini-3.", "gemini-4-")):
+        elif model_name.startswith(
+            ("gemini-3-", "gemini-3.", "gemini-4-", "gemini-4.")
+        ):
             # The thinkingLevel parameter, recommended for Gemini 3 models and onwards.
             # Use prefix match so new variants (3.1, 3-flash-lite-preview, etc.) are
             # covered without needing to keep an exhaustive list up to date.
@@ -300,7 +302,9 @@ class ProviderGoogleGenAI(Provider):
                 thinking_level = thinking_level.upper()
                 allowed_levels = {"MINIMAL", "LOW", "MEDIUM", "HIGH"}
                 fallback_level = "HIGH"
-                if model_name.startswith(("gemini-3.7", "gemini-3.8", "gemini-4-")):
+                if model_name.startswith(
+                    ("gemini-3.7", "gemini-3.8", "gemini-4-", "gemini-4.")
+                ):
                     allowed_levels = {"LOW", "MEDIUM", "HIGH"}
                     fallback_level = "MEDIUM"
                 if thinking_level not in allowed_levels:
