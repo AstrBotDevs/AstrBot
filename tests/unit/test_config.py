@@ -1,6 +1,7 @@
 """Tests for config module."""
 
 import asyncio
+import copy
 import json
 import os
 import threading
@@ -9,7 +10,11 @@ from pathlib import Path
 import pytest
 
 from astrbot.core.config.astrbot_config import AstrBotConfig, RateLimitStrategy
-from astrbot.core.config.default import DEFAULT_VALUE_MAP, get_local_permission_defaults
+from astrbot.core.config.default import (
+    DEFAULT_CONFIG,
+    DEFAULT_VALUE_MAP,
+    get_local_permission_defaults,
+)
 from astrbot.core.config.i18n_utils import ConfigMetadataI18n
 from astrbot.core.utils.auth_password import (
     DEFAULT_DASHBOARD_PASSWORD,
@@ -171,6 +176,92 @@ class TestAstrBotConfigLoad:
             == expected
         )
         assert defaults == get_local_permission_defaults(system)
+
+    @pytest.mark.parametrize("system", ["Windows", "Linux", "Darwin"])
+    @pytest.mark.parametrize("config_version", [4, 5, 6])
+    @pytest.mark.parametrize("is_profile", [False, True])
+    def test_windows_member_workspace_upgrade_is_persisted_once(
+        self, tmp_path, monkeypatch, system, config_version, is_profile
+    ):
+        """Migrate the old Windows default once in global and profile configs."""
+        profile_root = tmp_path / "profiles"
+        profile_root.mkdir()
+        monkeypatch.setattr(
+            "astrbot.core.utils.migra_helper.get_astrbot_config_path",
+            lambda: str(profile_root),
+        )
+        monkeypatch.setattr(
+            "astrbot.core.utils.migra_helper.get_astrbot_data_path",
+            lambda: str(tmp_path),
+        )
+        monkeypatch.setattr(
+            "astrbot.core.utils.migra_helper.platform.system", lambda: system
+        )
+        default_path = tmp_path / "cmd_config.json"
+        default_path.write_text(json.dumps(DEFAULT_CONFIG), encoding="utf-8")
+        config_path = profile_root / "custom.json" if is_profile else default_path
+        config = copy.deepcopy(DEFAULT_CONFIG)
+        config["config_version"] = config_version
+        permissions = config["provider_settings"]["computer_use_local_permissions"]
+        disabled = {
+            "allow_execution": False,
+            "allow_network": False,
+            "filesystem_scope": "none",
+        }
+        permissions["member"] = disabled.copy()
+        permissions["admin"] = disabled.copy()
+        config_path.write_text(json.dumps(config), encoding="utf-8")
+
+        loaded = AstrBotConfig(config_path=str(config_path))
+
+        expected = {
+            **disabled,
+            "filesystem_scope": (
+                "workspace" if system == "Windows" and config_version < 5 else "none"
+            ),
+        }
+        persisted = json.loads(config_path.read_text(encoding="utf-8-sig"))
+        assert persisted["config_version"] == max(config_version, 5)
+        assert persisted["provider_settings"]["computer_use_local_permissions"] == {
+            "member": expected,
+            "admin": disabled,
+        }
+
+        loaded["provider_settings"]["computer_use_local_permissions"]["member"] = (
+            disabled.copy()
+        )
+        loaded.save_config()
+        reloaded = AstrBotConfig(config_path=str(config_path))
+        assert reloaded["provider_settings"]["computer_use_local_permissions"] == {
+            "member": disabled,
+            "admin": disabled,
+        }
+
+    @pytest.mark.parametrize(
+        "member",
+        [
+            {"allow_execution": False, "allow_network": False, "filesystem_scope": "workspace"},
+            {"allow_execution": False, "allow_network": False, "filesystem_scope": "host"},
+            {"allow_execution": True, "allow_network": False, "filesystem_scope": "workspace"},
+            {"allow_execution": True, "allow_network": True, "filesystem_scope": "host"},
+        ],
+    )
+    def test_windows_workspace_upgrade_preserves_other_member_policies(
+        self, tmp_path, monkeypatch, member
+    ):
+        """Keep customized Windows execution and file grants unchanged."""
+        monkeypatch.setattr(
+            "astrbot.core.utils.migra_helper.platform.system", lambda: "Windows"
+        )
+        config_path = tmp_path / "custom.json"
+        config = copy.deepcopy(DEFAULT_CONFIG)
+        config["config_version"] = 4
+        config["provider_settings"]["computer_use_local_permissions"]["member"] = member
+        config_path.write_text(json.dumps(config), encoding="utf-8")
+
+        loaded = AstrBotConfig(config_path=str(config_path))
+
+        assert loaded["provider_settings"]["computer_use_local_permissions"]["member"] == member
 
     def test_first_deploy_flag(self, temp_config_path, minimal_default_config):
         """Test first_deploy flag is set for new config."""

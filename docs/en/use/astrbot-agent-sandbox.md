@@ -56,7 +56,7 @@ New installations use the same default permissions on Windows, Linux, and macOS:
 | Member | No | No | Workspace |
 | Administrator | Yes | Yes | Entire environment |
 
-These defaults do not require Local process isolation. Existing saved permissions are preserved.
+These defaults do not require Local process isolation. Existing saved permissions are preserved, with one upgrade exception: on Windows, an older member policy with execution disabled, execution networking disabled, and file access disabled is migrated once to workspace file access. The old default and a manually disabled policy have identical saved values, so both matching policies are migrated. This applies to the global configuration and configuration profiles. Disabling member file access again after the upgrade is respected on subsequent restarts; administrator and other member policies are unchanged.
 
 The permission matrix applies these dependencies:
 
