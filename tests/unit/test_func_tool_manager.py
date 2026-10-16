@@ -422,7 +422,9 @@ async def test_local_member_shell_is_denied_without_supported_sandbox(monkeypatc
 
     result = await LocalExecuteShellTool().call(wrapper, command="pwd")
 
-    assert "disabled by the Local permission policy" in result
+    assert "Local isolation unavailable" in result
+    assert "not supported on this platform" in result
+    assert "Do not bypass" in result
 
 
 @pytest.mark.asyncio
