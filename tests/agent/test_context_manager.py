@@ -84,7 +84,7 @@ class RateLimitedProvider(MockProvider):
 class CharTokenCounter:
     """Counts one token per character of text content."""
 
-    def count_tokens(self, messages, trusted_token_usage: int = 0) -> int:
+    def count_tokens(self, messages, reported_token_usage: int = 0) -> int:
         return sum(len(m.content) for m in messages if isinstance(m.content, str))
 
 
@@ -585,7 +585,7 @@ class TestContextManager:
         mock_compressor.should_compress = MagicMock(side_effect=[True, False])
         manager.compressor = mock_compressor
 
-        result = await manager.process(messages, trusted_token_usage=83)
+        result = await manager.process(messages, reported_token_usage=83)
 
         first_check = mock_compressor.should_compress.call_args_list[0]
         assert first_check.args == (messages, 83, 100)
@@ -717,7 +717,7 @@ class TestContextManager:
         messages = self._rounds_with_tool_chain("f" * 20)
 
         with caplog.at_level(logging.INFO):
-            result = await manager.process(messages, trusted_token_usage=900)
+            result = await manager.process(messages, reported_token_usage=900)
 
         # The oldest round is dropped and the tool chain stays paired, same
         # as the estimate-triggered failure fallback above.
@@ -744,7 +744,7 @@ class TestContextManager:
         manager = ContextManager(config)
         messages = self._rounds_with_tool_chain("f" * 20)
 
-        result = await manager.process(messages, trusted_token_usage=900)
+        result = await manager.process(messages, reported_token_usage=900)
 
         assert result == [messages[0], *messages[3:]]
 
