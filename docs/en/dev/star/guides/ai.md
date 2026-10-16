@@ -373,6 +373,9 @@ await conv_mgr.add_message_pair(
 )
 ```
 
+> [!WARNING]
+> The example above uses `unified_msg_origin` as the conversation history storage key. When **Isolate Conversation** (`platform_settings.unique_session`) is enabled, the `unified_msg_origin` of group messages changes (only on platforms that support isolation), so the same group resolves to a different conversation depending on the setting. Use `event.get_group_id()` when you need to target a group; see [Handling Message Events](./listen-message-event).
+
 ### Main Methods
 
 #### `new_conversation`
