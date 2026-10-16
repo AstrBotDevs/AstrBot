@@ -213,7 +213,7 @@ Handler names also have a dotted underline. Hover to lazily fetch plugin details
 
 Streaming responses show one final aggregated response after delivery finishes, without intermediate chunks or protocol closing frames. Messages sent independently by tools or plugins during generation remain separate responses.
 
-Timeline chips show the runner name without an execution-mode prefix, using the profile page's labels (`local` uses the AstrBot built-in AI title), plugin names (comma-separated in collapsed groups), and response ownership. Built-in Agent replies are system responses (`source: core`); plugin replies use `source: plugin:<plugin ID>` and show the plugin's display name.
+Timeline chips show the runner name without an execution-mode prefix, using the profile page's labels (`local` uses the AstrBot built-in AI title), and plugin names (comma-separated in collapsed groups). Response ownership chips are removed: successful public sends through `event.send()` and `Context.send_message()` record message outlines without a source field. Context sends attach to the current event execution, without creating a new trace when none is active. Nested forwarding is recorded once; streaming keeps only its final aggregate and separate tool messages.
 
 Consecutive nodes of the same type are collapsed by default, such as "Call plugin" with an "Event listener" chip, with a record count and stacked icons. Click to expand or collapse the individual records. Different handler categories and records separated by another node type remain separate, preserving execution order. Collapsed groups still show error counts, and summary cards continue to count actual calls.
 

@@ -2,6 +2,7 @@
 
 import asyncio
 import re
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -23,11 +24,13 @@ from astrbot.core.message.message_event_result import (
 from astrbot.core.pipeline.respond.stage import RespondStage
 from astrbot.core.platform.astr_message_event import (
     AstrMessageEvent,
+    current_message_event,
     streaming_response_event,
 )
 from astrbot.core.platform.astrbot_message import AstrBotMessage, Group, MessageMember
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
+from astrbot.core.star.context import Context
 
 
 class ConcreteAstrMessageEvent(AstrMessageEvent):
@@ -125,7 +128,7 @@ async def test_streaming_trace_only_records_final_response(
         ["Tool reply", "Hello world"] if tool_response else ["Hello world"]
     )
     assert records[-1].kwargs["streaming"] is True
-    assert records[-1].kwargs["source"] == "core"
+    assert "source" not in records[-1].kwargs
     assert streaming_response_event.get() is None
     await event.send(MessageChain([Plain("Normal reply")]))
     assert event.trace.record.call_args.kwargs["message"] == "Normal reply"
@@ -198,11 +201,10 @@ async def test_streaming_outline_limit_does_not_truncate_delivery(astr_message_e
         ResultContentType.STREAMING_RESULT,
     ],
 )
-@pytest.mark.parametrize("source", [None, "core", "plugin:test_plugin"])
-async def test_response_trace_preserves_sending_owner(
-    astr_message_event, monkeypatch, result_type, source
+async def test_response_trace_omits_sending_owner(
+    astr_message_event, monkeypatch, result_type
 ):
-    """Attribute system/model replies to core while preserving plugin ownership."""
+    """Record delivered responses without attributing a sending owner."""
     event = astr_message_event
     event.trace = MagicMock()
     monkeypatch.setattr(
@@ -212,8 +214,6 @@ async def test_response_trace_preserves_sending_owner(
         "astrbot.core.pipeline.respond.stage.call_event_hook",
         AsyncMock(return_value=False),
     )
-    if source is not None:
-        event.set_extra("_trace_response_source", source)
 
     async def stream():
         yield MessageChain([Plain("Reply")])
@@ -240,8 +240,126 @@ async def test_response_trace_preserves_sending_owner(
         if record.args[0] == "response_sent"
     ]
     assert len(sent) == 1
-    assert sent[0].kwargs["source"] == (source or "core")
+    assert "source" not in sent[0].kwargs
     assert sent[0].kwargs["message"] == "Reply"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("outcome", ["success", "missing", "failure"])
+async def test_public_context_send_records_only_successful_delivery(
+    astr_message_event, outcome
+):
+    """Attach successful public sends to the active event without a source."""
+    event = astr_message_event
+    event.trace = MagicMock()
+    platform = SimpleNamespace(
+        meta=lambda: SimpleNamespace(id="target"),
+        send_by_session=AsyncMock(
+            side_effect=RuntimeError("send failed") if outcome == "failure" else None
+        ),
+    )
+    context = SimpleNamespace(
+        platform_manager=SimpleNamespace(
+            platform_insts=[] if outcome == "missing" else [platform]
+        ),
+        get_config=lambda **kwargs: {},
+    )
+    with event.execution():
+        assert current_message_event.get() is event
+        if outcome == "failure":
+            with pytest.raises(RuntimeError, match="send failed"):
+                await Context.send_message(
+                    context, "target:FriendMessage:other", MessageChain([Plain("Hello")])
+                )
+        else:
+            assert await Context.send_message(
+                context, "target:FriendMessage:other", MessageChain([Plain("Hello")])
+            ) is (outcome == "success")
+    deliveries = [
+        call for call in event.trace.record.call_args_list
+        if call.args[0] == "response_sent"
+    ]
+    assert len(deliveries) == (1 if outcome == "success" else 0)
+    if deliveries:
+        assert deliveries[0].kwargs["message"] == "Hello"
+        assert deliveries[0].kwargs["target_umo"] == "target:FriendMessage:other"
+        assert "source" not in deliveries[0].kwargs
+    assert current_message_event.get() is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scoped", [False, True])
+async def test_public_context_send_skips_unscoped_and_stream_chunk_records(
+    astr_message_event, scoped
+):
+    """Do not invent traces or duplicate streaming chunk delivery records."""
+    event = astr_message_event
+    event.trace = MagicMock()
+    context = SimpleNamespace(
+        platform_manager=SimpleNamespace(platform_insts=[
+            SimpleNamespace(
+                meta=lambda: SimpleNamespace(id="target"), send_by_session=AsyncMock()
+            )
+        ]),
+        get_config=lambda **kwargs: {},
+    )
+    if scoped:
+        with event.execution():
+            token = streaming_response_event.set(event)
+            try:
+                await Context.send_message(
+                    context, "target:FriendMessage:other", MessageChain([Plain("Chunk")])
+                )
+            finally:
+                streaming_response_event.reset(token)
+    else:
+        await Context.send_message(
+            context, "target:FriendMessage:other", MessageChain([Plain("Hello")])
+        )
+    assert all(
+        call.args[0] != "response_sent"
+        for call in event.trace.record.call_args_list
+    )
+
+
+@pytest.mark.asyncio
+async def test_nested_event_forwarding_records_delivery_once(monkeypatch):
+    """Record nested public sends only once without duplicating event metrics."""
+    from astrbot.core.cron.events import CronMessageEvent
+    from astrbot.core.platform.message_session import MessageSession
+
+    monkeypatch.setattr(
+        "astrbot.core.platform.astr_message_event.Metric.upload", AsyncMock()
+    )
+    context = SimpleNamespace(
+        platform_manager=SimpleNamespace(platform_insts=[
+            SimpleNamespace(
+                meta=lambda: SimpleNamespace(id="target"), send_by_session=AsyncMock()
+            )
+        ]),
+        get_config=lambda **kwargs: {},
+    )
+
+    async def send_message(session, chain):
+        """Dispatch through the real public context method."""
+        return await Context.send_message(context, session, chain)
+
+    context.send_message = send_message
+    event = CronMessageEvent(
+        context=context,
+        session=MessageSession.from_str("target:FriendMessage:user"),
+        message="Scheduled",
+    )
+    event.trace = MagicMock()
+    with event.execution():
+        await event.send(MessageChain([Plain("Hello")]))
+    deliveries = [
+        call for call in event.trace.record.call_args_list
+        if call.args[0] == "response_sent"
+    ]
+    assert len(deliveries) == 1
+    assert deliveries[0].kwargs["message"] == "Hello"
+    assert event._has_send_oper is True
 
 
 def test_retained_attachment_is_excluded_from_event_cleanup(

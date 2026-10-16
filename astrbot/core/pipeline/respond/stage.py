@@ -238,21 +238,6 @@ class RespondStage(Stage):
             f"Prepare to send - {event.get_sender_name()}/{event.get_sender_id()}: {event._outline_chain(result.chain)}",
             extra={"category": "user_chat"},
         )
-        event.set_extra(
-            "_trace_response_source",
-            event.get_extra("_trace_response_source") or "core",
-        )
-        if result.result_content_type != ResultContentType.STREAMING_RESULT:
-            event.trace.record(
-                "response_ready",
-                kind="response",
-                source=event.get_extra("_trace_response_source"),
-                message=event._outline_chain(result.chain),
-                component_types=[str(component.type) for component in result.chain],
-                component_count=len(result.chain),
-                result_type=result.result_content_type.value,
-            )
-
         if result.result_content_type == ResultContentType.STREAMING_RESULT:
             if result.async_stream is None:
                 logger.warning("async_stream is empty; skipping delivery.")
@@ -317,7 +302,6 @@ class RespondStage(Stage):
                 event.trace.record(
                     "response_sent",
                     kind="response",
-                    source=event.get_extra("_trace_response_source"),
                     message=outline,
                     streaming=True,
                     **({"truncated": True} if outline_truncated else {}),

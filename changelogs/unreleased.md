@@ -1,5 +1,7 @@
 # Unreleased
 
+- Remove response-source bookkeeping and System/Plugin sender chips. Record successful proactive sends in Context.send_message rather than the send-message tool, correlate them with the active event, and deduplicate nested event forwarding. Preserve final-only streaming summaries and independent tool deliveries; do not create traces for unscoped sends or rewrite historical data.
+
 - Remove the execution-mode prefix from Agent chips, retaining only the configured runner's display name.
 
 - Prefix Agent model, persona, and tool-call chips with box, heart, and wrench icons; use a consistent 5px icon-to-label gap for trace metadata chips, including plugin names.

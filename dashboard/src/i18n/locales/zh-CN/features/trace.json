@@ -88,10 +88,7 @@
   "chips": {
     "provider": "提供商：{id}",
     "persona": "人格：{id}",
-    "toolCalls": "{count} 次工具调用",
-    "systemSender": "系统发送",
-    "pluginSender": "插件发送：{name}",
-    "unknownSender": "来源未知"
+    "toolCalls": "{count} 次工具调用"
   },
   "groups": {
     "handlerStart": "触发多个插件处理器",

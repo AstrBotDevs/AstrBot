@@ -156,13 +156,7 @@ async def test_send_message_defaults_to_current_session():
     target_session = call_args[0][0]
     assert str(target_session) == "feishu:GroupMessage:oc_xxx"
     assert ctx.context.event._has_send_oper is True
-    ctx.context.event.trace.record.assert_called_once()
-    assert ctx.context.event.trace.record.call_args.args == ("response_sent",)
-    fields = ctx.context.event.trace.record.call_args.kwargs
-    assert fields["source"] == "core"
-    assert fields["message"] == "hello"
-    assert fields["component_count"] == 1
-    assert fields["target_umo"] == "feishu:GroupMessage:oc_xxx"
+    ctx.context.event.trace.record.assert_not_called()
     assert ctx.context.event.get_extra(
         "_send_message_to_user_current_session_plain_texts",
     ) == ["hello"]
@@ -215,9 +209,7 @@ async def test_send_message_other_session_does_not_record_current_text():
     )
     assert "Message sent to session" in result
     assert ctx.context.event._has_send_oper is False
-    assert ctx.context.event.trace.record.call_args.kwargs["target_umo"] == (
-        "feishu:GroupMessage:oc_other"
-    )
+    ctx.context.event.trace.record.assert_not_called()
     assert (
         ctx.context.event.get_extra(
             "_send_message_to_user_current_session_plain_texts",
@@ -254,11 +246,7 @@ async def test_respond_stage_sends_different_text_after_send_message_to_user():
 
     assert result is None
     event.send.assert_awaited_once()
-    assert event.trace.record.call_args.args == ("response_ready",)
-    assert event.trace.record.call_args.kwargs["source"] == "core"
-    assert event.trace.record.call_args.kwargs["message"] == (
-        "I have sent the message with the tool."
-    )
+    event.trace.record.assert_not_called()
     assert event.get_result() is None
 
 

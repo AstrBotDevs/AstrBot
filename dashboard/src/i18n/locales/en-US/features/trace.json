@@ -88,10 +88,7 @@
   "chips": {
     "provider": "Provider: {id}",
     "persona": "Persona: {id}",
-    "toolCalls": "{count} tool calls",
-    "systemSender": "Sent by system",
-    "pluginSender": "Sent by plugin: {name}",
-    "unknownSender": "Unknown sender"
+    "toolCalls": "{count} tool calls"
   },
   "groups": {
     "handlerStart": "Multiple plugin handlers triggered",

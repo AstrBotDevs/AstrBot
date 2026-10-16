@@ -96,8 +96,6 @@ async def call_event_hook(
         plugin = star_map.get(handler.handler_module_path)
         plugin_name = plugin.name if plugin else handler.handler_module_path
         plugin_display_name = plugin.display_name if plugin else None
-        previous_source = event.get_extra("_trace_response_source")
-        event.set_extra("_trace_response_source", f"plugin:{plugin_name}")
         handler_category = (
             "llm_tool" if hook_type == EventType.OnCallingFuncToolEvent else "hook"
         )
@@ -147,11 +145,6 @@ async def call_event_hook(
                 handler_category=handler_category,
                 hook=hook_type.name,
             )
-        finally:
-            if previous_source is None:
-                event._extras.pop("_trace_response_source", None)
-            else:
-                event.set_extra("_trace_response_source", previous_source)
 
         if event.is_stopped():
             logger.info(

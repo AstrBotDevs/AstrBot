@@ -154,7 +154,7 @@ test("empty and singleton timelines do not create group headers", (t) => {
   assert.equal(state.recordLabel(state.timelineRows.value[0].record), "触发插件处理器 (指令/指令组)");
 });
 
-test("chips reuse profile runner names and classify responses by their sending owner", (t) => {
+test("chips reuse profile runner names without showing legacy response ownership", (t) => {
   const state = setup(t, [
     { key: "agent1", action: "agent_start", kind: "agent", fields: { runner_type: "local" } },
     { key: "agent2", action: "agent_start", kind: "agent", fields: { runner_type: "dify" } },
@@ -164,10 +164,10 @@ test("chips reuse profile runner names and classify responses by their sending o
   ]);
   const rows = state.timelineRows.value;
   assert.deepEqual(Array.from(rows[0].metadata), ["AstrBot 内置 AI", "Dify"]);
-  assert.deepEqual(Array.from(rows[1].metadata), ["系统发送", "插件发送：Weather Forecast"]);
+  assert.deepEqual(Array.from(rows[1].metadata), []);
   assert.equal(state.recordSubtitle({ action: "agent_start", fields: { runner_type: "custom_runner" } }), "custom_runner");
-  assert.equal(state.recordSubtitle({ action: "response_sent", fields: { source: "unknown" } }), "来源未知");
-  assert.equal(state.recordSubtitle({ action: "response_sent", fields: { source: "plugin:uninstalled" } }), "插件发送：uninstalled");
+  assert.equal(state.recordSubtitle({ action: "response_sent", fields: { source: "unknown" } }), "");
+  assert.equal(state.recordSubtitle({ action: "response_sent", fields: { source: "plugin:uninstalled" } }), "");
 });
 
 test("Agent folding follows span ancestry, keeps responses visible, and preserves interleaved branches", (t) => {

@@ -49,8 +49,6 @@ class AgentRequestSubStage(Stage):
             )
             return
 
-        previous_source = event.get_extra("_trace_response_source")
-        event.set_extra("_trace_response_source", "core")
         agent_config = self.config.get("agent_runner", {})
         event.trace.record(
             "agent_start",
@@ -80,8 +78,3 @@ class AgentRequestSubStage(Stage):
                 status="success",
                 runner_type=agent_config.get("runner_type", "local"),
             )
-        finally:
-            if previous_source is None:
-                event._extras.pop("_trace_response_source", None)
-            else:
-                event.set_extra("_trace_response_source", previous_source)

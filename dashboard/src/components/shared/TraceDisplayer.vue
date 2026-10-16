@@ -290,7 +290,7 @@ const timelineRows = computed(() => {
       record.fields.plugin_display_name || record.fields.plugin,
     ).filter(Boolean))].join(", ");
     const metadata = [...new Set(group.records.filter((record) =>
-      record.action === "agent_start" || record.kind === "response",
+      record.action === "agent_start",
     ).map((record) => recordSubtitle(record)))];
     rows.push({ key: `${group.key}:group`, record: group.records[0], group, expanded, errors, plugins, metadata, category: group.category, depth });
     if (expanded) {
@@ -745,12 +745,7 @@ function recordSubtitle(record) {
   }
   if (record.action === "stage_start" || record.action === "stage_end") return fields.stage || "";
   if (record.action === "response_sent" || record.action === "response_ready") {
-    const source = fields.source;
-    if (source?.startsWith("plugin:")) {
-      const plugin = source.slice("plugin:".length);
-      return tm("chips.pluginSender", { name: plugins.value[plugin]?.display_name || plugin });
-    }
-    return tm(source === "core" || source === "agent" ? "chips.systemSender" : "chips.unknownSender");
+    return "";
   }
   if (record.action === "agent_start") {
     const runner = fields.runner_type || "local";
@@ -1090,7 +1085,6 @@ onBeforeUnmount(() => {
                 <span v-if="record.fields.duration_ms != null"> · {{ formatDuration(record.fields.duration_ms) }}</span>
               </div>
               <div v-else-if="record.kind === 'response'" class="timeline-subtitle">
-                <v-chip class="timeline-metadata-chip" size="x-small" variant="tonal" :title="record.fields.source">{{ recordSubtitle(record) }}</v-chip>
                 <TraceMessagePreview v-if="record.fields.message" class="trace-response-outline" :text="record.fields.message" />
               </div>
               <div v-else-if="record.action === 'agent_start'" class="timeline-subtitle">

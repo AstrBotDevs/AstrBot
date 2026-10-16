@@ -88,10 +88,7 @@
   "chips": {
     "provider": "Провайдер: {id}",
     "persona": "Персона: {id}",
-    "toolCalls": "Вызовов инструментов: {count}",
-    "systemSender": "Отправлено системой",
-    "pluginSender": "Отправлено плагином: {name}",
-    "unknownSender": "Неизвестный отправитель"
+    "toolCalls": "Вызовов инструментов: {count}"
   },
   "groups": {
     "handlerStart": "Вызваны несколько обработчиков плагинов",

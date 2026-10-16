@@ -40,6 +40,9 @@ from .platform_metadata import PlatformMetadata
 streaming_response_event: ContextVar["AstrMessageEvent | None"] = ContextVar(
     "streaming_response_event", default=None
 )
+current_message_event: ContextVar["AstrMessageEvent | None"] = ContextVar(
+    "current_message_event", default=None
+)
 
 
 class AstrMessageEvent(abc.ABC):
@@ -141,6 +144,7 @@ class AstrMessageEvent(abc.ABC):
             self.trace.context(),
         ):
             self._execution_active = True
+            event_token = current_message_event.set(self)
             active_event_registry.register(self)
             status = "success"
             error = None
@@ -163,8 +167,11 @@ class AstrMessageEvent(abc.ABC):
                     try:
                         self.cleanup_temporary_local_files()
                     finally:
-                        active_event_registry.unregister(self)
-                        self._execution_active = False
+                        try:
+                            active_event_registry.unregister(self)
+                        finally:
+                            self._execution_active = False
+                            current_message_event.reset(event_token)
 
     @property
     def unified_msg_origin(self) -> str:
@@ -559,7 +566,6 @@ class AstrMessageEvent(abc.ABC):
             self.trace.record(
                 "response_sent",
                 kind="response",
-                source=self.get_extra("_trace_response_source", "unknown"),
                 message=self._outline_chain(message.chain),
                 component_types=[str(component.type) for component in message.chain],
                 component_count=len(message.chain),

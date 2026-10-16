@@ -88,10 +88,7 @@
   "chips": {
     "provider": "プロバイダー: {id}",
     "persona": "ペルソナ: {id}",
-    "toolCalls": "ツール呼び出し {count} 回",
-    "systemSender": "システムから送信",
-    "pluginSender": "プラグインから送信: {name}",
-    "unknownSender": "送信元不明"
+    "toolCalls": "ツール呼び出し {count} 回"
   },
   "groups": {
     "handlerStart": "複数のプラグインハンドラーを実行",

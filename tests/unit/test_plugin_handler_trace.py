@@ -53,7 +53,7 @@ async def test_message_handler_trace_category(monkeypatch, event_filter, categor
         assert record.kwargs["handler_category"] == category
         assert record.kwargs["handler_type"] == "AdapterMessageEvent"
         assert record.kwargs["plugin_display_name"] == "Test Plugin"
-    assert "_trace_response_source" not in extras
+    assert extras == {"activated_handlers": [handler], "handlers_parsed_params": {}}
 
 
 @pytest.mark.asyncio
@@ -83,7 +83,7 @@ async def test_event_hook_trace_category(monkeypatch, hook_type, category, fails
         "test_plugin",
         SimpleNamespace(name="test_plugin", display_name="Test Plugin"),
     )
-    extras = {"_trace_response_source": "agent"}
+    extras = {}
     event = MagicMock()
     event._extras = extras
     event.get_extra.side_effect = extras.get
@@ -98,7 +98,7 @@ async def test_event_hook_trace_category(monkeypatch, hook_type, category, fails
         assert record.kwargs["handler_category"] == category
         assert record.kwargs["handler_type"] == hook_type.name
     assert records[-1].kwargs["status"] == ("error" if fails else "success")
-    assert extras["_trace_response_source"] == "agent"
+    assert extras == {}
 
 
 @pytest.mark.asyncio

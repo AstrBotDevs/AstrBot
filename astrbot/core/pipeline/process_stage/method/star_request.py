@@ -47,11 +47,6 @@ class StarRequestSubStage(Stage):
                 )
                 continue
             logger.debug(f"plugin -> {md.name} - {handler.handler_name}")
-            previous_source = event.get_extra("_trace_response_source")
-            event.set_extra(
-                "_trace_response_source",
-                f"plugin:{md.name or handler.handler_module_path}",
-            )
             # Match the component categories used by the plugin detail page.
             handler_category = (
                 "command"
@@ -127,8 +122,3 @@ class StarRequestSubStage(Stage):
                     event.clear_result()
 
                 event.stop_event()
-            finally:
-                if previous_source is None:
-                    event._extras.pop("_trace_response_source", None)
-                else:
-                    event.set_extra("_trace_response_source", previous_source)
