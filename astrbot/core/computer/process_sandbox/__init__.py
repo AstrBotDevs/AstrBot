@@ -82,7 +82,7 @@ def get_process_sandbox_status() -> dict:
                     result.stderr.decode("utf-8", errors="replace").strip()
                     or f"Sandbox probe exited with code {result.returncode}."
                 )
-        except (OSError, RuntimeError) as exc:
+        except (OSError, RuntimeError, TimeoutError) as exc:
             sandbox.update(
                 status="unavailable", error=str(exc)[:1024] or type(exc).__name__
             )

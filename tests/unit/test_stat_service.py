@@ -113,6 +113,9 @@ def test_runtime_detects_platform_dependencies(
         (SandboxRunResult(returncode=2), "Sandbox probe exited with code 2."),
         (PermissionError("Operation not permitted"), "Operation not permitted"),
         (SandboxTimeoutError("Sandbox probe timed out."), "Sandbox probe timed out."),
+        (SandboxTimeoutError(), "SandboxTimeoutError"),
+        (TimeoutError("Sandbox probe timed out."), "Sandbox probe timed out."),
+        (TimeoutError(), "TimeoutError"),
         (RuntimeError("Sandbox launch failed."), "Sandbox launch failed."),
     ],
 )
@@ -141,6 +144,8 @@ def test_runtime_reports_sandbox_startup_failure(
         "status": "unavailable",
         "error": error,
     }
+    assert process_sandbox.get_process_sandbox_status() == service.runtime["sandbox"]
+    sandbox.run.assert_called_once()
     assert not list(tmp_path.iterdir())
 
 
