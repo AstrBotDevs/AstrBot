@@ -108,9 +108,6 @@
         scope: tm(`scopes.${policy(role).filesystem_scope}`)
       }) }}
     </v-alert>
-    <v-alert v-if="isolationUnavailable" type="info" variant="tonal" density="compact">
-      {{ tm('unrestrictedExecutionNotice') }}
-    </v-alert>
     <v-alert v-if="memberHasElevatedAccess" type="warning" variant="tonal" density="compact">
       {{ tm('memberWarning') }}
     </v-alert>

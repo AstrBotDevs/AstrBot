@@ -70,7 +70,7 @@ Saving configuration succeeds even when Local isolation is unavailable, includin
 - Saved permissions are not overwritten. After restoring isolation and restarting AstrBot, tools use the saved execution policy again.
 - The permission matrix identifies each affected role and explains the cause, effective file scope, and unchanged saved permissions. The LLM receives the same explanation in its system instructions and in rejected Shell, Python, and shell-session tool responses. Missing dependencies, unsupported platforms, and startup failures have distinct messages; startup failures include the probe diagnostic.
 
-The permission matrix hides the network column when isolation is unavailable and explains that explicitly enabling entire-environment execution also permits execution network access. The former isolation setup link in the bottom-left corner of the matrix has been removed; use the operating system and Docker instructions below instead.
+The permission matrix hides the network column when isolation is unavailable. The former isolation setup link in the bottom-left corner of the matrix has been removed; use the operating system and Docker instructions below instead.
 
 For example, if an administrator saved workspace-only execution and bubblewrap is missing, the LLM receives this Shell tool response:
 
