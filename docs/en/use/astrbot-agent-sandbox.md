@@ -26,7 +26,7 @@ AstrBot gives the Agent a set of tools, including Shell, Python, and filesystem 
 
 Permissions are configured separately for members and administrators in the matrix shown below.
 
-![Local permission policy matrix](./images/config-local-permissions-en.png)
+![Local permission policy matrix](./images/config-local-permissions-en.jpg)
 
 Enabling **Execute code** gives the Agent the `astrbot_execute_shell` and `astrbot_execute_python` tools to execute Shell commands and Python code in the local environment.
 

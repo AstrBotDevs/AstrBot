@@ -26,7 +26,7 @@ AstrBot 内置 AI 支持让 Agent 通过执行代码、读写文件等方式访�
 
 具体的权限支持按普通成员和管理员分别设置，以矩阵的形式展示，见下图。
 
-![本地权限策略矩阵](./images/config-local-permissions-zh.png)
+![本地权限策略矩阵](./images/config-local-permissions-zh.jpg)
 
 当勾选 “允许执行代码” 时，AstrBot 会为 Agent 提供 `astrbot_execute_shell` 和 `astrbot_execute_python` 两个工具，以让 Agent 在本机环境中执行 Shell 和 Python 代码。
 

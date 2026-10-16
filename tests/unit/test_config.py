@@ -124,9 +124,9 @@ class TestAstrBotConfigLoad:
 
         permissions = config["provider_settings"]["computer_use_local_permissions"]
         assert permissions["member"] == {
-            "allow_execution": system != "Windows" and not require_admin,
+            "allow_execution": not require_admin,
             "allow_network": False,
-            "filesystem_scope": "none" if system == "Windows" else "workspace",
+            "filesystem_scope": "workspace",
         }
         assert permissions["admin"] == {
             "allow_execution": True,
