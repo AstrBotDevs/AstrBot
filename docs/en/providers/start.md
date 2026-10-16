@@ -21,6 +21,7 @@ For example, you may choose to connect model services provided by (but not limit
 - Official Anthropic model services ([Anthropic](https://www.anthropic.com/))
 - Google's Gemini model services via Google Cloud ([Google Cloud](https://cloud.google.com/))
 - OpenRouter model services ([OpenRouter](https://openrouter.ai/))
+- Requesty model services ([Requesty](https://www.requesty.ai/))
 
 ## Integration Steps Using DeepSeek as an Example
 

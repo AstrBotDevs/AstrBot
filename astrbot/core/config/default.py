@@ -1547,6 +1547,18 @@ CONFIG_METADATA_2 = {
                         "proxy": "",
                         "custom_headers": {},
                     },
+                    "Requesty": {
+                        "id": "requesty",
+                        "provider": "requesty",
+                        "type": "requesty_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "timeout": 120,
+                        "api_base": "https://router.requesty.ai/v1",
+                        "proxy": "",
+                        "custom_headers": {},
+                    },
                     "SSYCloud(胜算云)": {
                         "id": "ssycloud",
                         "provider": "ssycloud",

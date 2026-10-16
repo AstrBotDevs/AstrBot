@@ -459,6 +459,10 @@ class ProviderManager:
                 from .sources.openrouter_source import (
                     ProviderOpenRouter as ProviderOpenRouter,
                 )
+            case "requesty_chat_completion":
+                from .sources.requesty_source import (
+                    ProviderRequesty as ProviderRequesty,
+                )
             case "ssycloud_chat_completion":
                 from .sources.ssycloud_source import (
                     ProviderSSYCloud as ProviderSSYCloud,
