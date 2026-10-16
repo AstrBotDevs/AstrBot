@@ -14,6 +14,7 @@ from pathlib import Path, PurePosixPath
 
 import yaml
 
+from astrbot.core import logger
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_builtin_plugin_path,
     get_astrbot_data_path,
@@ -552,11 +553,27 @@ class SkillManager:
             sandbox_cached_descriptions[name] = str(item.get("description", "") or "")
             sandbox_cached_paths[name] = path
 
-        for entry in sorted(Path(self.skills_root).iterdir()):
+        try:
+            local_skill_dirs = sorted(Path(self.skills_root).iterdir())
+        except OSError as exc:
+            # An unreadable skills root must not kill the whole agent request;
+            # mirror list_workspace_skills and continue with the other sources.
+            logger.warning(
+                f"Skill root {self.skills_root} is not readable, skipping local skills: {exc}"
+            )
+            local_skill_dirs = []
+
+        for entry in local_skill_dirs:
             if not entry.is_dir():
                 continue
             skill_name = entry.name
-            skill_md = _normalize_skill_markdown_path(entry)
+            try:
+                skill_md = _normalize_skill_markdown_path(entry)
+            except OSError as exc:
+                # One broken or permission-denied skill directory is not a
+                # reason to fail the entire request (#10589).
+                logger.warning(f"Skip unreadable skill directory {entry}: {exc}")
+                continue
             if skill_md is None:
                 continue
             active = skill_configs.get(skill_name, {}).get("active", True)
@@ -602,7 +619,13 @@ class SkillManager:
         ) in self._iter_plugin_skill_dirs():
             if skill_name in skills_by_name:
                 continue
-            skill_md = _normalize_skill_markdown_path(skill_dir, rename_legacy=False)
+            try:
+                skill_md = _normalize_skill_markdown_path(skill_dir, rename_legacy=False)
+            except OSError as exc:
+                logger.warning(
+                    f"Skip unreadable plugin skill directory {skill_dir}: {exc}"
+                )
+                continue
             if skill_md is None:
                 continue
             active = skill_configs.get(skill_name, {}).get("active", True)
