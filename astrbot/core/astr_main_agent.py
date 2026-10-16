@@ -560,6 +560,7 @@ async def _ensure_persona_and_skills(
     event: AstrMessageEvent,
 ) -> None:
     """Ensure persona and skills are applied to the request's system prompt or user prompt."""
+    event.set_extra("_trace_persona_id", None)
     if req.system_prompt is None:
         req.system_prompt = ""
 
@@ -580,6 +581,8 @@ async def _ensure_persona_and_skills(
         platform_name=event.get_platform_name(),
         provider_settings=cfg,
     )
+
+    event.set_extra("_trace_persona_id", persona_id)
 
     set_persona_custom_error_message_on_event(
         event, extract_persona_custom_error_message_from_persona(persona)
@@ -711,14 +714,6 @@ async def _ensure_persona_and_skills(
         ).strip()
         if router_prompt:
             req.system_prompt += f"\n{router_prompt}\n"
-    try:
-        event.trace.record(
-            "sel_persona",
-            persona_id=persona_id,
-            persona_toolset=persona_toolset.names(),
-        )
-    except Exception:
-        pass
 
 
 async def _request_img_caption(

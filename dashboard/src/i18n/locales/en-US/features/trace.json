@@ -4,7 +4,7 @@
     "enabled": "Auto-scroll: On",
     "disabled": "Auto-scroll: Off"
   },
-  "hint": "Currently only recording partial model call paths from AstrBot main Agent. More coverage will be added.",
+  "hint": "Inspect the in-memory execution chain for each message: plugin handlers, Agent steps, tools, and responses.",
   "toggleLabel": "Record traces",
   "recording": "Recording",
   "paused": "Paused",
@@ -17,5 +17,132 @@
   "expand": "Expand",
   "collapse": "Collapse",
   "showMore": "Show more",
-  "empty": "No trace data yet"
+  "empty": "No trace data yet",
+  "search": "Search messages, sessions, or plugins in {count} records",
+  "clearSearch": "Clear search",
+  "live": "Live",
+  "connecting": "Connecting",
+  "refresh": "Refresh",
+  "records": "records",
+  "traceList": "Trace list",
+  "loading": "Loading traces…",
+  "untitled": "Untitled message",
+  "steps": "steps",
+  "duration": "Duration",
+  "handlers": "Plugin handlers",
+  "responses": "Responses",
+  "details": "View details",
+  "selectTrace": "Select a trace to inspect the complete execution chain",
+  "closeDetails": "Close details",
+  "pagination": {
+    "perPage": "Rows per page",
+    "range": "{0}–{1} of {2}"
+  },
+  "messagePreview": {
+    "expand": "Show full text",
+    "collapse": "Collapse"
+  },
+  "compact": {
+    "pluginHandler": "Call plugin",
+    "agentExecution": "Agent execution",
+    "rawData": "Raw data",
+    "toggleAgent": "{action} the Agent execution chain"
+  },
+  "history": {
+    "loadFailed": "Failed to load trace history. Please retry.",
+    "detailFailed": "Failed to load trace details; the trace may have been evicted. Please retry.",
+    "storageWarning": "Some traces could not be persisted. Check database errors or capacity limits.",
+    "loadMore": "Load more",
+    "limitHint": "Showing up to {count} traces. Refine your search.",
+    "truncated": "This trace exceeded content or node limits; some data was truncated."
+  },
+  "controls": {
+    "start": "Start",
+    "pauseButton": "Pause",
+    "pause": "Pause trace recording",
+    "resume": "Start trace recording",
+    "loadFailed": "Failed to load trace settings. Refresh to retry.",
+    "updateFailed": "Failed to change trace recording. Please retry."
+  },
+  "tokens": {
+    "title": "Tokens",
+    "breakdown": "Input: {input} (cache read: {cached})\nOutput: {output}",
+    "unavailable": "No reported token usage available"
+  },
+  "classification": {
+    "agent": "Agent",
+    "command": "Command",
+    "group": "Group chat",
+    "private": "Private chat"
+  },
+  "columns": {
+    "category": "Type",
+    "duration": "Duration",
+    "status": "Status",
+    "platform": "Platform",
+    "timestamp": "Timestamp",
+    "message": "Message",
+    "sender": "Sender",
+    "spansHint": "Actual spans including the message root, excluding events. Collapsing does not change the count."
+  },
+  "chips": {
+    "provider": "Provider: {id}",
+    "persona": "Persona: {id}",
+    "toolCalls": "{count} tool calls"
+  },
+  "groups": {
+    "handlerStart": "Multiple plugin handlers triggered",
+    "agentStart": "Multiple Agents started",
+    "agentToolCall": "Multiple tools called",
+    "agentToolResult": "Multiple tool results",
+    "responseReady": "Multiple responses ready",
+    "responseSent": "Multiple responses sent",
+    "repeated": "Repeated: {label}",
+    "count": "{count} records",
+    "errors": "{count} errors"
+  },
+  "filters": {
+    "button": "Filters",
+    "title": "Filters",
+    "reset": "Reset",
+    "close": "Close filters",
+    "errors": "Has errors",
+    "models": "Has model calls",
+    "plugins": "Has plugin calls",
+    "hint": "Select multiple conditions to require all of them. No selection shows all traces."
+  },
+  "status": {
+    "error": "Error",
+    "complete": "Complete",
+    "live": "In progress"
+  },
+  "handlerDescription": {
+    "loading": "Loading handler description…",
+    "loadFailed": "Failed to load. Hover again to retry.",
+    "empty": "No handler description available"
+  },
+  "handlerCategories": {
+    "command": "Command/Command group",
+    "listener": "Event listener",
+    "hook": "Event hook",
+    "llm_tool": "LLM tool"
+  },
+  "actions": {
+    "selectPersona": "Select persona",
+    "eventReceived": "Message received",
+    "pipelineStart": "Pipeline started",
+    "pipelineEnd": "Processing complete",
+    "stageStart": "Stage started",
+    "stageEnd": "Stage complete",
+    "handlerStart": "Plugin handler triggered",
+    "handlerEnd": "Handler complete",
+    "agentStart": "Agent started",
+    "agentEnd": "Agent complete",
+    "agentPrepare": "Agent request prepared",
+    "agentComplete": "Model request complete",
+    "agentToolCall": "Tool called",
+    "agentToolResult": "Tool returned",
+    "responseReady": "Response ready",
+    "responseSent": "Response sent"
+  }
 }

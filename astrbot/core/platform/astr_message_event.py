@@ -4,7 +4,9 @@ import hashlib
 import os
 import re
 import uuid
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from time import time
 from typing import Any
 
@@ -13,6 +15,7 @@ from deprecated import deprecated
 from astrbot import logger
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.db.po import Conversation
+from astrbot.core.log import log_context
 from astrbot.core.message.components import (
     At,
     AtAll,
@@ -26,12 +29,20 @@ from astrbot.core.message.components import (
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider.entities import ProviderRequest
+from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.trace import TraceSpan
 
 from .astrbot_message import AstrBotMessage, Group
 from .message_session import MessageSesion, MessageSession  # noqa
 from .platform_metadata import PlatformMetadata
+
+streaming_response_event: ContextVar["AstrMessageEvent | None"] = ContextVar(
+    "streaming_response_event", default=None
+)
+current_message_event: ContextVar["AstrMessageEvent | None"] = ContextVar(
+    "current_message_event", default=None
+)
 
 
 class AstrMessageEvent(abc.ABC):
@@ -88,6 +99,14 @@ class AstrMessageEvent(abc.ABC):
         """用于记录事件处理的 TraceSpan 对象"""
         self.span = self.trace
         """事件级 TraceSpan(别名: span)"""
+        self.trace.record(
+            "event_received",
+            kind="message",
+            platform_id=platform_meta.id,
+            platform_name=platform_meta.name,
+            message_type=self.get_message_type().value,
+            message=self.get_message_outline(),
+        )
 
         self._has_send_oper = False
         """在此次事件中是否有过至少一次发送消息的操作"""
@@ -101,6 +120,58 @@ class AstrMessageEvent(abc.ABC):
 
         # back_compability
         self.platform = platform_meta
+        self._execution_active = False
+
+    @contextmanager
+    def execution(self) -> Iterator[None]:
+        """Own event execution, context binding, and final trace completion.
+
+        The outermost scope finishes the event after all awaited processing,
+        delivery, and history work. Nested scopes do not finish it early.
+        The legacy pipeline_end action remains the root completion signal.
+
+        Yields:
+            Control to the event's execution entry point.
+
+        Raises:
+            BaseException: Any execution failure or cancellation, unchanged.
+        """
+        if self._execution_active:
+            yield
+            return
+        with (
+            log_context(self.get_platform_id(), self.get_platform_name()),
+            self.trace.context(),
+        ):
+            self._execution_active = True
+            event_token = current_message_event.set(self)
+            active_event_registry.register(self)
+            status = "success"
+            error = None
+            try:
+                yield
+            except BaseException as exc:
+                status = "error"
+                error = str(exc) or type(exc).__name__
+                raise
+            finally:
+                try:
+                    self.trace.record(
+                        "pipeline_end",
+                        kind="message",
+                        status=status,
+                        stopped=self.is_stopped(),
+                        error=error,
+                    )
+                finally:
+                    try:
+                        self.cleanup_temporary_local_files()
+                    finally:
+                        try:
+                            active_event_registry.unregister(self)
+                        finally:
+                            self._execution_active = False
+                            current_message_event.reset(event_token)
 
     @property
     def unified_msg_origin(self) -> str:
@@ -487,6 +558,19 @@ class AstrMessageEvent(abc.ABC):
             message (MessageChain): 消息链，具体使用方式请参考文档。
 
         """
+        if (
+            message is not None
+            and message.chain
+            and streaming_response_event.get() is not self
+        ):
+            self.trace.record(
+                "response_sent",
+                kind="response",
+                message=self._outline_chain(message.chain),
+                component_types=[str(component.type) for component in message.chain],
+                component_count=len(message.chain),
+                message_type=message.type,
+            )
         # Leverage BLAKE2 hash function to generate a non-reversible hash of the sender ID for privacy.
         hash_obj = hashlib.blake2b(self.get_sender_id().encode("utf-8"), digest_size=16)
         sid = str(uuid.UUID(bytes=hash_obj.digest()))

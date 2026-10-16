@@ -2,13 +2,11 @@ from collections.abc import AsyncGenerator
 from typing import cast
 
 from astrbot.core import logger
-from astrbot.core.log import log_context
 from astrbot.core.platform import AstrMessageEvent
 from astrbot.core.platform.sources.webchat.webchat_event import WebChatMessageEvent
 from astrbot.core.platform.sources.wecom_ai_bot.wecomai_event import (
     WecomAIBotMessageEvent,
 )
-from astrbot.core.utils.active_event_registry import active_event_registry
 
 from .bootstrap import ensure_builtin_stages_registered
 from .context import PipelineContext
@@ -87,16 +85,11 @@ class PipelineScheduler:
             event (AstrMessageEvent): 事件对象
 
         """
-        active_event_registry.register(event)
-        with log_context(event.get_platform_id(), event.get_platform_name()):
-            try:
-                await self._process_stages(event)
+        with event.execution():
+            await self._process_stages(event)
 
-                # Send an empty message for platform-specific completion handling.
-                if isinstance(event, WebChatMessageEvent | WecomAIBotMessageEvent):
-                    await event.send(None)
+            # Send the closing frame before the event is marked complete.
+            if isinstance(event, WebChatMessageEvent | WecomAIBotMessageEvent):
+                await event.send(None)
 
-                logger.debug("pipeline execution completed.")
-            finally:
-                event.cleanup_temporary_local_files()
-                active_event_registry.unregister(event)
+            logger.debug("pipeline execution completed.")

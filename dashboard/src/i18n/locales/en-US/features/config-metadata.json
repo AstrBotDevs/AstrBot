@@ -1252,17 +1252,17 @@
         "description": "Temp Directory Size Limit (MB)",
         "hint": "Limits total size of data/temp in MB. The system checks every 10 minutes, and when exceeded, deletes oldest files first to release about 30% of current size."
       },
-      "trace_log_enable": {
-        "description": "Enable Trace File Logging",
-        "hint": "Write trace events to a separate file (does not change console output)."
+      "trace_db_path": {
+        "description": "Trace Database Path",
+        "hint": "Relative paths start from the data directory, for example logs/traces.db. Absolute paths are also supported."
       },
-      "trace_log_path": {
-        "description": "Trace Log File Path",
-        "hint": "Relative paths are resolved under the data directory, e.g. logs/astrbot.trace.log; absolute paths are supported."
+      "trace_db_max_mb": {
+        "description": "Trace Database Capacity Budget (MB)",
+        "hint": "Default: 80 MB. Old data is automatically cleared when this size is exceeded."
       },
-      "trace_log_max_mb": {
-        "description": "Trace Log Max Size (MB)",
-        "hint": "Rotate when exceeding this size; default 20MB."
+      "trace_retention_days": {
+        "description": "Trace Retention Days",
+        "hint": "Default: 7 days. Old data is cleared when either the retention period or capacity is reached."
       },
       "pip_install_arg": {
         "description": "Additional pip Installation Arguments",

@@ -690,6 +690,12 @@ export type SkillUploadRequest = {
     overwrite?: boolean;
 };
 
+export type StorageCleanupRequest = {
+    target?: 'logs' | 'cache' | 'traces' | 'all';
+};
+
+export type target = 'logs' | 'cache' | 'traces' | 'all';
+
 export type SuccessEnvelope = {
     status: "ok";
     message?: string;
@@ -3480,7 +3486,7 @@ export type GetStorageStatusResponse = (SuccessEnvelope);
 export type GetStorageStatusError = unknown;
 
 export type CleanupStorageData = {
-    body?: DynamicConfig;
+    body?: StorageCleanupRequest;
 };
 
 export type CleanupStorageResponse = (SuccessEnvelope);
@@ -3724,6 +3730,35 @@ export type StreamLiveLogsError = unknown;
 export type GetLogHistoryResponse = (string);
 
 export type GetLogHistoryError = unknown;
+
+export type ListTracesData = {
+    query?: {
+        /**
+         * Legacy keyset cursor; use page for numbered pagination.
+         */
+        cursor?: string;
+        errors?: boolean;
+        limit?: number;
+        models?: boolean;
+        page?: number;
+        plugins?: boolean;
+        query?: string;
+    };
+};
+
+export type ListTracesResponse = (SuccessEnvelope);
+
+export type ListTracesError = unknown;
+
+export type GetTraceDetailData = {
+    path: {
+        trace_id: string;
+    };
+};
+
+export type GetTraceDetailResponse = (SuccessEnvelope);
+
+export type GetTraceDetailError = (unknown);
 
 export type GetTraceSettingsResponse = (SuccessEnvelope);
 
