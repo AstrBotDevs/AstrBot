@@ -27,6 +27,7 @@ from astrbot.dashboard.services.auth_service import (
     DEFAULT_OPEN_API_SCOPES,
 )
 from astrbot.dashboard.services.chat_service import (
+    WEBCHAT_EPHEMERAL_CHAIN_TYPE,
     BotMessageAccumulator,
     collect_plain_text_from_message_parts,
 )
@@ -487,7 +488,7 @@ class OpenApiService:
 
                 await send_json(result)
 
-                if msg_type == "plain":
+                if msg_type == "plain" and chain_type != WEBCHAT_EPHEMERAL_CHAIN_TYPE:
                     message_accumulator.add_plain(
                         result_text,
                         chain_type=chain_type,
@@ -507,7 +508,11 @@ class OpenApiService:
                         message_accumulator.has_content() or refs or agent_stats
                     )
                 elif (streaming and msg_type == "complete") or not streaming:
-                    if chain_type not in ("tool_call", "tool_call_result"):
+                    if chain_type not in (
+                        "tool_call",
+                        "tool_call_result",
+                        WEBCHAT_EPHEMERAL_CHAIN_TYPE,
+                    ):
                         should_save = True
 
                 if should_save:
