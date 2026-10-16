@@ -812,6 +812,8 @@ class AstrBotImporter:
                         doc_id=doc.get("doc_id", ""),
                         text=doc.get("text", ""),
                         metadata=json.loads(doc.get("metadata", "{}")),
+                        # The copied FAISS index refers to these integer IDs.
+                        integer_id=doc.get("id"),
                     )
                 except Exception as e:
                     logger.warning(f"导入文档块失败: {e}")
