@@ -317,6 +317,11 @@ DEFAULT_CONFIG = {
     "persona": [],  # deprecated
     "timezone": "Asia/Shanghai",
     "callback_api_base": "",
+    "mcp_oauth_callback_base": "",
+    "mcp_oauth_client_name": "AstrBot MCP Client",
+    "mcp_oauth_scope": "",
+    "mcp_oauth_client_id": "",
+    "mcp_oauth_client_secret": "",
     "default_kb_collection": "",  # 默认知识库名称, 已经过时
     "plugin_set": ["*"],  # "*" 表示使用所有可用的插件, 空列表表示不使用任何插件
     "kb_names": [],  # 默认知识库名称列表
@@ -4833,7 +4838,32 @@ CONFIG_METADATA_3_SYSTEM = {
                     "callback_api_base": {
                         "description": "对外可达的回调接口地址",
                         "type": "string",
-                        "hint": "外部服务可能会通过 AstrBot 生成的回调链接（如文件下载链接）访问 AstrBot 后端。由于 AstrBot 无法自动判断部署环境中对外可达的主机地址（host），因此需要通过此配置项显式指定 “外部服务如何访问 AstrBot” 的地址。如 http://localhost:6185，https://example.com 等。",
+                        "hint": "外部服务可能会通过 AstrBot 生成的回调链接（如文件下载链接）访问 AstrBot 后端。由于 AstrBot 无法自动判断部署环境中对外可达的主机地址（host），因此需要通过此配置项显式指定“外部服务如何访问 AstrBot”的地址。如 http://localhost:6185，https://example.com 等。",
+                    },
+                    "mcp_oauth_callback_base": {
+                        "description": "MCP OAuth 回调地址",
+                        "type": "string",
+                        "hint": "对外可访问的 AstrBot 地址，用于 MCP OAuth 2.0 授权回调。留空或保持与“对外可达的回调接口地址”加上 /mcp/oauth/callback 一致时，将随通用回调地址自动更新。",
+                    },
+                    "mcp_oauth_client_name": {
+                        "description": "MCP OAuth 客户端名称",
+                        "type": "string",
+                    },
+                    "mcp_oauth_scope": {
+                        "description": "MCP OAuth 默认 Scope",
+                        "type": "string",
+                        "hint": "不同 MCP 服务所需权限不同；单个服务器配置中的 oauth2.scope 可覆盖此默认值。",
+                    },
+                    "mcp_oauth_client_id": {
+                        "description": "MCP OAuth 默认 Client ID",
+                        "type": "string",
+                        "hint": "仅用于支持预注册客户端的 MCP 服务；单个服务器配置中的 oauth2.client_id 可覆盖此默认值。",
+                    },
+                    "mcp_oauth_client_secret": {
+                        "description": "MCP OAuth 默认 Client Secret",
+                        "type": "string",
+                        "secret": True,
+                        "hint": "妥善保管客户端密钥；单个服务器配置中的 oauth2.client_secret 可覆盖此默认值。",
                     },
                     "timezone": {
                         "description": "时区",

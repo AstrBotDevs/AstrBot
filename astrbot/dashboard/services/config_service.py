@@ -776,6 +776,12 @@ class ConfigProfileService:
                 config[key] = default_conf.get(key, [])
 
         current_config = self.acm.confs[config_id]
+        if config_id == "default":
+            from astrbot.core.agent.mcp_oauth import (
+                sync_default_mcp_oauth_callback_base,
+            )
+
+            sync_default_mcp_oauth_callback_base(config, previous_config=current_config)
         if (
             not allow_admin_id_change
             and "admins_id" in config

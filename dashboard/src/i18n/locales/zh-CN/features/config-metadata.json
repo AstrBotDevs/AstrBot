@@ -1395,6 +1395,26 @@
       },
       "no_proxy": {
         "description": "直连地址列表"
+      },
+      "mcp_oauth_callback_base": {
+        "description": "MCP OAuth 回调地址",
+        "hint": "对外可访问的 AstrBot 地址，用于 MCP OAuth 2.0 授权回调。"
+      },
+      "mcp_oauth_client_name": {
+        "description": "MCP OAuth 客户端名称",
+        "hint": "OAuth 客户端注册时使用的名称。"
+      },
+      "mcp_oauth_scope": {
+        "description": "MCP OAuth 默认 Scope",
+        "hint": "各服务可在单服务器配置中覆盖。"
+      },
+      "mcp_oauth_client_id": {
+        "description": "MCP OAuth 默认 Client ID",
+        "hint": "仅适用于支持预注册客户端的服务，各服务可单独覆盖。"
+      },
+      "mcp_oauth_client_secret": {
+        "description": "MCP OAuth 默认 Client Secret",
+        "hint": "敏感信息。仅适用于支持预注册客户端的服务，各服务可单独覆盖。"
       }
     }
   },

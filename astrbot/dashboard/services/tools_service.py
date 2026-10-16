@@ -49,7 +49,7 @@ class ToolsService:
             logger.error(traceback.format_exc())
             return False
 
-    def get_mcp_servers(self) -> list[dict]:
+    async def get_mcp_servers(self) -> list[dict]:
         try:
             config = self.tool_mgr.load_mcp_config()
             servers = []
@@ -85,6 +85,10 @@ class ToolsService:
                     server_info["tools"] = [tool.name for tool in mcp_client.tools]
                     server_info["errlogs"] = mcp_client.server_errlogs
 
+                get_oauth_state = getattr(self.tool_mgr, "get_mcp_oauth_state", None)
+                if get_oauth_state is not None:
+                    server_info.update(await get_oauth_state(server_config))
+
                 servers.append(server_info)
 
             return servers
@@ -102,6 +106,41 @@ class ToolsService:
         if not isinstance(server_config, dict):
             return None
         return dict(server_config)
+
+    async def start_mcp_oauth_authorization(
+        self,
+        config: dict,
+        *,
+        callback_base_url: str,
+        oauth_defaults: dict | None = None,
+        server_name: str | None = None,
+        force: bool = False,
+    ) -> dict:
+        return await self.tool_mgr.start_mcp_oauth_authorization(
+            config,
+            callback_base_url=callback_base_url,
+            oauth_defaults=oauth_defaults,
+            server_name=server_name,
+            force=force,
+        )
+
+    def get_mcp_oauth_flow_status(self, flow_id: str) -> dict:
+        return self.tool_mgr.get_mcp_oauth_flow_status(flow_id)
+
+    async def submit_mcp_oauth_callback(
+        self,
+        flow_id: str | None,
+        *,
+        code: str | None,
+        state: str | None,
+        error: str | None,
+    ) -> None:
+        await self.tool_mgr.submit_mcp_oauth_callback(
+            flow_id,
+            code=code,
+            state=state,
+            error=error,
+        )
 
     async def add_mcp_server(self, server_data: Any) -> str:
         try:
@@ -421,6 +460,9 @@ class ToolsService:
                 "tools",
                 "errlogs",
                 "oldName",
+                "oauth2_enabled",
+                "oauth2_authorized",
+                "oauth2_grant_type",
             ]:
                 continue
             if key == "mcpServers":

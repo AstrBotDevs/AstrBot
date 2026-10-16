@@ -730,6 +730,7 @@ const systemConfigGroups = computed(() => {
 
     return [
         createGroup('runtime', ['timezone', 'callback_api_base']),
+        createGroup('mcp', ['mcp_oauth_callback_base', 'mcp_oauth_client_name', 'mcp_oauth_scope', 'mcp_oauth_client_id', 'mcp_oauth_client_secret']),
         createGroup('network', ['http_proxy', 'no_proxy', 'pip_install_arg', 'pypi_index_url']),
         createGroup('webuiSecurity', [
             'dashboard.trust_proxy_headers',
@@ -758,7 +759,7 @@ const systemConfigGroups = computed(() => {
 });
 
 const generalSystemConfigGroups = computed(() => systemConfigGroups.value.filter((group) => (
-    group.key === 'runtime' || group.key === 'logs' || group.key === 'tempStorage'
+    group.key === 'runtime' || group.key === 'mcp' || group.key === 'logs' || group.key === 'tempStorage'
 )));
 const networkSystemConfigGroups = computed(() => systemConfigGroups.value.filter((group) => (
     group.key === 'network'

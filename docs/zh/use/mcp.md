@@ -114,6 +114,48 @@ docker exec astrbot python -m pip install uv
 
 `command` 是启动程序，`args` 是分别传入的参数，不是一整行 Shell 命令。当前版本会校验 stdio 启动命令，不支持旧文档中的 `command: "env"`，也不支持 `bash -c` 等 Shell 包装；请用 `env` 字段传递环境变量。
 
+## OAuth 2.0 MCP 服务器
+
+对于需要 OAuth 2.0 的远程 MCP Server，AstrBot 现在支持在 WebUI 中直接完成授权登录。
+
+一个典型的 HTTP MCP 配置如下：
+
+```json
+{
+    "transport": "streamable_http",
+    "url": "https://example.com/mcp",
+    "headers": {},
+    "timeout": 5,
+    "sse_read_timeout": 300,
+    "oauth2": {
+        "grant_type": "authorization_code",
+        "client_name": "AstrBot MCP Client"
+    }
+}
+```
+
+如果服务端使用预先分配的客户端凭据，也可以改为 `client_credentials`：
+
+```json
+{
+    "transport": "streamable_http",
+    "url": "https://example.com/mcp",
+    "oauth2": {
+        "grant_type": "client_credentials",
+        "client_id": "your-client-id",
+        "client_secret": "your-client-secret",
+        "scope": "read write"
+    }
+}
+```
+
+在 WebUI 的 MCP 服务器弹窗中：
+
+1. 填写带有 `oauth2` 字段的 JSON 配置。
+2. 点击 `OAuth 2.0 登录`。
+3. 在新打开的授权页面完成登录。
+4. 返回 AstrBot，等待状态显示授权完成后再测试连接或保存。
+
 > [!NOTE]
 > stdio 服务器会在 AstrBot 运行环境中启动本地进程。请使用可信的服务器，并按需要设置它的访问权限。Agent 的本机隔离设置不会自动把这个 MCP 服务进程放进隔离环境。
 

@@ -50,6 +50,10 @@
         "title": "プロキシと依存パッケージの取得元",
         "subtitle": "実行時プロキシ、Python 依存パッケージのインストール設定、PyPI ミラー。"
       },
+      "mcp": {
+        "title": "MCP",
+        "subtitle": "MCP OAuth クライアントと認証コールバックを設定します。"
+      },
       "webuiSecurity": {
         "title": "WebUI セキュリティ",
         "subtitle": "HTTPS、信頼済みプロキシヘッダー、ログイン回数制限、TOTP。"
