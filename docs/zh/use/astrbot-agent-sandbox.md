@@ -145,9 +145,7 @@ Docker 已提供容器级的隔离。在容器内，AstrBot 默认只能访问�
 
 ### Windows 用户 {#local-windows}
 
-Windows 支持通过原生文件句柄在工作区范围内读取、写入和编辑文件，实现仅依赖 Python 标准库。文件操作会拒绝符号链接、目录联接和存在多个硬链接的文件。普通成员使用工作区文件工具不需要执行沙箱。
-
-目前 Windows 暂不支持本机进程隔离。管理员可以在允许联网、文件范围为整个环境的配置下执行代码；如需隔离执行代码，请使用 [第三方沙箱环境](#third-party-sandbox-environment)。
+目前 Windows 系统暂不支持本机隔离能力。您可以选择使用 [第三方沙箱环境](#third-party-sandbox-environment)。
 
 ## 第三方沙箱环境 {#third-party-sandbox-environment}
 
