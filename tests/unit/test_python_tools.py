@@ -160,7 +160,9 @@ async def test_local_python_uses_sandbox_backend(
         "astrbot.core.tools.computer_tools.python.get_local_booter",
         lambda: SimpleNamespace(python=local_python),
     )
-    monkeypatch.setattr(computer_util, "create_process_sandbox", object)
+    monkeypatch.setattr(
+        computer_util, "get_process_sandbox_status", lambda: {"status": "detected"}
+    )
     monkeypatch.setattr(
         "astrbot.core.tools.computer_tools.python.workspace_root_for_context",
         AsyncMock(return_value=tmp_path),
@@ -212,10 +214,9 @@ async def test_local_member_python_is_denied_without_supported_sandbox(monkeypat
     """Local member Python execution should fail without a sandbox backend."""
     from astrbot.core.tools.computer_tools import util as computer_util
 
-    def unavailable_sandbox():
-        raise RuntimeError("No Local process sandbox backend is available.")
-
-    monkeypatch.setattr(computer_util, "create_process_sandbox", unavailable_sandbox)
+    monkeypatch.setattr(
+        computer_util, "get_process_sandbox_status", lambda: {"status": "unsupported"}
+    )
     monkeypatch.setattr(
         "astrbot.core.tools.computer_tools.python.get_local_booter",
         lambda: pytest.fail("Local Python must not start without an OS sandbox"),
@@ -246,4 +247,4 @@ async def test_local_member_python_is_denied_without_supported_sandbox(monkeypat
 
     result = await LocalPythonTool().call(context, code="print('ok')")
 
-    assert "No Local process sandbox backend" in result
+    assert "disabled by the Local permission policy" in result

@@ -6,6 +6,7 @@ import pytest
 
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.computer import process_sandbox
+from astrbot.core.computer.booters import local
 from astrbot.core.config import default as config_defaults
 from astrbot.core.tools.computer_tools import fs, python, shell, util
 from astrbot.core.tools.computer_tools.shipyard_neo.browser import BrowserExecTool
@@ -16,6 +17,12 @@ from astrbot.core.tools.computer_tools.util import (
     check_local_execution_permission,
     get_local_permission_policy,
 )
+
+
+@pytest.fixture(autouse=True)
+def available_local_sandbox(monkeypatch):
+    """Test configured policies independently of the test host's isolation."""
+    monkeypatch.setattr(util, "get_process_sandbox_status", lambda: {"status": "detected"})
 
 
 class _FakeBrowser:
@@ -199,7 +206,7 @@ async def test_none_scope_denies_all_local_tools_before_accessing_resources(
     monkeypatch.setattr(fs, "workspace_root_for_context", workspace)
     monkeypatch.setattr(shell, "workspace_root_for_context", workspace)
     monkeypatch.setattr(python, "workspace_root_for_context", workspace)
-    monkeypatch.setattr(util, "create_process_sandbox", sandbox)
+    monkeypatch.setattr(util, "get_process_sandbox_status", sandbox)
     context = _make_local_run_context(
         role,
         {
@@ -243,47 +250,82 @@ def test_local_permission_policy_denies_disabled_execution():
     assert "Local Permission Policies" in error
 
 
+@pytest.mark.parametrize("role", ["member", "admin", "unexpected"])
+@pytest.mark.parametrize("status", ["missing", "unavailable", "unsupported"])
+@pytest.mark.parametrize("scope", ["workspace", "host"])
+def test_local_tools_fall_back_to_legacy_permissions(monkeypatch, role, status, scope):
+    """Unavailable isolation restores role-based execution and file access."""
+    monkeypatch.setattr(util, "get_process_sandbox_status", lambda: {"status": status})
+    policy_role = "admin" if role == "admin" else "member"
+    configured = {
+        policy_role: {
+            "allow_execution": True,
+            "allow_network": False,
+            "filesystem_scope": scope,
+        }
+    }
+    context = _make_local_run_context(role, configured)
+
+    resolved, error = check_local_execution_permission(context, "Shell execution")
+
+    assert resolved.allow_execution == (role == "admin")
+    assert resolved.allow_network == (role == "admin")
+    assert resolved.filesystem_scope == ("host" if role == "admin" else "workspace")
+    assert (error is None) == (role == "admin")
+    assert configured[policy_role]["filesystem_scope"] == scope
+    assert configured[policy_role]["allow_network"] is False
+
+
 @pytest.mark.parametrize("role", ["member", "admin"])
-@pytest.mark.parametrize(
-    ("allow_network", "filesystem_scope"),
-    [(False, "host"), (False, "workspace"), (True, "workspace")],
-)
-def test_windows_local_execution_requires_a_full_trust_policy(
-    monkeypatch, role, allow_network, filesystem_scope
+def test_unavailable_isolation_preserves_disabled_local_access(monkeypatch, role):
+    """Explicitly disabled roles must not acquire Local access from fallback."""
+    monkeypatch.setattr(util, "get_process_sandbox_status", lambda: {"status": "missing"})
+    context = _make_local_run_context(role, {role: {"filesystem_scope": "none"}})
+
+    assert get_local_permission_policy(context).filesystem_scope == "none"
+    assert check_local_execution_permission(context, "Shell execution")[1] is not None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["member", "admin"])
+@pytest.mark.parametrize("status", ["missing", "unavailable", "unsupported"])
+@pytest.mark.parametrize("tool_name", ["shell", "python"])
+async def test_execution_tools_use_legacy_fallback(
+    monkeypatch, tmp_path, role, status, tool_name
 ):
-    """Windows rejects restricted policies and allows explicit full trust."""
-    monkeypatch.setattr(process_sandbox, "sys", SimpleNamespace(platform="win32"))
-    restricted = {
-        role: {
-            "allow_execution": True,
-            "allow_network": allow_network,
-            "filesystem_scope": filesystem_scope,
-        }
-    }
-    full_trust = {
-        role: {
-            "allow_execution": True,
-            "allow_network": True,
-            "filesystem_scope": "host",
-        }
-    }
-
-    _, restricted_error = check_local_execution_permission(
-        _make_local_run_context(role, restricted),
-        "Shell execution",
-    )
-    full_policy, full_error = check_local_execution_permission(
-        _make_local_run_context(role, full_trust),
-        "Shell execution",
-    )
-
-    assert restricted_error is not None
-    assert "No Local process sandbox backend" in restricted_error
-    assert "Third-party sandbox" in restricted_error
-    assert "Computer Use Runtime" in restricted_error
-    assert full_error is None
-    assert full_policy is not None
-    assert full_policy.requires_sandbox is False
+    """Run administrators directly and deny members before starting a process."""
+    monkeypatch.setattr(util, "get_process_sandbox_status", lambda: {"status": status})
+    sandbox_factory = Mock(side_effect=AssertionError("Fallback must not launch isolation"))
+    monkeypatch.setattr(local, "create_process_sandbox", sandbox_factory)
+    context = _make_local_run_context(role, config_defaults.get_local_permission_defaults("Linux"))
+    settings = context.context.context.get_config("test")
+    settings["admins_id"] = ["user-1"]
+    context.context.context.get_config = lambda umo: settings
+    context.context.event.get_sender_id = lambda: "user-1"
+    context.context.event.get_platform_name = lambda: "test"
+    context.tool_call_timeout = 30
+    booter = SimpleNamespace(shell=local.LocalShellComponent(), python=local.LocalPythonComponent())
+    get_booter = AsyncMock(return_value=booter)
+    monkeypatch.setattr(shell, "get_booter", get_booter)
+    monkeypatch.setattr(python, "get_local_booter", lambda: booter)
+    workspace = AsyncMock(return_value=tmp_path)
+    monkeypatch.setattr(shell, "workspace_root_for_context", workspace)
+    monkeypatch.setattr(python, "workspace_root_for_context", workspace)
+    try:
+        if tool_name == "shell":
+            result = await shell.LocalExecuteShellTool().call(context, command="echo legacy-fallback")
+        else:
+            result = await python.LocalPythonTool().call(context, code="print('legacy-fallback')")
+        if role == "member":
+            assert "Permission denied" in result
+            workspace.assert_not_called()
+            get_booter.assert_not_called()
+        else:
+            text = result if isinstance(result, str) else "".join(item.text for item in result.content)
+            assert "legacy-fallback" in text
+        sandbox_factory.assert_not_called()
+    finally:
+        await booter.shell.shutdown_sessions()
 
 
 @pytest.mark.asyncio

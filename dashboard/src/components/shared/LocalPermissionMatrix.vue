@@ -101,43 +101,6 @@
       </tbody>
     </v-table>
 
-    <button
-      v-if="isolationUnavailable"
-      type="button"
-      class="isolation-hint"
-      aria-haspopup="dialog"
-      @click="isolationDialogOpen = true"
-    >
-      <ShieldAlert :size="16" aria-hidden="true" />
-      <span>{{ tm(`runtime.setupHint.${runtime.sandbox.status}`, {
-        backend: runtime.sandbox.backend === 'seatbelt' ? 'Seatbelt' : 'bubblewrap',
-        dependency: runtime.sandbox.backend === 'seatbelt' ? 'sandbox-exec' : 'bwrap'
-      }) }}</span>
-    </button>
-
-    <v-dialog v-model="isolationDialogOpen" max-width="640">
-      <v-card>
-        <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ tm('runtime.sandbox') }}</v-card-title>
-        <v-card-text class="pa-6 pb-2">
-          <p class="text-body-1">{{ tm('runtime.dialog.intro') }}</p>
-          <details v-if="runtime?.sandbox?.status === 'unavailable' && runtime.sandbox.error" class="sandbox-diagnostics mt-4">
-            <summary>{{ tm('runtime.dialog.startupError') }}</summary>
-            <pre class="mt-2">{{ runtime.sandbox.error }}</pre>
-          </details>
-          <a
-            :href="isolationDocumentationUrl"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="d-inline-block text-primary text-decoration-underline text-body-2 mt-5"
-          >{{ tm('runtime.dialog.documentation') }}</a>
-        </v-card-text>
-        <v-card-actions class="pa-4">
-          <v-spacer />
-          <v-btn variant="text" @click="isolationDialogOpen = false">{{ tm('runtime.close') }}</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
     <v-alert v-if="memberHasElevatedAccess" type="warning" variant="tonal" density="compact">
       {{ tm('memberWarning') }}
     </v-alert>
@@ -153,8 +116,8 @@ export const windowsPermissionDefaults = {
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { CircleHelp, ShieldAlert } from '@lucide/vue'
-import { useI18n, useModuleI18n } from '@/i18n/composables'
+import { CircleHelp } from '@lucide/vue'
+import { useModuleI18n } from '@/i18n/composables'
 import { statsApi } from '@/api/v1'
 
 const props = defineProps({
@@ -165,14 +128,9 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:modelValue'])
-const { locale } = useI18n()
 const { tm } = useModuleI18n('features/config-metadata.ai_group.agent_computer_use.local_permissions')
 const runtime = ref(null)
 const runtimeLoading = ref(true)
-const isolationDialogOpen = ref(false)
-const isolationDocumentationUrl = computed(() =>
-  `https://docs.astrbot.app/${locale.value === 'zh-CN' ? '' : 'en/'}use/astrbot-agent-sandbox.html#local-environment`
-)
 const unsupported = computed(() => runtime.value?.sandbox?.status === 'unsupported')
 const sandboxUnavailable = computed(() => ['missing', 'unavailable'].includes(runtime.value?.sandbox?.status))
 const isolationUnavailable = computed(() => unsupported.value || sandboxUnavailable.value)
@@ -284,40 +242,6 @@ const memberHasElevatedAccess = computed(() => {
   width: 100%;
   min-width: 0;
   padding-top: 12px;
-}
-
-.isolation-hint {
-  display: inline-flex;
-  align-items: center;
-  justify-self: start;
-  gap: 6px;
-  color: rgba(var(--v-theme-on-surface), 0.6);
-  font-size: 0.75rem;
-  line-height: 1.5;
-  text-align: left;
-}
-
-.isolation-hint svg {
-  flex-shrink: 0;
-}
-
-.isolation-hint span {
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.sandbox-diagnostics {
-  color: rgba(var(--v-theme-on-surface), 0.6);
-  font-size: 0.75rem;
-}
-
-.sandbox-diagnostics summary {
-  cursor: pointer;
-}
-
-.sandbox-diagnostics pre {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
 }
 
 .permission-table {

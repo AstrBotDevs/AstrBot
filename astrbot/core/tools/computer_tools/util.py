@@ -4,7 +4,7 @@ from typing import Literal
 
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.astr_agent_context import AstrAgentContext
-from astrbot.core.computer.process_sandbox import create_process_sandbox
+from astrbot.core.computer.process_sandbox import get_process_sandbox_status
 from astrbot.core.config.default import get_local_permission_defaults
 from astrbot.core.db import BaseDatabase
 from astrbot.core.utils.astrbot_path import get_astrbot_workspaces_path
@@ -94,7 +94,9 @@ def get_local_permission_policy(
         context: Tool call context.
 
     Returns:
-        Normalized policy. Unknown roles use the member policy.
+        Normalized policy. Without usable isolation, enabled Local access falls
+        back to workspace files without execution for members and unrestricted
+        execution for administrators. Unknown roles use the member policy.
     """
     cfg = context.context.context.get_config(
         umo=context.context.event.unified_msg_origin
@@ -116,6 +118,16 @@ def get_local_permission_policy(
     filesystem_scope = role_policy.get("filesystem_scope", defaults["filesystem_scope"])
     if filesystem_scope not in {"none", "workspace", "host"}:
         filesystem_scope = defaults["filesystem_scope"]
+    if (
+        provider_settings.get("computer_use_runtime") == "local"
+        and filesystem_scope != "none"
+        and get_process_sandbox_status()["status"] != "detected"
+    ):
+        return LocalPermissionPolicy(
+            allow_execution=role == "admin",
+            allow_network=role == "admin",
+            filesystem_scope="host" if role == "admin" else "workspace",
+        )
     allow_execution = (
         filesystem_scope != "none"
         and role_policy.get("allow_execution", defaults["allow_execution"]) is True
@@ -199,14 +211,4 @@ def check_local_execution_permission(
             "for this role in AstrBot WebUI -> Config -> AI -> Capabilities -> "
             "Agent Computer Use -> Local Permission Policies."
         )
-    if policy.requires_sandbox:
-        try:
-            create_process_sandbox()
-        except RuntimeError as exc:
-            return policy, (
-                "error: Permission denied. Restricted Local execution is unavailable: "
-                f"{exc} Select `Third-party sandbox` under AstrBot WebUI -> "
-                "Config -> AI -> Capabilities -> Agent Computer Use -> "
-                "Computer Use Runtime."
-            )
     return policy, None

@@ -6,8 +6,17 @@ from unittest.mock import MagicMock, Mock
 import pytest
 
 import astrbot.dashboard.services.stat_service as stat_service
+from astrbot.core.computer import process_sandbox
 from astrbot.core.computer.process_sandbox import SandboxRunResult, SandboxTimeoutError
 from astrbot.dashboard.services.stat_service import StatService
+
+
+@pytest.fixture(autouse=True)
+def reset_sandbox_probe():
+    """Keep cached sandbox capability checks independent across tests."""
+    process_sandbox.get_process_sandbox_status.cache_clear()
+    yield
+    process_sandbox.get_process_sandbox_status.cache_clear()
 
 
 def _make_service(db) -> StatService:
@@ -41,13 +50,14 @@ def test_runtime_detects_platform_dependencies(
         "platform",
         SimpleNamespace(system=lambda: system, machine=lambda: arch),
     )
+    monkeypatch.setattr(process_sandbox, "platform", stat_service.platform)
     which = Mock(return_value=executable)
-    monkeypatch.setattr(stat_service, "shutil", SimpleNamespace(which=which))
+    monkeypatch.setattr(process_sandbox, "shutil", SimpleNamespace(which=which))
     sandbox = Mock()
     sandbox.run.return_value = SandboxRunResult(returncode=0)
     factory = Mock(return_value=sandbox)
-    monkeypatch.setattr(stat_service, "create_process_sandbox", factory)
-    monkeypatch.setattr(stat_service, "get_astrbot_temp_path", lambda: str(tmp_path))
+    monkeypatch.setattr(process_sandbox, "create_process_sandbox", factory)
+    monkeypatch.setattr(process_sandbox, "get_astrbot_temp_path", lambda: str(tmp_path))
 
     service = _make_service(MagicMock())
 
@@ -56,6 +66,7 @@ def test_runtime_detects_platform_dependencies(
         "arch": arch,
         "sandbox": {"backend": backend, "status": status},
     }
+    assert process_sandbox.get_process_sandbox_status() == service.runtime["sandbox"]
     if system == "Linux":
         which.assert_called_once_with("bwrap")
     elif system == "Darwin":
@@ -81,6 +92,13 @@ def test_runtime_detects_platform_dependencies(
     [
         (
             SandboxRunResult(
+                returncode=1,
+                stderr=b"bwrap: Creating new namespace failed: Operation not permitted\n",
+            ),
+            "bwrap: Creating new namespace failed: Operation not permitted",
+        ),
+        (
+            SandboxRunResult(
                 returncode=1, stderr=b"bwrap: setting up uid map: Permission denied\n"
             ),
             "bwrap: setting up uid map: Permission denied",
@@ -104,7 +122,7 @@ def test_runtime_reports_sandbox_startup_failure(
     """Distinguish installed but unusable sandboxes without preventing startup."""
     monkeypatch.setattr(stat_service.platform, "system", lambda: system)
     monkeypatch.setattr(
-        stat_service,
+        process_sandbox,
         "shutil",
         SimpleNamespace(which=lambda name, **kwargs: f"/usr/bin/{name}"),
     )
@@ -113,8 +131,8 @@ def test_runtime_reports_sandbox_startup_failure(
         sandbox.run.side_effect = outcome
     else:
         sandbox.run.return_value = outcome
-    monkeypatch.setattr(stat_service, "create_process_sandbox", lambda: sandbox)
-    monkeypatch.setattr(stat_service, "get_astrbot_temp_path", lambda: str(tmp_path))
+    monkeypatch.setattr(process_sandbox, "create_process_sandbox", lambda: sandbox)
+    monkeypatch.setattr(process_sandbox, "get_astrbot_temp_path", lambda: str(tmp_path))
 
     service = _make_service(MagicMock())
 

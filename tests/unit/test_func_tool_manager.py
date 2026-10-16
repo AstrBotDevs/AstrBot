@@ -349,7 +349,9 @@ async def test_local_member_shell_uses_sandbox_backend(
     async def fake_get_booter(context, session_id):
         return booter
 
-    monkeypatch.setattr(computer_util, "create_process_sandbox", object)
+    monkeypatch.setattr(
+        computer_util, "get_process_sandbox_status", lambda: {"status": "detected"}
+    )
     monkeypatch.setattr(shell_tools, "get_booter", fake_get_booter)
     monkeypatch.setattr(
         shell_tools,
@@ -414,14 +416,13 @@ async def test_local_member_shell_is_denied_without_supported_sandbox(monkeypatc
         },
     )()
 
-    def unavailable_sandbox():
-        raise RuntimeError("No Local process sandbox backend is available.")
-
-    monkeypatch.setattr(computer_util, "create_process_sandbox", unavailable_sandbox)
+    monkeypatch.setattr(
+        computer_util, "get_process_sandbox_status", lambda: {"status": "unsupported"}
+    )
 
     result = await LocalExecuteShellTool().call(wrapper, command="pwd")
 
-    assert "No Local process sandbox backend" in result
+    assert "disabled by the Local permission policy" in result
 
 
 @pytest.mark.asyncio

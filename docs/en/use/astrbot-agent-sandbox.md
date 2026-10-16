@@ -54,14 +54,13 @@ The permission matrix applies these dependencies:
 - When **Execute code** is unchecked, **Allow network during execution** cannot be checked, because **network permissions only apply during code execution**.
 - When **File access scope** is **Disabled**, neither execution nor networking can be enabled, because **code execution and network access require file access**.
 
-If your environment **does not meet the requirements for local isolation**, such as Windows without a supported isolation backend, Linux without bubblewrap, or macOS without a usable Seatbelt launcher, the network option is hidden. The following permission combinations remain available:
+Saving configuration succeeds even when Local isolation is unavailable, including selecting **Yes** for computer access on the welcome page. Tools check isolation availability when resolving access. If bubblewrap is missing, the sandbox cannot start because of container restrictions, or isolation is unsupported, roles with Local file access enabled fall back to these permissions:
 
-- File access scope: Disabled; Execute code: No.
-- File access scope: Workspace; Execute code: No. This option is available on Linux/macOS; restricted workspace file access is currently unsupported on native Windows.
-- File access scope: Entire environment; Execute code: No.
-- File access scope: Entire environment; Execute code: Yes. Network access during execution cannot be restricted separately.
+- **Members**: no code execution; workspace file access.
+- **Administrators**: code execution with access to the entire environment and networking enabled.
+- Roles whose file access scope is explicitly **Disabled** remain disabled. Fallback does not overwrite saved permissions. After restoring isolation and restarting AstrBot, tools use the configured permissions again.
 
-If local isolation is unavailable, follow the instructions for your operating system and deployment environment below.
+The permission matrix hides the network column when isolation is unavailable. The former isolation setup link in the bottom-left corner of the matrix has been removed; use the operating system and Docker instructions below instead.
 
 ### macOS users {#local-macos}
 
