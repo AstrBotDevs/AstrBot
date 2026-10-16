@@ -192,8 +192,8 @@ async def test_proactive_agent_uses_session_fallback_models(
     runner = ama.AgentRunner()
     failed = scenario in ("all-fail", "unconfigured")
     expectation = (
-        pytest.raises(RuntimeError, match="Cron agent run ended in ERROR")
-        if entrypoint == "cron" and failed
+        pytest.raises(RuntimeError, match="agent run ended in ERROR")
+        if failed
         else nullcontext()
     )
     with (
