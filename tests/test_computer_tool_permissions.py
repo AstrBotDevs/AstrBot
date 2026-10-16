@@ -128,17 +128,12 @@ def test_local_permission_policy_treats_unknown_roles_as_members():
 def test_local_permission_policy_platform_defaults(
     monkeypatch, system, role, permissions
 ):
-    monkeypatch.setattr(
-        config_defaults, "platform", SimpleNamespace(system=lambda: system)
-    )
     resolved = get_local_permission_policy(_make_local_run_context(role, permissions))
 
     assert resolved.allow_execution == (role == "admin")
     assert resolved.allow_network == (role == "admin")
-    assert resolved.filesystem_scope == (
-        ("host" if role == "admin" else "none") if system == "Windows" else "workspace"
-    )
-    assert resolved.requires_sandbox == (system != "Windows" or role != "admin")
+    assert resolved.filesystem_scope == ("host" if role == "admin" else "workspace")
+    assert resolved.requires_sandbox is False
 
 
 @pytest.mark.parametrize("role", ["member", "admin", "unexpected"])
@@ -274,6 +269,23 @@ def test_local_tools_fall_back_to_legacy_permissions(monkeypatch, role, status, 
     assert (error is None) == (role == "admin")
     assert configured[policy_role]["filesystem_scope"] == scope
     assert configured[policy_role]["allow_network"] is False
+
+
+@pytest.mark.parametrize("status", ["missing", "unavailable", "unsupported"])
+@pytest.mark.parametrize("role", ["member", "admin"])
+@pytest.mark.parametrize("scope,execution,network", [("workspace", False, False), ("host", False, False), ("host", True, True)])
+def test_permissions_that_do_not_need_isolation_are_preserved(
+    monkeypatch, status, role, scope, execution, network
+):
+    """Unavailable isolation must not replace an already usable explicit policy."""
+    monkeypatch.setattr(util, "get_process_sandbox_status", lambda: {"status": status})
+    resolved = get_local_permission_policy(_make_local_run_context(role, {
+        role: {"filesystem_scope": scope, "allow_execution": execution, "allow_network": network},
+    }))
+    assert resolved.filesystem_scope == scope
+    assert resolved.allow_execution is execution
+    assert resolved.allow_network is network
+    assert not resolved.requires_sandbox
 
 
 @pytest.mark.parametrize("role", ["member", "admin"])

@@ -127,11 +127,9 @@ async def test_local_python_tool_uses_session_workspace(tmp_path, monkeypatch):
         timeout=30,
         silent=False,
         cwd=str(workspace.resolve(strict=False)),
-        sandboxed=True,
+        sandboxed=False,
         allow_network=True,
-        filesystem_scope="workspace",
-        readable_roots=ANY,
-        writable_roots=ANY,
+        filesystem_scope="host",
     )
 
 
@@ -181,6 +179,9 @@ async def test_local_python_uses_sandbox_backend(
                     "provider_settings": {
                         "computer_use_runtime": "local",
                         "computer_use_require_admin": False,
+                        "computer_use_local_permissions": {
+                            role: {"filesystem_scope": "workspace", "allow_execution": True, "allow_network": role == "admin"}
+                        },
                     }
                 }
             ),

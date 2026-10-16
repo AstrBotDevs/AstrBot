@@ -38,7 +38,9 @@ class LocalPermissionPolicy:
     @property
     def requires_sandbox(self) -> bool:
         """Return whether execution needs operating-system isolation."""
-        return not self.allow_network or self.filesystem_scope != "host"
+        return self.allow_execution and (
+            not self.allow_network or self.filesystem_scope != "host"
+        )
 
 
 def workspace_root(umo: str) -> Path:
@@ -118,16 +120,6 @@ def get_local_permission_policy(
     filesystem_scope = role_policy.get("filesystem_scope", defaults["filesystem_scope"])
     if filesystem_scope not in {"none", "workspace", "host"}:
         filesystem_scope = defaults["filesystem_scope"]
-    if (
-        provider_settings.get("computer_use_runtime") == "local"
-        and filesystem_scope != "none"
-        and get_process_sandbox_status()["status"] != "detected"
-    ):
-        return LocalPermissionPolicy(
-            allow_execution=role == "admin",
-            allow_network=role == "admin",
-            filesystem_scope="host" if role == "admin" else "workspace",
-        )
     allow_execution = (
         filesystem_scope != "none"
         and role_policy.get("allow_execution", defaults["allow_execution"]) is True
@@ -136,11 +128,22 @@ def get_local_permission_policy(
         allow_execution
         and role_policy.get("allow_network", defaults["allow_network"]) is True
     )
-    return LocalPermissionPolicy(
+    policy = LocalPermissionPolicy(
         allow_execution=allow_execution,
         allow_network=allow_network,
         filesystem_scope=filesystem_scope,
     )
+    if (
+        provider_settings.get("computer_use_runtime") == "local"
+        and policy.requires_sandbox
+        and get_process_sandbox_status()["status"] != "detected"
+    ):
+        return LocalPermissionPolicy(
+            allow_execution=role == "admin",
+            allow_network=role == "admin",
+            filesystem_scope="host" if role == "admin" else "workspace",
+        )
+    return policy
 
 
 def check_local_file_permission(

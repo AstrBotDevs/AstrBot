@@ -148,7 +148,7 @@ async def test_local_execute_shell_manages_running_and_closed_results(
                 "provider_settings": {
                     "computer_use_runtime": "local",
                     "computer_use_local_permissions": {
-                        "admin": {"allow_network": allow_network}
+                        "admin": {"allow_network": allow_network, "filesystem_scope": "workspace"}
                     },
                 }
             }

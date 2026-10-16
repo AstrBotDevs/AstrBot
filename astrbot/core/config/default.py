@@ -1,7 +1,6 @@
 """如需修改配置，请在 `data/cmd_config.json` 中修改或者在管理面板中可视化修改。"""
 
 import os
-import platform
 
 from astrbot import __version__
 from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
@@ -11,26 +10,25 @@ from .agent_runner import get_agent_runner_config_default
 
 
 def get_local_permission_defaults(system: str | None = None) -> dict:
-    """Return fresh Local permission defaults for the operating system.
+    """Return fresh Local permission defaults shared by all operating systems.
 
     Args:
-        system: Operating system name, or None to use the current system.
+        system: Retained for callers supplying an operating system name.
 
     Returns:
-        Per-role policies. Windows disables member access and gives admins
-        unrestricted access because workspace isolation is unavailable.
+        Workspace files without execution for members and unrestricted local
+        execution for administrators. Neither policy requires process isolation.
     """
-    windows = (system or platform.system()).lower() == "windows"
     return {
         "member": {
             "allow_execution": False,
             "allow_network": False,
-            "filesystem_scope": "none" if windows else "workspace",
+            "filesystem_scope": "workspace",
         },
         "admin": {
             "allow_execution": True,
             "allow_network": True,
-            "filesystem_scope": "host" if windows else "workspace",
+            "filesystem_scope": "host",
         },
     }
 

@@ -49,16 +49,25 @@ Enabling **Allow network during execution** permits network access during Shell/
 
 AstrBot provides `astrbot_file_read_tool`, `astrbot_file_write_tool`, `astrbot_file_edit_tool`, and `astrbot_grep_tool` for file reading, writing, editing, and content searching, respectively. When restricted code execution is enabled, the isolation backend also exposes the system tools, libraries, and Python runtime needed to execute code.
 
+New installations use the same default permissions on Windows, Linux, and macOS:
+
+| Role | Execute code | Network during execution | File access |
+| --- | --- | --- | --- |
+| Member | No | No | Workspace |
+| Administrator | Yes | Yes | Entire environment |
+
+These defaults do not require Local process isolation. Existing saved permissions are preserved.
+
 The permission matrix applies these dependencies:
 
 - When **Execute code** is unchecked, **Allow network during execution** cannot be checked, because **network permissions only apply during code execution**.
 - When **File access scope** is **Disabled**, neither execution nor networking can be enabled, because **code execution and network access require file access**.
 
-Saving configuration succeeds even when Local isolation is unavailable, including selecting **Yes** for computer access on the welcome page. Tools check isolation availability when resolving access. If bubblewrap is missing, the sandbox cannot start because of container restrictions, or isolation is unsupported, roles with Local file access enabled fall back to these permissions:
+Saving configuration succeeds even when Local isolation is unavailable, including selecting **Yes** for computer access on the welcome page. Tools check isolation availability when resolving access. If bubblewrap is missing, the sandbox cannot start because of container restrictions, or isolation is unsupported, only policies that require isolated code execution fall back to these permissions:
 
 - **Members**: no code execution; workspace file access.
 - **Administrators**: code execution with access to the entire environment and networking enabled.
-- Roles whose file access scope is explicitly **Disabled** remain disabled. Fallback does not overwrite saved permissions. After restoring isolation and restarting AstrBot, tools use the configured permissions again.
+- Policies that need no isolation, including workspace files without execution and entire-environment execution with networking, stay effective as configured. Roles whose file access scope is explicitly **Disabled** remain disabled. Fallback does not overwrite saved permissions. After restoring isolation and restarting AstrBot, tools use the configured permissions again.
 
 The permission matrix hides the network column when isolation is unavailable. The former isolation setup link in the bottom-left corner of the matrix has been removed; use the operating system and Docker instructions below instead.
 
@@ -135,7 +144,9 @@ Installing bwrap is only one part of the setup. Enabling local isolation inside 
 
 ### Windows users {#local-windows}
 
-Local isolation is currently unsupported on native Windows. You can use a [third-party sandbox environment](#third-party-sandbox-environment) instead.
+Windows supports workspace-scoped file reading, writing, and editing through native file handles using Python standard-library modules. File operations reject symbolic links, directory junctions, and multiply linked files. Ordinary members can use workspace file tools without an execution sandbox.
+
+Local process isolation is currently unsupported on native Windows. Administrators can execute code with entire-environment access and networking enabled. For isolated code execution, use a [third-party sandbox environment](#third-party-sandbox-environment).
 
 ## Third-party sandbox environment {#third-party-sandbox-environment}
 

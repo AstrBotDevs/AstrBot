@@ -56,7 +56,7 @@
               :model-value="policy(role).filesystem_scope"
               :items="[
                 { title: tm('modes.none'), value: 'none' },
-                { title: tm('scopes.workspace'), value: 'workspace', props: { disabled: unsupported } },
+                { title: tm('scopes.workspace'), value: 'workspace' },
                 { title: tm('scopes.host'), value: 'host' }
               ]"
               :disabled="!runtime"
@@ -71,7 +71,7 @@
                 <v-list-item v-bind="itemProps" :lines="false" role="option" :aria-selected="policy(role).filesystem_scope === item.value">
                   <template #subtitle>
                     <div class="scope-hint">
-                      {{ tm(unsupported && item.value === 'workspace' ? 'scopeHints.workspaceUnsupported' : `scopeHints.${item.value}`) }}
+                      {{ tm(`scopeHints.${item.value}`) }}
                       <v-menu
                         v-if="item.value === 'host'"
                         open-on-hover
@@ -108,8 +108,8 @@
 </template>
 
 <script>
-export const windowsPermissionDefaults = {
-  member: { filesystem_scope: 'none', allow_execution: false, allow_network: false },
+export const localPermissionDefaults = {
+  member: { filesystem_scope: 'workspace', allow_execution: false, allow_network: false },
   admin: { filesystem_scope: 'host', allow_execution: true, allow_network: true }
 }
 </script>
@@ -142,18 +142,7 @@ const executionUnavailableHint = computed(() => isolationUnavailable.value ? tm(
   }
 ) : '')
 const roles = ['member', 'admin']
-const defaults = computed(() => runtime.value?.os === 'windows' ? windowsPermissionDefaults : {
-  member: {
-    allow_execution: false,
-    allow_network: false,
-    filesystem_scope: 'workspace'
-  },
-  admin: {
-    allow_execution: true,
-    allow_network: true,
-    filesystem_scope: 'workspace'
-  }
-})
+const defaults = computed(() => localPermissionDefaults)
 
 onMounted(async () => {
   try {
