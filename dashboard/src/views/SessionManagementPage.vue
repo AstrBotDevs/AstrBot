@@ -577,12 +577,20 @@
 
               <v-row dense>
                 <v-col cols="12">
+                  <v-switch
+                    v-model="kbInheritGlobal"
+                    :label="tm('ruleEditor.kbConfig.inheritGlobal')"
+                    color="primary"
+                    hide-details
+                  />
+                </v-col>
+                <v-col cols="12">
                   <v-select
                     v-model="kbConfig.kb_ids"
                     :items="kbOptions"
                     item-title="label"
                     item-value="value"
-                    :disabled="availableKbs.length === 0"
+                    :disabled="kbInheritGlobal || availableKbs.length === 0"
                     :label="tm('ruleEditor.kbConfig.selectKbs')"
                     variant="outlined"
                     hide-details
@@ -593,10 +601,10 @@
                   />
                 </v-col>
                 <v-col cols="12" md="6">
-                  <v-text-field v-model.number="kbConfig.top_k" :label="tm('ruleEditor.kbConfig.topK')" variant="outlined" hide-details type="number" min="1" max="20" class="mt-3" />
+                  <v-text-field v-model.number="kbConfig.top_k" :label="tm('ruleEditor.kbConfig.topK')" variant="outlined" hide-details type="number" min="1" max="20" class="mt-3" :disabled="kbInheritGlobal" />
                 </v-col>
                 <v-col cols="12" md="6">
-                  <v-checkbox v-model="kbConfig.enable_rerank" :label="tm('ruleEditor.kbConfig.enableRerank')" color="primary" hide-details class="mt-3" />
+                  <v-checkbox v-model="kbConfig.enable_rerank" :label="tm('ruleEditor.kbConfig.enableRerank')" color="primary" hide-details class="mt-3" :disabled="kbInheritGlobal" />
                 </v-col>
               </v-row>
 
@@ -760,6 +768,7 @@ export default {
         top_k: 5,
         enable_rerank: true,
       },
+      kbInheritGlobal: true,
 
       // 删除确认
       deleteDialog: false,
@@ -1205,6 +1214,10 @@ export default {
 
       // 初始化知识库配置
       const kbCfg = this.editingRules.kb_config || {}
+      this.kbInheritGlobal = !Object.prototype.hasOwnProperty.call(
+        this.editingRules,
+        'kb_config',
+      )
       this.kbConfig = {
         kb_ids: kbCfg.kb_ids || [],
         top_k: kbCfg.top_k ?? 5,
@@ -1387,9 +1400,8 @@ export default {
           enable_rerank: this.kbConfig.enable_rerank,
         }
 
-        // 如果 kb_ids 为空，删除配置
-        if (config.kb_ids.length === 0) {
-          if (this.editingRules.kb_config) {
+        if (this.kbInheritGlobal) {
+          if (Object.prototype.hasOwnProperty.call(this.editingRules, 'kb_config')) {
             await sessionApi.deleteRules({
               umo: this.selectedUmo.umo,
               rule_key: 'kb_config',
