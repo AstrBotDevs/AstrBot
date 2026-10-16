@@ -16,6 +16,7 @@ from collections.abc import Callable
 
 from astrbot.core import logger
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+from astrbot.core.config import AstrBotConfig
 from astrbot.core.pipeline.scheduler import PipelineScheduler
 from astrbot.core.platform.message_type import MessageType
 
@@ -62,23 +63,32 @@ class EventBus:
                     f"PipelineScheduler not found for id: {conf_id}, event ignored."
                 )
                 continue
-            # Select the profile using the original UMO, then finalize the session
-            # before the scheduler registers it for stop requests and cleanup.
-            event.set_extra("_session_isolated", False)
-            platform_settings = scheduler.ctx.astrbot_config.get(
-                "platform_settings", {}
-            )
-            if platform_settings.get("unique_session", False) and (
-                event.message_obj.type == MessageType.GROUP_MESSAGE
-            ):
-                builder = UNIQUE_SESSION_ID_BUILDERS.get(event.get_platform_name())
-                sid = builder(event) if builder else None
-                if sid:
-                    event.session_id = sid
-                    event.set_extra("_session_isolated", True)
+            self._apply_session_isolation(event, scheduler.ctx.astrbot_config)
             task = asyncio.create_task(scheduler.execute(event))
             self._pending_tasks.add(task)
             task.add_done_callback(self._on_task_done)
+
+    def _apply_session_isolation(
+        self,
+        event: AstrMessageEvent,
+        config: AstrBotConfig,
+    ) -> None:
+        """Finalize the session before pipeline registration and stop lookup.
+
+        Args:
+            event: Incoming event whose original UMO was used to select a profile.
+            config: Selected profile's configuration controlling session isolation.
+        """
+        event.set_extra("_session_isolated", False)
+        platform_settings = config.get("platform_settings", {})
+        if platform_settings.get("unique_session", False) and (
+            event.message_obj.type == MessageType.GROUP_MESSAGE
+        ):
+            builder = UNIQUE_SESSION_ID_BUILDERS.get(event.get_platform_name())
+            sid = builder(event) if builder else None
+            if sid:
+                event.session_id = sid
+                event.set_extra("_session_isolated", True)
 
     def _on_task_done(self, task: asyncio.Task) -> None:
         """pipeline 任务结束回调: 移除强引用并暴露未捕获的异常"""
