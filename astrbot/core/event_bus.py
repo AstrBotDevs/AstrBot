@@ -12,12 +12,25 @@ class:
 
 import asyncio
 from asyncio import Queue
+from collections.abc import Callable
 
 from astrbot.core import logger
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.pipeline.scheduler import PipelineScheduler
+from astrbot.core.platform.message_type import MessageType
 
 from .platform import AstrMessageEvent
+
+UNIQUE_SESSION_ID_BUILDERS: dict[str, Callable[[AstrMessageEvent], str | None]] = {
+    "aiocqhttp": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
+    "slack": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
+    "dingtalk": lambda e: e.get_sender_id(),
+    "qq_official": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
+    "qq_official_webhook": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
+    "lark": lambda e: f"{e.get_sender_id()}%{e.get_group_id()}",
+    "misskey": lambda e: f"{e.get_session_id()}_{e.get_sender_id()}",
+    "matrix": lambda e: f"{e.get_sender_id()}_{e.get_group_id() or e.get_session_id()}",
+}
 
 
 class EventBus:
@@ -49,6 +62,20 @@ class EventBus:
                     f"PipelineScheduler not found for id: {conf_id}, event ignored."
                 )
                 continue
+            # Select the profile using the original UMO, then finalize the session
+            # before the scheduler registers it for stop requests and cleanup.
+            event.set_extra("_session_isolated", False)
+            platform_settings = scheduler.ctx.astrbot_config.get(
+                "platform_settings", {}
+            )
+            if platform_settings.get("unique_session", False) and (
+                event.message_obj.type == MessageType.GROUP_MESSAGE
+            ):
+                builder = UNIQUE_SESSION_ID_BUILDERS.get(event.get_platform_name())
+                sid = builder(event) if builder else None
+                if sid:
+                    event.session_id = sid
+                    event.set_extra("_session_isolated", True)
             task = asyncio.create_task(scheduler.execute(event))
             self._pending_tasks.add(task)
             task.add_done_callback(self._on_task_done)
