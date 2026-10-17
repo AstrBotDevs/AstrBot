@@ -30,6 +30,10 @@ string or fragment. Without a valid base, the method raises an actionable
 `return_url=False` to keep local-path output. Automatic core T2I fallback and
 direct calls to `context.html_renderer` retain their existing URL/path behavior.
 
+Anyone holding a file-service URL can download its image until the token expires.
+Treat it as a temporary access credential and share it only with the intended
+recipient. Reverting the calling code does not revoke already-issued links.
+
 ## Customization (HTML-Based)
 
 If you find the default rendered images insufficiently aesthetic, you can use custom HTML templates to render images.

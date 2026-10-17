@@ -1055,6 +1055,8 @@ async def on_aiocqhttp(self, event: AstrMessageEvent, text: str):
 `callback_api_base`，返回可重复访问的临时文件服务 URL（默认五分钟有效）；
 未配置时会给出明确错误。需要本地路径时请使用 `return_url=False`。详见
 [文转图说明](/zh/dev/star/guides/html-to-pic)。
+持有该 URL 的人可在令牌过期前下载图片，请仅分享给预期接收方。
+回滚调用代码不会撤销已经发出的链接。
 
 #### 自定义(基于 HTML)
 

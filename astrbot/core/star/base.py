@@ -125,8 +125,8 @@ class Star(CommandParserMixin, PluginKVStoreMixin):
                 and callback_url.scheme in {"http", "https"}
                 and callback_url.hostname
                 and callback_url.port != 0
-                and not callback_url.query
-                and not callback_url.fragment
+                and "?" not in callback_base
+                and "#" not in callback_base
                 and not any(char.isspace() for char in callback_base)
             )
         except ValueError:

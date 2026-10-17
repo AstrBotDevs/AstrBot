@@ -151,7 +151,12 @@ class TestStarBase:
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
         "callback_base",
-        ["https://files.example", "https://files.example/", "https://files.example/proxy/"],
+        [
+            "https://files.example",
+            "https://files.example/",
+            "https://files.example/proxy/",
+            "https://files.example/proxy%3Fname%23image/",
+        ],
     )
     async def test_text_to_image_local_fallback_returns_reusable_url(
         self, tmp_path, monkeypatch, callback_base
@@ -195,6 +200,12 @@ class TestStarBase:
             "https://[invalid",
             "https://files.example?key=private",
             "https://files.example/#fragment",
+            "https://files.example?",
+            "https://files.example#",
+            "https://files.example?#",
+            "https://files.example/proxy/?",
+            "https://files.example/proxy/#",
+            "https://files.example/proxy/?#",
             "https://files.example:bad",
             "https://files.example:0",
             "https://files.example:65536",
@@ -211,11 +222,11 @@ class TestStarBase:
 
         service = FileTokenService()
         monkeypatch.setattr(star_base, "file_token_service", service, raising=False)
+        image_file = tmp_path / "rendered.jpg"
+        image_file.write_bytes(b"fixture image bytes")
         context = MagicMock()
         context.get_config.return_value = {"callback_api_base": callback_base}
-        context.html_renderer.render_t2i = AsyncMock(
-            return_value=str(tmp_path / "rendered.jpg")
-        )
+        context.html_renderer.render_t2i = AsyncMock(return_value=str(image_file))
         with pytest.raises(
             RuntimeError, match="callback_api_base.*return_url=False"
         ) as exc_info:
