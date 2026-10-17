@@ -188,7 +188,29 @@
           "description": "启用网页搜索"
         },
         "websearch_provider": {
-          "description": "网页搜索提供商"
+          "description": "网页搜索提供商",
+          "labels": [
+            "SerpApi",
+            "DeepSeek Search API",
+            "Tavily",
+            "Baidu AI Search",
+            "Bocha",
+            "Brave",
+            "Firecrawl",
+            "Exa",
+            "AnySearch"
+          ],
+          "subtitles": [
+            "Google 网页、图片、学术和财经搜索",
+            "DeepSeek 官方搜索接口",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            ""
+          ]
         },
         "websearch_tavily_key": {
           "description": "Tavily API Key",
@@ -221,9 +243,13 @@
           "description": "AnySearch API Key",
           "hint": "可添加多个 Key 进行轮询。留空则使用匿名模式（每日免费额度）。"
         },
+        "websearch_serpapi_key": {
+          "description": "SerpApi API Key",
+          "hint": "支持 Google 网页、图片、学术和财经搜索。可添加多个 Key 轮询。获取 Key：[https://serpapi.com/manage-api-key](https://serpapi.com/manage-api-key)"
+        },
         "websearch_deepseek_key": {
           "description": "DeepSeek API Key",
-          "hint": "填入 DeepSeek API Key。可使用与对话模型相同的 Key（需独立填写）。可添加多个 Key 轮询，同账号共享 QPS 限制。"
+          "hint": "填入 DeepSeek API Key。可使用与对话模型相同的 Key（需独立填写）。可添加多个 Key 轮询。 获取 Key: [https://platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys)"
         }
       }
     },

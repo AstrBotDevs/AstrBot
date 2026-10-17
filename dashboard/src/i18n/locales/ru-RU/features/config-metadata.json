@@ -260,7 +260,29 @@
                     "description": "Включить поиск в сети"
                 },
                 "websearch_provider": {
-                    "description": "Провайдер поиска"
+                    "description": "Провайдер поиска",
+                    "labels": [
+                        "SerpApi",
+                        "DeepSeek Search API",
+                        "Tavily",
+                        "Baidu AI Search",
+                        "Bocha",
+                        "Brave",
+                        "Firecrawl",
+                        "Exa",
+                        "AnySearch"
+                    ],
+                    "subtitles": [
+                        "Веб-поиск, изображения, научные публикации и финансы Google",
+                        "Официальный поисковый API DeepSeek",
+                        "",
+                        "",
+                        "",
+                        "",
+                        "",
+                        "",
+                        ""
+                    ]
                 },
                 "websearch_tavily_key": {
                     "description": "API-ключ Tavily",
@@ -293,9 +315,13 @@
                     "description": "AnySearch API-ключ",
                     "hint": "Можно добавить несколько ключей для ротации. Оставьте пустым для анонимного режима с ежедневной бесплатной квотой."
                 },
+                "websearch_serpapi_key": {
+                    "description": "SerpApi API Key",
+                    "hint": "Поддерживает веб-поиск, поиск изображений, научных публикаций и финансовых данных Google. Можно добавить несколько ключей для ротации. Получить ключ: [https://serpapi.com/manage-api-key](https://serpapi.com/manage-api-key)"
+                },
                 "websearch_deepseek_key": {
                     "description": "API-ключ DeepSeek",
-                    "hint": "Введите API-ключ DeepSeek. Можно использовать тот же ключ, что и для чат-модели (не подставляется автоматически). Поддерживается ротация нескольких ключей, но лимит QPS общий на аккаунт."
+                    "hint": "Введите API-ключ DeepSeek. Можно использовать тот же ключ, что и для чат-модели (не подставляется автоматически). Поддерживается ротация нескольких ключей. Получить ключ: [https://platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys)"
                 }
             }
         },

@@ -14,8 +14,18 @@ from astrbot.dashboard.services.live_chat_service import LiveChatService
     ids=["chat", "live_chat"],
 )
 @pytest.mark.parametrize("cited", [True, False])
-def test_deepseek_search_refs_include_only_cited_sources(
-    monkeypatch, extract_refs, cited
+@pytest.mark.parametrize(
+    "tool_name",
+    [
+        "web_search_deepseek",
+        "web_search_serpapi",
+        "image_search_serpapi",
+        "finance_search_serpapi",
+        "scholar_search_serpapi",
+    ],
+)
+def test_search_refs_include_only_cited_sources(
+    monkeypatch, extract_refs, cited, tool_name
 ):
     result = {
         "title": "Search result",
@@ -33,7 +43,7 @@ def test_deepseek_search_refs_include_only_cited_sources(
             "type": "tool_call",
             "tool_calls": [
                 {
-                    "name": "web_search_deepseek",
+                    "name": tool_name,
                     "result": json.dumps({"results": [result]}),
                 }
             ],
@@ -50,18 +60,19 @@ def test_deepseek_search_refs_include_only_cited_sources(
     )
 
 
-def test_deepseek_search_configuration_is_available_in_webui():
+@pytest.mark.parametrize("provider", ["deepseek", "serpapi"])
+def test_search_configuration_is_available_in_webui(provider):
     settings = DEFAULT_CONFIG["provider_settings"]
     items = CONFIG_METADATA_3["ai_group"]["metadata"]["websearch"]["items"]
 
-    assert settings["websearch_deepseek_key"] == []
+    assert settings[f"websearch_{provider}_key"] == []
     assert settings["websearch_provider"] == "tavily"
-    assert "deepseek" in items["provider_settings.websearch_provider"]["options"]
-    key_metadata = items["provider_settings.websearch_deepseek_key"]
+    assert provider in items["provider_settings.websearch_provider"]["options"]
+    key_metadata = items[f"provider_settings.websearch_{provider}_key"]
     assert key_metadata["secret"] is True
     assert key_metadata["type"] == "list"
     assert key_metadata["items"] == {"type": "string"}
     assert key_metadata["condition"] == {
-        "provider_settings.websearch_provider": "deepseek",
+        "provider_settings.websearch_provider": provider,
         "provider_settings.web_search": True,
     }
