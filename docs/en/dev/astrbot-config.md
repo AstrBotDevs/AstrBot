@@ -64,6 +64,7 @@ The default AstrBot configuration is as follows:
         "websearch_tavily_key": [],
         "websearch_bocha_key": [],
         "websearch_brave_key": [],
+        "websearch_deepseek_key": [],
         "web_search_link": False,
         "display_reasoning_text": False,
         "identifier": False,
@@ -292,13 +293,14 @@ Whether to enable AstrBot's built-in web search capability. Default is `false`. 
 
 #### `provider_settings.websearch_provider`
 
-Web search provider type. Default is `tavily`. Currently supports `tavily`, `bocha`, `baidu_ai_search`, `brave`, and `firecrawl`.
+Web search provider type. Default is `tavily`. Currently supports `tavily`, `bocha`, `baidu_ai_search`, `brave`, `firecrawl`, and `deepseek`.
 
 - `tavily`: Uses the Tavily search engine.
 - `bocha`: Uses the BoCha search engine.
 - `baidu_ai_search`: Uses Baidu AI Search (MCP).
 - `brave`: Uses Brave Search API.
 - `firecrawl`: Uses the Firecrawl Search API.
+- `deepseek`: Uses the DeepSeek Search API.
 
 #### `provider_settings.websearch_tavily_key`
 
@@ -315,6 +317,10 @@ API Key list for the Brave search engine. Required when using `brave` as the web
 #### `provider_settings.websearch_firecrawl_key`
 
 API Key list for the Firecrawl search engine. Required when using `firecrawl` as the web search provider.
+
+#### `provider_settings.websearch_deepseek_key`
+
+API Key list for the DeepSeek search engine. Required when using `deepseek` as the web search provider. Can use the same API key as the chat model, but must be configured separately. Multiple keys under the same account share rate limits.
 
 #### `provider_settings.web_search_link`
 

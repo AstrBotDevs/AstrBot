@@ -99,6 +99,8 @@ from astrbot.core.tools.web_search_tools import (
     BaiduWebSearchTool,
     BochaWebSearchTool,
     BraveWebSearchTool,
+    DeepSeekFetchWebPageTool,
+    DeepSeekWebSearchTool,
     ExaGetContentsTool,
     ExaWebSearchTool,
     FirecrawlExtractWebPageTool,
@@ -162,6 +164,7 @@ WEB_SEARCH_CITATION_TOOL_NAMES = frozenset(
         "web_search_brave",
         "web_search_exa",
         "web_search_anysearch",
+        "web_search_deepseek",
     }
 )
 WEB_SEARCH_CITATION_PROMPT = (
@@ -1296,6 +1299,9 @@ async def _apply_web_search_tools(
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExaGetContentsTool))
     elif provider == "anysearch":
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(AnySearchWebSearchTool))
+    elif provider == "deepseek":
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(DeepSeekWebSearchTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(DeepSeekFetchWebPageTool))
 
 
 def _apply_web_search_citation_prompt(

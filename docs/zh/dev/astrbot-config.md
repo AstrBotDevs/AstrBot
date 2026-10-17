@@ -64,6 +64,7 @@ AstrBot 默认配置如下：
         "websearch_tavily_key": [],
         "websearch_bocha_key": [],
         "websearch_brave_key": [],
+        "websearch_deepseek_key": [],
         "web_search_link": False,
         "display_reasoning_text": False,
         "identifier": False,
@@ -292,13 +293,14 @@ ID 白名单。填写后，将只处理所填写的 ID 发来的消息事件。�
 
 #### `provider_settings.websearch_provider`
 
-网页搜索提供商类型。默认为 `tavily`。目前支持 `tavily`、`bocha`、`baidu_ai_search`、`brave`、`firecrawl`。
+网页搜索提供商类型。默认为 `tavily`。目前支持 `tavily`、`bocha`、`baidu_ai_search`、`brave`、`firecrawl`、`deepseek`。
 
 - `tavily`：使用 Tavily 搜索引擎。
 - `bocha`：使用 BoCha 搜索引擎。
 - `baidu_ai_search`：使用百度 AI Search（MCP）。
 - `brave`：使用 Brave Search API。
 - `firecrawl`：使用 Firecrawl Search API。
+- `deepseek`：使用 DeepSeek Search API。
 
 #### `provider_settings.websearch_tavily_key`
 
@@ -315,6 +317,10 @@ Brave 搜索引擎的 API Key 列表。使用 `brave` 作为网页搜索提供�
 #### `provider_settings.websearch_firecrawl_key`
 
 Firecrawl 搜索引擎的 API Key 列表。使用 `firecrawl` 作为网页搜索提供商时需要填写。
+
+#### `provider_settings.websearch_deepseek_key`
+
+DeepSeek 搜索引擎的 API Key 列表。使用 `deepseek` 作为网页搜索提供商时需要填写。可使用与对话模型相同的 API Key，配置相互独立。同账号下的多个 Key 共享 QPS 限制。
 
 #### `provider_settings.web_search_link`
 

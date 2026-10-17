@@ -1,13 +1,15 @@
 import json
 from types import SimpleNamespace
-import pytest
-from astrbot.core.tools import web_search_tools as tools
 
+import pytest
+
+from astrbot.core.tools import web_search_tools as tools
 from astrbot.core.tools.web_search_tools import (
-    _anysearch_search,
     AnySearchWebSearchTool,
+    _anysearch_search,
     normalize_legacy_web_search_config,
 )
+
 
 class _FakeAnysearchResponse:
     """Fake HTTP response for AnySearch API tests."""
@@ -1422,3 +1424,352 @@ async def test_anysearch_search_serializes_nested_vertical_fields(monkeypatch):
     assert "nvd.nist.gov/vuln/detail/CVE-2021-44228" in vuln.snippet
     assert '"from": "SHA"' in flight.snippet
     assert '"to": "PEK"' in flight.snippet
+
+
+@pytest.fixture
+def deepseek_session(monkeypatch):
+    """Install an isolated HTTP session and key rotator for DeepSeek tests."""
+    session = _CycleSession([_FakeFirecrawlResponse()])
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+    monkeypatch.setattr(
+        tools,
+        "_DEEPSEEK_KEY_ROTATOR",
+        tools._KeyRotator("websearch_deepseek_key", "DeepSeek"),
+    )
+    monkeypatch.setitem(tools.sp.temporary_cache, "_ws_favicon", {})
+    return session
+
+
+@pytest.mark.asyncio
+async def test_deepseek_search_request_and_result_mapping(deepseek_session):
+    deepseek_session.responses = [
+        _FakeFirecrawlResponse(
+            json_data={
+                "results": [
+                    {
+                        "title": "AstrBot",
+                        "url": "https://example.com",
+                        "snippet": "Short summary",
+                        "summary": "Detailed summary for the model",
+                        "content": "",
+                        "site_icon": "https://example.com/favicon.ico",
+                        "date": "2026-10-17",
+                    },
+                    {
+                        "title": "Another result",
+                        "url": "https://example.org",
+                        "snippet": "Fallback summary",
+                        "summary": "",
+                        "site_icon": None,
+                    },
+                ]
+            }
+        )
+    ]
+    context = _context_with_provider_settings(
+        {"websearch_deepseek_key": ["deepseek-key"]}
+    )
+
+    result = await tools.DeepSeekWebSearchTool().call(context, query="AstrBot")
+
+    assert deepseek_session.calls == [
+        {
+            "url": "https://api.deepseek.com/v1/tools/search",
+            "json": {"query": "AstrBot", "count": 10, "need_content": False},
+            "headers": {
+                "Authorization": "Bearer deepseek-key",
+                "Content-Type": "application/json",
+            },
+        }
+    ]
+    assert deepseek_session.trust_env is True
+    assert deepseek_session.entered is True
+    assert deepseek_session.exited is True
+    results = json.loads(result)["results"]
+    reference = results[0]["index"].split(".")[0]
+    assert len(reference) == 4
+    assert results == [
+        {
+            "title": "AstrBot",
+            "url": "https://example.com",
+            "snippet": "Detailed summary for the model",
+            "index": f"{reference}.1",
+        },
+        {
+            "title": "Another result",
+            "url": "https://example.org",
+            "snippet": "Fallback summary",
+            "index": f"{reference}.2",
+        },
+    ]
+    assert tools.sp.temporary_cache["_ws_favicon"] == {
+        "https://example.com": "https://example.com/favicon.ico"
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("count", [1, 50])
+async def test_deepseek_search_preserves_content_and_parameter_boundaries(
+    deepseek_session, count
+):
+    deepseek_session.responses = [
+        _FakeFirecrawlResponse(
+            json_data={
+                "results": [
+                    {
+                        "title": "Full page",
+                        "url": "https://example.com",
+                        "summary": "Summary",
+                        "content": "# Markdown\n\nFull page body",
+                    }
+                ]
+            }
+        )
+    ]
+    context = _context_with_provider_settings({"websearch_deepseek_key": ["key"]})
+    query = "猫" * 128
+    question = "问" * 128
+
+    result = await tools.DeepSeekWebSearchTool().call(
+        context,
+        query=query,
+        count=count,
+        ori_question=question,
+        need_content=True,
+    )
+
+    assert deepseek_session.calls[0]["json"] == {
+        "query": query,
+        "count": count,
+        "ori_question": question,
+        "need_content": True,
+    }
+    assert json.loads(result)["results"][0]["snippet"] == (
+        "Summary\n\n# Markdown\n\nFull page body"
+    )
+
+
+@pytest.mark.asyncio
+async def test_deepseek_search_omits_null_original_question(deepseek_session):
+    context = _context_with_provider_settings({"websearch_deepseek_key": ["key"]})
+
+    result = await tools.DeepSeekWebSearchTool().call(
+        context, query="x", ori_question=None
+    )
+
+    assert "ori_question" not in deepseek_session.calls[0]["json"]
+    assert result == "Error: DeepSeek web search does not return any results."
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("kwargs", "field"),
+    [
+        ({}, "query"),
+        ({"query": None}, "query"),
+        ({"query": 1}, "query"),
+        ({"query": ""}, "query"),
+        ({"query": " \t\n"}, "query"),
+        ({"query": "猫" * 129}, "query"),
+        ({"count": 0}, "count"),
+        ({"count": 51}, "count"),
+        ({"count": True}, "count"),
+        ({"count": 1.0}, "count"),
+        ({"count": "10"}, "count"),
+        ({"count": None}, "count"),
+        ({"ori_question": ""}, "ori_question"),
+        ({"ori_question": "问" * 129}, "ori_question"),
+        ({"ori_question": 1}, "ori_question"),
+        ({"need_content": "false"}, "need_content"),
+        ({"need_content": 0}, "need_content"),
+        ({"need_content": None}, "need_content"),
+    ],
+)
+async def test_deepseek_search_rejects_invalid_parameters(
+    deepseek_session, kwargs, field
+):
+    context = _context_with_provider_settings({"websearch_deepseek_key": ["key"]})
+    if field != "query":
+        kwargs = {"query": "AstrBot", **kwargs}
+
+    result = await tools.DeepSeekWebSearchTool().call(context, **kwargs)
+
+    assert result.startswith(f"Error: {field} must be")
+    assert deepseek_session.calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "tool_class", [tools.DeepSeekWebSearchTool, tools.DeepSeekFetchWebPageTool]
+)
+async def test_deepseek_tools_require_api_key(deepseek_session, tool_class):
+    context = _context_with_provider_settings({})
+
+    result = await tool_class().call(
+        context, query="AstrBot", url="https://example.com"
+    )
+
+    assert result == "Error: DeepSeek API key is not configured in AstrBot."
+    assert deepseek_session.calls == []
+
+
+@pytest.mark.asyncio
+async def test_deepseek_fetch_returns_title_and_markdown(deepseek_session):
+    deepseek_session.responses = [
+        _FakeFirecrawlResponse(
+            json_data={"title": "Example", "content": "# Example\n\nMarkdown body"}
+        )
+    ]
+    context = _context_with_provider_settings({"websearch_deepseek_key": ["key"]})
+
+    result = await tools.DeepSeekFetchWebPageTool().call(
+        context, url="https://example.com/page?q=猫"
+    )
+
+    assert deepseek_session.calls == [
+        {
+            "url": "https://api.deepseek.com/v1/tools/fetch",
+            "json": {"url": "https://example.com/page?q=猫"},
+            "headers": {
+                "Authorization": "Bearer key",
+                "Content-Type": "application/json",
+            },
+        }
+    ]
+    assert result == (
+        "URL: https://example.com/page?q=猫\n"
+        "Title: Example\nContent: # Example\n\nMarkdown body"
+    )
+    assert deepseek_session.trust_env is True
+    assert deepseek_session.exited is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "url",
+    [
+        None,
+        1,
+        "",
+        "ftp://example.com",
+        "https:///page",
+        "https://",
+        "https://user@example.com",
+        "https://user:password@example.com",
+        "https://@example.com",
+        "https://[broken",
+        "https://example.com/with space",
+        "https://example.com/\npage",
+    ],
+)
+async def test_deepseek_fetch_rejects_invalid_url(deepseek_session, url):
+    context = _context_with_provider_settings({"websearch_deepseek_key": ["key"]})
+
+    result = await tools.DeepSeekFetchWebPageTool().call(context, url=url)
+
+    assert result.startswith("Error: url must be")
+    assert deepseek_session.calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("url", ["http://example.com", "https://example.com"])
+async def test_deepseek_fetch_accepts_supported_urls(deepseek_session, url):
+    context = _context_with_provider_settings({"websearch_deepseek_key": ["key"]})
+
+    await tools.DeepSeekFetchWebPageTool().call(context, url=url)
+
+    assert deepseek_session.calls[0]["json"] == {"url": url}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("length", [8192, 8193])
+async def test_deepseek_fetch_url_length_limit(deepseek_session, length):
+    prefix = "https://example.com/"
+    url = prefix + "x" * (length - len(prefix))
+    assert len(url) == length
+    context = _context_with_provider_settings({"websearch_deepseek_key": ["key"]})
+    deepseek_session.responses = [
+        _FakeFirecrawlResponse(json_data={"title": "Page", "content": "Page body"})
+    ]
+
+    result = await tools.DeepSeekFetchWebPageTool().call(context, url=url)
+
+    if length == 8192:
+        assert deepseek_session.calls[0]["json"] == {"url": url}
+        assert result == f"URL: {url}\nTitle: Page\nContent: Page body"
+    else:
+        assert result == "Error: url must be a string of 1-8192 characters."
+        assert deepseek_session.calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [400, 401, 402, 403, 408, 429, 500])
+@pytest.mark.parametrize(
+    ("tool_class", "operation"),
+    [
+        (tools.DeepSeekWebSearchTool, "web search"),
+        (tools.DeepSeekFetchWebPageTool, "fetch"),
+    ],
+)
+async def test_deepseek_http_errors_do_not_retry(
+    deepseek_session, status, tool_class, operation
+):
+    deepseek_session.responses = [
+        _FakeFirecrawlResponse(status=status, text_data="API failure")
+    ]
+    context = _context_with_provider_settings(
+        {"websearch_deepseek_key": ["first-key", "second-key"]}
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match=f"DeepSeek {operation} failed: API failure, status: {status}",
+    ):
+        await tool_class().call(context, query="AstrBot", url="https://example.com")
+
+    assert len(deepseek_session.calls) == 1
+    assert deepseek_session.calls[0]["headers"]["Authorization"] == "Bearer first-key"
+    assert deepseek_session.exited is True
+
+
+@pytest.mark.asyncio
+async def test_deepseek_search_and_fetch_share_round_robin_keys(deepseek_session):
+    context = _context_with_provider_settings(
+        {"websearch_deepseek_key": ["first-key", "second-key"]}
+    )
+
+    await tools.DeepSeekWebSearchTool().call(context, query="AstrBot")
+    await tools.DeepSeekFetchWebPageTool().call(context, url="https://example.com")
+    await tools.DeepSeekWebSearchTool().call(context, query="AstrBot")
+
+    assert [call["headers"]["Authorization"] for call in deepseek_session.calls] == [
+        "Bearer first-key",
+        "Bearer second-key",
+        "Bearer first-key",
+    ]
+
+
+def test_deepseek_tools_are_exported_and_listed():
+    assert tools.DeepSeekWebSearchTool().name in tools.WEB_SEARCH_TOOL_NAMES
+    assert tools.DeepSeekFetchWebPageTool().name in tools.WEB_SEARCH_TOOL_NAMES
+    assert "DeepSeekWebSearchTool" in tools.__all__
+    assert "DeepSeekFetchWebPageTool" in tools.__all__
+
+
+@pytest.mark.asyncio
+async def test_deepseek_fetch_reports_empty_content(deepseek_session):
+    deepseek_session.responses = [
+        _FakeFirecrawlResponse(json_data={"title": "Empty page", "content": ""})
+    ]
+    context = _context_with_provider_settings({"websearch_deepseek_key": ["key"]})
+
+    result = await tools.DeepSeekFetchWebPageTool().call(
+        context, url="https://example.com"
+    )
+
+    assert result == "Error: DeepSeek fetch does not return any content."

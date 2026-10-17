@@ -813,22 +813,48 @@ class TestBuiltinToolInjection:
         assert req.func_tool.get_tool("web_search_baidu") is builtin_tool
 
     @pytest.mark.asyncio
-    async def test_apply_web_search_tools_adds_firecrawl_search_and_extract_tools(
-        self, mock_event, mock_context
+    @pytest.mark.parametrize(
+        ("provider", "search_class", "extract_class", "search_name", "extract_name"),
+        [
+            (
+                "firecrawl",
+                ama.FirecrawlWebSearchTool,
+                ama.FirecrawlExtractWebPageTool,
+                "web_search_firecrawl",
+                "firecrawl_extract_web_page",
+            ),
+            (
+                "deepseek",
+                ama.DeepSeekWebSearchTool,
+                ama.DeepSeekFetchWebPageTool,
+                "web_search_deepseek",
+                "deepseek_fetch_web_page",
+            ),
+        ],
+    )
+    async def test_apply_web_search_tools_adds_search_and_extract_tools(
+        self,
+        mock_event,
+        mock_context,
+        provider,
+        search_class,
+        extract_class,
+        search_name,
+        extract_name,
     ):
-        """Test Firecrawl web search injects search and extract tools."""
+        """Test web search providers inject both search and extraction tools."""
         module = ama
         req = ProviderRequest()
         mock_context.get_config.return_value = {
             "provider_settings": {
                 "web_search": True,
-                "websearch_provider": "firecrawl",
+                "websearch_provider": provider,
             }
         }
         search_tool = MagicMock(spec=FunctionTool)
-        search_tool.name = "web_search_firecrawl"
+        search_tool.name = search_name
         extract_tool = MagicMock(spec=FunctionTool)
-        extract_tool.name = "firecrawl_extract_web_page"
+        extract_tool.name = extract_name
         tool_mgr = MagicMock()
         tool_mgr.get_builtin_tool.side_effect = [search_tool, extract_tool]
         mock_context.get_llm_tool_manager.return_value = tool_mgr
@@ -836,18 +862,19 @@ class TestBuiltinToolInjection:
         await module._apply_web_search_tools(mock_event, req, mock_context)
 
         assert tool_mgr.get_builtin_tool.call_args_list == [
-            ((module.FirecrawlWebSearchTool,),),
-            ((module.FirecrawlExtractWebPageTool,),),
+            ((search_class,),),
+            ((extract_class,),),
         ]
         assert req.func_tool is not None
-        assert req.func_tool.get_tool("web_search_firecrawl") is search_tool
-        assert req.func_tool.get_tool("firecrawl_extract_web_page") is extract_tool
+        assert req.func_tool.get_tool(search_name) is search_tool
+        assert req.func_tool.get_tool(extract_name) is extract_tool
 
-    def test_apply_web_search_citation_prompt_for_webchat(self, mock_event):
+    @pytest.mark.parametrize("tool_name", ["web_search_tavily", "web_search_deepseek"])
+    def test_apply_web_search_citation_prompt_for_webchat(self, mock_event, tool_name):
         module = ama
         req = ProviderRequest(system_prompt="base")
         search_tool = MagicMock(spec=FunctionTool)
-        search_tool.name = "web_search_tavily"
+        search_tool.name = tool_name
         req.func_tool = ToolSet()
         req.func_tool.add_tool(search_tool)
         mock_event.get_platform_name.return_value = "webchat"

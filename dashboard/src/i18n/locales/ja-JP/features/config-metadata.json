@@ -292,6 +292,10 @@
         "websearch_exa_key": {
           "description": "Exa API Key",
           "hint": "複数の Key を追加してローテーションできます。Key の取得: https://dashboard.exa.ai"
+        },
+        "websearch_deepseek_key": {
+          "description": "DeepSeek API Key",
+          "hint": "DeepSeek API Key を入力します。チャットモデルと同じ Key も使用可能（個別に入力が必要）。複数 Key のローテーションに対応していますが、同一アカウントでは QPS 制限を共有します。"
         }
       }
     },

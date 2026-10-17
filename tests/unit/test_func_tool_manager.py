@@ -17,6 +17,8 @@ from astrbot.core.tools.computer_tools.shell import (
 )
 from astrbot.core.tools.message_tools import SendMessageToUserTool
 from astrbot.core.tools.web_search_tools import (
+    DeepSeekFetchWebPageTool,
+    DeepSeekWebSearchTool,
     FirecrawlExtractWebPageTool,
     FirecrawlWebSearchTool,
 )
@@ -870,16 +872,37 @@ async def test_execute_shell_reports_blank_exception_type(monkeypatch):
     assert result == "Error executing command: BlankError"
 
 
-def test_firecrawl_tools_are_registered_as_builtin_tools():
+@pytest.mark.parametrize(
+    ("search_class", "extract_class", "search_name", "extract_name"),
+    [
+        (
+            FirecrawlWebSearchTool,
+            FirecrawlExtractWebPageTool,
+            "web_search_firecrawl",
+            "firecrawl_extract_web_page",
+        ),
+        (
+            DeepSeekWebSearchTool,
+            DeepSeekFetchWebPageTool,
+            "web_search_deepseek",
+            "deepseek_fetch_web_page",
+        ),
+    ],
+)
+def test_search_tools_are_registered_as_builtin_tools(
+    search_class, extract_class, search_name, extract_name
+):
     manager = FunctionToolManager()
 
-    search_tool = manager.get_builtin_tool(FirecrawlWebSearchTool)
-    extract_tool = manager.get_builtin_tool(FirecrawlExtractWebPageTool)
+    search_tool = manager.get_builtin_tool(search_class)
+    extract_tool = manager.get_builtin_tool(extract_class)
 
-    assert search_tool.name == "web_search_firecrawl"
-    assert extract_tool.name == "firecrawl_extract_web_page"
-    assert manager.is_builtin_tool("web_search_firecrawl") is True
-    assert manager.is_builtin_tool("firecrawl_extract_web_page") is True
+    assert search_tool.name == search_name
+    assert extract_tool.name == extract_name
+    assert manager.is_builtin_tool(search_name) is True
+    assert manager.is_builtin_tool(extract_name) is True
+    assert manager.get_func(search_name) is search_tool
+    assert manager.get_func(extract_name) is extract_tool
 
 
 @pytest.mark.asyncio
