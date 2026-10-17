@@ -90,7 +90,6 @@ class Main(star.Star):
                             "你友好地询问用户想要聊些什么或者需要什么帮助，回复要符合人设，不要太过机械化。"
                             "请注意，你仅需要输出要回复用户的内容，不要输出其他任何东西"
                         ),
-                        session_id=curr_cid,
                         contexts=[],
                         system_prompt="",
                         conversation=conversation,
@@ -257,7 +256,6 @@ class Main(star.Star):
 
                     yield event.request_llm(
                         prompt=prompt,
-                        session_id=event.session_id,
                         image_urls=image_urls,
                         conversation=conv,
                     )
