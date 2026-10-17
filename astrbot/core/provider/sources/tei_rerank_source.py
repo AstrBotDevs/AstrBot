@@ -47,7 +47,7 @@ class TEIRerankProvider(RerankProvider):
     ) -> list[RerankResult]:
         if not self.client or self.client.closed:
             logger.error("[TEI Rerank] Client session is not initialized or closed")
-            return []
+            raise RuntimeError("TEI Rerank client session is not initialized or closed")
         if not documents:
             logger.warning(
                 "[TEI Rerank] Document list is empty, returning empty results"
