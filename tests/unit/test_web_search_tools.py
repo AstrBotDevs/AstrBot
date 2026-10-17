@@ -1663,6 +1663,9 @@ async def test_deepseek_fetch_returns_title_and_markdown(deepseek_session):
         "https://user:password@example.com",
         "https://@example.com",
         "https://[broken",
+        "https://example.com:abc/page",
+        "https://example.com:70000/page",
+        "https://example.com:-1/page",
         "https://example.com/with space",
         "https://example.com/\npage",
     ],
@@ -1677,7 +1680,16 @@ async def test_deepseek_fetch_rejects_invalid_url(deepseek_session, url):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("url", ["http://example.com", "https://example.com"])
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://example.com",
+        "https://example.com",
+        "http://example.com:80/page",
+        "https://example.com:443/page",
+        "https://example.com:8443/page",
+    ],
+)
 async def test_deepseek_fetch_accepts_supported_urls(deepseek_session, url):
     context = _context_with_provider_settings({"websearch_deepseek_key": ["key"]})
 

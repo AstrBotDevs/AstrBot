@@ -1617,6 +1617,8 @@ class DeepSeekFetchWebPageTool(FunctionTool[AstrAgentContext]):
             return "Error: url must be a string of 1-8192 characters."
         try:
             parsed = urlsplit(url)
+            # Port syntax and range are validated only when this property is read.
+            _ = parsed.port
             valid_url = (
                 parsed.scheme in {"http", "https"}
                 and bool(parsed.hostname)
