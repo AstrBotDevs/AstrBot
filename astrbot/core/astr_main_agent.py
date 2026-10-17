@@ -1878,13 +1878,6 @@ async def build_main_agent(
             AgentContextWrapper(context=astr_agent_ctx)
         )
         if (
-            local_policy.execution_disabled_reason
-            and local_policy.execution_disabled_reason not in (req.system_prompt or "")
-        ):
-            req.system_prompt = (
-                f"{req.system_prompt or ''}\n{local_policy.execution_disabled_reason}\n"
-            )
-        if (
             local_policy.allow_execution
             and not local_policy.allow_network
             and LOCAL_NETWORK_POLICY_NOTICE not in (req.system_prompt or "")
