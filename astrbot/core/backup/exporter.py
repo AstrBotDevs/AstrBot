@@ -73,10 +73,16 @@ class AstrBotExporter:
     async def _run_in_archive_thread(
         self, func: Callable[..., Any], /, *args: Any, **kwargs: Any
     ) -> Any:
-        """Run an archive operation on the executor that owns the archive.
+        """Run a blocking export operation on the executor that owns the archive.
+
+        The executor also carries JSON serialization and manifest generation, so
+        neither of them can run on the event loop while a large export is being
+        produced. Because it has exactly one worker, those CPU-bound calls and the
+        archive writes are serialised against each other, which is what makes the
+        shared ``ZipFile`` safe to use.
 
         Args:
-            func: The blocking archive callable to execute, e.g. ``zf.write``.
+            func: The blocking callable to execute, e.g. ``zf.write`` or ``json.dumps``.
             *args: Positional arguments forwarded to ``func``.
             **kwargs: Keyword arguments forwarded to ``func``.
 
@@ -84,8 +90,8 @@ class AstrBotExporter:
             Whatever ``func`` returns.
 
         Raises:
-            RuntimeError: If the private archive helpers are called outside
-                ``export_all``, i.e. while no archive executor owns the archive.
+            RuntimeError: If the private export helpers are called outside
+                ``export_all``, i.e. while no archive executor owns the export.
         """
         # The private archive helpers are only valid while export_all owns the
         # executor. Fail loudly instead of silently falling back to run_in_executor(None),
@@ -133,6 +139,11 @@ class AstrBotExporter:
                 "separate AstrBotExporter for each concurrent export."
             )
 
+        # Every export builds its own manifest. Without the reset, a reused exporter
+        # carries the previous run's checksums into the new manifest, which then lists
+        # files that are absent from the new ZIP.
+        self._checksums.clear()
+
         if output_dir is None:
             output_dir = get_astrbot_backups_path()
 
@@ -160,6 +171,7 @@ class AstrBotExporter:
         # the teardown can tell "the archive was never finished" apart from "the archive
         # finished but could not be finalised".
         export_error: BaseException | None = None
+        open_error: BaseException | None = None
         close_error: BaseException | None = None
         cancelled_while_cleaning = False
 
@@ -183,8 +195,10 @@ class AstrBotExporter:
             if progress_callback:
                 await progress_callback("main_db", 0, 100, "正在导出主数据库...")
             main_data = await self._export_main_database()
-            main_db_json = json.dumps(
-                main_data, ensure_ascii=False, indent=2, default=str
+            # Serialization of a large database is CPU-bound work that used to run on the
+            # event loop; the archive worker owns it now, together with the ZIP writes.
+            main_db_json = await self._run_in_archive_thread(
+                json.dumps, main_data, ensure_ascii=False, indent=2, default=str
             )
             await self._run_in_archive_thread(
                 zf.writestr, "databases/main_db.json", main_db_json
@@ -205,8 +219,8 @@ class AstrBotExporter:
                         "kb_metadata", 0, 100, "正在导出知识库元数据..."
                     )
                 kb_meta_data = await self._export_kb_metadata()
-                kb_meta_json = json.dumps(
-                    kb_meta_data, ensure_ascii=False, indent=2, default=str
+                kb_meta_json = await self._run_in_archive_thread(
+                    json.dumps, kb_meta_data, ensure_ascii=False, indent=2, default=str
                 )
                 await self._run_in_archive_thread(
                     zf.writestr, "databases/kb_metadata.json", kb_meta_json
@@ -229,8 +243,8 @@ class AstrBotExporter:
                             f"正在导出知识库 {kb_helper.kb.kb_name} 的文档数据...",
                         )
                     doc_data = await self._export_kb_documents(kb_helper)
-                    doc_json = json.dumps(
-                        doc_data, ensure_ascii=False, indent=2, default=str
+                    doc_json = await self._run_in_archive_thread(
+                        json.dumps, doc_data, ensure_ascii=False, indent=2, default=str
                     )
                     doc_path = f"databases/kb_{kb_id}/documents.json"
                     await self._run_in_archive_thread(zf.writestr, doc_path, doc_json)
@@ -279,8 +293,14 @@ class AstrBotExporter:
             # 6. 生成 manifest
             if progress_callback:
                 await progress_callback("manifest", 0, 100, "正在生成清单...")
-            manifest = self._generate_manifest(main_data, kb_meta_data, dir_stats)
-            manifest_json = json.dumps(manifest, ensure_ascii=False, indent=2)
+            # The manifest walks every knowledge-base media directory, so it is generated
+            # and serialized on the archive worker as well instead of on the event loop.
+            manifest = await self._run_in_archive_thread(
+                self._generate_manifest, main_data, kb_meta_data, dir_stats
+            )
+            manifest_json = await self._run_in_archive_thread(
+                json.dumps, manifest, ensure_ascii=False, indent=2
+            )
             await self._run_in_archive_thread(
                 zf.writestr, "manifest.json", manifest_json
             )
@@ -318,9 +338,11 @@ class AstrBotExporter:
                             await asyncio.shield(open_task)
                         except asyncio.CancelledError:
                             cancelled_while_cleaning = True
-                        except Exception:
-                            # The open itself failed. Its result is read below to report
-                            # why, so swallow it here and let the teardown continue.
+                        except BaseException:
+                            # The open itself failed, including a BaseException such as
+                            # KeyboardInterrupt raised on the archive worker. Its result is
+                            # read below to report why, so swallow it here and let the
+                            # teardown continue instead of skipping the ZIP cleanup.
                             pass
                     if not open_task.cancelled():
                         try:
@@ -329,7 +351,10 @@ class AstrBotExporter:
                             # the instance so its handle gets closed instead of leaked.
                             if zf is None:
                                 zf = open_task.result()
-                        except Exception as e:
+                        except BaseException as e:
+                            # A BaseException escaping here would otherwise jump over the
+                            # partial-file removal below, leaving an unusable ZIP behind.
+                            open_error = e
                             logger.warning(f"打开备份归档失败: {e}")
 
                 if zf is not None:
@@ -347,8 +372,10 @@ class AstrBotExporter:
                             await asyncio.shield(close_task)
                         except asyncio.CancelledError:
                             cancelled_while_cleaning = True
-                        except Exception:
-                            # A failed close is an export failure, reported below.
+                        except BaseException:
+                            # A failed close is an export failure, reported below. This
+                            # also covers a BaseException such as KeyboardInterrupt, which
+                            # would otherwise skip the partial-file removal.
                             pass
                     if not close_task.cancelled():
                         try:
@@ -367,12 +394,13 @@ class AstrBotExporter:
 
             if (
                 export_error is not None
+                or open_error is not None
                 or close_error is not None
                 or cancelled_while_cleaning
             ):
                 # This call is not going to report a usable archive: the export failed, it
-                # was cancelled, or the archive could not be finalised and is left without
-                # its central directory. Remove the file so no caller can pick up a
+                # was cancelled, or the archive could not be opened or finalised and is
+                # left in an unusable state. Remove the file so no caller can pick up a
                 # truncated zip that looks usable, and so a cancelled export does not
                 # orphan a file nothing will ever reference. Removal is best-effort and
                 # must never mask the error raised below; ZipFile.close() always clears
@@ -383,6 +411,13 @@ class AstrBotExporter:
                         os.remove(zip_path)
                     except OSError as remove_error:
                         logger.warning(f"清理残缺备份文件失败: {remove_error}")
+
+            if open_error is not None and export_error is None:
+                # The archive could not be created and no other error is propagating. This
+                # is defensive: the failed open normally raises at the await above, so this
+                # branch only exists to guarantee export_all never returns a path to a file
+                # that was never produced.
+                raise open_error
 
             if close_error is not None:
                 # The archive could not be finalised, so it is unopenable. Reporting
