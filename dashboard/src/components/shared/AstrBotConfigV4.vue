@@ -160,7 +160,8 @@ function shouldShowItem(itemMeta, itemKey) {
   if (itemMeta?.condition) {
     for (const [conditionKey, expectedValue] of Object.entries(itemMeta.condition)) {
       const actualValue = getValueBySelector(props.iterable, conditionKey)
-      if (actualValue !== expectedValue) {
+      const expectedValues = Array.isArray(expectedValue) ? expectedValue : [expectedValue]
+      if (!expectedValues.includes(actualValue)) {
         return false
       }
     }
@@ -218,7 +219,8 @@ function shouldShowSection() {
   }
   for (const [conditionKey, expectedValue] of Object.entries(sectionMeta.condition)) {
     const actualValue = getValueBySelector(props.iterable, conditionKey)
-    if (actualValue !== expectedValue) {
+    const expectedValues = Array.isArray(expectedValue) ? expectedValue : [expectedValue]
+    if (!expectedValues.includes(actualValue)) {
       return false
     }
   }
