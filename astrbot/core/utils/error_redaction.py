@@ -11,7 +11,8 @@ _AUTH_JSON_FIELD_PATTERN = re.compile(
     r"(?i)(?P<prefix>(?P<kq>['\"])authorization(?P=kq)\s*:\s*)(?P<vq>['\"])bearer\s+[^'\"]+(?P=vq)"
 )
 _QUERY_FIELD_PATTERN = re.compile(
-    rf"(?i)(?P<prefix>{_SECRET_KEYS}\s*=\s*)(?P<value>[^&'\" ]+)"
+    rf"(?i)(?P<prefix>{_SECRET_KEYS}\s*=\s*)"
+    r"(?P<value>(?P<vq>['\"])[^'\"]+(?P=vq)|[^&'\" ]+)"
 )
 _QUERY_PARAM_PATTERN = re.compile(
     r"(?i)(?P<prefix>[?&](?:api_?key|key|access_?token|auth_?token)=)(?P<value>[^&'\" ]+)"
@@ -20,7 +21,10 @@ _AUTH_HEADER_PATTERN = re.compile(
     r"(?i)(?P<prefix>\bauthorization\s*:\s*bearer\s+)(?P<token>[A-Za-z0-9._\-]+)"
 )
 _BEARER_PATTERN = re.compile(r"(?i)(?P<prefix>\bbearer\s+)(?P<token>[A-Za-z0-9._\-]+)")
-_SK_PATTERN = re.compile(r"\bsk-[A-Za-z0-9]{16,}\b")
+# Vendor keys are "sk-" plus a long body that may itself be dash-segmented,
+# e.g. "sk-proj-..." (OpenAI) or "sk-ant-api03-..." (Anthropic). Requiring a
+# minimum length keeps short placeholders like "sk-test" untouched.
+_SK_PATTERN = re.compile(r"\bsk-[A-Za-z0-9_-]{16,}\b")
 
 
 def _redact_json_field(match: re.Match[str]) -> str:
