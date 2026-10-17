@@ -1644,7 +1644,7 @@ class TestEnsurePersonaAndSkills:
             assert result.provider_request.system_prompt.count(
                 module.LOCAL_NETWORK_POLICY_NOTICE
             ) == int(allow_execution and not allow_network and isolation_status == "detected")
-            assert ("The saved execution restrictions require isolation" in result.provider_request.system_prompt) == (allow_execution and isolation_status != "detected")
+            assert ("These restrictions require Local process isolation" in result.provider_request.system_prompt) == (allow_execution and isolation_status != "detected")
         finally:
             if result.reset_coro:
                 result.reset_coro.close()

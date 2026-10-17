@@ -165,20 +165,37 @@ def get_local_permission_policy(
                 )
             else:
                 recovery = f"Fix the {backend} startup failure shown above, then restart AstrBot."
+            permission_changes = []
+            if policy.filesystem_scope != "host":
+                permission_changes.append(
+                    "set file access scope to `Entire environment`"
+                )
+            if not policy.allow_network:
+                permission_changes.append(
+                    "turn `Execute code` off and on again "
+                    "(this also enables execution network access)"
+                )
             return LocalPermissionPolicy(
                 allow_execution=False,
                 allow_network=False,
                 filesystem_scope=policy.filesystem_scope,
                 execution_disabled_reason=(
-                    f"The saved execution restrictions require isolation, but {reason}. "
-                    f"Code execution and execution network access are disabled; file "
-                    f"access keeps its configured scope ({policy.filesystem_scope}). "
-                    "Saved permissions have not been changed. "
+                    "The Agent Computer Use runtime is the local environment (`local`). "
+                    f"The current user role is `{role}`; its configured Local permission "
+                    "policy is: code execution enabled, execution network access "
+                    f"{'enabled' if policy.allow_network else 'disabled'}, "
+                    f"file access scope `{policy.filesystem_scope}`. "
+                    "These restrictions require Local process isolation, "
+                    f"but {reason}. Code execution is blocked. "
                     "Ask an AstrBot administrator to choose:\n"
-                    f"1. If code execution is needed: {recovery}\n"
-                    "2. If code execution is not needed: disable `Execute code` "
-                    f"for this user role ({role}) in AstrBot WebUI -> Config -> AI -> "
-                    "Capabilities -> Agent Computer Use -> Local Permission Policies.\n"
+                    f"1. Keep the configured restrictions: {recovery}\n"
+                    "2. Allow execution without Local isolation: "
+                    f"{' and '.join(permission_changes)} for this role in AstrBot "
+                    "WebUI -> Config -> AI -> Capabilities -> Agent Computer Use -> "
+                    "Local Permission Policies. Warning: this permits code execution "
+                    "with access to the entire environment and network, without "
+                    "Local isolation. Only an administrator should explicitly "
+                    "authorize this broader access.\n"
                     "Do not bypass this restriction using another tool, command, or runtime."
                 ),
             )

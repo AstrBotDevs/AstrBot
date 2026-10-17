@@ -93,7 +93,7 @@ async def test_tool_loop_agent_adds_network_policy_to_system_prompt(
     if isolation_status != "detected" and not existing_notice:
         expected_count = 0
     assert request.system_prompt.count(LOCAL_NETWORK_POLICY_NOTICE) == expected_count
-    assert ("The saved execution restrictions require isolation" in request.system_prompt) == (
+    assert ("These restrictions require Local process isolation" in request.system_prompt) == (
         isolation_status != "detected" and runtime == "local" and tool_state == "active"
     )
     context.get_config.assert_not_called()

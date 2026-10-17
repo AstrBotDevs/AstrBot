@@ -353,8 +353,9 @@ def test_local_policy_never_widens_saved_permissions(
     if blocked:
         assert "Local isolation unavailable" in error
         assert "Do not bypass" in error
-        assert "Saved permissions have not been changed" in error
-        assert f"scope ({scope})" in error
+        assert "Saved permissions have not been changed" not in error
+        assert f"file access scope `{scope}`" in error
+        assert f"current user role is `{policy_role}`" in error
     assert context.context.context.get_config("test")["provider_settings"]["computer_use_local_permissions"][policy_role] == saved
 
 
@@ -423,15 +424,22 @@ async def test_isolation_failure_is_explained_to_llm_before_starting_tools(
 
     assert result.startswith("error: Local isolation unavailable.")
     assert detail in result
-    assert f"1. If code execution is needed: {recovery}" in result
-    assert "2. If code execution is not needed: disable `Execute code`" in result
-    assert f"for this user role ({role})" in result
+    assert "runtime is the local environment (`local`)" in result
+    assert f"current user role is `{role}`" in result
+    assert f"1. Keep the configured restrictions: {recovery}" in result
+    assert "2. Allow execution without Local isolation:" in result
+    assert ("set file access scope to `Entire environment`" in result) == (scope != "host")
+    assert ("this also enables execution network access" in result) == (not network)
+    assert "execution network access " + ("enabled" if network else "disabled") in result
+    assert "Warning: this permits code execution" in result
+    assert "Only an administrator should explicitly authorize this broader access" in result
     assert "Local Permission Policies" in result
     assert ("Install bubblewrap" in result) == (
         status["status"] == "missing" and status["backend"] == "bubblewrap"
     )
-    assert "Code execution and execution network access are disabled" in result
-    assert f"scope ({scope})" in result
+    assert "Code execution is blocked" in result
+    assert f"file access scope `{scope}`" in result
+    assert "Saved permissions have not been changed" not in result
     assert "Do not bypass" in result
     booter.assert_not_called()
 
