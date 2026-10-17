@@ -208,6 +208,10 @@
         "websearch_deepseek_key": {
           "description": "DeepSeek API Key",
           "hint": "Enter your DeepSeek API key. Can use the same key as the chat model (must be entered separately). Supports multiple keys for rotation; keys under the same account share QPS limits."
+        },
+        "websearch_keenable_key": {
+          "description": "Keenable API Key",
+          "hint": "Multiple keys can be added for rotation. Leave empty to use the free keyless mode, which is rate limited; a key raises the limit. Get a key at https://keenable.ai/console"
         }
       }
     },

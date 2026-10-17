@@ -149,6 +149,7 @@ DEFAULT_CONFIG = {
         "websearch_exa_key": [],
         "websearch_anysearch_key": [],
         "websearch_deepseek_key": [],
+        "websearch_keenable_key": [],
         "web_search_link": False,
         "display_reasoning_text": False,
         "identifier": False,
@@ -3680,6 +3681,7 @@ CONFIG_METADATA_3 = {
                             "exa",
                             "anysearch",
                             "deepseek",
+                            "keenable",
                         ],
                         "condition": {
                             "provider_settings.web_search": True,
@@ -3768,6 +3770,17 @@ CONFIG_METADATA_3 = {
                         "secret": True,
                         "condition": {
                             "provider_settings.websearch_provider": "deepseek",
+                            "provider_settings.web_search": True,
+                        },
+                    },
+                    "provider_settings.websearch_keenable_key": {
+                        "description": "Keenable API Key",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "可添加多个 Key 进行轮询。留空则使用免费的匿名模式（有请求频率限制），填写 Key 可提高限额。获取 Key：https://keenable.ai/console",
+                        "secret": True,
+                        "condition": {
+                            "provider_settings.websearch_provider": "keenable",
                             "provider_settings.web_search": True,
                         },
                     },

@@ -282,6 +282,10 @@
           "description": "AnySearch API Key",
           "hint": "複数の Key を追加してローテーションできます。空欄の場合は匿名モードを使用します（1 日あたりの無料枠あり）。"
         },
+        "websearch_keenable_key": {
+          "description": "Keenable API Key",
+          "hint": "複数の Key を追加してローテーションできます。空欄の場合は無料の匿名モードを使用します（リクエスト頻度の制限あり）。Key を設定すると上限が引き上げられます。Key の取得: https://keenable.ai/console"
+        },
         "websearch_baidu_app_builder_key": {
           "description": "Baidu Qianfan Smart Cloud APP Builder API Key",
           "hint": "参照: [https://console.bce.baidu.com/iam/#/iam/apikey/list](https://console.bce.baidu.com/iam/#/iam/apikey/list)"

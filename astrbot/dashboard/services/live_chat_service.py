@@ -288,6 +288,7 @@ class LiveChatService:
             "web_search_bocha",
             "web_search_brave",
             "web_search_deepseek",
+            "web_search_keenable",
         ]
         web_search_results = {}
         tool_call_parts = [
