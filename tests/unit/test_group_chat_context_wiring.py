@@ -4,7 +4,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from astrbot.api.message_components import Json, Plain
+import astrbot.builtin_stars.astrbot.main as main_module
+from astrbot.api.message_components import At, Json, Plain
 from astrbot.api.provider import LLMResponse
 from astrbot.builtin_stars.astrbot.group_chat_context import GroupChatContext
 from astrbot.builtin_stars.astrbot.main import Main
@@ -120,10 +121,49 @@ async def test_active_reply_reuses_current_umo_conversation():
     )
     event.request_llm.assert_called_once_with(
         prompt="hello",
-        session_id="session-1",
         image_urls=[],
         conversation=conv,
     )
+
+
+@pytest.mark.asyncio
+async def test_empty_mention_reply_does_not_pass_platform_session_id(monkeypatch):
+    # Skip the real session waiter; it would block for its 60s timeout.
+    def fake_session_waiter(timeout):
+        def decorator(waiter):
+            async def wrapper(event):
+                raise TimeoutError
+
+            return wrapper
+
+        return decorator
+
+    monkeypatch.setattr(main_module, "session_waiter", fake_session_waiter)
+    conv = SimpleNamespace(cid="cid-1")
+    conv_mgr = SimpleNamespace(
+        get_curr_conversation_id=AsyncMock(return_value="cid-1"),
+        new_conversation=AsyncMock(),
+        get_conversation=AsyncMock(return_value=conv),
+    )
+    main = make_main_with_conversation_manager(conv_mgr)
+    main.context.get_config.return_value = {
+        "platform_settings": {
+            "empty_mention_waiting": True,
+            "empty_mention_waiting_need_reply": True,
+        },
+        "wake_prefix": ["/"],
+    }
+    event = make_event()
+    event.get_messages.return_value = [At(qq="bot-1")]
+    event.get_self_id.return_value = "bot-1"
+
+    results = [item async for item in main.handle_empty_mention(event)]
+
+    assert len(results) == 1
+    kwargs = event.request_llm.call_args.kwargs
+    assert "session_id" not in kwargs
+    assert kwargs["conversation"] is conv
+    assert kwargs["contexts"] == []
 
 
 @pytest.mark.asyncio
