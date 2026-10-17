@@ -129,11 +129,14 @@ class MarkdownChunker(BaseChunker):
                 # 扣除前缀长度，确保添加前缀后不超过 chunk_size
                 prefix_len = self._estimate_prefix_length(heading_path)
                 effective_chunk_size = max(chunk_size // 4, chunk_size - prefix_len)
+                effective_overlap = self._scale_overlap(
+                    chunk_overlap, chunk_size, effective_chunk_size
+                )
 
                 sub_chunks = await self._fallback_chunker.chunk(
                     section_text,
                     chunk_size=effective_chunk_size,
-                    chunk_overlap=chunk_overlap,
+                    chunk_overlap=effective_overlap,
                 )
                 for i, sub_chunk in enumerate(sub_chunks):
                     chunk_text = self._apply_heading_context(
@@ -142,6 +145,22 @@ class MarkdownChunker(BaseChunker):
                     raw_chunks.append((chunk_text, True))
 
         return raw_chunks
+
+    @staticmethod
+    def _scale_overlap(
+        chunk_overlap: int, chunk_size: int, effective_chunk_size: int
+    ) -> int:
+        """按正文预算等比缩放重叠长度。
+
+        标题前缀会压缩子块可用的 chunk_size，而外部传入的 chunk_overlap 是针对
+        完整 chunk_size 配置的。原样传递会让合法配置在内部变成
+        overlap >= effective_chunk_size，被递归分块器拒绝。保持
+        overlap / chunk_size 的比例，并确保结果严格小于 effective_chunk_size。
+        """
+        if chunk_size <= 0 or effective_chunk_size >= chunk_size:
+            return chunk_overlap
+        scaled = chunk_overlap * effective_chunk_size // chunk_size
+        return max(0, min(scaled, effective_chunk_size - 1))
 
     def _build_context_prefix(self, heading_path: list[str]) -> str:
         """构建标题路径前缀"""
