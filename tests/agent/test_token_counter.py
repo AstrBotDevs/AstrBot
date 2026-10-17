@@ -139,7 +139,7 @@ class TestTrustedUsage:
                 ),
             ],
         )
-        tokens = counter.count_tokens([msg], trusted_token_usage=42)
+        tokens = counter.count_tokens([msg], reported_token_usage=42)
         assert tokens == 42
 
 
