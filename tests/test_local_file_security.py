@@ -133,6 +133,44 @@ def test_windows_workspace_open_rejects_directory_junctions(tmp_path, create):
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Requires Windows native paths.")
+@pytest.mark.parametrize("ancestor", [False, True])
+def test_windows_workspace_open_rejects_junctions_at_or_above_root(tmp_path, ancestor):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    directory = outside / "nested" if ancestor else outside
+    directory.mkdir(exist_ok=True)
+    secret = directory / "secret.txt"
+    secret.write_text("secret", encoding="utf-8")
+    junction = tmp_path / "junction"
+    subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(junction), str(outside)],
+        check=True,
+        capture_output=True,
+    )
+    workspace = junction / "nested" if ancestor else junction
+    try:
+        with pytest.raises(PermissionError, match="reparse point"):
+            open_file_in_allowed_roots(
+                str(workspace / "secret.txt"), (workspace,), access="write"
+            )
+        assert secret.read_text(encoding="utf-8") == "secret"
+    finally:
+        junction.rmdir()
+
+
+def test_workspace_file_creation_does_not_create_missing_trusted_root(tmp_path):
+    workspace = tmp_path / "missing" / "workspace"
+    with pytest.raises(FileNotFoundError):
+        open_file_in_allowed_roots(
+            str(workspace / "file.txt"),
+            (workspace,),
+            access="write",
+            create_parents=True,
+        )
+    assert not workspace.parent.exists()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Requires Windows native paths.")
 @pytest.mark.parametrize("name", ["file.txt:stream", "file.txt.", "file.txt "])
 def test_windows_workspace_open_rejects_alternate_streams_and_ambiguous_names(
     tmp_path, name

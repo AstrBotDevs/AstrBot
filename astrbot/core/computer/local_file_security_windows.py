@@ -56,6 +56,10 @@ def open_windows_file(
 ) -> int:
     """Open a checked workspace file through stable, non-reparse handles.
 
+    Resolve the drive or share anchor before enabling OBJ_DONT_REPARSE so normal
+    Windows device mappings are allowed. Open every filesystem component below
+    that anchor relative to a checked handle without following reparse points.
+
     Args:
         root: Absolute trusted directory containing the requested file.
         parts: Validated path components relative to the trusted directory.
@@ -118,7 +122,7 @@ def open_windows_file(
     file_type.argtypes = [ctypes.c_void_p]
     file_type.restype = ctypes.c_uint32
 
-    native_root = str(root)
+    native_root = root.anchor
     if native_root.startswith("\\\\?\\"):
         native_root = "\\??\\" + native_root[4:]
     elif native_root.startswith("\\\\"):
@@ -126,10 +130,12 @@ def open_windows_file(
     else:
         native_root = "\\??\\" + native_root
 
+    root_parts = root.parts[1:]
+    components = (native_root, *root_parts, *parts)
     handles: list[int] = []
     try:
-        for index, name in enumerate((native_root, *parts)):
-            terminal = index == len(parts)
+        for index, name in enumerate(components):
+            terminal = index == len(components) - 1
             encoded_length = len(name.encode("utf-16-le"))
             if encoded_length > 65532:
                 raise ValueError("Restricted Windows filename is too long.")
@@ -143,7 +149,7 @@ def open_windows_file(
                 ctypes.sizeof(_ObjectAttributes),
                 handles[-1] if handles else None,
                 ctypes.pointer(unicode_name),
-                0x1040,  # OBJ_CASE_INSENSITIVE | OBJ_DONT_REPARSE
+                0x40 if index == 0 else 0x1040,
                 None,
                 None,
             )
@@ -164,7 +170,7 @@ def open_windows_file(
                 None,
                 0x80,  # FILE_ATTRIBUTE_NORMAL
                 0x3,  # Share read/write, but keep opened objects from being renamed.
-                3 if create_parents and index else 1,  # FILE_OPEN_IF / FILE_OPEN
+                3 if create_parents and index > len(root_parts) else 1,
                 0x200020 | (0x40 if terminal else 0x1),
                 # OPEN_REPARSE_POINT | SYNCHRONOUS_IO_NONALERT | NON_DIRECTORY/DIRECTORY
                 None,
