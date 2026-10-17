@@ -11,6 +11,7 @@ import time
 import zipfile
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -259,6 +260,50 @@ class TestAstrBotExporter:
             assert "manifest.json" in namelist
             assert "databases/main_db.json" in namelist
             assert "config/cmd_config.json" in namelist
+
+    @pytest.mark.asyncio
+    async def test_export_manifest_drops_stale_checksums(self, tmp_path, monkeypatch):
+        """复用同一实例导出两次时，manifest 不得残留上一轮的校验和"""
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (data_dir / "cmd_config.json").write_text(json.dumps({"test": "config"}))
+        plugin_dir = data_dir / "plugins"
+        plugin_dir.mkdir()
+        (plugin_dir / "plugin.txt").write_text("content")
+        monkeypatch.setattr(
+            "astrbot.core.backup.exporter.get_backup_directories",
+            lambda: {"plugins": str(plugin_dir)},
+        )
+
+        session = AsyncMock()
+        result = MagicMock()
+        result.scalars.return_value.all.return_value = []
+        session.execute = AsyncMock(return_value=result)
+        mock_db = MagicMock()
+        mock_db.get_db.return_value = AsyncMock(
+            __aenter__=AsyncMock(return_value=session),
+            __aexit__=AsyncMock(return_value=None),
+        )
+        exporter = AstrBotExporter(
+            main_db=mock_db,
+            kb_manager=None,
+            config_path=str(data_dir / "cmd_config.json"),
+        )
+        backup_dir = tmp_path / "backups"
+
+        await exporter.export_all(output_dir=str(backup_dir))
+        assert "config/cmd_config.json" in exporter._checksums
+
+        # 第二轮不再导出配置文件，manifest 也就不能继续列出它的校验和
+        os.remove(data_dir / "cmd_config.json")
+        second_zip = await exporter.export_all(output_dir=str(backup_dir))
+
+        with zipfile.ZipFile(second_zip) as zf:
+            assert "config/cmd_config.json" not in zf.namelist()
+            manifest = json.loads(zf.read("manifest.json"))
+        assert "config/cmd_config.json" not in manifest["checksums"]
+        for path in manifest["checksums"]:
+            assert path in zf.namelist()
 
 
 class TestAstrBotImporter:
@@ -1910,6 +1955,64 @@ class TestBackupExportDoesNotBlockEventLoop:
         assert max_gap < 0.5, f"事件循环最长停顿 {max_gap:.3f}s"
 
     @pytest.mark.asyncio
+    async def test_serialization_and_manifest_leave_event_loop_thread(
+        self, tmp_path, monkeypatch
+    ):
+        """JSON 序列化与 manifest 生成也必须离开事件循环线程
+
+        修复前这两步在事件循环上同步执行：数据库很大或知识库媒体目录很大时，
+        即使 ZIP 写入已经在线程里，事件循环仍会被序列化和目录遍历整段冻结。
+        """
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (data_dir / "cmd_config.json").write_text(json.dumps({"test": "config"}))
+        plugin_dir = data_dir / "plugins"
+        plugin_dir.mkdir()
+        (plugin_dir / "plugin.txt").write_text("content")
+
+        monkeypatch.setattr(
+            "astrbot.core.backup.exporter.get_backup_directories",
+            lambda: {"plugins": str(plugin_dir)},
+        )
+
+        exporter = self._make_exporter(data_dir)
+        backup_dir = tmp_path / "backups"
+
+        serialization_threads: set[int] = set()
+        manifest_threads: set[int] = set()
+        real_dumps = json.dumps
+        real_generate_manifest = AstrBotExporter._generate_manifest
+
+        def spy_dumps(*args, **kwargs):
+            serialization_threads.add(threading.get_ident())
+            return real_dumps(*args, **kwargs)
+
+        def spy_generate_manifest(exporter_self, *args, **kwargs):
+            manifest_threads.add(threading.get_ident())
+            return real_generate_manifest(exporter_self, *args, **kwargs)
+
+        # 只替换 exporter 模块对 json 的引用，避免影响同进程其他 json 调用
+        from astrbot.core.backup import exporter as exporter_module
+
+        monkeypatch.setattr(exporter_module, "json", SimpleNamespace(dumps=spy_dumps))
+        monkeypatch.setattr(
+            AstrBotExporter, "_generate_manifest", spy_generate_manifest
+        )
+
+        loop_thread_id = threading.get_ident()
+        zip_path = await exporter.export_all(output_dir=str(backup_dir))
+
+        assert os.path.exists(zip_path)
+        # 两步都确实执行过，且都没有落在事件循环线程上
+        assert serialization_threads
+        assert loop_thread_id not in serialization_threads
+        assert manifest_threads
+        assert loop_thread_id not in manifest_threads
+
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            assert "manifest.json" in zf.namelist()
+
+    @pytest.mark.asyncio
     async def test_export_failure_shuts_down_executor_and_cleans_zip(
         self, tmp_path, monkeypatch
     ):
@@ -2290,11 +2393,44 @@ class TestBackupExportTeardown:
 
         # 执行器必须已释放：这正是再入保护检查的状态
         assert exporter._archive_executor is None
+        # BaseException 不得越过残缺 ZIP 的清理：收尾失败后磁盘上不能留下坏归档
+        assert list(backup_dir.glob("*.zip")) == []
 
         # 同一实例仍然可用，而不是从此永远抛 "already running"
         zip_path = await exporter.export_all(output_dir=str(backup_dir))
         with zipfile.ZipFile(zip_path) as zf:
             assert zf.testzip() is None
+
+    @pytest.mark.asyncio
+    async def test_base_exception_during_open_still_removes_partial_zip(
+        self, tmp_path, monkeypatch
+    ):
+        """打开归档时抛 BaseException 也必须清理残留 ZIP 并释放执行器
+
+        修复前收尾只捕获 Exception：BaseException 会直接从 ``open_task.result()``
+        冲出 finally，跳过残缺文件清理，把一个永远无法打开的 ZIP 留在备份目录里。
+        """
+        data_dir = self._make_data_dir(tmp_path)
+        monkeypatch.setattr(
+            "astrbot.core.backup.exporter.get_backup_directories",
+            lambda: {"plugins": str(data_dir / "plugins")},
+        )
+
+        def exploding_zipfile(*args, **kwargs):
+            # 先落盘一个残缺文件，模拟真实失败后磁盘上的残留
+            Path(args[0]).write_bytes(b"PK\x03\x04partial-archive")
+            raise _TeardownInterrupt("simulated interrupt while opening the archive")
+
+        monkeypatch.setattr(zipfile, "ZipFile", exploding_zipfile)
+
+        exporter = self._make_exporter(data_dir)
+        backup_dir = tmp_path / "backups"
+
+        with pytest.raises(_TeardownInterrupt):
+            await exporter.export_all(output_dir=str(backup_dir))
+
+        assert list(backup_dir.glob("*.zip")) == []
+        assert exporter._archive_executor is None
 
     @pytest.mark.asyncio
     async def test_successful_export_still_returns_usable_archive(
@@ -2391,7 +2527,9 @@ class TestBackupExportTeardown:
                 release_close.set()
 
             # 真正的失败必须原样上报，而不是被收尾吸收的取消顶替
-            with pytest.raises(RuntimeError, match="simulated directory export failure"):
+            with pytest.raises(
+                RuntimeError, match="simulated directory export failure"
+            ):
                 await export_task
 
         # 残留 ZIP 必须被清理
