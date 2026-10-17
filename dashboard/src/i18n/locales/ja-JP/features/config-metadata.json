@@ -260,7 +260,29 @@
           "description": "ウェブ検索を有効化"
         },
         "websearch_provider": {
-          "description": "ウェブ検索プロバイダー"
+          "description": "ウェブ検索プロバイダー",
+          "labels": [
+            "SerpApi",
+            "DeepSeek Search API",
+            "Tavily",
+            "Baidu AI Search",
+            "Bocha",
+            "Brave",
+            "Firecrawl",
+            "Exa",
+            "AnySearch"
+          ],
+          "subtitles": [
+            "Google のウェブ・画像・学術・金融検索",
+            "DeepSeek 公式検索 API",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            ""
+          ]
         },
         "websearch_tavily_key": {
           "description": "Tavily API Key",
@@ -292,6 +314,14 @@
         "websearch_exa_key": {
           "description": "Exa API Key",
           "hint": "複数の Key を追加してローテーションできます。Key の取得: https://dashboard.exa.ai"
+        },
+        "websearch_serpapi_key": {
+          "description": "SerpApi API Key",
+          "hint": "Google のウェブ・画像・学術・金融検索に対応。複数の Key を追加してローテーションできます。Key の取得：[https://serpapi.com/manage-api-key](https://serpapi.com/manage-api-key)"
+        },
+        "websearch_deepseek_key": {
+          "description": "DeepSeek API Key",
+          "hint": "DeepSeek API Key を入力します。チャットモデルと同じ Key も使用可能（個別に入力が必要）。複数 Key のローテーションに対応しています。 Key の取得: [https://platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys)"
         }
       }
     },
@@ -417,6 +447,9 @@
         },
         "runtimeUnknown": "実行環境の情報を取得できません。",
         "memberWarning": "一般メンバーにネットワーク接続または環境全体へのアクセスが許可されています。",
+        "executionInactive": "未適用",
+        "executionInactiveHelp": "コード実行が適用されない理由",
+        "executionBlocked": "{role}のコード実行は有効ですが、設定された隔離要件を現在満たせません。理由：{reason}",
         "runtime": {
           "os": "OS",
           "arch": "アーキテクチャ",
@@ -432,6 +465,11 @@
             "missing": "{dependency} をインストールして、すべてのローカル隔離機能を有効にします。",
             "unavailable": "{backend} を設定して、すべてのローカル隔離機能を有効にします。",
             "unsupported": "ローカル隔離の対応状況を確認します。"
+          },
+          "isolationFailure": {
+            "missing": "{dependency} が見つかりません。",
+            "unavailable": "{backend} の起動テストに失敗しました。",
+            "unsupported": "このプラットフォームではローカルプロセス隔離はサポートされていません。"
           },
           "executionUnavailable": {
             "missing": "{dependency} が見つからないため、「ファイルアクセス範囲」で「ワークスペース」を選択している場合、コード実行を有効にできません。",

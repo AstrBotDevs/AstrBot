@@ -305,7 +305,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
             elif isinstance(i, Reply):
                 reference_message_id = i.id
             elif isinstance(i, At):
-                content_parts.append(f"<@{i.qq}>")
+                content_parts.append("@everyone" if i.qq == "all" else f"<@{i.qq}>")
             elif isinstance(i, Image):
                 logger.debug(f"[Discord] 开始处理 Image 组件: {i}")
                 try:

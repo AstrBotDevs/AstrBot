@@ -172,7 +172,29 @@
           "description": "Enable Web Search"
         },
         "websearch_provider": {
-          "description": "Web Search Provider"
+          "description": "Web Search Provider",
+          "labels": [
+            "SerpApi",
+            "DeepSeek Search API",
+            "Tavily",
+            "Baidu AI Search",
+            "Bocha",
+            "Brave",
+            "Firecrawl",
+            "Exa",
+            "AnySearch"
+          ],
+          "subtitles": [
+            "Google web, image, scholar, and finance search",
+            "Official DeepSeek search API",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            ""
+          ]
         },
         "websearch_tavily_key": {
           "description": "Tavily API Key",
@@ -204,6 +226,14 @@
         "websearch_anysearch_key": {
           "description": "AnySearch API Key",
           "hint": "Multiple keys can be added for rotation. Leave empty to use anonymous mode with a daily free quota."
+        },
+        "websearch_serpapi_key": {
+          "description": "SerpApi API Key",
+          "hint": "Supports Google web, image, scholar, and finance search. Multiple keys can be added for rotation. Get a key: [https://serpapi.com/manage-api-key](https://serpapi.com/manage-api-key)"
+        },
+        "websearch_deepseek_key": {
+          "description": "DeepSeek API Key",
+          "hint": "Enter your DeepSeek API key. Can use the same key as the chat model (must be entered separately). Supports multiple keys for rotation. Get a key: [https://platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys)"
         }
       }
     },
@@ -329,6 +359,9 @@
         },
         "runtimeUnknown": "Runtime information is unavailable.",
         "memberWarning": "Members have network access or file access across the entire environment.",
+        "executionInactive": "Inactive",
+        "executionInactiveHelp": "Why execution is inactive",
+        "executionBlocked": "Code execution is enabled for {role}, but the configured isolation requirements cannot currently be met. {reason}",
         "runtime": {
           "os": "OS",
           "arch": "Architecture",
@@ -344,6 +377,11 @@
             "missing": "Install {dependency} to enable all local isolation features.",
             "unavailable": "Configure {backend} to enable all local isolation features.",
             "unsupported": "Learn about local isolation support."
+          },
+          "isolationFailure": {
+            "missing": "Missing {dependency}.",
+            "unavailable": "{backend} failed its startup probe.",
+            "unsupported": "Local process isolation is not supported on this platform."
           },
           "executionUnavailable": {
             "missing": "Missing {dependency}; code execution cannot be enabled when File access scope is set to Workspace.",
