@@ -388,11 +388,13 @@ def test_unavailable_isolation_preserves_disabled_local_access(monkeypatch, role
 @pytest.mark.asyncio
 @pytest.mark.parametrize("role", ["member", "admin"])
 @pytest.mark.parametrize(
-    ("status", "detail"),
+    ("status", "detail", "recovery"),
     [
-        ({"status": "missing", "backend": "bubblewrap"}, "bubblewrap is not installed"),
-        ({"status": "unsupported", "backend": None}, "not supported on this platform"),
-        ({"status": "unavailable", "backend": "seatbelt", "error": "SandboxTimeoutError"}, "seatbelt failed its startup probe: SandboxTimeoutError"),
+        ({"status": "missing", "backend": "bubblewrap"}, "bubblewrap is not installed", "Install bubblewrap"),
+        ({"status": "unsupported", "backend": None}, "not supported on this platform", "Run AstrBot in an environment that supports Local process isolation"),
+        ({"status": "unavailable", "backend": "seatbelt", "error": "SandboxTimeoutError"}, "seatbelt failed its startup probe: SandboxTimeoutError", "Restore macOS Seatbelt (`sandbox-exec`) availability"),
+        ({"status": "missing", "backend": "seatbelt"}, "seatbelt is not installed", "Restore macOS Seatbelt (`sandbox-exec`) availability"),
+        ({"status": "unavailable", "backend": "bubblewrap", "error": "Operation not permitted"}, "bubblewrap failed its startup probe: Operation not permitted", "Fix the bubblewrap startup failure"),
     ],
 )
 @pytest.mark.parametrize("scope,network", [("workspace", False), ("workspace", True), ("host", False)])
@@ -405,7 +407,7 @@ def test_unavailable_isolation_preserves_disabled_local_access(monkeypatch, role
     ],
 )
 async def test_isolation_failure_is_explained_to_llm_before_starting_tools(
-    monkeypatch, role, status, detail, scope, network, tool, kwargs
+    monkeypatch, role, status, detail, recovery, scope, network, tool, kwargs
 ):
     """Reject restricted execution with its actual cause for both roles."""
     monkeypatch.setattr(util, "get_process_sandbox_status", lambda: status)
@@ -421,6 +423,13 @@ async def test_isolation_failure_is_explained_to_llm_before_starting_tools(
 
     assert result.startswith("error: Local isolation unavailable.")
     assert detail in result
+    assert f"1. If code execution is needed: {recovery}" in result
+    assert "2. If code execution is not needed: disable `Execute code`" in result
+    assert f"for this user role ({role})" in result
+    assert "Local Permission Policies" in result
+    assert ("Install bubblewrap" in result) == (
+        status["status"] == "missing" and status["backend"] == "bubblewrap"
+    )
     assert "Code execution and execution network access are disabled" in result
     assert f"scope ({scope})" in result
     assert "Do not bypass" in result

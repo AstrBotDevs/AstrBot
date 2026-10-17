@@ -152,6 +152,19 @@ def get_local_permission_policy(
             }.get(sandbox["status"], "Local process isolation is unavailable")
             if sandbox.get("error"):
                 reason += f": {sandbox['error']}"
+            if sandbox["status"] == "unsupported":
+                recovery = "Run AstrBot in an environment that supports Local process isolation."
+            elif sandbox["status"] == "missing" and backend == "bubblewrap":
+                recovery = (
+                    "Install bubblewrap on the AstrBot host, then restart AstrBot."
+                )
+            elif backend == "seatbelt":
+                recovery = (
+                    "Restore macOS Seatbelt (`sandbox-exec`) availability, "
+                    "then restart AstrBot."
+                )
+            else:
+                recovery = f"Fix the {backend} startup failure shown above, then restart AstrBot."
             return LocalPermissionPolicy(
                 allow_execution=False,
                 allow_network=False,
@@ -160,9 +173,13 @@ def get_local_permission_policy(
                     f"The saved execution restrictions require isolation, but {reason}. "
                     f"Code execution and execution network access are disabled; file "
                     f"access keeps its configured scope ({policy.filesystem_scope}). "
-                    "Saved permissions have not been changed. Ask the administrator "
-                    "to restore isolation and restart AstrBot. Do not bypass this "
-                    "restriction using another tool, command, or runtime."
+                    "Saved permissions have not been changed. "
+                    "Ask an AstrBot administrator to choose:\n"
+                    f"1. If code execution is needed: {recovery}\n"
+                    "2. If code execution is not needed: disable `Execute code` "
+                    f"for this user role ({role}) in AstrBot WebUI -> Config -> AI -> "
+                    "Capabilities -> Agent Computer Use -> Local Permission Policies.\n"
+                    "Do not bypass this restriction using another tool, command, or runtime."
                 ),
             )
     return policy
@@ -242,7 +259,7 @@ def check_local_execution_permission(
             "Agent Computer Use -> Local Permission Policies"
         )
         instructions = (
-            "Ask an AstrBot administrator to enable Local computer access and "
+            "Ask an AstrBot administrator to enable "
             f"`Execute code` for this role in {policy_location}."
         )
         if (
