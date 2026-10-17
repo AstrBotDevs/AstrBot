@@ -138,6 +138,13 @@ Select `Extensions` in the sidebar. The top tabs are `Plugins`, `Skills`, `MCP S
 
 On either plugin list, you can also click `Install Plugin` (+) in the bottom right corner to manually install plugins via URL or file upload.
 
+For a plugin with file-upload settings, click its gear icon (`Extension Config`),
+then `Manage Files` beside the file setting. Supported uploaded images have
+clickable thumbnails. Close the larger preview with Escape or its close button.
+Other files keep their usual management actions. See the
+[file configuration reference](/en/dev/star/guides/plugin-config#file-type-schema)
+for supported formats and preview limits.
+
 > Due to the plugin update mechanism, the AstrBot Team cannot fully guarantee the security of plugins in the plugin market. Please carefully verify them. The AstrBot Team is not responsible for any losses caused by plugins.
 
 ### Handling Plugin Load Failures

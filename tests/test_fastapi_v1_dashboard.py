@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import io
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -3465,6 +3466,294 @@ async def test_v1_plugin_config_file_routes_reach_service_layer(
     assert upload_response.json()["status"] == "error"
     assert delete_response.status_code == 400
     assert delete_response.json()["status"] == "error"
+
+
+@pytest.fixture
+def plugin_config_preview_files(asgi_app, monkeypatch, tmp_path):
+    """Register a synthetic file field and its real uploaded image files."""
+    root = tmp_path / "plugin_data"
+    image_dir = root / "preview-demo" / "files" / "images"
+    image_dir.mkdir(parents=True)
+    PILImage.new("RGB", (1600, 800), "blue").save(image_dir / "landscape.png")
+    PILImage.new("RGB", (40, 80), "orange").save(image_dir / "portrait.webp")
+    (image_dir / "invalid.png").write_bytes(b"not an image")
+    (image_dir / "active.svg").write_text(
+        '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
+        encoding="utf-8",
+    )
+    other_dir = root / "preview-demo" / "files" / "other"
+    other_dir.mkdir()
+    PILImage.new("RGB", (10, 10), "red").save(other_dir / "private.png")
+    config = SimpleNamespace(
+        schema={
+            "images": {"type": "file"},
+            "other": {"type": "file"},
+            "alias": {"type": "file"},
+            "text": {"type": "string"},
+        }
+    )
+    service = asgi_app.state.services.config_files
+    monkeypatch.setattr(
+        config_service, "get_astrbot_plugin_data_path", lambda: str(root)
+    )
+    monkeypatch.setattr(
+        service,
+        "get_plugin_metadata_by_name",
+        lambda name: SimpleNamespace(config=config) if name == "preview-demo" else None,
+    )
+    return root, image_dir
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("filename", ["landscape.png", "portrait.webp"])
+async def test_v1_plugin_config_image_preview(
+    asgi_client, plugin_config_preview_files, filename
+):
+    """Serve a bounded PNG preview without modifying or exposing the source."""
+    _, image_dir = plugin_config_preview_files
+    original = (image_dir / filename).read_bytes()
+    response = await asgi_client.get(
+        "/api/v1/plugins/config-files/preview",
+        params={
+            "plugin_id": "preview-demo",
+            "config_key": "images",
+            "path": f"files/images/{filename}",
+        },
+        headers=_jwt_headers(),
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/png"
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["x-content-type-options"] == "nosniff"
+    with PILImage.open(io.BytesIO(response.content)) as image:
+        assert image.format == "PNG"
+        assert max(image.size) <= 1024
+        if filename == "landscape.png":
+            assert image.size == (1024, 512)
+    assert (image_dir / filename).read_bytes() == original
+
+
+@pytest.mark.asyncio
+async def test_v1_plugin_config_image_preview_requires_plugin_scope(
+    asgi_client, fake_db, plugin_config_preview_files
+):
+    """Reuse plugin authentication rather than allowing public image URLs."""
+    params = {
+        "plugin_id": "preview-demo",
+        "config_key": "images",
+        "path": "files/images/landscape.png",
+    }
+    anonymous = await asgi_client.get(
+        "/api/v1/plugins/config-files/preview", params=params
+    )
+    assert anonymous.status_code == 401
+    fake_db.add_api_key("preview-wrong-scope", ["file"])
+    denied = await asgi_client.get(
+        "/api/v1/plugins/config-files/preview",
+        params=params,
+        headers={"Authorization": "Bearer preview-wrong-scope"},
+    )
+    assert denied.status_code == 403
+    fake_db.add_api_key("preview-plugin-scope", ["plugin"])
+    allowed = await asgi_client.get(
+        "/api/v1/plugins/config-files/preview",
+        params=params,
+        headers={"Authorization": "Bearer preview-plugin-scope"},
+    )
+    assert allowed.status_code == 200
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("plugin_id", "config_key", "path", "status"),
+    [
+        ("preview-demo", "images", "../private.png", 400),
+        ("preview-demo", "images", "files/images/../other/private.png", 400),
+        ("preview-demo", "images", "files/other/private.png", 400),
+        ("preview-demo", "images", "files/images-other/private.png", 400),
+        ("preview-demo", "images", "main.py", 400),
+        ("preview-demo", "images", "/etc/passwd", 400),
+        ("preview-demo", "images", "/files/images/landscape.png", 400),
+        ("preview-demo", "images", "files/images/missing.png", 404),
+        ("preview-demo", "images", "files/images", 400),
+        ("preview-demo", "text", "files/images/landscape.png", 400),
+        ("preview-demo", "unknown", "files/images/landscape.png", 400),
+        ("unknown-plugin", "images", "files/images/landscape.png", 400),
+        ("preview-demo", "images", "files/images/invalid.png", 415),
+        ("preview-demo", "images", "files/images/active.svg", 415),
+    ],
+)
+async def test_v1_plugin_config_image_preview_rejects_unsafe_inputs(
+    asgi_client, plugin_config_preview_files, plugin_id, config_key, path, status
+):
+    """Reject paths outside the selected field and files that are not images."""
+    response = await asgi_client.get(
+        "/api/v1/plugins/config-files/preview",
+        params={"plugin_id": plugin_id, "config_key": config_key, "path": path},
+        headers=_jwt_headers(),
+    )
+    assert response.status_code == status
+    assert response.json()["status"] == "error"
+    assert str(plugin_config_preview_files[0]) not in response.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("link_kind", ["file", "directory", "field-directory", "loop"])
+async def test_v1_plugin_config_image_preview_rejects_symlink_escape(
+    asgi_client, plugin_config_preview_files, require_symlink, link_kind
+):
+    """Resolve symlinks before enforcing the selected field's directory."""
+    root, image_dir = plugin_config_preview_files
+    if link_kind == "file":
+        (image_dir / "linked.png").symlink_to(
+            root / "preview-demo" / "files" / "other" / "private.png"
+        )
+        path = "files/images/linked.png"
+    elif link_kind == "directory":
+        (image_dir / "linked").symlink_to(image_dir.parent / "other")
+        path = "files/images/linked/private.png"
+    elif link_kind == "field-directory":
+        alias = root / "preview-demo" / "files" / "alias"
+        alias.symlink_to(image_dir)
+        path = "files/alias/landscape.png"
+    else:
+        (image_dir / "loop.png").symlink_to(image_dir / "loop.png")
+        path = "files/images/loop.png"
+    response = await asgi_client.get(
+        "/api/v1/plugins/config-files/preview",
+        params={
+            "plugin_id": "preview-demo",
+            "config_key": "alias" if link_kind == "field-directory" else "images",
+            "path": path,
+        },
+        headers=_jwt_headers(),
+    )
+    assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("limit", ["bytes", "pixels"])
+async def test_v1_plugin_config_image_preview_is_bounded(
+    asgi_client, plugin_config_preview_files, monkeypatch, limit
+):
+    """Bound compressed input and decoded dimensions independently."""
+    monkeypatch.setattr(
+        config_service,
+        "MAX_PREVIEW_FILE_BYTES" if limit == "bytes" else "MAX_PREVIEW_PIXELS",
+        32,
+        raising=False,
+    )
+    response = await asgi_client.get(
+        "/api/v1/plugins/config-files/preview",
+        params={
+            "plugin_id": "preview-demo",
+            "config_key": "images",
+            "path": "files/images/landscape.png",
+        },
+        headers=_jwt_headers(),
+    )
+    assert response.status_code == 413
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("format_", ["JPEG", "GIF", "BMP", "TIFF", "ICO"])
+async def test_v1_plugin_config_image_preview_supported_raster_formats(
+    asgi_client, plugin_config_preview_files, format_
+):
+    """Decode supported raster formats rather than trusting the extension."""
+    _, image_dir = plugin_config_preview_files
+    path = image_dir / "sample.image"
+    PILImage.new("RGB", (32, 32), "blue").save(path, format=format_)
+    response = await asgi_client.get(
+        "/api/v1/plugins/config-files/preview",
+        params={
+            "plugin_id": "preview-demo",
+            "config_key": "images",
+            "path": "files/images/sample.image",
+        },
+        headers=_jwt_headers(),
+    )
+    assert response.status_code == 200
+    with PILImage.open(io.BytesIO(response.content)) as image:
+        assert image.size == (32, 32)
+        assert image.format == "PNG"
+
+
+@pytest.mark.asyncio
+async def test_v1_plugin_config_image_preview_applies_orientation_and_strips_metadata(
+    asgi_client, plugin_config_preview_files
+):
+    """Apply EXIF orientation without returning private source metadata."""
+    _, image_dir = plugin_config_preview_files
+    image = PILImage.new("RGB", (80, 40), "blue")
+    exif = image.getexif()
+    exif[274] = 6
+    exif[270] = "private fixture metadata"
+    image.save(image_dir / "rotated.jpg", exif=exif)
+    response = await asgi_client.get(
+        "/api/v1/plugins/config-files/preview",
+        params={
+            "plugin_id": "preview-demo",
+            "config_key": "images",
+            "path": "files/images/rotated.jpg",
+        },
+        headers=_jwt_headers(),
+    )
+    assert response.status_code == 200
+    with PILImage.open(io.BytesIO(response.content)) as preview:
+        assert preview.size == (40, 80)
+        assert not preview.getexif()
+        assert not preview.info
+    with PILImage.open(image_dir / "rotated.jpg") as original:
+        assert original.size == (80, 40)
+        assert original.getexif()[270] == "private fixture metadata"
+
+
+@pytest.mark.asyncio
+async def test_v1_plugin_config_image_preview_uses_first_animation_frame(
+    asgi_client, plugin_config_preview_files
+):
+    """Keep animation previews bounded to one frame."""
+    _, image_dir = plugin_config_preview_files
+    PILImage.new("RGB", (32, 32), "blue").save(
+        image_dir / "animated.gif",
+        save_all=True,
+        append_images=[PILImage.new("RGB", (32, 32), "red")],
+        duration=100,
+        loop=0,
+    )
+    response = await asgi_client.get(
+        "/api/v1/plugins/config-files/preview",
+        params={
+            "plugin_id": "preview-demo",
+            "config_key": "images",
+            "path": "files/images/animated.gif",
+        },
+        headers=_jwt_headers(),
+    )
+    assert response.status_code == 200
+    with PILImage.open(io.BytesIO(response.content)) as preview:
+        assert not getattr(preview, "is_animated", False)
+        assert preview.convert("RGB").getpixel((0, 0)) == (0, 0, 255)
+
+
+@pytest.mark.asyncio
+async def test_v1_plugin_config_image_preview_rejects_decompression_bombs(
+    asgi_client, plugin_config_preview_files, monkeypatch
+):
+    """Handle Pillow's decoder guard without weakening its global limit."""
+    monkeypatch.setattr(PILImage, "MAX_IMAGE_PIXELS", 100)
+    response = await asgi_client.get(
+        "/api/v1/plugins/config-files/preview",
+        params={
+            "plugin_id": "preview-demo",
+            "config_key": "images",
+            "path": "files/images/landscape.png",
+        },
+        headers=_jwt_headers(),
+    )
+    assert response.status_code == 413
+    assert PILImage.MAX_IMAGE_PIXELS == 100
 
 
 @pytest.mark.asyncio

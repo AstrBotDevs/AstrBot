@@ -1905,6 +1905,21 @@ export type DeletePluginConfigFileByIdResponse = (SuccessEnvelope);
 
 export type DeletePluginConfigFileByIdError = unknown;
 
+export type PreviewPluginConfigImageByIdData = {
+    query: {
+        config_key: string;
+        /**
+         * Uploaded path relative to the plugin data directory
+         */
+        path: string;
+        plugin_id: string;
+    };
+};
+
+export type PreviewPluginConfigImageByIdResponse = ((Blob | File));
+
+export type PreviewPluginConfigImageByIdError = (unknown);
+
 export type GetPluginReadmeByIdData = {
     query: {
         plugin_id: string;
