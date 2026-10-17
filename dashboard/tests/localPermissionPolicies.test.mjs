@@ -2,13 +2,13 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import vm from 'node:vm';
-import { computed, ref } from 'vue';
+import { computed, ref, shallowReactive } from 'vue';
 import { parse } from 'vue/compiler-sfc';
 
 function setup(status, modelValue = {}) {
   const source = readFileSync(new URL('../src/components/shared/LocalPermissionMatrix.vue', import.meta.url), 'utf8');
   const { descriptor } = parse(source);
-  const props = { modelValue };
+  const props = shallowReactive({ modelValue });
   let saved;
   const scope = vm.createContext({
     computed, ref,
@@ -19,7 +19,7 @@ function setup(status, modelValue = {}) {
   });
   const script = descriptor.script.content.replace('export const', 'const');
   const setupScript = descriptor.scriptSetup.content.replace(/^import .*$/gm, '');
-  const component = vm.runInContext(`${script}\n${setupScript}\n;({ policy, updatePermission, runtime, executionBlockedRoles, isolationFailureReason })`, scope);
+  const component = vm.runInContext(`${script}\n${setupScript}\n;({ policy, updatePermission, runtime, executionBlockedRoles, isolationFailureReason, permissionLocks })`, scope);
   component.runtime.value = { os: status === 'unsupported' ? 'windows' : 'linux', sandbox: { status } };
   return {
     component,
@@ -57,6 +57,8 @@ test('unavailable isolation disables execution without widening any saved policy
       const { component, policy } = setup(status, { member: configured, admin: configured });
       for (const role of ['member', 'admin']) {
         assert.deepEqual(policy(role), { filesystem_scope: scope, allow_execution: false, allow_network: false });
+        assert.equal(component.policy(role, false).allow_execution, true);
+        assert.equal(component.permissionLocks.value[role].execution, false);
       }
       assert.deepEqual(Array.from(component.executionBlockedRoles.value), ['member', 'admin']);
       component.runtime.value.sandbox.error = 'Probe timed out after 5 seconds';
@@ -66,6 +68,36 @@ test('unavailable isolation disables execution without widening any saved policy
       assert.deepEqual(policy('admin'), original);
       assert.deepEqual(Array.from(component.executionBlockedRoles.value), []);
     }
+  }
+});
+
+test('a saved execution grant can be unchecked while isolation is unavailable', () => {
+  for (const status of ['missing', 'unavailable', 'unsupported']) {
+    for (const role of ['member', 'admin']) {
+      const { component, saved } = setup(status, {
+        [role]: { filesystem_scope: 'workspace', allow_execution: true, allow_network: true },
+      });
+      assert.equal(component.permissionLocks.value[role].execution, false);
+      component.updatePermission(role, { allow_execution: false });
+      assert.deepEqual(saved()[role], { filesystem_scope: 'workspace', allow_execution: false, allow_network: false });
+      assert.deepEqual(Array.from(component.executionBlockedRoles.value), []);
+      assert.equal(component.permissionLocks.value[role].execution, true);
+    }
+  }
+});
+
+test('editing file scope preserves saved execution and network restrictions', () => {
+  for (const network of [false, true]) {
+    const { component, saved, policy } = setup('unsupported', {
+      admin: { filesystem_scope: 'workspace', allow_execution: true, allow_network: network },
+    });
+    component.updatePermission('admin', { filesystem_scope: 'host' });
+    assert.deepEqual(saved().admin, { filesystem_scope: 'host', allow_execution: true, allow_network: network });
+    assert.equal(policy('admin').allow_execution, network);
+    component.runtime.value.sandbox.status = 'detected';
+    assert.equal(policy('admin').allow_execution, true);
+    component.updatePermission('admin', { filesystem_scope: 'none' });
+    assert.deepEqual(saved().admin, { filesystem_scope: 'none', allow_execution: false, allow_network: false });
   }
 });
 

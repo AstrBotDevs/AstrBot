@@ -345,7 +345,9 @@
         },
         "runtimeUnknown": "运行环境信息不可用。",
         "memberWarning": "普通成员已获得联网或整个环境访问权限。",
-        "executionBlocked": "{role}保存的执行限制需要本地隔离，当前已停用代码执行。原因：{reason} 文件范围仍为“{scope}”，保存的权限配置未改变。恢复隔离能力并重启 AstrBot 后，才能按原策略执行代码。",
+        "executionInactive": "未生效",
+        "executionInactiveHelp": "查看未生效原因",
+        "executionBlocked": "{role}已开启代码执行，但当前无法满足所配置的隔离限制。原因：{reason} 文件范围仍为“{scope}”，保存的配置未改变。恢复隔离能力并重启 AstrBot 后生效。",
         "runtime": {
           "os": "操作系统",
           "arch": "架构",

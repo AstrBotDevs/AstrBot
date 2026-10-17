@@ -329,7 +329,9 @@
         },
         "runtimeUnknown": "Runtime information is unavailable.",
         "memberWarning": "Members have network access or file access across the entire environment.",
-        "executionBlocked": "Code execution for {role} is disabled because the saved restrictions require local isolation. {reason} File access remains {scope}; saved permissions have not changed. Restore isolation and restart AstrBot to use the saved execution policy.",
+        "executionInactive": "Inactive",
+        "executionInactiveHelp": "Why execution is inactive",
+        "executionBlocked": "Code execution is enabled for {role}, but the configured isolation requirements cannot currently be met. {reason} File access remains {scope}; the saved policy is unchanged. Restore isolation and restart AstrBot to apply it.",
         "runtime": {
           "os": "OS",
           "arch": "Architecture",

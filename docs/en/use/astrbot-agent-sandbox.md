@@ -68,7 +68,7 @@ Saving configuration succeeds even when Local isolation is unavailable, includin
 - Code execution and execution network access are disabled. The saved file scope stays unchanged; workspace access never expands to the entire environment.
 - Policies that need no isolation, including workspace files without execution and entire-environment execution with networking, stay effective as configured. Explicitly disabled file access stays disabled.
 - Saved permissions are not overwritten. After restoring isolation and restarting AstrBot, tools use the saved execution policy again.
-- The permission matrix identifies each affected role and explains the cause, effective file scope, and unchanged saved permissions. The LLM receives the same explanation in its system instructions and in rejected Shell, Python, and shell-session tool responses. Missing dependencies, unsupported platforms, and startup failures have distinct messages; startup failures include the probe diagnostic.
+- The permission matrix preserves saved execution checkboxes and marks unavailable execution as **Inactive**. Hover over or select the adjacent help icon to see the cause; the permission can still be unchecked. The LLM receives the same explanation in its system instructions and in rejected Shell, Python, and shell-session tool responses. Missing dependencies, unsupported platforms, and startup failures have distinct messages; startup failures include the probe diagnostic.
 
 The permission matrix hides the network column when isolation is unavailable. The former isolation setup link in the bottom-left corner of the matrix has been removed; use the operating system and Docker instructions below instead.
 

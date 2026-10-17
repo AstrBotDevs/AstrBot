@@ -18,32 +18,58 @@
         <tr v-for="role in roles" :key="role" :aria-label="tm(`roles.${role}`)">
           <th scope="row">{{ tm(`roles.${role}`) }}</th>
           <td>
-            <v-tooltip
-              location="top"
-              :disabled="!isolationUnavailable || policy(role).filesystem_scope !== 'workspace'"
-              :text="executionUnavailableHint"
-            >
-              <template #activator="{ props: tooltipProps }">
-                <span
-                  v-bind="tooltipProps"
-                  class="execution-control"
-                  :tabindex="isolationUnavailable && policy(role).filesystem_scope === 'workspace' ? 0 : undefined"
+            <div class="execution-cell">
+              <v-tooltip
+                location="top"
+                :disabled="!permissionLocks[role].execution || !isolationUnavailable || policy(role, false).filesystem_scope !== 'workspace'"
+                :text="executionUnavailableHint"
+              >
+                <template #activator="{ props: tooltipProps }">
+                  <span
+                    v-bind="tooltipProps"
+                    class="execution-control"
+                    :tabindex="permissionLocks[role].execution && isolationUnavailable && policy(role, false).filesystem_scope === 'workspace' ? 0 : undefined"
+                  >
+                    <v-checkbox-btn
+                      :model-value="policy(role, false).allow_execution"
+                      :disabled="permissionLocks[role].execution"
+                      :aria-label="`${tm(`roles.${role}`)} · ${tm('execution')}`"
+                      :aria-describedby="executionBlockedRoles.includes(role) ? `local-execution-${role}-inactive` : undefined"
+                      color="primary"
+                      density="compact"
+                      @update:model-value="updatePermission(role, { allow_execution: Boolean($event) })"
+                    />
+                  </span>
+                </template>
+              </v-tooltip>
+              <span
+                v-if="executionBlockedRoles.includes(role)"
+                :id="`local-execution-${role}-inactive`"
+                class="execution-status text-warning text-caption"
+              >
+                {{ tm('executionInactive') }}
+                <v-tooltip
+                  location="top"
+                  open-on-click
+                  :max-width="480"
+                  :text="tm('executionBlocked', {
+                    role: tm(`roles.${role}`),
+                    reason: isolationFailureReason,
+                    scope: tm(`scopes.${policy(role).filesystem_scope}`)
+                  })"
                 >
-                  <v-checkbox-btn
-                    :model-value="policy(role).allow_execution && !permissionLocks[role].execution"
-                    :disabled="permissionLocks[role].execution"
-                    :aria-label="`${tm(`roles.${role}`)} · ${tm('execution')}`"
-                    color="primary"
-                    density="compact"
-                    @update:model-value="updatePermission(role, { allow_execution: Boolean($event) })"
-                  />
-                </span>
-              </template>
-            </v-tooltip>
+                  <template #activator="{ props: helpProps }">
+                    <button v-bind="helpProps" type="button" class="scope-help" :aria-label="`${tm(`roles.${role}`)} · ${tm('executionInactiveHelp')}`">
+                      <CircleHelp :size="14" aria-hidden="true" />
+                    </button>
+                  </template>
+                </v-tooltip>
+              </span>
+            </div>
           </td>
           <td v-if="!isolationUnavailable">
             <v-checkbox-btn
-              :model-value="policy(role).allow_network"
+              :model-value="policy(role, false).allow_network"
               :disabled="permissionLocks[role].network"
               :aria-label="`${tm(`roles.${role}`)} · ${tm('network')}`"
               color="primary"
@@ -101,13 +127,6 @@
       </tbody>
     </v-table>
 
-    <v-alert v-for="role in executionBlockedRoles" :key="role" type="warning" variant="tonal" density="compact">
-      {{ tm('executionBlocked', {
-        role: tm(`roles.${role}`),
-        reason: isolationFailureReason,
-        scope: tm(`scopes.${policy(role).filesystem_scope}`)
-      }) }}
-    </v-alert>
     <v-alert v-if="memberHasElevatedAccess" type="warning" variant="tonal" density="compact">
       {{ tm('memberWarning') }}
     </v-alert>
@@ -192,14 +211,14 @@ function policy(role, applyRuntime = true) {
 
 function updatePermission(role, changes) {
   const updatedRole = {
-    ...policy(role),
+    ...policy(role, false),
     ...changes
   }
   if (updatedRole.filesystem_scope === 'none') {
     updatedRole.allow_execution = false
   }
-  if (isolationUnavailable.value && updatedRole.allow_execution) {
-    // Without isolation, execution requires host access and cannot block networking.
+  if (isolationUnavailable.value && changes.allow_execution === true) {
+    // Explicitly enabling direct execution also grants its required network access.
     updatedRole.allow_execution = updatedRole.filesystem_scope === 'host'
     updatedRole.allow_network = updatedRole.allow_execution
   }
@@ -213,10 +232,10 @@ function updatePermission(role, changes) {
 }
 
 const permissionLocks = computed(() => Object.fromEntries(roles.map(role => {
-  const current = policy(role)
+  const current = policy(role, false)
   return [role, {
     execution: !runtime.value || current.filesystem_scope === 'none' ||
-      (isolationUnavailable.value && current.filesystem_scope === 'workspace'),
+      (isolationUnavailable.value && current.filesystem_scope === 'workspace' && !current.allow_execution),
     network: !runtime.value || !current.allow_execution
   }]
 })))
@@ -285,6 +304,21 @@ const memberHasElevatedAccess = computed(() => {
 
 .execution-control {
   display: inline-flex;
+}
+
+.execution-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.execution-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  white-space: nowrap;
 }
 
 @media (max-width: 600px) {
