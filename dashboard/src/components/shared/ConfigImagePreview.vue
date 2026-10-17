@@ -65,9 +65,15 @@ watch(
       if (active && response.data instanceof Blob && response.data.type === 'image/png') {
         objectUrl = URL.createObjectURL(response.data)
         imageUrl.value = objectUrl
+      } else if (active) {
+        console.warn('Image preview response was not a PNG')
       }
-    } catch {
-      // Unsupported, missing, or oversized images must not block file management.
+    } catch (error) {
+      const status = error?.response?.status
+      // Do not log Axios errors: their request config can contain credentials.
+      if (active && !controller.signal.aborted && ![400, 404, 413, 415].includes(status)) {
+        console.warn('Image preview request failed', { status: status || 'network' })
+      }
     } finally {
       if (active) loading.value = false
     }

@@ -3656,7 +3656,7 @@ async def test_v1_plugin_config_image_preview_is_bounded(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("format_", ["JPEG", "GIF", "BMP", "TIFF", "ICO"])
+@pytest.mark.parametrize("format_", ["JPEG", "GIF", "BMP", "DIB", "TIFF", "ICO"])
 async def test_v1_plugin_config_image_preview_supported_raster_formats(
     asgi_client, plugin_config_preview_files, format_
 ):
@@ -3754,6 +3754,35 @@ async def test_v1_plugin_config_image_preview_rejects_decompression_bombs(
     )
     assert response.status_code == 413
     assert PILImage.MAX_IMAGE_PIXELS == 100
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("storage_error", [PermissionError, OSError])
+async def test_v1_plugin_config_image_preview_distinguishes_storage_failure(
+    asgi_client, plugin_config_preview_files, monkeypatch, storage_error
+):
+    """Report storage outages separately from corrupt or unsupported images."""
+    _, image_dir = plugin_config_preview_files
+    original_open = Path.open
+
+    def failing_open(path, *args, **kwargs):
+        if path == image_dir / "landscape.png":
+            raise storage_error(f"Private storage failure: {image_dir}")
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", failing_open)
+    response = await asgi_client.get(
+        "/api/v1/plugins/config-files/preview",
+        params={
+            "plugin_id": "preview-demo",
+            "config_key": "images",
+            "path": "files/images/landscape.png",
+        },
+        headers=_jwt_headers(),
+    )
+    assert response.status_code == 503
+    assert response.json()["message"] == "Image file cannot be read"
+    assert str(image_dir) not in response.text
 
 
 @pytest.mark.asyncio

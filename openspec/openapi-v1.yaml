@@ -2140,6 +2140,8 @@ paths:
           description: Image exceeds the input size or pixel limit
         "415":
           description: Unsupported or invalid image
+        "503":
+          description: Image storage temporarily unavailable
 
   /api/v1/plugins/readme:
     get:

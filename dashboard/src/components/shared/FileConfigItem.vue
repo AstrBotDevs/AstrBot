@@ -26,7 +26,7 @@
             <v-list-item v-for="item in mergedFileItems" :key="item.path">
               <template #prepend>
                 <div class="file-thumbnail mr-3">
-                  <v-lazy v-if="dialog && item.status !== 'missing' && /\.(png|jpe?g|webp|gif|bmp|tiff?|ico)$/i.test(item.path)"
+                  <v-lazy v-if="dialog && item.status !== 'missing' && /\.(a?png|jpe?g|jpe|jfif|webp|gif|bmp|dib|tiff?|ico)$/i.test(item.path)"
                     :key="`${pluginName}:${configKey}:${item.path}:${previewRevision}`" min-height="48" width="56">
                     <ConfigImagePreview :plugin-name="pluginName" :config-key="configKey" :path="item.path" />
                   </v-lazy>

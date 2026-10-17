@@ -119,7 +119,7 @@ API Key、访问令牌和密码等敏感字符串应设置 `"secret": true`。�
 ```
 
 在 WebUI 的 **插件 → 插件 → 已安装** 中，点击插件的齿轮图标（**插件配置**），
-再点击 `file` 配置项的 **管理文件**。已上传的 PNG、JPEG、WebP、GIF、BMP、TIFF
+再点击 `file` 配置项的 **管理文件**。已上传的 PNG/APNG、JPEG（含 `.jpe`/`.jfif`）、WebP、GIF、BMP/DIB、TIFF
 和 ICO 图片会显示缩略图，点击缩略图可查看大图，按 Escape 或关闭按钮返回列表。
 非图片、缺失、损坏或超出预览限制的文件仍可按原方式管理。
 

@@ -120,7 +120,8 @@ Introduced in v4.13.0, this allows plugins to define file-upload configuration i
 
 In the WebUI, open **Extensions → Plugins → Installed**, click the plugin's gear
 icon (**Extension Config**), and click **Manage Files** for a `file` item.
-Uploaded PNG, JPEG, WebP, GIF, BMP, TIFF, and ICO images show thumbnails; click a
+Uploaded PNG/APNG, JPEG (including `.jpe`/`.jfif`), WebP, GIF, BMP/DIB, TIFF, and ICO
+images show thumbnails; click a
 thumbnail to open a larger preview, and press Escape or the close button to
 return to the list. Non-image, missing, invalid, and oversized files remain
 manageable without a preview.

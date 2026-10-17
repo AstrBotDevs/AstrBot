@@ -1424,8 +1424,13 @@ class ConfigFileService:
                 raise ValueError("Invalid path parameter")
             with target.open("rb") as source:
                 data = source.read(MAX_PREVIEW_FILE_BYTES + 1)
-            if len(data) > MAX_PREVIEW_FILE_BYTES:
-                raise ApiError("Image file is too large to preview", status_code=413)
+        except FileNotFoundError as exc:
+            raise ApiError("Image file not found", status_code=404) from exc
+        except OSError as exc:
+            raise ApiError("Image file cannot be read", status_code=503) from exc
+        if len(data) > MAX_PREVIEW_FILE_BYTES:
+            raise ApiError("Image file is too large to preview", status_code=413)
+        try:
             with Image.open(io.BytesIO(data)) as image:
                 if image.format not in {
                     "PNG",
@@ -1433,6 +1438,7 @@ class ConfigFileService:
                     "WEBP",
                     "GIF",
                     "BMP",
+                    "DIB",
                     "TIFF",
                     "ICO",
                 }:
@@ -1453,8 +1459,6 @@ class ConfigFileService:
                 return output.getvalue()
         except Image.DecompressionBombError as exc:
             raise ApiError("Image dimensions are too large", status_code=413) from exc
-        except FileNotFoundError as exc:
-            raise ApiError("Image file not found", status_code=404) from exc
         except (OSError, SyntaxError, EOFError) as exc:
             raise ApiError("Image preview is unavailable", status_code=415) from exc
 

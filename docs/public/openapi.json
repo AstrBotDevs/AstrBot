@@ -3247,6 +3247,9 @@
           },
           "415": {
             "description": "Unsupported or invalid image"
+          },
+          "503": {
+            "description": "Image storage temporarily unavailable"
           }
         }
       }
