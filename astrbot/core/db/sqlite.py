@@ -98,6 +98,12 @@ class SQLiteDatabase(BaseDatabase):
             await self._ensure_platform_message_history_checkpoint_column(conn)
             await self._ensure_chatui_project_workspace_columns(conn)
             await self._ensure_conversation_indexes(conn)
+            await conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_session_project_relations_project_id "
+                    "ON session_project_relations (project_id)"
+                )
+            )
             # The table-level unique constraint already provides an index for UMO
             # lookups. Older schemas also created this redundant explicit index.
             await conn.execute(text("DROP INDEX IF EXISTS ix_umo_aliases_umo"))
@@ -2483,10 +2489,31 @@ class SQLiteDatabase(BaseDatabase):
         page_size: int = 100,
     ) -> list[PlatformSession]:
         """Get all sessions in a project."""
+        sessions, _ = await self.get_project_sessions_paginated(
+            project_id, page=page, page_size=page_size
+        )
+        return sessions
+
+    async def get_project_sessions_paginated(
+        self,
+        project_id: str,
+        page: int = 1,
+        page_size: int = 100,
+    ) -> tuple[list[PlatformSession], int]:
+        """Get a page of project sessions and its total count.
+
+        Args:
+            project_id: Project whose sessions should be listed.
+            page: One-based page number.
+            page_size: Maximum number of sessions to return.
+
+        Returns:
+            The requested sessions and total number of sessions in the project.
+        """
         async with self.get_db() as session:
             session: AsyncSession
             offset = (page - 1) * page_size
-            result = await session.execute(
+            base_query = (
                 select(PlatformSession)
                 .join(
                     SessionProjectRelation,
@@ -2494,11 +2521,19 @@ class SQLiteDatabase(BaseDatabase):
                     == col(SessionProjectRelation.session_id),
                 )
                 .where(col(SessionProjectRelation.project_id) == project_id)
-                .order_by(desc(PlatformSession.updated_at))
+            )
+            total_result = await session.execute(
+                select(func.count()).select_from(base_query.subquery())
+            )
+            total = int(total_result.scalar_one() or 0)
+            result = await session.execute(
+                base_query.order_by(
+                    desc(PlatformSession.updated_at), desc(PlatformSession.session_id)
+                )
                 .limit(page_size)
                 .offset(offset),
             )
-            return list(result.scalars().all())
+            return list(result.scalars().all()), total
 
     async def get_project_by_session(
         self, session_id: str, creator: str

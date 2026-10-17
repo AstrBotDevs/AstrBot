@@ -2331,6 +2331,7 @@
           "Chat"
         ],
         "summary": "List sessions in a ChatUI project",
+        "description": "Without pagination parameters, returns the legacy list of up to 100 sessions. With page or page_size, returns sessions, total, page, and page_size.\n\n**Required scope:** `chat`",
         "operationId": "listChatProjectSessions",
         "x-astrbot-scope": "chat",
         "parameters": [
@@ -2341,14 +2342,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 100
+            }
           }
         ],
         "responses": {
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        },
-        "description": "**Required scope:** `chat`"
+        }
       }
     },
     "/api/v1/chat/projects/{project_id}/workspace/files": {

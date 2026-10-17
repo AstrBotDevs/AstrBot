@@ -505,7 +505,7 @@ class SessionProjectRelation(SQLModel, table=True):
     )
     session_id: str = Field(nullable=False, max_length=100)
     """Session ID from PlatformSession"""
-    project_id: str = Field(nullable=False, max_length=36)
+    project_id: str = Field(nullable=False, max_length=36, index=True)
     """Project ID from ChatUIProject"""
 
     __table_args__ = (
