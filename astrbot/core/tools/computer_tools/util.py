@@ -250,7 +250,11 @@ def check_local_execution_permission(
             and get_local_permission_policy(context, role="admin").allow_execution
         ):
             sender_id = context.context.event.get_sender_id()
-            identity = f" ({sender_id})" if sender_id else " (obtain the ID with /sid)"
+            identity = (
+                f" (the user id is: `{sender_id}`)"
+                if sender_id
+                else " (obtain the ID with /sid)"
+            )
             instructions = (
                 "Ask an AstrBot administrator to either:\n"
                 f"1. Add this user's ID{identity} under AstrBot WebUI -> Config -> "
