@@ -20,6 +20,20 @@ async def on_aiocqhttp(self, event: AstrMessageEvent, text: str):
 
 ![image](https://files.astrbot.app/docs/source/images/plugin/image-3.png)
 
+`text_to_image()` requests a URL by default. If the remote renderer fails and
+AstrBot renders locally, set `callback_api_base` to an HTTP(S) address from which
+the recipient can reach AstrBot. The returned file-service URL can be read more
+than once and expires after the existing file-token lifetime (five minutes by
+default). Keep any reverse-proxy path prefix in that base; do not include a query
+string or fragment. Without a valid base, the method raises an actionable
+`RuntimeError` instead of returning a local path as a URL. Use
+`return_url=False` to keep local-path output. Automatic core T2I fallback and
+direct calls to `context.html_renderer` retain their existing URL/path behavior.
+
+Anyone holding a file-service URL can download its image until the token expires.
+Treat it as a temporary access credential and share it only with the intended
+recipient. Reverting the calling code does not revoke already-issued links.
+
 ## Customization (HTML-Based)
 
 If you find the default rendered images insufficiently aesthetic, you can use custom HTML templates to render images.
