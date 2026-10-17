@@ -12,14 +12,22 @@ from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.sources.gemini_source import ProviderGoogleGenAI
 
 
-@pytest.mark.asyncio
-async def test_gemini_thinking_level_is_serialized_on_every_request():
-    model = "gemini-3.7-flash"
+@pytest.fixture
+def thinking_provider() -> ProviderGoogleGenAI:
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
     provider.provider_config = {"gm_thinking_config": {"level": "HIGH"}}
     provider.provider_settings = {}
-    provider.model_name = model
+    provider.model_name = "gemini-3.7-flash"
     provider.safety_settings = []
+    return provider
+
+
+@pytest.mark.asyncio
+async def test_gemini_thinking_level_is_serialized_on_every_request(
+    thinking_provider: ProviderGoogleGenAI,
+) -> None:
+    provider = thinking_provider
+    model = provider.model_name
 
     first_config = await provider._prepare_query_config({"model": model})
     second_config = await provider._prepare_query_config({"model": model})
@@ -35,13 +43,24 @@ async def test_gemini_thinking_level_is_serialized_on_every_request():
 
 
 @pytest.mark.asyncio
-async def test_gemini_37_minimal_thinking_level_falls_back_to_medium():
-    model = "gemini-3.7-flash"
-    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
-    provider.provider_config = {"gm_thinking_config": {"level": "MINIMAL"}}
-    provider.provider_settings = {}
-    provider.model_name = model
-    provider.safety_settings = []
+@pytest.mark.parametrize(
+    "model",
+    [
+        "gemini-3.7-flash",
+        "gemini-3.8-flash",
+        "gemini-4-argon",
+        "gemini-4-argon-preview",
+        "gemini-4-other",
+        "gemini-4.0-flash",
+        "gemini-4.1-flash-preview",
+    ],
+)
+@pytest.mark.parametrize("level", ["MINIMAL", "minimal", "INVALID"])
+async def test_gemini_restricted_thinking_level_falls_back_to_medium(
+    thinking_provider: ProviderGoogleGenAI, model: str, level: str
+) -> None:
+    provider = thinking_provider
+    provider.provider_config["gm_thinking_config"]["level"] = level
 
     config = await provider._prepare_query_config({"model": model})
 
@@ -49,6 +68,65 @@ async def test_gemini_37_minimal_thinking_level_falls_back_to_medium():
     assert config.thinking_config.model_dump(exclude_none=True) == {
         "thinking_level": types.ThinkingLevel.MEDIUM,
     }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "model",
+    [
+        "gemini-3.8-flash",
+        "gemini-4-argon",
+        "gemini-4-argon-preview",
+        "gemini-4-other",
+        "gemini-4.0-flash",
+        "gemini-4.1-flash-preview",
+    ],
+)
+@pytest.mark.parametrize("level", ["LOW", "MEDIUM", "HIGH", "low"])
+async def test_gemini_new_models_thinking_levels(
+    thinking_provider: ProviderGoogleGenAI, model: str, level: str
+) -> None:
+    provider = thinking_provider
+    provider.provider_config["gm_thinking_config"]["level"] = level
+
+    config = await provider._prepare_query_config({"model": model})
+
+    assert config.thinking_config is not None
+    assert config.thinking_config.model_dump(exclude_none=True) == {
+        "thinking_level": types.ThinkingLevel(level.upper()),
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("model", "thinking_settings", "expected"),
+    [
+        ("gemini-3.6-flash", {"level": "MINIMAL"}, {"thinking_level": "MINIMAL"}),
+        ("gemini-3-flash-preview", {"level": "MINIMAL"}, {"thinking_level": "MINIMAL"}),
+        ("gemini-4-other", {"level": "LOW"}, {"thinking_level": "LOW"}),
+        ("gemini-3.8-flash", {}, {"thinking_level": "HIGH"}),
+        ("gemini-4-argon", {}, {"thinking_level": "HIGH"}),
+        ("gemini-3.6-flash", {"level": "INVALID"}, {"thinking_level": "HIGH"}),
+        ("gemini-2.5-flash", {"budget": 1024}, {"thinking_budget": 1024}),
+        ("gemini-2.0-flash", {"level": "HIGH"}, None),
+    ],
+)
+async def test_gemini_thinking_config_compatibility(
+    thinking_provider: ProviderGoogleGenAI,
+    model: str,
+    thinking_settings: dict[str, str | int],
+    expected: dict[str, str | int] | None,
+) -> None:
+    provider = thinking_provider
+    provider.provider_config["gm_thinking_config"] = thinking_settings
+
+    config = await provider._prepare_query_config({"model": model})
+
+    if expected is None:
+        assert config.thinking_config is None
+    else:
+        assert config.thinking_config is not None
+        assert config.thinking_config.model_dump(exclude_none=True) == expected
 
 
 @pytest.mark.asyncio
