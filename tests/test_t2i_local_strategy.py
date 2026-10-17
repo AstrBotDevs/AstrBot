@@ -59,6 +59,47 @@ $$
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("markdown", "language", "code"),
+    [
+        pytest.param(
+            "~~~python\n# setup\nx = 1\n~~~\n## Next",
+            "python",
+            ["# setup", "x = 1"],
+            id="tilde-fence",
+        ),
+        pytest.param(
+            "````markdown\n```python\n# comment\n```\n````\n## Next",
+            "markdown",
+            ["```python", "# comment", "```"],
+            id="longer-fence-around-example",
+        ),
+    ],
+)
+async def test_markdown_parser_keeps_fenced_code_out_of_headings(
+    markdown: str, language: str, code: list[str]
+) -> None:
+    """Verify that "#" lines inside tilde and nested fences stay code."""
+    blocks = await MarkdownParser.parse(markdown)
+
+    assert [type(block) for block in blocks] == [CodeBlock, HeadingBlock]
+    assert blocks[0].language == language
+    assert blocks[0].content == code
+    assert blocks[1].content == "Next"
+
+
+@pytest.mark.asyncio
+async def test_markdown_parser_does_not_open_a_fence_on_inline_backticks() -> None:
+    """Verify a line starting with ```inline``` code does not swallow the rest."""
+    blocks = await MarkdownParser.parse("```inline``` code here\n## Next\nbody")
+
+    assert not any(isinstance(block, CodeBlock) for block in blocks)
+    assert any(
+        isinstance(block, HeadingBlock) and block.content == "Next" for block in blocks
+    )
+
+
+@pytest.mark.asyncio
 async def test_markdown_renderer_produces_requested_width_with_wrapped_content() -> (
     None
 ):
