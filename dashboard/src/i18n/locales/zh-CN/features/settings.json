@@ -61,6 +61,9 @@
       "tempStorage": {
         "title": "缓存",
         "subtitle": "临时目录自动清理阈值。"
+      },
+      "telemetry": {
+        "title": "用户体验改进计划"
       }
     },
     "timePreview": {

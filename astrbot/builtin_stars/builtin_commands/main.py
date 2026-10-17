@@ -71,7 +71,7 @@ class Main(star.Star):
         idx: str | int | None = None,
         idx2: int | None = None,
     ) -> None:
-        """View or switch LLM Provider"""
+        """View or switch the session provider (LLM, `/provider tts <idx>`, `/provider stt <idx>`)."""
         await self.provider_c.provider(event, idx, idx2)
 
     @filter.permission_type(filter.PermissionType.ADMIN)
