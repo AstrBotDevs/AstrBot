@@ -19,7 +19,7 @@ AstrBot 的「人格」（Persona）用于定义机器人的角色设定、系�
 | 预设对话 (`begin_dialogs`) | 可选的预设对话。条数必须为偶数，按 user / assistant 交替生效（从 user 开始），用于帮助模型更好地理解角色设定 |
 | 工具 / 技能 | 该人格可以使用的工具与技能范围 |
 
-工具与技能的配置说明见 [工具使用 Tools](./function-calling.md) 与 [技能 Skills](./skills.md)。
+工具与技能的配置见 [插件](./plugin.md)、[MCP](./mcp.md) 与 [技能 Skills](./skills.md)。
 
 ## 导入人格
 

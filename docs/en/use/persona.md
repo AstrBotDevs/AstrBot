@@ -19,7 +19,7 @@ Open the `Persona` page in the WebUI:
 | Preset Dialogs (`begin_dialogs`) | Optional preset dialogs. The count must be even; they alternate as user / assistant starting from user. They help the model understand the role |
 | Tools / Skills | Tools and Skills available to this persona |
 
-For tool and Skill configuration, see [Tool Use](./function-calling.md) and [Skills](./skills.md).
+For tool and Skill configuration, see [Plugins](./plugin.md), [MCP](./mcp.md), and [Skills](./skills.md).
 
 ## Importing a Persona
 
