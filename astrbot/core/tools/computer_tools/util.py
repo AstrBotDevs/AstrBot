@@ -236,6 +236,7 @@ def check_local_execution_permission(
             )
         if policy.filesystem_scope == "none":
             return policy, check_local_file_permission(context)
+        role = "admin" if context.context.event.role == "admin" else "member"
         policy_location = (
             "AstrBot WebUI -> Config -> AI -> Capabilities -> "
             "Agent Computer Use -> Local Permission Policies"
@@ -245,7 +246,7 @@ def check_local_execution_permission(
             f"`Execute code` for this role in {policy_location}."
         )
         if (
-            context.context.event.role != "admin"
+            role != "admin"
             and get_local_permission_policy(context, role="admin").allow_execution
         ):
             sender_id = context.context.event.get_sender_id()
@@ -258,6 +259,6 @@ def check_local_execution_permission(
             )
         return policy, (
             f"error: Permission denied. {operation_name} is disabled by the "
-            f"Local permission policy for this user role. {instructions}"
+            f"Local permission policy for this user role ({role}). {instructions}"
         )
     return policy, None

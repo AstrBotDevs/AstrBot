@@ -242,6 +242,7 @@ def test_local_permission_policy_denies_disabled_execution():
     assert resolved.allow_execution is False
     assert error is not None
     assert "disabled by the Local permission policy" in error
+    assert "user role (member)" in error
     assert "WebUI -> Config -> AI -> Capabilities" in error
     assert "Local Permission Policies" in error
 
@@ -321,6 +322,7 @@ def test_admin_execution_denial_does_not_suggest_adding_administrator_id():
 
     assert "Execute code" in error
     assert "Administrator IDs" not in error
+    assert "user role (admin)" in error
 
 
 @pytest.mark.parametrize("role", ["member", "admin", "unexpected"])
