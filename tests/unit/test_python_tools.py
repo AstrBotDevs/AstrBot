@@ -250,4 +250,8 @@ async def test_local_member_python_is_denied_without_supported_sandbox(monkeypat
 
     assert "Local isolation unavailable" in result
     assert "not supported on this platform" in result
-    assert "Do not bypass" in result
+    assert "Python execution was blocked" in result
+    assert "1. Keep the configured restrictions:" in result
+    assert "2. Allow execution without Local isolation:" in result
+    assert "Local Permission Policies" in result
+    assert "Do not bypass" not in result

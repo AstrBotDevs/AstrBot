@@ -424,7 +424,11 @@ async def test_local_member_shell_is_denied_without_supported_sandbox(monkeypatc
 
     assert "Local isolation unavailable" in result
     assert "not supported on this platform" in result
-    assert "Do not bypass" in result
+    assert "Shell execution was blocked" in result
+    assert "1. Keep the configured restrictions:" in result
+    assert "2. Allow execution without Local isolation:" in result
+    assert "Local Permission Policies" in result
+    assert "Do not bypass" not in result
 
 
 @pytest.mark.asyncio
