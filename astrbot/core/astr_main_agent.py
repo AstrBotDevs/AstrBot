@@ -599,11 +599,16 @@ async def _ensure_persona_and_skills(
 
     # Inject skills prompt
     runtime = cfg.get("computer_use_runtime", "none")
-    skill_manager = SkillManager()
-    skills = skill_manager.list_skills(active_only=True, runtime=runtime)
-    skills = _filter_skills_for_current_config(skills, cfg)
+    skills: list[SkillInfo] = []
+    skill_manager = None
+    try:
+        skill_manager = SkillManager()
+        skills = skill_manager.list_skills(active_only=True, runtime=runtime)
+        skills = _filter_skills_for_current_config(skills, cfg)
+    except Exception:
+        logger.exception("Failed to list skills while preparing LLM request.")
     workspace_skills: list[SkillInfo] = []
-    if runtime == "local":
+    if runtime == "local" and skill_manager:
         workspace_root = await _get_workspace_path_for_umo(
             event.unified_msg_origin,
             plugin_context,

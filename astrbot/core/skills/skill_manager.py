@@ -306,12 +306,18 @@ class SkillManager:
         """Return plugin-provided skill directories and preset status."""
         plugin_dirs: list[tuple[Path, bool]] = []
         plugins_root = Path(self.plugins_root)
-        if plugins_root.is_dir():
-            plugin_dirs.extend(
-                (plugin_dir, False)
-                for plugin_dir in plugins_root.iterdir()
-                if plugin_dir.is_dir()
-            )
+        try:
+            if plugins_root.is_dir():
+                for plugin_dir in plugins_root.iterdir():
+                    try:
+                        if plugin_dir.is_dir():
+                            plugin_dirs.append((plugin_dir, False))
+                    except OSError as exc:
+                        logger.warning(
+                            f"Skip unreadable plugin directory {plugin_dir}: {exc}"
+                        )
+        except OSError as exc:
+            logger.warning(f"Cannot list plugin directory {plugins_root}: {exc}")
 
         from astrbot.core.star.star import star_registry
 
@@ -321,11 +327,13 @@ class SkillManager:
             for metadata in star_registry
             if metadata.reserved and metadata.root_dir_name
         }
-        plugin_dirs.extend(
-            (builtin_plugins_root / plugin_name, True)
-            for plugin_name in builtin_plugin_names
-            if (builtin_plugins_root / plugin_name).is_dir()
-        )
+        for plugin_name in builtin_plugin_names:
+            plugin_dir = builtin_plugins_root / plugin_name
+            try:
+                if plugin_dir.is_dir():
+                    plugin_dirs.append((plugin_dir, True))
+            except OSError as exc:
+                logger.warning(f"Skip unreadable plugin directory {plugin_dir}: {exc}")
 
         result: list[tuple[str, str, Path, bool]] = []
         for plugin_dir, preset in sorted(
@@ -334,28 +342,41 @@ class SkillManager:
         ):
             plugin_name = plugin_dir.name
             skills_dir = plugin_dir / "skills"
-            if not skills_dir.is_dir():
-                continue
-
-            direct_skill_md = _normalize_skill_markdown_path(
-                skills_dir,
-                rename_legacy=False,
-            )
-            if direct_skill_md is not None and _SKILL_NAME_RE.match(plugin_name):
-                result.append((plugin_name, plugin_name, skills_dir, preset))
-
-            for skill_dir in sorted(skills_dir.iterdir(), key=lambda item: item.name):
-                if not skill_dir.is_dir():
+            try:
+                if not skills_dir.is_dir():
                     continue
-                skill_name = skill_dir.name
-                if not _SKILL_NAME_RE.match(skill_name):
-                    continue
-                if (
-                    _normalize_skill_markdown_path(skill_dir, rename_legacy=False)
-                    is None
+                direct_skill_md = _normalize_skill_markdown_path(
+                    skills_dir,
+                    rename_legacy=False,
+                )
+                if direct_skill_md is not None and _SKILL_NAME_RE.match(plugin_name):
+                    result.append((plugin_name, plugin_name, skills_dir, preset))
+
+                for skill_dir in sorted(
+                    skills_dir.iterdir(), key=lambda item: item.name
                 ):
-                    continue
-                result.append((skill_name, plugin_name, skill_dir, preset))
+                    try:
+                        if not skill_dir.is_dir():
+                            continue
+                        skill_name = skill_dir.name
+                        if not _SKILL_NAME_RE.match(skill_name):
+                            continue
+                        if (
+                            _normalize_skill_markdown_path(
+                                skill_dir, rename_legacy=False
+                            )
+                            is None
+                        ):
+                            continue
+                        result.append((skill_name, plugin_name, skill_dir, preset))
+                    except OSError as exc:
+                        logger.warning(
+                            f"Skip unreadable plugin skill directory {skill_dir}: {exc}"
+                        )
+            except OSError as exc:
+                logger.warning(
+                    f"Skip unreadable plugin skills directory {skills_dir}: {exc}"
+                )
         return result
 
     def _get_plugin_skill_dir(self, name: str) -> Path | None:
@@ -564,17 +585,15 @@ class SkillManager:
             local_skill_dirs = []
 
         for entry in local_skill_dirs:
-            if not entry.is_dir():
-                continue
-            skill_name = entry.name
             try:
+                if not entry.is_dir():
+                    continue
+                skill_name = entry.name
                 skill_md = _normalize_skill_markdown_path(entry)
+                if skill_md is None:
+                    continue
             except OSError as exc:
-                # One broken or permission-denied skill directory is not a
-                # reason to fail the entire request (#10589).
                 logger.warning(f"Skip unreadable skill directory {entry}: {exc}")
-                continue
-            if skill_md is None:
                 continue
             active = skill_configs.get(skill_name, {}).get("active", True)
             if skill_name not in skill_configs:
@@ -620,7 +639,9 @@ class SkillManager:
             if skill_name in skills_by_name:
                 continue
             try:
-                skill_md = _normalize_skill_markdown_path(skill_dir, rename_legacy=False)
+                skill_md = _normalize_skill_markdown_path(
+                    skill_dir, rename_legacy=False
+                )
             except OSError as exc:
                 logger.warning(
                     f"Skip unreadable plugin skill directory {skill_dir}: {exc}"
