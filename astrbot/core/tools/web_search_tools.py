@@ -1467,9 +1467,16 @@ class DeepSeekWebSearchTool(FunctionTool[AstrAgentContext]):
                     "minLength": 1,
                     "maxLength": 128,
                     "description": (
-                        "Required. Non-blank search query, 1-128 Unicode characters. "
-                        "Supports site:, -site:, quoted phrases, excluded terms, "
-                        "lang:, after: and before: filters."
+                        "Search query, 1-128 Unicode characters including filters, "
+                        "not all whitespace. Filters can be combined. Examples:\n"
+                        "Find DeepSeek API references on GitHub or Hugging Face -> "
+                        'DeepSeek "API reference" site:github.com OR site:huggingface.co\n'
+                        "Find Chinese or English DeepSeek news published after 2026-01-01 "
+                        "and before 2027-01-01 -> "
+                        "DeepSeek news lang:zh,en after:2026-01-01 before:2027-01-01\n"
+                        "Find DeepSeek information excluding ads, example.com and the phrase "
+                        '"release notes" -> DeepSeek -Ads -site:example.com -"release notes"\n'
+                        "Date filters accept YYYY or YYYY-MM-DD."
                     ),
                 },
                 "count": {
@@ -1578,7 +1585,8 @@ class DeepSeekWebSearchTool(FunctionTool[AstrAgentContext]):
 class DeepSeekFetchWebPageTool(FunctionTool[AstrAgentContext]):
     name: str = "deepseek_fetch_web_page"
     description: str = (
-        "Fetch a web page using DeepSeek and return its title and Markdown content."
+        "Fetch a single web page using DeepSeek and return its title and Markdown content. "
+        "Use this to read a known URL, including a page found through web search."
     )
     parameters: dict = Field(
         default_factory=lambda: {
