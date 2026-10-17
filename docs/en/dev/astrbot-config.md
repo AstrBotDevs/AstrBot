@@ -65,6 +65,7 @@ The default AstrBot configuration is as follows:
         "websearch_bocha_key": [],
         "websearch_brave_key": [],
         "websearch_deepseek_key": [],
+        "websearch_serpapi_key": [],
         "web_search_link": False,
         "display_reasoning_text": False,
         "identifier": False,
@@ -293,14 +294,17 @@ Whether to enable AstrBot's built-in web search capability. Default is `false`. 
 
 #### `provider_settings.websearch_provider`
 
-Web search provider type. Default is `tavily`. Currently supports `tavily`, `bocha`, `baidu_ai_search`, `brave`, `firecrawl`, and `deepseek`.
+Web search provider type. Default is `tavily`. Currently supports `serpapi`, `deepseek`, `tavily`, `bocha`, `baidu_ai_search`, `brave`, `firecrawl`, `exa`, and `anysearch`.
 
+- `serpapi`: Uses SerpApi Google Search, Google Images Light, Google Finance, and Google Scholar.
+- `deepseek`: Uses the DeepSeek Search API.
 - `tavily`: Uses the Tavily search engine.
 - `bocha`: Uses the BoCha search engine.
 - `baidu_ai_search`: Uses Baidu AI Search (MCP).
 - `brave`: Uses Brave Search API.
 - `firecrawl`: Uses the Firecrawl Search API.
-- `deepseek`: Uses the DeepSeek Search API.
+- `exa`: Uses the Exa Search API.
+- `anysearch`: Uses the AnySearch API.
 
 #### `provider_settings.websearch_tavily_key`
 
@@ -321,6 +325,10 @@ API Key list for the Firecrawl search engine. Required when using `firecrawl` as
 #### `provider_settings.websearch_deepseek_key`
 
 API Key list for the DeepSeek search engine. Required when using `deepseek` as the web search provider. Can use the same API key as the chat model, but must be configured separately. Multiple keys under the same account share rate limits.
+
+#### `provider_settings.websearch_serpapi_key`
+
+API Key list shared by SerpApi Google Search, Google Images Light, Google Finance, and Google Scholar. Required when using `serpapi` as the web search provider. Obtain a key at [SerpApi](https://serpapi.com/manage-api-key). Multiple keys rotate, with failover on authentication and quota errors.
 
 #### `provider_settings.web_search_link`
 

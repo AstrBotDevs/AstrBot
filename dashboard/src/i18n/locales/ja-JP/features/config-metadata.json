@@ -260,7 +260,29 @@
           "description": "ウェブ検索を有効化"
         },
         "websearch_provider": {
-          "description": "ウェブ検索プロバイダー"
+          "description": "ウェブ検索プロバイダー",
+          "labels": [
+            "SerpApi",
+            "DeepSeek Search API",
+            "Tavily",
+            "Baidu AI Search",
+            "Bocha",
+            "Brave",
+            "Firecrawl",
+            "Exa",
+            "AnySearch"
+          ],
+          "subtitles": [
+            "Google のウェブ・画像・学術・金融検索",
+            "DeepSeek 公式検索 API",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            ""
+          ]
         },
         "websearch_tavily_key": {
           "description": "Tavily API Key",
@@ -293,9 +315,13 @@
           "description": "Exa API Key",
           "hint": "複数の Key を追加してローテーションできます。Key の取得: https://dashboard.exa.ai"
         },
+        "websearch_serpapi_key": {
+          "description": "SerpApi API Key",
+          "hint": "Google のウェブ・画像・学術・金融検索に対応。複数の Key を追加してローテーションできます。Key の取得：[https://serpapi.com/manage-api-key](https://serpapi.com/manage-api-key)"
+        },
         "websearch_deepseek_key": {
           "description": "DeepSeek API Key",
-          "hint": "DeepSeek API Key を入力します。チャットモデルと同じ Key も使用可能（個別に入力が必要）。複数 Key のローテーションに対応していますが、同一アカウントでは QPS 制限を共有します。"
+          "hint": "DeepSeek API Key を入力します。チャットモデルと同じ Key も使用可能（個別に入力が必要）。複数 Key のローテーションに対応しています。 Key の取得: [https://platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys)"
         }
       }
     },

@@ -405,10 +405,30 @@ function getTranslatedLabels(itemMeta) {
 
 function getSelectItems(itemMeta) {
   const labels = getTranslatedLabels(itemMeta)
-  if (labels && itemMeta.options) {
+  let subtitles = itemMeta?.subtitles
+  if (
+    props.pluginName
+    && props.configKey
+    && props.pluginI18n
+    && Object.keys(props.pluginI18n).length > 0
+  ) {
+    const translatedSubtitles = configText(props.pluginI18n, props.configKey, 'subtitles', null)
+    if (Array.isArray(translatedSubtitles)) {
+      subtitles = translatedSubtitles
+    }
+  }
+  if (typeof subtitles === 'string') {
+    subtitles = getRaw(subtitles)
+  }
+  if (!Array.isArray(subtitles)) subtitles = null
+
+  if ((labels || subtitles) && itemMeta.options) {
     return itemMeta.options.map((value, index) => ({
-      title: labels[index] || value,
-      value: value
+      title: labels?.[index] || value,
+      value: value,
+      props: {
+        subtitle: typeof subtitles?.[index] === 'string' ? subtitles[index] : undefined
+      }
     }))
   }
   return itemMeta.options || []
