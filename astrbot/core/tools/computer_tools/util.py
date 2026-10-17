@@ -192,11 +192,8 @@ def get_local_permission_policy(
                     "2. Allow execution without Local isolation: "
                     f"{' and '.join(permission_changes)} for this role in AstrBot "
                     "WebUI -> Config -> AI -> Capabilities -> Agent Computer Use -> "
-                    "Local Permission Policies. Warning: this permits code execution "
-                    "with access to the entire environment and network, without "
-                    "Local isolation. Only an administrator should explicitly "
-                    "authorize this broader access.\n"
-                    "Do not bypass this restriction using another tool, command, or runtime."
+                    "Local Permission Policies. (Warning: this permits code execution "
+                    "with access to the entire environment and network, without isolation)."
                 ),
             )
     return policy

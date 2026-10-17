@@ -352,7 +352,7 @@ def test_local_policy_never_widens_saved_permissions(
     assert (error is not None) == (not resolved.allow_execution)
     if blocked:
         assert "Local isolation unavailable" in error
-        assert "Do not bypass" in error
+        assert "Do not bypass" not in error
         assert "Saved permissions have not been changed" not in error
         assert f"file access scope `{scope}`" in error
         assert f"current user role is `{policy_role}`" in error
@@ -431,8 +431,11 @@ async def test_isolation_failure_is_explained_to_llm_before_starting_tools(
     assert ("set file access scope to `Entire environment`" in result) == (scope != "host")
     assert ("this also enables execution network access" in result) == (not network)
     assert "execution network access " + ("enabled" if network else "disabled") in result
-    assert "Warning: this permits code execution" in result
-    assert "Only an administrator should explicitly authorize this broader access" in result
+    assert (
+        "(Warning: this permits code execution with access to the entire environment "
+        "and network, without isolation)."
+    ) in result
+    assert "Only an administrator should explicitly authorize this broader access" not in result
     assert "Local Permission Policies" in result
     assert ("Install bubblewrap" in result) == (
         status["status"] == "missing" and status["backend"] == "bubblewrap"
@@ -440,7 +443,7 @@ async def test_isolation_failure_is_explained_to_llm_before_starting_tools(
     assert "Code execution is blocked" in result
     assert f"file access scope `{scope}`" in result
     assert "Saved permissions have not been changed" not in result
-    assert "Do not bypass" in result
+    assert "Do not bypass" not in result
     booter.assert_not_called()
 
 
