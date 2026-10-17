@@ -1,5 +1,6 @@
 """Tests for CronJobManager."""
 
+import asyncio
 import json
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -554,6 +555,192 @@ class TestRunJob:
 
 class TestRunActiveAgentJob:
     """Tests for active agent cron job execution."""
+
+    @pytest.mark.asyncio
+    async def test_runs_once_per_delivery_session(self, cron_manager):
+        """A multi-target job wakes the agent once per delivery session."""
+        cron_manager._woke_main_agent = AsyncMock()
+        job = CronJob(
+            job_id="multi-job",
+            name="Multi",
+            job_type="active_agent",
+            cron_expression="0 9 * * *",
+            payload={"sessions": ["test:group:1", "test:group:2"]},
+            description="note",
+            enabled=True,
+        )
+
+        await cron_manager._run_active_agent_job(job, datetime.now(timezone.utc))
+
+        assert cron_manager._woke_main_agent.await_count == 2
+        first = cron_manager._woke_main_agent.await_args_list[0].kwargs
+        second = cron_manager._woke_main_agent.await_args_list[1].kwargs
+        assert first["session_str"] == "test:group:1"
+        assert first["delivery_session_str"] == "test:group:1"
+        assert second["session_str"] == "test:group:2"
+        assert second["delivery_session_str"] == "test:group:2"
+
+    @pytest.mark.asyncio
+    async def test_dedupes_delivery_sessions(self, cron_manager):
+        """Duplicate delivery sessions only wake the agent once."""
+        cron_manager._woke_main_agent = AsyncMock()
+        job = CronJob(
+            job_id="dup-job",
+            name="Dup",
+            job_type="active_agent",
+            cron_expression="0 9 * * *",
+            payload={"sessions": ["test:group:1", "test:group:1"]},
+            description="note",
+            enabled=True,
+        )
+
+        await cron_manager._run_active_agent_job(job, datetime.now(timezone.utc))
+
+        assert cron_manager._woke_main_agent.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_legacy_single_session_payload(self, cron_manager):
+        """Jobs without a sessions list fall back to the single session."""
+        cron_manager._woke_main_agent = AsyncMock()
+        job = CronJob(
+            job_id="legacy-job",
+            name="Legacy",
+            job_type="active_agent",
+            cron_expression="0 9 * * *",
+            payload={"session": "test:group:1"},
+            description="note",
+            enabled=True,
+        )
+
+        await cron_manager._run_active_agent_job(job, datetime.now(timezone.utc))
+
+        assert cron_manager._woke_main_agent.await_count == 1
+        kwargs = cron_manager._woke_main_agent.await_args.kwargs
+        assert kwargs["session_str"] == "test:group:1"
+        assert kwargs["delivery_session_str"] == "test:group:1"
+
+    @pytest.mark.asyncio
+    async def test_without_delivery_session_runs_on_synthetic_session(
+        self, cron_manager
+    ):
+        """Jobs without a delivery session still run once, untargeted."""
+        cron_manager._woke_main_agent = AsyncMock()
+        job = CronJob(
+            job_id="bare-job",
+            name="Bare",
+            job_type="active_agent",
+            cron_expression="0 9 * * *",
+            payload={},
+            description="note",
+            enabled=True,
+        )
+
+        await cron_manager._run_active_agent_job(job, datetime.now(timezone.utc))
+
+        assert cron_manager._woke_main_agent.await_count == 1
+        kwargs = cron_manager._woke_main_agent.await_args.kwargs
+        assert kwargs["session_str"] == "cron:OtherMessage:bare-job"
+        assert kwargs["delivery_session_str"] == ""
+
+    @pytest.mark.asyncio
+    async def test_partial_failure_still_runs_remaining_sessions(self, cron_manager):
+        """A failing session must not stop delivery to the other sessions."""
+        cron_manager._woke_main_agent = AsyncMock(
+            side_effect=[RuntimeError("boom"), None]
+        )
+        job = CronJob(
+            job_id="partial-job",
+            name="Partial",
+            job_type="active_agent",
+            cron_expression="0 9 * * *",
+            payload={"sessions": ["test:group:1", "test:group:2"]},
+            description="note",
+            enabled=True,
+        )
+
+        await cron_manager._run_active_agent_job(job, datetime.now(timezone.utc))
+
+        assert cron_manager._woke_main_agent.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_all_sessions_failed_raises(self, cron_manager):
+        """The job only fails when every delivery session failed."""
+        cron_manager._woke_main_agent = AsyncMock(side_effect=RuntimeError("boom"))
+        job = CronJob(
+            job_id="broken-job",
+            name="Broken",
+            job_type="active_agent",
+            cron_expression="0 9 * * *",
+            payload={"sessions": ["test:group:1", "test:group:2"]},
+            description="note",
+            enabled=True,
+        )
+
+        with pytest.raises(RuntimeError, match="failed for all"):
+            await cron_manager._run_active_agent_job(job, datetime.now(timezone.utc))
+
+    @pytest.mark.asyncio
+    async def test_slow_target_does_not_block_later_deliveries(self, cron_manager):
+        """Targets run concurrently so a slow session cannot stall the rest."""
+        started: list[str] = []
+        both_started = asyncio.Event()
+        stalled = False
+
+        async def fake_woke_main_agent(**kwargs):
+            nonlocal stalled
+            started.append(kwargs["delivery_session_str"])
+            if len(started) >= 2:
+                both_started.set()
+            try:
+                await asyncio.wait_for(both_started.wait(), timeout=1)
+            except TimeoutError:
+                # Sequential execution would reach this branch for the first
+                # target because the second one never gets to start.
+                stalled = True
+                raise
+
+        cron_manager._woke_main_agent = fake_woke_main_agent
+        job = CronJob(
+            job_id="parallel-job",
+            name="Parallel",
+            job_type="active_agent",
+            cron_expression="0 9 * * *",
+            payload={"sessions": ["test:group:1", "test:group:2"]},
+            description="note",
+            enabled=True,
+        )
+
+        await cron_manager._run_active_agent_job(job, datetime.now(timezone.utc))
+
+        assert stalled is False
+        assert sorted(started) == ["test:group:1", "test:group:2"]
+
+    @pytest.mark.asyncio
+    async def test_woke_main_agent_raises_on_invalid_session(self, cron_manager):
+        """A malformed target must surface as an error, not a silent skip."""
+        with pytest.raises(ValueError, match="Invalid session"):
+            await cron_manager._woke_main_agent(
+                message="note",
+                session_str="not-a-valid-session",
+                extras={},
+                delivery_session_str="not-a-valid-session",
+            )
+
+    @pytest.mark.asyncio
+    async def test_malformed_delivery_session_marks_job_failed(self, cron_manager):
+        """A job whose only target cannot be parsed is reported as failed."""
+        job = CronJob(
+            job_id="bad-session-job",
+            name="BadSession",
+            job_type="active_agent",
+            cron_expression="0 9 * * *",
+            payload={"sessions": ["not-a-valid-session"]},
+            description="note",
+            enabled=True,
+        )
+
+        with pytest.raises(ValueError, match="Invalid session"):
+            await cron_manager._run_active_agent_job(job, datetime.now(timezone.utc))
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
