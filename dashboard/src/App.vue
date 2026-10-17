@@ -4,7 +4,7 @@
   <UpgradeRecoveryDialog />
 
   <!-- 全局唯一 snackbar -->
-  <v-snackbar v-if="toastStore.current" v-model="snackbarShow" :color="toastStore.current.color"
+  <v-snackbar v-if="toastStore.current" :key="toastStore.current.id" v-model="snackbarShow" :color="toastStore.current.color"
     :timeout="toastStore.current.timeout" :multi-line="toastStore.current.multiLine"
     :location="toastStore.current.location" close-on-back>
     <div class="app-snackbar-message">
