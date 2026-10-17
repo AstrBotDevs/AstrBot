@@ -1589,6 +1589,27 @@ class ProviderConfigService:
         save_config(self.config, self.config, is_core=True)
         self.provider_manager.provider_sources_config = next_sources
 
+    def reorder_provider_sources(self, ordered_ids: list[str]) -> None:
+        """按给定 id 顺序重排 provider_sources 并落盘。
+
+        顺序只影响面板展示与配置文件中 provider_sources 的排列；运行时按 id
+        查找合并配置，因此无需重载 provider。
+
+        Args:
+            ordered_ids: 期望的 provider source id 顺序，须与现有集合一致。
+
+        Raises:
+            ValueError: 传入的 id 集合与现有 provider_sources 不一致。
+        """
+        sources = self.config.get("provider_sources", [])
+        by_id = {str(source.get("id") or ""): source for source in sources}
+        if sorted(ordered_ids) != sorted(by_id):
+            raise ValueError("提供商源顺序与现有提供商源不匹配")
+        next_sources = [by_id[source_id] for source_id in ordered_ids]
+        self.config["provider_sources"] = next_sources
+        save_config(self.config, self.config, is_core=True)
+        self.provider_manager.provider_sources_config = next_sources
+
     async def upsert_provider_source_from_dashboard_payload(
         self, payload: object
     ) -> str:

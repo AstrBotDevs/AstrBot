@@ -120,6 +120,8 @@
     "deleteConfirm": "プロバイダーソース {id} を削除してもよろしいですか？関連するすべてのモデル設定も削除されます。",
     "deleteSuccess": "プロバイダーソースを削除しました",
     "deleteError": "プロバイダーソースの削除に失敗しました",
+    "reorderSuccess": "プロバイダーソースの並び順を保存しました",
+    "reorderError": "プロバイダーソースの並び順の保存に失敗しました",
     "enabled": "有効",
     "disabled": "無効",
     "advancedConfig": "詳細設定…",

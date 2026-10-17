@@ -120,6 +120,8 @@
     "deleteConfirm": "确定要删除提供商源 {id} 吗？这将同时删除关联的所有模型配置。",
     "deleteSuccess": "提供商源删除成功",
     "deleteError": "提供商源删除失败",
+    "reorderSuccess": "提供商源顺序已保存",
+    "reorderError": "提供商源顺序保存失败",
     "enabled": "已启用",
     "disabled": "已禁用",
     "advancedConfig": "高级配置...",
