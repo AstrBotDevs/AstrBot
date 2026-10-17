@@ -101,6 +101,7 @@ class RetrievalManager:
                     "top_k_sparse": kb.top_k_sparse or 50,
                     "top_m_final": kb.top_m_final or 5,
                     "vec_db": kb_helper.vec_db,
+                    "kb_helper": kb_helper,
                     "rerank_provider_id": kb.rerank_provider_id,
                 }
                 new_kb_ids.append(kb_id)
@@ -218,12 +219,18 @@ class RetrievalManager:
             try:
                 vec_db: FaissVecDB = kb_options[kb_id]["vec_db"]
                 dense_k = int(kb_options[kb_id]["top_k_dense"])
+                # Resolve the embedding provider by ID on every retrieval.
+                # Vector stores cache the instance they were built with, so a
+                # provider reload would otherwise keep encoding queries with the
+                # terminated instance and its pre-reload endpoint and key.
+                embedding_provider = await kb_options[kb_id]["kb_helper"].get_ep()
                 vec_results = await vec_db.retrieve(
                     query=query,
                     k=dense_k,
                     fetch_k=dense_k * 2,
                     rerank=False,  # 稠密检索阶段不进行 rerank
                     metadata_filters={"kb_id": kb_id},
+                    embedding_provider=embedding_provider,
                 )
 
                 all_results.extend(vec_results)
