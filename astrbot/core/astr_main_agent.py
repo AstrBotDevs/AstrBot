@@ -99,6 +99,8 @@ from astrbot.core.tools.web_search_tools import (
     BaiduWebSearchTool,
     BochaWebSearchTool,
     BraveWebSearchTool,
+    DeepSeekFetchWebPageTool,
+    DeepSeekWebSearchTool,
     ExaGetContentsTool,
     ExaWebSearchTool,
     FirecrawlExtractWebPageTool,
@@ -164,6 +166,7 @@ WEB_SEARCH_CITATION_TOOL_NAMES = frozenset(
         "web_search_brave",
         "web_search_exa",
         "web_search_anysearch",
+        "web_search_deepseek",
         "web_search_keenable",
     }
 )
@@ -512,7 +515,7 @@ def _build_local_mode_prompt() -> str:
             "PowerShell 7-only syntax or assume Unix commands like cat/ls/grep are available."
         )
     return (
-        "You have access to the host local environment and can execute shell commands and Python code. "
+        "Local computer tools are available subject to your role's file and execution permissions. "
         f"Current operating system: {system_name}. "
         f"{shell_hint} "
         "Local shell commands automatically return a managed session when they "
@@ -1299,6 +1302,9 @@ async def _apply_web_search_tools(
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExaGetContentsTool))
     elif provider == "anysearch":
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(AnySearchWebSearchTool))
+    elif provider == "deepseek":
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(DeepSeekWebSearchTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(DeepSeekFetchWebPageTool))
     elif provider == "keenable":
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(KeenableWebSearchTool))
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(KeenableExtractWebPageTool))
@@ -1439,10 +1445,13 @@ def _matches_provider_wake_prefix(
         True when no prefix is configured, WebChat is exempt, or the message
         starts with the configured prefix.
     """
+    message_str = event.message_str or ""
+    if event.get_platform_name() == "lark":
+        message_str = message_str.lstrip()
     return (
         not provider_wake_prefix
         or event.get_platform_name() == "webchat"
-        or (event.message_str or "").startswith(provider_wake_prefix)
+        or message_str.startswith(provider_wake_prefix)
     )
 
 
@@ -1512,10 +1521,11 @@ async def collect_initial_request(
                 return None, None
 
             req.prompt = event.message_str
-            if provider_wake_prefix and event.message_str.startswith(
-                provider_wake_prefix
-            ):
-                req.prompt = event.message_str[len(provider_wake_prefix) :]
+            prefix_text = event.message_str
+            if event.get_platform_name() == "lark":
+                prefix_text = prefix_text.lstrip()
+            if provider_wake_prefix and prefix_text.startswith(provider_wake_prefix):
+                req.prompt = prefix_text[len(provider_wake_prefix) :]
 
             # media files attachments
             for comp in event.message_obj.message:

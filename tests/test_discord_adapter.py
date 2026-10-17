@@ -31,6 +31,29 @@ _WAV_PATH = "/tmp/discord_voice.wav"
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    [
+        (MessageChain().at_all().message(" test"), "@everyone test"),
+        (MessageChain().at("test", "123456789"), "<@123456789>"),
+    ],
+    ids=["everyone", "user"],
+)
+async def test_discord_formats_mentions(message, expected):
+    """Verify Discord mention syntax for everyone and individual users.
+
+    Args:
+        message: Message chain containing the mention.
+        expected: Expected Discord message content.
+    """
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+
+    content, *_ = await event._parse_to_discord(message)
+
+    assert content == expected
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("source", ["resolved", "cached", "fetched"])
 async def test_discord_reply_body_reaches_model_request(source):
     """Verify that Discord reply text reaches the model request.

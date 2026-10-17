@@ -27,7 +27,7 @@
 
 ## 选择搜索提供商
 
-当前支持以下八种接入方式。先选一个完成配置即可，无需同时申请所有服务。
+当前支持以下九种接入方式。先选一个完成配置即可，无需同时申请所有服务。
 
 | 提供商 | Key 申请入口 | AstrBot 提供的能力 |
 | --- | --- | --- |
@@ -38,13 +38,16 @@
 | <span id="firecrawl">Firecrawl</span> | [Firecrawl](https://firecrawl.dev/) | 网页搜索、按 URL 提取网页正文 |
 | <span id="exa">Exa</span> | [Exa 控制台](https://dashboard.exa.ai/) | 关键词或语义搜索、按 URL 获取正文，支持域名、日期等筛选 |
 | <span id="anysearch">AnySearch</span> | [AnySearch 控制台](https://anysearch.com/console/api-keys) | 通用搜索，以及学术、代码文档、金融、法律等垂直领域检索 |
+| <span id="deepseek">DeepSeek</span> | [DeepSeek 开放平台](https://platform.deepseek.com/api_keys) / [搜索文档](https://api-docs.deepseek.com/zh-cn/guides/search) | 网页搜索、按 URL 提取网页正文 |
 | <span id="keenable">Keenable</span> | [Keenable 控制台](https://keenable.ai/console) | 网页搜索（可限定站点）、按 URL 提取网页正文 |
 
 AnySearch 的 Key 留空时会使用匿名模式，服务提供每日免费额度；Keenable 的 Key 留空时也可免费使用，但有请求频率限制，填写 Key 可提高限额。其他提供商需要填写相应的 Key。服务的额度、收费、可用地区和授权方式以各自官网为准。
 
+DeepSeek 搜索与对话模型独立配置。即使对话模型已配置 DeepSeek，也需要单独填写搜索 Key，可以使用同一个 Key。搜索和正文提取接口各按账号限制 5 QPS，配置多个同账号 Key 不会增加限额。
+
 ### 搜索与读取链接的区别
 
-“搜索某个话题”会从搜索服务获取结果；“总结这个链接”需要提取指定网页的正文。当前 Tavily、Firecrawl、Exa 和 Keenable 都提供独立的网页正文提取工具。若经常需要阅读具体链接，优先选择其中一种。
+“搜索某个话题”会从搜索服务获取结果；“总结这个链接”需要提取指定网页的正文。当前 Tavily、Firecrawl、Exa、DeepSeek 和 Keenable 都提供独立的网页正文提取工具。若经常需要阅读具体链接，优先选择其中一种。
 
 网页提取不保证能读取所有网站。登录后才能访问的页面、反爬限制、付费内容，以及某些依赖脚本加载的页面，都可能导致提取失败。
 

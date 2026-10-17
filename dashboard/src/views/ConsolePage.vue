@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { reactive, ref, watch } from "vue";
-import { PackagePlus } from "@lucide/vue";
+import { Minus, PackagePlus, Plus } from "@lucide/vue";
 import ConsoleDisplayer from "@/components/shared/ConsoleDisplayer.vue";
 import { useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
@@ -11,8 +11,11 @@ const { tm } = useModuleI18n("features/console");
 const toast = useToast();
 const customizerStore = useCustomizerStore();
 
-const autoScrollEnabled = ref(
-  localStorage.getItem("console_auto_scroll") !== "false",
+const logFontSize = ref(
+  Math.min(
+    16,
+    Math.max(8, Number(localStorage.getItem("console_log_font_size")) || 12),
+  ),
 );
 const hideUserChatEnabled = ref(
   localStorage.getItem("console_hide_user_chat") === "true",
@@ -21,8 +24,8 @@ const pipDialog = ref(false);
 const pipInstallPayload = reactive({ package: "", mirror: "" });
 const loading = ref(false);
 
-watch(autoScrollEnabled, (value) => {
-  localStorage.setItem("console_auto_scroll", String(value));
+watch(logFontSize, (value) => {
+  localStorage.setItem("console_log_font_size", String(value));
 });
 
 watch(hideUserChatEnabled, (value) => {
@@ -56,29 +59,42 @@ async function pipInstall() {
       class="console-display"
       workspace-mode
       show-search
-      :auto-scroll="autoScrollEnabled"
-      :hide-user-chat="hideUserChatEnabled"
+      :font-size="logFontSize"
+      v-model:hide-user-chat="hideUserChatEnabled"
     >
       <template #header-actions>
         <div class="console-header-actions">
-          <v-switch
-            v-model="hideUserChatEnabled"
-            :label="tm('hideUserChat.label')"
-            :aria-label="tm('hideUserChat.label')"
-            hide-details
-            density="compact"
-            inset
-            color="primary"
-          />
-          <v-switch
-            v-model="autoScrollEnabled"
-            :label="tm('autoScroll.label')"
-            :aria-label="tm('autoScroll.label')"
-            hide-details
-            density="compact"
-            inset
-            color="primary"
-          />
+          <div
+            class="console-font-controls"
+            role="group"
+            :aria-label="tm('fontSize.label')"
+          >
+            <v-btn
+              icon
+              size="x-small"
+              variant="text"
+              :disabled="logFontSize <= 8"
+              :aria-label="tm('fontSize.decrease')"
+              :title="tm('fontSize.decrease')"
+              @click="logFontSize -= 2"
+            >
+              <Minus :size="15" aria-hidden="true" />
+            </v-btn>
+            <output :aria-label="tm('fontSize.label')"
+              >{{ logFontSize }}px</output
+            >
+            <v-btn
+              icon
+              size="x-small"
+              variant="text"
+              :disabled="logFontSize >= 16"
+              :aria-label="tm('fontSize.increase')"
+              :title="tm('fontSize.increase')"
+              @click="logFontSize += 2"
+            >
+              <Plus :size="15" aria-hidden="true" />
+            </v-btn>
+          </div>
           <v-dialog v-model="pipDialog" width="440">
             <template #activator="{ props }">
               <v-btn
@@ -162,17 +178,23 @@ async function pipInstall() {
 .console-header-actions {
   align-items: center;
   display: flex;
-  flex-wrap: wrap;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
   gap: 6px 14px;
 }
 
-.console-header-actions :deep(.v-switch .v-selection-control) {
-  min-height: 34px;
+.console-font-controls {
+  align-items: center;
+  display: flex;
+  gap: 2px;
+  white-space: nowrap;
 }
 
-.console-header-actions :deep(.v-label) {
-  font-size: 0.75rem;
-  opacity: 0.72;
+.console-font-controls output {
+  color: rgba(var(--v-theme-on-surface), 0.62);
+  font-size: 0.72rem;
+  min-width: 32px;
+  text-align: center;
 }
 
 .pip-install-button :deep(.v-btn__content) {
@@ -190,22 +212,6 @@ async function pipInstall() {
   .console-page {
     height: calc(100dvh - 112px);
     padding: 0 4px 6px;
-  }
-
-  .console-header-actions {
-    width: 100%;
-  }
-}
-
-@media (max-width: 520px) {
-  .console-header-actions {
-    display: grid;
-    gap: 4px 10px;
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .pip-install-button {
-    grid-column: 1 / -1;
   }
 }
 </style>
