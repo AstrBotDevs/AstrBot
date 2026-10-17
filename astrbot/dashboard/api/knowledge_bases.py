@@ -14,6 +14,7 @@ from astrbot.dashboard.schemas import (
     KnowledgeBaseRequest,
     KnowledgeBaseRetrieveRequest,
     KnowledgeBaseUrlImportRequest,
+    KnowledgeDocumentBatchDeleteRequest,
 )
 from astrbot.dashboard.services.knowledge_base_service import (
     KnowledgeBaseService,
@@ -223,6 +224,19 @@ async def import_knowledge_base_document_url(
     return await _run(
         lambda: service.upload_document_from_url({"kb_id": kb_id, **body}),
         prefix="从URL上传文档失败",
+    )
+
+
+@router.post("/knowledge-bases/{kb_id}/documents/batch-delete")
+async def delete_knowledge_base_documents(
+    kb_id: str,
+    payload: KnowledgeDocumentBatchDeleteRequest,
+    _auth: AuthContext = Depends(require_kb_scope),
+    service: KnowledgeBaseService = Depends(get_service),
+):
+    return await _run(
+        lambda: service.delete_documents({"kb_id": kb_id, **payload.model_dump()}),
+        prefix="批量删除文档未完成，请重试",
     )
 
 

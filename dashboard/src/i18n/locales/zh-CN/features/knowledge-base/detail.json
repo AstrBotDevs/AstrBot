@@ -47,7 +47,13 @@
     "uploadSuccess": "文档上传成功",
     "uploadFailed": "文档上传失败",
     "deleteSuccess": "文档删除成功",
-    "deleteFailed": "文档删除失败"
+    "deleteStatsWarning": "文档已删除，但统计刷新失败，显示的数量可能暂未更新。",
+    "deleteFailed": "文档删除失败",
+    "batchDelete": "批量删除",
+    "batchDeleteTitle": "确认批量删除",
+    "batchDeleteConfirm": "确定要删除所选的 {count} 个文档吗？",
+    "batchDeleteSuccess": "成功删除 {count} 个文档",
+    "batchDeleteFailed": "删除未完成。"
   },
   "upload": {
     "title": "上传文档",

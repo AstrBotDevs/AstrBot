@@ -139,6 +139,7 @@ class KBHelper:
         self.kb_root_dir = kb_root_dir
         self.chunker = chunker
         self.init_error = None
+        self._vec_db_init_lock = asyncio.Lock()
 
         self.kb_dir = Path(self.kb_root_dir) / self.kb.kb_id
         self.kb_medias_dir = Path(self.kb_dir) / "medias" / self.kb.kb_id
@@ -176,31 +177,44 @@ class KBHelper:
         return rp
 
     async def _ensure_vec_db(self) -> "FaissVecDB":
-        if not self.kb.embedding_provider_id:
-            raise ValueError(f"知识库 {self.kb.kb_name} 未配置 Embedding Provider")
+        """Initialize one shared vector store for this helper.
 
-        ep = await self.get_ep()
-        rp: RerankProvider | None = None
-        try:
-            rp = await self.get_rp()
-        except Exception as e:
-            logger.warning(
-                f"知识库 {self.kb.kb_name}({self.kb.kb_id}) 初始化重排序能力失败，将跳过重排序: {e}",
+        Returns:
+            The existing or newly initialized vector store.
+
+        Raises:
+            ValueError: The embedding provider is missing or unavailable.
+        """
+        async with self._vec_db_init_lock:
+            existing = getattr(self, "vec_db", None)
+            if existing is not None:
+                return existing
+
+            if not self.kb.embedding_provider_id:
+                raise ValueError(f"知识库 {self.kb.kb_name} 未配置 Embedding Provider")
+
+            ep = await self.get_ep()
+            rp: RerankProvider | None = None
+            try:
+                rp = await self.get_rp()
+            except Exception as e:
+                logger.warning(
+                    f"知识库 {self.kb.kb_name}({self.kb.kb_id}) 初始化重排序能力失败，将跳过重排序: {e}",
+                )
+
+            from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
+
+            vec_db = FaissVecDB(
+                doc_store_path=str(self.kb_dir / "doc.db"),
+                index_store_path=str(self.kb_dir / "index.faiss"),
+                embedding_provider=ep,
+                rerank_provider=rp,
             )
-
-        from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
-
-        vec_db = FaissVecDB(
-            doc_store_path=str(self.kb_dir / "doc.db"),
-            index_store_path=str(self.kb_dir / "index.faiss"),
-            embedding_provider=ep,
-            rerank_provider=rp,
-        )
-        await vec_db.initialize()
-        self.vec_db = vec_db
-        # Clear stale init_error once initialization succeeds.
-        self.init_error = None
-        return vec_db
+            await vec_db.initialize()
+            self.vec_db = vec_db
+            # Clear stale init_error once initialization succeeds.
+            self.init_error = None
+            return vec_db
 
     async def delete_vec_db(self) -> None:
         """删除知识库的向量数据库和所有相关文件"""
@@ -617,17 +631,41 @@ class KBHelper:
         doc = await self.kb_db.get_document_by_id(doc_id)
         return doc
 
-    async def delete_document(self, doc_id: str) -> None:
-        """删除单个文档及其相关数据"""
-        await self.kb_db.delete_document_by_id(
-            doc_id=doc_id,
-            vec_db=self.vec_db,  # type: ignore
+    async def delete_document(self, doc_id: str) -> tuple[int, bool]:
+        """Delete one document through the batch cleanup path.
+
+        Args:
+            doc_id: Document ID to delete.
+
+        Returns:
+            Number of existing records removed and whether statistics refreshed.
+        """
+        return await self.delete_documents([doc_id])
+
+    async def delete_documents(self, doc_ids: list[str]) -> tuple[int, bool]:
+        """Delete a set of documents and refresh statistics once.
+
+        Args:
+            doc_ids: Document IDs to delete from this knowledge base.
+
+        Returns:
+            Number of existing records removed and whether statistics refreshed.
+        """
+        if not doc_ids:
+            return 0, True
+        await self._ensure_vec_db()
+        count = await self.kb_db.delete_documents_by_ids(
+            doc_ids, self.vec_db, kb_id=self.kb.kb_id
         )
-        await self.kb_db.update_kb_stats(
-            kb_id=self.kb.kb_id,
-            vec_db=self.vec_db,  # type: ignore
-        )
-        await self.refresh_kb()
+        try:
+            await self.kb_db.update_kb_stats(kb_id=self.kb.kb_id, vec_db=self.vec_db)
+            await self.refresh_kb()
+        except Exception:
+            logger.exception(
+                "Documents deleted but knowledge base statistics refresh failed"
+            )
+            return count, False
+        return count, True
 
     async def delete_chunk(self, chunk_id: str, doc_id: str) -> None:
         """删除单个文本块及其相关数据"""

@@ -3847,6 +3847,25 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
+  /api/v1/knowledge-bases/{kb_id}/documents/batch-delete:
+    post:
+      tags: [Knowledge Base]
+      summary: Delete multiple knowledge base documents
+      description: Idempotent cleanup of up to 500 document IDs in one knowledge base. A failed operation can be retried with the same IDs. On success, data contains deleted_count and stats_refreshed; warning is stats_refresh_failed when deletion completed but statistics could not be refreshed.
+      operationId: deleteKnowledgeDocuments
+      x-astrbot-scope: kb
+      parameters:
+        - $ref: "#/components/parameters/KbId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KnowledgeDocumentBatchDeleteRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
   /api/v1/knowledge-bases/{kb_id}/documents/{document_id}:
     get:
       tags: [Knowledge Base]
@@ -3862,6 +3881,7 @@ paths:
     delete:
       tags: [Knowledge Base]
       summary: Delete a knowledge base document
+      description: On success, data contains deleted_count and stats_refreshed; warning is stats_refresh_failed when deletion completed but statistics could not be refreshed.
       operationId: deleteKnowledgeDocument
       x-astrbot-scope: kb
       parameters:
@@ -6189,6 +6209,19 @@ components:
         release_id:
           type: string
       additionalProperties: true
+
+    KnowledgeDocumentBatchDeleteRequest:
+      type: object
+      required: [document_ids]
+      properties:
+        document_ids:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items:
+            type: string
+            minLength: 1
+      additionalProperties: false
 
     KnowledgeBaseRequest:
       type: object

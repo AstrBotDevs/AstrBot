@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import shutil
 import tempfile
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -105,30 +106,57 @@ class EmbeddingStorage:
 
     @staticmethod
     def _write_index(index: faiss.Index, path: str) -> None:
-        """保存 Faiss 索引，兼容含非 ASCII 字符的 Windows 路径。"""
+        """Atomically replace an index, including non-ASCII Windows paths.
+
+        Args:
+            index: FAISS index to persist.
+            path: Destination index file.
+
+        Raises:
+            OSError: Writing, syncing, or replacing the index file fails.
+        """
         import faiss
 
-        dirname = os.path.dirname(path)
-        if dirname:
-            os.makedirs(dirname, exist_ok=True)
-
-        if not _needs_bridge(path):
-            faiss.write_index(index, path)
-            return
-
-        tmp = _make_temp_file("_faiss_write")
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        fd, temporary = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)
+        os.close(fd)
+        temporary_path = Path(temporary)
+        bridge_path = None
         try:
-            faiss.write_index(index, tmp)
-            shutil.move(tmp, path)
+            if _needs_bridge(str(target)):
+                bridge_path = Path(_make_temp_file("_faiss_write"))
+                faiss.write_index(index, str(bridge_path))
+                shutil.copyfile(bridge_path, temporary_path)
+            else:
+                faiss.write_index(index, str(temporary_path))
+            with temporary_path.open("rb+") as saved:
+                os.fsync(saved.fileno())
+            temporary_path.replace(target)
         finally:
-            if os.path.exists(tmp):
-                try:
-                    os.remove(tmp)
-                except OSError:
-                    pass
+            temporary_path.unlink(missing_ok=True)
+            if bridge_path is not None:
+                bridge_path.unlink(missing_ok=True)
+
+    def reload_index(self) -> None:
+        """Discard the active index and reload the last persisted version.
+
+        Leaves the index unavailable if reading fails, so subsequent operations
+        retry loading rather than use vectors from an interrupted deletion.
+
+        Raises:
+            RuntimeError: No persisted index is available.
+            OSError: Reading the persisted index fails.
+        """
+        self.index = None
+        if not self.path:
+            raise RuntimeError("No persisted FAISS index is available")
+        self.index = self._read_index(self.path)
 
     async def insert(self, vector: np.ndarray, id: int) -> None:
         """插入向量"""
+        if self.index is None:
+            self.reload_index()
         assert self.index is not None, "FAISS index is not initialized."
         if vector.shape[0] != self.dimension:
             raise ValueError(
@@ -139,6 +167,8 @@ class EmbeddingStorage:
 
     async def insert_batch(self, vectors: np.ndarray, ids: list[int]) -> None:
         """批量插入向量"""
+        if self.index is None:
+            self.reload_index()
         assert self.index is not None, "FAISS index is not initialized."
         if len(vectors.shape) != 2:
             raise ValueError(
@@ -156,6 +186,8 @@ class EmbeddingStorage:
 
         接受 1D (d,) 或 2D (1, d) 向量，自动展平为 Faiss 期望的 (1, d)。
         """
+        if self.index is None:
+            self.reload_index()
         assert self.index is not None, "FAISS index is not initialized."
         vector = np.asarray(vector, dtype=np.float32).ravel()
         if vector.shape[0] != self.dimension:
@@ -165,19 +197,23 @@ class EmbeddingStorage:
         distances, indices = self.index.search(vector.reshape(1, -1), k)
         return distances, indices
 
-    async def delete(self, ids: list[int]) -> None:
-        """删除向量
+    async def delete(self, ids: list[int], *, persist: bool = True) -> None:
+        """Remove vectors, optionally deferring persistence for a batch.
 
-        删除不存在的 ID 时 Faiss 会抛 RuntimeError。
-        由于 remove_ids 为幂等操作，此处忽略该错误。
+        Args:
+            ids: Internal vector IDs to remove.
+            persist: Save immediately unless the caller will save the whole batch.
+
+        Raises:
+            RuntimeError: FAISS cannot remove the requested IDs.
+            OSError: Persisting the updated index fails.
         """
+        if self.index is None:
+            self.reload_index()
         assert self.index is not None, "FAISS index is not initialized."
-        try:
-            self.index.remove_ids(np.array(ids, dtype=np.int64))
-        except RuntimeError:
-            # 幂等：删除已不存在的 ID，安全忽略
-            pass
-        await self.save_index()
+        self.index.remove_ids(np.array(ids, dtype=np.int64))
+        if persist:
+            await self.save_index()
 
     async def save_index(self) -> None:
         """保存索引（兼容含非 ASCII 字符的 Windows 路径）"""

@@ -14,6 +14,7 @@ import issues in the astrbot core module chain (same pattern as
 test_kb_manager_resilience.py).
 """
 
+import asyncio
 import sys
 import types
 from contextlib import asynccontextmanager
@@ -60,6 +61,7 @@ def stub_provider_manager_module():
 
 def _make_vec_db() -> FaissVecDB:
     vec_db = FaissVecDB.__new__(FaissVecDB)
+    vec_db._write_lock = asyncio.Lock()
     vec_db.embedding_provider = AsyncMock()
     vec_db.document_storage = AsyncMock()
     vec_db.embedding_storage = AsyncMock()

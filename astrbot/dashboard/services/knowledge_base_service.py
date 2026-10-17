@@ -735,7 +735,7 @@ class KnowledgeBaseService:
     ) -> dict[str, Any]:
         return await self.get_document(kb_id=kb_id, doc_id=doc_id)
 
-    async def delete_document(self, data: object) -> tuple[None, str]:
+    async def delete_document(self, data: object) -> tuple[dict, str]:
         payload = self._payload(data)
         kb_id = payload.get("kb_id")
         doc_id = payload.get("doc_id")
@@ -746,8 +746,60 @@ class KnowledgeBaseService:
         kb_helper = await self.get_kb_manager().get_kb(kb_id)
         if not kb_helper:
             raise KnowledgeBaseServiceError("知识库不存在")
-        await kb_helper.delete_document(doc_id)
-        return None, "删除文档成功"
+        count, stats_refreshed = await kb_helper.delete_document(doc_id)
+        result: dict[str, Any] = {
+            "deleted_count": count,
+            "stats_refreshed": stats_refreshed,
+        }
+        if not stats_refreshed:
+            result["warning"] = "stats_refresh_failed"
+        return (
+            result,
+            "删除文档成功" if stats_refreshed else "文档已删除，但统计刷新失败",
+        )
+
+    async def delete_documents(self, data: object) -> tuple[dict, str]:
+        """Delete a validated batch within a single knowledge base.
+
+        Args:
+            data: Payload containing kb_id and document_ids.
+
+        Returns:
+            Deleted record count, statistics refresh status, and a completion message.
+
+        Raises:
+            KnowledgeBaseServiceError: The request or knowledge base is invalid.
+        """
+        payload = self._payload(data)
+        kb_id = payload.get("kb_id")
+        doc_ids = payload.get("document_ids")
+        if not isinstance(kb_id, str) or not kb_id:
+            raise KnowledgeBaseServiceError("缺少参数 kb_id")
+        if (
+            not isinstance(doc_ids, list)
+            or not 1 <= len(doc_ids) <= 500
+            or any(
+                not isinstance(doc_id, str) or not doc_id.strip() for doc_id in doc_ids
+            )
+        ):
+            raise KnowledgeBaseServiceError(
+                "document_ids 必须包含 1 至 500 个有效文档 ID"
+            )
+        doc_ids = list(dict.fromkeys(doc_id.strip() for doc_id in doc_ids))
+        kb_helper = await self.get_kb_manager().get_kb(kb_id)
+        if not kb_helper:
+            raise KnowledgeBaseServiceError("知识库不存在")
+        count, stats_refreshed = await kb_helper.delete_documents(doc_ids)
+        result: dict[str, Any] = {
+            "deleted_count": count,
+            "stats_refreshed": stats_refreshed,
+        }
+        if not stats_refreshed:
+            result["warning"] = "stats_refresh_failed"
+        return (
+            result,
+            "批量删除文档完成" if stats_refreshed else "文档已删除，但统计刷新失败",
+        )
 
     async def delete_chunk(self, data: object) -> tuple[None, str]:
         payload = self._payload(data)

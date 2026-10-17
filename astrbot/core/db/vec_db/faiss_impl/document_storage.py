@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 
-from sqlalchemy import Column, DateTime, Text, bindparam
+from sqlalchemy import Column, DateTime, Text, bindparam, delete
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import Field, MetaData, SQLModel, col, func, select, text
@@ -18,6 +18,7 @@ from astrbot.core.knowledge_base.retrieval.tokenizer import (
 
 FTS_TABLE_NAME = "documents_fts"
 FTS_REBUILD_BATCH_SIZE = 1000
+DOCUMENT_DELETE_BATCH_SIZE = 500
 
 
 class BaseDocModel(SQLModel, table=False):
@@ -235,6 +236,7 @@ class DocumentStorage:
         ids: list | None = None,
         offset: int | None = 0,
         limit: int | None = 100,
+        after_id: int | None = None,
     ) -> list[dict]:
         """Retrieve documents by metadata filters and ids.
 
@@ -243,6 +245,7 @@ class DocumentStorage:
             ids (list | None): Optional list of document IDs to filter.
             offset (int | None): Offset for pagination.
             limit (int | None): Limit for pagination.
+            after_id: Exclusive internal ID boundary for ordered keyset batches.
 
         Returns:
             list: The list of documents that match the filters.
@@ -258,14 +261,18 @@ class DocumentStorage:
             query = select(Document)
 
             for key, val in metadata_filters.items():
+                field = func.json_extract(Document.metadata_, f"$.{key}")
                 query = query.where(
-                    text(f"json_extract(metadata, '$.{key}') = :filter_{key}"),
-                ).params(**{f"filter_{key}": val})
+                    field.in_(val) if isinstance(val, list) else field == val
+                )
 
             if ids is not None and len(ids) > 0:
                 valid_ids = [int(i) for i in ids if i != -1]
                 if valid_ids:
                     query = query.where(col(Document.id).in_(valid_ids))
+
+            if after_id is not None:
+                query = query.where(col(Document.id) > after_id).order_by(Document.id)
 
             if limit is not None:
                 query = query.limit(limit)
@@ -424,16 +431,24 @@ class DocumentStorage:
             query = select(Document)
 
             for key, val in metadata_filters.items():
+                field = func.json_extract(Document.metadata_, f"$.{key}")
                 query = query.where(
-                    text(f"json_extract(metadata, '$.{key}') = :filter_{key}"),
-                ).params(**{f"filter_{key}": val})
+                    field.in_(val) if isinstance(val, list) else field == val
+                )
 
-            result = await session.execute(query)
-            documents = result.scalars().all()
-
-            await self._delete_fts_rows_batch(session, documents)
-            for doc in documents:
-                await session.delete(doc)
+            query = query.order_by(Document.id).limit(DOCUMENT_DELETE_BATCH_SIZE)
+            while True:
+                result = await session.execute(query)
+                documents = result.scalars().all()
+                if not documents:
+                    break
+                await self._delete_fts_rows_batch(session, documents)
+                await session.execute(
+                    delete(Document)
+                    .where(col(Document.id).in_([doc.id for doc in documents]))
+                    .execution_options(synchronize_session=False)
+                )
+                del documents
 
     async def count_documents(self, metadata_filters: dict | None = None) -> int:
         """Count documents in the database.
@@ -734,13 +749,16 @@ class DocumentStorage:
         if not rowids:
             return set()
 
-        result = await session.execute(
-            text(
-                f"SELECT rowid FROM {FTS_TABLE_NAME} WHERE rowid IN :rowids"
-            ).bindparams(bindparam("rowids", expanding=True)),
-            {"rowids": rowids},
-        )
-        return {int(row[0]) for row in result.fetchall()}
+        existing: set[int] = set()
+        for offset in range(0, len(rowids), 900):
+            result = await session.execute(
+                text(
+                    f"SELECT rowid FROM {FTS_TABLE_NAME} WHERE rowid IN :rowids"
+                ).bindparams(bindparam("rowids", expanding=True)),
+                {"rowids": rowids[offset : offset + 900]},
+            )
+            existing.update(int(row[0]) for row in result.fetchall())
+        return existing
 
     async def get_user_ids(self) -> list[str]:
         """Retrieve all user IDs from the documents table.

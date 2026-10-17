@@ -109,7 +109,7 @@ async def test_delete_document_cleans_media_records(kb_db, seeded_media):
 
     # 验证 vec_db 也被调用
     mock_vec_db.delete_documents.assert_awaited_once_with(
-        metadata_filters={"kb_doc_id": doc_id},
+        metadata_filters={"kb_doc_id": [doc_id]},
     )
 
 
