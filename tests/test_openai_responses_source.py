@@ -397,3 +397,124 @@ async def test_parse_failed_response_raises_provider_error():
 
     with pytest.raises(RuntimeError, match="server_error: failed"):
         await provider._parse_response(response, tools=None)
+
+
+@pytest.mark.parametrize(
+    "output",
+    [
+        [],
+        [
+            {
+                "type": "message",
+                "status": "completed",
+                "content": [{"type": "output_text", "text": "  "}],
+            }
+        ],
+        [{"type": "reasoning", "summary": [], "encrypted_content": "state"}],
+    ],
+)
+@pytest.mark.asyncio
+async def test_completed_empty_response_preserves_metadata(output):
+    provider = _make_provider()
+    response = {
+        "id": "empty",
+        "status": "completed",
+        "output": output,
+        "usage": {"input_tokens": 12, "output_tokens": 3},
+    }
+    result = await provider._parse_response(response, None)
+    assert result.result_chain is None
+    assert result.reasoning_content is None
+    assert result.raw_completion is response
+    assert result.id == "empty"
+    assert result.usage.output == 3
+    if output and output[0]["type"] == "reasoning":
+        assert json.loads(result.reasoning_signature)["items"] == output
+
+
+@pytest.mark.parametrize(
+    "status", [None, "incomplete", "in_progress", "queued", "cancelled"]
+)
+@pytest.mark.asyncio
+async def test_unfinished_empty_response_remains_error(status):
+    from astrbot.core.exceptions import EmptyModelOutputError
+
+    with pytest.raises(EmptyModelOutputError):
+        await _make_provider()._parse_response({"status": status, "output": []}, None)
+
+
+@pytest.mark.parametrize(
+    "output",
+    [
+        [{"type": "function_call", "name": "test", "arguments": "{}"}],
+        [{"type": "web_search_call", "status": "completed"}],
+        [{"type": "message", "content": [{"type": "refusal", "refusal": ""}]}],
+        [{"type": "message", "content": [{"type": "unknown"}]}],
+        [{"type": "message", "status": "incomplete", "content": []}],
+    ],
+)
+@pytest.mark.asyncio
+async def test_empty_unhandled_output_remains_error(output):
+    from astrbot.core.exceptions import EmptyModelOutputError
+
+    with pytest.raises(EmptyModelOutputError):
+        await _make_provider()._parse_response(
+            {"status": "completed", "output": output}, None
+        )
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"error": {"code": "bad"}},
+        {"incomplete_details": {"reason": "max_output_tokens"}},
+    ],
+)
+@pytest.mark.asyncio
+async def test_completed_empty_response_with_error_details_is_rejected(extra):
+    from astrbot.core.exceptions import EmptyModelOutputError
+
+    with pytest.raises(EmptyModelOutputError):
+        await _make_provider()._parse_response(
+            {"status": "completed", "output": [], **extra}, None
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("completed", [True, False])
+async def test_empty_stream_requires_completed_event(monkeypatch, completed):
+    from astrbot.core.exceptions import EmptyModelOutputError
+
+    provider = _make_provider()
+
+    async def stream():
+        yield SimpleNamespace(
+            type="response.created", response=SimpleNamespace(id="resp_1")
+        )
+        if completed:
+            yield SimpleNamespace(
+                type="response.completed", response=_make_response([])
+            )
+
+    async def create(**kwargs):
+        return stream()
+
+    monkeypatch.setattr(provider.client.responses, "create", create)
+    if completed:
+        results = [
+            r
+            async for r in provider._query_stream(
+                {"model": "gpt-test", "input": "hi"}, tools=None
+            )
+        ]
+        assert len(results) == 1
+        assert results[0].result_chain is None
+        assert results[0].raw_completion.status == "completed"
+    else:
+        with pytest.raises(EmptyModelOutputError):
+            _ = [
+                r
+                async for r in provider._query_stream(
+                    {"model": "gpt-test", "input": "hi"}, tools=None
+                )
+            ]
