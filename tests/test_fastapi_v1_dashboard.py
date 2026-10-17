@@ -3713,6 +3713,95 @@ async def test_v1_token_file_is_public(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["url", "path", "no-callback", "renderer"])
+async def test_star_t2i_real_http_failure_and_local_fallback(
+    asgi_client, tmp_path, monkeypatch, mode
+):
+    """Render after a real HTTP failure and exercise the actual token file route."""
+    from aiohttp import web
+
+    from astrbot.core.star import Star
+    from astrbot.core.utils import io as io_utils
+    from astrbot.core.utils.t2i.renderer import HtmlRenderer
+
+    requests = []
+
+    async def unavailable_renderer(request):
+        payload = await request.json()
+        requests.append(payload)
+        if not payload["json"]:
+            # Exercise a real transport failure: non-200 download handling is
+            # independently covered by the existing image-download fix PR.
+            request.transport.close()
+        return web.Response(status=503, text="Synthetic renderer unavailable")
+
+    app = web.Application(client_max_size=16 * 1024 * 1024)
+    app.router.add_post("/text2img/generate", unavailable_renderer)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "127.0.0.1", 0)
+    await site.start()
+    port = site._server.sockets[0].getsockname()[1]
+    endpoint = f"http://127.0.0.1:{port}"
+    config = {"t2i_endpoint": endpoint}
+    if mode == "url":
+        config["callback_api_base"] = str(asgi_client.base_url).rstrip("/")
+    renderer = HtmlRenderer(endpoint)
+    context = SimpleNamespace(
+        get_config=lambda _umo: config, html_renderer=renderer
+    )
+    monkeypatch.setattr(io_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    monkeypatch.setattr(file_token_service, "staged_files", {})
+    try:
+        star = Star(context)
+        if mode == "no-callback":
+            with pytest.raises(RuntimeError, match="callback_api_base"):
+                await star.text_to_image("Real local fallback fixture")
+        else:
+            result = (
+                await renderer.render_t2i(
+                    "Real local fallback fixture", return_url=True, endpoint=endpoint
+                )
+                if mode == "renderer"
+                else await star.text_to_image(
+                    "Real local fallback fixture", return_url=mode == "url"
+                )
+            )
+            if mode == "url":
+                assert result.startswith(f"{config['callback_api_base']}/api/file/")
+                first = await asgi_client.get(result)
+                second = await asgi_client.get(result)
+                assert first.status_code == second.status_code == 200
+                assert first.content == second.content
+                assert first.headers["content-type"].startswith("image/")
+                token = result.rsplit("/", 1)[-1]
+                image_path, _, single_use = file_token_service.staged_files[token]
+                assert not single_use
+                monkeypatch.setitem(
+                    file_token_service.staged_files,
+                    token,
+                    (image_path, 0, single_use),
+                )
+                expired = await asgi_client.get(result)
+                assert expired.status_code == 404
+            else:
+                assert Path(result).is_file()
+                assert not file_token_service.staged_files
+        assert len(requests) == 1
+        assert requests[0]["json"] is (mode != "path")
+        rendered = list(tmp_path.glob("io_temp_img_*.jpg"))
+        assert len(rendered) == 1
+        with PILImage.open(rendered[0]) as image:
+            assert image.format == "JPEG"
+            assert image.width == 800
+            assert image.height > 0
+        if mode == "no-callback":
+            assert not file_token_service.staged_files
+    finally:
+        await runner.cleanup()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("cached_token_state", ["valid", "expired", "consumed"])
 async def test_v1_platform_logo_refreshes_stale_tokens_and_supports_repeated_reads(
     asgi_client: httpx.AsyncClient,

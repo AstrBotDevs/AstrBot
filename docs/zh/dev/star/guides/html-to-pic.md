@@ -18,6 +18,14 @@ async def on_aiocqhttp(self, event: AstrMessageEvent, text: str):
 
 ![image](https://files.astrbot.app/docs/source/images/plugin/image-3.png)
 
+`text_to_image()` 默认请求 URL。远程渲染失败而回退到本地渲染时，需要将
+`callback_api_base` 配置为接收方能访问 AstrBot 的 HTTP(S) 地址。返回的文件服务
+URL 支持重复读取，并在现有文件令牌有效期后失效（默认为五分钟）。如果使用反向代理，
+请在该地址保留路径前缀，不要包含查询参数或片段。没有有效地址时，方法会抛出带有处理
+建议的 `RuntimeError`，而不是把本地路径当成 URL 返回。需要本地路径时请传入
+`return_url=False`。核心自动文转图回退和直接调用 `context.html_renderer` 的原有
+URL/路径行为不变。
+
 ## 自定义(基于 HTML)
 
 如果你觉得上面渲染出来的图片不够美观，你可以使用自定义的 HTML 模板来渲染图片。

@@ -1051,6 +1051,11 @@ async def on_aiocqhttp(self, event: AstrMessageEvent, text: str):
 
 ![image](https://files.astrbot.app/docs/source/images/plugin/image-3.png)
 
+`text_to_image()` 默认请求 URL。远程失败、本地回退时，需要有效的
+`callback_api_base`，返回可重复访问的临时文件服务 URL（默认五分钟有效）；
+未配置时会给出明确错误。需要本地路径时请使用 `return_url=False`。详见
+[文转图说明](/zh/dev/star/guides/html-to-pic)。
+
 #### 自定义(基于 HTML)
 
 如果你觉得上面渲染出来的图片不够美观，你可以使用自定义的 HTML 模板来渲染图片。
