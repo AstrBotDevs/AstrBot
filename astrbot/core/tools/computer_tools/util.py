@@ -91,11 +91,14 @@ def is_local_runtime(context: ContextWrapper[AstrAgentContext]) -> bool:
 
 def get_local_permission_policy(
     context: ContextWrapper[AstrAgentContext],
+    *,
+    role: Literal["member", "admin"] | None = None,
 ) -> LocalPermissionPolicy:
     """Resolve the Local permission policy for the caller's role.
 
     Args:
         context: Tool call context.
+        role: Role policy to inspect, or None to use the caller's role.
 
     Returns:
         Normalized policy. If required isolation is unavailable, execution is
@@ -106,7 +109,7 @@ def get_local_permission_policy(
         umo=context.context.event.unified_msg_origin
     )
     provider_settings = cfg.get("provider_settings", {})
-    role = "admin" if context.context.event.role == "admin" else "member"
+    role = "admin" if (role or context.context.event.role) == "admin" else "member"
     defaults = get_local_permission_defaults()[role]
 
     permissions = provider_settings.get("computer_use_local_permissions")
@@ -233,11 +236,28 @@ def check_local_execution_permission(
             )
         if policy.filesystem_scope == "none":
             return policy, check_local_file_permission(context)
+        policy_location = (
+            "AstrBot WebUI -> Config -> AI -> Capabilities -> "
+            "Agent Computer Use -> Local Permission Policies"
+        )
+        instructions = (
+            "Ask an AstrBot administrator to enable Local computer access and "
+            f"`Execute code` for this role in {policy_location}."
+        )
+        if (
+            context.context.event.role != "admin"
+            and get_local_permission_policy(context, role="admin").allow_execution
+        ):
+            sender_id = context.context.event.get_sender_id()
+            identity = f" ({sender_id})" if sender_id else " (obtain the ID with /sid)"
+            instructions = (
+                "Ask an AstrBot administrator to either:\n"
+                f"1. Add this user's ID{identity} under AstrBot WebUI -> Config -> "
+                "Access Control -> Administrators -> Administrator IDs.\n"
+                f"2. Enable `Execute code` for members in {policy_location}."
+            )
         return policy, (
             f"error: Permission denied. {operation_name} is disabled by the "
-            "Local permission policy for this user role. Enable Local computer "
-            "access and `Execute code` "
-            "for this role in AstrBot WebUI -> Config -> AI -> Capabilities -> "
-            "Agent Computer Use -> Local Permission Policies."
+            f"Local permission policy for this user role. {instructions}"
         )
     return policy, None

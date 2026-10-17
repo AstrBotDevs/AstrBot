@@ -70,6 +70,7 @@ def _make_local_run_context(role: str, policy: dict) -> ContextWrapper:
     event = SimpleNamespace(
         role=role,
         unified_msg_origin="qq_official:friend:user-1",
+        get_sender_id=lambda: "user-1",
     )
     return ContextWrapper(context=SimpleNamespace(context=config_holder, event=event))
 
@@ -243,6 +244,83 @@ def test_local_permission_policy_denies_disabled_execution():
     assert "disabled by the Local permission policy" in error
     assert "WebUI -> Config -> AI -> Capabilities" in error
     assert "Local Permission Policies" in error
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["detected", "missing", "unavailable", "unsupported"])
+@pytest.mark.parametrize(
+    "admin_scope,admin_execution,admin_network",
+    [
+        ("host", True, True),
+        ("workspace", True, True),
+        ("host", True, False),
+        ("host", False, False),
+        ("workspace", False, False),
+        ("none", True, True),
+    ],
+)
+@pytest.mark.parametrize(
+    "tool,kwargs",
+    [
+        (shell.LocalExecuteShellTool, {"command": "echo forbidden"}),
+        (shell.ShellSessionTool, {"action": "list"}),
+        (python.LocalPythonTool, {"code": "print('forbidden')"}),
+    ],
+)
+async def test_member_denial_offers_only_available_administrator_access(
+    monkeypatch, status, admin_scope, admin_execution, admin_network, tool, kwargs
+):
+    """Offer promotion only when the effective admin policy allows execution."""
+    monkeypatch.setattr(util, "get_process_sandbox_status", lambda: {"status": status})
+    policies = {
+        "member": {"filesystem_scope": "workspace", "allow_execution": False, "allow_network": False},
+        "admin": {"filesystem_scope": admin_scope, "allow_execution": admin_execution, "allow_network": admin_network},
+    }
+    original = json.dumps(policies, sort_keys=True)
+    context = _make_local_run_context("member", policies)
+    admin_can_execute = admin_execution and admin_scope != "none" and (
+        (admin_scope == "host" and admin_network) or status == "detected"
+    )
+
+    result = await tool().call(context, **kwargs)
+
+    assert "disabled by the Local permission policy" in result
+    assert "Ask an AstrBot administrator" in result
+    assert "Execute code" in result
+    assert "Local Permission Policies" in result
+    assert ("Administrator IDs" in result) == admin_can_execute
+    assert ("user-1" in result) == admin_can_execute
+    assert context.context.event.role == "member"
+    assert get_local_permission_policy(context).allow_execution is False
+    assert json.dumps(policies, sort_keys=True) == original
+
+
+@pytest.mark.parametrize("role", ["member", "admin"])
+@pytest.mark.parametrize("scope,execution", [("none", False), ("workspace", True)])
+def test_other_denials_do_not_suggest_administrator_access(monkeypatch, role, scope, execution):
+    """Keep isolation and disabled-file errors separate from execution grants."""
+    monkeypatch.setattr(util, "get_process_sandbox_status", lambda: {"status": "unsupported"})
+    context = _make_local_run_context(role, {
+        role: {"filesystem_scope": scope, "allow_execution": execution, "allow_network": False},
+    })
+
+    _, error = check_local_execution_permission(context, "Shell execution")
+
+    assert error is not None
+    assert "Administrator IDs" not in error
+    assert ("Local isolation unavailable" in error) == execution
+
+
+def test_admin_execution_denial_does_not_suggest_adding_administrator_id():
+    """Already-admin callers only need their role policy changed."""
+    context = _make_local_run_context("admin", {
+        "admin": {"filesystem_scope": "host", "allow_execution": False},
+    })
+
+    _, error = check_local_execution_permission(context, "Python execution")
+
+    assert "Execute code" in error
+    assert "Administrator IDs" not in error
 
 
 @pytest.mark.parametrize("role", ["member", "admin", "unexpected"])
