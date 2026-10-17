@@ -250,6 +250,53 @@ class TestAstrBotExporter:
 class TestAstrBotImporter:
     """AstrBotImporter 类测试"""
 
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("snapshot", ["empty", "export_failed"])
+    async def test_restore_directory_snapshot(
+        self, tmp_path, mock_main_db, monkeypatch, snapshot
+    ):
+        plugins = tmp_path / "plugins"
+        plugins.mkdir()
+        if snapshot == "export_failed":
+            (plugins / "original.txt").write_text("original", encoding="utf-8")
+        monkeypatch.setattr(
+            "astrbot.core.backup.exporter.get_backup_directories",
+            lambda: {"plugins": plugins},
+        )
+        archive = tmp_path / "snapshot.zip"
+        with zipfile.ZipFile(archive, "w") as zf, monkeypatch.context() as export_patch:
+            if snapshot == "export_failed":
+                export_patch.setattr(
+                    zf, "write", MagicMock(side_effect=OSError("export failed"))
+                )
+            await AstrBotExporter(main_db=mock_main_db)._export_directories(zf)
+            if snapshot == "empty":
+                assert zf.getinfo("directories/plugins/").is_dir()
+
+        (plugins / "added_later.txt").write_text("later", encoding="utf-8")
+        before_restore = {path.name: path.read_bytes() for path in plugins.iterdir()}
+        monkeypatch.setattr(
+            "astrbot.core.backup.importer.get_backup_directories",
+            lambda: {"plugins": plugins},
+        )
+        result = ImportResult()
+        with zipfile.ZipFile(archive) as zf:
+            restored = await AstrBotImporter(main_db=mock_main_db)._import_directories(
+                zf, {"version": "1.1", "directories": ["plugins", "plugins"]}, result
+            )
+
+        backup = tmp_path / "plugins.bak"
+        if snapshot == "empty":
+            assert restored == {"plugins": 0}
+            assert {path.name: path.read_bytes() for path in backup.iterdir()} == before_restore
+            assert not any(plugins.iterdir())
+            assert result.warnings == []
+        else:
+            assert restored == {}
+            assert not backup.exists()
+            assert {path.name: path.read_bytes() for path in plugins.iterdir()} == before_restore
+            assert len(result.warnings) == 1
+
     def test_init(self, mock_main_db, mock_kb_manager, temp_data_dir):
         """测试初始化"""
         importer = AstrBotImporter(
