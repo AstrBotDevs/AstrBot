@@ -54,8 +54,7 @@
                   :max-width="480"
                   :text="tm('executionBlocked', {
                     role: tm(`roles.${role}`),
-                    reason: isolationFailureReason,
-                    scope: tm(`scopes.${policy(role).filesystem_scope}`)
+                    reason: isolationFailureReason
                   })"
                 >
                   <template #activator="{ props: helpProps }">

@@ -331,7 +331,7 @@
         "memberWarning": "Members have network access or file access across the entire environment.",
         "executionInactive": "Inactive",
         "executionInactiveHelp": "Why execution is inactive",
-        "executionBlocked": "Code execution is enabled for {role}, but the configured isolation requirements cannot currently be met. {reason} File access remains {scope}; the saved policy is unchanged. Restore isolation and restart AstrBot to apply it.",
+        "executionBlocked": "Code execution is enabled for {role}, but the configured isolation requirements cannot currently be met. {reason}",
         "runtime": {
           "os": "OS",
           "arch": "Architecture",

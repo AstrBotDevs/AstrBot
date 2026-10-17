@@ -347,7 +347,7 @@
         "memberWarning": "普通成员已获得联网或整个环境访问权限。",
         "executionInactive": "未生效",
         "executionInactiveHelp": "查看未生效原因",
-        "executionBlocked": "{role}已开启代码执行，但当前无法满足所配置的隔离限制。原因：{reason} 文件范围仍为“{scope}”，保存的配置未改变。恢复隔离能力并重启 AstrBot 后生效。",
+        "executionBlocked": "{role}已开启代码执行，但当前无法满足所配置的隔离限制。原因：{reason}",
         "runtime": {
           "os": "操作系统",
           "arch": "架构",

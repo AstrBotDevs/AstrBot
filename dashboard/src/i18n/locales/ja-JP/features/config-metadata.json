@@ -419,7 +419,7 @@
         "memberWarning": "一般メンバーにネットワーク接続または環境全体へのアクセスが許可されています。",
         "executionInactive": "未適用",
         "executionInactiveHelp": "コード実行が適用されない理由",
-        "executionBlocked": "{role}のコード実行は有効ですが、設定された隔離要件を現在満たせません。理由：{reason} ファイル範囲は「{scope}」のままで、保存済み設定は変更されていません。隔離を復旧して AstrBot を再起動すると適用されます。",
+        "executionBlocked": "{role}のコード実行は有効ですが、設定された隔離要件を現在満たせません。理由：{reason}",
         "runtime": {
           "os": "OS",
           "arch": "アーキテクチャ",
