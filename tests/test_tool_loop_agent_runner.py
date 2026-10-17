@@ -2398,3 +2398,402 @@ async def test_small_step_budgets_and_reset(
     )
     assert runner._step_budget_used == 0
     assert runner._step_budget_notified == set()
+
+
+class EmptyFinalProvider(MockProvider):
+    """First call runs a tool; the next ``empty_streak`` calls return an empty
+    final response (no text, no tool calls); later calls answer normally."""
+
+    def __init__(self, empty_streak: int = 1, first_tool: str = "test_tool"):
+        super().__init__()
+        self.empty_streak = empty_streak
+        self.first_tool = first_tool
+        self.received_contexts = []
+
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        self.received_contexts.append(list(kwargs.get("contexts") or []))
+        if self.call_count == 1:
+            return LLMResponse(
+                role="assistant",
+                completion_text="",
+                tools_call_name=[self.first_tool],
+                tools_call_args=[{"query": "test"}],
+                tools_call_ids=["call_empty_final"],
+                usage=TokenUsage(input_other=10, output=5),
+            )
+        if self.call_count <= 1 + self.empty_streak:
+            return LLMResponse(
+                role="assistant",
+                completion_text="",
+                usage=TokenUsage(input_other=10, output=5),
+            )
+        return LLMResponse(
+            role="assistant",
+            completion_text="补救后的最终回答",
+            usage=TokenUsage(input_other=10, output=5),
+        )
+
+
+@pytest.mark.asyncio
+async def test_empty_final_response_is_repaired_once(
+    runner, provider_request, mock_tool_executor, mock_hooks
+):
+    """An empty final with no tool calls must be repaired once, not silenced."""
+    provider = EmptyFinalProvider(empty_streak=1)
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async def passthrough(messages, trusted_token_usage=0):
+        return list(messages)
+
+    runner.request_context_manager.process = passthrough
+
+    responses = [resp async for resp in runner.step_until_done(10)]
+
+    assert runner.done()
+    assert provider.call_count == 3
+    repair_contexts = provider.received_contexts[2]
+    assert repair_contexts[-1].role == "user"
+    assert repair_contexts[-1].content == runner.EMPTY_FINAL_REPAIR_PROMPT
+    final_texts = [
+        resp.data["chain"].get_plain_text()
+        for resp in responses
+        if resp.type == "llm_result"
+    ]
+    assert any("补救后的最终回答" in text for text in final_texts)
+
+
+@pytest.mark.asyncio
+async def test_empty_final_response_repair_is_not_repeated(
+    runner, provider_request, mock_tool_executor, mock_hooks
+):
+    """If the repair also returns empty, finish quietly instead of looping."""
+    provider = EmptyFinalProvider(empty_streak=100)
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async def passthrough(messages, trusted_token_usage=0):
+        return list(messages)
+
+    runner.request_context_manager.process = passthrough
+
+    async for _ in runner.step_until_done(10):
+        pass
+
+    assert runner.done()
+    assert provider.call_count == 3
+    repairs = sum(
+        1
+        for ctx in provider.received_contexts
+        if ctx
+        and ctx[-1].role == "user"
+        and ctx[-1].content == runner.EMPTY_FINAL_REPAIR_PROMPT
+    )
+    assert repairs == 1
+
+
+@pytest.mark.asyncio
+async def test_empty_final_after_send_message_to_user_is_not_repaired(
+    runner, mock_tool_executor, mock_hooks
+):
+    """A deliberate empty final after send_message_to_user stays silent."""
+    send_tool = FunctionTool(
+        name="send_message_to_user",
+        description="发送消息给用户",
+        parameters={"type": "object", "properties": {"text": {"type": "string"}}},
+        handler=AsyncMock(),
+    )
+    request = ProviderRequest(
+        prompt="把结果发给用户",
+        func_tool=ToolSet(tools=[send_tool]),
+        contexts=[],
+    )
+    provider = EmptyFinalProvider(empty_streak=100, first_tool="send_message_to_user")
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async def passthrough(messages, trusted_token_usage=0):
+        return list(messages)
+
+    runner.request_context_manager.process = passthrough
+
+    async for _ in runner.step_until_done(10):
+        pass
+
+    assert runner.done()
+    assert provider.call_count == 2
+    assert all(
+        not (
+            ctx
+            and ctx[-1].role == "user"
+            and ctx[-1].content == runner.EMPTY_FINAL_REPAIR_PROMPT
+        )
+        for ctx in provider.received_contexts
+    )
+
+
+@pytest.mark.asyncio
+async def test_media_only_final_response_is_not_repaired(
+    runner, provider_request, mock_tool_executor, mock_hooks
+):
+    """A final message carrying media but no text is a real answer."""
+    from astrbot.core.message.components import At
+
+    class MediaFinalProvider(MockProvider):
+        async def text_chat(self, **kwargs) -> LLMResponse:
+            self.call_count += 1
+            return LLMResponse(
+                role="assistant",
+                result_chain=MessageChain(chain=[At(qq="123")]),
+                usage=TokenUsage(input_other=10, output=5),
+            )
+
+    provider = MediaFinalProvider()
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(5):
+        pass
+
+    assert runner.done()
+    assert provider.call_count == 1
+
+
+class ForcedEmptyFinalProvider(MockProvider):
+    """Calls a tool on every call while tools are attached; with tools
+    stripped (the forced final step) returns an empty final, and answers only
+    once the empty-final repair prompt shows up."""
+
+    def __init__(self):
+        super().__init__()
+        self.received_contexts = []
+
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        self.received_contexts.append(list(kwargs.get("contexts") or []))
+        if kwargs.get("func_tool") is not None:
+            return LLMResponse(
+                role="assistant",
+                completion_text="",
+                tools_call_name=["test_tool"],
+                tools_call_args=[{"query": "test"}],
+                tools_call_ids=[f"call_forced_{self.call_count}"],
+                usage=TokenUsage(input_other=10, output=5),
+            )
+        contexts = self.received_contexts[-1]
+        if (
+            contexts
+            and contexts[-1].role == "user"
+            and contexts[-1].content == ToolLoopAgentRunner.EMPTY_FINAL_REPAIR_PROMPT
+        ):
+            return LLMResponse(
+                role="assistant",
+                completion_text="补救后的最终回答",
+                usage=TokenUsage(input_other=10, output=5),
+            )
+        return LLMResponse(
+            role="assistant",
+            completion_text="",
+            usage=TokenUsage(input_other=10, output=5),
+        )
+
+
+@pytest.mark.asyncio
+async def test_forced_final_empty_response_still_runs_repair(
+    runner, provider_request, mock_tool_executor, mock_hooks
+):
+    """An empty final on the forced last step must still get its one repair
+    step; ending right after scheduling the repair would leave the run in
+    RUNNING and the user staring at silence."""
+    provider = ForcedEmptyFinalProvider()
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async def passthrough(messages, trusted_token_usage=0):
+        return list(messages)
+
+    runner.request_context_manager.process = passthrough
+
+    responses = [resp async for resp in runner.step_until_done(3)]
+
+    assert runner.done()
+    # 3 budgeted tool steps + 1 forced final (empty) + 1 repair step.
+    assert provider.call_count == 5
+    repairs = sum(
+        1
+        for ctx in provider.received_contexts
+        if ctx
+        and ctx[-1].role == "user"
+        and ctx[-1].content == runner.EMPTY_FINAL_REPAIR_PROMPT
+    )
+    assert repairs == 1
+    final_texts = [
+        resp.data["chain"].get_plain_text()
+        for resp in responses
+        if resp.type == "llm_result"
+    ]
+    assert any("补救后的最终回答" in text for text in final_texts)
+
+
+@pytest.mark.asyncio
+async def test_empty_final_after_cross_session_send_is_repaired(
+    runner, mock_tool_executor, mock_hooks
+):
+    """send_message_to_user aimed at another session must not silence this run."""
+    send_tool = FunctionTool(
+        name="send_message_to_user",
+        description="发送消息给用户",
+        parameters={"type": "object", "properties": {"text": {"type": "string"}}},
+        handler=AsyncMock(),
+    )
+    request = ProviderRequest(
+        prompt="把结果发给另一个会话",
+        func_tool=ToolSet(tools=[send_tool]),
+        contexts=[],
+    )
+
+    class CrossSessionProvider(MockProvider):
+        async def text_chat(self, **kwargs) -> LLMResponse:
+            self.call_count += 1
+            if self.call_count == 1:
+                return LLMResponse(
+                    role="assistant",
+                    completion_text="",
+                    tools_call_name=["send_message_to_user"],
+                    tools_call_args=[
+                        {
+                            "messages": [{"type": "plain", "text": "hi"}],
+                            "session": "aiocqhttp:FriendMessage:someone_else",
+                        }
+                    ],
+                    tools_call_ids=["call_cross_session"],
+                    usage=TokenUsage(input_other=10, output=5),
+                )
+            if self.call_count == 2:
+                return LLMResponse(
+                    role="assistant",
+                    completion_text="",
+                    usage=TokenUsage(input_other=10, output=5),
+                )
+            return LLMResponse(
+                role="assistant",
+                completion_text="当前会话的回答",
+                usage=TokenUsage(input_other=10, output=5),
+            )
+
+    provider = CrossSessionProvider()
+    event = MockEvent(umo="aiocqhttp:FriendMessage:u123", sender_id="u123")
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=MockAgentContext(event)),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async def passthrough(messages, trusted_token_usage=0):
+        return list(messages)
+
+    runner.request_context_manager.process = passthrough
+
+    async for _ in runner.step_until_done(10):
+        pass
+
+    # The cross-session send must not count as delivering this run's reply,
+    # so the empty final triggers the one-shot repair and the run answers.
+    assert runner.done()
+    assert provider.call_count == 3
+
+
+@pytest.mark.asyncio
+async def test_skills_like_media_only_requery_is_meaningful(runner, mock_hooks):
+    """A skills_like re-query that comes back with media but no text is a real
+    reply, not a failure to follow the tool-use instruction."""
+    from astrbot.core.message.components import At
+
+    class MediaRequeryProvider(MockProvider):
+        async def text_chat(self, **kwargs) -> LLMResponse:
+            self.call_count += 1
+            if self.call_count == 1:
+                return LLMResponse(
+                    role="assistant",
+                    completion_text="选择工具",
+                    tools_call_name=["test_tool"],
+                    tools_call_args=[{"query": "test"}],
+                    tools_call_ids=["call_1"],
+                    usage=TokenUsage(input_other=10, output=5),
+                )
+            # The re-query answers with media only.
+            return LLMResponse(
+                role="assistant",
+                result_chain=MessageChain(chain=[At(qq="123")]),
+                usage=TokenUsage(input_other=10, output=5),
+            )
+
+    provider = MediaRequeryProvider()
+    tool = FunctionTool(
+        name="test_tool",
+        description="测试",
+        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+        handler=AsyncMock(),
+    )
+    req = ProviderRequest(
+        prompt="发一张图",
+        func_tool=ToolSet(tools=[tool]),
+        contexts=[],
+    )
+    event = MockEvent(umo="test_umo", sender_id="test_sender")
+    await runner.reset(
+        provider=provider,
+        request=req,
+        run_context=ContextWrapper(context=MockAgentContext(event)),
+        tool_executor=cast(Any, MockToolExecutor()),
+        agent_hooks=mock_hooks,
+        tool_schema_mode="skills_like",
+        streaming=False,
+    )
+
+    async def passthrough(messages, trusted_token_usage=0):
+        return list(messages)
+
+    runner.request_context_manager.process = passthrough
+
+    async for _ in runner.step_until_done(5):
+        pass
+
+    assert runner.done()
+    # call 1 picks the tool, call 2 is the re-query; a third call would mean
+    # the media-only reply was misjudged and the stronger-instruction repair ran.
+    assert provider.call_count == 2
