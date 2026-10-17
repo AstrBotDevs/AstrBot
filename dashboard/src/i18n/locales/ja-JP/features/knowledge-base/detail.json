@@ -103,7 +103,9 @@
     "charCount": "{count} 文字",
     "searchSuccess": "検索が完了し、{count} 件の結果が見つかりました",
     "searchFailed": "検索に失敗しました",
-    "queryRequired": "検索クエリを入力してください"
+    "queryRequired": "検索クエリを入力してください",
+    "debugMode": "デバッグモード (t-SNE)",
+    "tsneVisualization": "t-SNE 可視化"
   },
   "settings": {
     "title": "ナレッジベース設定",

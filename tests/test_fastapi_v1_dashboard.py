@@ -1060,17 +1060,21 @@ async def test_version_routes_return_startup_runtime_snapshot(
     platform = SimpleNamespace(
         system=Mock(return_value="Linux"), machine=Mock(return_value="aarch64")
     )
+    from astrbot.core.computer import process_sandbox
+
+    process_sandbox.get_process_sandbox_status.cache_clear()
+    monkeypatch.setattr(process_sandbox, "platform", platform)
     which = Mock(return_value=None if status == "missing" else "/usr/bin/bwrap")
     monkeypatch.setattr(stat_service, "platform", platform)
-    monkeypatch.setattr(stat_service, "shutil", SimpleNamespace(which=which))
+    monkeypatch.setattr(process_sandbox, "shutil", SimpleNamespace(which=which))
     error = "bwrap: setting up uid map: Permission denied"
     sandbox = Mock()
     sandbox.run.return_value = SimpleNamespace(
         returncode=1 if status == "unavailable" else 0, stderr=error.encode()
     )
     factory = Mock(return_value=sandbox)
-    monkeypatch.setattr(stat_service, "create_process_sandbox", factory)
-    monkeypatch.setattr(stat_service, "get_astrbot_temp_path", lambda: str(tmp_path))
+    monkeypatch.setattr(process_sandbox, "create_process_sandbox", factory)
+    monkeypatch.setattr(process_sandbox, "get_astrbot_temp_path", lambda: str(tmp_path))
     monkeypatch.setattr(
         stat_service, "is_desktop_session_auth_enabled", lambda: desktop_auth
     )
@@ -1123,9 +1127,10 @@ async def test_version_routes_return_startup_runtime_snapshot(
         assert "runtime" not in response.json()["data"]
 
     which.assert_called_once_with("bwrap")
-    platform.system.assert_called_once_with()
+    assert platform.system.call_count == 2
     platform.machine.assert_called_once_with()
     assert factory.call_count == (0 if status == "missing" else 1)
+    process_sandbox.get_process_sandbox_status.cache_clear()
 
 
 @pytest.mark.asyncio
@@ -1929,7 +1934,7 @@ async def test_config_update_revokes_only_affected_shell_sessions(
         "/api/config/astrbot/update",
     ],
 )
-async def test_config_api_validates_local_permissions(
+async def test_config_api_saves_local_permissions_without_isolation(
     asgi_app,
     asgi_client,
     fake_core_lifecycle,
@@ -1967,26 +1972,45 @@ async def test_config_api_validates_local_permissions(
         json={"conf_id": "default", "config": payload} if legacy else payload,
     )
 
-    assert response.status_code == (400 if scope == "workspace" and not legacy else 200)
-    if scope == "workspace":
-        assert response.json()["status"] == "error"
-        assert "Local permission member:" in response.json()["message"]
-        assert reason in response.json()["message"]
-        if status == "unavailable":
-            assert "installed but cannot start" in response.json()["message"]
-            assert "Missing" not in response.json()["message"]
-        assert fake_core_lifecycle.astrbot_config == original
-        assert fake_core_lifecycle.reloaded_config_ids == []
-    else:
-        assert response.json()["status"] == "ok"
-        payload["provider_settings"]["computer_use_local_permissions"]["admin"].update(
-            allow_execution=False, allow_network=False
-        )
-        assert (
-            fake_core_lifecycle.astrbot_config["provider_settings"]
-            == payload["provider_settings"]
-        )
-        assert fake_core_lifecycle.reloaded_config_ids == ["default"]
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+    payload["provider_settings"]["computer_use_local_permissions"]["admin"].update(
+        allow_execution=False, allow_network=False
+    )
+    assert (
+        fake_core_lifecycle.astrbot_config["provider_settings"]
+        == payload["provider_settings"]
+    )
+    assert fake_core_lifecycle.reloaded_config_ids == ["default"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["missing", "unavailable", "unsupported"])
+async def test_welcome_page_can_enable_local_computer_access_without_isolation(
+    asgi_app, asgi_client, fake_core_lifecycle, status
+):
+    """Welcome setup only changes the runtime and retains default permissions."""
+    from astrbot.core.config.default import get_local_permission_defaults
+
+    runtime = asgi_app.state.services.stats.runtime
+    runtime.update({"os": "linux", "sandbox": {"status": status}})
+    config = fake_core_lifecycle.astrbot_config
+    config["agent_runner"] = {"runner_type": "local"}
+    config["provider_settings"] = {
+        "computer_use_runtime": "none",
+        "computer_use_local_permissions": get_local_permission_defaults("Linux"),
+    }
+    payload = copy.deepcopy(config)
+    payload["provider_settings"]["computer_use_runtime"] = "local"
+
+    response = await asgi_client.put(
+        "/api/v1/config-profiles/default", headers=_jwt_headers(), json=payload
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "ok"
+    assert config["provider_settings"] == payload["provider_settings"]
+    assert fake_core_lifecycle.reloaded_config_ids == ["default"]
 
 
 @pytest.mark.asyncio

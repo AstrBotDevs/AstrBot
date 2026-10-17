@@ -102,6 +102,10 @@ export type ChatMessagePatchRequest = {
 };
 
 export type ChatMessageRegenerateRequest = {
+    /**
+     * UI locale for built-in LLM error messages. Omitted or unsupported locales fall back to zh-CN.
+     */
+    locale?: string;
     selected_provider?: string;
     selected_model?: string;
     /**
@@ -132,6 +136,10 @@ export type ChatProjectRequest = {
 export type workspace_type = 'session' | 'project' | 'custom';
 
 export type ChatRequest = {
+    /**
+     * UI locale for built-in LLM error messages. Omitted or unsupported locales fall back to zh-CN.
+     */
+    locale?: string;
     /**
      * Caller-declared WebChat sender/session owner. Configured AstrBot administrator IDs require the chat:admin API key sub-scope.
      */
@@ -185,6 +193,10 @@ export type ChatThreadCreateRequest = {
 };
 
 export type ChatThreadMessageRequest = {
+    /**
+     * UI locale for built-in LLM error messages. Omitted or unsupported locales fall back to zh-CN.
+     */
+    locale?: string;
     message: (string | Array<MessagePart>);
     selected_provider?: string;
     selected_model?: string;

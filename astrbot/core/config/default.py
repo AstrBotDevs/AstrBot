@@ -1,7 +1,6 @@
 """如需修改配置，请在 `data/cmd_config.json` 中修改或者在管理面板中可视化修改。"""
 
 import os
-import platform
 
 from astrbot import __version__
 from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
@@ -11,26 +10,25 @@ from .agent_runner import get_agent_runner_config_default
 
 
 def get_local_permission_defaults(system: str | None = None) -> dict:
-    """Return fresh Local permission defaults for the operating system.
+    """Return fresh Local permission defaults shared by all operating systems.
 
     Args:
-        system: Operating system name, or None to use the current system.
+        system: Retained for callers supplying an operating system name.
 
     Returns:
-        Per-role policies. Windows disables member access and gives admins
-        unrestricted access because workspace isolation is unavailable.
+        Workspace files without execution for members and unrestricted local
+        execution for administrators. Neither policy requires process isolation.
     """
-    windows = (system or platform.system()).lower() == "windows"
     return {
         "member": {
             "allow_execution": False,
             "allow_network": False,
-            "filesystem_scope": "none" if windows else "workspace",
+            "filesystem_scope": "workspace",
         },
         "admin": {
             "allow_execution": True,
             "allow_network": True,
-            "filesystem_scope": "host" if windows else "workspace",
+            "filesystem_scope": "host",
         },
     }
 
@@ -90,7 +88,7 @@ WEBHOOK_SUPPORTED_PLATFORMS = [
 
 # 默认配置
 DEFAULT_CONFIG = {
-    "config_version": 4,
+    "config_version": 5,
     "platform_settings": {
         "unique_session": False,
         "rate_limit": {
@@ -150,6 +148,8 @@ DEFAULT_CONFIG = {
         "websearch_firecrawl_key": [],
         "websearch_exa_key": [],
         "websearch_anysearch_key": [],
+        "websearch_deepseek_key": [],
+        "websearch_serpapi_key": [],
         "web_search_link": False,
         "display_reasoning_text": False,
         "identifier": False,
@@ -1240,7 +1240,7 @@ CONFIG_METADATA_2 = {
                     "id_whitelist": {
                         "type": "list",
                         "items": {"type": "string"},
-                        "hint": "只处理填写的 ID 发来的消息事件，为空时不启用。可使用 /sid 指令获取在平台上的会话 ID(类似 abc:GroupMessage:123)。管理员可在 WebUI 的平台设置中管理白名单",
+                        "hint": "只处理填写的 ID 发来的消息事件，为空时不启用。可使用 /sid 指令获取在平台上的会话 ID(类似 abc:GroupMessage:123)。管理员可在 WebUI 的配置文件 -> 访问控制 -> 白名单中管理白名单。",
                     },
                     "id_whitelist_log": {
                         "type": "bool",
@@ -3284,7 +3284,7 @@ Dashboard locale.
 """
 CONFIG_METADATA_3 = {
     "ai_group": {
-        "name": "AI 配置",
+        "name": "AI",
         "metadata": {
             "agent_runner": {
                 "description": "Agent 执行方式",
@@ -3673,6 +3673,8 @@ CONFIG_METADATA_3 = {
                         "description": "网页搜索提供商",
                         "type": "string",
                         "options": [
+                            "serpapi",
+                            "deepseek",
                             "tavily",
                             "baidu_ai_search",
                             "bocha",
@@ -3680,6 +3682,28 @@ CONFIG_METADATA_3 = {
                             "firecrawl",
                             "exa",
                             "anysearch",
+                        ],
+                        "labels": [
+                            "SerpApi",
+                            "DeepSeek Search API",
+                            "Tavily",
+                            "Baidu AI Search",
+                            "Bocha",
+                            "Brave",
+                            "Firecrawl",
+                            "Exa",
+                            "AnySearch",
+                        ],
+                        "subtitles": [
+                            "Google 网页、图片、学术和财经搜索",
+                            "DeepSeek 官方搜索接口",
+                            "",
+                            "",
+                            "",
+                            "",
+                            "",
+                            "",
+                            "",
                         ],
                         "condition": {
                             "provider_settings.web_search": True,
@@ -3760,6 +3784,28 @@ CONFIG_METADATA_3 = {
                             "provider_settings.web_search": True,
                         },
                     },
+                    "provider_settings.websearch_deepseek_key": {
+                        "description": "DeepSeek API Key",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "Configure a DeepSeek API key for search and page extraction. Multiple keys rotate. Get a key: [https://platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys)",
+                        "secret": True,
+                        "condition": {
+                            "provider_settings.websearch_provider": "deepseek",
+                            "provider_settings.web_search": True,
+                        },
+                    },
+                    "provider_settings.websearch_serpapi_key": {
+                        "description": "SerpApi API Key",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "支持 Google 网页、图片、学术和财经搜索。可添加多个 Key 轮询。获取 Key：[https://serpapi.com/manage-api-key](https://serpapi.com/manage-api-key)",
+                        "secret": True,
+                        "condition": {
+                            "provider_settings.websearch_provider": "serpapi",
+                            "provider_settings.web_search": True,
+                        },
+                    },
                     "provider_settings.web_search_link": {
                         "description": "显示来源引用",
                         "type": "bool",
@@ -3825,7 +3871,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.computer_use_require_admin": {
                         "description": "沙箱能力需要 AstrBot 管理员权限",
                         "type": "bool",
-                        "hint": "开启后，需要 AstrBot 管理员权限才能调用远程沙箱能力。在平台配置->管理员中可添加管理员。使用 /sid 指令查看管理员 ID。",
+                        "hint": "开启后，需要 AstrBot 管理员权限才能调用远程沙箱能力。在配置文件 -> 访问控制 -> 管理员 -> 管理员 ID 中可添加管理员。给机器人发送 /sid 指令以获取 ID。",
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
                         },
@@ -4280,17 +4326,12 @@ CONFIG_METADATA_3 = {
         },
     },
     "platform_group": {
-        "name": "平台配置",
+        "name": "平台与消息",
         "metadata": {
             "general": {
                 "description": "基本",
                 "type": "object",
                 "items": {
-                    "admins_id": {
-                        "description": "管理员 ID",
-                        "type": "list",
-                        "items": {"type": "string"},
-                    },
                     "platform_settings.unique_session": {
                         "description": "隔离对话",
                         "type": "bool",
@@ -4329,36 +4370,6 @@ CONFIG_METADATA_3 = {
                         "description": "禁用自带指令",
                         "type": "bool",
                         "hint": "禁用所有 AstrBot 的自带指令，如 help, sid, new 等。",
-                    },
-                },
-            },
-            "whitelist": {
-                "description": "白名单",
-                "type": "object",
-                "items": {
-                    "platform_settings.enable_id_white_list": {
-                        "description": "启用白名单",
-                        "type": "bool",
-                        "hint": "启用后，只有在白名单内的会话会被响应。",
-                    },
-                    "platform_settings.id_whitelist": {
-                        "description": "白名单 ID 列表",
-                        "type": "list",
-                        "items": {"type": "string"},
-                        "hint": "使用 /sid 获取 ID。当白名单列表为空时，代表不启用白名单（即所有 ID 都在白名单内）。",
-                    },
-                    "platform_settings.id_whitelist_log": {
-                        "description": "输出日志",
-                        "type": "bool",
-                        "hint": "启用后，当一条消息没通过白名单时，会输出 INFO 级别的日志。",
-                    },
-                    "platform_settings.wl_ignore_admin_on_group": {
-                        "description": "管理员群组消息无视 ID 白名单",
-                        "type": "bool",
-                    },
-                    "platform_settings.wl_ignore_admin_on_friend": {
-                        "description": "管理员私聊消息无视 ID 白名单",
-                        "type": "bool",
                     },
                 },
             },
@@ -4488,8 +4499,55 @@ CONFIG_METADATA_3 = {
             },
         },
     },
+    "access_group": {
+        "name": "访问控制",
+        "metadata": {
+            "admins": {
+                "description": "管理员",
+                "type": "object",
+                "items": {
+                    "admins_id": {
+                        "description": "管理员 ID",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "给机器人发送 /sid 指令以获取 ID。",
+                    },
+                },
+            },
+            "whitelist": {
+                "description": "白名单",
+                "type": "object",
+                "items": {
+                    "platform_settings.enable_id_white_list": {
+                        "description": "启用白名单",
+                        "type": "bool",
+                        "hint": "启用后,只有在白名单内的会话会被响应。",
+                    },
+                    "platform_settings.id_whitelist": {
+                        "description": "白名单 ID 列表",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "给机器人发送 /sid 指令以获取 ID。为空时代表不启用白名单功能。",
+                    },
+                    "platform_settings.id_whitelist_log": {
+                        "description": "输出拦截日志",
+                        "type": "bool",
+                        "hint": "输出未通过白名单校验的消息的日志。",
+                    },
+                    "platform_settings.wl_ignore_admin_on_group": {
+                        "description": "管理员群组消息无视 ID 白名单",
+                        "type": "bool",
+                    },
+                    "platform_settings.wl_ignore_admin_on_friend": {
+                        "description": "管理员私聊消息无视 ID 白名单",
+                        "type": "bool",
+                    },
+                },
+            },
+        },
+    },
     "plugin_group": {
-        "name": "插件配置",
+        "name": "插件",
         "metadata": {
             "plugin": {
                 "description": "插件",

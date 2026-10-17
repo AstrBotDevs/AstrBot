@@ -19,7 +19,7 @@ Locale file names use WebUI locales, such as `zh-CN.json` and `en-US.json`. Each
 When the current locale has no translation, a field is missing, or the locale file does not exist, AstrBot falls back to the default text:
 
 - Plugin names, card short descriptions, and descriptions fall back to `display_name`, `short_desc`, and `desc` in `metadata.yaml`.
-- Configuration text falls back to `description`, `hint`, and `labels` in `_conf_schema.json`.
+- Configuration text falls back to `description`, `hint`, `labels`, and `subtitles` in `_conf_schema.json`.
 - Page text falls back to the Page directory name, default Page title, or fallback text provided by page code.
 
 ## Metadata
@@ -54,7 +54,8 @@ Example `_conf_schema.json`:
     "description": "Mode",
     "type": "string",
     "options": ["fast", "safe"],
-    "labels": ["Fast", "Safe"]
+    "labels": ["Fast", "Safe"],
+    "subtitles": ["Faster responses", "More conservative processing"]
   }
 }
 ```
@@ -70,13 +71,14 @@ Corresponding `.astrbot-plugin/i18n/zh-CN.json`:
     },
     "mode": {
       "description": "模式",
-      "labels": ["快速", "安全"]
+      "labels": ["快速", "安全"],
+      "subtitles": ["更快响应", "更保守的处理"]
     }
   }
 }
 ```
 
-`options` are stored configuration values and should usually not be translated. Use `labels` for select display text.
+`options` are stored configuration values and should usually not be translated. Use `labels` for select display text. Use `subtitles` for descriptions below each option, aligned with `options` by index.
 
 ## Plugin Views
 
@@ -105,7 +107,7 @@ Corresponding `.astrbot-plugin/i18n/en-US.json`:
 }
 ```
 
-`title` is used by the WebUI shell title and the view component name on the plugin detail page. `description` is used by the view component description on the plugin detail page. Other fields are read by the page through the bridge:
+`title` is used by the sidebar, the WebUI shell title, and the view component name on the plugin detail page. `description` is used by the view component description on the plugin detail page. Other fields are read by the page through the bridge:
 
 ```js
 const bridge = window.AstrBotPluginView;

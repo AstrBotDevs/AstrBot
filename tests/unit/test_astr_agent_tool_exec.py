@@ -1,7 +1,7 @@
 import asyncio
 import json
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import mcp
 import pytest
@@ -595,6 +595,87 @@ async def test_background_wakeup_applies_max_agent_step(
     )
 
     assert runner.captured_max_step == expected_max_step
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("delivered", [False, True])
+async def test_background_wakeup_warns_when_result_is_not_sent_to_user(
+    monkeypatch: pytest.MonkeyPatch,
+    delivered: bool,
+):
+    """The user only sees the result if the main agent sends it to them."""
+    from astrbot.core.tools.message_tools import SendMessageToUserTool
+
+    send_tool = SendMessageToUserTool()
+    send_message = AsyncMock(return_value=True)
+    context = SimpleNamespace(
+        get_config=lambda **_kwargs: {},
+        get_llm_tool_manager=lambda: SimpleNamespace(
+            get_builtin_tool=lambda _tool_cls: send_tool
+        ),
+        conversation_manager=SimpleNamespace(),
+        send_message=send_message,
+    )
+
+    class _Runner:
+        def __init__(self, event):
+            self.event = event
+
+        async def step_until_done(self, _max_step):
+            if delivered:
+                await send_tool.call(
+                    ContextWrapper(
+                        context=SimpleNamespace(event=self.event, context=context)
+                    ),
+                    messages=[{"type": "plain", "text": "the report is ready"}],
+                )
+            if False:
+                yield
+
+        def get_final_llm_resp(self):
+            return SimpleNamespace(role="assistant", completion_text="done")
+
+    async def _fake_get_session_conv(**_kwargs):
+        return SimpleNamespace(history="[]")
+
+    async def _fake_build_main_agent(**kwargs):
+        return SimpleNamespace(agent_runner=_Runner(kwargs["event"]))
+
+    monkeypatch.setattr(
+        "astrbot.core.astr_main_agent._get_session_conv",
+        _fake_get_session_conv,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.astr_main_agent.build_main_agent",
+        _fake_build_main_agent,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_tool_exec.persist_agent_history",
+        AsyncMock(),
+    )
+    logger = MagicMock()
+    monkeypatch.setattr("astrbot.core.astr_agent_tool_exec.logger", logger)
+    run_context = ContextWrapper(
+        context=SimpleNamespace(event=_DummyEvent([]), context=context),
+        tool_call_timeout=120,
+    )
+
+    await FunctionToolExecutor._wake_main_agent_for_background_result(
+        run_context,
+        task_id="task-id",
+        tool_name="long_tool",
+        result_text="ok",
+        tool_args={},
+        note="task finished",
+        summary_name="BackgroundTask",
+    )
+
+    assert send_message.await_count == int(delivered)
+    warned = any(
+        "long_tool" in call.args[0] and "task_id=task-id" in call.args[0]
+        for call in logger.warning.call_args_list
+    )
+    assert warned is not delivered
 
 
 @pytest.mark.asyncio

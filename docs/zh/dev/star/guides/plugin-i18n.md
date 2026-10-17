@@ -19,7 +19,7 @@ your_plugin/
 当当前语言没有对应翻译、某个字段缺失，或语言文件不存在时，AstrBot 会回退到默认文案：
 
 - 插件名称、卡片短描述和描述回退到 `metadata.yaml` 中的 `display_name`、`short_desc`、`desc`。
-- 配置项文案回退到 `_conf_schema.json` 中的 `description`、`hint`、`labels`。
+- 配置项文案回退到 `_conf_schema.json` 中的 `description`、`hint`、`labels`、`subtitles`。
 - Page 文案回退到 Page 目录名、Page 默认标题或页面代码中提供的 fallback。
 
 ## 元数据
@@ -54,7 +54,8 @@ your_plugin/
     "description": "Mode",
     "type": "string",
     "options": ["fast", "safe"],
-    "labels": ["Fast", "Safe"]
+    "labels": ["Fast", "Safe"],
+    "subtitles": ["Faster responses", "More conservative processing"]
   }
 }
 ```
@@ -70,13 +71,14 @@ your_plugin/
     },
     "mode": {
       "description": "模式",
-      "labels": ["快速", "安全"]
+      "labels": ["快速", "安全"],
+      "subtitles": ["更快响应", "更保守的处理"]
     }
   }
 }
 ```
 
-`options` 是配置保存值，不建议翻译。下拉框的展示文本请使用 `labels`。
+`options` 是配置保存值，不建议翻译。下拉框的展示文本请使用 `labels`。 `subtitles` 用于选项下方的说明，并与 `options` 按索引对应。
 
 ## 插件可视化视图
 
@@ -105,7 +107,7 @@ views/
 }
 ```
 
-`title` 会用于 WebUI 外壳标题和插件详情页中的视图组件名称，`description` 会用于插件详情页中的视图组件描述。其他字段由页面通过 bridge 自行读取：
+`title` 会用于侧边栏、WebUI 外壳标题和插件详情页中的视图组件名称，`description` 会用于插件详情页中的视图组件描述。其他字段由页面通过 bridge 自行读取：
 
 ```js
 const bridge = window.AstrBotPluginView;

@@ -2162,9 +2162,11 @@ async function stopCurrentSession() {
   border-right-color: rgba(255, 255, 255, 0.06);
 }
 
+/* Match the shell's dynamic viewport sizing so the drawer's bottom (session list
+   tail and the Settings footer) stays above the mobile browsers' toolbar area. */
 .chat-sidebar {
   top: 0 !important;
-  height: 100vh !important;
+  height: 100dvh !important;
   background: var(--astrbot-chrome-bg, rgb(var(--v-theme-surface)));
   border-right: 0;
   user-select: none;

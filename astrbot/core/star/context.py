@@ -16,6 +16,7 @@ from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.db import BaseDatabase
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
+from astrbot.core.llm_error_messages import LLM_ERROR_MESSAGES
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.platform import Platform
@@ -513,11 +514,14 @@ class Context:
     async def get_using_provider_async(
         self,
         umo: str | None = None,
+        *,
+        locale: str = "zh-CN",
     ) -> Provider | None:
         """Asynchronously get the current text-generation provider.
 
         Args:
             umo: Unified message origin used for session-specific preferences.
+            locale: Language for the built-in provider type error.
 
         Returns:
             Current chat provider, or None if no provider is available.
@@ -532,8 +536,9 @@ class Context:
         if prov is None:
             return None
         if not isinstance(prov, Provider):
+            messages = LLM_ERROR_MESSAGES.get(locale, LLM_ERROR_MESSAGES["zh-CN"])
             raise ValueError(
-                f"该会话来源的对话模型（提供商）的类型不正确: {type(prov)}"
+                messages["invalidSessionProviderType"].format(provider_type=type(prov))
             )
         return prov
 

@@ -1,5 +1,6 @@
 import { reactive, shallowRef, onMounted, watch } from "vue";
 import { pluginApi } from "@/api/v1";
+import { useI18n } from "@/i18n/composables";
 import type { menu } from "@/layouts/full/vertical-sidebar/sidebarItem";
 
 const DEFAULT_ICON = "mdi-puzzle";
@@ -13,6 +14,13 @@ interface PluginEntry {
   version?: string;
   activated: boolean;
   pages: string[];
+  i18n?: Record<
+    string,
+    {
+      views?: Record<string, { title?: unknown }>;
+      pages?: Record<string, { title?: unknown }>;
+    }
+  > | null;
 }
 
 /** 模块级共享状态，由 useExtensionPage.getExtensions() 更新 */
@@ -22,7 +30,7 @@ export const pluginSidebarState = reactive<{
   plugins: [],
 });
 
-function buildPluginItems(plugins: PluginEntry[]): menu | null {
+function buildPluginItems(plugins: PluginEntry[], locale: string): menu | null {
   const activeWithPages = plugins.filter(
     (p) => p.activated && Array.isArray(p.pages) && p.pages.length > 0,
   );
@@ -30,7 +38,7 @@ function buildPluginItems(plugins: PluginEntry[]): menu | null {
   if (activeWithPages.length === 0) return null;
 
   const children: menu[] = activeWithPages.map((p) => {
-    return buildPageItem(p, p.pages[0]);
+    return buildPageItem(p, p.pages[0], locale, false);
   });
 
   return {
@@ -40,10 +48,25 @@ function buildPluginItems(plugins: PluginEntry[]): menu | null {
   };
 }
 
-function buildPageItem(p: PluginEntry, page: string): menu {
+function buildPageItem(
+  p: PluginEntry,
+  page: string,
+  locale: string,
+  grouped: boolean,
+): menu {
   const displayName = p.display_name || p.name || "Unknown Plugin";
+  const localeData = p.i18n?.[locale];
+  const localizedTitle =
+    localeData && typeof localeData === "object"
+      ? (localeData.views?.[page]?.title ?? localeData.pages?.[page]?.title)
+      : undefined;
   return {
-    title: page,
+    title:
+      typeof localizedTitle === "string" && localizedTitle.trim()
+        ? localizedTitle.trim()
+        : grouped
+          ? page
+          : displayName,
     icon: DEFAULT_ICON,
     to: `/plugin-view/${encodeURIComponent(p.name)}/${encodeURIComponent(page)}`,
     isRawTitle: true,
@@ -56,16 +79,17 @@ function buildPageItem(p: PluginEntry, page: string): menu {
   };
 }
 
-function buildPluginGroups(plugins: PluginEntry[]): menu[] {
+function buildPluginGroups(plugins: PluginEntry[], locale: string): menu[] {
   return plugins
     .filter((p) => p.activated && Array.isArray(p.pages) && p.pages.length > 0)
     .map((p) => {
       const displayName = p.display_name || p.name || "Unknown Plugin";
       return {
+        value: `plugin:${p.name}`,
         title: displayName,
         icon: GROUP_ICON,
         isRawTitle: true,
-        children: p.pages.map((page) => buildPageItem(p, page)),
+        children: p.pages.map((page) => buildPageItem(p, page, locale, true)),
       };
     });
 }
@@ -86,12 +110,19 @@ async function initPluginState() {
 }
 
 export function usePluginSidebarItems() {
+  const { locale } = useI18n();
   const pluginItems = shallowRef<menu | null>(null);
   const pluginGroups = shallowRef<menu[]>([]);
 
   function refreshItems() {
-    pluginItems.value = buildPluginItems(pluginSidebarState.plugins);
-    pluginGroups.value = buildPluginGroups(pluginSidebarState.plugins);
+    pluginItems.value = buildPluginItems(
+      pluginSidebarState.plugins,
+      locale.value,
+    );
+    pluginGroups.value = buildPluginGroups(
+      pluginSidebarState.plugins,
+      locale.value,
+    );
   }
 
   onMounted(async () => {
@@ -100,7 +131,7 @@ export function usePluginSidebarItems() {
   });
 
   watch(
-    () => pluginSidebarState.plugins,
+    [() => pluginSidebarState.plugins, locale],
     () => {
       refreshItems();
     },
