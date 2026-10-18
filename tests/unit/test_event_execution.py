@@ -34,7 +34,7 @@ def frames(monkeypatch):
     """
     captured = []
     store = MagicMock()
-    store.append.side_effect = lambda packet: (
+    store.append.side_effect = lambda packet, **kwargs: (
         captured.append(json.loads(json.dumps(packet))) or True
     )
     monkeypatch.setitem(trace_module.astrbot_config, "trace_enable", True)

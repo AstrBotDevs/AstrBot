@@ -15,6 +15,7 @@ from contextlib import closing
 from pathlib import Path
 from queue import Empty, Full, Queue
 from typing import Any
+from weakref import WeakValueDictionary
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
@@ -33,6 +34,8 @@ class TraceStore:
         self.queue: Queue = Queue(maxsize=1024)
         self._lock = threading.Lock()
         self._pending_bytes = 0
+        self._pending_traces: dict[str, int] = {}
+        self._active_traces: WeakValueDictionary[str, Any] = WeakValueDictionary()
         self._stop = threading.Event()
         self._ready = threading.Event()
         self._failed = False
@@ -44,11 +47,12 @@ class TraceStore:
         )
         self._thread.start()
 
-    def append(self, payload: dict) -> bool:
+    def append(self, payload: dict, *, owner: Any = None) -> bool:
         """Queue an immutable snapshot without blocking message processing.
 
         Args:
             payload: A trace summary with a span update or event.
+            owner: Live trace object, held weakly until execution finishes.
 
         Returns:
             Whether the bounded queue accepted the snapshot.
@@ -57,7 +61,13 @@ class TraceStore:
             payload, ensure_ascii=False, separators=(",", ":"), allow_nan=False
         )
         size = len(encoded.encode())
+        trace_id = payload.get("trace", {}).get("trace_id")
         with self._lock:
+            if owner is not None:
+                if owner._finished:
+                    self._active_traces.pop(trace_id, None)
+                else:
+                    self._active_traces[trace_id] = owner
             if (
                 self._stop.is_set()
                 or self._failed
@@ -69,6 +79,9 @@ class TraceStore:
                 try:
                     self.queue.put_nowait((encoded, size))
                     self._pending_bytes += size
+                    self._pending_traces[trace_id] = (
+                        self._pending_traces.get(trace_id, 0) + 1
+                    )
                     accepted = True
                 except Full:
                     accepted = False
@@ -135,6 +148,37 @@ class TraceStore:
                 "Trace cleanup timed out; check storage status."
             ) from exc
 
+    def _interrupt_inactive(self, connection: sqlite3.Connection) -> None:
+        """Close orphaned records without interrupting live or queued traces.
+
+        Args:
+            connection: Writer-owned connection.
+        """
+        with self._lock:
+            protected = set(self._pending_traces)
+            protected.update(
+                trace_id
+                for trace_id, owner in self._active_traces.items()
+                if not owner._finished
+            )
+        # A temporary table avoids SQLite's parameter limit at high concurrency.
+        connection.execute(
+            "CREATE TEMP TABLE IF NOT EXISTS protected_traces(trace_id TEXT PRIMARY KEY)"
+        )
+        connection.execute("DELETE FROM protected_traces")
+        connection.executemany(
+            "INSERT INTO protected_traces VALUES (?)", ((item,) for item in protected)
+        )
+        connection.execute("""UPDATE traces SET state='interrupted', has_errors=1,
+            data=json_set(data, '$.state', 'interrupted', '$.has_errors', json('true'),
+                '$.end_time_unix_nano', CAST(updated_ns AS TEXT))
+            WHERE state='running' AND trace_id NOT IN (SELECT trace_id FROM protected_traces)""")
+        connection.execute("""UPDATE spans SET data=json_set(data,
+            '$.end_time_unix_nano', CAST((SELECT updated_ns FROM traces WHERE traces.trace_id=spans.trace_id) AS TEXT),
+            '$.status.code', 2, '$.status.message', 'Execution ended before persistence completed')
+            WHERE trace_id IN (SELECT trace_id FROM traces WHERE state='interrupted')
+                AND json_extract(data, '$.end_time_unix_nano') IS NULL""")
+
     def _prune(self, connection: sqlite3.Connection, force: bool = False) -> None:
         """Evict complete traces as units and reclaim reusable database pages.
 
@@ -142,9 +186,10 @@ class TraceStore:
             connection: Writer-owned connection.
             force: Whether to free additional space after a full-disk error.
         """
+        self._interrupt_inactive(connection)
         max_mb = self.config.get("trace_db_max_mb", 80)
         max_mb = (
-            max_mb
+            max(32, max_mb)
             if isinstance(max_mb, int) and not isinstance(max_mb, bool) and max_mb > 0
             else 80
         )
@@ -317,14 +362,7 @@ class TraceStore:
             if connection.execute("SELECT version FROM trace_meta").fetchone()[0] != 1:
                 raise ValueError("Unsupported trace database schema version.")
             # A process restart cannot resume spans from a previous process.
-            connection.execute("""UPDATE traces SET state='interrupted', has_errors=1,
-                data=json_set(data, '$.state', 'interrupted', '$.has_errors', json('true'),
-                    '$.end_time_unix_nano', CAST(updated_ns AS TEXT))
-                WHERE state='running'""")
-            connection.execute("""UPDATE spans SET data=json_set(data,
-                '$.end_time_unix_nano', CAST((SELECT updated_ns FROM traces WHERE traces.trace_id=spans.trace_id) AS TEXT),
-                '$.status.code', 2, '$.status.message', 'Process stopped before completion')
-                WHERE json_extract(data, '$.end_time_unix_nano') IS NULL""")
+            self._interrupt_inactive(connection)
             connection.commit()
             self._prune(connection)
             self._ready.set()
@@ -365,6 +403,14 @@ class TraceStore:
                         self._prune(connection, force=True)
                         self._write(connection, batch)
                     written = True
+                    # All frames in this batch have committed. Later queued frames
+                    # still protect their trace from orphan reconciliation.
+                    with self._lock:
+                        for payload in batch:
+                            trace_id = payload["trace"]["trace_id"]
+                            self._pending_traces[trace_id] -= 1
+                            if not self._pending_traces[trace_id]:
+                                del self._pending_traces[trace_id]
                     if batch:
                         self.last_error = None
                     if time.monotonic() - last_prune >= 10:
@@ -376,6 +422,7 @@ class TraceStore:
                         and command.set_running_or_notify_cancel()
                     ):
                         with connection:
+                            self._interrupt_inactive(connection)
                             removed = connection.execute(
                                 "DELETE FROM traces WHERE state != 'running'"
                             ).rowcount
@@ -387,6 +434,13 @@ class TraceStore:
                 except Exception as exc:
                     self.last_error = str(exc)
                     self.dropped += len(batch) if not written else 0
+                    if not written:
+                        with self._lock:
+                            for payload in batch:
+                                trace_id = payload["trace"]["trace_id"]
+                                self._pending_traces[trace_id] -= 1
+                                if not self._pending_traces[trace_id]:
+                                    del self._pending_traces[trace_id]
                     logger.error("Trace database write failed: %s", exc)
                     for item, _ in items:
                         if isinstance(item, Future) and not item.done():
@@ -410,6 +464,11 @@ class TraceStore:
                 with self._lock:
                     self._pending_bytes -= size
                     self.dropped += int(size > 0)
+                    if isinstance(item, str):
+                        trace_id = json.loads(item)["trace"]["trace_id"]
+                        self._pending_traces[trace_id] -= 1
+                        if not self._pending_traces[trace_id]:
+                            del self._pending_traces[trace_id]
                 if isinstance(item, threading.Event):
                     item.set()
                 elif isinstance(item, Future) and not item.done():

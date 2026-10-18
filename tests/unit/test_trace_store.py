@@ -1,6 +1,7 @@
 """Canonical trace model, correlation, bounded storage, and migration tests."""
 
 import asyncio
+import gc
 import json
 import logging
 import re
@@ -8,6 +9,7 @@ import runpy
 import sqlite3
 import threading
 import time
+import weakref
 from pathlib import Path
 
 import pytest
@@ -32,7 +34,7 @@ def capture(monkeypatch):
     frames = []
 
     class CaptureStore:
-        def append(self, payload):
+        def append(self, payload, **kwargs):
             frames.append(json.loads(json.dumps(payload)))
             return True
 
@@ -462,6 +464,72 @@ def test_oversized_queue_records_are_rejected(persisted):
     assert persisted._pending_bytes == 0
 
 
+def test_orphan_cleanup_preserves_live_and_pending_traces(persisted, capture, monkeypatch):
+    """Recover dropped completion frames without retaining dead trace objects.
+
+    Args:
+        persisted: Isolated trace database.
+        capture: Enable recording without production storage or live clients.
+        monkeypatch: Pytest patch manager.
+    """
+    monkeypatch.setattr(trace_module, "get_trace_store", lambda *_: persisted)
+    assert persisted.flush()
+    live = TraceSpan("live")
+    live.record("event_received")
+    abandoned = TraceSpan("abandoned")
+    abandoned.record("event_received")
+    abandoned_id = abandoned.trace_id
+    reference = weakref.ref(abandoned)
+    del abandoned
+    gc.collect()
+    assert reference() is None
+    assert abandoned_id not in persisted._active_traces
+    assert persisted.flush()
+
+    entered, release = threading.Event(), threading.Event()
+    original_write = persisted._write
+
+    def held_write(connection, batch):
+        """Pause persistence to force a rejected terminal frame."""
+        entered.set()
+        assert release.wait(5)
+        original_write(connection, batch)
+
+    monkeypatch.setattr(persisted, "_write", held_write)
+    persisted.queue.maxsize = 1
+    lost = TraceSpan("lost completion")
+    try:
+        lost.record("event_received")
+        assert entered.wait(5)
+        lost.record("response_sent", message="done")
+        lost.record("pipeline_end", status="success")
+        assert persisted.dropped == 1
+        # Even a finished owner must remain protected until queued frames drain.
+        with sqlite3.connect(persisted.path) as connection:
+            persisted._interrupt_inactive(connection)
+            assert connection.execute(
+                "SELECT trace_id FROM protected_traces WHERE trace_id=?", (lost.trace_id,)
+            ).fetchone()
+        assert persisted.get_trace(live.trace_id)["trace"]["state"] == "running"
+        release.set()
+        assert persisted.flush()
+        assert not persisted._pending_traces
+        assert lost.trace_id not in persisted._active_traces
+        with sqlite3.connect(persisted.path) as connection:
+            persisted._interrupt_inactive(connection)
+        detail = persisted.get_trace(lost.trace_id)
+        assert detail["trace"]["state"] == "interrupted"
+        assert all(span["end_time_unix_nano"] for span in detail["spans"])
+        assert persisted.clear_history()["removed_traces"] == 2
+        assert persisted.get_trace(live.trace_id)["trace"]["state"] == "running"
+    finally:
+        release.set()
+        live.record("pipeline_end", status="success")
+    assert persisted.flush()
+    assert persisted.dropped == 1
+    assert persisted._pending_bytes == 0
+
+
 def test_stale_updates_do_not_reopen_completed_trace(persisted, capture):
     trace = TraceSpan("message", message_outline="Literal % _")
     trace.record("event_received")
@@ -484,7 +552,7 @@ def test_capacity_prunes_complete_traces_with_cascade(persisted, capture):
         frame = json.loads(json.dumps(capture[-1]))
         frame["trace"]["trace_id"] = frame["span"]["trace_id"] = f"{index:032x}"
         frame["trace"]["root_span_id"] = frame["span"]["span_id"] = f"{index:016x}"
-        frame["trace"]["attributes"]["astrbot.payload"] = "x" * 20000
+        frame["trace"]["attributes"]["astrbot.payload"] = "x" * 340000
         assert persisted.append(frame)
         if index % 16 == 0:
             assert persisted.flush()
@@ -493,6 +561,7 @@ def test_capacity_prunes_complete_traces_with_cascade(persisted, capture):
     with sqlite3.connect(persisted.path) as connection:
         connection.execute("PRAGMA foreign_keys=ON")
         persisted._prune(connection)
+        assert connection.execute("PRAGMA max_page_count").fetchone()[0] == 8192
         count = connection.execute("SELECT COUNT(*) FROM traces").fetchone()[0]
         assert 0 < count < 80
         assert connection.execute("SELECT COUNT(*) FROM spans").fetchone()[0] == count
@@ -503,7 +572,7 @@ def test_capacity_prunes_complete_traces_with_cascade(persisted, capture):
                 ).fetchone()[0]
                 for table in ("traces", "spans", "events")
             )
-            < 1024 * 1024
+            < 32 * 1024 * 1024
         )
 
 
@@ -617,7 +686,9 @@ def test_trace_usage_and_cleanup_preserve_running_traces(
         running = TraceSpan("running")
         running.record("event_received")
         for frame in capture:
-            assert store.append(frame)
+            assert store.append(
+                frame, owner=running if frame["trace"]["trace_id"] == running.trace_id else finished
+            )
         assert store.flush()
         log = tmp_path / "logs" / "astrbot.log"
         log.parent.mkdir(parents=True, exist_ok=True)

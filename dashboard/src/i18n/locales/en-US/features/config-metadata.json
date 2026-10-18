@@ -1262,7 +1262,7 @@
       },
       "trace_db_max_mb": {
         "description": "Trace Database Capacity Budget (MB)",
-        "hint": "Default: 80 MB. Old data is automatically cleared when this size is exceeded."
+        "hint": "Default: 80 MB. Values below 32 MB use 32 MB. Old data is automatically cleared when this size is exceeded."
       },
       "trace_retention_days": {
         "description": "Trace Retention Days",

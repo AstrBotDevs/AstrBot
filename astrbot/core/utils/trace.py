@@ -202,7 +202,7 @@ class TraceSpan:
                 )
         self._bytes += size
         try:
-            accepted = get_trace_store(astrbot_config).append(payload)
+            accepted = get_trace_store(astrbot_config).append(payload, owner=self)
         except Exception:
             accepted = False
             logger.error("Failed to queue trace persistence.", exc_info=True)
@@ -375,7 +375,6 @@ class TraceSpan:
                     break
             if action != "pipeline_end":
                 return
-            self._finished = True
             for span, _, _ in self._pending.values():
                 span.set_status(
                     Status(
@@ -400,6 +399,7 @@ class TraceSpan:
                 )
             )
             self._root.end(end_time=now)
+            self._finished = True
             self._emit(span=self._root, closing=True)
             return
 
@@ -450,4 +450,5 @@ def trace_execution(trace: TraceSpan) -> Iterator[None]:
             try:
                 trace.record("pipeline_end", status=status, error=error)
             finally:
+                trace._finished = True
                 trace._execution_active = False

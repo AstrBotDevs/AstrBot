@@ -1283,7 +1283,7 @@
       },
       "trace_db_max_mb": {
         "description": "追踪数据库容量预算 (MB)",
-        "hint": "默认 80 MB，超出后自动清除旧数据。"
+        "hint": "默认 80 MB，最小 32 MB，低于最小值时按 32 MB 生效。超出后自动清除旧数据。"
       },
       "trace_retention_days": {
         "description": "追踪保留天数",

@@ -1363,7 +1363,7 @@
       },
       "trace_db_max_mb": {
         "description": "トレースDB容量 (MB)",
-        "hint": "既定は 80 MB。超えると古いデータを自動的に削除します。"
+        "hint": "既定は 80 MB。32 MB 未満の値は 32 MB として適用されます。超えると古いデータを自動的に削除します。"
       },
       "trace_retention_days": {
         "description": "トレース保持日数",
