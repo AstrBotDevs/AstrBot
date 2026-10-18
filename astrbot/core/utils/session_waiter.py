@@ -102,8 +102,19 @@ class SessionFilter:
 
 class DefaultSessionFilter(SessionFilter):
     def filter(self, event: AstrMessageEvent) -> str:
-        """默认实现,返回统一消息来源字符串作为会话标识符"""
-        return event.unified_msg_origin
+        """Identify a waiter by both message origin and sender.
+
+        The origin alone would match other members of the same group. The sender
+        alone would match that user's messages in other groups or private chats.
+        Use a custom SessionFilter when a waiter should accept an entire group.
+
+        Args:
+            event: The message event to identify.
+
+        Returns:
+            A key in the form ``{unified_msg_origin}!{sender_id}``.
+        """
+        return f"{event.unified_msg_origin}!{event.get_sender_id()}"
 
 
 class SessionWaiter:
