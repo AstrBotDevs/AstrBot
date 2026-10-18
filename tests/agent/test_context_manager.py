@@ -12,8 +12,15 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from astrbot.core.agent.context.config import ContextConfig
 from astrbot.core.agent.context.manager import ContextManager
-from astrbot.core.agent.message import AudioURLPart, ImageURLPart, Message, TextPart
+from astrbot.core.agent.message import (
+    AudioURLPart,
+    ImageURLPart,
+    Message,
+    TextPart,
+    ToolCall,
+)
 from astrbot.core.provider.entities import LLMResponse
+from astrbot.core.provider.sources.request_retry import retry_provider_request
 
 
 class MockProvider:
@@ -40,6 +47,44 @@ class MockProvider:
 
     def meta(self):
         return MagicMock(id="test_provider", type="openai")
+
+
+class FailingProvider(MockProvider):
+    """Provider whose summary request always fails."""
+
+    async def text_chat(self, **kwargs):
+        self.last_text_chat_kwargs = kwargs
+        raise RuntimeError("summary model unavailable")
+
+
+class QuotaExhaustedError(Exception):
+    status_code = 429
+
+
+class RateLimitedProvider(MockProvider):
+    """Provider that goes through the real retry helper and always gets a 429."""
+
+    def __init__(self):
+        super().__init__()
+        self.attempts = 0
+
+    async def text_chat(self, **kwargs):
+        async def request():
+            self.attempts += 1
+            raise QuotaExhaustedError("quota exhausted")
+
+        return await retry_provider_request(
+            "summary",
+            request,
+            max_attempts=kwargs.get("request_max_retries"),
+        )
+
+
+class CharTokenCounter:
+    """Counts one token per character of text content."""
+
+    def count_tokens(self, messages, trusted_token_usage: int = 0) -> int:
+        return sum(len(m.content) for m in messages if isinstance(m.content, str))
 
 
 class TestContextManager:
@@ -580,31 +625,77 @@ class TestContextManager:
             mock_compress.assert_not_called()
             assert result == messages
 
+    def _rounds_with_tool_chain(self, latest_request: str) -> list[Message]:
+        """System prompt, a long first round, a round with a tool chain, and
+        the latest request. One token per character with ``CharTokenCounter``."""
+        return [
+            self.create_message("system", "s" * 10),
+            self.create_message("user", "a" * 300),
+            self.create_message("assistant", "b" * 300),
+            self.create_message("user", "c" * 50),
+            Message(
+                role="assistant",
+                tool_calls=[
+                    ToolCall(
+                        id="call_1",
+                        function=ToolCall.FunctionBody(name="lookup", arguments="{}"),
+                    )
+                ],
+            ),
+            Message(role="tool", content="d" * 100, tool_call_id="call_1"),
+            self.create_message("assistant", "e" * 50),
+            self.create_message("user", latest_request),
+        ]
+
     @pytest.mark.asyncio
-    async def test_double_check_after_compression(self):
-        """Test that halving is applied if still over threshold after compression."""
-        config = ContextConfig(max_context_tokens=100)
+    async def test_failed_summary_drops_oldest_rounds_until_within_limit(self):
+        """When the summary fails, whole rounds are dropped until the context fits."""
+        provider = FailingProvider()
+        config = ContextConfig(
+            max_context_tokens=1000,
+            llm_compress_provider=provider,  # type: ignore[arg-type]
+            custom_token_counter=CharTokenCounter(),
+        )
         manager = ContextManager(config)
+        messages = self._rounds_with_tool_chain("f" * 20)
 
-        # Create messages that would still be over threshold after compression
-        long_messages = [self.create_message("user", "x" * 200) for _ in range(10)]
+        result = await manager.process(messages)
 
-        # Mock compressor to return messages still over threshold
-        async def mock_compress(msgs):
-            return msgs  # Return same messages (still over limit)
+        assert provider.last_text_chat_kwargs["request_max_retries"] == 1
+        # Dropping the first round (600 tokens) is enough to get under 820, so
+        # the round with the tool chain stays intact.
+        assert result == [messages[0], *messages[3:]]
 
-        # Mock should_compress to return True twice (before and after compression)
-        with patch.object(manager.compressor, "should_compress", return_value=True):
-            with patch.object(manager.compressor, "__call__", new=mock_compress):
-                with patch.object(
-                    manager.truncator,
-                    "truncate_by_halving",
-                    return_value=long_messages[:5],
-                ) as mock_halving:
-                    _ = await manager.process(long_messages)
+    @pytest.mark.asyncio
+    async def test_fallback_keeps_latest_round_when_it_alone_exceeds_limit(
+        self, caplog
+    ):
+        config = ContextConfig(
+            max_context_tokens=1000,
+            llm_compress_provider=FailingProvider(),  # type: ignore[arg-type]
+            custom_token_counter=CharTokenCounter(),
+        )
+        manager = ContextManager(config)
+        messages = self._rounds_with_tool_chain("f" * 900)
 
-                    # Halving should be called
-                    mock_halving.assert_called_once()
+        result = await manager.process(messages)
+
+        assert result == [messages[0], messages[-1]]
+        assert "only the latest round left" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_llm_summary_is_requested_once(self):
+        """A failed summary falls back to truncation instead of being retried."""
+        from astrbot.core.agent.context.compressor import LLMSummaryCompressor
+
+        provider = RateLimitedProvider()
+        compressor = LLMSummaryCompressor(provider=provider, keep_recent_ratio=0.15)  # type: ignore[arg-type]
+        messages = self._rounds_with_tool_chain("f" * 20)
+
+        result = await compressor(messages)
+
+        assert result is messages
+        assert provider.attempts == 1
 
     # ==================== Combined Truncation and Compression Tests ====================
 

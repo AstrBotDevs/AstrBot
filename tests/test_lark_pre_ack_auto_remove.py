@@ -156,6 +156,8 @@ async def _execute_scheduler(remove_reaction: AsyncMock, fail_processing: bool) 
     from astrbot.core.pipeline.scheduler import PipelineScheduler
 
     event = SimpleNamespace(
+        get_platform_id=lambda: "lark-account",
+        get_platform_name=lambda: "lark",
         get_extra=lambda key=None, default=None: (
             ("reaction-1", "Typing") if key == PRE_ACK_REACTION else default
         ),
@@ -564,6 +566,8 @@ async def test_scheduler_cleans_up_when_reaction_removal_is_cancelled():
     unregister = Mock()
     remove_reaction = AsyncMock(side_effect=asyncio.CancelledError())
     event = SimpleNamespace(
+        get_platform_id=lambda: "lark-account",
+        get_platform_name=lambda: "lark",
         get_extra=lambda key=None, default=None: (
             ("reaction-1", "Typing") if key == PRE_ACK_REACTION else default
         ),

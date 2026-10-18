@@ -19,7 +19,7 @@ Locale file names use WebUI locales, such as `zh-CN.json` and `en-US.json`. Each
 When the current locale has no translation, a field is missing, or the locale file does not exist, AstrBot falls back to the default text:
 
 - Plugin names, card short descriptions, and descriptions fall back to `display_name`, `short_desc`, and `desc` in `metadata.yaml`.
-- Configuration text falls back to `description`, `hint`, and `labels` in `_conf_schema.json`.
+- Configuration text falls back to `description`, `hint`, `labels`, and `subtitles` in `_conf_schema.json`.
 - Page text falls back to the Page directory name, default Page title, or fallback text provided by page code.
 
 ## Metadata
@@ -54,7 +54,8 @@ Example `_conf_schema.json`:
     "description": "Mode",
     "type": "string",
     "options": ["fast", "safe"],
-    "labels": ["Fast", "Safe"]
+    "labels": ["Fast", "Safe"],
+    "subtitles": ["Faster responses", "More conservative processing"]
   }
 }
 ```
@@ -70,22 +71,23 @@ Corresponding `.astrbot-plugin/i18n/zh-CN.json`:
     },
     "mode": {
       "description": "模式",
-      "labels": ["快速", "安全"]
+      "labels": ["快速", "安全"],
+      "subtitles": ["更快响应", "更保守的处理"]
     }
   }
 }
 ```
 
-`options` are stored configuration values and should usually not be translated. Use `labels` for select display text.
+`options` are stored configuration values and should usually not be translated. Use `labels` for select display text. Use `subtitles` for descriptions below each option, aligned with `options` by index.
 
-## Plugin Pages
+## Plugin Views
 
-`pages` overrides plugin Dashboard Page titles, descriptions, and custom text inside plugin pages. The structure is nested by Page directory name.
+`views` overrides plugin Dashboard View titles, descriptions, and custom text inside plugin views (`pages` is accepted as an alias). The structure is nested by view directory name.
 
-Example plugin page directory:
+Example plugin view directory:
 
 ```text
-pages/
+views/
   settings/
     index.html
 ```
@@ -94,7 +96,7 @@ Corresponding `.astrbot-plugin/i18n/en-US.json`:
 
 ```json
 {
-  "pages": {
+  "views": {
     "settings": {
       "title": "Settings",
       "description": "Manage advanced settings for this plugin.",
@@ -105,14 +107,14 @@ Corresponding `.astrbot-plugin/i18n/en-US.json`:
 }
 ```
 
-`title` is used by the WebUI shell title and the Page component name on the plugin detail page. `description` is used by the Page component description on the plugin detail page. Other fields are read by the page through the bridge:
+`title` is used by the sidebar, the WebUI shell title, and the view component name on the plugin detail page. `description` is used by the view component description on the plugin detail page. Other fields are read by the page through the bridge:
 
 ```js
-const bridge = window.AstrBotPluginPage;
+const bridge = window.AstrBotPluginView;
 
 function render() {
   document.getElementById("save").textContent = bridge.t(
-    "pages.settings.save",
+    "views.settings.save",
     "Save",
   );
 }

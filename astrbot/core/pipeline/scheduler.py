@@ -2,6 +2,7 @@ from collections.abc import AsyncGenerator
 from typing import cast
 
 from astrbot.core import logger
+from astrbot.core.log import log_context
 from astrbot.core.platform import AstrMessageEvent
 from astrbot.core.platform.astr_message_event import PRE_ACK_REACTION
 from astrbot.core.platform.sources.webchat.webchat_event import WebChatMessageEvent
@@ -88,23 +89,24 @@ class PipelineScheduler:
 
         """
         active_event_registry.register(event)
-        try:
-            await self._process_stages(event)
-
-            # 发送一个空消息, 以便于后续的处理
-            if isinstance(event, WebChatMessageEvent | WecomAIBotMessageEvent):
-                await event.send(None)
-
-            logger.debug("pipeline execution completed.")
-        finally:
+        with log_context(event.get_platform_id(), event.get_platform_name()):
             try:
-                pre_ack_reaction = event.get_extra(PRE_ACK_REACTION, None)
-                if pre_ack_reaction is not None:
-                    try:
-                        reaction_id, emoji = pre_ack_reaction
-                        await event.remove_reaction(reaction_id, emoji)
-                    except Exception as e:
-                        logger.warning(f"Failed to remove pre-ack reaction: {e}")
+                await self._process_stages(event)
+
+                # Send an empty message for platform-specific completion handling.
+                if isinstance(event, WebChatMessageEvent | WecomAIBotMessageEvent):
+                    await event.send(None)
+
+                logger.debug("pipeline execution completed.")
             finally:
-                event.cleanup_temporary_local_files()
-                active_event_registry.unregister(event)
+                try:
+                    pre_ack_reaction = event.get_extra(PRE_ACK_REACTION, None)
+                    if pre_ack_reaction is not None:
+                        try:
+                            reaction_id, emoji = pre_ack_reaction
+                            await event.remove_reaction(reaction_id, emoji)
+                        except Exception as e:
+                            logger.warning(f"Failed to remove pre-ack reaction: {e}")
+                finally:
+                    event.cleanup_temporary_local_files()
+                    active_event_registry.unregister(event)

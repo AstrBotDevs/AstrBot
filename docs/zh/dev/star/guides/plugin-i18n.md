@@ -19,7 +19,7 @@ your_plugin/
 当当前语言没有对应翻译、某个字段缺失，或语言文件不存在时，AstrBot 会回退到默认文案：
 
 - 插件名称、卡片短描述和描述回退到 `metadata.yaml` 中的 `display_name`、`short_desc`、`desc`。
-- 配置项文案回退到 `_conf_schema.json` 中的 `description`、`hint`、`labels`。
+- 配置项文案回退到 `_conf_schema.json` 中的 `description`、`hint`、`labels`、`subtitles`。
 - Page 文案回退到 Page 目录名、Page 默认标题或页面代码中提供的 fallback。
 
 ## 元数据
@@ -54,7 +54,8 @@ your_plugin/
     "description": "Mode",
     "type": "string",
     "options": ["fast", "safe"],
-    "labels": ["Fast", "Safe"]
+    "labels": ["Fast", "Safe"],
+    "subtitles": ["Faster responses", "More conservative processing"]
   }
 }
 ```
@@ -70,22 +71,23 @@ your_plugin/
     },
     "mode": {
       "description": "模式",
-      "labels": ["快速", "安全"]
+      "labels": ["快速", "安全"],
+      "subtitles": ["更快响应", "更保守的处理"]
     }
   }
 }
 ```
 
-`options` 是配置保存值，不建议翻译。下拉框的展示文本请使用 `labels`。
+`options` 是配置保存值，不建议翻译。下拉框的展示文本请使用 `labels`。 `subtitles` 用于选项下方的说明，并与 `options` 按索引对应。
 
-## 插件 Pages
+## 插件可视化视图
 
-`pages` 用于覆盖插件 Dashboard Page 的标题、描述和页面内自定义文案。结构按 Page 目录名嵌套。
+`views` 用于覆盖插件 Dashboard 可视化视图的标题、描述和视图内自定义文案（`pages` 是其别名，保持兼容）。结构按视图目录名嵌套。
 
-例如插件页面目录：
+例如插件可视化视图目录：
 
 ```text
-pages/
+views/
   settings/
     index.html
 ```
@@ -94,7 +96,7 @@ pages/
 
 ```json
 {
-  "pages": {
+  "views": {
     "settings": {
       "title": "设置",
       "description": "管理这个插件的高级设置。",
@@ -105,14 +107,14 @@ pages/
 }
 ```
 
-`title` 会用于 WebUI 外壳标题和插件详情页中的 Page 组件名称，`description` 会用于插件详情页中的 Page 组件描述。其他字段由页面通过 bridge 自行读取：
+`title` 会用于侧边栏、WebUI 外壳标题和插件详情页中的视图组件名称，`description` 会用于插件详情页中的视图组件描述。其他字段由页面通过 bridge 自行读取：
 
 ```js
-const bridge = window.AstrBotPluginPage;
+const bridge = window.AstrBotPluginView;
 
 function render() {
   document.getElementById("save").textContent = bridge.t(
-    "pages.settings.save",
+    "views.settings.save",
     "Save",
   );
 }

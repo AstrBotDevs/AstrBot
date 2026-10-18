@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.middleware.gzip import GZipMiddleware
 
 from astrbot.core import DEMO_MODE, LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -95,6 +96,9 @@ def create_dashboard_asgi_app(
         docs_url=f"{API_V1_PREFIX}/docs",
         redoc_url=f"{API_V1_PREFIX}/redoc",
     )
+    # Compress JS/CSS and other sizable responses; Starlette's GZipMiddleware
+    # skips text/event-stream, so SSE endpoints are unaffected.
+    app.add_middleware(GZipMiddleware, minimum_size=1024)
     app.state.core_lifecycle = core_lifecycle
     app.state.db = db
     app.state.jwt_secret = jwt_secret

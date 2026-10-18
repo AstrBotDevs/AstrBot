@@ -553,7 +553,10 @@ class PluginManager:
                     if isinstance(metadata.get("astrbot_version"), str)
                     else None
                 ),
-                pages=metadata["pages"]
+                # "views" is the preferred key; "pages" stays as an alias.
+                views=metadata["views"]
+                if isinstance(metadata.get("views"), list)
+                else metadata["pages"]
                 if isinstance(metadata.get("pages"), list)
                 else [],
                 i18n=PluginManager._load_plugin_i18n(plugin_path),
@@ -1189,7 +1192,7 @@ class PluginManager:
                             metadata.display_name = metadata_yaml.display_name
                             metadata.support_platforms = metadata_yaml.support_platforms
                             metadata.astrbot_version = metadata_yaml.astrbot_version
-                            metadata.pages = metadata_yaml.pages
+                            metadata.views = metadata_yaml.views
                             metadata.i18n = metadata_yaml.i18n
                     except Exception as e:
                         logger.warning(

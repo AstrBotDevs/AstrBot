@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import json
 import logging
+import platform
 import traceback
 from pathlib import Path
 from typing import Any
@@ -327,7 +328,30 @@ def migrate_config_on_load(config: dict[str, Any], config_path: Path) -> bool:
                 resolved_path,
                 exc,
             )
-    return _migrate_agent_runner_config(config, fallback_config)
+    changed = _migrate_agent_runner_config(config, fallback_config)
+    config_version = config.get("config_version")
+    if not isinstance(config_version, int) or config_version < 5:
+        provider_settings = config.get("provider_settings", {})
+        permissions = provider_settings.get("computer_use_local_permissions", {})
+        if (
+            platform.system() == "Windows"
+            and isinstance(permissions, dict)
+            and permissions.get("member")
+            == {
+                "allow_execution": False,
+                "allow_network": False,
+                "filesystem_scope": "none",
+            }
+        ):
+            # The old default and an explicit disabled policy are indistinguishable.
+            permissions["member"]["filesystem_scope"] = "workspace"
+            logger.info(
+                "Migrated Windows member Local file access from disabled to workspace; "
+                "code execution and execution network access remain disabled."
+            )
+        config["config_version"] = 5
+        changed = True
+    return changed
 
 
 def finalize_config_migrations(configs: list[dict[str, Any]]) -> bool:

@@ -10,7 +10,7 @@ AstrBot 的配置文件是一个 JSON 格式的文件。AstrBot 会在启动时�
 
 > 在 AstrBot v4.0.0 版本及之后，我们引入了[多配置文件](https://blog.astrbot.app/posts/what-is-changed-in-4.0.0/#%E5%A4%9A%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6)的概念。`data/cmd_config.json` 作为默认配置文件 `default`。其他您在 WebUI 新建的配置文件会存储在 `data/config/` 目录下，以 `abconf_` 开头。
 
-WebUI 中，按机器人或会话使用的行为配置在 `配置文件` 页面管理；全局运行、日志、网络、WebUI 安全和文本转图像服务等配置在 `设置` 页面管理。模型连接和机器人连接分别在 `模型提供商` 和 `机器人` 页面管理。
+WebUI 中，按机器人或会话使用的行为配置（含文本转图像）在 `配置文件` 页面管理；全局运行、日志、网络和 WebUI 安全等配置在 `系统设置` 页面管理。模型连接和机器人连接分别在 `模型提供商` 和 `机器人` 页面管理。
 
 AstrBot 默认配置如下：
 
@@ -64,6 +64,8 @@ AstrBot 默认配置如下：
         "websearch_tavily_key": [],
         "websearch_bocha_key": [],
         "websearch_brave_key": [],
+        "websearch_deepseek_key": [],
+        "websearch_serpapi_key": [],
         "web_search_link": False,
         "display_reasoning_text": False,
         "identifier": False,
@@ -181,6 +183,8 @@ AstrBot 默认配置如下：
 
 消息转发阈值。当回复内容超过一定字数后，机器人会将消息折叠成 QQ 群聊的 “转发消息”，以防止刷屏。
 
+在 WebUI 中，选择机器人使用的配置文件，进入 `访问控制 → 白名单` 管理以下白名单设置。
+
 #### `platform_settings.enable_id_white_list`
 
 是否启用 ID 白名单。默认为 `true`。启用后，只有在白名单中的 ID 发来的消息才会被处理。
@@ -294,13 +298,17 @@ ID 白名单。填写后，将只处理所填写的 ID 发来的消息事件。�
 
 #### `provider_settings.websearch_provider`
 
-网页搜索提供商类型。默认为 `tavily`。目前支持 `tavily`、`bocha`、`baidu_ai_search`、`brave`、`firecrawl`。
+网页搜索提供商类型。默认为 `tavily`。目前支持 `serpapi`、`deepseek`、`tavily`、`bocha`、`baidu_ai_search`、`brave`、`firecrawl`、`exa`、`anysearch`。
 
+- `serpapi`：使用 SerpApi Google Search、Google Images Light、Google Finance 和 Google Scholar。
+- `deepseek`：使用 DeepSeek Search API。
 - `tavily`：使用 Tavily 搜索引擎。
 - `bocha`：使用 BoCha 搜索引擎。
 - `baidu_ai_search`：使用百度 AI Search（MCP）。
 - `brave`：使用 Brave Search API。
 - `firecrawl`：使用 Firecrawl Search API。
+- `exa`：使用 Exa Search API。
+- `anysearch`：使用 AnySearch API。
 
 #### `provider_settings.websearch_tavily_key`
 
@@ -317,6 +325,14 @@ Brave 搜索引擎的 API Key 列表。使用 `brave` 作为网页搜索提供�
 #### `provider_settings.websearch_firecrawl_key`
 
 Firecrawl 搜索引擎的 API Key 列表。使用 `firecrawl` 作为网页搜索提供商时需要填写。
+
+#### `provider_settings.websearch_deepseek_key`
+
+DeepSeek 搜索引擎的 API Key 列表。使用 `deepseek` 作为网页搜索提供商时需要填写。可使用与对话模型相同的 API Key，配置相互独立。同账号下的多个 Key 共享 QPS 限制。
+
+#### `provider_settings.websearch_serpapi_key`
+
+SerpApi Google Search、Google Images Light、Google Finance 和 Google Scholar 共用的 API Key 列表。使用 `serpapi` 作为网页搜索提供商时需要填写。前往 [SerpApi](https://serpapi.com/manage-api-key) 获取 Key。多个 Key 轮询使用，鉴权或额度错误时会尝试下一个 Key。
 
 #### `provider_settings.web_search_link`
 
@@ -467,6 +483,8 @@ Added in `v4.3.5`
 ### `admins_id`
 
 管理员 ID 列表。此外，还可以使用 `/op`, `/deop` 指令来添加或删除管理员。
+
+在 WebUI 的 `配置文件` 中选择机器人使用的配置文件，再进入 `访问控制 → 管理员 → 管理员 ID` 设置。给机器人发送 `/sid` 指令以获取 `UID`。
 
 ### `t2i`
 

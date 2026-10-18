@@ -1,10 +1,9 @@
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator
 
 from astrbot import logger
 from astrbot.core.message.components import At, AtAll, Reply
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.platform.message_type import MessageType
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.filter.permission import PermissionTypeFilter
 from astrbot.core.star.session_plugin_manager import SessionPluginManager
@@ -14,23 +13,6 @@ from astrbot.core.star.star_handler import EventType, star_handlers_registry
 from ..context import PipelineContext
 from ..stage import Stage, register_stage
 from .umo_auto_name import UmoAutoNameRecorder
-
-UNIQUE_SESSION_ID_BUILDERS: dict[str, Callable[[AstrMessageEvent], str | None]] = {
-    "aiocqhttp": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
-    "slack": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
-    "dingtalk": lambda e: e.get_sender_id(),
-    "qq_official": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
-    "qq_official_webhook": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
-    "lark": lambda e: f"{e.get_sender_id()}%{e.get_group_id()}",
-    "misskey": lambda e: f"{e.get_session_id()}_{e.get_sender_id()}",
-    "matrix": lambda e: f"{e.get_sender_id()}_{e.get_group_id() or e.get_session_id()}",
-}
-
-
-def build_unique_session_id(event: AstrMessageEvent) -> str | None:
-    platform = event.get_platform_name()
-    builder = UNIQUE_SESSION_ID_BUILDERS.get(platform)
-    return builder(event) if builder else None
 
 
 @register_stage
@@ -72,8 +54,6 @@ class WakingCheckStage(Stage):
         self.disable_builtin_commands = self.ctx.astrbot_config.get(
             "disable_builtin_commands", False
         )
-        platform_settings = self.ctx.astrbot_config.get("platform_settings", {})
-        self.unique_session = platform_settings.get("unique_session", False)
         self._umo_auto_name_recorder = UmoAutoNameRecorder(
             ctx.db_helper,
             ctx.astrbot_config_id,
@@ -83,14 +63,6 @@ class WakingCheckStage(Stage):
         self,
         event: AstrMessageEvent,
     ) -> None | AsyncGenerator[None, None]:
-        # apply unique session
-        event.set_extra("_session_isolated", False)
-        if self.unique_session and event.message_obj.type == MessageType.GROUP_MESSAGE:
-            sid = build_unique_session_id(event)
-            if sid:
-                event.session_id = sid
-                event.set_extra("_session_isolated", True)
-
         # ignore bot self message
         if (
             self.ignore_bot_self_message
@@ -100,7 +72,12 @@ class WakingCheckStage(Stage):
             return
 
         # 设置 sender 身份
-        event.message_str = event.message_str.strip()
+        preserve_whitespace = event.get_platform_name() == "lark" and (
+            getattr(event.message_obj.raw_message, "message_type", None) == "post"
+        )
+        message_str = event.message_str.strip()
+        if not preserve_whitespace:
+            event.message_str = message_str
         api_key_allow_admin_role = event.get_extra("_api_key_allow_admin_role")
         for admin_id in self.ctx.astrbot_config["admins_id"]:
             if (
@@ -115,7 +92,7 @@ class WakingCheckStage(Stage):
         messages = event.get_messages()
         is_wake = False
         for wake_prefix in wake_prefixes:
-            if event.message_str.startswith(wake_prefix):
+            if message_str.startswith(wake_prefix):
                 if (
                     not event.is_private_chat()
                     and isinstance(messages[0], At)
@@ -127,7 +104,13 @@ class WakingCheckStage(Stage):
                 is_wake = True
                 event.is_at_or_wake_command = True
                 event.is_wake = True
-                event.message_str = event.message_str[len(wake_prefix) :].strip()
+                if preserve_whitespace:
+                    if wake_prefix:
+                        event.message_str = event.message_str.lstrip()[
+                            len(wake_prefix) :
+                        ]
+                else:
+                    event.message_str = message_str[len(wake_prefix) :].strip()
                 break
         if not is_wake:
             # 检查是否有at消息 / at全体成员消息 / 引用了bot的消息
