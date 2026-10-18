@@ -774,12 +774,6 @@ function recordClass(record) {
 function formatFields(fields) {
   if (!fields || Object.keys(fields).length === 0) return "";
   const safeFields = { ...fields };
-  delete safeFields.module;
-  delete safeFields["astrbot.module"];
-  if (safeFields.attributes) {
-    safeFields.attributes = { ...safeFields.attributes };
-    delete safeFields.attributes["astrbot.module"];
-  }
   try {
     return JSON.stringify(safeFields, null, 2);
   } catch {

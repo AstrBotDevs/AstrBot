@@ -1,6 +1,6 @@
 # Unreleased
 
-- Stop recording plugin handler module metadata and hide it in trace raw-detail views for legacy records, without rewriting historical data.
+- Stop recording redundant plugin handler module metadata without rewriting or filtering historical data.
 
 - Remove response-source bookkeeping and System/Plugin sender chips. Record successful proactive sends in Context.send_message rather than the send-message tool, correlate them with the active event, and deduplicate nested event forwarding. Preserve final-only streaming summaries and independent tool deliveries; do not create traces for unscoped sends or rewrite historical data.
 

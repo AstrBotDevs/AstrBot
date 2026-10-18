@@ -64,17 +64,6 @@ function handler(key, category = "listener", fields = {}) {
   };
 }
 
-test("raw details hide module metadata without modifying stored records", () => {
-  const node = ast.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === "formatFields");
-  const formatFields = vm.runInNewContext(node.getText(ast) + "; formatFields");
-  const model = { name: "plugin.handler", attributes: { "astrbot.module": "plugin", "astrbot.handler": "handler" } };
-  const displayed = JSON.parse(formatFields(model));
-  assert.equal(displayed.attributes["astrbot.module"], undefined);
-  assert.equal(displayed.attributes["astrbot.handler"], "handler");
-  assert.equal(model.attributes["astrbot.module"], "plugin");
-  assert.equal(JSON.parse(formatFields({ module: "plugin", handler: "handler" })).module, undefined);
-});
-
 test("Agent title metadata remains visible when folded and stays isolated per Agent", (t) => {
   const state = setup(t, [
     { key: "outer", action: "agent_start", operation_span_id: "outer", parent_span_id: "root", fields: {} },
