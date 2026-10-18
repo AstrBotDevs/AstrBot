@@ -97,6 +97,7 @@ const renderedReadme = ref("");
 const readmeLocale = ref("");
 const readmeAvailableLocales = ref([]);
 let readmeRequestId = 0;
+let detailRequestId = 0;
 const readmeLocaleItems = computed(() => [
   { title: `${tm("detail.readmeLanguageAuto")} (${locale.value})`, value: "" },
   ...readmeAvailableLocales.value.map((item) => ({ title: item, value: item })),
@@ -673,11 +674,19 @@ const scrollToHashTarget = async () => {
 };
 
 const fetchPluginDetail = async () => {
+  const requestId = ++detailRequestId;
+  const pluginName = props.plugin?.name;
   pluginDetail.value = null;
-  if (isMarketDetail.value || !props.plugin?.name) return;
+  if (isMarketDetail.value || !pluginName) return true;
+
+  const isCurrent = () =>
+    requestId === detailRequestId && props.plugin?.name === pluginName;
 
   try {
-    const res = await pluginApi.get(props.plugin.name);
+    const res = await pluginApi.get(pluginName);
+    // Ignore slow responses that belong to an older plugin selection
+    // (e.g. plugin A's request completes after switching to plugin B).
+    if (!isCurrent()) return false;
     if (res.data.status === "ok" && res.data.data) {
       pluginDetail.value = res.data.data;
       await scrollToHashTarget();
@@ -685,6 +694,7 @@ const fetchPluginDetail = async () => {
   } catch (err) {
     console.debug("Failed to fetch plugin detail:", err);
   }
+  return isCurrent();
 };
 
 const getDocumentUrl = (fieldName) => {
@@ -703,9 +713,14 @@ const fetchRemoteMarkdown = async (url) => {
 
 const fetchReadme = async () => {
   const plugin = pluginData.value || {};
-  if (!plugin?.name) return;
+  const pluginName = plugin.name;
+  if (!pluginName) return;
 
   const requestId = ++readmeRequestId;
+  // A response is stale when a newer README request started or the user has
+  // switched to another plugin since this request began.
+  const isCurrent = () =>
+    requestId === readmeRequestId && props.plugin?.name === pluginName;
   readmeLoading.value = true;
   readmeError.value = "";
   readmeEmpty.value = false;
@@ -722,15 +737,19 @@ const fetchReadme = async () => {
 
     try {
       const content = await fetchRemoteMarkdown(readmeUrl);
+      if (!isCurrent()) return;
       if (!content.trim()) {
         readmeEmpty.value = true;
         return;
       }
       renderedReadme.value = renderMarkdown(content);
     } catch (err) {
+      if (!isCurrent()) return;
       readmeError.value = err?.message || String(err);
     } finally {
-      readmeLoading.value = false;
+      if (isCurrent()) {
+        readmeLoading.value = false;
+      }
     }
     return;
   }
@@ -757,8 +776,8 @@ const fetchReadme = async () => {
       plugin.name,
       readmeLocale.value || locale.value,
     );
-    // Ignore slow responses that belong to an older locale selection.
-    if (requestId !== readmeRequestId) return;
+    // Ignore slow responses that belong to an older locale or plugin selection.
+    if (!isCurrent()) return;
 
     if (res.data.status !== "ok") {
       readmeError.value = res.data.message || tm("messages.operationFailed");
@@ -775,10 +794,10 @@ const fetchReadme = async () => {
 
     renderedReadme.value = renderMarkdown(content);
   } catch (err) {
-    if (requestId !== readmeRequestId) return;
+    if (!isCurrent()) return;
     readmeError.value = err?.message || String(err);
   } finally {
-    if (requestId === readmeRequestId) {
+    if (isCurrent()) {
       readmeLoading.value = false;
     }
   }
@@ -856,7 +875,10 @@ watch(
   async () => {
     logoLoadFailed.value = false;
     readmeLocale.value = "";
-    await fetchPluginDetail();
+    const isCurrent = await fetchPluginDetail();
+    // The plugin selection changed while the detail request was pending;
+    // do not start README/changelog fetches for the stale selection.
+    if (!isCurrent) return;
     fetchReadme();
     fetchChangelog();
     scrollToHashTarget();
