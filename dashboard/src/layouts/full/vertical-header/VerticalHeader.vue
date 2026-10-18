@@ -321,6 +321,7 @@ async function checkDesktopUpdate(showDialog = false) {
 
   const bridge = getAppUpdaterBridge();
   if (!bridge) {
+    console.warn("[desktop-update] App updater bridge is unavailable.");
     desktopUpdateChecking.value = false;
     desktopUpdateStatus.value = t(
       "core.header.updateDialog.desktopApp.checkFailed",
@@ -328,9 +329,21 @@ async function checkDesktopUpdate(showDialog = false) {
     return;
   }
 
+  let checkTimeout: ReturnType<typeof setTimeout> | undefined;
   try {
-    const result = await bridge.checkForAppUpdate();
+    const result = await Promise.race([
+      bridge.checkForAppUpdate(),
+      new Promise<never>((_, reject) => {
+        checkTimeout = setTimeout(() => {
+          reject(new Error("Desktop app update check timed out."));
+        }, 30_000);
+      }),
+    ]);
     if (!result?.ok) {
+      console.warn(
+        "[desktop-update] Failed to check for app updates.",
+        result?.reason || "Unknown error",
+      );
       desktopUpdateCurrentVersion.value = result?.currentVersion || "-";
       desktopUpdateLatestVersion.value =
         result?.latestVersion || result?.currentVersion || "-";
@@ -352,6 +365,7 @@ async function checkDesktopUpdate(showDialog = false) {
       "core.header.updateDialog.desktopApp.checkFailed",
     );
   } finally {
+    if (checkTimeout !== undefined) clearTimeout(checkTimeout);
     desktopUpdateChecking.value = false;
   }
 }
