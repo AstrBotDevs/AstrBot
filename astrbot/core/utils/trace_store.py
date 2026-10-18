@@ -19,7 +19,8 @@ from typing import Any
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 logger = logging.getLogger("astrbot")
-QUEUE_BYTES = 4 * 1024 * 1024
+QUEUE_BYTES = 16 * 1024 * 1024
+MAX_WAL_BYTES = 4 * 1024 * 1024
 MAX_FRAME_BYTES = 1024 * 1024
 
 
@@ -29,7 +30,7 @@ class TraceStore:
     def __init__(self, path: Path, config: Mapping[str, Any]) -> None:
         self.path = path
         self.config = config
-        self.queue: Queue = Queue(maxsize=128)
+        self.queue: Queue = Queue(maxsize=1024)
         self._lock = threading.Lock()
         self._pending_bytes = 0
         self._stop = threading.Event()
@@ -349,9 +350,9 @@ class TraceStore:
                 written = False
                 try:
                     wal = Path(str(self.path) + "-wal")
-                    if wal.exists() and wal.stat().st_size > QUEUE_BYTES:
+                    if wal.exists() and wal.stat().st_size > MAX_WAL_BYTES:
                         self._prune(connection)
-                        if wal.exists() and wal.stat().st_size > QUEUE_BYTES:
+                        if wal.exists() and wal.stat().st_size > MAX_WAL_BYTES:
                             raise sqlite3.OperationalError(
                                 "Trace WAL cannot checkpoint within its capacity budget."
                             )

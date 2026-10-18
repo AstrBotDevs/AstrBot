@@ -37,7 +37,7 @@ def _get_log_broker():
 
 
 class TraceSpan:
-    """Retain bounded message traces only for command responses or Agent calls."""
+    """Own one message trace and its bounded operation spans and events."""
 
     def __init__(
         self,
@@ -56,8 +56,6 @@ class TraceSpan:
         self._start_ns = time.time_ns()
         self._started = False
         self._finished = False
-        self._retained = False
-        self._deferred: dict[str, str] = {}
         self._bytes = 0
         self._events = 0
         self._span_count = 1
@@ -122,7 +120,7 @@ class TraceSpan:
         event: dict | None = None,
         closing: bool = False,
     ) -> None:
-        """Defer candidates until admission, then persist and notify subscribers.
+        """Queue a bounded snapshot and separately notify live subscribers.
 
         Args:
             span: Standard span update.
@@ -166,36 +164,18 @@ class TraceSpan:
                     }
                 )
         self._bytes += size
-        if not self._retained:
-            self._retained = self._summary["has_models"] or (
-                self._summary["has_commands"]
-                and event is not None
-                and event["name"] == "response_sent"
-            )
-            if not self._retained:
-                if self._finished:
-                    self._deferred.clear()
-                elif self._bytes <= MAX_TRACE_BYTES:
-                    # Keep immutable latest snapshots within the existing byte budget.
-                    key = span["span_id"] if span is not None else event["event_id"]
-                    self._deferred[key] = json.dumps(payload, ensure_ascii=False)
-                return
-        packets = [json.loads(item) for item in self._deferred.values()]
-        self._deferred.clear()
-        packets.append(payload)
-        for packet in packets:
-            try:
-                accepted = get_trace_store(astrbot_config).append(packet)
-            except Exception:
-                accepted = False
-                logger.error("Failed to queue trace persistence.", exc_info=True)
-            # Persistence acknowledgements are not implied by an SSE notification.
-            live = json.loads(
-                json.dumps({**packet, "storage_accepted": accepted}, ensure_ascii=False)
-            )
-            broker = _get_log_broker()
-            if broker:
-                broker.publish(live)
+        try:
+            accepted = get_trace_store(astrbot_config).append(payload)
+        except Exception:
+            accepted = False
+            logger.error("Failed to queue trace persistence.", exc_info=True)
+        # Persistence acknowledgements are not implied by an SSE notification.
+        live = json.loads(
+            json.dumps({**payload, "storage_accepted": accepted}, ensure_ascii=False)
+        )
+        broker = _get_log_broker()
+        if broker:
+            broker.publish(live)
 
     def record(self, action: str, **fields: Any) -> None:
         """Record a span transition or event using bounded primitive attributes.
@@ -231,14 +211,6 @@ class TraceSpan:
             self._started = True
             self._emit(span=self._root)
         if action == "event_received":
-            return
-
-        if action == "agent_invoked":
-            # Direct runners use this admission signal without adding a UI node.
-            if enabled:
-                self._summary["has_models"] = True
-                if not self._retained:
-                    self._emit(span=self._root)
             return
 
         current = current_trace_context.get()

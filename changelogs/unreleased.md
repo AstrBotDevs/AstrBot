@@ -1,6 +1,6 @@
 # Unreleased
 
-- Retain traces only for Agent invocations or delivered command responses. Buffer bounded candidate snapshots until admission instead of persisting or publishing ordinary messages, then discard unqualified events on completion. Recognize direct Agent runners through their shared lifecycle hook without adding timeline nodes or rewriting existing history.
+- Expand the trace writer queue to 1024 frames with a 16 MiB byte budget while keeping the WAL threshold unchanged. Revert conditional trace admission and its internal agent_invoked signal.
 
 - Expose Enable Trace Recording under Settings → General → Logs, backed by the same trace_enable setting as the trace toolbar's start/pause button.
 

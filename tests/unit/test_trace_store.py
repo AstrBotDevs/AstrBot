@@ -8,7 +8,6 @@ import sqlite3
 import threading
 import time
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -39,83 +38,6 @@ def capture(monkeypatch):
     monkeypatch.setattr(trace_module, "get_trace_store", lambda *_: CaptureStore())
     monkeypatch.setattr(trace_module, "_get_log_broker", lambda: None)
     return frames
-
-
-@pytest.mark.parametrize(
-    ("category", "response", "agent", "retained"),
-    [
-        (None, False, False, False),
-        ("listener", True, False, False),
-        ("hook", True, False, False),
-        ("command", False, False, False),
-        ("command", True, False, True),
-        ("listener", False, True, True),
-        ("command", False, True, True),
-    ],
-)
-def test_only_command_responses_or_agent_calls_are_published(
-    capture, monkeypatch, category, response, agent, retained
-):
-    """Admit confirmed activity without publishing unrelated event candidates.
-
-    Args:
-        capture: Immutable persistence snapshots.
-        monkeypatch: Pytest patch manager.
-        category: Optional plugin handler category.
-        response: Whether delivery succeeds.
-        agent: Whether an Agent is called.
-        retained: Whether this event qualifies for tracing.
-    """
-    broker = MagicMock()
-    monkeypatch.setattr(trace_module, "_get_log_broker", lambda: broker)
-    trace = TraceSpan("message")
-    with trace.context():
-        trace.record("event_received", message="Original")
-        if category:
-            trace.record("handler_start", handler_full_name="plugin.handler", handler_category=category)
-            trace.record("handler_end", handler_full_name="plugin.handler", status="success")
-        assert capture == []
-        broker.publish.assert_not_called()
-        if agent:
-            trace.record("agent_start")
-            trace.record("agent_end", status="error", error="Provider failed")
-        if response:
-            trace.record("response_sent", kind="response", message="Reply")
-        trace.record("pipeline_end", status="success")
-    assert bool(capture) is retained
-    assert bool(broker.publish.call_count) is retained
-    assert trace._deferred == {}
-    assert trace._finished
-    assert not trace._pending
-    if retained:
-        assert capture[-1]["trace"]["state"] == "completed"
-        assert any(frame.get("span", {}).get("attributes", {}).get("astrbot.message") == "Original" for frame in capture)
-        if category:
-            handlers = [frame["span"] for frame in capture if frame.get("span", {}).get("attributes", {}).get("astrbot.kind") == "plugin_handler"]
-            assert handlers and handlers[0]["end_time_unix_nano"]
-
-
-@pytest.mark.asyncio
-async def test_direct_agent_runner_admits_trace_without_extra_timeline_node(capture, monkeypatch):
-    """Recognize direct runners without requiring the message pipeline.
-
-    Args:
-        capture: Immutable persistence snapshots.
-        monkeypatch: Pytest patch manager.
-    """
-    from astrbot.core import astr_agent_hooks
-
-    monkeypatch.setattr(astr_agent_hooks, "call_event_hook", AsyncMock())
-    context = MagicMock()
-    trace = TraceSpan("scheduled")
-    context.context.event.trace = trace
-    with trace.context():
-        trace.record("event_received")
-        await astr_agent_hooks.MainAgentHooks().on_agent_begin(context)
-        trace.record("pipeline_end", status="success")
-    assert capture[-1]["trace"]["has_models"] is True
-    assert all("event" not in frame for frame in capture)
-    assert capture[-1]["trace"]["span_count"] == 1
 
 
 def test_standard_ids_parents_and_immutable_snapshots(capture):
@@ -219,7 +141,6 @@ def test_internal_transitions_and_timing_are_not_persisted(capture):
         capture: Immutable trace snapshots.
     """
     trace = TraceSpan("message")
-    trace.record("agent_invoked")
     with trace.context():
         trace.record("event_received")
         trace.record(
@@ -290,7 +211,6 @@ async def test_logs_correlate_and_detached_contexts_expire(capture):
 @pytest.mark.asyncio
 async def test_concurrent_abandoned_spans_end(capture):
     trace = TraceSpan("message")
-    trace.record("agent_invoked")
     release = asyncio.Event()
 
     async def child(name):
@@ -318,7 +238,6 @@ async def test_concurrent_abandoned_spans_end(capture):
 
 def test_pause_preserves_completion(capture, monkeypatch):
     trace = TraceSpan("message")
-    trace.record("agent_invoked")
     with trace.context():
         trace.record("event_received")
         trace.record("handler_start", handler_full_name="test.handler")
@@ -344,7 +263,6 @@ def test_limits_preserve_completion(capture):
     assert attrs["astrbot.truncated"] is True
     assert all(isinstance(value, (str, bool, int, float)) for value in attrs.values())
     trace = TraceSpan("message")
-    trace.record("agent_invoked")
     with trace.context():
         trace.record("event_received")
         for index in range(400):
@@ -377,7 +295,6 @@ def test_database_pages_filters_details_and_restart(persisted, capture):
                 plugin="test",
                 plugin_display_name="Display Test",
                 handler_full_name="test.handler",
-                handler_category="command",
             )
             trace.record(
                 "handler_end",
@@ -458,7 +375,6 @@ def test_long_prompt_is_preserved_in_spans_events_and_database(
 
 def test_retention_deletes_whole_traces(persisted, capture):
     trace = TraceSpan("message")
-    trace.record("agent_invoked")
     trace.record("event_received")
     trace.record("response_sent", message="Reply")
     trace.record("pipeline_end", status="success")
@@ -485,7 +401,6 @@ def test_oversized_queue_records_are_rejected(persisted):
 
 def test_stale_updates_do_not_reopen_completed_trace(persisted, capture):
     trace = TraceSpan("message", message_outline="Literal % _")
-    trace.record("agent_invoked")
     trace.record("event_received")
     trace.record("pipeline_end", status="success")
     for frame in reversed(capture):
@@ -500,7 +415,6 @@ def test_stale_updates_do_not_reopen_completed_trace(persisted, capture):
 
 def test_capacity_prunes_complete_traces_with_cascade(persisted, capture):
     trace = TraceSpan("message")
-    trace.record("agent_invoked")
     trace.record("event_received")
     trace.record("pipeline_end", status="success")
     for index in range(80):
@@ -541,17 +455,17 @@ def test_writer_queue_has_byte_and_count_limits(tmp_path, monkeypatch, capture):
 
     monkeypatch.setattr(TraceStore, "_run", delayed_run)
     trace = TraceSpan("message")
-    trace.record("agent_invoked")
     trace.record("event_received")
     payload = capture[0]
     payload["trace"]["attributes"]["astrbot.payload"] = "x" * 40000
     store = TraceStore(tmp_path / "traces.db", {})
     try:
-        accepted = sum(store.append(payload) for _ in range(200))
-        assert accepted < 128
+        attempts = store.queue.maxsize + 1
+        accepted = sum(store.append(payload) for _ in range(attempts))
+        assert 0 < accepted < store.queue.maxsize
         assert store._pending_bytes <= QUEUE_BYTES
         assert store.queue.qsize() == accepted
-        assert store.dropped == 200 - accepted
+        assert store.dropped == attempts - accepted
         release.set()
         assert store.flush()
     finally:
@@ -663,12 +577,10 @@ def test_trace_usage_and_cleanup_preserve_running_traces(
     monkeypatch.setattr(storage_module, "get_trace_store", lambda *_: store)
     try:
         finished = TraceSpan("finished", message_outline="x" * 3000)
-        finished.record("agent_invoked")
         finished.record("event_received")
         finished.record("response_sent", message="x" * 30000)
         finished.record("pipeline_end", status="success")
         running = TraceSpan("running")
-        running.record("agent_invoked")
         running.record("event_received")
         for frame in capture:
             assert store.append(frame)
@@ -723,12 +635,10 @@ def test_trace_usage_and_cleanup_preserve_running_traces(
 def test_trace_cleanup_barrier_preserves_later_writes(persisted, capture, monkeypatch):
     """Ensure a cleanup command never deletes writes queued after it."""
     old = TraceSpan("old")
-    old.record("agent_invoked")
     old.record("event_received")
     old.record("pipeline_end", status="success")
     old_frame = capture[-1]
     new = TraceSpan("new")
-    new.record("agent_invoked")
     new.record("event_received")
     new.record("pipeline_end", status="success")
     new_frame = capture[-1]
