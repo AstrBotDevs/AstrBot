@@ -102,6 +102,7 @@ async def test_slack_failed_event_can_be_retried(webhook, error, monkeypatch):
     if isinstance(error, asyncio.TimeoutError):
         assert cancelled.is_set()
     assert queue.empty()
+    client.event_handler.assert_awaited_once()
 
     client.event_handler.side_effect = queue.put
     assert (await client.handle_callback(request())).status_code == 200
