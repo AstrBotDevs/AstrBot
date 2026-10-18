@@ -1,7 +1,7 @@
 <template>
   <div class="standalone-chat" v-on="dragEvents">
     <transition name="drop-fade">
-      <div v-if="isDragging" class="chat-drop-overlay">
+      <div v-if="!minimal && isDragging" class="chat-drop-overlay">
         <div class="chat-drop-overlay-content">
           <v-icon size="48" color="primary">mdi-cloud-upload</v-icon>
           <span class="chat-drop-text">{{ tm("input.dropToUpload") }}</span>
@@ -174,7 +174,8 @@
         :staged-audio-url="stagedAudioUrl"
         :staged-files="stagedNonImageFiles"
         :disabled="sending || initializing"
-        show-settings
+        :minimal="minimal"
+        :show-settings="!minimal"
         :is-recording="false"
         :is-running="Boolean(currSessionId && isSessionRunning(currSessionId))"
         :session-id="currSessionId || null"
@@ -193,6 +194,7 @@
     </section>
 
     <ChatSettingsDialog
+      v-if="!minimal"
       v-model="settingsOpen"
       v-model:enable-streaming="enableStreaming"
       v-model:enable-reasoning="enableReasoning"
@@ -254,8 +256,9 @@ import { useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
 import { buildWebchatUmoDetails } from "@/utils/chatConfigBinding";
 
-const props = withDefaults(defineProps<{ configId?: string | null }>(), {
+const props = withDefaults(defineProps<{ configId?: string | null; minimal?: boolean }>(), {
   configId: "default",
+  minimal: false,
 });
 
 registerChatMarkdownComponents();
@@ -430,6 +433,7 @@ async function stopCurrentSession() {
 }
 
 async function handleFilesSelected(files: FileList | File[]) {
+  if (props.minimal) return;
   const selectedFiles = Array.from(files || []);
   for (const file of selectedFiles) {
     if (file.type.startsWith("image/")) {
