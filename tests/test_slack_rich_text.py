@@ -184,24 +184,16 @@ async def test_slack_list_preserves_links_and_mentions(style):
     assert [type(c) for c in received.message] == [Plain, At, Plain, At, Plain]
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("nested", "mention_last"),
     [(False, False), (True, False), (False, True)],
     ids=["plain_list", "nested_list", "trailing_mention"],
 )
-async def test_slack_list_preserves_layout(nested, mention_last):
+def test_slack_list_preserves_layout(nested, mention_last):
     adapter = SlackAdapter(
         make_platform_config("slack", bot_token="xoxb-test", app_token="xapp-test"),
         {},
         asyncio.Queue(),
-    )
-    adapter.bot_self_id = "UBOT"
-    adapter.web_client.users_info = AsyncMock(
-        return_value={"user": {"real_name": "Tester"}},
-    )
-    adapter.web_client.conversations_info = AsyncMock(
-        return_value={"channel": {"is_im": True}},
     )
     elements = [
         {
@@ -242,19 +234,15 @@ async def test_slack_list_preserves_layout(nested, mention_last):
             },
         ]
     )
-    received = await adapter.convert_message(
-        {
-            "user": "UTEST",
-            "channel": "DTEST",
-            "blocks": [{"type": "rich_text", "elements": elements}],
-        }
-    )
+    components = adapter._parse_blocks([{"type": "rich_text", "elements": elements}])
 
     expected = "• SKU-AB\n123 is the quantity."
     if nested:
         expected = "• Parent\n    • SKU-AB\n123 is the quantity."
-    assert received.message_str == f"Items:\n{expected}"
-    assert [c.qq for c in received.message if isinstance(c, At)] == (
+    assert "".join(c.text for c in components if isinstance(c, Plain)) == (
+        f"Items:\n{expected}"
+    )
+    assert [c.qq for c in components if isinstance(c, At)] == (
         ["UOTHER"] if mention_last else []
     )
 
