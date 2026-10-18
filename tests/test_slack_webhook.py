@@ -71,18 +71,40 @@ async def test_slack_retry_does_not_enqueue_twice(webhook, monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("error", [RuntimeError("failed"), asyncio.CancelledError()])
-async def test_slack_failed_event_can_be_retried(webhook, error):
+@pytest.mark.parametrize(
+    "error", [RuntimeError("failed"), asyncio.CancelledError(), asyncio.TimeoutError()]
+)
+async def test_slack_failed_event_can_be_retried(webhook, error, monkeypatch):
     client, queue, request = webhook
     client.event_handler.side_effect = error
+    cancelled = asyncio.Event()
+    if isinstance(error, asyncio.TimeoutError):
+        monkeypatch.setattr(slack_client, "_EVENT_PROCESSING_TIMEOUT", 0.01)
+
+        async def stalled_handler(event):
+            try:
+                await asyncio.Event().wait()
+                await queue.put(event)
+            except asyncio.CancelledError:
+                # Keep the claim until the old handler has stopped.
+                assert (await client.handle_callback(request())).status_code == 503
+                cancelled.set()
+                raise
+
+        client.event_handler.side_effect = stalled_handler
+
     if isinstance(error, asyncio.CancelledError):
         with pytest.raises(asyncio.CancelledError):
             await client.handle_callback(request())
     else:
-        assert (await client.handle_callback(request())).status_code == 500
+        result = await asyncio.wait_for(client.handle_callback(request()), timeout=1)
+        assert result.status_code == 500
+    if isinstance(error, asyncio.TimeoutError):
+        assert cancelled.is_set()
     assert queue.empty()
 
     client.event_handler.side_effect = queue.put
+    assert (await client.handle_callback(request())).status_code == 200
     assert (await client.handle_callback(request())).status_code == 200
     assert queue.qsize() == 1
 

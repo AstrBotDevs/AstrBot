@@ -18,6 +18,7 @@ from astrbot.api import logger
 from astrbot.core.platform.webhook_server import FastAPIWebhookServer
 
 _EVENT_CACHE_TTL = 600
+_EVENT_PROCESSING_TIMEOUT = 120
 
 
 class SlackWebhookClient:
@@ -118,7 +119,11 @@ class SlackWebhookClient:
                 # Claim the ID before yielding to prevent concurrent processing.
                 self._processing_event_ids.add(event_id)
                 try:
-                    await self.event_handler(event_data)
+                    # Leave time for a later Slack retry if preprocessing stalls.
+                    await asyncio.wait_for(
+                        self.event_handler(event_data),
+                        timeout=_EVENT_PROCESSING_TIMEOUT,
+                    )
                     self._completed_event_ids[event_id] = monotonic()
                 finally:
                     # Failures and cancellation must allow a subsequent delivery.
