@@ -1273,6 +1273,10 @@
         "description": "临时目录大小上限 (MB)",
         "hint": "用于限制 data/temp 目录总大小，单位为 MB。系统每 10 分钟检查一次，超限时按文件修改时间从旧到新删除，释放约 30% 当前体积。"
       },
+      "trace_enable": {
+        "description": "启用追踪记录",
+        "hint": "与追踪页的启动/暂停按钮共用同一开关。关闭后不再采集新追踪，已有记录仍可查看。"
+      },
       "trace_db_path": {
         "description": "追踪数据库路径",
         "hint": "相对路径以 data 目录为基准，例如 logs/traces.db；支持绝对路径。"

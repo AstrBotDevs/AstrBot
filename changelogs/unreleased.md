@@ -1,5 +1,7 @@
 # Unreleased
 
+- Expose Enable Trace Recording under Settings → General → Logs, backed by the same trace_enable setting as the trace toolbar's start/pause button.
+
 - Stop recording redundant plugin handler module metadata without rewriting or filtering historical data.
 
 - Remove response-source bookkeeping and System/Plugin sender chips. Record successful proactive sends in Context.send_message rather than the send-message tool, correlate them with the active event, and deduplicate nested event forwarding. Preserve final-only streaming summaries and independent tool deliveries; do not create traces for unscoped sends or rewrite historical data.

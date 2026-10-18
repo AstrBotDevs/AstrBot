@@ -1252,6 +1252,10 @@
         "description": "Temp Directory Size Limit (MB)",
         "hint": "Limits total size of data/temp in MB. The system checks every 10 minutes, and when exceeded, deletes oldest files first to release about 30% of current size."
       },
+      "trace_enable": {
+        "description": "Enable Trace Recording",
+        "hint": "Uses the same setting as the trace page’s start/pause button. Disabling it stops collecting new traces; existing records remain available."
+      },
       "trace_db_path": {
         "description": "Trace Database Path",
         "hint": "Relative paths start from the data directory, for example logs/traces.db. Absolute paths are also supported."

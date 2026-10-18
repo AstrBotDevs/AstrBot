@@ -554,7 +554,7 @@ Log level. Default is `INFO`. Can be set to `DEBUG`, `INFO`, `WARNING`, `ERROR`,
 
 ### `trace_enable`
 
-Whether to enable trace recording. Default is `false`. When enabled, AstrBot records execution traces, which can be viewed under `Data & Logs → Trace` in the admin panel.
+Whether to enable trace recording. Default is `false`. Toggle it under `Settings → General → Logs → Enable Trace Recording`; this is the same setting as the trace page’s start/pause button. When enabled, AstrBot records execution traces, which can be viewed under `Data & Logs → Trace` in the admin panel.
 
 Enabling recording also persists traces. Pausing preserves history and lets existing traces finish. Logs correlate with the active `trace_id` / `span_id`; plugins continue using `astrbot.api.logger`. Core fields align with the OTel model, without an OTel SDK, OTLP, or external export.
 

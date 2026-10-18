@@ -747,6 +747,7 @@ const systemConfigGroups = computed(() => {
             'log_file_enable',
             'log_file_path',
             'log_file_max_mb',
+            'trace_enable',
             'trace_db_path',
             'trace_db_max_mb',
             'trace_retention_days'

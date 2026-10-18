@@ -3236,6 +3236,7 @@ CONFIG_METADATA_2 = {
             "log_file_path": {"type": "string", "condition": {"log_file_enable": True}},
             "log_file_max_mb": {"type": "int", "condition": {"log_file_enable": True}},
             "temp_dir_max_size": {"type": "int"},
+            "trace_enable": {"type": "bool"},
             "trace_db_path": {"type": "string"},
             "trace_db_max_mb": {"type": "int"},
             "trace_retention_days": {"type": "int"},
@@ -4798,6 +4799,11 @@ CONFIG_METADATA_3_SYSTEM = {
                         "description": "临时目录大小上限 (MB)",
                         "type": "int",
                         "hint": "用于限制 data/temp 目录总大小，单位为 MB。系统每 10 分钟检查一次，超限时按文件修改时间从旧到新删除，释放约 30% 当前体积。",
+                    },
+                    "trace_enable": {
+                        "description": "启用追踪记录",
+                        "type": "bool",
+                        "hint": "与追踪页的启动/暂停按钮共用同一开关。关闭后不再采集新追踪，已有记录仍可查看。",
                     },
                     "trace_db_path": {
                         "description": "追踪数据库路径",

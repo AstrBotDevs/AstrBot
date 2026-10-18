@@ -10,12 +10,20 @@ const source = readFileSync(new URL("../src/views/Settings.vue", import.meta.url
 const { descriptor } = parse(source);
 const ast = ts.createSourceFile("settings.js", descriptor.scriptSetup.content, ts.ScriptTarget.Latest, true);
 
-test("general log settings expose SQLite path, capacity, and retention without legacy JSONL keys", () => {
+test("recording toggle has translated metadata in every supported locale", () => {
+  for (const locale of ["zh-CN", "en-US", "ja-JP", "ru-RU"]) {
+    const metadata = JSON.parse(readFileSync(new URL(`../src/i18n/locales/${locale}/features/config-metadata.json`, import.meta.url), "utf8"));
+    assert.ok(metadata.system_group.system.trace_enable.description);
+    assert.ok(metadata.system_group.system.trace_enable.hint);
+  }
+});
+
+test("general log settings expose recording toggle, SQLite path, capacity, and retention without legacy JSONL keys", () => {
   const keys = [
     "log_level", "log_file_enable", "log_file_path", "log_file_max_mb",
-    "trace_db_path", "trace_db_max_mb", "trace_retention_days",
+    "trace_enable", "trace_db_path", "trace_db_max_mb", "trace_retention_days",
   ];
-  const items = Object.fromEntries(keys.map((key) => [key, { type: key === "trace_db_path" ? "string" : "int" }]));
+  const items = Object.fromEntries(keys.map((key) => [key, { type: key === "trace_enable" ? "bool" : key === "trace_db_path" ? "string" : "int" }]));
   const context = vm.createContext({
     computed,
     tm: (key) => key,
@@ -29,6 +37,7 @@ test("general log settings expose SQLite path, capacity, and retention without l
   const groups = vm.runInContext("generalSystemConfigGroups.value", context);
   const logs = groups.find((group) => group.key === "logs");
   assert.deepEqual(Object.keys(logs.metadata.logs.items), keys);
+  assert.equal(logs.metadata.logs.items.trace_enable.type, "bool");
   for (const key of ["trace_log_enable", "trace_log_path", "trace_log_max_mb"]) {
     assert.doesNotMatch(statements[0].getText(ast), new RegExp(key));
   }
