@@ -1,5 +1,7 @@
 # Unreleased
 
+- Move session-waiter dispatch from the built-in plugin's `handle_session_control_agent` handler into the core pipeline. Admit matching follow-up input without a mention or wake prefix, and dispatch after access/safety checks and preprocessing but before ordinary plugin handlers or the Agent. Preserve the existing `@session_waiter` API.
+
 - Expand the trace writer queue to 1024 frames with a 16 MiB byte budget while keeping the WAL threshold unchanged. Revert conditional trace admission and its internal agent_invoked signal.
 
 - Expose Enable Trace Recording under Settings → General → Logs, backed by the same trace_enable setting as the trace toolbar's start/pause button.
