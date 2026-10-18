@@ -1254,7 +1254,7 @@
       },
       "trace_enable": {
         "description": "Enable Trace Recording",
-        "hint": "Uses the same setting as the trace page’s start/pause button. Disabling it stops collecting new traces; existing records remain available."
+        "hint": "Trace each user command and AI call."
       },
       "trace_db_path": {
         "description": "Trace Database Path",

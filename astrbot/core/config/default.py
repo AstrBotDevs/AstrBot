@@ -4803,7 +4803,7 @@ CONFIG_METADATA_3_SYSTEM = {
                     "trace_enable": {
                         "description": "启用追踪记录",
                         "type": "bool",
-                        "hint": "与追踪页的启动/暂停按钮共用同一开关。关闭后不再采集新追踪，已有记录仍可查看。",
+                        "hint": "追踪用户的每次指令和 AI 调用。",
                     },
                     "trace_db_path": {
                         "description": "追踪数据库路径",
