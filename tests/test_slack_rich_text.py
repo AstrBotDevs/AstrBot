@@ -176,7 +176,133 @@ async def test_slack_list_preserves_links_and_mentions(style):
     )
 
     assert [c.qq for c in received.message if isinstance(c, At)] == ["UBOT", "UOTHER"]
-    assert received.message_str == (
-        f"•  Link: [Probe]({url}) after\n• [{url}]({url})\n• \n• End"
-    )
+    if style == "ordered":
+        expected = f"1.  Link: [Probe]({url}) after\n2. [{url}]({url})\n3. \n4. End\n"
+    else:
+        expected = f"•  Link: [Probe]({url}) after\n• [{url}]({url})\n• \n• End\n"
+    assert received.message_str == expected
     assert [type(c) for c in received.message] == [Plain, At, Plain, At, Plain]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("nested", "mention_last"),
+    [(False, False), (True, False), (False, True)],
+    ids=["plain_list", "nested_list", "trailing_mention"],
+)
+async def test_slack_list_preserves_layout(nested, mention_last):
+    adapter = SlackAdapter(
+        make_platform_config("slack", bot_token="xoxb-test", app_token="xapp-test"),
+        {},
+        asyncio.Queue(),
+    )
+    adapter.bot_self_id = "UBOT"
+    adapter.web_client.users_info = AsyncMock(
+        return_value={"user": {"real_name": "Tester"}},
+    )
+    adapter.web_client.conversations_info = AsyncMock(
+        return_value={"channel": {"is_im": True}},
+    )
+    elements = [
+        {
+            "type": "rich_text_section",
+            "elements": [{"type": "text", "text": "Items:\n" if nested else "Items:"}],
+        }
+    ]
+    if nested:
+        elements.append(
+            {
+                "type": "rich_text_list",
+                "style": "bullet",
+                "indent": 0,
+                "elements": [
+                    {
+                        "type": "rich_text_section",
+                        "elements": [{"type": "text", "text": "Parent"}],
+                    },
+                ],
+            }
+        )
+    item_elements = [{"type": "text", "text": "SKU-AB"}]
+    if mention_last:
+        item_elements.append({"type": "user", "user_id": "UOTHER"})
+    elements.extend(
+        [
+            {
+                "type": "rich_text_list",
+                "style": "bullet",
+                "indent": 1 if nested else 0,
+                "elements": [
+                    {"type": "rich_text_section", "elements": item_elements},
+                ],
+            },
+            {
+                "type": "rich_text_section",
+                "elements": [{"type": "text", "text": "123 is the quantity."}],
+            },
+        ]
+    )
+    received = await adapter.convert_message(
+        {
+            "user": "UTEST",
+            "channel": "DTEST",
+            "blocks": [{"type": "rich_text", "elements": elements}],
+        }
+    )
+
+    expected = "• SKU-AB\n123 is the quantity."
+    if nested:
+        expected = "• Parent\n    • SKU-AB\n123 is the quantity."
+    assert received.message_str == f"Items:\n{expected}"
+    assert [c.qq for c in received.message if isinstance(c, At)] == (
+        ["UOTHER"] if mention_last else []
+    )
+
+
+def test_slack_ordered_list_preserves_offset():
+    adapter = SlackAdapter(
+        make_platform_config("slack", bot_token="xoxb-test", app_token="xapp-test"),
+        {},
+        asyncio.Queue(),
+    )
+    components = adapter._parse_blocks(
+        [
+            {
+                "type": "rich_text",
+                "elements": [
+                    {
+                        "type": "rich_text_section",
+                        "elements": [{"type": "user", "user_id": "UBOT"}],
+                    },
+                    {
+                        "type": "rich_text_list",
+                        "style": "ordered",
+                        "indent": 1,
+                        "offset": 9,
+                        "elements": [
+                            {
+                                "type": "rich_text_section",
+                                "elements": [
+                                    {"type": "text", "text": "Child"},
+                                ],
+                            },
+                            {
+                                "type": "rich_text_section",
+                                "elements": [{"type": "text", "text": "Sibling"}],
+                            },
+                        ],
+                    },
+                    {
+                        "type": "rich_text_section",
+                        "elements": [{"type": "text", "text": "End"}],
+                    },
+                ],
+            }
+        ]
+    )
+
+    assert isinstance(components[0], At)
+    assert components[0].qq == "UBOT"
+    assert "".join(c.text for c in components if isinstance(c, Plain)) == (
+        "\n    10. Child\n    11. Sibling\nEnd"
+    )

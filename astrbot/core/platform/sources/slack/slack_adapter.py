@@ -272,16 +272,30 @@ class SlackAdapter(Platform):
                             message_components.append(Plain(text="\n"))
 
                     elif element.get("type") == "rich_text_list":
-                        # 处理列表
                         list_items = element.get("elements", [])
+                        if (
+                            list_items
+                            and message_components
+                            and (
+                                not isinstance(message_components[-1], Plain)
+                                or not message_components[-1].text.endswith("\n")
+                            )
+                        ):
+                            message_components.append(Plain(text="\n"))
                         list_text = ""
-                        for item in list_items:
+                        indent = "    " * element.get("indent", 0)
+                        for index, item in enumerate(list_items):
                             if item.get("type") == "rich_text_section":
                                 # Reuse section parsing to preserve inline components.
                                 item_components = self._parse_blocks(
                                     [{"type": "rich_text", "elements": [item]}]
                                 )
-                                list_text += "• "
+                                marker = (
+                                    f"{element.get('offset', 0) + index + 1}. "
+                                    if element.get("style") == "ordered"
+                                    else "• "
+                                )
+                                list_text += indent + marker
                                 for component in item_components:
                                     if isinstance(component, Plain):
                                         list_text += component.text
@@ -294,8 +308,9 @@ class SlackAdapter(Platform):
                                         message_components.append(component)
                                 list_text += "\n"
 
-                        if list_text.strip():
-                            message_components.append(Plain(text=list_text.rstrip()))
+                        # Keep the final newline, including after a trailing mention.
+                        if list_text:
+                            message_components.append(Plain(text=list_text))
 
             elif block_type == "section":
                 # 处理段落块
