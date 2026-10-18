@@ -556,7 +556,7 @@ AstrBot WebUI 配置。
 
 是否启用追踪记录。默认为 `false`。可在 `设置 → 常规 → 日志 → 启用追踪记录` 中切换，与追踪页的启动/暂停按钮共用同一配置。启用后，AstrBot 会记录运行追踪信息，可以在管理面板的 `数据与日志 → 追踪` 页面查看。
 
-开启后自动持久化；暂停不删除历史，已开始的追踪仍会记录完成状态。日志会关联当前活动的 `trace_id` / `span_id`，插件仍使用原来的 `astrbot.api.logger`。数据模型对齐 OTel 核心字段，但没有 OTel SDK、OTLP 或外部导出。
+开启后自动持久化；暂停不删除历史，已开始的追踪仍会记录完成状态。OpenTelemetry API 和 SDK 负责 Span ID、父子关系、起止时间、状态、事件和活动上下文。日志会关联当前活动的 `trace_id` / `span_id`，插件仍使用原来的 `astrbot.api.logger`。AstrBot 使用独立的 TracerProvider，不替换全局 Provider，不添加导出器或自动埋点。SQLite 持久化、JSON API/SSE 和现有历史数据格式保持不变，不启用 OTLP 导出。标准环境变量 `OTEL_SDK_DISABLED=true` 也会关闭 SDK 追踪。
 
 ### `trace_db_path`
 

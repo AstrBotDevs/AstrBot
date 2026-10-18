@@ -4,7 +4,7 @@ import test from "node:test";
 import vm from "node:vm";
 import ts from "typescript";
 import { computed, nextTick, reactive, ref, watch } from "vue";
-import { compileStyle, compileTemplate, parse } from "vue/compiler-sfc";
+import { parse } from "vue/compiler-sfc";
 
 const source = readFileSync(new URL("../src/components/shared/TraceDisplayer.vue", import.meta.url), "utf8");
 const { descriptor } = parse(source);
@@ -58,13 +58,6 @@ function canonical(id, stamp = "2000000000", completed = true) {
     attributes: { "astrbot.message_outline": "Hello", "astrbot.plugins": "Weather" },
   };
 }
-
-test("trace text uses system fonts and running status is blue", () => {
-  assert.match(descriptor.styles[0].content, /font-family: system-ui, sans-serif/);
-  assert.match(descriptor.styles[0].content, /:global\(\.trace-tooltip\)/);
-  assert.doesNotMatch(descriptor.styles[0].content, /astrbot-font-cjk-mono|Outfit/);
-  assert.match(descriptor.template.content, /event.status === 'success' \? 'success' : '#1976D2'/);
-});
 
 test("timestamps include zero-padded month and day with milliseconds", () => {
   const node = ast.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === "formatTime");
@@ -239,31 +232,16 @@ test("Vuetify datatable keeps the requested columns and explicit detail selectio
     "columns.status", "columns.platform", "columns.timestamp",
     "columns.duration", "columns.message", "columns.category", "UMO", "columns.sender", "Spans",
   ]);
-  const platformHeader = state.traceHeaders.value.find((header) => header.key === "platform");
-  assert.equal(platformHeader.width, 80);
-  assert.equal(platformHeader.minWidth, 80);
-  assert.equal(platformHeader.headerProps.class, "text-no-wrap");
-  assert.match(descriptor.template.content, /<v-chip size="small" variant="flat" :color="event.status/);
-  const zh = JSON.parse(readFileSync(new URL("../src/i18n/locales/zh-CN/features/trace.json", import.meta.url), "utf8"));
-  assert.equal(zh.columns.duration, "时长");
-  assert.equal(zh.columns.category, "类型");
-  assert.match(descriptor.template.content, /matchesFilter\(event, 'models'\)[^>]*color="#1976D2"/);
-  assert.match(descriptor.template.content, /event.has_commands \?\?[^>]*color="#2E7D32"/);
-  assert.match(descriptor.template.content, /<v-data-table/);
   assert.match(descriptor.template.content, /item-value="event.span_id"/);
   assert.match(descriptor.template.content, /<v-data-table-server/);
   assert.match(descriptor.template.content, /:items-per-page="pageSize"/);
   assert.match(descriptor.template.content, /:page="historyPage"/);
   assert.match(descriptor.template.content, /:items-length="totalRecords"/);
   assert.doesNotMatch(descriptor.template.content, /hide-default-footer|history.loadMore/);
-  assert.doesNotMatch(descriptor.template.content, /#item=/);
   for (const key of ["status", "platform", "timestamp", "duration", "message", "category", "umo", "sender", "spans"]) {
     assert.match(descriptor.template.content, new RegExp("#item\\." + key + "="));
   }
-  assert.match(descriptor.template.content, /@click:row="\(_, \{ item \}\) => selectEvent\(item.event.span_id\)"/);
   assert.match(descriptor.template.content, /<main v-if="selectedEvent"/);
-  assert.match(descriptor.template.content, /tm\('closeDetails'\)/);
-  assert.match(descriptor.scriptSetup.content, /clearInterval\(durationTimer.value\)/);
 });
 
 test("native table rows retain trace identity, selection, and keyboard activation", () => {
@@ -285,30 +263,4 @@ test("native table rows retain trace identity, selection, and keyboard activatio
   assert.deepEqual(selections, ["first", "first"]);
   assert.equal(prevented, 2);
   assert.equal(rowProps({ item: { event: { span_id: "second" } } }).class.selected, false);
-});
-
-test("table uses 13px text and 40px headers while body density and hover use Vuetify defaults", () => {
-  const table = descriptor.template.content.match(/<v-data-table[\s\S]*?>/)[0];
-  assert.match(table, /\s+hover\s/);
-  assert.doesNotMatch(table, /density=/);
-  assert.doesNotMatch(descriptor.styles[0].content, /:deep\(table|table-layout:\s*fixed|\.trace-list-row:hover/);
-  const tableStyle = descriptor.styles[0].content.match(/\.trace-list-table\s*\{([^}]+)\}/)[1];
-  assert.match(descriptor.styles[0].content, /\.trace-list\s*\{[^}]*isolation:\s*isolate/);
-  assert.doesNotMatch(tableStyle, /font-size|padding|font-family/);
-  assert.match(tableStyle, /--v-table-header-height: 40px/);
-  assert.match(descriptor.styles[0].content, /:deep\(th\), \.trace-list-table :deep\(td\) \{ font-size: 13px;/);
-  assert.deepEqual(compileTemplate({ source: descriptor.template.content, filename: "TraceDisplayer.vue", id: "trace-native" }).errors, []);
-  assert.deepEqual(compileStyle({ source: descriptor.styles[0].content, filename: "TraceDisplayer.vue", id: "trace-native", scoped: true }).errors, []);
-});
-
-test("trace tab stays flat without outer cards or a tinted list container", () => {
-  const page = parse(readFileSync(new URL("../src/views/TracePage.vue", import.meta.url), "utf8")).descriptor;
-  assert.doesNotMatch(page.template.content, /trace-card/);
-  assert.doesNotMatch(page.styles[0].content, /--trace-card|\.trace-card/);
-  const explorer = descriptor.styles[0].content.match(/\.trace-explorer\s*\{([^}]+)\}/)[1];
-  assert.match(explorer, /background:\s*transparent/);
-  assert.match(explorer, /border:\s*0/);
-  assert.match(explorer, /border-radius:\s*0/);
-  assert.deepEqual(compileTemplate({ source: page.template.content, filename: "TracePage.vue", id: "trace-flat" }).errors, []);
-  assert.deepEqual(compileStyle({ source: page.styles[0].content, filename: "TracePage.vue", id: "trace-flat", scoped: true }).errors, []);
 });

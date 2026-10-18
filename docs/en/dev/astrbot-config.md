@@ -556,7 +556,7 @@ Log level. Default is `INFO`. Can be set to `DEBUG`, `INFO`, `WARNING`, `ERROR`,
 
 Whether to enable trace recording. Default is `false`. Toggle it under `Settings → General → Logs → Enable Trace Recording`; this is the same setting as the trace page’s start/pause button. When enabled, AstrBot records execution traces, which can be viewed under `Data & Logs → Trace` in the admin panel.
 
-Enabling recording also persists traces. Pausing preserves history and lets existing traces finish. Logs correlate with the active `trace_id` / `span_id`; plugins continue using `astrbot.api.logger`. Core fields align with the OTel model, without an OTel SDK, OTLP, or external export.
+Enabling recording also persists traces. Pausing preserves history and lets existing traces finish. The OpenTelemetry API and SDK manage span IDs, parent relationships, timestamps, status, events, and active context. Logs correlate with the active `trace_id` / `span_id`; plugins continue using `astrbot.api.logger`. AstrBot uses its own TracerProvider without replacing the global provider, adding exporters, or enabling automatic instrumentation. SQLite persistence and JSON API/SSE remain unchanged; existing history stays readable. No OTLP export is enabled. The standard `OTEL_SDK_DISABLED=true` environment variable also disables SDK tracing.
 
 ### `trace_db_path`
 

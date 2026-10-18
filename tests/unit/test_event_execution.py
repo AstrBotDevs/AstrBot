@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from opentelemetry.trace import format_trace_id, get_current_span
 
 from astrbot.core.agent.runners.base import AgentState
 from astrbot.core.cron.manager import CronJobManager
@@ -17,7 +18,6 @@ from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.utils import trace as trace_module
 from astrbot.core.utils.active_event_registry import active_event_registry
-from astrbot.core.utils.telemetry import current_trace_context
 from astrbot.core.utils.trace_store import TraceStore
 
 
@@ -81,9 +81,12 @@ def test_event_scope_finishes_and_restores_context(event, frames, tmp_path, fail
     event.track_temporary_local_file(str(attachment))
     try:
         with event.execution():
-            root_context = current_trace_context.get()
+            root_context = get_current_span()
             platform_context = _log_context.get()
-            assert root_context.trace_id == event.trace.trace_id
+            assert (
+                format_trace_id(root_context.get_span_context().trace_id)
+                == event.trace.trace_id
+            )
             assert platform_context.platform_id == "test"
             assert event in active_event_registry._events[event.unified_msg_origin]
             event.trace.record("agent_start", kind="agent")
@@ -102,9 +105,9 @@ def test_event_scope_finishes_and_restores_context(event, frames, tmp_path, fail
     if failure:
         assert root["status"]["message"] == (str(failure) or type(failure).__name__)
     assert not event.trace._pending
-    assert current_trace_context.get() is None
+    assert not get_current_span().get_span_context().is_valid
     assert _log_context.get() is None
-    assert not root_context.active and not platform_context.active
+    assert not root_context.is_recording() and not platform_context.active
     assert event.unified_msg_origin not in active_event_registry._events
     assert not attachment.exists()
 
@@ -117,9 +120,9 @@ def test_nested_event_scopes_do_not_finish_early(event, frames):
         frames: Captured trace snapshots.
     """
     with event.execution():
-        context = current_trace_context.get()
+        context = get_current_span()
         with event.execution():
-            assert current_trace_context.get() is context
+            assert get_current_span() is context
         assert event.trace._summary["state"] == "running"
         assert event in active_event_registry._events[event.unified_msg_origin]
     final_count = len(frames)
@@ -188,7 +191,7 @@ async def test_task_cancellation_finishes_event(event, frames):
     assert frames[-1]["trace"]["state"] == "completed"
     assert frames[-1]["span"]["status"] == {"code": 2, "message": "CancelledError"}
     assert event.unified_msg_origin not in active_event_registry._events
-    assert current_trace_context.get() is None
+    assert not get_current_span().get_span_context().is_valid
 
 
 @pytest.mark.asyncio
@@ -265,7 +268,10 @@ async def test_cron_uses_event_scope(frames, monkeypatch, failure_at):
 
     async def conversation(**kwargs):
         captured["event"] = kwargs["event"]
-        assert current_trace_context.get().trace_id == captured["event"].trace.trace_id
+        assert (
+            format_trace_id(get_current_span().get_span_context().trace_id)
+            == captured["event"].trace.trace_id
+        )
         if failure_at == "conversation":
             raise RuntimeError("conversation failed")
         return SimpleNamespace(history="[]")
@@ -285,7 +291,10 @@ async def test_cron_uses_event_scope(frames, monkeypatch, failure_at):
     runner.get_final_llm_resp.return_value = None
 
     async def build(**kwargs):
-        assert current_trace_context.get().trace_id == kwargs["event"].trace.trace_id
+        assert (
+            format_trace_id(get_current_span().get_span_context().trace_id)
+            == kwargs["event"].trace.trace_id
+        )
         assert _log_context.get().platform_id == "test"
         assert _log_context.get().platform_type == "cron"
         if failure_at == "build":
@@ -294,7 +303,10 @@ async def test_cron_uses_event_scope(frames, monkeypatch, failure_at):
 
     async def persist(*args, **kwargs):
         assert frames[-1]["trace"]["state"] == "running"
-        assert current_trace_context.get().trace_id == kwargs["event"].trace.trace_id
+        assert (
+            format_trace_id(get_current_span().get_span_context().trace_id)
+            == kwargs["event"].trace.trace_id
+        )
         if failure_at == "history":
             raise RuntimeError("history failed")
 
@@ -320,5 +332,5 @@ async def test_cron_uses_event_scope(frames, monkeypatch, failure_at):
     assert final["span"]["span_id"] == final["trace"]["root_span_id"]
     assert final["span"]["status"]["code"] == (2 if failure_at else 1)
     assert "test:FriendMessage:cron-execution-test" not in active_event_registry._events
-    assert current_trace_context.get() is None
+    assert not get_current_span().get_span_context().is_valid
     assert _log_context.get() is None

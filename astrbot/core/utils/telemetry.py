@@ -1,10 +1,6 @@
-"""Bounded OTel-compatible values and local trace context (without an SDK)."""
+"""Bounded application values shared by OpenTelemetry spans and logs."""
 
 import json
-from collections.abc import Iterator
-from contextlib import contextmanager
-from contextvars import ContextVar
-from dataclasses import dataclass
 from itertools import islice
 from typing import Any
 
@@ -114,37 +110,3 @@ def bounded_attributes(
     if truncated:
         result["astrbot.truncated"] = True
     return result
-
-
-@dataclass
-class TraceContext:
-    """Trace identifiers whose lifetime also applies to copied task contexts."""
-
-    trace_id: str
-    span_id: str
-    active: bool = True
-
-
-current_trace_context: ContextVar[TraceContext | None] = ContextVar(
-    "astrbot_trace_context", default=None
-)
-
-
-@contextmanager
-def bind_trace_context(trace_id: str, span_id: str) -> Iterator[TraceContext]:
-    """Bind IDs and invalidate detached copies on exit.
-
-    Args:
-        trace_id: Lowercase 32-character trace ID.
-        span_id: Lowercase 16-character span ID.
-
-    Yields:
-        The active context.
-    """
-    context = TraceContext(trace_id, span_id)
-    token = current_trace_context.set(context)
-    try:
-        yield context
-    finally:
-        context.active = False
-        current_trace_context.reset(token)

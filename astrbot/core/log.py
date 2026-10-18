@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from loguru import logger as _raw_loguru_logger
+from opentelemetry.trace import format_span_id, format_trace_id, get_current_span
 
 from astrbot.core.config.default import VERSION
 from astrbot.core.utils.astrbot_path import (
@@ -27,7 +28,6 @@ from astrbot.core.utils.astrbot_path import (
 from astrbot.core.utils.telemetry import (
     bounded_attributes,
     bounded_text,
-    current_trace_context,
 )
 
 CACHED_SIZE = 500
@@ -121,10 +121,12 @@ class _RecordEnricherFilter(logging.Filter):
         record.platform_type = getattr(record, "platform_type", None) or (
             context.platform_type if context_is_active else None
         )
-        trace_context = current_trace_context.get()
-        if trace_context is not None and trace_context.active:
-            record.trace_id = trace_context.trace_id
-            record.span_id = trace_context.span_id
+        span = get_current_span()
+        # Copied task contexts can still reference a span after its execution ends.
+        if span.is_recording():
+            trace_context = span.get_span_context()
+            record.trace_id = format_trace_id(trace_context.trace_id)
+            record.span_id = format_span_id(trace_context.span_id)
         return True
 
 

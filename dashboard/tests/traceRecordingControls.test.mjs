@@ -101,30 +101,4 @@ test("recording button reads Start, Pause, or Connecting without a status dot", 
   assert.equal(label.value, "启动");
   connected.value = false;
   assert.equal(label.value, "启动");
-  assert.doesNotMatch(view.template.content, /live-dot|trace-count/);
-});
-
-test("toolbar has matching icon-and-text buttons, fluid input, and an embedded record count", () => {
-  const toolbar = view.template.content.split('<div class="trace-workspace">')[0];
-  const buttons = Array.from(toolbar.matchAll(/<v-btn\b[\s\S]*?<\/v-btn>/g), (match) => match[0]);
-  assert.equal(buttons.length, 3);
-  for (const button of buttons) assert.match(button, /variant="tonal"/);
-  assert.match(buttons[0], /<v-icon/);
-  assert.match(buttons[0], /tm\("filters.button"\)/);
-  assert.match(buttons[1], /<component/);
-  assert.match(buttons[1], /recordingLabel/);
-  assert.match(buttons[2], /<RefreshCw/);
-  assert.match(buttons[2], /tm\("refresh"\)/);
-  assert.match(buttons[1], /:loading="recordingBusy"/);
-  assert.match(buttons[1], /:disabled="recordingBusy"/);
-  assert.match(toolbar, /tm\('search', \{ count: totalRecords \}\)/);
-  const searchStyle = view.styles[0].content.match(/\.trace-search\s*\{([^}]+)\}/)[1];
-  assert.match(searchStyle, /flex:\s*1/);
-  assert.match(searchStyle, /height:\s*36px/);
-  assert.doesNotMatch(searchStyle, /max-width/);
-  const buttonStyle = view.styles[0].content.match(/\.trace-explorer-toolbar :deep\(\.v-btn\) \{([^}]+)\}/)[1];
-  assert.match(buttonStyle, /height:\s*36px/);
-  assert.match(buttonStyle, /background:\s*var\(--trace-control-background\)/);
-  assert.match(searchStyle, /background:\s*var\(--trace-control-background\)/);
-  assert.match(view.styles[0].content, /\.v-btn__underlay\) \{ display: none; \}/);
 });

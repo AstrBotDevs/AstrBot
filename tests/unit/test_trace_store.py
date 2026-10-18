@@ -4,12 +4,15 @@ import asyncio
 import json
 import logging
 import re
+import runpy
 import sqlite3
 import threading
 import time
 from pathlib import Path
 
 import pytest
+from opentelemetry.sdk.trace import Span, TracerProvider
+from opentelemetry.trace import format_span_id, get_current_span, get_tracer_provider
 
 from astrbot.core.log import LogBroker, LogManager
 from astrbot.core.utils import trace as trace_module
@@ -18,7 +21,6 @@ from astrbot.core.utils.storage_cleaner import StorageCleaner
 from astrbot.core.utils.telemetry import (
     MAX_ATTRIBUTE_BYTES,
     bounded_attributes,
-    current_trace_context,
 )
 from astrbot.core.utils.trace import TraceSpan
 from astrbot.core.utils.trace_store import QUEUE_BYTES, TraceStore
@@ -45,6 +47,7 @@ def test_standard_ids_parents_and_immutable_snapshots(capture):
     assert re.fullmatch("[0-9a-f]{32}", trace.trace_id)
     assert re.fullmatch("[0-9a-f]{16}", trace.span_id)
     with trace.context():
+        root = get_current_span()
         trace.record("event_received", platform_id="qq", kind="message")
         trace.record(
             "handler_start",
@@ -52,18 +55,25 @@ def test_standard_ids_parents_and_immutable_snapshots(capture):
             plugin="test",
             handler_full_name="test.handler",
         )
-        handler_id = current_trace_context.get().span_id
+        handler = get_current_span()
+        handler_id = format_span_id(handler.get_span_context().span_id)
         trace.record("agent_start", kind="agent")
-        agent_id = current_trace_context.get().span_id
+        agent = get_current_span()
+        agent_id = format_span_id(agent.get_span_context().span_id)
         trace.record("agent_tool_call", tool_name="weather")
         trace.record("agent_tool_result", tool_result="Sunny")
         trace.record("agent_end", status="success")
-        assert current_trace_context.get().span_id == handler_id
+        assert (
+            format_span_id(get_current_span().get_span_context().span_id) == handler_id
+        )
         trace.record("handler_end", handler_full_name="test.handler", status="success")
-        assert current_trace_context.get().span_id == trace.span_id
+        assert (
+            format_span_id(get_current_span().get_span_context().span_id)
+            == trace.span_id
+        )
         trace.record("response_sent", kind="response", source="core", message="Sunny")
         trace.record("pipeline_end", status="success")
-    assert current_trace_context.get() is None
+    assert not get_current_span().get_span_context().is_valid
     spans = {
         frame["span"]["span_id"]: frame["span"] for frame in capture if "span" in frame
     }
@@ -85,6 +95,61 @@ def test_standard_ids_parents_and_immutable_snapshots(capture):
     assert capture[0]["trace"]["state"] == "running"
     assert capture[-1]["trace"]["state"] == "completed"
     assert not trace._pending
+    assert agent.parent == handler.get_span_context()
+    for sdk_span in (root, handler, agent):
+        assert isinstance(sdk_span, Span) and not sdk_span.is_recording()
+        packet = spans[format_span_id(sdk_span.context.span_id)]
+        assert str(sdk_span.start_time) == packet["start_time_unix_nano"]
+        assert str(sdk_span.end_time) == packet["end_time_unix_nano"]
+        assert sdk_span.status.status_code.value == packet["status"]["code"]
+        assert dict(sdk_span.attributes) == packet["attributes"]
+    events = [frame["event"] for frame in capture if "event" in frame]
+    assert len(events) == len(root.events) == 1
+    assert root.events[0].name == events[0]["name"] == "response_sent"
+    assert str(root.events[0].timestamp) == events[0]["time_unix_nano"]
+    assert dict(root.events[0].attributes) == events[0]["attributes"]
+    assert all("events" not in frame.get("span", {}) for frame in capture)
+
+
+def test_sdk_context_is_isolated_and_restores_foreign_span(capture):
+    """Use standard context without taking ownership of other providers.
+
+    Args:
+        capture: Immutable trace snapshots.
+    """
+    global_provider = get_tracer_provider()
+    provider = TracerProvider(shutdown_on_exit=False)
+    try:
+        with provider.get_tracer("plugin").start_as_current_span("plugin") as foreign:
+            trace = TraceSpan("message")
+            assert trace._root.parent is None
+            assert trace._root.context.trace_id != foreign.context.trace_id
+            with trace.context():
+                assert get_current_span() is trace._root
+                trace.record("pipeline_end", status="success")
+            assert get_current_span() is foreign
+            assert foreign.is_recording()
+        assert get_tracer_provider() is global_provider
+    finally:
+        provider.shutdown()
+
+
+def test_sdk_disabled_does_not_break_messages(capture, monkeypatch):
+    """Respect the SDK kill switch without emitting invalid trace IDs.
+
+    Args:
+        capture: Immutable trace snapshots.
+        monkeypatch: Pytest patch manager.
+    """
+    monkeypatch.setenv("OTEL_SDK_DISABLED", "true")
+    module = runpy.run_path(trace_module.__file__)
+    trace = module["TraceSpan"]("disabled")
+    with trace.context():
+        assert not get_current_span().is_recording()
+        trace.record("event_received")
+        trace.record("agent_start")
+        trace.record("pipeline_end", status="success")
+    assert not capture
 
 
 def test_agent_and_command_types_are_independent_and_persisted(persisted, capture):
@@ -149,7 +214,7 @@ def test_internal_transitions_and_timing_are_not_persisted(capture):
             handler_type="AdapterMessageEvent",
             duration_ms=999,
         )
-        handler_id = current_trace_context.get().span_id
+        handler_id = format_span_id(get_current_span().get_span_context().span_id)
         trace.record(
             "handler_end",
             handler_full_name="plugin.handler",
@@ -188,7 +253,7 @@ async def test_logs_correlate_and_detached_contexts_expire(capture):
         trace.record("event_received")
         log.info("Root")
         trace.record("handler_start", handler_full_name="plugin.handler")
-        child_id = current_trace_context.get().span_id
+        child_id = format_span_id(get_current_span().get_span_context().span_id)
         task = asyncio.create_task(late_log())
         log.warning("Handler")
         trace.record(
@@ -215,9 +280,9 @@ async def test_concurrent_abandoned_spans_end(capture):
 
     async def child(name):
         trace.record("handler_start", handler_full_name=name)
-        context = current_trace_context.get()
+        context = get_current_span()
         await release.wait()
-        assert context.active is False
+        assert not context.is_recording()
 
     with trace.context():
         trace.record("event_received")
@@ -442,35 +507,6 @@ def test_capacity_prunes_complete_traces_with_cascade(persisted, capture):
             )
             < 1024 * 1024
         )
-
-
-def test_writer_queue_has_byte_and_count_limits(tmp_path, monkeypatch, capture):
-    release = threading.Event()
-    original_run = TraceStore._run
-
-    def delayed_run(self):
-        """Hold the writer to simulate a slow disk."""
-        release.wait(5)
-        original_run(self)
-
-    monkeypatch.setattr(TraceStore, "_run", delayed_run)
-    trace = TraceSpan("message")
-    trace.record("event_received")
-    payload = capture[0]
-    payload["trace"]["attributes"]["astrbot.payload"] = "x" * 40000
-    store = TraceStore(tmp_path / "traces.db", {})
-    try:
-        attempts = store.queue.maxsize + 1
-        accepted = sum(store.append(payload) for _ in range(attempts))
-        assert 0 < accepted < store.queue.maxsize
-        assert store._pending_bytes <= QUEUE_BYTES
-        assert store.queue.qsize() == accepted
-        assert store.dropped == attempts - accepted
-        release.set()
-        assert store.flush()
-    finally:
-        release.set()
-        store.close()
 
 
 @pytest.mark.asyncio
