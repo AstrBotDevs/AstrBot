@@ -7,7 +7,11 @@ from pathlib import Path
 
 from astrbot.core import logger
 from astrbot.core.message.components import Image, Plain, Record, Reply
-from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.astr_message_event import (
+    LAST_REACTION_CREATED,
+    PRE_ACK_REACTION,
+    AstrMessageEvent,
+)
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import (
     describe_media_ref,
@@ -117,7 +121,19 @@ class PreProcessStage(Stage):
             and event.is_at_or_wake_command
         ):
             try:
-                await event.react(random.choice(emojis))
+                emoji = random.choice(emojis)
+                reaction_id = await event.react(emoji)
+                # Only track reactions with an ID so a failed create cannot
+                # trigger the emoji fallback and remove an older reaction.
+                if (
+                    platform == "lark"
+                    and cfg.get("auto_remove", True) is True
+                    and (
+                        reaction_id is not None
+                        or event.get_extra(LAST_REACTION_CREATED, False) is True
+                    )
+                ):
+                    event.set_extra(PRE_ACK_REACTION, (reaction_id, emoji))
             except Exception as e:
                 logger.warning(
                     f"Failed to send a pre-response reaction on {platform}: {e}"
