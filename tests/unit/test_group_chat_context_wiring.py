@@ -300,3 +300,25 @@ async def test_format_message_truncates_long_json_card_fields():
     formatted = await context._format_message(event, {})
 
     assert f"Description: {'a' * 200}...]" in formatted
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("raw_idx", [-1, 0, 1, 2, None])
+async def test_on_req_llm_ignores_stale_record_id(raw_idx: int | None) -> None:
+    context = GroupChatContext(MagicMock(), MagicMock())
+    context.raw_records["umo"].extend(["first", "second"])
+    context._record_ids["umo"].extend(["id-1", "id-2"])
+
+    event = MagicMock()
+    event.unified_msg_origin = "umo"
+    event.get_extra.side_effect = lambda key, default=None: {
+        "_group_context_record_id": "stale-id",
+        "_group_context_raw_idx": raw_idx,
+    }.get(key, default)
+    req = SimpleNamespace(extra_user_content_parts=[])
+
+    await context.on_req_llm(event, req)
+
+    assert req.extra_user_content_parts == []
+    assert list(context.raw_records["umo"]) == ["first", "second"]
+    assert list(context._record_ids["umo"]) == ["id-1", "id-2"]
