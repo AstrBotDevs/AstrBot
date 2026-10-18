@@ -23,9 +23,6 @@ import enUSChart from './features/chart.json';
 import enUSDashboard from './features/dashboard.json';
 import enUSCron from './features/cron.json';
 import enUSStats from './features/stats.json';
-import enUSAlkaidIndex from './features/alkaid/index.json';
-import enUSAlkaidKnowledgeBase from './features/alkaid/knowledge-base.json';
-import enUSAlkaidMemory from './features/alkaid/memory.json';
 import enUSKnowledgeBaseIndex from './features/knowledge-base/index.json';
 import enUSKnowledgeBaseDetail from './features/knowledge-base/detail.json';
 import enUSKnowledgeBaseDocument from './features/knowledge-base/document.json';
@@ -65,11 +62,6 @@ export default {
       dashboard: enUSDashboard,
       cron: enUSCron,
       stats: enUSStats,
-      alkaid: {
-        index: enUSAlkaidIndex,
-        'knowledge-base': enUSAlkaidKnowledgeBase,
-        memory: enUSAlkaidMemory
-      },
       'knowledge-base': {
         index: enUSKnowledgeBaseIndex,
         detail: enUSKnowledgeBaseDetail,

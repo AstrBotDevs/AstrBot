@@ -11,6 +11,7 @@ class StaticFileService:
         "/logs",
         "/extension",
         "/dashboard/default",
+        # Retired Alkaid UIs: keep the SPA entry so old links reach the in-app redirect.
         "/alkaid",
         "/alkaid/knowledge-base",
         "/alkaid/long-term-memory",
