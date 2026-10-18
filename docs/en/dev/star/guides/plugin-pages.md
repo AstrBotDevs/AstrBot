@@ -27,6 +27,24 @@ Use simple directory names for `view_name`, such as `settings` or `bridge-demo`.
 
 Users open views from the plugin detail page in the WebUI.
 
+### Migrating from Pages to Views
+
+Earlier versions called plugin views Pages. `views` is now canonical, with `pages` kept only as a compatibility alias:
+
+| Item | Current | Compatibility alias |
+| --- | --- | --- |
+| View directory | `views/<view_name>/` | `pages/<view_name>/` |
+| i18n namespace | `views.<view_name>.*` | `pages.<view_name>.*` |
+| Bridge global | `window.AstrBotPluginView` | `window.AstrBotPluginPage` |
+| v1 API routes | `/plugins/views`, `/plugins/{plugin_id}/views/{view_name}` | `/plugins/pages` and the matching aliases |
+
+> [!WARNING]
+> When both `views/` and `pages/` exist, AstrBot only scans `views/` and every view under `pages/` is ignored. Move the whole directory in one step instead of copying the contents into `views/` while keeping the original `pages/` around.
+
+A `views:` declaration (`pages:` in older plugins) in `metadata.yaml` only feeds plugin metadata. View discovery is driven purely by directory scanning, so declaring `views:` never makes a view under another directory work.
+
+Untouched plugins keep working as before; new and maintained plugins should use `views`.
+
 ## Development Flow
 
 1. Create `views/<view_name>/index.html` in the plugin directory.
