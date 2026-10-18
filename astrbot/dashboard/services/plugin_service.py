@@ -1978,7 +1978,8 @@ class PluginService:
         try:
             resolved = (plugin_dir / relative).resolve(strict=True)
             root = plugin_dir.resolve(strict=True)
-        except (OSError, RuntimeError):
+        except (OSError, RuntimeError, ValueError):
+            # ValueError covers paths with embedded NUL bytes.
             return None
         if not resolved.is_file():
             return None
@@ -2018,8 +2019,10 @@ class PluginService:
         declared = self._get_plugin_readmes(plugin_name)
         available_locales = [key for key in declared if key != "default"]
         requested = self._normalize_locale(locale)
+        # Map the normalized tag to the originally declared locale key so the
+        # resolved locale matches the spelling used in available_locales.
         locale_paths = {
-            self._normalize_locale(key): value
+            self._normalize_locale(key): (key, value)
             for key, value in declared.items()
             if key != "default"
         }
@@ -2034,7 +2037,8 @@ class PluginService:
                 if base_language in locale_paths:
                     matched_locale = base_language
             if matched_locale:
-                candidates.append((matched_locale, locale_paths[matched_locale]))
+                declared_locale, path = locale_paths[matched_locale]
+                candidates.append((declared_locale, path))
         candidates.append((None, declared.get("default") or "README.md"))
 
         readme_path = None

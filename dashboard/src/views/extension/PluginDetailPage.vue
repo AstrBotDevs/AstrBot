@@ -98,6 +98,10 @@ const readmeLocale = ref("");
 const readmeAvailableLocales = ref([]);
 let readmeRequestId = 0;
 let detailRequestId = 0;
+let changelogRequestId = 0;
+// Set when the plugin-switch watcher resets readmeLocale, so the locale
+// watcher skips the fetch that the plugin-switch flow already performs.
+let skipNextLocaleWatch = false;
 const readmeLocaleItems = computed(() => [
   { title: `${tm("detail.readmeLanguageAuto")} (${locale.value})`, value: "" },
   ...readmeAvailableLocales.value.map((item) => ({ title: item, value: item })),
@@ -805,7 +809,14 @@ const fetchReadme = async () => {
 
 const fetchChangelog = async () => {
   const plugin = pluginData.value || {};
-  if (!plugin?.name) return;
+  const pluginName = plugin.name;
+  if (!pluginName) return;
+
+  const requestId = ++changelogRequestId;
+  // A response is stale when a newer changelog request started or the user
+  // has switched to another plugin since this request began.
+  const isCurrent = () =>
+    requestId === changelogRequestId && props.plugin?.name === pluginName;
 
   changelogLoading.value = true;
   changelogError.value = "";
@@ -822,21 +833,26 @@ const fetchChangelog = async () => {
 
     try {
       const content = await fetchRemoteMarkdown(changelogUrl);
+      if (!isCurrent()) return;
       if (!content.trim()) {
         changelogEmpty.value = true;
         return;
       }
       renderedChangelog.value = renderMarkdown(content);
     } catch (err) {
+      if (!isCurrent()) return;
       changelogError.value = err?.message || String(err);
     } finally {
-      changelogLoading.value = false;
+      if (isCurrent()) {
+        changelogLoading.value = false;
+      }
     }
     return;
   }
 
   try {
     const res = await pluginApi.changelog(plugin.name);
+    if (!isCurrent()) return;
 
     if (res.data.status !== "ok") {
       changelogError.value = res.data.message || tm("messages.operationFailed");
@@ -851,9 +867,12 @@ const fetchChangelog = async () => {
 
     renderedChangelog.value = renderMarkdown(content);
   } catch (err) {
+    if (!isCurrent()) return;
     changelogError.value = err?.message || String(err);
   } finally {
-    changelogLoading.value = false;
+    if (isCurrent()) {
+      changelogLoading.value = false;
+    }
   }
 };
 
@@ -874,6 +893,9 @@ watch(
   ],
   async () => {
     logoLoadFailed.value = false;
+    // The locale watcher below would fire on this reset and duplicate the
+    // README fetch that this flow performs after the detail request.
+    skipNextLocaleWatch = readmeLocale.value !== "";
     readmeLocale.value = "";
     const isCurrent = await fetchPluginDetail();
     // The plugin selection changed while the detail request was pending;
@@ -888,6 +910,10 @@ watch(
 
 // Follow the WebUI language until the user picks a README variant explicitly.
 watch([() => locale.value, readmeLocale], () => {
+  if (skipNextLocaleWatch) {
+    skipNextLocaleWatch = false;
+    return;
+  }
   fetchReadme();
 });
 
