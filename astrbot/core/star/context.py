@@ -656,18 +656,34 @@ class Context:
         空段或通配符表示匹配任意值）。未命中任何覆盖时返回全局配置副本。
 
         Args:
-            plugin_name: 插件名（即 metadata.name）。
+            plugin_name: 插件名（即 metadata.name）或插件 ID（author/name，
+                见 StarMetadata.plugin_id）。当多个插件同名时，必须使用插件 ID
+                消除歧义。
             umo: 会话的 unified message origin；不传则返回全局插件配置。
 
         Returns:
             合并后的配置快照。修改返回值不会影响插件实际使用的配置。
 
         Raises:
-            ValueError: 当插件不存在时抛出。
+            ValueError: 当插件不存在，或多个插件同名但未提供插件 ID 时抛出。
         """
+        # 插件 ID（author/name）是唯一的；仅按插件名查找可能命中多个插件。
+        lookup = plugin_name.lower()
         for metadata in star_registry:
-            if metadata.name != plugin_name:
-                continue
+            if getattr(metadata, "plugin_id", None) == lookup:
+                return resolve_plugin_config(
+                    dict(metadata.config or {}),
+                    metadata.config_overrides,
+                    umo,
+                )
+        matches = [m for m in star_registry if m.name == plugin_name]
+        if len(matches) > 1:
+            raise ValueError(
+                f"Multiple plugins named {plugin_name!r}; "
+                "pass the plugin ID (author/name) to disambiguate"
+            )
+        if matches:
+            metadata = matches[0]
             return resolve_plugin_config(
                 dict(metadata.config or {}),
                 metadata.config_overrides,

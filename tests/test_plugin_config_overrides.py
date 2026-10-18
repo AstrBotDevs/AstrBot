@@ -29,6 +29,29 @@ def test_load_malformed_file_returns_empty_mapping(tmp_path: Path):
     assert load_plugin_config_overrides(path) == {}
 
 
+def test_load_deeply_nested_json_returns_empty_mapping(tmp_path: Path):
+    # 超出 json 解码递归限制的覆盖文件不应阻止插件启动。
+    path = tmp_path / "demo_config.overrides.json"
+    depth = 2000
+    path.write_text("[" * depth + "]" * depth, encoding="utf-8")
+
+    assert load_plugin_config_overrides(path) == {}
+
+
+def test_load_non_object_root_returns_empty_mapping(tmp_path: Path):
+    path = tmp_path / "demo_config.overrides.json"
+    path.write_text(json.dumps(["aiocqhttp:group:1"]), encoding="utf-8")
+
+    assert load_plugin_config_overrides(path) == {}
+
+
+def test_load_without_scopes_object_returns_empty_mapping(tmp_path: Path):
+    path = tmp_path / "demo_config.overrides.json"
+    path.write_text(json.dumps({"version": 1}), encoding="utf-8")
+
+    assert load_plugin_config_overrides(path) == {}
+
+
 def test_load_skips_invalid_scope_entries(tmp_path: Path):
     path = tmp_path / "demo_config.overrides.json"
     path.write_text(
@@ -44,6 +67,34 @@ def test_load_skips_invalid_scope_entries(tmp_path: Path):
     )
 
     assert load_plugin_config_overrides(path) == {"aiocqhttp:group:1": {"enable": True}}
+
+
+def test_load_skips_scopes_with_invalid_umo_syntax(tmp_path: Path):
+    path = tmp_path / "demo_config.overrides.json"
+    path.write_text(
+        json.dumps(
+            {
+                "scopes": {
+                    "not-a-umo-pattern": {"enable": True},
+                    "aiocqhttp:group:1": {"enable": False},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert load_plugin_config_overrides(path) == {"aiocqhttp:group:1": {"enable": False}}
+
+
+def test_save_rejects_scopes_with_invalid_umo_syntax(tmp_path: Path):
+    try:
+        save_plugin_config_overrides(
+            tmp_path / "demo_config.overrides.json", {"bad-key": {"enable": True}}
+        )
+    except ValueError as exc:
+        assert "bad-key" in str(exc)
+    else:  # pragma: no cover - the assertion below is the failure path
+        raise AssertionError("expected ValueError")
 
 
 def test_saved_overrides_round_trip(tmp_path: Path):
@@ -97,7 +148,13 @@ def test_global_config_is_returned_without_umo():
     scopes = {"aiocqhttp:group:1": {"enable": False}}
     base = {"enable": True, "nested": {"a": 1}}
 
-    assert resolve_plugin_config(base, scopes, None) == base
+    result = resolve_plugin_config(base, scopes, None)
+
+    assert result == base
+    # 必须返回快照而非原对象，否则调用方可以篡改插件的全局配置。
+    assert result is not base
+    result["nested"]["a"] = 99
+    assert base["nested"]["a"] == 1
 
 
 def test_merge_is_recursive_and_does_not_mutate_the_global_config():
@@ -141,5 +198,37 @@ def test_context_get_plugin_config_rejects_unknown_plugin(monkeypatch):
         context_module.Context.get_plugin_config(object(), "missing")
     except ValueError as exc:
         assert "missing" in str(exc)
+    else:  # pragma: no cover - the assertion below is the failure path
+        raise AssertionError("expected ValueError")
+
+
+def test_context_get_plugin_config_disambiguates_duplicate_names(monkeypatch):
+    first = SimpleNamespace(
+        name="demo",
+        plugin_id="alice/demo",
+        config={"owner": "alice"},
+        config_overrides={},
+    )
+    second = SimpleNamespace(
+        name="demo",
+        plugin_id="bob/demo",
+        config={"owner": "bob"},
+        config_overrides={},
+    )
+    monkeypatch.setattr(context_module, "star_registry", [first, second])
+
+    # 重名插件必须能通过插件 ID（author/name）取到各自的配置。
+    assert context_module.Context.get_plugin_config(object(), "alice/demo") == {
+        "owner": "alice"
+    }
+    assert context_module.Context.get_plugin_config(object(), "bob/demo") == {
+        "owner": "bob"
+    }
+
+    # 仅给重名的插件名时必须报错，而不是静默返回第一个插件的配置。
+    try:
+        context_module.Context.get_plugin_config(object(), "demo")
+    except ValueError as exc:
+        assert "demo" in str(exc)
     else:  # pragma: no cover - the assertion below is the failure path
         raise AssertionError("expected ValueError")

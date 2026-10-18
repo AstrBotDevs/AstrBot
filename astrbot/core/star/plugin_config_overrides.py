@@ -38,7 +38,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from astrbot.core.umop_config_router import is_umo_pattern_match
+from astrbot.core.umop_config_router import is_umo_pattern_match, split_umo
 
 logger = logging.getLogger("astrbot")
 
@@ -88,19 +88,25 @@ def load_plugin_config_overrides(
         return {}
     try:
         data = json.loads(file_path.read_text(encoding="utf-8-sig"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, RecursionError) as exc:
         logger.warning(
             f"Failed to load plugin config overrides from {file_path}: {exc}"
         )
         return {}
 
-    raw_scopes = data.get(SCOPES_KEY) if isinstance(data, dict) else None
+    if not isinstance(data, dict):
+        logger.warning(
+            f"Ignoring plugin config overrides in {file_path}: "
+            "root must be a JSON object"
+        )
+        return {}
+
+    raw_scopes = data.get(SCOPES_KEY)
     if not isinstance(raw_scopes, dict):
-        if isinstance(data, dict) and data:
-            logger.warning(
-                f"Ignoring plugin config overrides in {file_path}: missing "
-                f"'{SCOPES_KEY}' object"
-            )
+        logger.warning(
+            f"Ignoring plugin config overrides in {file_path}: missing "
+            f"'{SCOPES_KEY}' object"
+        )
         return {}
 
     scopes: dict[str, dict] = {}
@@ -109,6 +115,13 @@ def load_plugin_config_overrides(
             logger.warning(
                 f"Ignoring invalid scope {pattern!r} in plugin config overrides "
                 f"{file_path}: scope keys must be strings and values must be objects"
+            )
+            continue
+        if split_umo(pattern) is None:
+            logger.warning(
+                f"Ignoring invalid scope {pattern!r} in plugin config overrides "
+                f"{file_path}: scope keys must use the "
+                "'platform:message_type:session_id' UMO syntax"
             )
             continue
         scopes[pattern] = override
@@ -126,12 +139,18 @@ def save_plugin_config_overrides(
         scopes: Mapping of UMO pattern to partial config.
 
     Raises:
-        ValueError: If a scope key or value has an invalid type.
+        ValueError: If a scope key or value has an invalid type, or a scope
+            key is not a valid UMO pattern.
         OSError: If the file cannot be written.
     """
     for pattern, override in scopes.items():
         if not isinstance(pattern, str) or not isinstance(override, dict):
             raise ValueError("scopes must map UMO pattern strings to objects")
+        if split_umo(pattern) is None:
+            raise ValueError(
+                f"Invalid scope key {pattern!r}: expected the "
+                "'platform:message_type:session_id' UMO syntax"
+            )
 
     payload = {"version": 1, SCOPES_KEY: scopes}
     file_path = Path(path)
