@@ -1007,6 +1007,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     llm_resp.tools_call_name = requery_resp.tools_call_name
                     llm_resp.tools_call_args = requery_resp.tools_call_args
                     llm_resp.tools_call_ids = requery_resp.tools_call_ids
+                    # Provider metadata (e.g. Gemini thought signatures) is keyed by
+                    # the final tool-call IDs, so it must move with them. Keeping the
+                    # first response's metadata here replays a missing or stale
+                    # signature to the provider on the next turn.
+                    llm_resp.tools_call_extra_content = (
+                        requery_resp.tools_call_extra_content
+                    )
 
             tool_call_result_blocks = []
             cached_images = []  # Collect cached images for LLM visibility
