@@ -6,17 +6,17 @@ import time
 
 import pytest
 
-from astrbot.core.utils.trace_store import QUEUE_BYTES, TraceStore
+from astrbot.core.utils.trace_store import MAX_FRAME_BYTES, QUEUE_BYTES, TraceStore
 
 
-@pytest.mark.parametrize("body_bytes", [32, 65536])
-def test_trace_queue_limits_frames_and_bytes(tmp_path, monkeypatch, body_bytes):
-    """Bound larger bursts by 1024 frames and the 16 MiB byte budget.
+@pytest.mark.parametrize("body_bytes", [32, 1536 * 1024])
+def test_trace_queue_limits_bytes_without_frame_count_cap(tmp_path, monkeypatch, body_bytes):
+    """Admit over 1024 small frames while bounding large frames by 128 MiB.
 
     Args:
         tmp_path: Isolated database directory.
         monkeypatch: Pytest patch manager.
-        body_bytes: Payload length used to exercise frame or byte capacity.
+        body_bytes: Payload length used to exercise small bursts or byte capacity.
     """
     release = threading.Event()
     original_run = TraceStore._run
@@ -43,15 +43,17 @@ def test_trace_queue_limits_frames_and_bytes(tmp_path, monkeypatch, body_bytes):
         "time_unix_nano": now,
     }
     frame_bytes = len(json.dumps(packet, ensure_ascii=False, separators=(",", ":")).encode())
-    expected = min(1024, QUEUE_BYTES // frame_bytes)
+    attempts = 1025 if body_bytes == 32 else QUEUE_BYTES // frame_bytes + 1
+    expected = min(attempts, QUEUE_BYTES // frame_bytes)
     try:
-        assert QUEUE_BYTES == 16 * 1024 * 1024
-        assert store.queue.maxsize == 1024
-        accepted = sum(store.append(packet) for _ in range(1025))
+        assert QUEUE_BYTES == 128 * 1024 * 1024
+        assert MAX_FRAME_BYTES == 2 * 1024 * 1024
+        assert store.queue.maxsize == 0
+        accepted = sum(store.append(packet) for _ in range(attempts))
         assert accepted == expected
         assert store.queue.qsize() == expected
         assert store._pending_bytes <= QUEUE_BYTES
-        assert store.dropped == 1025 - expected
+        assert store.dropped == attempts - expected
         release.set()
         assert store.flush(15)
         assert store._pending_bytes == 0

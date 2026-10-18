@@ -25,7 +25,7 @@ from astrbot.core.utils.telemetry import (
     bounded_attributes,
 )
 from astrbot.core.utils.trace import TraceSpan, trace_execution
-from astrbot.core.utils.trace_store import QUEUE_BYTES, TraceStore
+from astrbot.core.utils.trace_store import MAX_FRAME_BYTES, TraceStore
 
 
 @pytest.fixture
@@ -459,7 +459,7 @@ def test_retention_deletes_whole_traces(persisted, capture):
 
 
 def test_oversized_queue_records_are_rejected(persisted):
-    assert persisted.append({"oversized": "x" * QUEUE_BYTES}) is False
+    assert persisted.append({"oversized": "x" * MAX_FRAME_BYTES}) is False
     assert persisted.dropped == 1
     assert persisted._pending_bytes == 0
 

@@ -20,9 +20,9 @@ from weakref import WeakValueDictionary
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 logger = logging.getLogger("astrbot")
-QUEUE_BYTES = 16 * 1024 * 1024
+QUEUE_BYTES = 128 * 1024 * 1024
 MAX_WAL_BYTES = 4 * 1024 * 1024
-MAX_FRAME_BYTES = 1024 * 1024
+MAX_FRAME_BYTES = 2 * 1024 * 1024
 
 
 class TraceStore:
@@ -31,7 +31,7 @@ class TraceStore:
     def __init__(self, path: Path, config: Mapping[str, Any]) -> None:
         self.path = path
         self.config = config
-        self.queue: Queue = Queue(maxsize=1024)
+        self.queue: Queue = Queue()
         self._lock = threading.Lock()
         self._pending_bytes = 0
         self._pending_traces: dict[str, int] = {}
