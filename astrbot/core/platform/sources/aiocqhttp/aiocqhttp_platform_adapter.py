@@ -2,6 +2,7 @@ import asyncio
 import inspect
 import itertools
 import logging
+import sqlite3
 import time
 import uuid
 from collections.abc import Awaitable
@@ -98,16 +99,30 @@ class AiocqhttpAdapter(Platform):
         async def private(event: Event) -> None:
             try:
                 umo = f"{self.metadata.id}:FriendMessage:{event.get('user_id')}"
-                blocked = self.bot.delivery_store.blocked(umo)
-                inbound_text = event.get("raw_message")
-                if not isinstance(inbound_text, str):
-                    inbound_text = str(event.get("message") or "")
-                self.bot.delivery_store.record_inbound(
-                    umo,
-                    inbound_text,
-                    event,
-                    blocked=blocked,
-                )
+                blocked = False
+                try:
+                    blocked = self.bot.delivery_store.blocked(umo)
+                except (sqlite3.Error, OSError):
+                    logger.warning(
+                        "Private circuit lookup failed; continuing inbound processing.",
+                        exc_info=True,
+                    )
+                else:
+                    inbound_text = event.get("raw_message")
+                    if not isinstance(inbound_text, str):
+                        inbound_text = str(event.get("message") or "")
+                    try:
+                        self.bot.delivery_store.record_inbound(
+                            umo,
+                            inbound_text,
+                            event,
+                            blocked=blocked,
+                        )
+                    except (sqlite3.Error, OSError):
+                        logger.warning(
+                            "Private inbound audit failed; preserving message routing.",
+                            exc_info=True,
+                        )
                 if blocked:
                     return
                 abm = await self.convert_message(event)

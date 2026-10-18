@@ -201,3 +201,161 @@ def test_pre_send_recheck_blocks_before_network(tmp_path, monkeypatch):
     api.assert_not_awaited()
     item = client.delivery_store.page("test:FriendMessage:1")["items"][0]
     assert item["status"] == "blocked"
+
+
+@pytest.mark.asyncio
+async def test_idle_private_locks_are_reclaimed(tmp_path, monkeypatch):
+    """Reclaim idle locks after each distinct contact finishes sending.
+
+    Args:
+        tmp_path: Isolated audit database directory.
+        monkeypatch: Scoped replacement of the network transport.
+    """
+    client = object.__new__(SafeCQHttp)
+    client.delivery_platform_id = "test"
+    client.delivery_store = DeliveryStore(tmp_path / "audit.db")
+    monkeypatch.setattr(
+        CQHttp, "call_action", AsyncMock(return_value={"message_id": 1})
+    )
+    for user_id in range(1, 51):
+        await client.call_action("send_private_msg", user_id=user_id, message="hello")
+        assert len(client._delivery_locks) == 0
+
+
+@pytest.mark.asyncio
+async def test_waiter_cancellation_keeps_one_shared_send_lock(tmp_path, monkeypatch):
+    """Canceling one waiter must not create a second concurrent lock.
+
+    Args:
+        tmp_path: Isolated audit database directory.
+        monkeypatch: Scoped replacement of the network transport.
+    """
+    client = object.__new__(SafeCQHttp)
+    client.delivery_platform_id = "test"
+    client.delivery_store = DeliveryStore(tmp_path / "audit.db")
+    entered = asyncio.Event()
+    release = asyncio.Event()
+    active = 0
+    maximum = 0
+
+    async def network(*args, **kwargs):
+        """Hold transport calls until the test releases their shared gate.
+
+        Args:
+            args: Unused action arguments.
+            kwargs: Unused action parameters.
+
+        Returns:
+            A confirmed simulated platform receipt.
+        """
+        nonlocal active, maximum
+        active += 1
+        maximum = max(maximum, active)
+        entered.set()
+        try:
+            await release.wait()
+            return {"message_id": 1}
+        finally:
+            active -= 1
+
+    monkeypatch.setattr(CQHttp, "call_action", network)
+    first = asyncio.create_task(
+        client.call_action("send_private_msg", user_id=1, message="alpha")
+    )
+    await asyncio.wait_for(entered.wait(), 2)
+    second = asyncio.create_task(
+        client.call_action("send_private_msg", user_id=1, message="beta")
+    )
+    third = asyncio.create_task(
+        client.call_action("send_private_msg", user_id=1, message="gamma")
+    )
+    await asyncio.sleep(0)
+    assert len(client._delivery_locks) == 1
+    second.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await second
+    assert len(client._delivery_locks) == 1
+    release.set()
+    await asyncio.gather(first, third)
+    assert maximum == 1
+    assert len(client._delivery_locks) == 0
+
+
+@pytest.mark.asyncio
+async def test_audit_failure_still_prevents_outbound_network(monkeypatch):
+    """Keep outgoing reservations mandatory when persistence fails.
+
+    Args:
+        monkeypatch: Scoped replacement of audit persistence and transport.
+    """
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    client = object.__new__(SafeCQHttp)
+    client.delivery_platform_id = "test"
+    client.delivery_store = SimpleNamespace(
+        reserve=Mock(side_effect=sqlite3.OperationalError("locked"))
+    )
+    network = AsyncMock()
+    monkeypatch.setattr(CQHttp, "call_action", network)
+    with pytest.raises(sqlite3.OperationalError):
+        await client.call_action("send_private_msg", user_id=1, message="hello")
+    network.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    ("lookup_error", "blocked", "record_error", "routed"),
+    [
+        (sqlite3.OperationalError("locked"), False, None, True),
+        (OSError("unavailable"), False, None, True),
+        (None, False, sqlite3.OperationalError("locked"), True),
+        (None, True, sqlite3.OperationalError("locked"), False),
+        (None, False, None, True),
+    ],
+)
+@pytest.mark.asyncio
+async def test_inbound_routing_survives_audit_failures(
+    monkeypatch, lookup_error, blocked, record_error, routed
+):
+    """Separate inbound routing from audit errors without bypassing known circuits.
+
+    Args:
+        monkeypatch: Scoped replacement of the platform client.
+        lookup_error: Optional circuit lookup failure.
+        blocked: Circuit state returned by a successful lookup.
+        record_error: Optional inbound persistence failure.
+        routed: Whether message conversion and dispatch should run.
+    """
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    from astrbot.core.platform.sources.aiocqhttp import (
+        aiocqhttp_platform_adapter as module,
+    )
+
+    handlers = {}
+    store = SimpleNamespace(
+        blocked=Mock(return_value=blocked, side_effect=lookup_error),
+        record_inbound=Mock(side_effect=record_error),
+    )
+    bot = SimpleNamespace(
+        delivery_store=store,
+        on_request=lambda: lambda fn: fn,
+        on_notice=lambda: lambda fn: fn,
+        on_message=lambda kind: lambda fn: handlers.setdefault(kind, fn),
+        on_websocket_connection=lambda fn: fn,
+    )
+    monkeypatch.setattr(module, "SafeCQHttp", lambda **kwargs: bot)
+    adapter = module.AiocqhttpAdapter(
+        {"id": "test", "ws_reverse_host": "127.0.0.1", "ws_reverse_port": 1},
+        {},
+        asyncio.Queue(),
+    )
+    adapter.convert_message = AsyncMock(return_value=object())
+    adapter.handle_msg = AsyncMock()
+    event = {"user_id": 1, "raw_message": "hello"}
+    await handlers["private"](event)
+    assert adapter.convert_message.await_count == int(routed)
+    assert adapter.handle_msg.await_count == int(routed)
+    if lookup_error:
+        store.record_inbound.assert_not_called()

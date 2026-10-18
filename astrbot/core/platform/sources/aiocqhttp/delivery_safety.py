@@ -9,6 +9,7 @@ from collections.abc import Mapping
 from contextlib import contextmanager
 from difflib import SequenceMatcher
 from pathlib import Path
+from weakref import WeakValueDictionary
 
 from aiocqhttp import CQHttp
 
@@ -293,7 +294,9 @@ class SafeCQHttp(CQHttp):
         super().__init__(*args, **kwargs)
         self.delivery_platform_id = platform_id
         self.delivery_store = DeliveryStore()
-        self._delivery_locks: dict[str, asyncio.Lock] = {}
+        self._delivery_locks: WeakValueDictionary[str, asyncio.Lock] = (
+            WeakValueDictionary()
+        )
 
     async def call_action(self, action: str, **params):
         base_action = action.removesuffix("_async")
@@ -320,8 +323,10 @@ class SafeCQHttp(CQHttp):
                 if isinstance(part, dict)
             )
         delivery_locks = getattr(self, "_delivery_locks", None)
-        if not isinstance(delivery_locks, dict):
-            delivery_locks = self._delivery_locks = {}
+        if not isinstance(delivery_locks, WeakValueDictionary):
+            delivery_locks = self._delivery_locks = WeakValueDictionary(
+                delivery_locks if isinstance(delivery_locks, dict) else {}
+            )
         async with delivery_locks.setdefault(umo, asyncio.Lock()):
             try:
                 row_id = self.delivery_store.reserve(
