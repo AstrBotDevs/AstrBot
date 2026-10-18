@@ -263,3 +263,39 @@ class ConfigPlugin(Star):
 ## Configuration Updates
 
 When you update the Schema across different versions, AstrBot will recursively inspect the configuration items in the Schema, automatically adding default values for missing items and removing those that no longer exist.
+
+## Per-session Configuration Overrides (Optional)
+
+By default a plugin owns a single global configuration instance (`metadata.config`) that is shared by every group and private chat. Plugins that need different values per group can ship an extra `data/config/<plugin_name>_config.overrides.json` file with sparse overrides:
+
+```json
+{
+  "version": 1,
+  "scopes": {
+    "aiocqhttp:group:123456": { "reply_style": "concise" },
+    "aiocqhttp:group:*": { "enable_tts": false }
+  }
+}
+```
+
+- Keys of `scopes` are UMO patterns using the same `[platform]:[message_type]:[session]` syntax as the core configuration router. An empty segment matches anything and `*` wildcards are supported, for example `aiocqhttp:group:*` or `::`.
+- Scopes are matched in file order and the **first match wins**; keys that are not overridden keep the global value. Put the most specific keys first.
+- Nested objects are merged recursively, while lists and scalars are replaced.
+- A malformed override file is ignored with a warning and never prevents a plugin from loading.
+
+Plugins read the merged snapshot from a handler with `Context.get_plugin_config()`:
+
+```py
+@filter.command("style")
+async def show_style(self, event: AstrMessageEvent):
+    conf = self.context.get_plugin_config(
+        "astrbot_plugin_demo", event.unified_msg_origin
+    )
+    yield event.plain_result(f"Reply style: {conf.get('reply_style', 'default')}")
+```
+
+`get_plugin_config()` returns a deep copy, so changing it does not affect the configuration the plugin actually uses and is never written back. `self.config` always stays the global configuration: plugins that need per-session values must call this method explicitly, and plugins that do not need it keep their current behavior.
+
+> [!NOTE]
+> The override layer currently has to be edited by hand. A WebUI scope editor with a "restore inheritance" action is not available yet.
+

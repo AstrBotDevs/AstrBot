@@ -263,3 +263,39 @@ class ConfigPlugin(Star):
 ## 配置更新
 
 您在发布不同版本更新 Schema 时，AstrBot 会递归检查 Schema 的配置项，自动为缺失的配置项添加默认值、移除不存在的配置项。
+
+## 按会话覆盖配置（可选）
+
+默认情况下，一个插件只有一个全局配置实例（`metadata.config`），所有群聊和私聊共享它。如果希望不同群使用不同参数，可以额外提供 `data/config/<plugin_name>_config.overrides.json`，按会话写入“稀疏覆盖”：
+
+```json
+{
+  "version": 1,
+  "scopes": {
+    "aiocqhttp:group:123456": { "reply_style": "concise" },
+    "aiocqhttp:group:*": { "enable_tts": false }
+  }
+}
+```
+
+- `scopes` 的 key 是 UMO 模式，格式与核心配置路由一致：`[平台]:[消息类型]:[会话]`。空段表示任意值，支持 `*` 通配符，例如 `aiocqhttp:group:*`、`::`。
+- 按文件中的顺序匹配，**第一个命中的生效**；没有命中的配置项继续继承全局配置。建议把更精确的 key 写在前面。
+- 合并规则：嵌套对象递归合并，列表和标量直接替换。
+- 覆盖文件损坏或格式非法时会被忽略并记录警告，不会影响插件加载。
+
+插件在 handler 中通过 `Context.get_plugin_config()` 读取合并后的快照：
+
+```py
+@filter.command("style")
+async def show_style(self, event: AstrMessageEvent):
+    conf = self.context.get_plugin_config(
+        "astrbot_plugin_demo", event.unified_msg_origin
+    )
+    yield event.plain_result(f"当前回复风格: {conf.get('reply_style', '默认')}")
+```
+
+`get_plugin_config()` 返回的是深拷贝，修改它不会影响插件实际使用的配置，也不会写回文件。`self.config` 始终是全局配置，需要按会话取值的插件请显式调用该方法；不需要区分的插件可以完全忽略这个能力，行为保持不变。
+
+> [!NOTE]
+> 覆盖层目前需要手动编辑上述 JSON 文件，WebUI 的 scope 编辑与“恢复继承”入口尚未提供。
+

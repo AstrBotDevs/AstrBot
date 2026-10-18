@@ -43,6 +43,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
 from ..exceptions import ProviderNotFoundError
 from .filter.command import CommandFilter
 from .filter.regex import RegexFilter
+from .plugin_config_overrides import resolve_plugin_config
 from .star import StarMetadata, star_map, star_registry
 from .star_handler import EventType, StarHandlerMetadata, star_handlers_registry
 
@@ -646,6 +647,33 @@ class Context:
             # 使用默认配置
             return self._config
         return self.astrbot_config_mgr.get_conf(umo)
+
+    def get_plugin_config(self, plugin_name: str, umo: str | None = None) -> dict:
+        """获取插件配置的只读快照，并按会话合并覆盖项。
+
+        插件仍然只有一个全局配置实例，本方法不会修改它。会话级覆盖保存在
+        <plugin>_config.overrides.json，key 为 UMO 模式（[平台]:[消息类型]:[会话]，
+        空段或通配符表示匹配任意值）。未命中任何覆盖时返回全局配置副本。
+
+        Args:
+            plugin_name: 插件名（即 metadata.name）。
+            umo: 会话的 unified message origin；不传则返回全局插件配置。
+
+        Returns:
+            合并后的配置快照。修改返回值不会影响插件实际使用的配置。
+
+        Raises:
+            ValueError: 当插件不存在时抛出。
+        """
+        for metadata in star_registry:
+            if metadata.name != plugin_name:
+                continue
+            return resolve_plugin_config(
+                dict(metadata.config or {}),
+                metadata.config_overrides,
+                umo,
+            )
+        raise ValueError(f"Plugin {plugin_name} not found")
 
     async def send_message(
         self,

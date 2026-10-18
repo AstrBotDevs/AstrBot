@@ -52,6 +52,7 @@ from .command_management import sync_command_configs
 from .context import Context
 from .error_messages import format_plugin_error
 from .filter.permission import COMMAND_PERMISSION_TYPES, PermissionTypeFilter
+from .plugin_config_overrides import load_plugin_config_overrides, overrides_path_for
 from .star import star_map, star_registry
 from .star_handler import EventType, star_handlers_registry
 from .updater import PLUGIN_METADATA_FILENAMES, _PluginUpdater
@@ -563,6 +564,25 @@ class PluginManager:
             )
 
         return metadata
+
+    @staticmethod
+    def _load_plugin_config_overrides(plugin_config) -> dict[str, dict]:
+        """Load per-session overrides that belong to a plugin config file.
+
+        Args:
+            plugin_config: The plugin's AstrBotConfig, or None when the plugin
+                has no _conf_schema.json.
+
+        Returns:
+            Mapping of UMO pattern to partial config. Missing or malformed
+            override files yield an empty mapping.
+        """
+        config_path = (
+            getattr(plugin_config, "config_path", None) if plugin_config else None
+        )
+        if not config_path:
+            return {}
+        return load_plugin_config_overrides(overrides_path_for(config_path))
 
     @staticmethod
     def _load_plugin_i18n(plugin_path: str) -> dict[str, dict]:
@@ -1214,6 +1234,9 @@ class PluginManager:
 
                     logger.info(metadata)
                     metadata.config = plugin_config
+                    metadata.config_overrides = self._load_plugin_config_overrides(
+                        plugin_config,
+                    )
                     plugin_id = metadata.plugin_id
 
                     # inject class attributes before instantiation so __init__ can read them
@@ -1364,6 +1387,9 @@ class PluginManager:
 
                     metadata.star_cls = obj
                     metadata.config = plugin_config
+                    metadata.config_overrides = self._load_plugin_config_overrides(
+                        plugin_config,
+                    )
                     metadata.module = module
                     metadata.root_dir_name = root_dir_name
                     metadata.reserved = reserved

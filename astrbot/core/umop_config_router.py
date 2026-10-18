@@ -3,6 +3,46 @@ import fnmatch
 from astrbot.core.utils.shared_preferences import SharedPreferences
 
 
+def split_umo(umo: str) -> tuple[str, str, str] | None:
+    """Split a UMO into platform, message type and session ID.
+
+    The session ID may itself contain ":" so it is never split further.
+
+    Args:
+        umo: Unified message origin or UMO pattern.
+
+    Returns:
+        The three parts, or None when the value is not a UMO string.
+    """
+    if not isinstance(umo, str):
+        return None
+    parts = umo.split(":", 2)
+    if len(parts) != 3:
+        return None
+    return parts[0], parts[1], parts[2]
+
+
+def is_umo_pattern_match(pattern: str, umo: str) -> bool:
+    """Check whether a UMO is covered by a UMO pattern.
+
+    Empty segments match anything and "*" is treated as a shell wildcard.
+
+    Args:
+        pattern: UMO pattern such as "aiocqhttp:group:*" or "::".
+        umo: Concrete unified message origin.
+
+    Returns:
+        True when the pattern covers the UMO, otherwise False.
+    """
+    pattern_parts = split_umo(pattern)
+    umo_parts = split_umo(umo)
+    if pattern_parts is None or umo_parts is None:
+        return False
+    return all(
+        p == "" or fnmatch.fnmatchcase(t, p) for p, t in zip(pattern_parts, umo_parts)
+    )
+
+
 class UmopConfigRouter:
     """UMOP 配置路由器"""
 
@@ -28,22 +68,11 @@ class UmopConfigRouter:
     @staticmethod
     def _split_umo(umo: str) -> tuple[str, str, str] | None:
         """将 UMO 拆分为 3 个部分，同时保留 session_id 中的 ':'"""
-        if not isinstance(umo, str):
-            return None
-        parts = umo.split(":", 2)
-        if len(parts) != 3:
-            return None
-        return parts[0], parts[1], parts[2]
+        return split_umo(umo)
 
     def _is_umo_match(self, p1: str, p2: str) -> bool:
         """判断 p2 umo 是否逻辑包含于 p1 umo"""
-        p1_ls = self._split_umo(p1)
-        p2_ls = self._split_umo(p2)
-
-        if p1_ls is None or p2_ls is None:
-            return False  # 非法格式
-
-        return all(p == "" or fnmatch.fnmatchcase(t, p) for p, t in zip(p1_ls, p2_ls))
+        return is_umo_pattern_match(p1, p2)
 
     def get_conf_id_for_umop(self, umo: str) -> str | None:
         """根据 UMO 获取对应的配置文件 ID

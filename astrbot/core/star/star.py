@@ -54,6 +54,9 @@ class StarMetadata:
     config: AstrBotConfig | None = None
     """插件配置"""
 
+    config_overrides: dict[str, dict] = field(default_factory=dict)
+    """插件配置的会话级覆盖：UMO 模式 -> 部分配置，由 PluginManager 加载。"""
+
     star_handler_full_names: list[str] = field(default_factory=list)
     """注册的 Handler 的全名列表"""
 
