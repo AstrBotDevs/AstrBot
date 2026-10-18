@@ -262,8 +262,7 @@ import KnowledgeBaseSelector from './KnowledgeBaseSelector.vue'
 import PluginSetSelector from './PluginSetSelector.vue'
 import T2ITemplateEditor from './T2ITemplateEditor.vue'
 import DashboardTotpManager from './DashboardTotpManager.vue'
-import LocalPermissionMatrix, { windowsPermissionDefaults } from './LocalPermissionMatrix.vue'
-import { statsApi } from '@/api/v1'
+import LocalPermissionMatrix from './LocalPermissionMatrix.vue'
 import { computed, ref } from 'vue'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
 import { usePluginI18n } from '@/utils/pluginI18n'
@@ -314,8 +313,6 @@ const { configText } = usePluginI18n()
 
 async function emitUpdate(val) {
   val = validateNumericConfig(props.itemMeta?.type, val)
-  const enablingLocal = props.configKey === 'provider_settings.computer_use_runtime'
-    && (props.modelValue === 'none' || props.modelValue == null) && val === 'local'
   if (
     props.itemMeta?._special === 'agent_runner_type'
     && props.configRoot?.agent_runner
@@ -326,22 +323,7 @@ async function emitUpdate(val) {
     )
   }
   emit('update:modelValue', val)
-  if (enablingLocal && props.configRoot?.provider_settings) {
-    const settings = props.configRoot.provider_settings
-    try {
-      const response = await statsApi.version()
-      if (response.data?.data?.runtime?.os === 'windows' && settings.computer_use_runtime === 'local') {
-        const permissions = { ...settings.computer_use_local_permissions }
-        for (const [role, defaults] of Object.entries(windowsPermissionDefaults)) {
-          const policy = permissions[role]
-          if (!policy || policy.filesystem_scope === 'workspace') permissions[role] = { ...defaults }
-        }
-        settings.computer_use_local_permissions = permissions
-      }
-    } catch (error) {
-      console.warn('Failed to initialize local permissions:', error)
-    }
-  }
+
 }
 
 const listSelectItems = computed(() =>
@@ -423,10 +405,30 @@ function getTranslatedLabels(itemMeta) {
 
 function getSelectItems(itemMeta) {
   const labels = getTranslatedLabels(itemMeta)
-  if (labels && itemMeta.options) {
+  let subtitles = itemMeta?.subtitles
+  if (
+    props.pluginName
+    && props.configKey
+    && props.pluginI18n
+    && Object.keys(props.pluginI18n).length > 0
+  ) {
+    const translatedSubtitles = configText(props.pluginI18n, props.configKey, 'subtitles', null)
+    if (Array.isArray(translatedSubtitles)) {
+      subtitles = translatedSubtitles
+    }
+  }
+  if (typeof subtitles === 'string') {
+    subtitles = getRaw(subtitles)
+  }
+  if (!Array.isArray(subtitles)) subtitles = null
+
+  if ((labels || subtitles) && itemMeta.options) {
     return itemMeta.options.map((value, index) => ({
-      title: labels[index] || value,
-      value: value
+      title: labels?.[index] || value,
+      value: value,
+      props: {
+        subtitle: typeof subtitles?.[index] === 'string' ? subtitles[index] : undefined
+      }
     }))
   }
   return itemMeta.options || []

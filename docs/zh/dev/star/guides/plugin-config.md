@@ -52,6 +52,8 @@ AstrBot 提供了“强大”的配置解析和可视化功能。能够让用户
 - `invisible`: 可选。配置是否隐藏。默认是 `false`。如果设置为 `true`，则不会在管理面板上显示。
 - `secret`: 可选。仅对 `string` 和字符串 `list` 生效。设置为 `true` 时，管理面板会以密码输入框展示，并允许用户临时切换可见状态。此选项只遮罩界面显示，不会加密配置文件中的值。
 - `options`: 可选。一个列表，如 `"options": ["chat", "agent", "workflow"]`。提供下拉列表可选项。
+- `labels`: 可选。按索引与 `options` 对应的展示名称，不改变保存值。
+- `subtitles`: 可选。按索引与 `options` 对应的简短说明，显示在下拉菜单选项名称下方。不需要说明的选项可以填写空字符串或省略末尾条目。支持单选和多选下拉框；普通复选框不显示副标题。
 - `slider`: 可选。仅对 `int` 和 `float` 生效。一个字典，如 `"slider": {"min": 1, "max": 100, "step": 1}`。提供一个含有上下限和一定步长的滑动列表。
 - `editor_mode`: 可选。是否启用代码编辑器模式。需要 AstrBot >= `v3.5.10`, 低于这个版本不会报错，但不会生效。默认是 false。
 - `editor_language`: 可选。代码编辑器的代码语言，默认为 `json`。
@@ -83,7 +85,7 @@ API Key、访问令牌和密码等敏感字符串应设置 `"secret": true`。�
 
 ### 配置项国际化（可选）
 
-配置项的 `description`、`hint` 和下拉选项 `labels` 支持按 WebUI 语言显示，详见[插件国际化](./plugin-i18n)。
+配置项的 `description`、`hint` 和下拉选项 `labels`、`subtitles` 支持按 WebUI 语言显示，详见[插件国际化](./plugin-i18n)。
 
 其中，如果启用了代码编辑器，效果如下图所示:
 

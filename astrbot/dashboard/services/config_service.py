@@ -218,7 +218,6 @@ def validate_config(
     is_core: bool,
     *,
     runtime: dict | None = None,
-    current_config: dict | None = None,
 ) -> tuple[list[str], dict]:
     """Validate configuration values and normalize linked Local permissions.
 
@@ -226,9 +225,7 @@ def validate_config(
         data: Submitted configuration, normalized in place.
         schema: Configuration metadata used for validation.
         is_core: Whether this is a core configuration rather than a plugin.
-        runtime: Startup runtime snapshot for platform-specific validation.
-        current_config: Existing configuration whose unchanged Local policies
-            may be retained when saving unrelated settings.
+        runtime: Startup runtime snapshot for platform-specific defaults.
 
     Returns:
         Validation errors and the normalized configuration.
@@ -338,7 +335,6 @@ def validate_config(
             if isinstance(provider_settings, dict)
             else {}
         )
-        submitted_permissions = copy.deepcopy(permissions)
         if not isinstance(permissions, dict):
             errors.append("Local computer permissions must be an object.")
         else:
@@ -372,57 +368,6 @@ def validate_config(
                 ):
                     policy["allow_network"] = False
 
-        if (
-            not errors
-            and runtime is not None
-            and isinstance(provider_settings, dict)
-            and provider_settings.get("computer_use_runtime") == "local"
-            and runtime["sandbox"]["status"] != "detected"
-        ):
-            old_settings = (current_config or {}).get("provider_settings", {})
-            old_permissions = old_settings.get("computer_use_local_permissions", {})
-            was_local = old_settings.get("computer_use_runtime") == "local"
-            for role in ("member", "admin"):
-                # Keep unchanged legacy policies, but check both roles when
-                # activating Local access or creating a profile.
-                if was_local and submitted_permissions.get(
-                    role, {}
-                ) == old_permissions.get(role, {}):
-                    continue
-                policy = {**defaults[role], **permissions.get(role, {})}
-                scope = policy["filesystem_scope"]
-                if scope == "none":
-                    continue
-                unsupported = runtime["sandbox"]["status"] == "unsupported"
-                if not (
-                    (unsupported and scope == "workspace")
-                    or (
-                        policy["allow_execution"]
-                        and (scope == "workspace" or not policy["allow_network"])
-                    )
-                ):
-                    continue
-                if unsupported:
-                    reason = f"Local isolation is not supported on {runtime['os']}."
-                else:
-                    dependency = (
-                        "Seatbelt (/usr/bin/sandbox-exec)"
-                        if runtime["sandbox"]["backend"] == "seatbelt"
-                        else "bubblewrap (bwrap)"
-                    )
-                    if runtime["sandbox"]["status"] == "unavailable":
-                        detail = runtime["sandbox"].get(
-                            "error", "Sandbox startup failed."
-                        )
-                        reason = (
-                            f"{dependency} is installed but cannot start a sandbox: "
-                            f"{detail} Restricted Local execution is unavailable. "
-                            "Check system security policies or container restrictions, "
-                            "then restart AstrBot to check again."
-                        )
-                    else:
-                        reason = f"Missing {dependency}; restricted Local execution is unavailable."
-                errors.append(f"Local permission {role}: {reason}")
     else:
         validate(data, schema)
 
@@ -589,7 +534,6 @@ def save_config(
                 CONFIG_METADATA_2,
                 is_core,
                 runtime=runtime,
-                current_config=dict(config),
             )
         else:
             errors, post_config = validate_config(

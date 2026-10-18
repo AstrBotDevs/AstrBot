@@ -177,7 +177,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                 },
             )
         await WebChatMessageEvent._send(message_id, message, session_id=self.session_id)
-        await super().send(MessageChain([]))
+        await super().send(message if message is not None else MessageChain([]))
 
     async def send_typing(self) -> None:
         """Emit a run-start signal before an independent LLM request."""

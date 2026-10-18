@@ -9,6 +9,7 @@ import pytest
 
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.log import LogBroker
+from astrbot.core.utils.trace_store import close_trace_store
 
 
 @pytest.fixture
@@ -895,13 +896,22 @@ class TestAstrBotCoreLifecycleRestart:
 
         lifecycle.astrbot_updater = MagicMock()
 
-        with patch("astrbot.core.core_lifecycle.threading.Thread") as mock_thread:
+        # Mock threaded cleanup so the restart Thread mock cannot swallow the
+        # default executor's worker creation and leave to_thread waiting forever.
+        with (
+            patch(
+                "astrbot.core.core_lifecycle.asyncio.to_thread",
+                new_callable=AsyncMock,
+            ) as mock_to_thread,
+            patch("astrbot.core.core_lifecycle.threading.Thread") as mock_thread,
+        ):
             await lifecycle.restart()
 
             # Verify managers were terminated
             lifecycle.provider_manager.terminate.assert_awaited_once()
             lifecycle.platform_manager.terminate.assert_awaited_once()
             lifecycle.kb_manager.terminate.assert_awaited_once()
+            mock_to_thread.assert_awaited_once_with(close_trace_store)
 
             # Verify thread was started
             mock_thread.assert_called_once()

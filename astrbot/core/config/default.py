@@ -1,7 +1,6 @@
 """如需修改配置，请在 `data/cmd_config.json` 中修改或者在管理面板中可视化修改。"""
 
 import os
-import platform
 
 from astrbot import __version__
 from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
@@ -11,26 +10,25 @@ from .agent_runner import get_agent_runner_config_default
 
 
 def get_local_permission_defaults(system: str | None = None) -> dict:
-    """Return fresh Local permission defaults for the operating system.
+    """Return fresh Local permission defaults shared by all operating systems.
 
     Args:
-        system: Operating system name, or None to use the current system.
+        system: Retained for callers supplying an operating system name.
 
     Returns:
-        Per-role policies. Windows disables member access and gives admins
-        unrestricted access because workspace isolation is unavailable.
+        Workspace files without execution for members and unrestricted local
+        execution for administrators. Neither policy requires process isolation.
     """
-    windows = (system or platform.system()).lower() == "windows"
     return {
         "member": {
             "allow_execution": False,
             "allow_network": False,
-            "filesystem_scope": "none" if windows else "workspace",
+            "filesystem_scope": "workspace",
         },
         "admin": {
             "allow_execution": True,
             "allow_network": True,
-            "filesystem_scope": "host" if windows else "workspace",
+            "filesystem_scope": "host",
         },
     }
 
@@ -90,7 +88,7 @@ WEBHOOK_SUPPORTED_PLATFORMS = [
 
 # 默认配置
 DEFAULT_CONFIG = {
-    "config_version": 4,
+    "config_version": 5,
     "platform_settings": {
         "unique_session": False,
         "rate_limit": {
@@ -150,6 +148,8 @@ DEFAULT_CONFIG = {
         "websearch_firecrawl_key": [],
         "websearch_exa_key": [],
         "websearch_anysearch_key": [],
+        "websearch_deepseek_key": [],
+        "websearch_serpapi_key": [],
         "web_search_link": False,
         "display_reasoning_text": False,
         "identifier": False,
@@ -309,9 +309,9 @@ DEFAULT_CONFIG = {
     "log_file_max_mb": 20,
     "temp_dir_max_size": 1024,
     "trace_enable": False,
-    "trace_log_enable": False,
-    "trace_log_path": "logs/astrbot.trace.log",
-    "trace_log_max_mb": 20,
+    "trace_db_path": "logs/traces.db",
+    "trace_db_max_mb": 80,
+    "trace_retention_days": 7,
     "pip_install_arg": "",
     "pypi_index_url": "https://mirrors.aliyun.com/pypi/simple/",
     "persona": [],  # deprecated
@@ -3236,15 +3236,10 @@ CONFIG_METADATA_2 = {
             "log_file_path": {"type": "string", "condition": {"log_file_enable": True}},
             "log_file_max_mb": {"type": "int", "condition": {"log_file_enable": True}},
             "temp_dir_max_size": {"type": "int"},
-            "trace_log_enable": {"type": "bool"},
-            "trace_log_path": {
-                "type": "string",
-                "condition": {"trace_log_enable": True},
-            },
-            "trace_log_max_mb": {
-                "type": "int",
-                "condition": {"trace_log_enable": True},
-            },
+            "trace_enable": {"type": "bool"},
+            "trace_db_path": {"type": "string"},
+            "trace_db_max_mb": {"type": "int"},
+            "trace_retention_days": {"type": "int"},
             "t2i_strategy": {
                 "type": "string",
                 "options": ["remote", "local"],
@@ -3673,6 +3668,8 @@ CONFIG_METADATA_3 = {
                         "description": "网页搜索提供商",
                         "type": "string",
                         "options": [
+                            "serpapi",
+                            "deepseek",
                             "tavily",
                             "baidu_ai_search",
                             "bocha",
@@ -3680,6 +3677,28 @@ CONFIG_METADATA_3 = {
                             "firecrawl",
                             "exa",
                             "anysearch",
+                        ],
+                        "labels": [
+                            "SerpApi",
+                            "DeepSeek Search API",
+                            "Tavily",
+                            "Baidu AI Search",
+                            "Bocha",
+                            "Brave",
+                            "Firecrawl",
+                            "Exa",
+                            "AnySearch",
+                        ],
+                        "subtitles": [
+                            "Google 网页、图片、学术和财经搜索",
+                            "DeepSeek 官方搜索接口",
+                            "",
+                            "",
+                            "",
+                            "",
+                            "",
+                            "",
+                            "",
                         ],
                         "condition": {
                             "provider_settings.web_search": True,
@@ -3757,6 +3776,28 @@ CONFIG_METADATA_3 = {
                         "hint": "可添加多个 Key 进行轮询。留空则使用匿名模式（每日免费额度）。申请地址：https://anysearch.com/console/api-keys",
                         "condition": {
                             "provider_settings.websearch_provider": "anysearch",
+                            "provider_settings.web_search": True,
+                        },
+                    },
+                    "provider_settings.websearch_deepseek_key": {
+                        "description": "DeepSeek API Key",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "Configure a DeepSeek API key for search and page extraction. Multiple keys rotate. Get a key: [https://platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys)",
+                        "secret": True,
+                        "condition": {
+                            "provider_settings.websearch_provider": "deepseek",
+                            "provider_settings.web_search": True,
+                        },
+                    },
+                    "provider_settings.websearch_serpapi_key": {
+                        "description": "SerpApi API Key",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "支持 Google 网页、图片、学术和财经搜索。可添加多个 Key 轮询。获取 Key：[https://serpapi.com/manage-api-key](https://serpapi.com/manage-api-key)",
+                        "secret": True,
+                        "condition": {
+                            "provider_settings.websearch_provider": "serpapi",
                             "provider_settings.web_search": True,
                         },
                     },
@@ -4805,20 +4846,25 @@ CONFIG_METADATA_3_SYSTEM = {
                         "type": "int",
                         "hint": "用于限制 data/temp 目录总大小，单位为 MB。系统每 10 分钟检查一次，超限时按文件修改时间从旧到新删除，释放约 30% 当前体积。",
                     },
-                    "trace_log_enable": {
-                        "description": "启用 Trace 文件日志",
+                    "trace_enable": {
+                        "description": "启用追踪记录",
                         "type": "bool",
-                        "hint": "将 Trace 事件写入独立文件（不影响控制台输出）。",
+                        "hint": "追踪用户的每次指令和 AI 调用。",
                     },
-                    "trace_log_path": {
-                        "description": "Trace 日志文件路径",
+                    "trace_db_path": {
+                        "description": "追踪数据库路径",
                         "type": "string",
-                        "hint": "相对路径以 data 目录为基准，例如 logs/astrbot.trace.log；支持绝对路径。",
+                        "hint": "相对路径以 data 目录为基准，例如 logs/traces.db；支持绝对路径。",
                     },
-                    "trace_log_max_mb": {
-                        "description": "Trace 日志大小上限 (MB)",
+                    "trace_db_max_mb": {
+                        "description": "追踪数据库容量预算 (MB)",
                         "type": "int",
-                        "hint": "超过大小后自动轮转，默认 20MB。",
+                        "hint": "默认 80 MB，最小 32 MB，低于最小值时按 32 MB 生效。超出后自动清除旧数据。",
+                    },
+                    "trace_retention_days": {
+                        "description": "追踪保留天数",
+                        "type": "int",
+                        "hint": "默认 7 天，期限或容量先达到者触发清理。",
                     },
                     "pip_install_arg": {
                         "description": "pip 安装额外参数",
