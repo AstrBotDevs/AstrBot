@@ -24,22 +24,48 @@ const normalizePreferences = (value) => {
   return { folders, assignments };
 };
 
-export const readPluginOrganizerPreferences = () => {
-  if (typeof window === "undefined") return { folders: [], assignments: {} };
+const parsePreferences = (raw) => {
+  if (typeof raw !== "string") return null;
   try {
-    const current = window.localStorage.getItem(STORAGE_KEY);
-    const legacy = current
-      ? null
-      : window.localStorage.getItem(LEGACY_STORAGE_KEY);
-    const preferences = normalizePreferences(
-      JSON.parse(current || legacy || "{}"),
-    );
-    if (!current && legacy) {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
+    const value = JSON.parse(raw);
+    if (
+      !value ||
+      typeof value !== "object" ||
+      Array.isArray(value) ||
+      !Array.isArray(value.folders) ||
+      !value.assignments ||
+      typeof value.assignments !== "object" ||
+      Array.isArray(value.assignments)
+    ) {
+      return null;
     }
-    return preferences;
+    return normalizePreferences(value);
   } catch {
-    return { folders: [], assignments: {} };
+    return null;
+  }
+};
+
+export const readPluginOrganizerPreferences = () => {
+  const emptyPreferences = { folders: [], assignments: {} };
+  if (typeof window === "undefined") return emptyPreferences;
+
+  try {
+    const current = parsePreferences(window.localStorage.getItem(STORAGE_KEY));
+    if (current) return current;
+
+    const legacy = parsePreferences(
+      window.localStorage.getItem(LEGACY_STORAGE_KEY),
+    );
+    if (!legacy) return emptyPreferences;
+
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(legacy));
+    } catch {
+      // Keep using the legacy preferences if migration cannot be persisted.
+    }
+    return legacy;
+  } catch {
+    return emptyPreferences;
   }
 };
 
