@@ -1931,21 +1931,130 @@ class PluginService:
             raise PluginServiceError(f"无法找到插件 {plugin_name} 的目录")
         return plugin_dir
 
-    def get_plugin_readme(self, plugin_name: str | None) -> tuple[dict, str]:
+    def _get_plugin_readmes(self, plugin_name: str) -> dict[str, str]:
+        """Return the locale -> README path mapping declared by one plugin.
+
+        Args:
+            plugin_name: Plugin name (metadata.name).
+
+        Returns:
+            The declared mapping, or an empty dict for plugins that only ship
+            a single README.md.
+        """
+        for plugin in self.plugin_manager.context.get_all_stars():
+            if plugin.name == plugin_name:
+                return dict(getattr(plugin, "readmes", None) or {})
+        return {}
+
+    @staticmethod
+    def _normalize_locale(locale: str | None) -> str:
+        """Normalize a locale tag to lowercase with a hyphen separator.
+
+        Args:
+            locale: Raw locale such as "zh_CN" or "zh-CN".
+
+        Returns:
+            The normalized tag, or an empty string when no locale is given.
+        """
+        return (locale or "").strip().replace("_", "-").lower()
+
+    @staticmethod
+    def _resolve_declared_readme(plugin_dir: Path, filename: str) -> Path | None:
+        """Resolve a README path declared in metadata.yaml inside the plugin directory.
+
+        Args:
+            plugin_dir: Root directory of the plugin.
+            filename: Declared relative Markdown path.
+
+        Returns:
+            The resolved file path, or None when the entry escapes the plugin
+            directory, is not a file, or is not Markdown.
+        """
+        relative = Path(filename.strip())
+        if not relative.name or relative.is_absolute() or ".." in relative.parts:
+            return None
+        if relative.suffix.lower() not in {".md", ".markdown"}:
+            return None
+        try:
+            resolved = (plugin_dir / relative).resolve(strict=True)
+            root = plugin_dir.resolve(strict=True)
+        except (OSError, RuntimeError):
+            return None
+        if not resolved.is_file():
+            return None
+        try:
+            resolved.relative_to(root)
+        except ValueError:
+            return None
+        return resolved
+
+    def get_plugin_readme(
+        self,
+        plugin_name: str | None,
+        locale: str | None = None,
+    ) -> tuple[dict, str]:
+        """Read the plugin README that best matches the requested locale.
+
+        Resolution order is exact locale, base language (zh-TW -> zh), then the
+        declared default entry. Plugins that do not declare "readmes" in
+        metadata.yaml keep the legacy README.md behavior.
+
+        Args:
+            plugin_name: Plugin name (metadata.name).
+            locale: WebUI locale used to pick a language variant.
+
+        Returns:
+            A tuple of the response payload (content, resolved_locale,
+            available_locales) and a human readable message.
+
+        Raises:
+            PluginServiceError: If the plugin is unknown or no README exists.
+        """
         if not plugin_name:
             logger.warning("The plugin name is empty.")
             raise PluginServiceError("插件名称不能为空")
 
         plugin_dir = self.resolve_plugin_dir(plugin_name)
-        readme_path = plugin_dir / "README.md"
+        declared = self._get_plugin_readmes(plugin_name)
+        available_locales = [key for key in declared if key != "default"]
+        requested = self._normalize_locale(locale)
+        locale_paths = {
+            self._normalize_locale(key): value
+            for key, value in declared.items()
+            if key != "default"
+        }
 
-        if not readme_path.is_file():
+        candidates: list[tuple[str | None, str]] = []
+        if requested:
+            matched_locale = None
+            if requested in locale_paths:
+                matched_locale = requested
+            elif "-" in requested:
+                base_language = requested.split("-", 1)[0]
+                if base_language in locale_paths:
+                    matched_locale = base_language
+            if matched_locale:
+                candidates.append((matched_locale, locale_paths[matched_locale]))
+        candidates.append((None, declared.get("default") or "README.md"))
+
+        readme_path = None
+        resolved_locale = None
+        for candidate_locale, filename in candidates:
+            candidate_path = self._resolve_declared_readme(plugin_dir, filename)
+            if candidate_path:
+                readme_path = candidate_path
+                resolved_locale = candidate_locale
+                break
+
+        if readme_path is None:
             logger.warning(f"Plugin {plugin_name} has no README file.")
             raise PluginServiceError(f"插件 {plugin_name} 没有README文件")
 
         try:
             return {
-                "content": readme_path.read_text(encoding="utf-8")
+                "content": readme_path.read_text(encoding="utf-8"),
+                "resolved_locale": resolved_locale,
+                "available_locales": available_locales,
             }, "成功获取README内容"
         except Exception as exc:
             logger.warning(f"Failed to read README for plugin {plugin_name}: {exc}")
@@ -1957,8 +2066,9 @@ class PluginService:
     def get_plugin_readme_from_dashboard_query(
         self,
         plugin_name: str | None,
+        locale: str | None = None,
     ) -> tuple[dict, str]:
-        return self.get_plugin_readme(plugin_name)
+        return self.get_plugin_readme(plugin_name, locale)
 
     def get_plugin_changelog(self, plugin_name: str | None) -> tuple[dict, str]:
         logger.debug(f"Getting the changelog for plugin {plugin_name}")

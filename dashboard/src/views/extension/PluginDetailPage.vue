@@ -92,6 +92,15 @@ const readmeLoading = ref(false);
 const readmeError = ref("");
 const readmeEmpty = ref(false);
 const renderedReadme = ref("");
+// Empty string means "follow the WebUI locale"; otherwise the user picked a
+// language variant declared by the plugin in metadata.yaml.
+const readmeLocale = ref("");
+const readmeAvailableLocales = ref([]);
+let readmeRequestId = 0;
+const readmeLocaleItems = computed(() => [
+  { title: `${tm("detail.readmeLanguageAuto")} (${locale.value})`, value: "" },
+  ...readmeAvailableLocales.value.map((item) => ({ title: item, value: item })),
+]);
 const changelogLoading = ref(false);
 const changelogError = ref("");
 const changelogEmpty = ref(false);
@@ -696,10 +705,12 @@ const fetchReadme = async () => {
   const plugin = pluginData.value || {};
   if (!plugin?.name) return;
 
+  const requestId = ++readmeRequestId;
   readmeLoading.value = true;
   readmeError.value = "";
   readmeEmpty.value = false;
   renderedReadme.value = "";
+  readmeAvailableLocales.value = [];
 
   if (isMarketDetail.value) {
     const readmeUrl = getDocumentUrl("readme_url");
@@ -742,12 +753,19 @@ const fetchReadme = async () => {
   }
 
   try {
-    const res = await pluginApi.readme(plugin.name);
+    const res = await pluginApi.readme(
+      plugin.name,
+      readmeLocale.value || locale.value,
+    );
+    // Ignore slow responses that belong to an older locale selection.
+    if (requestId !== readmeRequestId) return;
 
     if (res.data.status !== "ok") {
       readmeError.value = res.data.message || tm("messages.operationFailed");
       return;
     }
+
+    readmeAvailableLocales.value = res.data.data?.available_locales || [];
 
     const content = res.data.data?.content || "";
     if (!content) {
@@ -757,9 +775,12 @@ const fetchReadme = async () => {
 
     renderedReadme.value = renderMarkdown(content);
   } catch (err) {
+    if (requestId !== readmeRequestId) return;
     readmeError.value = err?.message || String(err);
   } finally {
-    readmeLoading.value = false;
+    if (requestId === readmeRequestId) {
+      readmeLoading.value = false;
+    }
   }
 };
 
@@ -834,6 +855,7 @@ watch(
   ],
   async () => {
     logoLoadFailed.value = false;
+    readmeLocale.value = "";
     await fetchPluginDetail();
     fetchReadme();
     fetchChangelog();
@@ -841,6 +863,11 @@ watch(
   },
   { immediate: true },
 );
+
+// Follow the WebUI language until the user picks a README variant explicitly.
+watch([() => locale.value, readmeLocale], () => {
+  fetchReadme();
+});
 
 onMounted(() => {
   updateHeaderStuckState();
@@ -1085,7 +1112,19 @@ onBeforeUnmount(() => {
     </section>
 
     <section v-if="showDocsSection" class="detail-section">
-      <h3 class="detail-section__title">{{ tm("detail.docsTitle") }}</h3>
+      <div class="detail-section__header">
+        <h3 class="detail-section__title">{{ tm("detail.docsTitle") }}</h3>
+        <v-select
+          v-if="readmeAvailableLocales.length > 0"
+          v-model="readmeLocale"
+          class="docs-locale-select"
+          density="compact"
+          hide-details
+          :items="readmeLocaleItems"
+          :label="tm('detail.readmeLanguage')"
+          variant="outlined"
+        />
+      </div>
       <v-card class="rounded-lg docs-card" variant="outlined">
         <v-card-text>
           <div v-if="readmeLoading" class="docs-state">
@@ -1233,6 +1272,24 @@ onBeforeUnmount(() => {
 
 .detail-section {
   margin-top: 28px;
+}
+
+.detail-section__header {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.detail-section__header .detail-section__title {
+  margin-bottom: 0;
+}
+
+.docs-locale-select {
+  flex: 0 0 220px;
+  max-width: 100%;
 }
 
 .detail-section__title {

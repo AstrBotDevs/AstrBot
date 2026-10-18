@@ -1907,6 +1907,10 @@ export type DeletePluginConfigFileByIdError = unknown;
 
 export type GetPluginReadmeByIdData = {
     query: {
+        /**
+         * Preferred README locale such as zh-CN or en-US
+         */
+        locale?: string;
         plugin_id: string;
     };
 };
@@ -2069,6 +2073,12 @@ export type DeletePluginConfigFileError = unknown;
 export type GetPluginReadmeData = {
     path: {
         plugin_id: string;
+    };
+    query?: {
+        /**
+         * Preferred README locale such as zh-CN or en-US
+         */
+        locale?: string;
     };
 };
 

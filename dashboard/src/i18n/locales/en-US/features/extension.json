@@ -111,6 +111,8 @@
     "notFound": "Plugin not found",
     "docsTitle": "Documentation",
     "docsEmpty": "No documentation",
+    "readmeLanguage": "Documentation language",
+    "readmeLanguageAuto": "Follow interface language",
     "changelogTitle": "Changelog",
     "changelogEmpty": "No changelog",
     "subCommandsCount": "{count} sub-commands",

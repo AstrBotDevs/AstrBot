@@ -111,6 +111,8 @@
         "notFound": "Плагин не найден",
         "docsTitle": "Документация",
         "docsEmpty": "Документация отсутствует",
+        "readmeLanguage": "Язык документации",
+        "readmeLanguageAuto": "Как в интерфейсе",
         "changelogTitle": "Журнал изменений",
         "changelogEmpty": "Журнал изменений отсутствует",
         "subCommandsCount": "{count} подкоманд",

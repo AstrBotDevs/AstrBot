@@ -2095,6 +2095,11 @@ paths:
           required: true
           schema:
             type: string
+        - name: locale
+          in: query
+          description: Preferred README locale such as zh-CN or en-US
+          schema:
+            type: string
       responses:
         "200":
           $ref: "#/components/responses/Text"
@@ -2338,6 +2343,11 @@ paths:
       x-astrbot-scope: plugin
       parameters:
         - $ref: "#/components/parameters/PluginId"
+        - name: locale
+          in: query
+          description: Preferred README locale such as zh-CN or en-US
+          schema:
+            type: string
       responses:
         "200":
           $ref: "#/components/responses/Text"

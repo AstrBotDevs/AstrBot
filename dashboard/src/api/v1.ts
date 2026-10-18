@@ -1353,9 +1353,11 @@ export const pluginApi = {
       }),
     );
   },
-  readme(pluginId: string) {
+  readme(pluginId: string, locale?: string) {
     return typed<OpenConfig>(
-      openApiV1.getPluginReadmeById({ query: { plugin_id: pluginId } }),
+      openApiV1.getPluginReadmeById({
+        query: { plugin_id: pluginId, locale },
+      }),
     );
   },
   changelog(pluginId: string) {

@@ -75,6 +75,12 @@ class StarMetadata:
     views: list[dict] = field(default_factory=list)
     """插件注册的 Views 元数据。"""
 
+    readmes: dict[str, str] = field(default_factory=dict)
+    """插件声明的多语言 README：locale -> 相对于插件根目录的 Markdown 路径。
+
+    "default" 键表示默认版本，其余键为 locale（如 "zh-CN"）。
+    """
+
     @property
     def plugin_id(self) -> str:
         p_name = (self.name or "unknown").lower().replace("/", "_")
