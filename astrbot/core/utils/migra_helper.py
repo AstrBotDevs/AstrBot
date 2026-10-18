@@ -311,6 +311,33 @@ def migrate_config_on_load(config: dict[str, Any], config_path: Path) -> bool:
     Returns:
         Whether the configuration changed.
     """
+    changed = False
+    legacy = config.get("log_file")
+    legacy = legacy if isinstance(legacy, dict) else {}
+    old_keys = ("trace_log_enable", "trace_log_path", "trace_log_max_mb")
+    if any(key in config for key in old_keys) or any(
+        key in legacy for key in ("trace_enable", "trace_path", "trace_max_mb")
+    ):
+        old_size = config.get("trace_log_max_mb", legacy.get("trace_max_mb", 20))
+        if "trace_db_max_mb" not in config:
+            config["trace_db_max_mb"] = (
+                old_size * 4
+                if isinstance(old_size, int)
+                and not isinstance(old_size, bool)
+                and old_size > 0
+                else 80
+            )
+        config.setdefault("trace_db_path", "logs/traces.db")
+        config.setdefault("trace_retention_days", 7)
+        for key in old_keys:
+            config.pop(key, None)
+        for key in ("trace_enable", "trace_path", "trace_max_mb"):
+            legacy.pop(key, None)
+        logger.warning(
+            "Trace file settings migrated to SQLite in %s. Recording now persists when trace_enable is on; old files are untouched and not imported.",
+            config_path,
+        )
+        changed = True
     fallback_config = None
     resolved_path = config_path.resolve()
     profile_root = Path(get_astrbot_config_path()).resolve()
@@ -327,7 +354,7 @@ def migrate_config_on_load(config: dict[str, Any], config_path: Path) -> bool:
                 resolved_path,
                 exc,
             )
-    return _migrate_agent_runner_config(config, fallback_config)
+    return _migrate_agent_runner_config(config, fallback_config) or changed
 
 
 def finalize_config_migrations(configs: list[dict[str, Any]]) -> bool:

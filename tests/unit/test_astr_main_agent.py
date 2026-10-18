@@ -1096,6 +1096,11 @@ class TestEnsurePersonaAndSkills:
         await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
 
         assert "You are helpful." in req.system_prompt
+        mock_event.set_extra.assert_any_call("_trace_persona_id", "test-persona")
+        assert not any(
+            call.args[0] == "sel_persona"
+            for call in mock_event.trace.record.call_args_list
+        )
 
     @pytest.mark.asyncio
     async def test_ensure_persona_from_conversation(self, mock_event, mock_context):
@@ -1112,6 +1117,7 @@ class TestEnsurePersonaAndSkills:
         await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
 
         assert "Custom persona." in req.system_prompt
+        mock_event.set_extra.assert_any_call("_trace_persona_id", "conv-persona")
 
     @pytest.mark.asyncio
     async def test_inline_genui_prompt_is_added_with_custom_persona(

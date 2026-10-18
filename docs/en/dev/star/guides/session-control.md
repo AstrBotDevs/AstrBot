@@ -16,6 +16,8 @@ User: Keen observation (明察秋毫)
 
 AstrBot provides out-of-the-box session control functionality:
 
+Follow-up input is routed by the core pipeline, rather than the built-in plugin's former `handle_session_control_agent` handler. A matching active waiter allows input without another mention or wake prefix. After whitelist, session-status, rate-limit, content-safety checks, and preprocessing, `ProcessStage` dispatches the input before ordinary plugin handlers or the Agent. Consumed input does not continue to those handlers; `@session_waiter` usage is unchanged.
+
 Import:
 
 ```py
