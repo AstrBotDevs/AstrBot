@@ -22,7 +22,7 @@ from astrbot.core.utils.telemetry import (
     MAX_ATTRIBUTE_BYTES,
     bounded_attributes,
 )
-from astrbot.core.utils.trace import TraceSpan
+from astrbot.core.utils.trace import TraceSpan, trace_execution
 from astrbot.core.utils.trace_store import QUEUE_BYTES, TraceStore
 
 
@@ -124,9 +124,8 @@ def test_sdk_context_is_isolated_and_restores_foreign_span(capture):
             trace = TraceSpan("message")
             assert trace._root.parent is None
             assert trace._root.context.trace_id != foreign.context.trace_id
-            with trace.context():
+            with trace_execution(trace):
                 assert get_current_span() is trace._root
-                trace.record("pipeline_end", status="success")
             assert get_current_span() is foreign
             assert foreign.is_recording()
         assert get_tracer_provider() is global_provider
@@ -144,11 +143,10 @@ def test_sdk_disabled_does_not_break_messages(capture, monkeypatch):
     monkeypatch.setenv("OTEL_SDK_DISABLED", "true")
     module = runpy.run_path(trace_module.__file__)
     trace = module["TraceSpan"]("disabled")
-    with trace.context():
+    with trace_execution(trace):
         assert not get_current_span().is_recording()
         trace.record("event_received")
         trace.record("agent_start")
-        trace.record("pipeline_end", status="success")
     assert not capture
 
 
@@ -284,11 +282,11 @@ async def test_concurrent_abandoned_spans_end(capture):
         await release.wait()
         assert not context.is_recording()
 
-    with trace.context():
+    with pytest.raises(RuntimeError, match="Cancelled"), trace_execution(trace):
         trace.record("event_received")
         tasks = [asyncio.create_task(child(name)) for name in ("a", "b")]
         await asyncio.sleep(0)
-        trace.record("pipeline_end", status="error", error="Cancelled")
+        raise RuntimeError("Cancelled")
     release.set()
     await asyncio.gather(*tasks)
     assert not trace._pending
@@ -303,15 +301,15 @@ async def test_concurrent_abandoned_spans_end(capture):
 
 def test_pause_preserves_completion(capture, monkeypatch):
     trace = TraceSpan("message")
-    with trace.context():
+    with trace_execution(trace):
         trace.record("event_received")
         trace.record("handler_start", handler_full_name="test.handler")
         monkeypatch.setitem(trace_module.astrbot_config, "trace_enable", False)
         trace.record("agent_start")
         trace.record("handler_end", handler_full_name="test.handler", status="success")
-        trace.record("pipeline_end", status="success")
     count = len(capture)
-    TraceSpan("disabled").record("event_received")
+    with trace_execution(TraceSpan("disabled")):
+        assert not get_current_span().get_span_context().is_valid
     assert len(capture) == count
     assert capture[-1]["trace"]["state"] == "completed"
     assert capture[-1]["trace"]["span_count"] == 2

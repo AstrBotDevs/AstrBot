@@ -25,6 +25,7 @@ from astrbot.core.pipeline.respond.stage import RespondStage
 from astrbot.core.platform.astr_message_event import (
     AstrMessageEvent,
     current_message_event,
+    event_context,
     streaming_response_event,
 )
 from astrbot.core.platform.astrbot_message import AstrBotMessage, Group, MessageMember
@@ -264,7 +265,7 @@ async def test_public_context_send_records_only_successful_delivery(
         ),
         get_config=lambda **kwargs: {},
     )
-    with event.execution():
+    with event_context(event):
         assert current_message_event.get() is event
         if outcome == "failure":
             with pytest.raises(RuntimeError, match="send failed"):
@@ -304,7 +305,7 @@ async def test_public_context_send_skips_unscoped_and_stream_chunk_records(
         get_config=lambda **kwargs: {},
     )
     if scoped:
-        with event.execution():
+        with event_context(event):
             token = streaming_response_event.set(event)
             try:
                 await Context.send_message(
@@ -351,7 +352,7 @@ async def test_nested_event_forwarding_records_delivery_once(monkeypatch):
         message="Scheduled",
     )
     event.trace = MagicMock()
-    with event.execution():
+    with event_context(event):
         await event.send(MessageChain([Plain("Hello")]))
     deliveries = [
         call for call in event.trace.record.call_args_list

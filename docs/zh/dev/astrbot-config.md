@@ -558,6 +558,8 @@ AstrBot WebUI 配置。
 
 开启后自动持久化；暂停不删除历史，已开始的追踪仍会记录完成状态。OpenTelemetry API 和 SDK 负责 Span ID、父子关系、起止时间、状态、事件和活动上下文。日志会关联当前活动的 `trace_id` / `span_id`，插件仍使用原来的 `astrbot.api.logger`。AstrBot 使用独立的 TracerProvider，不替换全局 Provider，不添加导出器或自动埋点。SQLite 持久化、JSON API/SSE 和现有历史数据格式保持不变，不启用 OTLP 导出。标准环境变量 `OTEL_SDK_DISABLED=true` 也会关闭 SDK 追踪。
 
+框架入口组合使用 `log_context(...)`、`event_context(event)` 和独立的 `trace_execution(event.trace)`。只有最外层追踪执行作用域在消息处理、发送及历史保存结束后完成追踪；异常或取消会标记错误并原样抛出。`event_context(event)` 仅负责绑定当前事件、注册活动事件及清理临时文件；`TraceSpan.context()` 仅绑定根 Span，不负责结束追踪。插件无需在处理器中调用这些由框架入口管理的执行作用域。
+
 ### `trace_db_path`
 
 独立 SQLite 路径，默认 `logs/traces.db`（相对 `data` 目录），更改路径后重启生效。数据库、WAL 和 SHM 不受“清理日志”影响。追踪正文可能包含消息、插件参数和工具结果，请限制数据库文件访问权限。

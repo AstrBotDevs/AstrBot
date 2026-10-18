@@ -558,6 +558,8 @@ Whether to enable trace recording. Default is `false`. Toggle it under `Settings
 
 Enabling recording also persists traces. Pausing preserves history and lets existing traces finish. The OpenTelemetry API and SDK manage span IDs, parent relationships, timestamps, status, events, and active context. Logs correlate with the active `trace_id` / `span_id`; plugins continue using `astrbot.api.logger`. AstrBot uses its own TracerProvider without replacing the global provider, adding exporters, or enabling automatic instrumentation. SQLite persistence and JSON API/SSE remain unchanged; existing history stays readable. No OTLP export is enabled. The standard `OTEL_SDK_DISABLED=true` environment variable also disables SDK tracing.
 
+Framework entry points compose `log_context(...)`, `event_context(event)`, and the independent `trace_execution(event.trace)` scope. Only the outermost trace execution scope completes the trace after awaited processing, delivery, and history saving; failures and cancellations mark it errored and propagate unchanged. `event_context(event)` only binds the current event, registers active execution, and cleans up temporary files. `TraceSpan.context()` only binds the root span without completing it. Plugins do not need to wrap their handlers in these framework-owned execution scopes.
+
 ### `trace_db_path`
 
 Dedicated SQLite path, default `logs/traces.db`, relative to `data`. Restart after changing the path. Log cleanup protects the database, WAL, and SHM. Trace content may contain messages, plugin arguments, and tool results; restrict file access accordingly.

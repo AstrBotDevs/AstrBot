@@ -17,11 +17,14 @@ from astrbot.core.config.agent_runner import resolve_context_compression_config
 from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import CronJob
+from astrbot.core.log import log_context
+from astrbot.core.platform.astr_message_event import event_context
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider.entites import ProviderRequest
 from astrbot.core.utils.config_number import coerce_int_config
 from astrbot.core.utils.history_saver import persist_agent_history
+from astrbot.core.utils.trace import trace_execution
 
 if TYPE_CHECKING:
     from astrbot.core.star.context import Context
@@ -459,7 +462,11 @@ class CronJobManager:
             message_type=session.message_type,
         )
 
-        with cron_event.execution():
+        with (
+            log_context(cron_event.get_platform_id(), cron_event.get_platform_name()),
+            event_context(cron_event),
+            trace_execution(cron_event.trace),
+        ):
             # judge user's role
             umo = cron_event.unified_msg_origin
             cfg = self.ctx.get_config(umo=umo)

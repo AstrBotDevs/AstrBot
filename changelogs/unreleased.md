@@ -58,7 +58,7 @@
 
 ## Trace
 
-- Finish message and Cron traces through the shared event execution lifecycle, after awaited processing, delivery, and history saving. Close failures and cancellations without swallowing them; preserve the existing root completion signal.
+- Finish message and Cron traces through independent `trace_execution()` scopes at framework entry points, after awaited processing, delivery, and history saving. Compose logging separately; keep current-event binding, active-event registration, and temporary-file cleanup in `event_context(event)`. Close failures and cancellations without swallowing them; nested scopes do not finish traces early.
 
 - Plugin handler triggered → Call plugin: compact the trace timeline with short titles, neutral category/metadata chips, platform IDs on a secondary line, relative times with exact timestamps on hover, and a consistent heading/chevron interaction instead of repeated View details rows.
 - Start Agent → Agent execution: collapse descendants using actual span ancestry, retain responses on the main line and error indicators on collapsed headers, and preserve chronological ordering for concurrent/interleaved branches. Folding does not alter trace/span/call counts.
@@ -73,7 +73,7 @@
 - Collapse consecutive same-type timeline nodes with stacked icons and visible error counts.
 - Record only the final streaming-response summary, excluding adapter chunks and protocol closing frames while retaining independent tool/plugin replies.
 - Replace the in-memory trace record cache and JSONL sink with dedicated SQLite history at `data/logs/traces.db`, using bounded asynchronous writes, whole-trace retention, and a default 80 MB capacity target / 7-day retention. Preserve legacy files without importing or appending them.
-- Align trace/span IDs, parent relationships, timestamps, status, attributes, and events with the OpenTelemetry core model, and correlate structured logs with the active trace/span context. This does not add an OTel SDK, OTLP transport, or external export.
+- Use the OpenTelemetry API and SDK to manage trace/span IDs, parent relationships, timestamps, status, attributes, events, and active context, and correlate structured logs with the active span. Preserve local SQLite and JSON API/SSE without OTLP transport or external export.
 - Migrate `trace_log_enable/path/max_mb` to `trace_db_path/max_mb` and `trace_retention_days`; keep `trace_enable`. New database settings take precedence. Protect SQLite files and sidecars from log cleanup.
 - Show execution mode, plugin names, and response ownership as timeline chips. Reuse profile runner labels and classify built-in Agent replies as system/core while preserving plugin senders.
 - Remove the outer gray trace card and tinted list shell, using a flat tab layout with toolbar/table separators in both themes.

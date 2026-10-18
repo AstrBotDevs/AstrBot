@@ -86,6 +86,7 @@ class TraceSpan:
         self.span_id = format_span_id(root_context.span_id)
         self._started = False
         self._finished = False
+        self._execution_active = False
         self._bytes = 0
         self._events = 0
         self._span_count = 1
@@ -417,3 +418,36 @@ class TraceSpan:
                 "attributes": attrs,
             }
         )
+
+
+@contextmanager
+def trace_execution(trace: TraceSpan) -> Iterator[None]:
+    """Bind and finish a trace independently of message-event resources.
+
+    Args:
+        trace: Trace whose outermost execution scope owns completion.
+
+    Yields:
+        Control while the trace's root span is bound.
+
+    Raises:
+        BaseException: Any execution failure or cancellation, unchanged.
+    """
+    if trace._execution_active or trace._finished:
+        yield
+        return
+    with trace.context():
+        trace._execution_active = True
+        status = "success"
+        error = None
+        try:
+            yield
+        except BaseException as exc:
+            status = "error"
+            error = str(exc) or type(exc).__name__
+            raise
+        finally:
+            try:
+                trace.record("pipeline_end", status=status, error=error)
+            finally:
+                trace._execution_active = False

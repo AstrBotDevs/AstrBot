@@ -10,14 +10,15 @@ from opentelemetry.trace import format_trace_id, get_current_span
 
 from astrbot.core.agent.runners.base import AgentState
 from astrbot.core.cron.manager import CronJobManager
-from astrbot.core.log import _log_context
+from astrbot.core.log import _log_context, log_context
 from astrbot.core.pipeline import scheduler as scheduler_module
-from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.astr_message_event import AstrMessageEvent, event_context
 from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.utils import trace as trace_module
 from astrbot.core.utils.active_event_registry import active_event_registry
+from astrbot.core.utils.trace import trace_execution
 from astrbot.core.utils.trace_store import TraceStore
 
 
@@ -80,7 +81,11 @@ def test_event_scope_finishes_and_restores_context(event, frames, tmp_path, fail
     attachment.write_text("temporary", encoding="utf-8")
     event.track_temporary_local_file(str(attachment))
     try:
-        with event.execution():
+        with (
+            log_context(event.get_platform_id(), event.get_platform_name()),
+            event_context(event),
+            trace_execution(event.trace),
+        ):
             root_context = get_current_span()
             platform_context = _log_context.get()
             assert (
@@ -119,12 +124,17 @@ def test_nested_event_scopes_do_not_finish_early(event, frames):
         event: Message event to execute.
         frames: Captured trace snapshots.
     """
-    with event.execution():
-        context = get_current_span()
-        with event.execution():
-            assert get_current_span() is context
+    assert not hasattr(event, "execution")
+    with trace_execution(event.trace):
+        with event_context(event):
+            event.trace.record("agent_start")
+            context = get_current_span()
+            with event_context(event), trace_execution(event.trace):
+                assert get_current_span() is context
+            assert event in active_event_registry._events[event.unified_msg_origin]
+            event.trace.record("agent_end", status="success")
         assert event.trace._summary["state"] == "running"
-        assert event in active_event_registry._events[event.unified_msg_origin]
+        assert event.unified_msg_origin not in active_event_registry._events
     final_count = len(frames)
     event.trace.record("pipeline_end", status="success")
     assert len(frames) == final_count
@@ -152,7 +162,7 @@ def test_event_completion_reaches_sqlite(event, frames, tmp_path, monkeypatch):
     try:
         for frame in frames:
             assert store.append(frame)
-        with event.execution():
+        with event_context(event), trace_execution(event.trace):
             event.trace.record(
                 "response_sent", kind="response", source="core", message="Done"
             )
@@ -179,7 +189,7 @@ async def test_task_cancellation_finishes_event(event, frames):
     started = asyncio.Event()
 
     async def execute():
-        with event.execution():
+        with event_context(event), trace_execution(event.trace):
             started.set()
             await asyncio.Event().wait()
 

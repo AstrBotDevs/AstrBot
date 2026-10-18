@@ -15,7 +15,6 @@ from deprecated import deprecated
 from astrbot import logger
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.db.po import Conversation
-from astrbot.core.log import log_context
 from astrbot.core.message.components import (
     At,
     AtAll,
@@ -43,6 +42,38 @@ streaming_response_event: ContextVar["AstrMessageEvent | None"] = ContextVar(
 current_message_event: ContextVar["AstrMessageEvent | None"] = ContextVar(
     "current_message_event", default=None
 )
+
+
+@contextmanager
+def event_context(event: "AstrMessageEvent") -> Iterator[None]:
+    """Bind the current event and clean up event-owned resources.
+
+    Logging and tracing scopes are owned separately by the framework entry
+    point. Nested scopes do not unregister the event or clean up files early.
+
+    Args:
+        event: Event whose outermost scope owns registration and cleanup.
+
+    Yields:
+        Control while the event is active.
+    """
+    if event._execution_active:
+        yield
+        return
+    event._execution_active = True
+    event_token = current_message_event.set(event)
+    active_event_registry.register(event)
+    try:
+        yield
+    finally:
+        try:
+            event.cleanup_temporary_local_files()
+        finally:
+            try:
+                active_event_registry.unregister(event)
+            finally:
+                event._execution_active = False
+                current_message_event.reset(event_token)
 
 
 class AstrMessageEvent(abc.ABC):
@@ -121,57 +152,6 @@ class AstrMessageEvent(abc.ABC):
         # back_compability
         self.platform = platform_meta
         self._execution_active = False
-
-    @contextmanager
-    def execution(self) -> Iterator[None]:
-        """Own event execution, context binding, and final trace completion.
-
-        The outermost scope finishes the event after all awaited processing,
-        delivery, and history work. Nested scopes do not finish it early.
-        The legacy pipeline_end action remains the root completion signal.
-
-        Yields:
-            Control to the event's execution entry point.
-
-        Raises:
-            BaseException: Any execution failure or cancellation, unchanged.
-        """
-        if self._execution_active:
-            yield
-            return
-        with (
-            log_context(self.get_platform_id(), self.get_platform_name()),
-            self.trace.context(),
-        ):
-            self._execution_active = True
-            event_token = current_message_event.set(self)
-            active_event_registry.register(self)
-            status = "success"
-            error = None
-            try:
-                yield
-            except BaseException as exc:
-                status = "error"
-                error = str(exc) or type(exc).__name__
-                raise
-            finally:
-                try:
-                    self.trace.record(
-                        "pipeline_end",
-                        kind="message",
-                        status=status,
-                        stopped=self.is_stopped(),
-                        error=error,
-                    )
-                finally:
-                    try:
-                        self.cleanup_temporary_local_files()
-                    finally:
-                        try:
-                            active_event_registry.unregister(self)
-                        finally:
-                            self._execution_active = False
-                            current_message_event.reset(event_token)
 
     @property
     def unified_msg_origin(self) -> str:
