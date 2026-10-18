@@ -317,9 +317,7 @@ const openView = () => {
                   </div>
                 </template>
                 <span>{{
-                  extension.activated
-                    ? tm("buttons.stop")
-                    : tm("buttons.load")
+                  extension.activated ? tm("buttons.stop") : tm("buttons.load")
                 }}</span>
               </v-tooltip>
             </template>
@@ -365,6 +363,9 @@ const openView = () => {
             {{ localizedDesc }}
           </div>
         </div>
+      </div>
+      <div v-if="$slots.management" class="extension-management-slot">
+        <slot name="management" />
       </div>
     </v-card-text>
 
@@ -537,6 +538,10 @@ const openView = () => {
 </template>
 
 <style scoped>
+.extension-management-slot {
+  margin-top: 10px;
+}
+
 .extension-card-text {
   padding: 12px 14px 8px;
   width: 100%;

@@ -480,5 +480,33 @@
   },
   "pluginChangelog": {
     "menuTitle": "変更履歴を表示"
+  },
+  "organizer": {
+    "title": "フォルダー",
+    "hint": "プラグインカードをフォルダーにドラッグして整理します。",
+    "all": "すべてのプラグイン",
+    "uncategorized": "未分類",
+    "count": "{count} 件のプラグイン",
+    "stats": {
+      "plugins": "{count} 件",
+      "running": "実行中 {count} 件",
+      "updates": "更新可能 {count} 件"
+    },
+    "newFolder": "新しいフォルダー",
+    "newFolderTitle": "プラグインフォルダーを作成",
+    "folderName": "フォルダー名",
+    "duplicateFolder": "同じ名前のフォルダーが既にあります。",
+    "createFolder": "フォルダーを作成",
+    "deleteFolder": "フォルダーを削除",
+    "noMatch": "条件に一致するプラグインはありません。フォルダーまたはフィルターを変更してください。",
+    "moveToFolder": "フォルダーに移動",
+    "filters": {
+      "all": "すべて",
+      "active": "実行中",
+      "stopped": "停止中",
+      "updates": "更新あり",
+      "pinned": "ピン留め"
+    },
+    "filterLabel": "プラグインのクイックフィルター"
   }
 }
