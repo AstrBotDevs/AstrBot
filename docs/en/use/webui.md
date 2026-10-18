@@ -172,6 +172,8 @@ The toolbar contains search, fullscreen, font-size controls, and `Install Pip pa
 
 ### Trace
 
+Only events with an Agent invocation or a successfully delivered command response are retained. Ordinary messages, listener/hook-only events, and commands with neither a response nor an Agent call are not persisted or published to the trace list. Candidate nodes are buffered within the existing capacity limit until admission, preserving the preceding execution chain when retained and discarding it otherwise at event completion. Direct Agent runners, including scheduled tasks, follow the same rule; existing history is not automatically deleted.
+
 The Agent execution heading shows chips for recorded model and persona IDs, plus the number of actual tool calls when nonzero. Hover over a model chip to see its provider ID. These remain visible when the execution chain is collapsed; nested and parallel Agents are counted separately, and unavailable metadata is omitted.
 
 Below the detail title, UMO and sender appear on separate icon-and-value rows. UMO aliases retain their hover tooltip showing the full identifier.

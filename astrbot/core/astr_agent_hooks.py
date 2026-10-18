@@ -14,6 +14,7 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
     async def on_agent_begin(
         self, run_context: ContextWrapper[AstrAgentContext]
     ) -> None:
+        run_context.context.event.trace.record("agent_invoked")
         await call_event_hook(
             run_context.context.event,
             EventType.OnAgentBeginEvent,

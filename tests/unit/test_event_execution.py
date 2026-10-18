@@ -56,12 +56,14 @@ def event(frames):
     message.type = MessageType.FRIEND_MESSAGE
     message.sender = MessageMember(user_id="test-user", nickname="Test User")
     message.message = []
-    return AstrMessageEvent(
+    result = AstrMessageEvent(
         "Test event",
         message,
         PlatformMetadata(id="test", name="test-platform", description="Test"),
         "execution-test",
     )
+    result.trace.record("agent_invoked")
+    return result
 
 
 @pytest.mark.parametrize(
@@ -271,6 +273,7 @@ async def test_cron_uses_event_scope(frames, monkeypatch, failure_at):
         return SimpleNamespace(history="[]")
 
     async def steps(max_steps):
+        captured["event"].trace.record("agent_invoked")
         assert frames[-1]["trace"]["state"] == "running"
         if failure_at == "run":
             raise RuntimeError("run failed")
@@ -315,10 +318,13 @@ async def test_cron_uses_event_scope(frames, monkeypatch, failure_at):
     else:
         await execution
     assert save.await_count == int(failure_at in (None, "history"))
-    final = frames[-1]
-    assert final["trace"]["state"] == "completed"
-    assert final["span"]["span_id"] == final["trace"]["root_span_id"]
-    assert final["span"]["status"]["code"] == (2 if failure_at else 1)
+    if failure_at in {"config", "conversation", "build", "empty"}:
+        assert frames == []
+    else:
+        final = frames[-1]
+        assert final["trace"]["state"] == "completed"
+        assert final["span"]["span_id"] == final["trace"]["root_span_id"]
+        assert final["span"]["status"]["code"] == (2 if failure_at else 1)
     assert "test:FriendMessage:cron-execution-test" not in active_event_registry._events
     assert current_trace_context.get() is None
     assert _log_context.get() is None
