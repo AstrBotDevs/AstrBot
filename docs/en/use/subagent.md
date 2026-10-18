@@ -1,58 +1,98 @@
-# Agent Handoff and SubAgent
+# SubAgent Orchestration {#agent-handoff-and-subagent}
 
-SubAgent Orchestration is an advanced agent organization method provided by AstrBot. It allows you to decompose complex tasks into multiple specialized SubAgents, reducing the Main Agent's prompt length and improving task execution success rates.
+A SubAgent is an AI assistant with a specific responsibility. The main Agent talks to the user, delegates suitable tasks to a SubAgent, and continues its response using the returned result.
 
-v4.14.0 introduced this feature, which is currently an **experimental feature** and not yet stable.
+<span id="motivation"></span>
 
-![](https://files.astrbot.app/docs/source/images/subagent/image.png)
+For example, one SubAgent can research sources while another organizes files. Each uses its own Persona prompt and tool selection, and can optionally use a different chat model. This separates responsibilities and reduces the tools the main Agent must choose directly, but also adds model calls and waiting time. Simple conversations with only a few tools usually do not need orchestration.
 
-## Motivation
+Introduced in v4.14.0, this feature is still marked **experimental**. This page covers AstrBot's built-in AI. Orchestration provided by an external AI application is configured in that application.
 
-In traditional architectures, all tools are directly mounted on the Main Agent. When there are many tools, several issues arise:
-1. **Prompt Bloat**: The Main Agent must include descriptions for all tools in its System Prompt, consuming excessive context.
-2. **Execution Errors**: With a large number of tools, the LLM may confuse tool purposes or generate incorrect parameters.
-3. **Complexity**: The Main Agent is overburdened with both conversation and the organization/invocation of numerous tools.
+## How it works
 
-With SubAgent Orchestration, the Main Agent can interact with users, use its own tools, and delegate tasks to specialized SubAgents.
+1. When enabled, the main Agent receives tools named `transfer_to_<name>`, such as `transfer_to_research_assistant`, alongside its own tools.
+2. The main Agent reads each SubAgent's public description to decide whether to delegate. It passes a clear task and can include images when needed.
+3. The SubAgent uses its Persona's prompt, preset dialogue, and tools to complete the task.
+4. It returns the result to the main Agent, which organizes the response and continues the conversation.
 
-## How It Works
+The model decides when to delegate. Delegation is neither automatic for every message nor a fixed workflow. A SubAgent receives the delegated task and its own preset dialogue; it **does not automatically receive the main Agent's entire conversation history**. Include necessary background, file paths, and constraints in the task.
 
-1. **Main Agent Delegation**: When SubAgent mode is enabled, the Main Agent gains delegation tools named `transfer_to_<subagent_name>` alongside its own tools. Enabling the option to deduplicate Main LLM tools hides tools that overlap with those of SubAgents.
-2. **Task Handoff**: When the Main Agent determines a task needs execution, it calls the corresponding delegation tool, passing the task description to the SubAgent.
-3. **SubAgent Execution**: The SubAgent receives the task, performs operations using its assigned tools, and returns the organized results to the Main Agent.
-4. **Feedback**: The Main Agent receives the results and continues the conversation with the user.
+The delegation tool also supports background execution. The main Agent can acknowledge submission first and be woken again when the SubAgent finishes. Proactive delivery still depends on the chat platform; see [Proactive Capabilities](./proactive-agent.md).
 
-![](https://files.astrbot.app/docs/source/images/subagent/1.png)
+## Create your first SubAgent {#configuration}
 
-## Configuration
+### 1. Prepare a model and Persona
 
-In the AstrBot WebUI, expand **More Features** in the left navigation bar and click **SubAgents** (`/subagent`).
+Confirm that AstrBot's built-in AI can hold a conversation and that its chat model supports tool calling. Under **Extensions → Persona** in the WebUI, create a dedicated Persona, such as “Research Assistant”:
 
-### 1. Enable SubAgent Mode
+- Explain how it should collect information, verify sources, and present results.
+- Select only the tools needed for research, such as configured web search or MCP tools.
+- If it only analyzes text, it can have no tools.
 
-Toggle "Enable SubAgent Orchestration" at the top of the page.
+The Persona describes **how the assistant works**. The public description explains **when the main Agent should ask for its help**.
 
-### 2. Create a SubAgent
+<span id="_2-create-a-subagent"></span>
 
-Click the "Add SubAgent" button:
+### 2. Add the SubAgent
 
-- **Agent Name**: Used to generate the delegation tool name (e.g., `transfer_to_weather`). Use lowercase and underscores.
-- **Select Persona**: Choose a preset Persona, which defines the SubAgent's basic character, behavioral guidance, and the Tools collection it can use. You can create and manage Personas on the "Persona" page.
-- **Description for Main LLM**: This description tells the Main Agent what this SubAgent is good at, ensuring accurate delegation.
-- **Tools**: The SubAgent inherits its selected Persona’s tools. Edit the Persona’s tool selection on the **Persona** page.
-- **Provider Override (Optional)**: You can specify different model providers for specific SubAgents. For example, the Main Agent could use GPT-4o, while a simple query SubAgent uses GPT-4o-mini to save costs.
+Open **Extensions → SubAgents**, click **Add SubAgent**, then click **Expand** on the new card.
 
-After configuring the agents, click `Save` on the page.
+![Current SubAgent configuration page](./images/subagent-create-en.png)
 
-## Best Practices
+| Setting | What to enter |
+| --- | --- |
+| Agent name | For example, `research_assistant`. Start with a lowercase English letter; use only lowercase letters, numbers, and underscores. Maximum 64 characters. Names must be unique. |
+| Chat Provider (optional) | Select the SubAgent's chat model. Leave empty to use the chat provider resolved for the current conversation. This is not a separate API key field. |
+| Choose Persona | Select the Persona you created. Its preview appears on the right. Required. |
+| Description for the main LLM | Describe suitable tasks, required inputs, and expected results. Avoid vague descriptions such as “a powerful assistant.” |
+| Enable switch | Controls whether this SubAgent participates in orchestration. New SubAgents are enabled by default. |
 
-- **Single Responsibility**: Each SubAgent should handle one category of related tasks (e.g., search, file processing, smart home control).
-- **Clear Descriptions**: Descriptions for the Main Agent should be concise and highlight the SubAgent's core capabilities.
-- **Layered Management**: For extremely complex tasks, consider multi-level delegation if necessary.
+Example public description:
 
-## Known Issues
+```text
+Researches and verifies information. Delegate questions that need a comparison, recent information, or a summary of sources. Include the question and constraints. I return concise findings with source links.
+```
 
-SubAgent orchestration is currently an **experimental feature** and not yet stable.
+Manage tools on the **Persona** page; the SubAgent page has no separate tool selector. A Persona with all tools selected can use currently available tools. A specific selection uses only matching tools that still exist and are enabled. Computer-use tools also require the appropriate runtime and permissions.
 
-1. Skills of personas cannot be isolated at this time.
-2. SubAgent conversation histories are not currently saved.
+<span id="_1-enable-subagent-mode"></span>
+
+### 3. Enable and save
+
+Turn on **Enable SubAgent orchestration**, then click **Save** in the upper right. Adding, editing, disabling, or deleting a SubAgent, and changing either global switch, all require saving. Saving reloads orchestration without restarting AstrBot.
+
+This page manages **global orchestration settings**, rather than a separate SubAgent list for the currently selected configuration profile.
+
+## Deduplicate main LLM tools
+
+By default, the main Agent can use its own tools directly or delegate. With **Deduplicate main LLM tools (hide tools duplicated by SubAgents)** enabled, overlapping tools assigned to enabled SubAgents are removed from the main Agent's tool list.
+
+For example, if both have a search tool, the main Agent can search directly or delegate when deduplication is off. With deduplication on, it uses the research SubAgent for that search task.
+
+<span id="best-practices"></span>
+
+Start with deduplication off and enable it after confirming the SubAgent works. Giving every SubAgent all tools makes clear responsibilities difficult to maintain.
+
+## Verify the setup
+
+1. Check the required tools first: configure web search, connect the MCP service, and so on.
+2. Send an explicit request, such as “Ask the research assistant to compare these two options and provide source links.”
+3. Look for `transfer_to_research_assistant` and subsequent calls in the conversation's tool activity or **Data & Logs → Logs**.
+4. Check that the answer follows the Persona's instructions before adding more SubAgents.
+
+The model may still answer directly. Creating a SubAgent alone does not guarantee delegation.
+
+## Limits and troubleshooting {#known-issues}
+
+| Symptom | What to check |
+| --- | --- |
+| Cannot save | Check names, duplicates, and Persona selection, including disabled SubAgents. |
+| Main Agent never delegates | Check both enable switches and saved settings. Use a tool-capable model and a specific public description. |
+| SubAgent cannot use a tool | Check Persona tool selection, plugin/MCP status, runtime, and permissions. Selecting a disabled tool does not reactivate it. |
+| Result lacks context | Specify the background and constraints to pass. Full conversation history is not automatically shared. |
+| SubAgent model fails | Check that the selected Chat Provider exists and works, or clear it to use the conversation's model. |
+| Persona changes are not reflected | Save the SubAgent page again to reload the Persona content. |
+
+A SubAgent is not a separate container or account permission boundary. It calls tools in the current conversation's AstrBot environment. Configure file and execution isolation through [Agent Sandbox](./astrbot-agent-sandbox.md).
+
+SubAgent execution history is not persisted as an independent conversation. There is no separate Skills isolation configuration. This page does not configure multi-level delegation and should not be treated as an arbitrarily nested tree of Agents.

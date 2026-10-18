@@ -72,3 +72,63 @@ async def test_termination_while_waiting_for_lock_exits_before_agent(monkeypatch
 
     event.send_typing.assert_awaited_once()
     event.stop_typing.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_wake_prefix_rejection_does_not_register_pending_text(monkeypatch):
+    """Reject unmatched requests before mutating the merge queue.
+
+    Args:
+        monkeypatch: Scoped replacement fixture for hooks and lock boundaries.
+    """
+    stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
+    stage.streaming_response = False
+    stage.show_reasoning = False
+    event = build_event(Mock(return_value=False))
+    event.get_message_type.return_value = MessageType.FRIEND_MESSAGE
+    event.get_message_str = Mock(return_value="hello")
+    monkeypatch.setattr(internal, "try_capture_follow_up", Mock(return_value=None))
+    monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
+    prepare = AsyncMock()
+    register = Mock()
+    acquire = Mock()
+    monkeypatch.setattr(internal, "_prepare_file_attachments", prepare)
+    monkeypatch.setattr(internal._inbound_reply_merger, "register", register)
+    monkeypatch.setattr(internal.session_lock_manager, "acquire_lock", acquire)
+
+    async for _ in stage.process(event, "/ask"):
+        pass
+
+    prepare.assert_not_awaited()
+    register.assert_not_called()
+    acquire.assert_not_called()
+    event.send_typing.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_attachments_are_prepared_before_waiting_for_session_lock(monkeypatch):
+    """Keep upstream file preparation outside the session lock.
+
+    Args:
+        monkeypatch: Scoped replacement fixture for attachment and lock handling.
+    """
+    stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
+    stage.streaming_response = False
+    stage.show_reasoning = False
+    event = build_event(Mock(side_effect=[False, True]))
+    monkeypatch.setattr(internal, "try_capture_follow_up", Mock(return_value=None))
+    monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
+    prepare = AsyncMock()
+    lock = AsyncMock()
+    acquire = Mock(return_value=lock)
+    order = Mock()
+    order.attach_mock(prepare, "prepare")
+    order.attach_mock(acquire, "acquire")
+    monkeypatch.setattr(internal, "_prepare_file_attachments", prepare)
+    monkeypatch.setattr(internal.session_lock_manager, "acquire_lock", acquire)
+
+    await drain(stage, event)
+
+    prepare.assert_awaited_once_with(event)
+    acquire.assert_called_once_with(event.unified_msg_origin)
+    assert [item[0] for item in order.mock_calls[:2]] == ["prepare", "acquire"]
