@@ -10,6 +10,7 @@ import sqlite3
 import threading
 import time
 import weakref
+from itertools import count
 from pathlib import Path
 
 import pytest
@@ -416,7 +417,11 @@ def test_database_pages_filters_details_and_restart(persisted, capture):
         restarted.close()
 
 
-@pytest.mark.parametrize("prompt", ["x" * 8192, "字" * 20000, "x" * 131072])
+@pytest.mark.parametrize(
+    "prompt",
+    ["x" * 8192, "字" * 20000, "x" * 131072],
+    ids=["ascii-8k", "unicode-20k", "ascii-128k"],
+)
 def test_long_prompt_is_preserved_in_spans_events_and_database(
     persisted, capture, prompt
 ):
@@ -530,11 +535,29 @@ def test_orphan_cleanup_preserves_live_and_pending_traces(persisted, capture, mo
     assert persisted._pending_bytes == 0
 
 
-def test_stale_updates_do_not_reopen_completed_trace(persisted, capture):
+@pytest.mark.parametrize("clock_step", [None, 0, -1], ids=["real", "frozen", "backward"])
+@pytest.mark.parametrize("reverse", [False, True], ids=["ordered", "reversed"])
+def test_stale_updates_do_not_reopen_completed_trace(
+    persisted, capture, monkeypatch, clock_step, reverse
+):
+    """Keep completed snapshots newer even when the wall clock repeats or regresses.
+
+    Args:
+        persisted: Isolated trace database.
+        capture: Immutable trace snapshots.
+        monkeypatch: Pytest patch manager.
+        clock_step: Nanoseconds per clock read, or None for the real clock.
+        reverse: Whether to enqueue snapshots in reverse order.
+    """
+    if clock_step is not None:
+        clock = count(time.time_ns(), clock_step)
+        monkeypatch.setattr(time, "time_ns", clock.__next__)
     trace = TraceSpan("message", message_outline="Literal % _")
     trace.record("event_received")
     trace.record("pipeline_end", status="success")
-    for frame in reversed(capture):
+    stamps = [int(frame["time_unix_nano"]) for frame in capture]
+    assert all(earlier < later for earlier, later in zip(stamps, stamps[1:]))
+    for frame in reversed(capture) if reverse else capture:
         assert persisted.append(frame)
     assert persisted.flush()
     detail = persisted.get_trace(trace.trace_id)

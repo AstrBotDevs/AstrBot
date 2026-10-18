@@ -4380,7 +4380,11 @@ async def test_v1_persistent_trace_routes(asgi_client, monkeypatch, tmp_path):
                 },
             }
         )
-        assert store.flush()
+        # Allow bounded headroom for database initialization on slower CI disks.
+        assert await asyncio.to_thread(store.flush, timeout=30), (
+            f"Trace flush failed: error={store.last_error!r}, "
+            f"writer_alive={store._thread.is_alive()}, ready={store._ready.is_set()}"
+        )
         response = await asgi_client.get("/api/v1/trace/history")
         assert response.status_code == 401
         token = jwt.encode(
@@ -4420,7 +4424,7 @@ async def test_v1_persistent_trace_routes(asgi_client, monkeypatch, tmp_path):
             await asgi_client.get("/api/v1/trace/settings", headers=headers)
         ).status_code == 200
     finally:
-        store.close()
+        await asyncio.to_thread(store.close)
 
 
 @pytest.mark.asyncio
