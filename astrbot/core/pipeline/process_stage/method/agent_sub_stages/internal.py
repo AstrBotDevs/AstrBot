@@ -62,6 +62,7 @@ from ...follow_up import (
 _INBOUND_MERGE_MIN_INTERVAL_SECONDS = 15.0
 _INBOUND_MERGE_MAX_AGE_SECONDS = 180.0
 _INBOUND_MERGE_MAX_MESSAGES = 20
+_INBOUND_MERGE_MAX_STATES = 1024
 _INBOUND_MERGE_MAX_CHARS = 6000
 
 
@@ -78,7 +79,6 @@ class _PendingInboundMessage:
 class _InboundMergeState:
     """Pending inbound messages and the last LLM start for one UMO."""
 
-    next_sequence: int = 0
     pending: list[_PendingInboundMessage] = field(default_factory=list)
     last_started_at: float = 0.0
 
@@ -97,17 +97,28 @@ class _InboundReplyMerger:
 
     def __init__(self) -> None:
         self._states: dict[str, _InboundMergeState] = {}
+        self._next_sequence = 0
 
     def register(self, event: AstrMessageEvent) -> bool:
         """Register an eligible private text before it waits for the session lock."""
         if not self._eligible(event):
             return False
+        current = time()
+        for key, old in list(self._states.items()):
+            if (
+                not old.pending
+                and current - old.last_started_at >= _INBOUND_MERGE_MIN_INTERVAL_SECONDS
+            ):
+                del self._states[key]
         umo = event.unified_msg_origin
+        if umo not in self._states and len(self._states) >= _INBOUND_MERGE_MAX_STATES:
+            # Preserve active queues and cooldowns; new sessions use normal routing.
+            return False
         state = self._states.setdefault(umo, _InboundMergeState())
-        state.next_sequence += 1
+        self._next_sequence += 1
         received_at = self._received_at(event)
         message = _PendingInboundMessage(
-            sequence=state.next_sequence,
+            sequence=self._next_sequence,
             text=self._message_text(event),
             received_at=received_at,
         )
@@ -196,8 +207,12 @@ def _merge_inbound_prompt(messages: tuple[_PendingInboundMessage, ...]) -> str:
     selected: list[str] = []
     used_chars = 0
     omitted = 0
+    truncated_latest = False
     for message in reversed(messages):
         text = message.text.strip()
+        if not selected and len(text) > _INBOUND_MERGE_MAX_CHARS:
+            text = text[:_INBOUND_MERGE_MAX_CHARS]
+            truncated_latest = True
         projected = used_chars + len(text)
         if (
             len(selected) >= _INBOUND_MERGE_MAX_MESSAGES
@@ -214,6 +229,8 @@ def _merge_inbound_prompt(messages: tuple[_PendingInboundMessage, ...]) -> str:
     )
     if omitted:
         header += f"[较早的 {omitted} 条因长度限制已省略。]"
+    if truncated_latest:
+        header += "[最新消息过长，已保留其开头并截断；不要猜测未提供的部分。]"
     body = "\n".join(f"{index}. {text}" for index, text in enumerate(selected, 1))
     return f"{header}\n{body}"
 
@@ -335,6 +352,8 @@ class InternalAgentSubStage(Stage):
         follow_up_consumed_marked = False
         follow_up_activated = False
         typing_requested = False
+        inbound_merge_registered = False
+        inbound_merge_superseded = False
         try:
             streaming_response = self.streaming_response
             if (enable_streaming := event.get_extra("enable_streaming")) is not None:
@@ -424,6 +443,7 @@ class InternalAgentSubStage(Stage):
                     while True:
                         merge_decision = _inbound_reply_merger.decide(event)
                         if merge_decision.action == "superseded":
+                            inbound_merge_superseded = True
                             logger.info(
                                 "Newer inbound message superseded queued LLM request. "
                                 "umo=%s",
@@ -728,6 +748,26 @@ class InternalAgentSubStage(Stage):
             )
             await event.send(MessageChain().message(error_text))
         finally:
+            if inbound_merge_registered and (
+                not inbound_merge_superseded
+                or event.is_stopped()
+                or event.get_extra("agent_stop_requested")
+            ):
+                state = _inbound_reply_merger._states.get(event.unified_msg_origin)
+                if state is not None:
+                    sequence = event.get_extra("_inbound_merge_sequence")
+                    if event.get_extra("agent_stop_requested"):
+                        state.pending[:] = [
+                            m for m in state.pending if m.sequence > sequence
+                        ]
+                    else:
+                        state.pending[:] = [
+                            m for m in state.pending if m.sequence != sequence
+                        ]
+                    if not state.pending and not state.last_started_at:
+                        _inbound_reply_merger._states.pop(
+                            event.unified_msg_origin, None
+                        )
             if typing_requested:
                 try:
                     await event.stop_typing()
