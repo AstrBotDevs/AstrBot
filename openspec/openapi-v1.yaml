@@ -4656,6 +4656,7 @@ paths:
       tags: [Stats]
       summary: Get storage status
       operationId: getStorageStatus
+      description: Returns log, cache, and trace database usage (including trace sidecars), plus total bytes.
       x-astrbot-scope: system
       responses:
         "200":
@@ -4666,13 +4667,14 @@ paths:
       tags: [Stats]
       summary: Clean storage
       operationId: cleanupStorage
+      description: Clears logs, cache, finished trace history, or all three. Running traces are retained.
       x-astrbot-scope: system
       requestBody:
         required: false
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/DynamicConfig"
+              $ref: "#/components/schemas/StorageCleanupRequest"
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -5084,6 +5086,56 @@ paths:
       responses:
         "200":
           $ref: "#/components/responses/Text"
+
+  /api/v1/trace/history:
+    get:
+      tags: [Logs]
+      summary: List persisted trace summaries
+      operationId: listTraces
+      x-astrbot-scope: system
+      parameters:
+        - name: limit
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 100, default: 50}
+        - name: cursor
+          description: Legacy keyset cursor; use page for numbered pagination.
+          in: query
+          schema: {type: string, maxLength: 64}
+        - name: page
+          in: query
+          schema: {type: integer, minimum: 1, default: 1}
+        - name: query
+          in: query
+          schema: {type: string, maxLength: 256, default: ""}
+        - name: errors
+          in: query
+          schema: {type: boolean, default: false}
+        - name: models
+          in: query
+          schema: {type: boolean, default: false}
+        - name: plugins
+          in: query
+          schema: {type: boolean, default: false}
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/trace/{trace_id}:
+    get:
+      tags: [Logs]
+      summary: Get persisted trace spans and events
+      operationId: getTraceDetail
+      x-astrbot-scope: system
+      parameters:
+        - name: trace_id
+          in: path
+          required: true
+          schema: {type: string, pattern: "^[0-9a-f]{32}$"}
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+        "404":
+          description: Trace not found or already evicted.
 
   /api/v1/trace/settings:
     get:
@@ -5538,6 +5590,14 @@ components:
           type: string
         data: {}
       additionalProperties: false
+
+    StorageCleanupRequest:
+      type: object
+      properties:
+        target:
+          type: string
+          enum: [logs, cache, traces, all]
+          default: all
 
     DynamicConfig:
       type: object

@@ -1391,17 +1391,21 @@
         "description": "一時ディレクトリの最大サイズ（MB）",
         "hint": "data/temp ディレクトリの合計サイズを MB 単位で制限します。システムは 10 分ごとに確認し、上限を超えると更新日時の古いファイルから削除して、現在のサイズの約 30% を解放します。"
       },
-      "trace_log_enable": {
-        "description": "Trace ファイルログを有効化",
-        "hint": "Trace イベントを個別のファイルへ書き込みます（コンソール出力には影響しません）。"
+      "trace_enable": {
+        "description": "トレース記録を有効化",
+        "hint": "ユーザーの各コマンドと AI 呼び出しを追跡します。"
       },
-      "trace_log_path": {
-        "description": "Trace ログファイルのパス",
-        "hint": "相対パスは data ディレクトリを基準とします（例: logs/astrbot.trace.log）。絶対パスにも対応しています。"
+      "trace_db_path": {
+        "description": "トレースDBのパス",
+        "hint": "相対パスは data ディレクトリが基準です（例：logs/traces.db）。絶対パスも使用できます。"
       },
-      "trace_log_max_mb": {
-        "description": "Trace ログの最大サイズ（MB）",
-        "hint": "サイズを超えると自動的にローテーションします。デフォルトは 20MB です。"
+      "trace_db_max_mb": {
+        "description": "トレースDB容量 (MB)",
+        "hint": "既定は 80 MB。32 MB 未満の値は 32 MB として適用されます。超えると古いデータを自動的に削除します。"
+      },
+      "trace_retention_days": {
+        "description": "トレース保持日数",
+        "hint": "既定は 7 日。保持期間または容量のどちらかに達すると古いデータを削除します。"
       },
       "pip_install_arg": {
         "description": "pip インストールの追加引数",

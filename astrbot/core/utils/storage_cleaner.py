@@ -18,7 +18,8 @@ class LogFileConfig:
 class StorageCleaner:
     TARGET_LOGS = "logs"
     TARGET_CACHE = "cache"
-    VALID_TARGETS = {TARGET_LOGS, TARGET_CACHE, "all"}
+    TARGET_TRACES = "traces"
+    VALID_TARGETS = {TARGET_LOGS, TARGET_CACHE, TARGET_TRACES, "all"}
 
     def __init__(
         self,
@@ -34,10 +35,14 @@ class StorageCleaner:
     def get_status(self) -> dict:
         logs = self._build_status(self.TARGET_LOGS)
         cache = self._build_status(self.TARGET_CACHE)
+        traces = self._build_status(self.TARGET_TRACES)
         return {
             self.TARGET_LOGS: logs,
             self.TARGET_CACHE: cache,
-            "total_bytes": logs["size_bytes"] + cache["size_bytes"],
+            self.TARGET_TRACES: traces,
+            "total_bytes": logs["size_bytes"]
+            + cache["size_bytes"]
+            + traces["size_bytes"],
         }
 
     def cleanup(self, target: str = "all") -> dict:
@@ -46,7 +51,7 @@ class StorageCleaner:
             raise ValueError(f"Unsupported cleanup target: {target}")
 
         targets = (
-            [self.TARGET_LOGS, self.TARGET_CACHE]
+            [self.TARGET_TRACES, self.TARGET_LOGS, self.TARGET_CACHE]
             if normalized_target == "all"
             else [normalized_target]
         )
@@ -57,6 +62,7 @@ class StorageCleaner:
             "deleted_files": 0,
             "truncated_files": 0,
             "failed_files": 0,
+            "removed_traces": 0,
         }
 
         for target_name in targets:
@@ -81,6 +87,15 @@ class StorageCleaner:
         elif target == self.TARGET_CACHE:
             files = self._collect_cache_files()
             primary_path = self._temp_dir
+        elif target == self.TARGET_TRACES:
+            primary_path = self._resolve_log_path(
+                self._get_optional_str("trace_db_path"),
+                default_relative_path="logs/traces.db",
+            )
+            files = {
+                Path(str(primary_path) + suffix)
+                for suffix in ("", "-wal", "-shm", "-journal")
+            }
         else:
             raise ValueError(f"Unsupported cleanup target: {target}")
 
@@ -93,6 +108,27 @@ class StorageCleaner:
         }
 
     def _cleanup_target(self, target: str) -> dict:
+        if target == self.TARGET_TRACES:
+            from astrbot.core.utils.trace_store import get_trace_store
+
+            before = self._build_status(target)
+            removed_traces = 0
+            if before["size_bytes"]:
+                store = get_trace_store(self._config)
+                if store.path.resolve() != Path(before["path"]).resolve():
+                    raise ValueError(
+                        "Restart AstrBot after changing the trace database path before cleaning history."
+                    )
+                removed_traces = store.clear_history()["removed_traces"]
+            after = self._build_status(target)
+            return {
+                "removed_bytes": max(0, before["size_bytes"] - after["size_bytes"]),
+                "removed_traces": removed_traces,
+                "processed_files": 0,
+                "deleted_files": 0,
+                "truncated_files": 0,
+                "failed_files": 0,
+            }
         if target == self.TARGET_LOGS:
             files = self._collect_log_files()
             active_log_files = self._active_log_files()
@@ -145,6 +181,7 @@ class StorageCleaner:
 
         return {
             "removed_bytes": removed_bytes,
+            "removed_traces": 0,
             "processed_files": deleted_files + truncated_files,
             "deleted_files": deleted_files,
             "truncated_files": truncated_files,
@@ -155,7 +192,32 @@ class StorageCleaner:
         files = set(self._iter_files(self._data_dir / "logs"))
         for log_path in self._configured_log_paths():
             files.update(self._iter_log_family_files(log_path))
-        return files
+        trace_path = self._resolve_log_path(
+            self._get_optional_str("trace_db_path"),
+            default_relative_path="logs/traces.db",
+        ).resolve()
+        protected = {
+            Path(str(trace_path) + suffix)
+            for suffix in ("", "-wal", "-shm", "-journal")
+        }
+        candidates = set()
+        for path in files:
+            if (
+                path.resolve() in protected
+                or path.suffix in {".db", ".sqlite", ".sqlite3"}
+                or path.name.endswith(("-wal", "-shm", "-journal"))
+            ):
+                continue
+            try:
+                # Protect custom database names, including an old active path
+                # after a configuration edit that has not restarted the core.
+                with path.open("rb") as stream:
+                    if stream.read(16) == b"SQLite format 3\x00":
+                        continue
+            except OSError:
+                continue
+            candidates.add(path)
+        return candidates
 
     def _collect_cache_files(self) -> set[Path]:
         files = set(self._iter_files(self._temp_dir))
@@ -168,7 +230,15 @@ class StorageCleaner:
             if extra_file.is_file():
                 files.add(extra_file)
 
-        return files
+        trace_path = self._resolve_log_path(
+            self._get_optional_str("trace_db_path"),
+            default_relative_path="logs/traces.db",
+        )
+        protected = {
+            Path(str(trace_path) + suffix).resolve()
+            for suffix in ("", "-wal", "-shm", "-journal")
+        }
+        return {path for path in files if path.resolve() not in protected}
 
     def _log_file_configs(self) -> list[LogFileConfig]:
         return [

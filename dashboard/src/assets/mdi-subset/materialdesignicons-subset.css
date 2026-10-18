@@ -328,6 +328,10 @@
   content: "\F1640";
 }
 
+.mdi-database-outline::before {
+  content: "\F1632";
+}
+
 .mdi-database-refresh-outline::before {
   content: "\F1634";
 }
@@ -1046,10 +1050,6 @@
 
 .mdi-vector-point::before {
   content: "\F01C4";
-}
-
-.mdi-video-outline::before {
-  content: "\F0BDC";
 }
 
 .mdi-view-grid::before {

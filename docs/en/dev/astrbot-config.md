@@ -568,7 +568,30 @@ Log level. Default is `INFO`. Can be set to `DEBUG`, `INFO`, `WARNING`, `ERROR`,
 
 ### `trace_enable`
 
-Whether to enable trace recording. Default is `false`. When enabled, AstrBot records execution traces, which can be viewed under `Data & Logs → Trace` in the admin panel.
+Whether to enable trace recording. Default is `false`. Toggle it under `Settings → General → Logs → Enable Trace Recording`; this is the same setting as the trace page’s start/pause button. When enabled, AstrBot records execution traces, which can be viewed under `Data & Logs → Trace` in the admin panel.
+
+Enabling recording also persists traces. Pausing preserves history and lets existing traces finish. The OpenTelemetry API and SDK manage span IDs, parent relationships, timestamps, status, events, and active context. Logs correlate with the active `trace_id` / `span_id`; plugins continue using `astrbot.api.logger`. AstrBot uses its own TracerProvider without replacing the global provider, adding exporters, or enabling automatic instrumentation. SQLite persistence and JSON API/SSE remain unchanged; existing history stays readable. No OTLP export is enabled. The standard `OTEL_SDK_DISABLED=true` environment variable also disables SDK tracing.
+
+Framework entry points compose `log_context(...)`, `event_context(event)`, and the independent `trace_execution(event.trace)` scope. Only the outermost trace execution scope completes the trace after awaited processing, delivery, and history saving; failures and cancellations mark it errored and propagate unchanged. `event_context(event)` only binds the current event, registers active execution, and cleans up temporary files. `TraceSpan.context()` only binds the root span without completing it. Plugins do not need to wrap their handlers in these framework-owned execution scopes.
+
+### `trace_db_path`
+
+Dedicated SQLite path, default `logs/traces.db`, relative to `data`. Restart after changing the path. Log cleanup protects the database, WAL, and SHM. Trace content may contain messages, plugin arguments, and tool results; restrict file access accordingly.
+
+### `trace_db_max_mb` / `trace_retention_days`
+
+Positive integers, default 80 MB capacity target and 7-day retention; unlimited capacity is not supported. Expired or oldest traces are evicted as complete units. WAL, checkpoints, and page reclamation may temporarily add disk usage, so this is not an instantaneous hard limit. Per-trace content, span, and event limits also apply; detail shows truncation warnings.
+
+Legacy settings migrate on load, with new settings taking precedence. Existing JSONL files remain untouched and are neither appended nor automatically imported:
+
+| Old setting | New setting/behavior |
+| --- | --- |
+| `trace_enable` | Unchanged; controls recording and persistence of new traces |
+| `trace_log_enable` | Removed; no separate JSONL toggle |
+| `trace_log_path` | Removed; replaced by `trace_db_path: logs/traces.db` by default |
+| `trace_log_max_mb` | When new capacity is absent, a positive integer is multiplied by 4 for `trace_db_max_mb`, approximating the old current file plus 3 backups; invalid values fall back to 80 MB |
+
+The new `trace_retention_days` defaults to 7 days.
 
 ### `pip_install_arg`
 
