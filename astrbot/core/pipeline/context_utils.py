@@ -109,7 +109,6 @@ async def call_event_hook(
             handler_full_name=handler.handler_full_name,
             handler_type=handler.event_type.name,
             handler_category=handler_category,
-            module=handler.handler_module_path,
             hook=hook_type.name,
         )
         try:

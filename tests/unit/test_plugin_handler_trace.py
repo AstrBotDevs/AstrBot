@@ -53,6 +53,7 @@ async def test_message_handler_trace_category(monkeypatch, event_filter, categor
         assert record.kwargs["handler_category"] == category
         assert record.kwargs["handler_type"] == "AdapterMessageEvent"
         assert record.kwargs["plugin_display_name"] == "Test Plugin"
+        assert "module" not in record.kwargs
     assert extras == {"activated_handlers": [handler], "handlers_parsed_params": {}}
 
 
@@ -97,6 +98,7 @@ async def test_event_hook_trace_category(monkeypatch, hook_type, category, fails
     for record in records:
         assert record.kwargs["handler_category"] == category
         assert record.kwargs["handler_type"] == hook_type.name
+        assert "module" not in record.kwargs
     assert records[-1].kwargs["status"] == ("error" if fails else "success")
     assert extras == {}
 

@@ -68,7 +68,6 @@ class StarRequestSubStage(Stage):
                 handler_full_name=handler.handler_full_name,
                 handler_type=handler.event_type.name,
                 handler_category=handler_category,
-                module=handler.handler_module_path,
                 priority=handler.extras_configs.get("priority", 0),
             )
             try:
