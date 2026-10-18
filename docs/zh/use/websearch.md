@@ -27,23 +27,28 @@
 
 ## 选择搜索提供商
 
-当前支持以下九种接入方式。先选一个完成配置即可，无需同时申请所有服务。
+当前支持以下十种接入方式。先选一个完成配置即可，无需同时申请所有服务。
 
 | 提供商 | Key 申请入口 | AstrBot 提供的能力 |
 | --- | --- | --- |
+| <span id="serpapi">SerpApi</span> | [SerpApi API Key](https://serpapi.com/manage-api-key) | Google 网页搜索、Images Light 图片搜索、Finance 金融查询、Scholar 学术搜索 |
+| <span id="deepseek">DeepSeek Search API</span> | [DeepSeek 开放平台](https://platform.deepseek.com/api_keys) / [搜索文档](https://api-docs.deepseek.com/zh-cn/guides/search) | 网页搜索、按 URL 提取网页正文 |
 | <span id="tavily">Tavily</span> | [Tavily 控制台](https://app.tavily.com/home) | 网页搜索、按 URL 提取网页正文 |
-| <span id="bocha">BoCha</span> | [博查](https://bochaai.com/) | 网页搜索 |
-| <span id="百度-ai-搜索">百度 AI 搜索</span> | [百度智能云 API Key 管理](https://console.bce.baidu.com/iam/#/iam/apikey/list) | 百度 AI 搜索；需要开通相应服务 |
+| <span id="bocha">Bocha</span> | [博查](https://bochaai.com/) | 网页搜索 |
+| <span id="百度-ai-搜索">Baidu AI Search</span> | [百度智能云 API Key 管理](https://console.bce.baidu.com/iam/#/iam/apikey/list) | 百度 AI 搜索；需要开通相应服务 |
 | <span id="brave">Brave</span> | [Brave Search API](https://brave.com/search/api/) | 网页搜索 |
 | <span id="firecrawl">Firecrawl</span> | [Firecrawl](https://firecrawl.dev/) | 网页搜索、按 URL 提取网页正文 |
 | <span id="exa">Exa</span> | [Exa 控制台](https://dashboard.exa.ai/) | 关键词或语义搜索、按 URL 获取正文，支持域名、日期等筛选 |
 | <span id="anysearch">AnySearch</span> | [AnySearch 控制台](https://anysearch.com/console/api-keys) | 通用搜索，以及学术、代码文档、金融、法律等垂直领域检索 |
-| <span id="deepseek">DeepSeek</span> | [DeepSeek 开放平台](https://platform.deepseek.com/api_keys) / [搜索文档](https://api-docs.deepseek.com/zh-cn/guides/search) | 网页搜索、按 URL 提取网页正文 |
 | <span id="keenable">Keenable</span> | [Keenable 控制台](https://keenable.ai/console) | 网页搜索（可限定站点）、按 URL 提取网页正文 |
 
 AnySearch 的 Key 留空时会使用匿名模式，服务提供每日免费额度；Keenable 的 Key 留空时也可免费使用，但有请求频率限制，填写 Key 可提高限额。其他提供商需要填写相应的 Key。服务的额度、收费、可用地区和授权方式以各自官网为准。
 
 DeepSeek 搜索与对话模型独立配置。即使对话模型已配置 DeepSeek，也需要单独填写搜索 Key，可以使用同一个 Key。搜索和正文提取接口各按账号限制 5 QPS，配置多个同账号 Key 不会增加限额。
+
+SerpApi 使用 [Google Search API](https://serpapi.com/search-api)，需要填写 SerpApi 的 API Key。AstrBot 返回第一页中的标题、来源链接和摘要（最多 10 条，实际可能更少）。多个 Key 会轮询使用，鉴权或额度错误时会尝试下一个 Key。同一个 Key 也会启用基于 [Google Images Light API](https://serpapi.com/google-images-light-api) 的图片搜索工具，返回最多 10 张图片的直链、缩略图、来源页面及可用的尺寸信息，无需额外开关或 Key。此接入不提供网页正文提取工具。
+
+同一个 SerpApi Key 还会启用 [Google Finance](https://serpapi.com/google-finance-api) 和 [Google Scholar](https://serpapi.com/google-scholar-api)。Finance 接受 `AAPL:NASDAQ`、`EUR-USD` 等代码，返回可用的行情、币种、更新时间、财务数据和新闻；指定历史区间后返回行情摘要和可用的价格序列。Scholar 返回最多 20 篇文献的摘要片段、出版信息、被引次数和可用的全文链接，支持按发表年份筛选。
 
 ### 搜索与读取链接的区别
 
@@ -61,6 +66,20 @@ DeepSeek 搜索与对话模型独立配置。即使对话模型已配置 DeepSee
 
 ```text
 请查找 bubblewrap 的官方使用文档，说明它适合解决什么问题。
+```
+
+选择 SerpApi 后，还可以搜索图片：
+
+```text
+请找三张咖啡图片，并附上来源页面。
+```
+
+```text
+请通过 Google Finance 查询 AAPL:NASDAQ 的行情，并注明更新时间。
+```
+
+```text
+请用 Google Scholar 查找 2023 年以来的检索增强生成论文，附上被引次数和可用的 PDF 链接。
 ```
 
 如果选择了支持正文提取的提供商，还可以发送：

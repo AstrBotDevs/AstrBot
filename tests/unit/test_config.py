@@ -1165,15 +1165,16 @@ class TestConfigMetadataI18n:
             == "group.section.field.hint"
         )
 
-    def test_convert_to_i18n_keys_with_labels(self):
-        """Test converting metadata with labels."""
+    @pytest.mark.parametrize("attribute", ["labels", "subtitles"])
+    def test_convert_to_i18n_keys_with_option_text(self, attribute):
+        """Test converting dropdown option text to translation keys."""
         metadata = {
             "group": {
                 "metadata": {
                     "section": {
                         "items": {
                             "field": {
-                                "labels": ["Label1", "Label2"],
+                                attribute: ["Text1", "Text2"],
                                 "type": "string",
                             },
                         },
@@ -1185,8 +1186,8 @@ class TestConfigMetadataI18n:
         result = ConfigMetadataI18n.convert_to_i18n_keys(metadata)
 
         assert (
-            result["group"]["metadata"]["section"]["items"]["field"]["labels"]
-            == "group.section.field.labels"
+            result["group"]["metadata"]["section"]["items"]["field"][attribute]
+            == f"group.section.field.{attribute}"
         )
 
     def test_convert_to_i18n_keys_nested_items(self):

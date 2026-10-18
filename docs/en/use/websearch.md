@@ -27,23 +27,28 @@ These settings belong to the selected profile. Changing `default` does not enabl
 
 ## Choose a search provider
 
-AstrBot supports nine providers. Configure one to start; you do not need an account with every service.
+AstrBot supports ten providers. Configure one to start; you do not need an account with every service.
 
 | Provider | Get a key | Capabilities available in AstrBot |
 | --- | --- | --- |
+| <span id="serpapi">SerpApi</span> | [SerpApi API key](https://serpapi.com/manage-api-key) | Google web search, Images Light, Finance, and Scholar |
+| <span id="deepseek">DeepSeek Search API</span> | [DeepSeek Platform](https://platform.deepseek.com/api_keys) / [Search Docs](https://api-docs.deepseek.com/guides/search) | Web search and page content extraction from a URL |
 | <span id="tavily">Tavily</span> | [Tavily dashboard](https://app.tavily.com/home) | Web search and page content extraction from a URL |
-| <span id="bocha">BoCha</span> | [BoCha](https://bochaai.com/) | Web search |
+| <span id="bocha">Bocha</span> | [BoCha](https://bochaai.com/) | Web search |
 | <span id="baidu-ai-search">Baidu AI Search</span> | [Baidu Cloud API key management](https://console.bce.baidu.com/iam/#/iam/apikey/list) | Baidu AI Search; requires access to the corresponding service |
 | <span id="brave">Brave</span> | [Brave Search API](https://brave.com/search/api/) | Web search |
 | <span id="firecrawl">Firecrawl</span> | [Firecrawl](https://firecrawl.dev/) | Web search and page content extraction from a URL |
 | <span id="exa">Exa</span> | [Exa dashboard](https://dashboard.exa.ai/) | Keyword or semantic search, page contents, and filters such as domain and date |
 | <span id="anysearch">AnySearch</span> | [AnySearch console](https://anysearch.com/console/api-keys) | General search and specialized retrieval for research, code documentation, finance, legal information, and other domains |
-| <span id="deepseek">DeepSeek</span> | [DeepSeek Platform](https://platform.deepseek.com/api_keys) / [Search Docs](https://api-docs.deepseek.com/guides/search) | Web search and page content extraction from a URL |
 | <span id="keenable">Keenable</span> | [Keenable console](https://keenable.ai/console) | Web search, optionally limited to one site, and page content extraction from a URL |
 
 AnySearch uses anonymous mode with a daily free quota when its key list is empty, and Keenable works without a key under a rate limit that a key raises. Other providers require their own keys. Check each service's website for current quotas, pricing, regional availability, and authorization requirements.
 
 DeepSeek search settings are independent of the chat model. Even if your chat model already uses DeepSeek, enter the API key separately in the search configuration; you may use the same key. Search and Fetch each have an account-level limit of 5 QPS. Adding multiple keys under the same account does not increase this limit.
+
+SerpApi uses the [Google Search API](https://serpapi.com/search-api) and requires a SerpApi key. AstrBot returns titles, source URLs, and snippets from the first page (up to 10 results); fewer results may be available. Multiple keys rotate, and authentication or quota errors trigger a retry with the next key. The same key also enables an image search tool using the [Google Images Light API](https://serpapi.com/google-images-light-api), returning up to 10 image URLs, thumbnails, source pages, and available dimensions. No additional switch or key is needed. SerpApi does not provide a page extraction tool in AstrBot.
+
+The SerpApi key also enables [Google Finance](https://serpapi.com/google-finance-api) and [Google Scholar](https://serpapi.com/google-scholar-api). Finance accepts symbols such as `AAPL:NASDAQ` or `EUR-USD` and returns available quote prices, currencies, timestamps, financial data, and news. Requesting a history window returns the quote summary and available graph points. Scholar returns up to 20 publications with snippets, publication details, citation counts, and available full-text links; the model can filter by publication year.
 
 ### Searching versus reading a link
 
@@ -61,6 +66,20 @@ Search for AstrBot's latest release. Give the version, summarize the main change
 
 ```text
 Find the official bubblewrap documentation and explain what problems it helps solve.
+```
+
+With SerpApi selected, you can also ask:
+
+```text
+Find three images of coffee and include their source pages.
+```
+
+```text
+Look up AAPL:NASDAQ on Google Finance and include the quote timestamp.
+```
+
+```text
+Search Google Scholar for retrieval augmented generation papers published since 2023. Include citation counts and available PDF links.
 ```
 
 With a provider that supports page extraction, you can also ask:

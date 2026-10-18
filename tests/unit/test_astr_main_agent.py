@@ -788,6 +788,29 @@ class TestBuiltinToolInjection:
     """Tests for builtin tool injection paths."""
 
     @pytest.mark.asyncio
+    async def test_serpapi_injects_all_search_tools(self, mock_event, mock_context):
+        """Verify all configured SerpApi tools reach the model request."""
+        req = ProviderRequest()
+        mock_context.get_config.return_value = {
+            "provider_settings": {"web_search": True, "websearch_provider": "serpapi"}
+        }
+
+        await ama._apply_web_search_tools(mock_event, req, mock_context)
+
+        assert req.func_tool.names() == [
+            "web_search_serpapi",
+            "image_search_serpapi",
+            "finance_search_serpapi",
+            "scholar_search_serpapi",
+        ]
+        assert isinstance(
+            req.func_tool.get_tool("web_search_serpapi"), ama.SerpApiWebSearchTool
+        )
+        assert isinstance(
+            req.func_tool.get_tool("image_search_serpapi"), ama.SerpApiImageSearchTool
+        )
+
+    @pytest.mark.asyncio
     async def test_apply_web_search_tools_uses_builtin_tool_manager(
         self, mock_event, mock_context
     ):
@@ -901,7 +924,16 @@ class TestBuiltinToolInjection:
         assert req.func_tool.get_tool("keenable_extract_web_page") is extract_tool
 
     @pytest.mark.parametrize(
-        "tool_name", ["web_search_tavily", "web_search_deepseek", "web_search_keenable"]
+        "tool_name",
+        [
+            "web_search_tavily",
+            "web_search_deepseek",
+            "web_search_serpapi",
+            "image_search_serpapi",
+            "finance_search_serpapi",
+            "scholar_search_serpapi",
+            "web_search_keenable",
+        ],
     )
     def test_apply_web_search_citation_prompt_for_webchat(self, mock_event, tool_name):
         module = ama
@@ -1569,8 +1601,23 @@ class TestEnsurePersonaAndSkills:
         assert req.func_tool is not None
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("provider", "tool_names"),
+        [
+            ("baidu_ai_search", ["web_search_baidu"]),
+            (
+                "serpapi",
+                [
+                    "web_search_serpapi",
+                    "image_search_serpapi",
+                    "finance_search_serpapi",
+                    "scholar_search_serpapi",
+                ],
+            ),
+        ],
+    )
     async def test_persona_empty_tools_keeps_late_builtin_tools(
-        self, mock_event, mock_context, mock_provider
+        self, mock_event, mock_context, mock_provider, provider, tool_names
     ):
         module = ama
         persona = {"name": "locked", "prompt": "No tools.", "tools": []}
@@ -1581,14 +1628,14 @@ class TestEnsurePersonaAndSkills:
         mock_context.get_config.return_value = {
             "provider_settings": {
                 "web_search": True,
-                "websearch_provider": "baidu_ai_search",
+                "websearch_provider": provider,
             }
         }
         config = module.MainAgentBuildConfig(
             tool_call_timeout=60,
             provider_settings={
                 "web_search": True,
-                "websearch_provider": "baidu_ai_search",
+                "websearch_provider": provider,
             },
             computer_use_runtime="none",
             add_cron_tools=False,
@@ -1615,7 +1662,7 @@ class TestEnsurePersonaAndSkills:
         assert result is not None
         try:
             assert result.provider_request.func_tool is not None
-            assert result.provider_request.func_tool.names() == ["web_search_baidu"]
+            assert result.provider_request.func_tool.names() == tool_names
         finally:
             if result.reset_coro:
                 result.reset_coro.close()

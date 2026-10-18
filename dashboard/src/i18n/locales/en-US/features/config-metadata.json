@@ -172,7 +172,31 @@
           "description": "Enable Web Search"
         },
         "websearch_provider": {
-          "description": "Web Search Provider"
+          "description": "Web Search Provider",
+          "labels": [
+            "SerpApi",
+            "DeepSeek Search API",
+            "Tavily",
+            "Baidu AI Search",
+            "Bocha",
+            "Brave",
+            "Firecrawl",
+            "Exa",
+            "AnySearch",
+            "Keenable"
+          ],
+          "subtitles": [
+            "Google web, image, scholar, and finance search",
+            "Official DeepSeek search API",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            ""
+          ]
         },
         "websearch_tavily_key": {
           "description": "Tavily API Key",
@@ -205,13 +229,17 @@
           "description": "AnySearch API Key",
           "hint": "Multiple keys can be added for rotation. Leave empty to use anonymous mode with a daily free quota."
         },
+        "websearch_serpapi_key": {
+          "description": "SerpApi API Key",
+          "hint": "Supports Google web, image, scholar, and finance search. Multiple keys can be added for rotation. Get a key: [https://serpapi.com/manage-api-key](https://serpapi.com/manage-api-key)"
+        },
         "websearch_deepseek_key": {
           "description": "DeepSeek API Key",
-          "hint": "Enter your DeepSeek API key. Can use the same key as the chat model (must be entered separately). Supports multiple keys for rotation; keys under the same account share QPS limits."
+          "hint": "Enter your DeepSeek API key. Can use the same key as the chat model (must be entered separately). Supports multiple keys for rotation. Get a key: [https://platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys)"
         },
         "websearch_keenable_key": {
           "description": "Keenable API Key",
-          "hint": "Multiple keys can be added for rotation. Leave empty to use the free keyless mode, which is rate limited; a key raises the limit. Get a key at https://keenable.ai/console"
+          "hint": "Multiple keys can be added for rotation. Leave empty to use the free keyless mode, which is rate limited; a key raises the limit. Get a key at [https://keenable.ai/console](https://keenable.ai/console)"
         }
       }
     },
