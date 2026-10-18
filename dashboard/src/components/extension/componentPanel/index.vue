@@ -47,6 +47,7 @@ const {
   commands, 
   tools,
   toolsLoading,
+  globalLanguage,
   summary, 
   snackbar, 
   toast, 
@@ -229,6 +230,7 @@ watch(viewMode, async (mode) => {
               :items="filteredCommands"
               :expanded-groups="expandedGroups"
               :loading="loading"
+              :global-language="globalLanguage"
               @toggle-expand="toggleGroupExpand"
               @toggle-command="handleToggleCommand"
               @rename="openRenameDialog"
