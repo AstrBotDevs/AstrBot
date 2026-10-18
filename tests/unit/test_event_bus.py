@@ -300,7 +300,7 @@ async def test_session_isolation_precedes_registration(
         lambda *_args, **_kwargs: [],
     )
     registry = ActiveEventRegistry()
-    monkeypatch.setattr("astrbot.core.pipeline.scheduler.active_event_registry", registry)
+    monkeypatch.setattr("astrbot.core.platform.astr_message_event.active_event_registry", registry)
     started = asyncio.Event()
     release = asyncio.Event()
 
