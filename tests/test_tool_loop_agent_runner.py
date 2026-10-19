@@ -675,7 +675,9 @@ async def test_missing_toolset_still_emits_matching_result(runner, mock_hooks):
         mock_hooks: Agent hooks fixture.
     """
     provider = MockToolCallProvider("test_tool")
-    request = ProviderRequest(prompt="call the unavailable tool", func_tool=None, contexts=[])
+    request = ProviderRequest(
+        prompt="call the unavailable tool", func_tool=None, contexts=[]
+    )
 
     await runner.reset(
         provider=provider,
