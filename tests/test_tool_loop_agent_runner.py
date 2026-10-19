@@ -620,6 +620,45 @@ async def test_tool_loop_next_request_includes_tool_result(
 
 
 @pytest.mark.asyncio
+async def test_silent_tool_executor_still_emits_matching_result(
+    runner, provider_request, mock_hooks
+):
+    """An executor that yields nothing must not leave an orphaned tool call."""
+
+    class SilentToolExecutor:
+        @staticmethod
+        async def execute(tool, run_context, **tool_args):
+            if False:
+                yield None
+
+    provider = CapturingToolLoopProvider("test_tool")
+
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=SilentToolExecutor(),
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async def snapshot_context_manager(messages, trusted_token_usage=0):
+        return list(messages)
+
+    runner.request_context_manager.process = snapshot_context_manager
+
+    async for _ in runner.step_until_done(3):
+        pass
+
+    assert provider.call_count == 2
+    second_contexts = provider.received_contexts[1]
+    tool_messages = [message for message in second_contexts if message.role == "tool"]
+    assert len(tool_messages) == 1
+    assert tool_messages[0].tool_call_id == "call_context_refresh"
+    assert "The tool returned no result." in str(tool_messages[0].content)
+
+
+@pytest.mark.asyncio
 async def test_normal_completion_without_max_step(
     runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
 ):
