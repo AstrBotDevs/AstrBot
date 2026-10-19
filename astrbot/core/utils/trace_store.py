@@ -257,7 +257,8 @@ class TraceStore:
                     has_models=MAX(traces.has_models, excluded.has_models),
                     has_plugins=MAX(traces.has_plugins, excluded.has_plugins),
                     search=excluded.search, data=excluded.data, size_bytes=excluded.size_bytes
-                    WHERE excluded.updated_ns >= traces.updated_ns""",
+                    WHERE excluded.updated_ns >= traces.updated_ns
+                        AND (traces.state = 'running' OR excluded.state != 'running')""",
                     (
                         trace_id,
                         int(summary["start_time_unix_nano"]),
