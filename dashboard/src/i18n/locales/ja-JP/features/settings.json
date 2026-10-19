@@ -61,10 +61,6 @@
       "tempStorage": {
         "title": "キャッシュ",
         "subtitle": "一時ディレクトリを自動消去するしきい値。"
-      },
-      "t2iRendering": {
-        "title": "長文の画像化",
-        "subtitle": "長文を画像としてレンダリングする際の方式、エンドポイント、カスタムテンプレート。"
       }
     },
     "timePreview": {
@@ -117,7 +113,7 @@
       "button": "バックアップ管理"
     },
     "cleanup": {
-      "title": "ログとキャッシュの消去",
+      "title": "ログ・キャッシュ・トレースの消去",
       "subtitle": "ログとキャッシュの使用量を確認し、まとめて消去します。",
       "refresh": "使用量を再読み込み",
       "clean": "消去",
@@ -131,7 +127,8 @@
       "targetNames": {
         "cache": "キャッシュ",
         "logs": "ログ",
-        "all": "ログとキャッシュ"
+        "all": "ログ、キャッシュ、トレースデータ",
+        "traces": "トレースデータ"
       },
       "targets": {
         "cache": {
@@ -143,23 +140,21 @@
           "title": "ログ",
           "subtitle": "過去のログを削除し、現在書き込み中のログファイルを空にします。",
           "button": "ログを消去"
+        },
+        "traces": {
+          "title": "トレース",
+          "subtitle": "履歴を削除します。実行中のトレースは保持します。",
+          "button": "トレースデータを消去"
         }
       },
       "messages": {
         "statusFailed": "ストレージ使用量の読み込みに失敗しました",
         "cleanupSuccess": "{count} ファイルを消去し、{size} を解放しました",
-        "cleanupFailed": "消去に失敗しました"
-      }
-    }
-  },
-  "sidebar": {
-    "title": "サイドバー",
-    "customize": {
-      "title": "サイドバーをカスタマイズ",
-      "subtitle": "ドラッグしてモジュールを並べ替えるか、「その他の機能」グループへ移動またはグループから取り出します。設定はブラウザー内にのみ保存されます。",
-      "reset": "既定に戻す",
-      "mainItems": "メインモジュール",
-      "moreItems": "その他の機能"
+        "cleanupFailed": "消去に失敗しました",
+        "cleanupTracesSuccess": "{count} 件のトレースを消去し、{size} を解放しました",
+        "cleanupWithTracesSuccess": "{count} ファイルと {traces} 件のトレースを消去し、{size} を解放しました"
+      },
+      "confirmWithTraces": "{target}を消去しますか？過去のトレースは復元できません。実行中のトレースは保持します。"
     }
   },
   "backup": {

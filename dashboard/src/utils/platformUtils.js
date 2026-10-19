@@ -1,3 +1,7 @@
+// ?no-inline keeps the asset URL matchable by the dark mode CSS rules.
+import matrixIcon from '@/assets/images/platform_logos/matrix.svg?no-inline';
+import mattermostIcon from '@/assets/images/platform_logos/mattermost.svg?no-inline';
+
 /**
  * 平台相关工具函数
  */
@@ -41,9 +45,9 @@ export function getPlatformIcon(name) {
   } else if (name === 'line') {
     return new URL('@/assets/images/platform_logos/line.png', import.meta.url).href
   } else if (name === 'matrix') {
-    return new URL('@/assets/images/platform_logos/matrix.svg', import.meta.url).href
+    return matrixIcon
   } else if (name === 'mattermost') {
-    return new URL('@/assets/images/platform_logos/mattermost.svg', import.meta.url).href
+    return mattermostIcon
   }
 }
 

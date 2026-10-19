@@ -18,7 +18,6 @@ from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
 from ..registry import builtin_tool
 from .fs import _read_allowed_roots, _write_allowed_roots
 from .util import (
-    LOCAL_NETWORK_POLICY_NOTICE,
     check_local_execution_permission,
     get_local_permission_policy,
     is_local_runtime,
@@ -109,11 +108,6 @@ class ExecuteShellTool(FunctionTool):
         if permission_error:
             return permission_error
         sandboxed = bool(local_policy and local_policy.requires_sandbox)
-        policy_notice = (
-            f"{LOCAL_NETWORK_POLICY_NOTICE}\n"
-            if local_policy and not local_policy.allow_network
-            else ""
-        )
 
         sb = await get_booter(
             context.context.context,
@@ -192,9 +186,7 @@ class ExecuteShellTool(FunctionTool):
                         f"(wall time: {elapsed_seconds:.2f}s)."
                     )
                     output = f"{result['stdout']}{result['stderr']}"
-                    return f"{policy_notice}{message}\nOutput:\n{output}"
-                if policy_notice:
-                    result["policy_notice"] = LOCAL_NETWORK_POLICY_NOTICE
+                    return f"{message}\nOutput:\n{output}"
                 return json.dumps(result, ensure_ascii=False)
 
             effective_background = background and not _is_self_detached_command(command)
@@ -225,7 +217,7 @@ class ExecuteShellTool(FunctionTool):
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
             detail = str(e) or type(e).__name__
-            return f"{policy_notice}Error executing command: {detail}"
+            return f"Error executing command: {detail}"
 
 
 @dataclass

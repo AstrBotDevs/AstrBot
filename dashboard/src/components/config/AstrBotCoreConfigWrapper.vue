@@ -99,9 +99,10 @@ import AstrBotConfigV4 from '@/components/shared/AstrBotConfigV4.vue';
 import PluginSetSelector from '@/components/shared/PluginSetSelector.vue';
 import { useModuleI18n } from '@/i18n/composables';
 
-const SECTION_ORDER = ['ai_group', 'plugin_group', 'platform_group', 'ext_group'];
+const SECTION_ORDER = ['ai_group', 'platform_group', 'access_group', 'plugin_group', 'ext_group'];
 const SECTION_ICONS = {
   ai_group: 'mdi-auto-fix',
+  access_group: 'mdi-account-lock-outline',
   plugin_group: 'mdi-puzzle-outline',
   platform_group: 'mdi-robot-outline',
   ext_group: 'mdi-tune-variant'

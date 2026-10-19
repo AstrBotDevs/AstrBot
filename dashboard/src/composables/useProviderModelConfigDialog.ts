@@ -4,10 +4,10 @@ import { providerApi } from '@/api/v1'
 interface UseProviderModelConfigDialogOptions {
   selectedProviderSource: Ref<any | null>
   configSchema: Ref<Record<string, any>>
-  buildModelProviderConfig: (modelId: string) => any
-  modelAlreadyConfigured: (modelId: string) => boolean
+  buildModelProviderConfig?: (modelId: string) => any
+  modelAlreadyConfigured?: (modelId: string) => boolean
   loadConfig: () => Promise<void> | void
-  tm: (key: string, params?: Record<string, unknown>) => string
+  tm: (key: string, params?: Record<string, string | number>) => string
   showMessage: (message: string, color?: string) => void
 }
 
@@ -74,12 +74,12 @@ export function useProviderModelConfigDialog(options: UseProviderModelConfigDial
       return
     }
     if (!modelId) return
-    if (modelAlreadyConfigured(modelId)) {
+    if (modelAlreadyConfigured?.(modelId)) {
       showMessage(tm('models.manualModelExists'), 'error')
       return
     }
 
-    const newProviderConfig = buildModelProviderConfig(modelId)
+    const newProviderConfig = buildModelProviderConfig?.(modelId)
     if (!newProviderConfig) return
 
     providerEditData.value = newProviderConfig

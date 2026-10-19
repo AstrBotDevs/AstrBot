@@ -251,6 +251,7 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
         # 执行 Coze API 请求
         accumulated_content = ""
         message_started = False
+        chat_completed = False
 
         async for chunk in self.api_client.chat_messages(
             bot_id=self.bot_id,
@@ -302,14 +303,19 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
             elif event_type == "conversation.chat.completed":
                 # 对话完成
                 logger.debug("Coze chat completed")
+                chat_completed = True
                 break
 
-            elif event_type == "error":
-                # 错误处理
-                error_msg = data.get("msg", "未知错误")
-                error_code = data.get("code", "UNKNOWN")
+            elif event_type in ("error", "conversation.chat.failed"):
+                # Chat failures may carry details in last_error.
+                error_data = data.get("last_error") or data
+                error_msg = error_data.get("msg", "未知错误")
+                error_code = error_data.get("code", "UNKNOWN")
                 logger.error(f"Coze 出现错误: {error_code} - {error_msg}")
                 raise Exception(f"Coze 出现错误: {error_code} - {error_msg}")
+
+        if not chat_completed:
+            raise Exception("Coze response stream ended before the chat completed")
 
         if not message_started and not accumulated_content:
             logger.warning("Coze 未返回任何内容")
