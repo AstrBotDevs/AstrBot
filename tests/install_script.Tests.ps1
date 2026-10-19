@@ -27,6 +27,11 @@ if ($parseErrors.Count -ne 0) {
 if (-not $ast.ParamBlock) {
     throw 'install.ps1 must retain its top-level param block.'
 }
+if ($ast.Extent.Text -notmatch 'Write-Host "`nSelect language"' -or
+    $ast.Extent.Text -notmatch "Write-Host '  1\. Chinese \(Simplified\)'" -or
+    $ast.Extent.Text -notmatch "Write-Host '  3\. Japanese'") {
+    throw 'The Invoke-Expression bootstrap menu must remain ASCII-only.'
+}
 
 $global:UvArguments = @()
 function global:uv {

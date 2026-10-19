@@ -48,10 +48,12 @@ if (-not $Language) {
     if ($CanPrompt) {
         $languages = @('zh-CN', 'en-US', 'ja-JP')
         $defaultChoice = [array]::IndexOf($languages, $Language) + 1
-        Write-Host "`n请选择语言 / Select language / 言語を選択してください"
-        Write-Host '  1. 简体中文'
+        # Keep this bootstrap prompt ASCII-only: PowerShell 5.1 can decode
+        # source text from Invoke-WebRequest using the system code page.
+        Write-Host "`nSelect language"
+        Write-Host '  1. Chinese (Simplified)'
         Write-Host '  2. English'
-        Write-Host '  3. 日本語'
+        Write-Host '  3. Japanese'
         do {
             $choice = Read-Host "1-3 [$defaultChoice]"
         } until ($choice -eq '' -or $choice -in @('1', '2', '3'))
