@@ -36,6 +36,7 @@ try {
 
 $UseColor = [string]::IsNullOrEmpty($env:NO_COLOR) -and [Console]::IsOutputRedirected -eq $false
 $CanPrompt = -not $NonInteractive -and [Environment]::UserInteractive -and -not [Console]::IsInputRedirected
+$Indent = '  '
 
 # Keep the first-run experience predictable across machines. Users can still
 # choose Chinese or Japanese explicitly in the language menu.
@@ -58,14 +59,14 @@ if (-not $Language) {
     if ($CanPrompt) {
         $languages = @('en-US', 'zh-CN', 'ja-JP')
         $defaultChoice = [array]::IndexOf($languages, $Language) + 1
-        Write-Host "`n  $($bootstrapText.InstallerTitle)" -ForegroundColor Cyan
-        Write-Host '  -----------------------' -ForegroundColor DarkGray
-        Write-Host "`n  $($bootstrapText.LanguagePrompt)"
-        Write-Host "    1. $($bootstrapText.English)"
-        Write-Host "    2. $($bootstrapText.Chinese)"
-        Write-Host "    3. $($bootstrapText.Japanese)"
+        Write-Host "`n$Indent$($bootstrapText.InstallerTitle)" -ForegroundColor Cyan
+        Write-Host "$Indent-----------------------" -ForegroundColor DarkGray
+        Write-Host "`n$Indent$($bootstrapText.LanguagePrompt)"
+        Write-Host "$Indent  1. $($bootstrapText.English)"
+        Write-Host "$Indent  2. $($bootstrapText.Chinese)"
+        Write-Host "$Indent  3. $($bootstrapText.Japanese)"
         do {
-            $choice = Read-Host "  1-3 [$defaultChoice]"
+            $choice = Read-Host "${Indent}1-3 [$defaultChoice]"
         } until ($choice -eq '' -or $choice -in @('1', '2', '3'))
         if ($choice) { $Language = $languages[[int]$choice - 1] }
     }
@@ -179,14 +180,14 @@ if (-not $DownloadSource) {
     $DownloadSource = 'official'
     if ($CanPrompt) {
         $defaultChoice = if ($Language -eq 'zh-CN') { '1' } else { '2' }
-        Write-Host "`n$($Text.ChooseSource)"
-        Write-Host "  1. $($Text.China)"
-        Write-Host "  2. $($Text.Official)"
-        Write-Host "  3. $($Text.Custom)"
+        Write-Host "`n$Indent$($Text.ChooseSource)"
+        Write-Host "$Indent  1. $($Text.China)"
+        Write-Host "$Indent  2. $($Text.Official)"
+        Write-Host "$Indent  3. $($Text.Custom)"
         do {
-            $choice = Read-Host "$($Text.Choice) [$defaultChoice]"
+            $choice = Read-Host "$Indent$($Text.Choice) [$defaultChoice]"
             if ($choice -eq '') { $choice = $defaultChoice }
-            if ($choice -notin @('1', '2', '3')) { Write-Host $Text.InvalidChoice }
+            if ($choice -notin @('1', '2', '3')) { Write-Host "$Indent$($Text.InvalidChoice)" }
         } until ($choice -in @('1', '2', '3'))
         $DownloadSource = @('china', 'official', 'custom')[[int]$choice - 1]
     }
@@ -205,8 +206,8 @@ switch ($DownloadSource) {
     'official' { $PypiIndexUrl = 'https://pypi.org/simple/' }
     'custom' {
         if ($CanPrompt) {
-            if (-not $UvDownloadBaseUrl) { $UvDownloadBaseUrl = Read-Host $Text.UvUrl }
-            if (-not $PypiIndexUrl) { $PypiIndexUrl = Read-Host $Text.PypiUrl }
+            if (-not $UvDownloadBaseUrl) { $UvDownloadBaseUrl = Read-Host "$Indent$($Text.UvUrl)" }
+            if (-not $PypiIndexUrl) { $PypiIndexUrl = Read-Host "$Indent$($Text.PypiUrl)" }
         }
         if (-not $UvDownloadBaseUrl -or -not $PypiIndexUrl) {
             throw $Text.CustomRequired
@@ -235,9 +236,9 @@ function Write-Status {
     )
 
     if ($UseColor) {
-        Write-Host "$Prefix    $Message" -ForegroundColor $Color
+        Write-Host "$Indent$Prefix    $Message" -ForegroundColor $Color
     } else {
-        Write-Host "$Prefix    $Message"
+        Write-Host "$Indent$Prefix    $Message"
     }
 }
 
