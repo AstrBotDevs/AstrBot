@@ -1221,7 +1221,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
             try:
                 if not req.func_tool:
-                    logger.warning("No function tools are available for %s.", func_tool_name)
+                    logger.warning(
+                        "No function tools are available for %s.", func_tool_name
+                    )
                     _append_tool_call_result(
                         func_tool_id,
                         "error: No tools are available to execute this call."
