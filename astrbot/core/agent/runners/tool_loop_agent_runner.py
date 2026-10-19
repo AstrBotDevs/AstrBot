@@ -1419,6 +1419,15 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     ),
                 )
 
+            # Every model-issued tool call needs a matching result, even when
+            # an executor ends without yielding anything (e.g. a skipped task).
+            if len(tool_call_result_blocks) == tool_result_blocks_start:
+                logger.warning(
+                    "Tool `%s` returned no result; adding a fallback tool receipt.",
+                    func_tool_name,
+                )
+                _append_tool_call_result(func_tool_id, "The tool returned no result.")
+
             if len(tool_call_result_blocks) > tool_result_blocks_start:
                 tool_result_content = str(tool_call_result_blocks[-1].content)
                 yield _HandleFunctionToolsResult.from_message_chain(
