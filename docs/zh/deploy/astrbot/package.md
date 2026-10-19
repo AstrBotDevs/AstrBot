@@ -17,7 +17,7 @@ curl -fsSL https://docs.astrbot.app/install.sh -o install.sh
 bash install.sh --language zh-CN --download-source china --non-interactive
 ```
 
-`--download-source` 可选 `china`、`official` 或 `custom`。省略参数时使用系统语言和官方源。
+`--download-source` 可选 `china`、`official` 或 `custom`。省略语言参数时默认使用 English；未指定下载源时，中文使用中国大陆加速下载镜像源，英文和日文使用官方源。
 
 ## Windows
 
@@ -36,7 +36,9 @@ Invoke-WebRequest https://docs.astrbot.app/install.ps1 -OutFile install.ps1 -Use
 .\install.ps1 -Language zh-CN -DownloadSource china -NonInteractive
 ```
 
-`-DownloadSource` 可选 `china`、`official` 或 `custom`；省略参数时使用系统语言和官方源。
+`-DownloadSource` 可选 `china`、`official` 或 `custom`；省略语言参数时默认使用 English；未指定下载源时，中文使用中国大陆加速下载镜像源，英文和日文使用官方源。
+
+选择中国大陆源时，脚本也会为 Python 3.12 配置 USTC 镜像，失败后使用官方 Python 源重试。已有的 Python 镜像环境变量或显式参数优先。
 
 ## 启动 AstrBot
 

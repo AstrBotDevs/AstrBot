@@ -17,7 +17,7 @@ curl -fsSL https://docs.astrbot.app/install.sh -o install.sh
 bash install.sh --language en-US --download-source official --non-interactive
 ```
 
-`--download-source` accepts `china`, `official`, or `custom`. If omitted, the system language and official sources are used.
+`--download-source` accepts `china`, `official`, or `custom`. The default language is English. If the source is omitted, Chinese uses the mainland China mirrors; English and Japanese use official sources.
 
 ## Windows
 
@@ -36,7 +36,9 @@ Invoke-WebRequest https://docs.astrbot.app/install.ps1 -OutFile install.ps1 -Use
 .\install.ps1 -Language en-US -DownloadSource official -NonInteractive
 ```
 
-`-DownloadSource` accepts `china`, `official`, or `custom`. If omitted, the system language and official sources are used.
+`-DownloadSource` accepts `china`, `official`, or `custom`. The default language is English. If the source is omitted, Chinese uses the mainland China mirrors; English and Japanese use official sources.
+
+The mainland China option also configures the USTC mirror for Python 3.12 and retries with the official Python source on failure. Existing Python mirror environment variables or explicit options take priority.
 
 ## Start AstrBot
 
