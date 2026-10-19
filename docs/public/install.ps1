@@ -16,21 +16,6 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# Keep localized status messages readable in Windows PowerShell consoles whose
-# legacy code page cannot represent CJK characters.
-try {
-    if ($Host.Name -eq 'ConsoleHost') {
-        # Windows PowerShell 5.1 may keep an OEM code page even when the
-        # managed output encoding is UTF-8.
-        $null = & chcp.com 65001 2>$null
-    }
-    $utf8 = New-Object System.Text.UTF8Encoding($false)
-    [Console]::InputEncoding = $utf8
-    [Console]::OutputEncoding = $utf8
-} catch {
-    # Some hosts do not expose mutable console encodings; continue normally.
-}
-
 # Windows PowerShell 5.1 may otherwise negotiate an obsolete TLS version.
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
@@ -291,8 +276,11 @@ function Invoke-UvToolInstall {
 
     # PowerShell may otherwise give console programs their own window in some
     # hosts. Explicitly keep uv and all of its installation output in this one.
+    # Do not inherit the current directory: it may have been removed while an
+    # existing PowerShell session was still located there.
+    $workingDirectory = [System.IO.Path]::GetTempPath()
     $process = Start-Process -FilePath $uvCommand.Source -ArgumentList $ArgumentList `
-        -NoNewWindow -Wait -PassThru
+        -WorkingDirectory $workingDirectory -NoNewWindow -Wait -PassThru
     return $process.ExitCode
 }
 

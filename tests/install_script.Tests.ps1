@@ -41,7 +41,9 @@ if ($ast.Extent.Text -match 'mirror\.nyist\.edu\.cn' -or
     $ast.Extent.Text -match 'https://astral\.sh/uv/install\.ps1' -or
     $ast.Extent.Text -notmatch 'https://github\.com/astral-sh/uv/releases/latest/download' -or
     $ast.Extent.Text -notmatch 'Microsoft\.PowerShell\.Commands\.WebRequestSession' -or
-    $ast.Extent.Text -notmatch '-NoNewWindow -Wait -PassThru') {
+    $ast.Extent.Text -notmatch '-WorkingDirectory \$workingDirectory -NoNewWindow -Wait -PassThru' -or
+    $ast.Extent.Text -match 'chcp\.com' -or
+    $ast.Extent.Text -match '\[Console\]::(?:Input|Output)Encoding') {
     throw 'uv must use the verified ZIP flow, support the USTC cookie challenge, and keep installation in the current window.'
 }
 
@@ -148,14 +150,24 @@ Invoke-Expression $uvInstallFunctionAst.Extent.Text
 $applicationTestDir = Join-Path ([System.IO.Path]::GetTempPath()) ("astrbot-uv-process-test-{0}" -f [guid]::NewGuid())
 $null = New-Item -ItemType Directory -Path $applicationTestDir
 $previousPath = $env:PATH
+$previousLocation = (Get-Location).Path
 try {
     Copy-Item -LiteralPath "$env:SystemRoot\System32\cmd.exe" -Destination (Join-Path $applicationTestDir 'uv.exe')
     $env:PATH = "$applicationTestDir;$env:PATH"
+
+    # Reproduce a shell whose current directory was removed by an earlier
+    # cleanup. Start-Process fails with "The directory name is invalid" unless
+    # Invoke-UvToolInstall supplies a valid working directory explicitly.
+    $staleCurrentDirectory = Join-Path $applicationTestDir 'deleted-current-directory'
+    $null = New-Item -ItemType Directory -Path $staleCurrentDirectory
+    Set-Location -LiteralPath $staleCurrentDirectory
+    [System.IO.Directory]::Delete($staleCurrentDirectory)
     $exitCode = Invoke-UvToolInstall -ArgumentList @('/d', '/c', 'exit', '0')
     if ($exitCode -ne 0) {
         throw "The no-new-window uv process path returned exit code $exitCode."
     }
 } finally {
+    Set-Location -LiteralPath $previousLocation
     $env:PATH = $previousPath
     Remove-Item -LiteralPath $applicationTestDir -Recurse -Force -ErrorAction SilentlyContinue
     Remove-Item Function:\Invoke-UvToolInstall -ErrorAction SilentlyContinue
