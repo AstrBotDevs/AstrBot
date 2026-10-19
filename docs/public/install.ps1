@@ -16,6 +16,16 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# Keep localized status messages readable in Windows PowerShell consoles whose
+# legacy code page cannot represent CJK characters.
+try {
+    $utf8 = New-Object System.Text.UTF8Encoding($false)
+    [Console]::InputEncoding = $utf8
+    [Console]::OutputEncoding = $utf8
+} catch {
+    # Some hosts do not expose mutable console encodings; continue normally.
+}
+
 # Windows PowerShell 5.1 may otherwise negotiate an obsolete TLS version.
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
