@@ -41,7 +41,7 @@ The script detects the macOS/Linux architecture and prefers static musl builds o
 
 ### Windows Installation Wizard
 
-Run the following in **PowerShell 7 or later**:
+Run the following in **Windows PowerShell 5.1 or PowerShell 7+**:
 
 ```powershell
 irm https://docs.astrbot.app/install.ps1 | iex
@@ -58,7 +58,7 @@ In interactive mode, the system language determines the initial language selecti
 For unattended installation, download the script and pass explicit options:
 
 ```powershell
-Invoke-WebRequest https://docs.astrbot.app/install.ps1 -OutFile install.ps1
+Invoke-WebRequest https://docs.astrbot.app/install.ps1 -OutFile install.ps1 -UseBasicParsing
 .\install.ps1 -Language en-US -DownloadSource china -NonInteractive
 ```
 

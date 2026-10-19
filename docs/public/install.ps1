@@ -1,11 +1,12 @@
-#Requires -Version 7.0
+﻿#Requires -Version 5.1
 
 # Install AstrBot with uv on Windows PowerShell.
 [CmdletBinding()]
 param(
-    [ValidateSet('zh-CN', 'en-US', 'ja-JP')]
+    # Invoke-Expression validates omitted string parameters as empty values.
+    [ValidateSet('', 'zh-CN', 'en-US', 'ja-JP')]
     [string]$Language,
-    [ValidateSet('china', 'official', 'custom')]
+    [ValidateSet('', 'china', 'official', 'custom')]
     [string]$DownloadSource,
     [string]$UvDownloadBaseUrl,
     [string]$PypiIndexUrl,
@@ -14,6 +15,9 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+# Windows PowerShell 5.1 may otherwise negotiate an obsolete TLS version.
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
 $UseColor = [string]::IsNullOrEmpty($env:NO_COLOR) -and [Console]::IsOutputRedirected -eq $false
 $CanPrompt = -not $NonInteractive -and [Environment]::UserInteractive -and -not [Console]::IsInputRedirected
@@ -181,7 +185,7 @@ foreach ($url in @($uvMirrorUrls) + @($PypiIndexUrl, $PythonInstallMirror)) {
     }
 }
 
-if (-not $IsWindows) { throw $Text.WindowsOnly }
+if ($env:OS -ne 'Windows_NT') { throw $Text.WindowsOnly }
 
 function Write-Status {
     param(
@@ -241,10 +245,12 @@ function Install-Uv {
     $null = New-Item -ItemType Directory -Path $tempDir
     try {
         if ($uvMirrorUrls.Count -gt 0) {
-            $arch = switch ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()) {
-                'X64' { 'x86_64' }
-                'X86' { 'i686' }
-                'Arm64' { 'aarch64' }
+            # PROCESSOR_ARCHITEW6432 identifies the native OS when PowerShell is emulated.
+            $nativeArch = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
+            $arch = switch ($nativeArch) {
+                'AMD64' { 'x86_64' }
+                'x86' { 'i686' }
+                'ARM64' { 'aarch64' }
                 default { throw ($Text.UnsupportedArch -f $_) }
             }
             $artifact = "uv-$arch-pc-windows-msvc.zip"
@@ -253,8 +259,8 @@ function Install-Uv {
                     Info ($Text.TryingMirror -f $baseUrl)
                     $archive = Join-Path $tempDir $artifact
                     $checksumFile = Join-Path $tempDir "$artifact.sha256"
-                    Invoke-WebRequest -Uri "$baseUrl/$artifact" -OutFile $archive -TimeoutSec 60
-                    Invoke-WebRequest -Uri "$baseUrl/$artifact.sha256" -OutFile $checksumFile -TimeoutSec 30
+                    Invoke-WebRequest -Uri "$baseUrl/$artifact" -OutFile $archive -TimeoutSec 60 -UseBasicParsing
+                    Invoke-WebRequest -Uri "$baseUrl/$artifact.sha256" -OutFile $checksumFile -TimeoutSec 30 -UseBasicParsing
                     $expectedHash = ((Get-Content $checksumFile -Raw).Trim() -split '\s+')[0]
                     if ($expectedHash -notmatch '^[a-fA-F0-9]{64}$' -or
                         (Get-FileHash $archive -Algorithm SHA256).Hash -ne $expectedHash) {

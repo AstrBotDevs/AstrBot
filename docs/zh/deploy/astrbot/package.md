@@ -40,7 +40,7 @@ bash install.sh --language zh-CN --download-source china --non-interactive
 
 ### Windows 安装向导
 
-在 **PowerShell 7 或更高版本**中运行：
+在 **Windows PowerShell 5.1 或 PowerShell 7+**中运行：
 
 ```powershell
 irm https://docs.astrbot.app/install.ps1 | iex
@@ -57,7 +57,7 @@ irm https://docs.astrbot.app/install.ps1 | iex
 也可下载脚本后通过参数跳过交互：
 
 ```powershell
-Invoke-WebRequest https://docs.astrbot.app/install.ps1 -OutFile install.ps1
+Invoke-WebRequest https://docs.astrbot.app/install.ps1 -OutFile install.ps1 -UseBasicParsing
 .\install.ps1 -Language zh-CN -DownloadSource china -NonInteractive
 ```
 
