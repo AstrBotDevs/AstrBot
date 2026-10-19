@@ -240,10 +240,10 @@ class ShellInstallerTests(unittest.TestCase):
         self.assertIn("  [INFO]    Download source: Official sources", output)
         self.assertIn(
             "\n  Reload the environment for your shell:\n"
-            "  Bash: source ~/.bashrc\n"
-            "  Zsh: source ~/.zshrc\n"
-            "  Fish: source ~/.config/fish/config.fish\n"
-            "  PowerShell: . $PROFILE\n\n"
+            "    Bash: source ~/.bashrc\n"
+            "    Zsh: source ~/.zshrc\n"
+            "    Fish: source ~/.config/fish/config.fish\n"
+            "    PowerShell: . $PROFILE\n\n"
             "  Then run these commands manually:\n"
             "    astrbot init\n"
             "    astrbot run\n",

@@ -14,6 +14,11 @@ if ($scriptBytes.Length -ge 3 -and
     throw 'install.ps1 must be UTF-8 without BOM because Invoke-WebRequest preserves the BOM before Invoke-Expression.'
 }
 
+# Windows PowerShell 5.1 reads BOM-less files using the system ANSI code page.
+if (@($scriptBytes | Where-Object { $_ -gt 0x7F }).Count -ne 0) {
+    throw 'install.ps1 must use ASCII source with JSON Unicode escapes for localized messages.'
+}
+
 $tokens = $null
 $parseErrors = $null
 $ast = [System.Management.Automation.Language.Parser]::ParseFile(
@@ -27,7 +32,7 @@ if ($parseErrors.Count -ne 0) {
 if (-not $ast.ParamBlock) {
     throw 'install.ps1 must retain its top-level param block.'
 }
-if ($ast.Extent.Text -notmatch '\$bootstrapCompressed = \[Convert\]::FromBase64String' -or
+if ($ast.Extent.Text -notmatch '\$bootstrapText = ConvertFrom-Json @''' -or
     $ast.Extent.Text -notmatch '\$languages = @\(''en-US'', ''zh-CN'', ''ja-JP''\)' -or
     $ast.Extent.Text -notmatch '\$defaultLanguage = ''en-US''' -or
     $ast.Extent.Text -notmatch '\$Indent = ''  ''' -or

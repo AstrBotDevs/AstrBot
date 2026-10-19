@@ -25,17 +25,23 @@ $Indent = '  '
 
 # Keep the first-run experience predictable across machines. Users can still
 # choose Chinese or Japanese explicitly in the language menu.
-$bootstrapCompressed = [Convert]::FromBase64String(
-    'H4sIAAAAAAAACmWQ3W4SQRzFX2Uy1xu8xys1mmiMIakvsNKB3bjskt0htTEmO1AL7S7S1ABq+CiW5at82MREaqEP4+xMh6v6CGZaLCQkczFz5szvP+e8h89NB6uGgezXOjYQjMK/Td8HjxxsP7YwuL+FCnypmsmMmkQx20qlMYzCLWSgOAbGUgcPgJj8WrgH3OuLyUj0XKn0XDFo0Ozxgkz5YYOSKiUdSkqUnFBSpmQPKvCJppvIkbOvx244/xxOR7yShwp8aiYN3dFg9H6nwBdqWl26eTXgtaEYNKACX6F3eAujtLN6IyUF2BkTYA05CMStVEo1t53oun01m38KwqnH6wErTcLLILyq82GLH3RFy5fHqcf9fHjZloZCnXU95lfYsc+OJuyw97+vm9m3dfj6X4ctSs6oS+5YspCT/evygJIzNm6Klr/ZzB0stos1y3ymGsYbNf52lS52q4OUbtuWDRKqbqDth8BG2N7VzSTY0bEmcwMrkdDjumoAx8rYcRSJRDagqw6W0EW5xnKlcOqJ+Zy1z8XP4Gbm89Epq/VYIc+L31nhBxt/4ZUL/vtokS+KSfmP29ngrsVfgmmuSXN9mpvJ2O1zXq7exm7KlSXUJezjkM1KNDuXnuwFJV22XxT9zlpBe5RcUfJVDvzwD6o1noa/AgAA'
-)
-$bootstrapInput = New-Object System.IO.MemoryStream(,$bootstrapCompressed)
-$bootstrapGzip = New-Object System.IO.Compression.GZipStream(
-    $bootstrapInput,
-    [System.IO.Compression.CompressionMode]::Decompress
-)
-$bootstrapReader = New-Object System.IO.StreamReader($bootstrapGzip, [Text.Encoding]::UTF8)
-$bootstrapText = ConvertFrom-Json $bootstrapReader.ReadToEnd()
-$bootstrapReader.Dispose()
+# Use JSON Unicode escapes so Windows PowerShell 5.1 can read this file
+# with any system encoding, while downloaded UTF-8 scripts also work without a BOM.
+$bootstrapText = ConvertFrom-Json @'
+{
+    "InstallerTitle": "\ud83c\udf0c AstrBot Installer",
+    "LanguagePrompt": "Select language / \u8bf7\u9009\u62e9\u8bed\u8a00 / \u8a00\u8a9e\u3092\u9078\u629e\u3057\u3066\u304f\u3060\u3055\u3044",
+    "Chinese": "\u7b80\u4f53\u4e2d\u6587",
+    "English": "English",
+    "Japanese": "\u65e5\u672c\u8a9e",
+    "NextStepsEnglish": "Next, run these commands:",
+    "NextStepsChinese": "\u63a5\u4e0b\u6765\u53ef\u4ee5\u4f9d\u6b21\u6267\u884c\u4ee5\u4e0b\u6307\u4ee4\u6765\u521d\u59cb\u5316\u548c\u542f\u52a8 AstrBot\uff1a",
+    "NextStepsJapanese": "\u6b21\u306b\u3001\u4ee5\u4e0b\u3092\u9806\u756a\u306b\u5b9f\u884c\u3057\u3066\u304f\u3060\u3055\u3044\uff1a",
+    "PythonFallbackEnglish": "Python mirror failed; retrying with the official source...",
+    "PythonFallbackChinese": "Python \u955c\u50cf\u4e0b\u8f7d\u5931\u8d25\uff0c\u6b63\u5728\u5207\u6362\u5230\u5b98\u65b9\u6e90\u91cd\u8bd5\u2026",
+    "PythonFallbackJapanese": "Python \u30df\u30e9\u30fc\u306b\u5931\u6557\u3057\u305f\u305f\u3081\u3001\u516c\u5f0f\u30bd\u30fc\u30b9\u3067\u518d\u8a66\u884c\u3057\u3066\u3044\u307e\u3059\u2026"
+}
+'@
 
 $defaultLanguage = 'en-US'
 
@@ -57,108 +63,103 @@ if (-not $Language) {
     }
 }
 
-$compressedMessages = [Convert]::FromBase64String(
-    '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'
-)
-$messageInput = New-Object System.IO.MemoryStream(,$compressedMessages)
-$messageGzip = New-Object System.IO.Compression.GZipStream(
-    $messageInput,
-    [System.IO.Compression.CompressionMode]::Decompress
-)
-$messageReader = New-Object System.IO.StreamReader($messageGzip, [Text.Encoding]::UTF8)
-$messages = ConvertFrom-Json $messageReader.ReadToEnd()
-$messageReader.Dispose()
-<#
-$messages = @{
-    'zh-CN' = @{
-        ChooseSource = '请选择下载源'
-        China = '中国大陆加速下载镜像源'
-        Official = '官方源'
-        Custom = '自定义'
-        Choice = '输入编号，按回车使用默认选项'
-        InvalidChoice = '请输入 1、2 或 3。'
-        UvUrl = 'uv ZIP 下载目录 URL（不含文件名）'
-        PypiUrl = 'PyPI simple 索引 URL'
-        CustomRequired = '自定义源需要同时提供 UvDownloadBaseUrl 和 PypiIndexUrl。'
-        InvalidUrl = '下载源必须是有效的 HTTPS URL：{0}'
-        WindowsOnly = '请在 Windows 上运行此 PowerShell 脚本；Linux/macOS 请使用 install.sh。'
-        Source = '下载源：{0}'
-        UvMirror = 'uv 下载目录：{0}'
-        Pypi = 'PyPI 索引：{0}'
-        PythonMirror = 'Python 下载镜像：{0}'
-        PythonDefault = 'Python 下载沿用 uv 的配置；如需加速，可通过 -PythonInstallMirror 指定镜像（PyPI 镜像不包含 Python 解释器）。'
-        InstallingUv = '未找到 uv，正在安装…'
-        TryingMirror = '正在尝试 uv 镜像：{0}'
-        MirrorFailed = 'uv 镜像下载失败：{0}'
-        OfficialFallback = '正在尝试 uv 官方安装器…'
-        UnsupportedArch = '不支持的 Windows 架构：{0}'
-        InvalidChecksum = 'uv 压缩包 SHA256 校验失败。'
-        MissingBinaries = 'uv 压缩包中缺少 uv.exe 或 uvx.exe。'
-        UvFailed = 'uv 安装失败。请参考 https://docs.astral.sh/uv/getting-started/installation/'
-        InstallingAstrBot = '正在使用 Python 3.12 安装 AstrBot…'
-        AstrBotFailed = 'AstrBot 安装失败（退出码 {0}）。请检查上方的下载或依赖错误。'
-        Installed = 'AstrBot 安装完成。'
-    }
-    'en-US' = @{
-        ChooseSource = 'Select a download source'
-        China = 'Mainland China accelerated download mirrors'
-        Official = 'Official sources'
-        Custom = 'Custom'
-        Choice = 'Enter a number, or press Enter to use the default'
-        InvalidChoice = 'Please enter 1, 2, or 3.'
-        UvUrl = 'uv ZIP download directory URL (without the filename)'
-        PypiUrl = 'PyPI simple index URL'
-        CustomRequired = 'Custom sources require both UvDownloadBaseUrl and PypiIndexUrl.'
-        InvalidUrl = 'Download sources must be valid HTTPS URLs: {0}'
-        WindowsOnly = 'Run this PowerShell script on Windows; use install.sh on Linux/macOS.'
-        Source = 'Download source: {0}'
-        UvMirror = 'uv download directory: {0}'
-        Pypi = 'PyPI index: {0}'
-        PythonMirror = 'Python download mirror: {0}'
-        PythonDefault = 'Python downloads use the existing uv configuration. Set -PythonInstallMirror to use a mirror (PyPI mirrors do not include Python interpreters).'
-        InstallingUv = 'uv was not found. Installing uv...'
-        TryingMirror = 'Trying uv mirror: {0}'
-        MirrorFailed = 'uv mirror download failed: {0}'
-        OfficialFallback = 'Trying the official uv installer...'
-        UnsupportedArch = 'Unsupported Windows architecture: {0}'
-        InvalidChecksum = 'uv archive SHA256 verification failed.'
-        MissingBinaries = 'The uv archive is missing uv.exe or uvx.exe.'
-        UvFailed = 'Failed to install uv. See https://docs.astral.sh/uv/getting-started/installation/'
-        InstallingAstrBot = 'Installing AstrBot with Python 3.12...'
-        AstrBotFailed = 'AstrBot installation failed (exit code {0}). Check the download or dependency errors above.'
-        Installed = 'AstrBot has been installed.'
-    }
-    'ja-JP' = @{
-        ChooseSource = 'ダウンロード元を選択してください'
-        China = '中国本土向け高速ダウンロードミラー'
-        Official = '公式ソース'
-        Custom = 'カスタム'
-        Choice = '番号を入力してください。Enter で既定値を使用します'
-        InvalidChoice = '1、2、3 のいずれかを入力してください。'
-        UvUrl = 'uv ZIP のダウンロードディレクトリ URL（ファイル名を除く）'
-        PypiUrl = 'PyPI simple インデックス URL'
-        CustomRequired = 'カスタムソースには UvDownloadBaseUrl と PypiIndexUrl の両方が必要です。'
-        InvalidUrl = 'ダウンロード元には有効な HTTPS URL を指定してください：{0}'
-        WindowsOnly = 'この PowerShell スクリプトは Windows 用です。Linux/macOS では install.sh を使用してください。'
-        Source = 'ダウンロード元：{0}'
-        UvMirror = 'uv ダウンロードディレクトリ：{0}'
-        Pypi = 'PyPI インデックス：{0}'
-        PythonMirror = 'Python ダウンロードミラー：{0}'
-        PythonDefault = 'Python のダウンロードには既存の uv 設定を使用します。ミラーを使うには -PythonInstallMirror を指定してください（PyPI ミラーに Python 本体は含まれません）。'
-        InstallingUv = 'uv が見つかりません。インストールしています…'
-        TryingMirror = 'uv ミラーを試しています：{0}'
-        MirrorFailed = 'uv ミラーからのダウンロードに失敗しました：{0}'
-        OfficialFallback = 'uv の公式インストーラーを試しています…'
-        UnsupportedArch = '未対応の Windows アーキテクチャ：{0}'
-        InvalidChecksum = 'uv アーカイブの SHA256 検証に失敗しました。'
-        MissingBinaries = 'uv アーカイブに uv.exe または uvx.exe がありません。'
-        UvFailed = 'uv のインストールに失敗しました。https://docs.astral.sh/uv/getting-started/installation/ を参照してください。'
-        InstallingAstrBot = 'Python 3.12 で AstrBot をインストールしています…'
-        AstrBotFailed = 'AstrBot のインストールに失敗しました（終了コード {0}）。上記のダウンロードまたは依存関係のエラーを確認してください。'
-        Installed = 'AstrBot のインストールが完了しました。'
+$messages = ConvertFrom-Json @'
+{
+    "zh-CN": {
+        "ChooseSource": "\u8bf7\u9009\u62e9\u4e0b\u8f7d\u6e90",
+        "China": "\u4e2d\u56fd\u5927\u9646\u52a0\u901f\u4e0b\u8f7d\u955c\u50cf\u6e90",
+        "Official": "\u5b98\u65b9\u6e90",
+        "Custom": "\u81ea\u5b9a\u4e49",
+        "Choice": "\u8f93\u5165\u7f16\u53f7\uff0c\u6309\u56de\u8f66\u4f7f\u7528\u9ed8\u8ba4\u9009\u9879",
+        "InvalidChoice": "\u8bf7\u8f93\u5165 1\u30012 \u6216 3\u3002",
+        "UvUrl": "uv ZIP \u4e0b\u8f7d\u76ee\u5f55 URL\uff08\u4e0d\u542b\u6587\u4ef6\u540d\uff09",
+        "PypiUrl": "PyPI simple \u7d22\u5f15 URL",
+        "CustomRequired": "\u81ea\u5b9a\u4e49\u6e90\u9700\u8981\u540c\u65f6\u63d0\u4f9b UvDownloadBaseUrl \u548c PypiIndexUrl\u3002",
+        "InvalidUrl": "\u4e0b\u8f7d\u6e90\u5fc5\u987b\u662f\u6709\u6548\u7684 HTTPS URL\uff1a{0}",
+        "WindowsOnly": "\u8bf7\u5728 Windows \u4e0a\u8fd0\u884c\u6b64 PowerShell \u811a\u672c\uff1bLinux/macOS \u8bf7\u4f7f\u7528 install.sh\u3002",
+        "Source": "\u4e0b\u8f7d\u6e90\uff1a{0}",
+        "UvMirror": "uv \u4e0b\u8f7d\u76ee\u5f55\uff1a{0}",
+        "Pypi": "PyPI \u7d22\u5f15\uff1a{0}",
+        "PythonMirror": "Python \u4e0b\u8f7d\u955c\u50cf\uff1a{0}",
+        "PythonDefault": "Python \u4e0b\u8f7d\u6cbf\u7528 uv \u7684\u914d\u7f6e\uff1b\u5982\u9700\u52a0\u901f\uff0c\u53ef\u901a\u8fc7 -PythonInstallMirror \u6307\u5b9a\u955c\u50cf\uff08PyPI \u955c\u50cf\u4e0d\u5305\u542b Python \u89e3\u91ca\u5668\uff09\u3002",
+        "InstallingUv": "\u672a\u627e\u5230 uv\uff0c\u6b63\u5728\u5b89\u88c5\u2026",
+        "TryingMirror": "\u6b63\u5728\u5c1d\u8bd5 uv \u955c\u50cf\uff1a{0}",
+        "MirrorFailed": "uv \u955c\u50cf\u4e0b\u8f7d\u5931\u8d25\uff1a{0}",
+        "OfficialFallback": "\u6b63\u5728\u5c1d\u8bd5 uv \u5b98\u65b9\u5b89\u88c5\u5668\u2026",
+        "UnsupportedArch": "\u4e0d\u652f\u6301\u7684 Windows \u67b6\u7784\uff1a{0}",
+        "InvalidChecksum": "uv \u538b\u7f29\u5305 SHA256 \u6821\u9a8c\u5931\u8d25\u3002",
+        "MissingBinaries": "uv \u538b\u7f29\u5305\u4e2d\u7f3a\u5c11 uv.exe \u6216 uvx.exe\u3002",
+        "UvFailed": "uv \u5b89\u88c5\u5931\u8d25\u3002\u8bf7\u53c2\u8003 https://docs.astral.sh/uv/getting-started/installation/",
+        "InstallingAstrBot": "\u6b63\u5728\u4f7f\u7528 Python 3.12 \u5b89\u88c5 AstrBot\u2026",
+        "AstrBotFailed": "AstrBot \u5b89\u88c5\u5931\u8d25\uff08\u9000\u51fa\u7801 {0}\uff09\u3002\u8bf7\u68c0\u67e5\u4e0a\u65b9\u7684\u4e0b\u8f7d\u6216\u4f9d\u8d56\u9519\u8bef\u3002",
+        "Installed": "AstrBot \u5b89\u88c5\u5b8c\u6210\u3002",
+        "ReloadShell": "\u8bf7\u6839\u636e\u4f60\u4f7f\u7528\u7684\u7ec8\u7aef\u91cd\u65b0\u52a0\u8f7d\u73af\u5883\uff1a",
+        "RunCommands": "\u91cd\u65b0\u52a0\u8f7d\u540e\uff0c\u8bf7\u624b\u52a8\u8fd0\u884c\uff1a"
+    },
+    "en-US": {
+        "ChooseSource": "Select a download source",
+        "China": "Mainland China accelerated download mirrors",
+        "Official": "Official sources",
+        "Custom": "Custom",
+        "Choice": "Enter a number, or press Enter to use the default",
+        "InvalidChoice": "Please enter 1, 2, or 3.",
+        "UvUrl": "uv ZIP download directory URL (without the filename)",
+        "PypiUrl": "PyPI simple index URL",
+        "CustomRequired": "Custom sources require both UvDownloadBaseUrl and PypiIndexUrl.",
+        "InvalidUrl": "Download sources must be valid HTTPS URLs: {0}",
+        "WindowsOnly": "Run this PowerShell script on Windows; use install.sh on Linux/macOS.",
+        "Source": "Download source: {0}",
+        "UvMirror": "uv download directory: {0}",
+        "Pypi": "PyPI index: {0}",
+        "PythonMirror": "Python download mirror: {0}",
+        "PythonDefault": "Python downloads use the existing uv configuration. Set -PythonInstallMirror to use a mirror (PyPI mirrors do not include Python interpreters).",
+        "InstallingUv": "uv was not found. Installing uv...",
+        "TryingMirror": "Trying uv mirror: {0}",
+        "MirrorFailed": "uv mirror download failed: {0}",
+        "OfficialFallback": "Trying the official uv installer...",
+        "UnsupportedArch": "Unsupported Windows architecture: {0}",
+        "InvalidChecksum": "uv archive SHA256 verification failed.",
+        "MissingBinaries": "The uv archive is missing uv.exe or uvx.exe.",
+        "UvFailed": "Failed to install uv. See https://docs.astral.sh/uv/getting-started/installation/",
+        "InstallingAstrBot": "Installing AstrBot with Python 3.12...",
+        "AstrBotFailed": "AstrBot installation failed (exit code {0}). Check the download or dependency errors above.",
+        "Installed": "AstrBot has been installed.",
+        "ReloadShell": "Reload the environment for your shell:",
+        "RunCommands": "Then run these commands manually:"
+    },
+    "ja-JP": {
+        "ChooseSource": "\u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u5143\u3092\u9078\u629e\u3057\u3066\u304f\u3060\u3055\u3044",
+        "China": "\u4e2d\u56fd\u672c\u571f\u5411\u3051\u9ad8\u901f\u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u30df\u30e9\u30fc",
+        "Official": "\u516c\u5f0f\u30bd\u30fc\u30b9",
+        "Custom": "\u30ab\u30b9\u30bf\u30e0",
+        "Choice": "\u756a\u53f7\u3092\u5165\u529b\u3057\u3066\u304f\u3060\u3055\u3044\u3002Enter \u3067\u65e2\u5b9a\u5024\u3092\u4f7f\u7528\u3057\u307e\u3059",
+        "InvalidChoice": "1\u30012\u30013 \u306e\u3044\u305a\u308c\u304b\u3092\u5165\u529b\u3057\u3066\u304f\u3060\u3055\u3044\u3002",
+        "UvUrl": "uv ZIP \u306e\u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u30c7\u30a3\u30ec\u30af\u30c8\u30ea URL\uff08\u30d5\u30a1\u30a4\u30eb\u540d\u3092\u9664\u304f\uff09",
+        "PypiUrl": "PyPI simple \u30a4\u30f3\u30c7\u30c3\u30af\u30b9 URL",
+        "CustomRequired": "\u30ab\u30b9\u30bf\u30e0\u30bd\u30fc\u30b9\u306b\u306f UvDownloadBaseUrl \u3068 PypiIndexUrl \u306e\u4e21\u65b9\u304c\u5fc5\u8981\u3067\u3059\u3002",
+        "InvalidUrl": "\u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u5143\u306b\u306f\u6709\u52b9\u306a HTTPS URL \u3092\u6307\u5b9a\u3057\u3066\u304f\u3060\u3055\u3044\uff1a{0}",
+        "WindowsOnly": "\u3053\u306e PowerShell \u30b9\u30af\u30ea\u30d7\u30c8\u306f Windows \u7528\u3067\u3059\u3002Linux/macOS \u3067\u306f install.sh \u3092\u4f7f\u7528\u3057\u3066\u304f\u3060\u3055\u3044\u3002",
+        "Source": "\u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u5143\uff1a{0}",
+        "UvMirror": "uv \u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u30c7\u30a3\u30ec\u30af\u30c8\u30ea\uff1a{0}",
+        "Pypi": "PyPI \u30a4\u30f3\u30c7\u30c3\u30af\u30b9\uff1a{0}",
+        "PythonMirror": "Python \u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u30df\u30e9\u30fc\uff1a{0}",
+        "PythonDefault": "Python \u306e\u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u306b\u306f\u65e2\u5b58\u306e uv \u8a2d\u5b9a\u3092\u4f7f\u7528\u3057\u307e\u3059\u3002\u30df\u30e9\u30fc\u3092\u4f7f\u3046\u306b\u306f -PythonInstallMirror \u3092\u6307\u5b9a\u3057\u3066\u304f\u3060\u3055\u3044\uff08PyPI \u30df\u30e9\u30fc\u306b Python \u672c\u4f53\u306f\u542b\u307e\u308c\u307e\u305b\u3093\uff09\u3002",
+        "InstallingUv": "uv \u304c\u898b\u3064\u304b\u308a\u307e\u305b\u3093\u3002\u30a4\u30f3\u30b9\u30c8\u30fc\u30eb\u3057\u3066\u3044\u307e\u3059\u2026",
+        "TryingMirror": "uv \u30df\u30e9\u30fc\u3092\u8a66\u3057\u3066\u3044\u307e\u3059\uff1a{0}",
+        "MirrorFailed": "uv \u30df\u30e9\u30fc\u304b\u3089\u306e\u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u306b\u5931\u6557\u3057\u307e\u3057\u305f\uff1a{0}",
+        "OfficialFallback": "uv \u306e\u516c\u5f0f\u30a4\u30f3\u30b9\u30c8\u30fc\u30e9\u30fc\u3092\u8a66\u3057\u3066\u3044\u307e\u3059\u2026",
+        "UnsupportedArch": "\u672a\u5bfe\u5fdc\u306e Windows \u30a2\u30fc\u30ad\u30c6\u30af\u30c1\u30e3\uff1a{0}",
+        "InvalidChecksum": "uv \u30a2\u30fc\u30ab\u30a4\u30d6\u306e SHA256 \u691c\u8a3c\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002",
+        "MissingBinaries": "uv \u30a2\u30fc\u30ab\u30a4\u30d6\u306b uv.exe \u307e\u305f\u306f uvx.exe \u304c\u3042\u308a\u307e\u305b\u3093\u3002",
+        "UvFailed": "uv \u306e\u30a4\u30f3\u30b9\u30c8\u30fc\u30eb\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002https://docs.astral.sh/uv/getting-started/installation/ \u3092\u53c2\u7167\u3057\u3066\u304f\u3060\u3055\u3044\u3002",
+        "InstallingAstrBot": "Python 3.12 \u3067 AstrBot \u3092\u30a4\u30f3\u30b9\u30c8\u30fc\u30eb\u3057\u3066\u3044\u307e\u3059\u2026",
+        "AstrBotFailed": "AstrBot \u306e\u30a4\u30f3\u30b9\u30c8\u30fc\u30eb\u306b\u5931\u6557\u3057\u307e\u3057\u305f\uff08\u7d42\u4e86\u30b3\u30fc\u30c9 {0}\uff09\u3002\u4e0a\u8a18\u306e\u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u307e\u305f\u306f\u4f9d\u5b58\u95a2\u4fc2\u306e\u30a8\u30e9\u30fc\u3092\u78ba\u8a8d\u3057\u3066\u304f\u3060\u3055\u3044\u3002",
+        "Installed": "AstrBot \u306e\u30a4\u30f3\u30b9\u30c8\u30fc\u30eb\u304c\u5b8c\u4e86\u3057\u307e\u3057\u305f\u3002",
+        "ReloadShell": "\u4f7f\u7528\u3059\u308b\u30b7\u30a7\u30eb\u306b\u5408\u308f\u305b\u3066\u74b0\u5883\u3092\u518d\u8aad\u307f\u8fbc\u307f\u3057\u3066\u304f\u3060\u3055\u3044\uff1a",
+        "RunCommands": "\u305d\u306e\u5f8c\u3001\u4ee5\u4e0b\u306e\u30b3\u30de\u30f3\u30c9\u3092\u624b\u52d5\u3067\u5b9f\u884c\u3057\u3066\u304f\u3060\u3055\u3044\uff1a"
     }
 }
-#>
+'@
 $Text = $messages.$Language
 
 if (-not $DownloadSource) {
@@ -467,22 +468,12 @@ try {
     }
     Ok $Text.Installed
     try { & uv tool update-shell *> $null } catch { }
-    $reloadShell = switch ($Language) {
-        'zh-CN' { '请根据你使用的终端重新加载环境：' }
-        'ja-JP' { '使用するシェルに合わせて環境を再読み込みしてください：' }
-        default { 'Reload the environment for your shell:' }
-    }
-    $runCommands = switch ($Language) {
-        'zh-CN' { '重新加载后，请手动运行：' }
-        'ja-JP' { 'その後、以下のコマンドを手動で実行してください：' }
-        default { 'Then run these commands manually:' }
-    }
-    Write-Host "`n$Indent$reloadShell"
+    Write-Host "`n$Indent$($Text.ReloadShell)"
     Write-Host "$($Indent)  Bash: source ~/.bashrc"
     Write-Host "$($Indent)  Zsh: source ~/.zshrc"
     Write-Host "$($Indent)  Fish: source ~/.config/fish/config.fish"
     Write-Host "$($Indent)  PowerShell: . `$PROFILE"
-    Write-Host "`n$Indent$runCommands"
+    Write-Host "`n$Indent$($Text.RunCommands)"
     Write-Host "$($Indent)$($Indent)astrbot init" -ForegroundColor Cyan
     Write-Host "$($Indent)$($Indent)astrbot run" -ForegroundColor Cyan
 } finally {
