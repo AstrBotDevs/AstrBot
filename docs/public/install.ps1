@@ -40,7 +40,7 @@ $CanPrompt = -not $NonInteractive -and [Environment]::UserInteractive -and -not 
 # Keep the first-run experience predictable across machines. Users can still
 # choose Chinese or Japanese explicitly in the language menu.
 $bootstrapCompressed = [Convert]::FromBase64String(
-    'H4sIAAAAAAAACqtW8knMSy9NTE8NKMrPLShRslJ6sX77y4bOZ90rX6xf+2JFg4K+QnBqTmpyiUIOVKWCvsKLFQ0vVs173DTpZeOOZ13zHjdOf9y47HFj/+PGBY8bpz5ubFHSUXLOyMxLLU5VslJ6vq7hyd7JT3asfTatXUlHyTUvPSezOEPJCs7SUfJKLEiEqn42femzOWterJqnVAsAE4JdBJ4AAAA='
+    'H4sIAAAAAAAACqtW8knMSy9NTE8NKMrPLShRslIKTs1JTS5RyIGKK+grvFi//WVD57PulS/Wr32xogEksqLhxap5j5smvWzc8axr3uPG6Y8blz1u7H/cuOBx49THjS1KOkrOGZl5qcWpSlZKz9c1PNk7+cmOtc+mtSvpKLnmpedkFmcoWcFZOkpeiQWJUNXPpi99NmfNi1XzlGoBBSle6p4AAAA='
 )
 $bootstrapInput = New-Object System.IO.MemoryStream(,$bootstrapCompressed)
 $bootstrapGzip = New-Object System.IO.Compression.GZipStream(
