@@ -41,7 +41,7 @@ $Indent = '  '
 # Keep the first-run experience predictable across machines. Users can still
 # choose Chinese or Japanese explicitly in the language menu.
 $bootstrapCompressed = [Convert]::FromBase64String(
-    'H4sIAAAAAAAACqtW8swrLknMyUktCsksyUlVslL6ML+nR8GxuKTIKb9EAS6rpKPkk5iXXpqYnhpQlJ9bUKJkpRScmpOaXKKQAxVX0Fd4sX77y4bOZ90rX6xf+2JFA0hkRcOLVfMeN0162bjjWde8x43THzcue9zY/7hxwePGqY8bW5R0lJwzMvNSi0F2P1/X8GTv5Cc71j6b1q6ko+Sal56TWZyhZAVn6Sh5JRYkQlU/m7702Zw1L1bNU6oFAAIYB+vIAAAA'
+    'H4sIAAAAAAAACmWPzUrDQBSFX2W464D77FRcKCJCfYFQhySQPzJTEETIiCi1QUGpBbFps4i2adosG/DnZSZOpyt9BAmUNuDucu455+Ocw75DqGZZ2D8xqYVBhd9BGKJtQv0dl6L1FxQ41By9pen42Hdtj4IKDWzhJkXWSkdbSObzZdAWnbHMp3IUVMookGnELx+WrBC3EWc9zl45u+dsyFmXsytQYNcwHUwq9mIWlJ+PZTEVTzegwJ6jWyYxQF1fChxonrZyi14iXjKZRqDAET6jDYo9sslUkoL8loOogQlGTde2NeeUqHX7hi3ukrLoiH4i83n51RdZLNpvMg5/Pp7rgTo/izmb8ICV71W0Gjm8XnRTzibfs4GMw/9rq7KLP6djnXl1AQAA'
 )
 $bootstrapInput = New-Object System.IO.MemoryStream(,$bootstrapCompressed)
 $bootstrapGzip = New-Object System.IO.Compression.GZipStream(
@@ -393,6 +393,14 @@ try {
         exit $LASTEXITCODE
     }
     Ok $Text.Installed
+    $nextSteps = switch ($Language) {
+        'zh-CN' { $bootstrapText.NextStepsChinese }
+        'ja-JP' { $bootstrapText.NextStepsJapanese }
+        default { $bootstrapText.NextStepsEnglish }
+    }
+    Write-Host "`n$Indent$nextSteps"
+    Write-Host "$($Indent)$($Indent)astrbot init" -ForegroundColor Cyan
+    Write-Host "$($Indent)$($Indent)astrbot run" -ForegroundColor Cyan
 } finally {
     $env:UV_PYTHON_INSTALL_MIRROR = $previousPythonMirror
 }

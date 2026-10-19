@@ -32,6 +32,8 @@ if ($ast.Extent.Text -notmatch '\$bootstrapCompressed = \[Convert\]::FromBase64S
     $ast.Extent.Text -notmatch '\$defaultLanguage = ''en-US''' -or
     $ast.Extent.Text -notmatch '\$Indent = ''  ''' -or
     $ast.Extent.Text -notmatch 'Write-Host "\$Indent\$Prefix    \$Message"' -or
+    $ast.Extent.Text -notmatch 'Write-Host "\$\(\$Indent\)\$\(\$Indent\)astrbot init"' -or
+    $ast.Extent.Text -notmatch 'Write-Host "\$\(\$Indent\)\$\(\$Indent\)astrbot run"' -or
     $ast.Extent.Text -notmatch 'if \(\$Language -eq ''zh-CN''\) \{ ''1'' \} else \{ ''2'' \}') {
     throw 'The bootstrap menu must remain ASCII-only, default to English, and select the source default by language.'
 }
