@@ -1804,13 +1804,13 @@ async def _run_skills_like_requery_step(
     return runner
 
 
-def _recorded_tool_calls(runner: ToolLoopAgentRunner):
-    assistant = next(
+def _recorded_tool_turn(runner: ToolLoopAgentRunner):
+    """Return the assistant message that records the executed tool calls."""
+    return next(
         msg
         for msg in runner.run_context.messages
         if msg.role == "assistant" and getattr(msg, "tool_calls", None)
     )
-    return assistant.tool_calls
 
 
 @pytest.mark.asyncio
@@ -1819,7 +1819,8 @@ async def test_skills_like_requery_keeps_tool_call_extra_content(same_ids):
     """The recorded tool call must carry the re-query's provider metadata.
 
     Gemini falls back to the tool name as the call ID, so both replies often
-    share one ID; the stale selection signature must still be replaced.
+    share one ID; the stale selection signature must still be replaced. The
+    reasoning/signature pair travels with the call, the narration does not.
     """
     first_id = "test_tool"
     second_id = "test_tool" if same_ids else "call_actual"
@@ -1829,6 +1830,8 @@ async def test_skills_like_requery_keeps_tool_call_extra_content(same_ids):
         LLMResponse(
             role="assistant",
             completion_text="选择工具",
+            reasoning_content="pick a tool",
+            reasoning_signature=_SELECT_SIGNATURE,
             tools_call_name=["test_tool"],
             tools_call_args=[{"query": "select"}],
             tools_call_ids=[first_id],
@@ -1837,6 +1840,8 @@ async def test_skills_like_requery_keeps_tool_call_extra_content(same_ids):
         LLMResponse(
             role="assistant",
             completion_text="调用工具",
+            reasoning_content="fill the arguments",
+            reasoning_signature=_ACTUAL_SIGNATURE,
             tools_call_name=["test_tool"],
             tools_call_args=[{"query": "actual"}],
             tools_call_ids=[second_id],
@@ -1847,10 +1852,14 @@ async def test_skills_like_requery_keeps_tool_call_extra_content(same_ids):
     runner = await _run_skills_like_requery_step(provider, ["test_tool"])
 
     assert provider.call_count == 2
-    tool_calls = _recorded_tool_calls(runner)
-    assert [call.id for call in tool_calls] == [second_id]
-    assert tool_calls[0].function.arguments == json.dumps({"query": "actual"})
-    assert tool_calls[0].extra_content == actual_signature
+    turn = _recorded_tool_turn(runner)
+    assert [call.id for call in turn.tool_calls] == [second_id]
+    assert turn.tool_calls[0].function.arguments == json.dumps({"query": "actual"})
+    assert turn.tool_calls[0].extra_content == actual_signature
+    parts = {part.type: part for part in turn.content}
+    assert parts["think"].think == "fill the arguments"
+    assert parts["think"].encrypted == _ACTUAL_SIGNATURE
+    assert parts["text"].text == "选择工具"
 
 
 @pytest.mark.asyncio
@@ -1883,19 +1892,20 @@ async def test_skills_like_requery_keeps_extra_content_per_tool_call():
 
     runner = await _run_skills_like_requery_step(provider, ["test_tool", "other_tool"])
 
-    tool_calls = _recorded_tool_calls(runner)
+    tool_calls = _recorded_tool_turn(runner).tool_calls
     assert {call.id: call.extra_content for call in tool_calls} == signatures
 
 
 @pytest.mark.asyncio
 async def test_skills_like_requery_signature_round_trips_to_gemini():
-    """Gemini must receive the re-query signature on the replayed function call."""
+    """Gemini must replay one signature, the re-query's, on the whole model turn."""
     from astrbot.core.provider.sources.gemini_source import ProviderGoogleGenAI
 
     provider = RequeryMetadataProvider(
         LLMResponse(
             role="assistant",
             completion_text="选择工具",
+            reasoning_signature=_SELECT_SIGNATURE,
             tools_call_name=["test_tool"],
             tools_call_args=[{"query": "select"}],
             tools_call_ids=["test_tool"],
@@ -1906,6 +1916,7 @@ async def test_skills_like_requery_signature_round_trips_to_gemini():
         LLMResponse(
             role="assistant",
             completion_text="调用工具",
+            reasoning_signature=_ACTUAL_SIGNATURE,
             tools_call_name=["test_tool"],
             tools_call_args=[{"query": "actual"}],
             tools_call_ids=["test_tool"],
@@ -1921,15 +1932,20 @@ async def test_skills_like_requery_signature_round_trips_to_gemini():
         {"messages": [msg.model_dump() for msg in runner.run_context.messages]}
     )
 
-    function_parts = [
-        part
+    model_turn = next(
+        content
         for content in contents
-        for part in (content.parts or [])
-        if part.function_call is not None
+        if any(part.function_call is not None for part in (content.parts or []))
+    )
+    assert model_turn.parts is not None
+    # Narration text part plus the function call, both carrying the re-query
+    # signature, which is the shape a single full-mode Gemini reply produces.
+    assert [part.text for part in model_turn.parts] == ["选择工具", None]
+    assert model_turn.parts[1].function_call.args == {"query": "actual"}
+    assert [part.thought_signature for part in model_turn.parts] == [
+        b"actual-call",
+        b"actual-call",
     ]
-    assert len(function_parts) == 1
-    assert function_parts[0].function_call.args == {"query": "actual"}
-    assert function_parts[0].thought_signature == b"actual-call"
 
 
 @pytest.mark.asyncio
