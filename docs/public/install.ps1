@@ -198,8 +198,7 @@ switch ($DownloadSource) {
     'china' {
         # Use uv mirrors listed by MirrorZ; the release-directory layout is not GitHub's layout.
         $uvMirrorUrls = @(
-            'https://mirrors.ustc.edu.cn/github-release/astral-sh/uv/LatestRelease',
-            'https://mirror.nyist.edu.cn/github-release/astral-sh/uv/LatestRelease'
+            'https://mirrors.ustc.edu.cn/github-release/astral-sh/uv/LatestRelease'
         )
         $PypiIndexUrl = 'https://mirrors.cernet.edu.cn/pypi/web/simple/'
     }
@@ -261,6 +260,42 @@ function Test-Command {
     return $?
 }
 
+function Test-ZipArchive {
+    param([string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path) -or (Get-Item -LiteralPath $Path).Length -lt 4) {
+        return $false
+    }
+
+    $stream = [System.IO.File]::OpenRead($Path)
+    try {
+        return $stream.ReadByte() -eq 0x50 -and
+            $stream.ReadByte() -eq 0x4B -and
+            $stream.ReadByte() -eq 0x03 -and
+            $stream.ReadByte() -eq 0x04
+    } finally {
+        $stream.Dispose()
+    }
+}
+
+function Invoke-UvToolInstall {
+    param([string[]]$ArgumentList)
+
+    $uvCommand = Get-Command 'uv' -ErrorAction Stop
+    if ($uvCommand.CommandType -ne 'Application') {
+        # This path also makes the installer straightforward to test without
+        # downloading packages or changing the developer machine.
+        & $uvCommand @ArgumentList
+        return $LASTEXITCODE
+    }
+
+    # PowerShell may otherwise give console programs their own window in some
+    # hosts. Explicitly keep uv and all of its installation output in this one.
+    $process = Start-Process -FilePath $uvCommand.Source -ArgumentList $ArgumentList `
+        -NoNewWindow -Wait -PassThru
+    return $process.ExitCode
+}
+
 function Update-UvPath {
     $candidateDirs = @()
 
@@ -293,64 +328,93 @@ function Install-Uv {
     $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString())
     $null = New-Item -ItemType Directory -Path $tempDir
     try {
-        if ($uvMirrorUrls.Count -gt 0) {
-            # PROCESSOR_ARCHITEW6432 identifies the native OS when PowerShell is emulated.
-            $nativeArch = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
-            $arch = switch ($nativeArch) {
-                'AMD64' { 'x86_64' }
-                'x86' { 'i686' }
-                'ARM64' { 'aarch64' }
-                default { throw ($Text.UnsupportedArch -f $_) }
-            }
-            $artifact = "uv-$arch-pc-windows-msvc.zip"
-            foreach ($baseUrl in $uvMirrorUrls) {
-                try {
-                    Info ($Text.TryingMirror -f $baseUrl)
-                    $archive = Join-Path $tempDir $artifact
-                    $checksumFile = Join-Path $tempDir "$artifact.sha256"
-                    Invoke-WebRequest -Uri "$baseUrl/$artifact" -OutFile $archive -TimeoutSec 60 -UseBasicParsing
-                    Invoke-WebRequest -Uri "$baseUrl/$artifact.sha256" -OutFile $checksumFile -TimeoutSec 30 -UseBasicParsing
-                    $expectedHash = ((Get-Content $checksumFile -Raw).Trim() -split '\s+')[0]
-                    if ($expectedHash -notmatch '^[a-fA-F0-9]{64}$' -or
-                        (Get-FileHash $archive -Algorithm SHA256).Hash -ne $expectedHash) {
-                        throw $Text.InvalidChecksum
-                    }
-                    $unpacked = Join-Path $tempDir 'unpacked'
-                    Expand-Archive -Path $archive -DestinationPath $unpacked -Force
-                    if (-not (Test-Path (Join-Path $unpacked 'uv.exe')) -or
-                        -not (Test-Path (Join-Path $unpacked 'uvx.exe'))) {
-                        throw $Text.MissingBinaries
-                    }
-                } catch {
-                    Warn ($Text.MirrorFailed -f $_.Exception.Message)
-                    Remove-Item (Join-Path $tempDir 'unpacked') -Recurse -Force -ErrorAction SilentlyContinue
-                    continue
-                }
-
-                # Respect uv's installation directory settings when using a mirror too.
-                $installDir = if ($env:UV_INSTALL_DIR) { $env:UV_INSTALL_DIR }
-                    elseif ($env:UV_UNMANAGED_INSTALL) { $env:UV_UNMANAGED_INSTALL }
-                    elseif ($env:XDG_BIN_HOME) { $env:XDG_BIN_HOME }
-                    elseif ($env:XDG_DATA_HOME) { Join-Path $env:XDG_DATA_HOME '..\bin' }
-                    else { Join-Path $env:USERPROFILE '.local\bin' }
-                $null = New-Item -ItemType Directory -Path $installDir -Force
-                Copy-Item (Join-Path $unpacked '*.exe') -Destination $installDir -Force
-                $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-                if (-not $env:UV_UNMANAGED_INSTALL -and -not $env:INSTALLER_NO_MODIFY_PATH -and
-                    ($userPath -split ';') -notcontains $installDir) {
-                    [Environment]::SetEnvironmentVariable('Path', "$installDir;$userPath", 'User')
-                }
-                Update-UvPath
-                return
-            }
+        # PROCESSOR_ARCHITEW6432 identifies the native OS when PowerShell is emulated.
+        $nativeArch = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
+        $arch = switch ($nativeArch) {
+            'AMD64' { 'x86_64' }
+            'x86' { 'i686' }
+            'ARM64' { 'aarch64' }
+            default { throw ($Text.UnsupportedArch -f $_) }
         }
+        $artifact = "uv-$arch-pc-windows-msvc.zip"
+        $officialBaseUrl = 'https://github.com/astral-sh/uv/releases/latest/download'
+        foreach ($baseUrl in @($uvMirrorUrls) + $officialBaseUrl) {
+            try {
+                if ($baseUrl -eq $officialBaseUrl) {
+                    Info "$($Text.Official): $officialBaseUrl"
+                } else {
+                    Info ($Text.TryingMirror -f $baseUrl)
+                }
+                $archive = Join-Path $tempDir $artifact
+                $checksumFile = Join-Path $tempDir "$artifact.sha256"
+                Invoke-WebRequest -Uri "$baseUrl/$artifact" -OutFile $archive -TimeoutSec 90 -UseBasicParsing
 
-        Info $Text.OfficialFallback
-        $tempScript = Join-Path $tempDir 'uv-install.ps1'
-        Invoke-WebRequest -Uri "https://astral.sh/uv/install.ps1" -OutFile $tempScript -UseBasicParsing
-        & $tempScript
-        if (-not $?) { throw $Text.UvFailed }
-        Update-UvPath
+                # USTC protects larger release assets with a lightweight
+                # JavaScript cookie check. Reproduce that single documented
+                # browser step when its verification page is returned.
+                if (-not (Test-ZipArchive $archive) -and
+                    ([Uri]$baseUrl).Host -eq 'mirrors.ustc.edu.cn') {
+                    $challengePage = [System.IO.File]::ReadAllText($archive)
+                    $addressMatch = [regex]::Match(
+                        $challengePage,
+                        'document\.cookie\s*=\s*"addr=([0-9A-Fa-f:.]+);'
+                    )
+                    if ($addressMatch.Success) {
+                        # Windows PowerShell 5.1 silently drops a manually set
+                        # Cookie header. A WebRequestSession works in both 5.1
+                        # and modern PowerShell.
+                        $webSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+                        $cookie = New-Object System.Net.Cookie(
+                            'addr',
+                            $addressMatch.Groups[1].Value,
+                            '/',
+                            'mirrors.ustc.edu.cn'
+                        )
+                        $webSession.Cookies.Add($cookie)
+                        Invoke-WebRequest -Uri "$baseUrl/$artifact" -OutFile $archive `
+                            -WebSession $webSession `
+                            -TimeoutSec 90 -UseBasicParsing
+                    }
+                }
+
+                if (-not (Test-ZipArchive $archive)) {
+                    throw $Text.InvalidChecksum
+                }
+                Invoke-WebRequest -Uri "$baseUrl/$artifact.sha256" -OutFile $checksumFile -TimeoutSec 30 -UseBasicParsing
+                $expectedHash = ((Get-Content $checksumFile -Raw).Trim() -split '\s+')[0]
+                if ($expectedHash -notmatch '^[a-fA-F0-9]{64}$' -or
+                    (Get-FileHash $archive -Algorithm SHA256).Hash -ne $expectedHash) {
+                    throw $Text.InvalidChecksum
+                }
+                $unpacked = Join-Path $tempDir 'unpacked'
+                Expand-Archive -Path $archive -DestinationPath $unpacked -Force
+                if (-not (Test-Path (Join-Path $unpacked 'uv.exe')) -or
+                    -not (Test-Path (Join-Path $unpacked 'uvx.exe'))) {
+                    throw $Text.MissingBinaries
+                }
+            } catch {
+                Warn ($Text.MirrorFailed -f $_.Exception.Message)
+                Remove-Item (Join-Path $tempDir 'unpacked') -Recurse -Force -ErrorAction SilentlyContinue
+                continue
+            }
+
+            # Respect uv's installation directory settings for every source.
+            $installDir = if ($env:UV_INSTALL_DIR) { $env:UV_INSTALL_DIR }
+                elseif ($env:UV_UNMANAGED_INSTALL) { $env:UV_UNMANAGED_INSTALL }
+                elseif ($env:XDG_BIN_HOME) { $env:XDG_BIN_HOME }
+                elseif ($env:XDG_DATA_HOME) { Join-Path $env:XDG_DATA_HOME '..\bin' }
+                else { Join-Path $env:USERPROFILE '.local\bin' }
+            $null = New-Item -ItemType Directory -Path $installDir -Force
+            Copy-Item (Join-Path $unpacked '*.exe') -Destination $installDir -Force
+            $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+            if (-not $env:UV_UNMANAGED_INSTALL -and -not $env:INSTALLER_NO_MODIFY_PATH -and
+                ($userPath -split ';') -notcontains $installDir) {
+                [Environment]::SetEnvironmentVariable('Path', "$installDir;$userPath", 'User')
+            }
+            Update-UvPath
+            return
+        }
+        throw $Text.UvFailed
     } catch {
         Err $_.Exception.Message
         Err $Text.UvFailed
@@ -394,8 +458,10 @@ $previousPythonMirror = $env:UV_PYTHON_INSTALL_MIRROR
 try {
     if ($PythonInstallMirror) { $env:UV_PYTHON_INSTALL_MIRROR = $PythonInstallMirror }
     Info $Text.InstallingAstrBot
-    uv tool install --python 3.12 astrbot --default-index $PypiIndexUrl
-    if ($LASTEXITCODE -ne 0 -and $PythonInstallMirror) {
+    $toolInstallExitCode = Invoke-UvToolInstall -ArgumentList @(
+        'tool', 'install', '--python', '3.12', 'astrbot', '--default-index', $PypiIndexUrl
+    )
+    if ($toolInstallExitCode -ne 0 -and $PythonInstallMirror) {
         $pythonFallback = switch ($Language) {
             'zh-CN' { $bootstrapText.PythonFallbackChinese }
             'ja-JP' { $bootstrapText.PythonFallbackJapanese }
@@ -403,11 +469,13 @@ try {
         }
         Warn $pythonFallback
         $env:UV_PYTHON_INSTALL_MIRROR = $null
-        uv tool install --python 3.12 astrbot --default-index $PypiIndexUrl
+        $toolInstallExitCode = Invoke-UvToolInstall -ArgumentList @(
+            'tool', 'install', '--python', '3.12', 'astrbot', '--default-index', $PypiIndexUrl
+        )
     }
-    if ($LASTEXITCODE -ne 0) {
-        Err ($Text.AstrBotFailed -f $LASTEXITCODE)
-        exit $LASTEXITCODE
+    if ($toolInstallExitCode -ne 0) {
+        Err ($Text.AstrBotFailed -f $toolInstallExitCode)
+        exit $toolInstallExitCode
     }
     Ok $Text.Installed
     $nextSteps = switch ($Language) {

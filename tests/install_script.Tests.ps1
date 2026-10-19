@@ -37,6 +37,41 @@ if ($ast.Extent.Text -notmatch '\$bootstrapCompressed = \[Convert\]::FromBase64S
     $ast.Extent.Text -notmatch 'if \(\$Language -eq ''zh-CN''\) \{ ''1'' \} else \{ ''2'' \}') {
     throw 'The bootstrap menu must remain ASCII-only, default to English, and select the source default by language.'
 }
+if ($ast.Extent.Text -match 'mirror\.nyist\.edu\.cn' -or
+    $ast.Extent.Text -match 'https://astral\.sh/uv/install\.ps1' -or
+    $ast.Extent.Text -notmatch 'https://github\.com/astral-sh/uv/releases/latest/download' -or
+    $ast.Extent.Text -notmatch 'Microsoft\.PowerShell\.Commands\.WebRequestSession' -or
+    $ast.Extent.Text -notmatch '-NoNewWindow -Wait -PassThru') {
+    throw 'uv must use the verified ZIP flow, support the USTC cookie challenge, and keep installation in the current window.'
+}
+
+$zipFunctionAst = $ast.Find({
+    param($node)
+    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+        $node.Name -eq 'Test-ZipArchive'
+}, $true)
+if (-not $zipFunctionAst) { throw 'Test-ZipArchive is missing.' }
+Invoke-Expression $zipFunctionAst.Extent.Text
+
+$archiveTestDir = Join-Path ([System.IO.Path]::GetTempPath()) ("astrbot-install-test-{0}" -f [guid]::NewGuid())
+$null = New-Item -ItemType Directory -Path $archiveTestDir
+try {
+    $validArchive = Join-Path $archiveTestDir 'valid.zip'
+    $htmlResponse = Join-Path $archiveTestDir 'verification.html'
+    $shortFile = Join-Path $archiveTestDir 'short.bin'
+    [System.IO.File]::WriteAllBytes($validArchive, [byte[]](0x50, 0x4B, 0x03, 0x04))
+    [System.IO.File]::WriteAllText($htmlResponse, '<!doctype html><title>Verifying</title>')
+    [System.IO.File]::WriteAllBytes($shortFile, [byte[]](0x50, 0x4B, 0x03))
+    if (-not (Test-ZipArchive $validArchive) -or
+        (Test-ZipArchive $htmlResponse) -or
+        (Test-ZipArchive $shortFile) -or
+        (Test-ZipArchive (Join-Path $archiveTestDir 'missing.zip'))) {
+        throw 'ZIP signature validation did not accept only a valid archive signature.'
+    }
+} finally {
+    Remove-Item -LiteralPath $archiveTestDir -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item Function:\Test-ZipArchive -ErrorAction SilentlyContinue
+}
 
 $global:UvArguments = @()
 $global:UvPythonMirrors = @()
@@ -100,6 +135,30 @@ try {
 } finally {
     $env:UV_PYTHON_INSTALL_MIRROR = $previousPythonMirror
     Remove-Item Function:\uv -ErrorAction SilentlyContinue
+}
+
+$uvInstallFunctionAst = $ast.Find({
+    param($node)
+    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+        $node.Name -eq 'Invoke-UvToolInstall'
+}, $true)
+if (-not $uvInstallFunctionAst) { throw 'Invoke-UvToolInstall is missing.' }
+Invoke-Expression $uvInstallFunctionAst.Extent.Text
+
+$applicationTestDir = Join-Path ([System.IO.Path]::GetTempPath()) ("astrbot-uv-process-test-{0}" -f [guid]::NewGuid())
+$null = New-Item -ItemType Directory -Path $applicationTestDir
+$previousPath = $env:PATH
+try {
+    Copy-Item -LiteralPath "$env:SystemRoot\System32\cmd.exe" -Destination (Join-Path $applicationTestDir 'uv.exe')
+    $env:PATH = "$applicationTestDir;$env:PATH"
+    $exitCode = Invoke-UvToolInstall -ArgumentList @('/d', '/c', 'exit', '0')
+    if ($exitCode -ne 0) {
+        throw "The no-new-window uv process path returned exit code $exitCode."
+    }
+} finally {
+    $env:PATH = $previousPath
+    Remove-Item -LiteralPath $applicationTestDir -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item Function:\Invoke-UvToolInstall -ErrorAction SilentlyContinue
 }
 
 Write-Host "install.ps1 passed direct-file and Invoke-Expression tests on $($PSVersionTable.PSEdition) $($PSVersionTable.PSVersion)."
