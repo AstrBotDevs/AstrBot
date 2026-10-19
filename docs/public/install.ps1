@@ -40,7 +40,7 @@ $CanPrompt = -not $NonInteractive -and [Environment]::UserInteractive -and -not 
 # Keep the first-run experience predictable across machines. Users can still
 # choose Chinese or Japanese explicitly in the language menu.
 $bootstrapCompressed = [Convert]::FromBase64String(
-    'H4sIAAAAAAAACqtW8knMSy9NTE8NKMrPLShRslIKTs1JTS5RyIGKK+grvFi//WVD57PulS/Wr32xogEksqLhxap5j5smvWzc8axr3uPG6Y8blz1u7H/cuOBx49THjS1KOkrOGZl5qcWpSlZKz9c1PNk7+cmOtc+mtSvpKLnmpedkFmcoWcFZOkpeiQWJUNXPpi99NmfNi1XzlGoBBSle6p4AAAA='
+    'H4sIAAAAAAAACqtW8swrLknMyUktCsksyUlVslL6ML+nR8GxuKTIKb9EAS6rpKPkk5iXXpqYnhpQlJ9bUKJkpRScmpOaXKKQAxVX0Fd4sX77y4bOZ90rX6xf+2JFA0hkRcOLVfMeN0162bjjWde8x43THzcue9zY/7hxwePGqY8bW5R0lJwzMvNSi0F2P1/X8GTv5Cc71j6b1q6ko+Sal56TWZyhZAVn6Sh5JRYkQlU/m7702Zw1L1bNU6oFAAIYB+vIAAAA'
 )
 $bootstrapInput = New-Object System.IO.MemoryStream(,$bootstrapCompressed)
 $bootstrapGzip = New-Object System.IO.Compression.GZipStream(
@@ -58,12 +58,14 @@ if (-not $Language) {
     if ($CanPrompt) {
         $languages = @('en-US', 'zh-CN', 'ja-JP')
         $defaultChoice = [array]::IndexOf($languages, $Language) + 1
-        Write-Host "`n$($bootstrapText.LanguagePrompt)"
-        Write-Host "  1. $($bootstrapText.English)"
-        Write-Host "  2. $($bootstrapText.Chinese)"
-        Write-Host "  3. $($bootstrapText.Japanese)"
+        Write-Host "`n  $($bootstrapText.InstallerTitle)" -ForegroundColor Cyan
+        Write-Host '  -----------------------' -ForegroundColor DarkGray
+        Write-Host "`n  $($bootstrapText.LanguagePrompt)"
+        Write-Host "    1. $($bootstrapText.English)"
+        Write-Host "    2. $($bootstrapText.Chinese)"
+        Write-Host "    3. $($bootstrapText.Japanese)"
         do {
-            $choice = Read-Host "1-3 [$defaultChoice]"
+            $choice = Read-Host "  1-3 [$defaultChoice]"
         } until ($choice -eq '' -or $choice -in @('1', '2', '3'))
         if ($choice) { $Language = $languages[[int]$choice - 1] }
     }
