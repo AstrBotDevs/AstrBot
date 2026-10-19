@@ -1221,7 +1221,15 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
             try:
                 if not req.func_tool:
-                    return
+                    logger.warning("No function tools are available for %s.", func_tool_name)
+                    _append_tool_call_result(
+                        func_tool_id,
+                        "error: No tools are available to execute this call."
+                        + self._build_repeated_tool_call_guidance(
+                            func_tool_name, tool_call_streak
+                        ),
+                    )
+                    continue
 
                 if (
                     self.tool_schema_mode == "skills_like"
@@ -1426,7 +1434,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     "Tool `%s` returned no result; adding a fallback tool receipt.",
                     func_tool_name,
                 )
-                _append_tool_call_result(func_tool_id, "The tool returned no result.")
+                _append_tool_call_result(
+                    func_tool_id,
+                    "The tool returned no result."
+                    + self._build_repeated_tool_call_guidance(
+                        func_tool_name, tool_call_streak
+                    ),
+                )
 
             if len(tool_call_result_blocks) > tool_result_blocks_start:
                 tool_result_content = str(tool_call_result_blocks[-1].content)
