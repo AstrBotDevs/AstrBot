@@ -39,14 +39,24 @@ if ($ast.Extent.Text -notmatch '\$bootstrapCompressed = \[Convert\]::FromBase64S
 }
 
 $global:UvArguments = @()
+$global:UvPythonMirrors = @()
+$global:FailNextToolInstall = $false
 function global:uv {
     $global:UvArguments += ,@($args)
     $global:LASTEXITCODE = 0
     if ($args.Count -eq 1 -and $args[0] -eq '--version') {
         'uv test-version'
+    } elseif ($args.Count -gt 1 -and $args[0] -eq 'tool' -and $args[1] -eq 'install') {
+        $global:UvPythonMirrors += [string]$env:UV_PYTHON_INSTALL_MIRROR
+        if ($global:FailNextToolInstall) {
+            $global:FailNextToolInstall = $false
+            $global:LASTEXITCODE = 1
+        }
     }
 }
 
+$previousPythonMirror = $env:UV_PYTHON_INSTALL_MIRROR
+$env:UV_PYTHON_INSTALL_MIRROR = $null
 try {
     & $scriptPath -Language en-US -DownloadSource official -NonInteractive
     if ($LASTEXITCODE -ne 0) {
@@ -60,24 +70,36 @@ try {
     if ($LASTEXITCODE -ne 0) {
         throw "Invoke-Expression execution failed with exit code $LASTEXITCODE."
     }
+    $versionCalls = @($global:UvArguments | Where-Object { $_.Count -eq 1 -and $_[0] -eq '--version' })
+    $installCalls = @($global:UvArguments | Where-Object {
+        $_.Count -eq 7 -and
+        $_[0] -eq 'tool' -and
+        $_[1] -eq 'install' -and
+        $_[2] -eq '--python' -and
+        $_[3] -eq '3.12' -and
+        $_[4] -eq 'astrbot' -and
+        $_[5] -eq '--default-index' -and
+        $_[6] -eq 'https://pypi.org/simple/'
+    })
+    if ($versionCalls.Count -ne 2 -or $installCalls.Count -ne 2) {
+        throw "Expected both execution modes to reach uv; got $($versionCalls.Count) version calls and $($installCalls.Count) install calls."
+    }
+
+    $global:FailNextToolInstall = $true
+    & $scriptPath -Language zh-CN -DownloadSource china -NonInteractive
+    if ($LASTEXITCODE -ne 0) {
+        throw "China mirror fallback failed with exit code $LASTEXITCODE."
+    }
+    $fallbackMirrors = @($global:UvPythonMirrors | Select-Object -Last 2)
+    $ustcMirror = 'https://mirrors.ustc.edu.cn/github-release/astral-sh/python-build-standalone/'
+    if ($fallbackMirrors.Count -ne 2 -or
+        $fallbackMirrors[0] -ne $ustcMirror -or
+        $fallbackMirrors[1] -ne '') {
+        throw "Expected USTC then official Python sources; got: $($fallbackMirrors -join ', ')"
+    }
 } finally {
+    $env:UV_PYTHON_INSTALL_MIRROR = $previousPythonMirror
     Remove-Item Function:\uv -ErrorAction SilentlyContinue
-}
-
-$versionCalls = @($global:UvArguments | Where-Object { $_.Count -eq 1 -and $_[0] -eq '--version' })
-$installCalls = @($global:UvArguments | Where-Object {
-    $_.Count -eq 7 -and
-    $_[0] -eq 'tool' -and
-    $_[1] -eq 'install' -and
-    $_[2] -eq '--python' -and
-    $_[3] -eq '3.12' -and
-    $_[4] -eq 'astrbot' -and
-    $_[5] -eq '--default-index' -and
-    $_[6] -eq 'https://pypi.org/simple/'
-})
-
-if ($versionCalls.Count -ne 2 -or $installCalls.Count -ne 2) {
-    throw "Expected both execution modes to reach uv; got $($versionCalls.Count) version calls and $($installCalls.Count) install calls."
 }
 
 Write-Host "install.ps1 passed direct-file and Invoke-Expression tests on $($PSVersionTable.PSEdition) $($PSVersionTable.PSVersion)."

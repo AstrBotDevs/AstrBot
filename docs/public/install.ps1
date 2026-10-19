@@ -41,7 +41,7 @@ $Indent = '  '
 # Keep the first-run experience predictable across machines. Users can still
 # choose Chinese or Japanese explicitly in the language menu.
 $bootstrapCompressed = [Convert]::FromBase64String(
-    'H4sIAAAAAAAACmVQXUsCQRT9K8N9Xuh93yp6KCIC+wOLDSqsq+yOEESwE5HpDhmGCpEfC62aX/vYgtWfmZ1xfKqfEEumQm/3nnvuOYdzCYeWQwzTxPZZjpgYdPjuMoZ2HWLvFQhaX0GDY8PKlIwMPrUL+SIBHVLYxGmCzBWOdpAK35ZuRXqvKpyqoZsgQ1eNOvy6vqSRrHY4bXHa57TGaY/TBqc3oMF+NmdhJ/FezNz44zGOprJZBg0OrIyZc7KgrycNjoyisWLLViCfJ2rUAQ1O8AVJEVx0Nj8JpCG7ZCGSxQ5G6UI+b1jnjr5N33jL+yCOPNkORC2M50H82ZYTX1YGymfJGnmSleP5S0K4a4uBJ1hT1Jl4CEV1+NfX1/vTtvh21onP6Zi79FcrKaR3u2iMOB2LWVf57H8zidjVDw7uGtmhAQAA'
+    'H4sIAAAAAAAACmWQ3W4SQRzFX2Uy1xu8xys1mmiMIakvsNKB3bjskt0htTEmO1AL7S7S1ABq+CiW5at82MREaqEP4+xMh6v6CGZaLCQkczFz5szvP+e8h89NB6uGgezXOjYQjMK/Td8HjxxsP7YwuL+FCnypmsmMmkQx20qlMYzCLWSgOAbGUgcPgJj8WrgH3OuLyUj0XKn0XDFo0Ozxgkz5YYOSKiUdSkqUnFBSpmQPKvCJppvIkbOvx244/xxOR7yShwp8aiYN3dFg9H6nwBdqWl26eTXgtaEYNKACX6F3eAujtLN6IyUF2BkTYA05CMStVEo1t53oun01m38KwqnH6wErTcLLILyq82GLH3RFy5fHqcf9fHjZloZCnXU95lfYsc+OJuyw97+vm9m3dfj6X4ctSs6oS+5YspCT/evygJIzNm6Klr/ZzB0stos1y3ymGsYbNf52lS52q4OUbtuWDRKqbqDth8BG2N7VzSTY0bEmcwMrkdDjumoAx8rYcRSJRDagqw6W0EW5xnKlcOqJ+Zy1z8XP4Gbm89Epq/VYIc+L31nhBxt/4ZUL/vtokS+KSfmP29ngrsVfgmmuSXN9mpvJ2O1zXq7exm7KlSXUJezjkM1KNDuXnuwFJV22XxT9zlpBe5RcUfJVDvzwD6o1noa/AgAA'
 )
 $bootstrapInput = New-Object System.IO.MemoryStream(,$bootstrapCompressed)
 $bootstrapGzip = New-Object System.IO.Compression.GZipStream(
@@ -177,7 +177,7 @@ $messages = @{
 $Text = $messages.$Language
 
 if (-not $DownloadSource) {
-    $DownloadSource = 'official'
+    $DownloadSource = if ($Language -eq 'zh-CN') { 'china' } else { 'official' }
     if ($CanPrompt) {
         $defaultChoice = if ($Language -eq 'zh-CN') { '1' } else { '2' }
         Write-Host "`n$Indent$($Text.ChooseSource)"
@@ -213,6 +213,14 @@ switch ($DownloadSource) {
             throw $Text.CustomRequired
         }
         $uvMirrorUrls = @($UvDownloadBaseUrl.TrimEnd('/'))
+    }
+}
+
+if (-not $PythonInstallMirror) {
+    if ($env:UV_PYTHON_INSTALL_MIRROR) {
+        $PythonInstallMirror = $env:UV_PYTHON_INSTALL_MIRROR
+    } elseif ($DownloadSource -eq 'china') {
+        $PythonInstallMirror = 'https://mirrors.ustc.edu.cn/github-release/astral-sh/python-build-standalone/'
     }
 }
 
@@ -376,7 +384,6 @@ if (-not (Test-Command "uv")) {
 Ok (& uv --version)
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-if (-not $PythonInstallMirror) { $PythonInstallMirror = $env:UV_PYTHON_INSTALL_MIRROR }
 if ($PythonInstallMirror) {
     Info ($Text.PythonMirror -f $PythonInstallMirror)
 } else {
@@ -388,6 +395,16 @@ try {
     if ($PythonInstallMirror) { $env:UV_PYTHON_INSTALL_MIRROR = $PythonInstallMirror }
     Info $Text.InstallingAstrBot
     uv tool install --python 3.12 astrbot --default-index $PypiIndexUrl
+    if ($LASTEXITCODE -ne 0 -and $PythonInstallMirror) {
+        $pythonFallback = switch ($Language) {
+            'zh-CN' { $bootstrapText.PythonFallbackChinese }
+            'ja-JP' { $bootstrapText.PythonFallbackJapanese }
+            default { $bootstrapText.PythonFallbackEnglish }
+        }
+        Warn $pythonFallback
+        $env:UV_PYTHON_INSTALL_MIRROR = $null
+        uv tool install --python 3.12 astrbot --default-index $PypiIndexUrl
+    }
     if ($LASTEXITCODE -ne 0) {
         Err ($Text.AstrBotFailed -f $LASTEXITCODE)
         exit $LASTEXITCODE
