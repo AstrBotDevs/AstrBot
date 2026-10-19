@@ -37,11 +37,9 @@ try {
 $UseColor = [string]::IsNullOrEmpty($env:NO_COLOR) -and [Console]::IsOutputRedirected -eq $false
 $CanPrompt = -not $NonInteractive -and [Environment]::UserInteractive -and -not [Console]::IsInputRedirected
 
-$defaultLanguage = switch -Wildcard ((Get-UICulture).Name) {
-    'zh*' { 'zh-CN' }
-    'ja*' { 'ja-JP' }
-    default { 'en-US' }
-}
+# Keep the first-run experience predictable across machines. Users can still
+# choose Chinese or Japanese explicitly in the language menu.
+$defaultLanguage = 'en-US'
 
 if (-not $Language) {
     $Language = $defaultLanguage
