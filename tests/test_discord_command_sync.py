@@ -55,3 +55,23 @@ async def test_discord_command_sync_ignores_daily_quota(monkeypatch):
     adapter.client.sync_commands.assert_awaited_once()
     warning.assert_called_once()
     assert "30034" in warning.call_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_discord_command_sync_skips_handler_outside_star_map(monkeypatch):
+    from astrbot.core.platform.sources.discord import discord_platform_adapter
+
+    adapter = _build_adapter(monkeypatch)
+    handler_md = Mock(
+        handler_module_path="data.plugins.example.submodule",
+        enabled=True,
+        event_filters=[],
+    )
+    monkeypatch.setattr(
+        discord_platform_adapter, "star_handlers_registry", [handler_md]
+    )
+    monkeypatch.setattr(discord_platform_adapter, "star_map", {})
+
+    await adapter._collect_and_register_commands()
+
+    adapter.client.sync_commands.assert_awaited_once()

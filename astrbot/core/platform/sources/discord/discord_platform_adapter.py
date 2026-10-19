@@ -472,7 +472,9 @@ class DiscordPlatformAdapter(Platform):
         registered_commands = []
 
         for handler_md in star_handlers_registry:
-            if not star_map[handler_md.handler_module_path].activated:
+            # Handlers defined in plugin submodules (e.g. mixins) are not keyed in star_map
+            plugin = star_map.get(handler_md.handler_module_path)
+            if not (plugin and plugin.activated):
                 continue
             if not handler_md.enabled:
                 continue
