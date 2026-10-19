@@ -1,4 +1,5 @@
 import copy
+import json
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import Any, Generic
 
@@ -302,6 +303,25 @@ class ToolSet:
                 "required",
             }
             result.update({k: schema[k] for k in support_fields if k in schema})
+
+            # Gemini only accepts string enums ("enum: only allowed for STRING
+            # type"). Other fields keep their type, so the model still sends
+            # e.g. an integer, and list the allowed values in the description.
+            if "enum" in result:
+                enum = result.pop("enum")
+                values = [v for v in enum if v is not None]
+                if None in enum:
+                    result["nullable"] = True
+                if result["type"] == "string":
+                    result["enum"] = [
+                        v if isinstance(v, str) else json.dumps(v) for v in values
+                    ]
+                else:
+                    allowed = ", ".join(json.dumps(v) for v in values)
+                    description = result.get("description", "")
+                    result["description"] = (
+                        f"{description}\nAllowed values: {allowed}".strip()
+                    )
 
             if "properties" in schema:
                 properties = {}
