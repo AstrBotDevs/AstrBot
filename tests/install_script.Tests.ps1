@@ -30,8 +30,8 @@ if (-not $ast.ParamBlock) {
 if ($ast.Extent.Text -notmatch 'Write-Host "`nSelect language"' -or
     $ast.Extent.Text -notmatch "Write-Host '  1\. Chinese \(Simplified\)'" -or
     $ast.Extent.Text -notmatch "Write-Host '  3\. Japanese'" -or
-    $ast.Extent.Text -notmatch "\$defaultLanguage = 'en-US'" -or
-    $ast.Extent.Text -notmatch "if \(\$Language -eq 'zh-CN'\) \{ '1' \} else \{ '2' \}") {
+    $ast.Extent.Text -notmatch '\$defaultLanguage = ''en-US''' -or
+    $ast.Extent.Text -notmatch 'if \(\$Language -eq ''zh-CN''\) \{ ''1'' \} else \{ ''2'' \}') {
     throw 'The bootstrap menu must remain ASCII-only, default to English, and select the source default by language.'
 }
 
