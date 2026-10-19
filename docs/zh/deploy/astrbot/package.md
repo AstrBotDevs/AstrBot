@@ -40,9 +40,22 @@ Invoke-WebRequest https://docs.astrbot.app/install.ps1 -OutFile install.ps1 -Use
 
 选择中国大陆源时，脚本也会为 Python 3.12 配置 USTC 镜像，失败后使用官方 Python 源重试。已有的 Python 镜像环境变量或显式参数优先。
 
-## 启动 AstrBot
+## 安装完成后
 
-首次使用时初始化目录，之后直接启动：
+安装脚本会自动执行 `uv tool update-shell`。请根据你使用的终端重新加载环境：
+
+```bash
+# Bash
+source ~/.bashrc
+# Zsh
+source ~/.zshrc
+# Fish
+source ~/.config/fish/config.fish
+# PowerShell
+. $PROFILE
+```
+
+重新加载后，手动运行：
 
 ```bash
 astrbot init

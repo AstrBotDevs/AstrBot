@@ -40,9 +40,22 @@ Invoke-WebRequest https://docs.astrbot.app/install.ps1 -OutFile install.ps1 -Use
 
 The mainland China option also configures the USTC mirror for Python 3.12 and retries with the official Python source on failure. Existing Python mirror environment variables or explicit options take priority.
 
-## Start AstrBot
+## After Installation
 
-Initialize the directory once, then start AstrBot:
+The installer runs `uv tool update-shell`. Reload the environment for your shell:
+
+```bash
+# Bash
+source ~/.bashrc
+# Zsh
+source ~/.zshrc
+# Fish
+source ~/.config/fish/config.fish
+# PowerShell
+. $PROFILE
+```
+
+Then run these commands manually:
 
 ```bash
 astrbot init

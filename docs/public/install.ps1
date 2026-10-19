@@ -466,12 +466,23 @@ try {
         exit $toolInstallExitCode
     }
     Ok $Text.Installed
-    $nextSteps = switch ($Language) {
-        'zh-CN' { $bootstrapText.NextStepsChinese }
-        'ja-JP' { $bootstrapText.NextStepsJapanese }
-        default { $bootstrapText.NextStepsEnglish }
+    try { & uv tool update-shell *> $null } catch { }
+    $reloadShell = switch ($Language) {
+        'zh-CN' { '请根据你使用的终端重新加载环境：' }
+        'ja-JP' { '使用するシェルに合わせて環境を再読み込みしてください：' }
+        default { 'Reload the environment for your shell:' }
     }
-    Write-Host "`n$Indent$nextSteps"
+    $runCommands = switch ($Language) {
+        'zh-CN' { '重新加载后，请手动运行：' }
+        'ja-JP' { 'その後、以下のコマンドを手動で実行してください：' }
+        default { 'Then run these commands manually:' }
+    }
+    Write-Host "`n$Indent$reloadShell"
+    Write-Host "$($Indent)  Bash: source ~/.bashrc"
+    Write-Host "$($Indent)  Zsh: source ~/.zshrc"
+    Write-Host "$($Indent)  Fish: source ~/.config/fish/config.fish"
+    Write-Host "$($Indent)  PowerShell: . `$PROFILE"
+    Write-Host "`n$Indent$runCommands"
     Write-Host "$($Indent)$($Indent)astrbot init" -ForegroundColor Cyan
     Write-Host "$($Indent)$($Indent)astrbot run" -ForegroundColor Cyan
 } finally {

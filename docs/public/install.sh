@@ -127,7 +127,8 @@ message() {
     zh-CN:InstallingAstrBot) format='正在使用 Python 3.12 安装 AstrBot…' ;;
     zh-CN:AstrBotFailed) format='AstrBot 安装失败（退出码 %s）。请检查上方的下载或依赖错误。' ;;
     zh-CN:PythonFallback) format='Python 镜像下载失败，正在切换到官方源重试…' ;;
-    zh-CN:NextSteps) format='接下来可以依次执行以下指令来初始化和启动 AstrBot：' ;;
+    zh-CN:ReloadShell) format='请根据你使用的终端重新加载环境：' ;;
+    zh-CN:RunCommands) format='重新加载后，请手动运行：' ;;
     zh-CN:Installed) format='AstrBot 安装完成。' ;;
     en-US:ChooseSource) format='Select a download source' ;;
     en-US:China) format='Mainland China accelerated download mirrors' ;;
@@ -156,7 +157,8 @@ message() {
     en-US:InstallingAstrBot) format='Installing AstrBot with Python 3.12...' ;;
     en-US:AstrBotFailed) format='AstrBot installation failed (exit code %s). Check the download or dependency errors above.' ;;
     en-US:PythonFallback) format='Python mirror failed; retrying with the official source...' ;;
-    en-US:NextSteps) format='Next, run these commands:' ;;
+    en-US:ReloadShell) format='Reload the environment for your shell:' ;;
+    en-US:RunCommands) format='Then run these commands manually:' ;;
     en-US:Installed) format='AstrBot has been installed.' ;;
     ja-JP:ChooseSource) format='ダウンロード元を選択してください' ;;
     ja-JP:China) format='中国本土向け高速ダウンロードミラー' ;;
@@ -185,7 +187,8 @@ message() {
     ja-JP:InstallingAstrBot) format='Python 3.12 で AstrBot をインストールしています…' ;;
     ja-JP:AstrBotFailed) format='AstrBot のインストールに失敗しました（終了コード %s）。上記のダウンロードまたは依存関係のエラーを確認してください。' ;;
     ja-JP:PythonFallback) format='Python ミラーに失敗したため、公式ソースで再試行しています…' ;;
-    ja-JP:NextSteps) format='次に、以下を順番に実行してください：' ;;
+    ja-JP:ReloadShell) format='使用するシェルに合わせて環境を再読み込みしてください：' ;;
+    ja-JP:RunCommands) format='その後、以下のコマンドを手動で実行してください：' ;;
     ja-JP:Installed) format='AstrBot のインストールが完了しました。' ;;
     *) printf 'Unknown message: %s\n' "$key" >&2; return 1 ;;
   esac
@@ -436,5 +439,11 @@ if [ "$tool_install_exit_code" -ne 0 ]; then
   exit "$tool_install_exit_code"
 fi
 ok "$(message Installed)"
-printf '\n%s%s\n%s%sastrbot init%s\n%s%sastrbot run%s\n' \
-  "$indent" "$(message NextSteps)" "$indent$indent" "$CYAN" "$NC" "$indent$indent" "$CYAN" "$NC"
+uv tool update-shell >/dev/null 2>&1 || true
+printf '\n%s%s\n' "$indent" "$(message ReloadShell)"
+printf '%s  Bash: source ~/.bashrc\n' "$indent"
+printf '%s  Zsh: source ~/.zshrc\n' "$indent"
+printf '%s  Fish: source ~/.config/fish/config.fish\n' "$indent"
+printf '%s  PowerShell: . $PROFILE\n' "$indent"
+printf '\n%s%s\n%s  astrbot init\n%s  astrbot run\n' \
+  "$indent" "$(message RunCommands)" "$indent" "$indent"

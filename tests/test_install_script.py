@@ -26,6 +26,7 @@ PYTHON_MIRROR = (
 
 FAKE_UV = b"""#!/bin/bash
 if [ "$1" = --version ]; then printf 'uv fixture\\n'; exit 0; fi
+if [ "$1" = tool ] && [ "$2" = update-shell ]; then touch "$TEST_DIR/uv-update-shell"; exit 0; fi
 printf '%s\\n' "$@" > "$TEST_DIR/uv-args"
 printf '%s\\n' "${UV_PYTHON_INSTALL_MIRROR:-}" >> "$TEST_DIR/python-mirrors"
 if [ "${TEST_FAIL_ONCE:-0}" = 1 ] && [ ! -f "$TEST_DIR/failed-once" ]; then
@@ -235,9 +236,18 @@ class ShellInstallerTests(unittest.TestCase):
         status, output = self.run_installer(["--non-interactive"])
         self.assertEqual(status, 0, output)
         self.assert_install(OFFICIAL_INDEX, [""])
+        self.assertTrue((self.root / "uv-update-shell").exists())
         self.assertIn("  [INFO]    Download source: Official sources", output)
         self.assertIn(
-            "\n  Next, run these commands:\n    astrbot init\n    astrbot run\n", output
+            "\n  Reload the environment for your shell:\n"
+            "  Bash: source ~/.bashrc\n"
+            "  Zsh: source ~/.zshrc\n"
+            "  Fish: source ~/.config/fish/config.fish\n"
+            "  PowerShell: . $PROFILE\n\n"
+            "  Then run these commands manually:\n"
+            "    astrbot init\n"
+            "    astrbot run\n",
+            output,
         )
 
     def test_chinese_defaults_to_all_china_mirrors(self):
@@ -330,7 +340,7 @@ class ShellInstallerTests(unittest.TestCase):
         self.assertIn(
             "  番号を入力してください。Enter で既定値を使用します [2]:", output
         )
-        self.assertIn("  次に、以下を順番に実行してください：", output)
+        self.assertIn("  使用するシェルに合わせて環境を再読み込みしてください：", output)
         self.assert_install("https://pypi.example.com/simple/", [""])
 
     def test_official_archive_is_verified_without_installer_script(self):
