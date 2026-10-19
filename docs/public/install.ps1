@@ -39,6 +39,18 @@ $CanPrompt = -not $NonInteractive -and [Environment]::UserInteractive -and -not 
 
 # Keep the first-run experience predictable across machines. Users can still
 # choose Chinese or Japanese explicitly in the language menu.
+$bootstrapCompressed = [Convert]::FromBase64String(
+    'H4sIAAAAAAAACqtW8knMSy9NTE8NKMrPLShRslJ6sX77y4bOZ90rX6xf+2JFg4K+QnBqTmpyiUIOVKWCvsKLFQ0vVs173DTpZeOOZ13zHjdOf9y47HFj/+PGBY8bpz5ubFHSUXLOyMxLLU5VslJ6vq7hyd7JT3asfTatXUlHyTUvPSezOEPJCs7SUfJKLEiEqn42femzOWterJqnVAsAE4JdBJ4AAAA='
+)
+$bootstrapInput = New-Object System.IO.MemoryStream(,$bootstrapCompressed)
+$bootstrapGzip = New-Object System.IO.Compression.GZipStream(
+    $bootstrapInput,
+    [System.IO.Compression.CompressionMode]::Decompress
+)
+$bootstrapReader = New-Object System.IO.StreamReader($bootstrapGzip, [Text.Encoding]::UTF8)
+$bootstrapText = ConvertFrom-Json $bootstrapReader.ReadToEnd()
+$bootstrapReader.Dispose()
+
 $defaultLanguage = 'en-US'
 
 if (-not $Language) {
@@ -46,12 +58,10 @@ if (-not $Language) {
     if ($CanPrompt) {
         $languages = @('zh-CN', 'en-US', 'ja-JP')
         $defaultChoice = [array]::IndexOf($languages, $Language) + 1
-        # Keep this bootstrap prompt ASCII-only: PowerShell 5.1 can decode
-        # source text from Invoke-WebRequest using the system code page.
-        Write-Host "`nSelect language"
-        Write-Host '  1. Chinese (Simplified)'
-        Write-Host '  2. English'
-        Write-Host '  3. Japanese'
+        Write-Host "`n$($bootstrapText.LanguagePrompt)"
+        Write-Host "  1. $($bootstrapText.Chinese)"
+        Write-Host "  2. $($bootstrapText.English)"
+        Write-Host "  3. $($bootstrapText.Japanese)"
         do {
             $choice = Read-Host "1-3 [$defaultChoice]"
         } until ($choice -eq '' -or $choice -in @('1', '2', '3'))
