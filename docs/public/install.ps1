@@ -1,4 +1,4 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 
 # Install AstrBot with uv on Windows PowerShell.
 [CmdletBinding()]
@@ -44,6 +44,18 @@ if (-not $Language) {
     }
 }
 
+$compressedMessages = [Convert]::FromBase64String(
+    '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'
+)
+$messageInput = New-Object System.IO.MemoryStream(,$compressedMessages)
+$messageGzip = New-Object System.IO.Compression.GZipStream(
+    $messageInput,
+    [System.IO.Compression.CompressionMode]::Decompress
+)
+$messageReader = New-Object System.IO.StreamReader($messageGzip, [Text.Encoding]::UTF8)
+$messages = ConvertFrom-Json $messageReader.ReadToEnd()
+$messageReader.Dispose()
+<#
 $messages = @{
     'zh-CN' = @{
         ChooseSource = '请选择下载源'
@@ -133,7 +145,8 @@ $messages = @{
         Installed = 'AstrBot のインストールが完了しました。'
     }
 }
-$Text = $messages[$Language]
+#>
+$Text = $messages.$Language
 
 if (-not $DownloadSource) {
     $DownloadSource = 'official'

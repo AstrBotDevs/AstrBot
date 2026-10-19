@@ -1,0 +1,37 @@
+name: Test Windows install script
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'docs/public/install.ps1'
+      - 'tests/install_script.Tests.ps1'
+      - '.github/workflows/install_script_test.yml'
+  pull_request:
+    paths:
+      - 'docs/public/install.ps1'
+      - 'tests/install_script.Tests.ps1'
+      - '.github/workflows/install_script_test.yml'
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: ${{ matrix.name }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows PowerShell 5.1
+            shell: powershell
+          - name: PowerShell 7
+            shell: pwsh
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Test all supported invocation modes
+        shell: ${{ matrix.shell }}
+        run: .\tests\install_script.Tests.ps1
