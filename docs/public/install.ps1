@@ -41,7 +41,7 @@ $Indent = '  '
 # Keep the first-run experience predictable across machines. Users can still
 # choose Chinese or Japanese explicitly in the language menu.
 $bootstrapCompressed = [Convert]::FromBase64String(
-    'H4sIAAAAAAAACmWPzUrDQBSFX2W464D77FRcKCJCfYFQhySQPzJTEETIiCi1QUGpBbFps4i2adosG/DnZSZOpyt9BAmUNuDucu455+Ocw75DqGZZ2D8xqYVBhd9BGKJtQv0dl6L1FxQ41By9pen42Hdtj4IKDWzhJkXWSkdbSObzZdAWnbHMp3IUVMookGnELx+WrBC3EWc9zl45u+dsyFmXsytQYNcwHUwq9mIWlJ+PZTEVTzegwJ6jWyYxQF1fChxonrZyi14iXjKZRqDAET6jDYo9sslUkoL8loOogQlGTde2NeeUqHX7hi3ukrLoiH4i83n51RdZLNpvMg5/Pp7rgTo/izmb8ICV71W0Gjm8XnRTzibfs4GMw/9rq7KLP6djnXl1AQAA'
+    'H4sIAAAAAAAACmVQXUsCQRT9K8N9Xuh93yp6KCIC+wOLDSqsq+yOEESwE5HpDhmGCpEfC62aX/vYgtWfmZ1xfKqfEEumQm/3nnvuOYdzCYeWQwzTxPZZjpgYdPjuMoZ2HWLvFQhaX0GDY8PKlIwMPrUL+SIBHVLYxGmCzBWOdpAK35ZuRXqvKpyqoZsgQ1eNOvy6vqSRrHY4bXHa57TGaY/TBqc3oMF+NmdhJ/FezNz44zGOprJZBg0OrIyZc7KgrycNjoyisWLLViCfJ2rUAQ1O8AVJEVx0Nj8JpCG7ZCGSxQ5G6UI+b1jnjr5N33jL+yCOPNkORC2M50H82ZYTX1YGymfJGnmSleP5S0K4a4uBJ1hT1Jl4CEV1+NfX1/vTtvh21onP6Zi79FcrKaR3u2iMOB2LWVf57H8zidjVDw7uGtmhAQAA'
 )
 $bootstrapInput = New-Object System.IO.MemoryStream(,$bootstrapCompressed)
 $bootstrapGzip = New-Object System.IO.Compression.GZipStream(
