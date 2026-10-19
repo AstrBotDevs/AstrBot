@@ -56,11 +56,11 @@ $defaultLanguage = 'en-US'
 if (-not $Language) {
     $Language = $defaultLanguage
     if ($CanPrompt) {
-        $languages = @('zh-CN', 'en-US', 'ja-JP')
+        $languages = @('en-US', 'zh-CN', 'ja-JP')
         $defaultChoice = [array]::IndexOf($languages, $Language) + 1
         Write-Host "`n$($bootstrapText.LanguagePrompt)"
-        Write-Host "  1. $($bootstrapText.Chinese)"
-        Write-Host "  2. $($bootstrapText.English)"
+        Write-Host "  1. $($bootstrapText.English)"
+        Write-Host "  2. $($bootstrapText.Chinese)"
         Write-Host "  3. $($bootstrapText.Japanese)"
         do {
             $choice = Read-Host "1-3 [$defaultChoice]"
