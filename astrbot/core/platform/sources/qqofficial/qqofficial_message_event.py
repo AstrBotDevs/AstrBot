@@ -4,6 +4,7 @@ import copy
 import logging
 import os
 import random
+from html import escape
 from pathlib import Path
 from typing import cast
 
@@ -969,9 +970,12 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             if isinstance(i, Plain):
                 plain_text += i.text
             elif isinstance(i, At):
-                mention_id = str(i.qq) if i.qq else ""
-                if mention_id and mention_id != "all":
-                    plain_text += f'<qqbot-at-user id="{mention_id}" />'
+                member_id = str(i.qq or "").strip()
+                # QQ's text and Markdown mention protocol uses the same tag.
+                if member_id and member_id != "all":
+                    plain_text += (
+                        f'<qqbot-at-user id="{escape(member_id, quote=True)}" />'
+                    )
             elif isinstance(i, Image) and not image_base64:
                 if not i.file:
                     raise ValueError("Unsupported image file format")

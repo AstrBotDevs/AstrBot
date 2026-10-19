@@ -194,6 +194,12 @@ async def test_send_message_missing_platform_does_not_record_delivery():
     assert result.startswith("error: failed to find platform")
     ctx.context.event.trace.record.assert_not_called()
     assert ctx.context.event._has_send_oper is False
+    assert (
+        ctx.context.event.get_extra(
+            "_send_message_to_user_current_session_delivery_confirmed"
+        )
+        is False
+    )
 
 
 @pytest.mark.asyncio
@@ -356,7 +362,9 @@ async def test_restricted_role_cannot_send_arbitrary_local_absolute_file(
     tool = SendMessageToUserTool()
     ctx = _make_context(
         role=role,
-        local_permissions={role: {"filesystem_scope": scope, "allow_execution": False}} if scope else None,
+        local_permissions={role: {"filesystem_scope": scope, "allow_execution": False}}
+        if scope
+        else None,
     )
     secret_path = tmp_path / "secret.txt"
     secret_path.write_text("secret", encoding="utf-8")

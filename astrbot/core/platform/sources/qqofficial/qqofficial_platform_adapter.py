@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 import random
+import re
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -345,6 +346,10 @@ class QQOfficialPlatformAdapter(Platform):
 
         Returns:
             None.
+
+        Raises:
+            ValueError: If the message is empty or its type is unsupported.
+            RuntimeError: If routing or the QQ API receipt is unavailable.
         """
         if session.message_type == MessageType.GROUP_MESSAGE:
             session = MessageSesion(
@@ -378,11 +383,20 @@ class QQOfficialPlatformAdapter(Platform):
             and not video_file_source
             and not file_source
         ):
-            return
+            raise ValueError("QQOfficial message has no sendable content.")
 
         # 主动推送不需要 msg_id，见 https://github.com/AstrBotDevs/AstrBot/issues/7904
         msg_id = self._session_last_message_id.get(session.session_id)
         scene = self._session_scene.get(session.session_id)
+        if (
+            scene is None
+            and session.message_type == MessageType.GROUP_MESSAGE
+            and re.fullmatch(r"[0-9a-fA-F]{32}", session.session_id)
+        ):
+            # QQ group OpenIDs are opaque hex IDs, unlike guild channel IDs.
+            # A persisted group session remains routable after cache loss.
+            scene = "group"
+            self.remember_session_scene(session.session_id, scene)
         allow_group_proactive_send = (
             session.message_type == MessageType.GROUP_MESSAGE
             and scene == "group"
@@ -393,11 +407,10 @@ class QQOfficialPlatformAdapter(Platform):
             and session.message_type != MessageType.FRIEND_MESSAGE
             and not allow_group_proactive_send
         ):
-            logger.warning(
-                "[QQOfficial] No cached msg_id for session: %s, skip send_by_session",
-                session.session_id,
+            raise RuntimeError(
+                "QQOfficial delivery context is unavailable: "
+                "no cached msg_id or confirmed proactive group route."
             )
-            return
 
         use_md = getattr(message_chain, "use_markdown_", None)
         if use_md is False or (use_md is None and not self.use_markdown_default):
@@ -551,15 +564,21 @@ class QQOfficialPlatformAdapter(Platform):
                 plain_text=plain_text,
             )
         else:
-            logger.warning(
-                "[QQOfficial] Unsupported message type for send_by_session: %s",
-                session.message_type,
+            raise ValueError(
+                f"QQOfficial does not support sending message type {session.message_type}."
             )
-            return
 
         sent_message_id = self._extract_message_id(ret)
-        if sent_message_id:
-            self.remember_session_message_id(session.session_id, sent_message_id)
+        if not sent_message_id:
+            raise RuntimeError(
+                "QQOfficial API did not confirm sending: the message receipt has no id."
+            )
+        self.remember_session_message_id(session.session_id, sent_message_id)
+        logger.info(
+            "[QQOfficial] API accepted message; scene=%s, receipt_id=%s.",
+            scene or session.message_type.value,
+            sent_message_id,
+        )
         await Platform.send_by_session(self, session, message_chain)
 
     def remember_session_message_id(self, session_id: str, message_id: str) -> None:

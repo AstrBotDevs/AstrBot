@@ -1,8 +1,10 @@
 import asyncio
 import json
+import os
 import re
+import signal
 from collections.abc import Awaitable, Callable
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
 
@@ -32,6 +34,7 @@ if TYPE_CHECKING:
 
 _CRONTAB_WEEKDAY_NAMES = ("sun", "mon", "tue", "wed", "thu", "fri", "sat")
 _CRONTAB_WEEKDAY_PATTERN = re.compile(r"^(?:(\*)|(\d+)(?:-(\d+))?)(?:/(\d+))?$")
+_MISFIRE_GRACE_SECONDS = 24 * 60 * 60
 
 
 def _normalize_crontab_day_of_week(day_of_week: str) -> str:
@@ -111,6 +114,7 @@ class CronJobManager:
         self._started = False
         # The scheduler may start early via _schedule_job; track DB sync separately.
         self._db_synced = False
+        self._resume_loop: asyncio.AbstractEventLoop | None = None
 
     async def start(self, ctx: "Context") -> None:
         self.ctx: Context = ctx  # star context
@@ -122,11 +126,38 @@ class CronJobManager:
                 self._started = True
             await self.sync_from_db()
             self._db_synced = True
+            # Opt in only where the host sends SIGCONT after resuming from sleep.
+            resume_signal = getattr(signal, "SIGCONT", None)
+            if os.environ.get("ASTRBOT_CRON_RESUME_SIGNAL") == "1" and resume_signal:
+                if signal.getsignal(resume_signal) == signal.SIG_DFL:
+                    try:
+                        loop = asyncio.get_running_loop()
+                        loop.add_signal_handler(resume_signal, self._resume_time_check)
+                        self._resume_loop = loop
+                        logger.info("Cron resume notifications enabled via SIGCONT.")
+                    except (NotImplementedError, RuntimeError, ValueError):
+                        logger.warning("Cron resume signal handler is unavailable.")
+                else:
+                    logger.warning("Cron resume signal already has a handler.")
+            logger.info(
+                "Cron scheduler started without periodic clock checks; missed executions "
+                "are coalesced within a %s-second recovery window.",
+                _MISFIRE_GRACE_SECONDS,
+            )
+
+    def _resume_time_check(self) -> None:
+        """Recheck system-time deadlines once after a host resume notification."""
+        if self._started:
+            logger.info("Host resumed; rechecking cron deadlines against system time.")
+            self.scheduler.wakeup()
 
     async def shutdown(self) -> None:
         async with self._lock:
             if not self._started:
                 return
+            if self._resume_loop is not None:
+                self._resume_loop.remove_signal_handler(signal.SIGCONT)
+                self._resume_loop = None
             self.scheduler.shutdown(wait=False)
             await asyncio.sleep(0)
             self._started = False
@@ -144,7 +175,7 @@ class CronJobManager:
                 )
                 continue
             try:
-                self._schedule_job(job)
+                self._schedule_job(job, restore_missed=True)
             except CronJobSchedulingError:
                 continue  # Error already logged in _schedule_job
 
@@ -290,19 +321,52 @@ class CronJobManager:
             logger.exception("Failed to build trigger for cron job %s", job.job_id)
             raise CronJobSchedulingError(str(e)) from e
 
-    def _schedule_job(self, job: CronJob) -> None:
+    def _schedule_job(self, job: CronJob, *, restore_missed: bool = False) -> None:
+        """Schedule a job and optionally recover a missed persisted deadline.
+
+        Args:
+            job: Validated job definition to schedule.
+            restore_missed: Recover overdue recurring jobs when loading from DB.
+        """
         if not self._started:
             self.scheduler.start()
             self._started = True
         try:
             trigger = self._build_trigger(job)
+            schedule_options: dict[str, Any] = {}
+            if restore_missed and not job.run_once and job.next_run_time:
+                now = datetime.now(timezone.utc)
+                saved_next = job.next_run_time
+                if saved_next.tzinfo is None:
+                    saved_next = saved_next.replace(tzinfo=timezone.utc)
+                recovery_from = max(
+                    saved_next, now - timedelta(seconds=_MISFIRE_GRACE_SECONDS)
+                )
+                if job.last_run_at:
+                    last_run = job.last_run_at
+                    if last_run.tzinfo is None:
+                        last_run = last_run.replace(tzinfo=timezone.utc)
+                    recovery_from = max(
+                        recovery_from, last_run + timedelta(microseconds=1)
+                    )
+                missed_run = trigger.get_next_fire_time(None, recovery_from)
+                if missed_run is not None and missed_run <= now:
+                    schedule_options["next_run_time"] = missed_run
+                    logger.info(
+                        "Recovering overdue cron job %s from %s.",
+                        job.job_id,
+                        missed_run.isoformat(),
+                    )
             self.scheduler.add_job(
                 self._run_job,
                 id=job.job_id,
                 trigger=trigger,
                 args=[job.job_id],
                 replace_existing=True,
-                misfire_grace_time=300,
+                misfire_grace_time=_MISFIRE_GRACE_SECONDS,
+                coalesce=True,
+                max_instances=1,
+                **schedule_options,
             )
             asyncio.create_task(
                 self.db.update_cron_job(
@@ -563,6 +627,17 @@ class CronJobManager:
                     else ""
                 )
                 raise RuntimeError(f"Cron agent run ended in ERROR state{detail}")
+            if (
+                delivery_session_str
+                and cron_event.get_extra(
+                    "_send_message_to_user_current_session_delivery_confirmed", None
+                )
+                is False
+            ):
+                raise RuntimeError(
+                    "Scheduled message delivery failed: the latest send_message_to_user "
+                    "call did not confirm delivery to the target session."
+                )
             cron_meta = extras.get("cron_job", {}) if extras else {}
             summary_note = (
                 f"[CronJob] {cron_meta.get('name') or cron_meta.get('id', 'unknown')}: {cron_meta.get('description', '')} "

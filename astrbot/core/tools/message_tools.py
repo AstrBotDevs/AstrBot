@@ -100,7 +100,11 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                             },
                             "text": {
                                 "type": "string",
-                                "description": "Text content for `plain` type.",
+                                "description": (
+                                    "Required for plain components. Use the text field, "
+                                    "not a field named plain. Whitespace separators "
+                                    "between mentions are allowed."
+                                ),
                             },
                             "path": {
                                 "type": "string",
@@ -219,6 +223,10 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                 context, "Send message to another session"
             ):
                 return permission_error
+        if str(session) == current_session:
+            context.context.event.set_extra(
+                "_send_message_to_user_current_session_delivery_confirmed", False
+            )
         messages = kwargs.get("messages")
         if not isinstance(messages, list) or not messages:
             return "error: messages parameter is empty or invalid."
@@ -234,8 +242,8 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
 
             try:
                 if msg_type == "plain":
-                    text = str(msg.get("text", "")).strip()
-                    if not text:
+                    text = msg.get("text")
+                    if not isinstance(text, str) or not text:
                         return f"error: messages[{idx}].text is required for plain component."
                     components.append(Comp.Plain(text=text))
                 elif msg_type == "image":
@@ -308,6 +316,12 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             except Exception as exc:
                 return f"error: failed to build messages[{idx}] component: {exc}"
 
+        if all(
+            isinstance(component, Comp.Plain) and not component.text.strip()
+            for component in components
+        ):
+            return "error: messages contain no non-whitespace content."
+
         try:
             target_session = (
                 MessageSession.from_str(session)
@@ -337,6 +351,10 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                 return f"error: invalid session: {session}"
 
         message_chain = MessageChain(chain=components)
+        if str(target_session) == current_session:
+            context.context.event.set_extra(
+                "_send_message_to_user_current_session_delivery_confirmed", False
+            )
         try:
             sent = await context.context.context.send_message(
                 target_session,
@@ -347,6 +365,9 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         if not sent:
             return f"error: failed to find platform for session {target_session}."
         if str(target_session) == current_session:
+            context.context.event.set_extra(
+                "_send_message_to_user_current_session_delivery_confirmed", True
+            )
             context.context.event._has_send_oper = True
             sent_plain_text = message_chain.get_plain_text().strip()
             if sent_plain_text:
