@@ -19,6 +19,11 @@ $ErrorActionPreference = 'Stop'
 # Keep localized status messages readable in Windows PowerShell consoles whose
 # legacy code page cannot represent CJK characters.
 try {
+    if ($Host.Name -eq 'ConsoleHost') {
+        # Windows PowerShell 5.1 may keep an OEM code page even when the
+        # managed output encoding is UTF-8.
+        $null = & chcp.com 65001 2>$null
+    }
     $utf8 = New-Object System.Text.UTF8Encoding($false)
     [Console]::InputEncoding = $utf8
     [Console]::OutputEncoding = $utf8
