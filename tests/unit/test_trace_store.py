@@ -416,7 +416,12 @@ def test_database_pages_filters_details_and_restart(persisted, capture):
         restarted.close()
 
 
-@pytest.mark.parametrize("prompt", ["x" * 8192, "字" * 20000, "x" * 131072])
+# Keep node IDs below Windows' PYTEST_CURRENT_TEST environment variable limit.
+@pytest.mark.parametrize(
+    "prompt",
+    ["x" * 8192, "字" * 20000, "x" * 131072],
+    ids=["ascii-8k", "unicode-20k", "ascii-128k"],
+)
 def test_long_prompt_is_preserved_in_spans_events_and_database(
     persisted, capture, prompt
 ):
