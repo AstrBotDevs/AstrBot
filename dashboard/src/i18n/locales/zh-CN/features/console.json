@@ -1,10 +1,5 @@
 {
   "title": "平台日志",
-  "autoScroll": {
-    "label": "自动滚动",
-    "enabled": "自动滚动已开启",
-    "disabled": "自动滚动已关闭"
-  },
   "hideUserChat": {
     "label": "排除用户对话",
     "enabled": "已排除用户对话",
@@ -12,7 +7,27 @@
   },
   "search": {
     "label": "搜索日志",
-    "placeholder": "按关键词过滤日志"
+    "placeholder": "搜索日志"
+  },
+  "fontSize": {
+    "label": "日志字号",
+    "decrease": "减小字号",
+    "increase": "增大字号"
+  },
+  "filters": {
+    "title": "筛选",
+    "button": "过滤器",
+    "reset": "重置",
+    "level": "日志级别",
+    "source": "来源",
+    "allSources": "全部来源",
+    "core": "系统",
+    "plugins": "插件",
+    "plugin": "插件",
+    "allPlugins": "全部插件",
+    "platform": "机器人平台",
+    "allPlatforms": "全部平台",
+    "unscopedPlatform": "系统 / 无平台"
   },
   "pipInstall": {
     "button": "安装 pip 库",

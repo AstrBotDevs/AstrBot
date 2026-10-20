@@ -37,6 +37,7 @@ from astrbot.core.provider.entities import (
 )
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.config_number import coerce_int_config
+from astrbot.core.utils.media_utils import describe_media_ref
 from astrbot.core.utils.metrics import Metric
 
 from .....astr_agent_context import AgentContextWrapper, AstrAgentContext
@@ -291,16 +292,20 @@ class ThirdPartyAgentSubStage(Stage):
         req = ProviderRequest()
         req.session_id = event.unified_msg_origin
         req.prompt = event.message_str
-        if provider_wake_prefix and event.message_str.startswith(provider_wake_prefix):
-            req.prompt = event.message_str[len(provider_wake_prefix) :]
+        prefix_text = event.message_str
+        if event.get_platform_name() == "lark":
+            prefix_text = prefix_text.lstrip()
+        if provider_wake_prefix and prefix_text.startswith(provider_wake_prefix):
+            req.prompt = prefix_text[len(provider_wake_prefix) :]
         for comp in event.message_obj.message:
             if isinstance(comp, Image):
                 try:
                     image_path = await comp.convert_to_base64()
                 except Exception as exc:  # noqa: BLE001
                     logger.warning(
-                        "Image attachment is unavailable (%s).",
+                        "Image attachment is unavailable (%s): %s",
                         type(exc).__name__,
+                        describe_media_ref(comp.url or comp.file),
                     )
                     continue
                 req.image_urls.append(image_path)
@@ -315,7 +320,10 @@ class ThirdPartyAgentSubStage(Stage):
                     continue
                 req.audio_urls.append(audio_path)
 
-        if not req.prompt and not req.image_urls and not req.audio_urls:
+        empty_prompt = not req.prompt or (
+            event.get_platform_name() == "lark" and not req.prompt.strip()
+        )
+        if empty_prompt and not req.image_urls and not req.audio_urls:
             return
 
         custom_error_message = await self._resolve_persona_custom_error_message(event)

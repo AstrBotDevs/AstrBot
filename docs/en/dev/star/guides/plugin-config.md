@@ -52,6 +52,8 @@ The file content is a `Schema` that represents the configuration. The Schema is 
 - `invisible`: Optional. Whether the configuration is hidden. Default is `false`. If set to `true`, it will not be displayed in the management panel.
 - `secret`: Optional. Applies to `string` and string `list` fields. When set to `true`, the dashboard displays a password input and lets the user temporarily reveal its value. This only masks the value in the UI; it does not encrypt the value in the configuration file.
 - `options`: Optional. A list, such as `"options": ["chat", "agent", "workflow"]`. Provides dropdown list options.
+- `labels`: Optional. Display labels aligned with `options` by index; stored values remain unchanged.
+- `subtitles`: Optional. Short descriptions aligned with `options` by index, displayed beneath each dropdown item label. Use an empty string or omit trailing entries for options without a subtitle. Supported by single-select and multi-select dropdowns; plain checkboxes do not display subtitles.
 - `slider`: Optional. Applies to `int` and `float` fields. A dict，such as `"slider": {"min": 1, "max": 100, "step": 1}`. Displays a slider with configurable minimum, maximum, and step values.
 - `editor_mode`: Optional. Whether to enable code editor mode. Requires AstrBot >= `v3.5.10`. Versions below this won't report errors but won't take effect. Default is false.
 - `editor_language`: Optional. The code language for the code editor, defaults to `json`.
@@ -83,7 +85,7 @@ Sensitive strings such as API keys, access tokens, and passwords should set `"se
 
 ### Configuration Internationalization (Optional)
 
-Configuration `description`, `hint`, and select `labels` can follow the WebUI language. See [Plugin Internationalization](./plugin-i18n).
+Configuration `description`, `hint`, and select `labels` and `subtitles` can follow the WebUI language. See [Plugin Internationalization](./plugin-i18n).
 
 When the code editor is enabled, it looks like this:
 

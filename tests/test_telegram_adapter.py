@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from telegram import Message
+from telegram import Message, MessageEntity, TextQuote
 
 import astrbot.api.message_components as Comp
 from astrbot.api.platform import Group
@@ -494,6 +494,120 @@ async def test_telegram_reply_without_quote_text_uses_full_message(quote_text):
     assert len(reply.chain) == 1
     assert isinstance(reply.chain[0], Comp.Plain)
     assert reply.chain[0].text == original_text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("in_caption", [False, True], ids=["text", "caption"])
+async def test_telegram_hidden_links_survive_conversion_and_reply(in_caption):
+    """Preserve linked text and URLs in messages and full replies.
+
+    Args:
+        in_caption: Whether the linked text is a photo caption.
+    """
+    adapter = _load_telegram_adapter()(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    text = "😀 查看文档 和 示例"
+    entities = [
+        MessageEntity("bold", 3, 4),
+        MessageEntity("text_link", 3, 4, url="https://example.com/docs"),
+        MessageEntity("text_link", 10, 2, url="https://example.com/demo"),
+    ]
+    update = create_mock_update(
+        message_text=None if in_caption else text,
+        entities=None if in_caption else entities,
+        caption=text if in_caption else None,
+        caption_entities=entities if in_caption else None,
+        photo=[create_mock_file()] if in_caption else None,
+    )
+    expected = (
+        "😀 查看文档 (https://example.com/docs) 和 示例 (https://example.com/demo)"
+    )
+
+    result = await adapter.convert_message(update, _build_context())
+    assert result.message_str == expected
+    assert [part.text for part in result.message if isinstance(part, Comp.Plain)] == [
+        expected
+    ]
+
+    reply_update = create_mock_update(
+        message_text="Which link?", reply_to_message=update.message
+    )
+    result = await adapter.convert_message(reply_update, _build_context())
+    reply = result.message[0]
+    assert reply.message_str == reply.text == expected
+    assert [part.text for part in reply.chain if isinstance(part, Comp.Plain)] == [
+        expected
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("position", [5, 0], ids=["matched", "stale"])
+async def test_telegram_partial_quote_preserves_only_overlapping_links(position):
+    """Recover a quoted link without including links outside the selected text.
+
+    Args:
+        position: UTF-16 quote offset, either matching the source or stale.
+    """
+    adapter = _load_telegram_adapter()(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    original = create_mock_update(
+        message_text="😀 查看文档 和 示例",
+        entities=[
+            MessageEntity("text_link", 3, 4, url="https://example.com/docs"),
+            MessageEntity("text_link", 10, 2, url="https://example.com/demo"),
+        ],
+    )
+    update = create_mock_update(
+        reply_to_message=original.message,
+        quote=TextQuote(text="文档", position=position),
+    )
+
+    result = await adapter.convert_message(update, _build_context())
+
+    expected = "文档 (https://example.com/docs)" if position == 5 else "文档"
+    reply = result.message[0]
+    assert reply.message_str == reply.text == expected
+    assert reply.chain == [Comp.Plain(expected)]
+
+
+@pytest.mark.asyncio
+async def test_telegram_hidden_links_and_mentions_use_original_offsets():
+    """Keep link positions intact when self mentions are removed."""
+    adapter = _load_telegram_adapter()(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    text = "😀 @test_bot 文档 @test_bot https://example.com"
+    sdk_message = Message.de_json(
+        {
+            "message_id": 1,
+            "date": 0,
+            "chat": {"id": 123, "type": "private"},
+            "text": text,
+            "entities": [
+                {"type": "mention", "offset": 3, "length": 9},
+                MessageEntity(
+                    "text_link", 13, 2, url="https://example.com/docs"
+                ).to_dict(),
+                {"type": "mention", "offset": 16, "length": 9},
+                {"type": "url", "offset": 26, "length": 19},
+            ],
+        },
+        bot=None,
+    )
+    update = create_mock_update(message_text=text, entities=sdk_message.entities)
+    update.message.parse_entity = sdk_message.parse_entity
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert (
+        result.message_str == "😀  文档 (https://example.com/docs)  https://example.com"
+    )
+    assert [part.qq for part in result.message if isinstance(part, Comp.At)] == [
+        "test_bot",
+        "test_bot",
+    ]
 
 
 @pytest.mark.asyncio

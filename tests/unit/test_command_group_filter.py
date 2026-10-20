@@ -102,7 +102,6 @@ async def test_admin_group_only_blocks_its_own_commands(message, blocked, monkey
             "plugin_set": ["*"],
         }
     )
-    stage.unique_session = False
     stage.ignore_bot_self_message = False
     stage.friend_message_needs_wake_prefix = False
     stage.ignore_at_all = False

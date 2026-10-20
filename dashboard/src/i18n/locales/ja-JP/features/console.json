@@ -1,10 +1,5 @@
 {
   "title": "プラットフォームログ",
-  "autoScroll": {
-    "label": "自動スクロール",
-    "enabled": "自動スクロールを有効にしました",
-    "disabled": "自動スクロールを無効にしました"
-  },
   "hideUserChat": {
     "label": "ユーザーの会話を除外",
     "enabled": "ユーザーの会話を除外しました",
@@ -13,6 +8,26 @@
   "search": {
     "label": "ログを検索",
     "placeholder": "キーワードでログを絞り込む"
+  },
+  "fontSize": {
+    "label": "ログの文字サイズ",
+    "decrease": "文字を小さくする",
+    "increase": "文字を大きくする"
+  },
+  "filters": {
+    "title": "フィルター",
+    "button": "フィルター",
+    "reset": "リセット",
+    "level": "ログレベル",
+    "source": "ソース",
+    "allSources": "すべてのソース",
+    "core": "Core",
+    "plugins": "プラグイン",
+    "plugin": "プラグイン",
+    "allPlugins": "すべてのプラグイン",
+    "platform": "ボットプラットフォーム",
+    "allPlatforms": "すべてのプラットフォーム",
+    "unscopedPlatform": "システム / 未指定"
   },
   "pipInstall": {
     "button": "pip パッケージをインストール",

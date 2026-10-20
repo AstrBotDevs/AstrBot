@@ -4,7 +4,10 @@ from typing import Any
 
 from astrbot.core.message.components import Plain
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.astr_message_event import (
+    AstrMessageEvent,
+    streaming_response_event,
+)
 from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
@@ -56,7 +59,14 @@ class CronMessageEvent(AstrMessageEvent):
     async def send(self, message: MessageChain) -> None:
         if message is None:
             return
-        await self.context_obj.send_message(self.session, message)
+        # The outer event.send records delivery; suppress its nested public send.
+        token = streaming_response_event.set(self)
+        try:
+            sent = await self.context_obj.send_message(self.session, message)
+        finally:
+            streaming_response_event.reset(token)
+        if not sent:
+            return
         await super().send(message)
 
     async def send_streaming(self, generator, use_fallback: bool = False) -> None:

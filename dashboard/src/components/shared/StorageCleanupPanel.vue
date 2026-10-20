@@ -78,6 +78,12 @@ const storageStatus = ref({
         path: '',
         exists: false
     },
+    traces: {
+        size_bytes: 0,
+        file_count: 0,
+        path: '',
+        exists: false
+    },
     total_bytes: 0
 });
 
@@ -118,6 +124,12 @@ const storageCards = computed(() => [
         buttonText: tm('system.cleanup.targets.logs.button'),
         icon: 'mdi-file-document-outline',
         sizeBytes: storageStatus.value.logs?.size_bytes || 0
+    },
+    {
+        key: 'traces',
+        buttonText: tm('system.cleanup.targets.traces.button'),
+        icon: 'mdi-database-outline',
+        sizeBytes: storageStatus.value.traces?.size_bytes || 0
     }
 ]);
 
@@ -136,7 +148,9 @@ const loadStorageStatus = async () => {
 
 const cleanupStorage = async (target) => {
     const confirmed = await askForConfirmation(
-        tm('system.cleanup.confirm', { target: tm(`system.cleanup.targetNames.${target}`) }),
+        ['traces', 'all'].includes(target)
+            ? tm('system.cleanup.confirmWithTraces', { target: tm(`system.cleanup.targetNames.${target}`) })
+            : tm('system.cleanup.confirm', { target: tm(`system.cleanup.targetNames.${target}`) }),
         confirmDialog
     );
     if (!confirmed) return;
@@ -152,9 +166,12 @@ const cleanupStorage = async (target) => {
         const cleanupData = res.data.data || {};
         storageStatus.value = cleanupData.status || storageStatus.value;
         showToast(
-            tm('system.cleanup.messages.cleanupSuccess', {
+            tm(target === 'traces' ? 'system.cleanup.messages.cleanupTracesSuccess'
+                : cleanupData.removed_traces ? 'system.cleanup.messages.cleanupWithTracesSuccess'
+                    : 'system.cleanup.messages.cleanupSuccess', {
                 size: formatBytes(cleanupData.removed_bytes || 0),
-                count: cleanupData.processed_files || 0
+                count: target === 'traces' ? cleanupData.removed_traces || 0 : cleanupData.processed_files || 0,
+                traces: cleanupData.removed_traces || 0
             })
         );
     } catch (error) {

@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import time
 
-from fastapi import APIRouter, Depends, Header, Request
+from fastapi import APIRouter, Depends, Header, Path, Query, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from starlette.background import BackgroundTask
 
@@ -107,6 +107,51 @@ async def get_trace_settings(
     service: LogService = Depends(get_service),
 ):
     return _get_trace_settings(service)
+
+
+@router.get("/trace/history")
+async def list_traces(
+    limit: int = Query(default=50, ge=1, le=100),
+    page: int = Query(default=1, ge=1),
+    cursor: str | None = Query(default=None, max_length=64),
+    query: str = Query(default="", max_length=256),
+    errors: bool = False,
+    models: bool = False,
+    plugins: bool = False,
+    _auth: AuthContext = Depends(require_system_scope),
+    service: LogService = Depends(get_service),
+):
+    """Return a page of persisted trace summaries."""
+    try:
+        return ok(
+            await service.get_trace_history(
+                limit=limit,
+                page=page,
+                cursor=cursor,
+                query=query,
+                errors=errors,
+                models=models,
+                plugins=plugins,
+            )
+        )
+    except LogServiceError as exc:
+        _raise_log_error(exc)
+
+
+@router.get("/trace/{trace_id}")
+async def get_trace_detail(
+    trace_id: str = Path(pattern="^[0-9a-f]{32}$"),
+    _auth: AuthContext = Depends(require_system_scope),
+    service: LogService = Depends(get_service),
+):
+    """Return one trace's canonical spans and events."""
+    try:
+        detail = await service.get_trace_detail(trace_id)
+    except LogServiceError as exc:
+        _raise_log_error(exc)
+    if detail is None:
+        raise ApiError("Trace not found or already evicted.", status_code=404)
+    return ok(detail)
 
 
 @router.put("/trace/settings")

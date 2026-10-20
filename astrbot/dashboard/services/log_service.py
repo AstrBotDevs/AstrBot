@@ -19,6 +19,8 @@ from astrbot.core.config.default import VERSION
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
 from astrbot.core.utils.storage_cleaner import StorageCleaner
 
+from astrbot.core.utils.trace_store import get_trace_store
+
 
 class LogServiceError(Exception):
     pass
@@ -220,6 +222,45 @@ class LogService:
         except Exception as exc:
             logger.error(f"获取 Trace 设置失败: {exc}")
             raise LogServiceError(f"获取 Trace 设置失败: {exc}") from exc
+
+    async def get_trace_history(self, **filters) -> dict:
+        """Read a bounded database page.
+
+        Args:
+            **filters: Validated page/cursor, keyword, and feature filters.
+
+        Returns:
+            Trace summaries and pagination metadata.
+
+        Raises:
+            LogServiceError: If the cursor or database is unavailable.
+        """
+        try:
+            store = get_trace_store(self.config)
+            return await asyncio.to_thread(store.list_traces, **filters)
+        except Exception as exc:
+            logger.error("Failed to query trace history: %s", exc)
+            raise LogServiceError(str(exc)) from exc
+
+    async def get_trace_detail(self, trace_id: str) -> dict | None:
+        """Read the spans and events of a single trace.
+
+        Args:
+            trace_id: Validated trace identifier.
+
+        Returns:
+            Trace detail, or None if evicted.
+
+        Raises:
+            LogServiceError: If database access fails.
+        """
+        try:
+            return await asyncio.to_thread(
+                get_trace_store(self.config).get_trace, trace_id
+            )
+        except Exception as exc:
+            logger.error("Failed to query trace detail: %s", exc)
+            raise LogServiceError(str(exc)) from exc
 
     def update_trace_settings(self, payload: dict | None) -> str:
         try:
