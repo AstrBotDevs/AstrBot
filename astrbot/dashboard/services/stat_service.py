@@ -11,6 +11,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from functools import cmp_to_key
 from pathlib import Path
+from urllib.parse import urlparse
 
 import aiohttp
 import psutil
@@ -541,6 +542,53 @@ class StatService:
                 if response.status == 200:
                     end_time = time.time()
                     _ = await response.text()
+                    return {
+                        "latency": round((end_time - start_time) * 1000, 2),
+                    }
+                raise StatServiceError(f"Failed. Status code: {response.status}")
+        except StatServiceError:
+            raise
+        except Exception as exc:
+            logger.error(traceback.format_exc())
+            raise StatServiceError(f"Error: {exc!s}") from exc
+
+    async def test_pypi_index_connection(self, index_url: str | None) -> dict:
+        """Check whether a PyPI index (mirror) answers requests.
+
+        Only the response headers are awaited: a simple index page can be very
+        large, so the body is never downloaded.
+
+        Args:
+            index_url: Base URL of the PyPI index, e.g.
+                ``https://mirrors.aliyun.com/pypi/simple/``.
+
+        Returns:
+            A dict with the round trip latency in milliseconds.
+
+        Raises:
+            StatServiceError: If the URL is missing, malformed, or unreachable.
+        """
+        try:
+            normalized_url = (index_url or "").strip().rstrip("/")
+            if not normalized_url:
+                raise StatServiceError("index_url is required")
+
+            parsed = urlparse(normalized_url)
+            if parsed.scheme not in ("http", "https") or not parsed.netloc:
+                raise StatServiceError("index_url must be a valid http(s) URL")
+
+            start_time = time.time()
+            async with (
+                aiohttp.ClientSession() as session,
+                session.get(
+                    f"{normalized_url}/",
+                    # Some mirrors reject non-pip user agents, so mimic pip itself.
+                    headers={"User-Agent": "pip/24.3.1"},
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as response,
+            ):
+                if response.status == 200:
+                    end_time = time.time()
                     return {
                         "latency": round((end_time - start_time) * 1000, 2),
                     }

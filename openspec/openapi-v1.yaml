@@ -4613,6 +4613,22 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
+  /api/v1/stats/pypi-index/test:
+    post:
+      tags: [Stats]
+      summary: Test a PyPI index (mirror) endpoint
+      operationId: testPypiIndexConnection
+      x-astrbot-scope: system
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PypiIndexTestRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
   /api/v1/changelogs:
     get:
       tags: [Stats]
@@ -6700,6 +6716,14 @@ components:
       required: [proxy_url]
       properties:
         proxy_url:
+          type: string
+      additionalProperties: false
+
+    PypiIndexTestRequest:
+      type: object
+      required: [index_url]
+      properties:
+        index_url:
           type: string
       additionalProperties: false
 

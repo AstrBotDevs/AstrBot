@@ -79,6 +79,22 @@
             "subtitle": "Адрес для ускорения загрузки плагинов и обновлений AstrBot. Особенно актуально для пользователей из Китая. Все адреса предоставляются как есть, если обновление не удается — проверьте доступность выбранного зеркала.",
             "label": "Выбрать ускоритель GitHub"
         },
+        "pypiMirror": {
+            "title": "Индекс пакетов PyPI",
+            "subtitle": "Индекс PyPI, который pip использует при установке Python-зависимостей AstrBot. Можно выбрать зеркало или указать свой адрес. Изменения вступят в силу после перезапуска AstrBot.",
+            "label": "Выбрать индекс PyPI",
+            "none": "Без зеркала (официальный PyPI)",
+            "custom": "Свой адрес",
+            "customPlaceholder": "https://example.com/pypi/simple",
+            "testConnection": "Проверить соединение",
+            "unavailable": "Недоступен",
+            "presets": {
+                "aliyun": "Alibaba Cloud",
+                "tsinghua": "Tsinghua",
+                "ustc": "USTC",
+                "tencent": "Tencent Cloud"
+            }
+        },
         "proxySelector": {
             "title": "Ускорение GitHub",
             "noProxy": "Не использовать",

@@ -46,6 +46,7 @@ import {
   type PluginValidateRepoRequest,
   type PluginConfigFileDeleteRequest,
   type ProviderConfigRequest,
+  type PypiIndexTestRequest,
   type RuntimeInfo,
   type BatchSessionProviderRequest,
   type BatchSessionServiceRequest,
@@ -1842,6 +1843,11 @@ export const statsApi = {
           '/api/stat/test-ghproxy-connection',
           payload,
         ),
+    );
+  },
+  testPypiIndex(payload: PypiIndexTestRequest) {
+    return typed<{ latency?: number }>(
+      openApiV1.testPypiIndexConnection({ body: payload }),
     );
   },
   startTime() {

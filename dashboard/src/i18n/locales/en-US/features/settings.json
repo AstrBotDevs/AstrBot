@@ -79,6 +79,22 @@
       "subtitle": "Set the GitHub proxy address used when downloading plugins or updating AstrBot. This is effective in mainland China's network environment. Can be customized, input takes effect in real time. All addresses do not guarantee stability. If errors occur when updating plugins/projects, please first check if the proxy address is working properly.",
       "label": "Select GitHub Proxy Address"
     },
+    "pypiMirror": {
+      "title": "PyPI Package Index",
+      "subtitle": "PyPI index used by pip when installing AstrBot's Python dependencies. Pick a mirror or a custom URL. Restart AstrBot for changes to take effect.",
+      "label": "Choose PyPI Package Index",
+      "none": "No mirror (official PyPI)",
+      "custom": "Custom URL",
+      "customPlaceholder": "https://example.com/pypi/simple",
+      "testConnection": "Test Connectivity",
+      "unavailable": "Unavailable",
+      "presets": {
+        "aliyun": "Aliyun",
+        "tsinghua": "Tsinghua",
+        "ustc": "USTC",
+        "tencent": "Tencent Cloud"
+      }
+    },
     "proxySelector": {
       "title": "GitHub Proxy",
       "noProxy": "Don't use GitHub Proxy",

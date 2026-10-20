@@ -612,6 +612,10 @@ export type ProviderSourceConfigRequest = {
     config: DynamicConfig;
 };
 
+export type PypiIndexTestRequest = {
+    index_url: string;
+};
+
 export type RenameRequest = {
     name: string;
 };
@@ -3462,6 +3466,14 @@ export type TestGhproxyConnectionData = {
 export type TestGhproxyConnectionResponse = (SuccessEnvelope);
 
 export type TestGhproxyConnectionError = unknown;
+
+export type TestPypiIndexConnectionData = {
+    body: PypiIndexTestRequest;
+};
+
+export type TestPypiIndexConnectionResponse = (SuccessEnvelope);
+
+export type TestPypiIndexConnectionError = unknown;
 
 export type ListChangelogVersionsResponse = (SuccessEnvelope);
 
