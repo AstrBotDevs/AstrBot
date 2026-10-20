@@ -29,6 +29,7 @@ from astrbot.core.utils.network_utils import (
 
 from ..headers import build_conversation_headers, build_provider_headers
 from ..register import register_provider_adapter
+from .minimax_models import MINIMAX_TEXT_MODELS, is_minimax_api
 from .request_retry import retry_provider_request, retry_provider_request_context
 
 
@@ -106,7 +107,10 @@ class ProviderAnthropic(Provider):
         if use_api_key:
             self._init_api_key(provider_config)
 
-        self.set_model(provider_config.get("model", "unknown"))
+        default_model = (
+            MINIMAX_TEXT_MODELS[0] if is_minimax_api(self.base_url) else "unknown"
+        )
+        self.set_model(provider_config.get("model", default_model))
 
     def _init_api_key(self, provider_config: dict) -> None:
         self.chosen_api_key: str = ""
@@ -1067,6 +1071,8 @@ class ProviderAnthropic(Provider):
         return self.chosen_api_key
 
     async def get_models(self) -> list[str]:
+        if is_minimax_api(self.base_url):
+            return list(MINIMAX_TEXT_MODELS)
         models_str = []
         models = await retry_provider_request(
             "Anthropic",

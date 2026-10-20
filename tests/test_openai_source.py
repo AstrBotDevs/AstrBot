@@ -206,7 +206,9 @@ async def test_get_models_retries_transient_request_error(monkeypatch):
 
     models = FakeModels()
     provider = ProviderOpenAIOfficial.__new__(ProviderOpenAIOfficial)
-    provider.client = SimpleNamespace(models=models)
+    provider.client = SimpleNamespace(
+        models=models, base_url="https://api.openai.com/v1"
+    )
 
     assert await provider.get_models() == ["gpt-a", "gpt-b"]
     assert models.calls == 2
