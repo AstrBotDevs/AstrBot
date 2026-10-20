@@ -10,6 +10,7 @@ import traceback
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from functools import cmp_to_key
+from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
@@ -673,8 +674,35 @@ class StatService:
                         response.charset or "utf-8", errors="replace"
                     )
 
+                class _AnchorHrefParser(HTMLParser):
+                    """Collect ``href`` values of anchor tags from a simple index.
+
+                    A real parser is used instead of a regex so that valid markup
+                    with single quotes, unquoted values, or uppercase ``HREF``
+                    is handled; tag and attribute names arrive lowercased.
+                    """
+
+                    def __init__(self) -> None:
+                        super().__init__(convert_charrefs=True)
+                        self.hrefs: list[str] = []
+
+                    def handle_starttag(
+                        self, tag: str, attrs: list[tuple[str, str | None]]
+                    ) -> None:
+                        if tag != "a":
+                            return
+                        for name, value in attrs:
+                            if name == "href" and value:
+                                self.hrefs.append(value)
+
+                anchor_parser = _AnchorHrefParser()
+                anchor_parser.feed(page)
+                anchor_parser.close()
+
                 wheels: list[tuple[Version, str]] = []
-                for href in re.findall(r'href="([^"#]+)', page):
+                for href in anchor_parser.hrefs:
+                    # Simple indexes append a "#sha256=..." fragment.
+                    href = href.split("#", 1)[0]
                     file_name = href.rsplit("/", 1)[-1]
                     suffix = "-py3-none-any.whl"
                     if not (file_name.startswith("pip-") and file_name.endswith(suffix)):
