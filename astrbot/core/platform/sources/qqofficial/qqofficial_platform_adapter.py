@@ -353,8 +353,12 @@ class QQOfficialPlatformAdapter(Platform):
                 session.session_id.rsplit("_", 1)[-1],
             )
 
+        # Proactive group / C2C messages render the mention literally as well
+        # when it shares a media message, so split them the same way.
+        scene = self._session_scene.get(session.session_id)
         message_chains = QQOfficialMessageEvent._split_message_chain_by_media(
-            message_chain
+            message_chain,
+            separate_mentions=scene in ("group", "friend"),
         )
         if len(message_chains) > 1:
             for split_message_chain in message_chains:
