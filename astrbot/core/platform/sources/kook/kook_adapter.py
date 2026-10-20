@@ -64,13 +64,14 @@ class KookPlatformAdapter(Platform):
 
     async def send_by_session(
         self, session: MessageSesion, message_chain: MessageChain
-    ):
+    ) -> bool:
         inner_message = AstrBotMessage()
         inner_message.session_id = session.session_id
         inner_message.type = session.message_type
         inner_message.message_str = message_chain.get_plain_text()
         message_event = self.create_event(inner_message)
         await message_event.send(message_chain)
+        return True
 
     def meta(self) -> PlatformMetadata:
         return PlatformMetadata(

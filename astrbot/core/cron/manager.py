@@ -111,6 +111,7 @@ class CronJobManager:
         self.scheduler = AsyncIOScheduler()
         self._basic_handlers: dict[str, Callable[..., Any]] = {}
         self._lock = asyncio.Lock()
+        self._running_job_ids: set[str] = set()
         self._started = False
         # The scheduler may start early via _schedule_job; track DB sync separately.
         self._db_synced = False
@@ -411,6 +412,28 @@ class CronJobManager:
         ignore_enabled: bool = False,
         delete_run_once: bool = True,
     ) -> None:
+        # APScheduler's max_instances only covers scheduler-triggered runs;
+        # dashboard/manual runs must share the same per-job guard.
+        if job_id in self._running_job_ids:
+            logger.info("Skipping cron job %s because it is already running", job_id)
+            return
+        self._running_job_ids.add(job_id)
+        try:
+            await self._run_job_once(
+                job_id,
+                ignore_enabled=ignore_enabled,
+                delete_run_once=delete_run_once,
+            )
+        finally:
+            self._running_job_ids.discard(job_id)
+
+    async def _run_job_once(
+        self,
+        job_id: str,
+        *,
+        ignore_enabled: bool,
+        delete_run_once: bool,
+    ) -> None:
         job = await self.db.get_cron_job(job_id)
         if not job or (not job.enabled and not ignore_enabled):
             return
@@ -516,8 +539,7 @@ class CronJobManager:
                 else MessageSession.from_str(session_str)
             )
         except Exception as e:  # noqa: BLE001
-            logger.error(f"Invalid session for cron job: {e}")
-            return
+            raise RuntimeError(f"Invalid session for cron job: {e}") from e
 
         cron_event = CronMessageEvent(
             context=self.ctx,
@@ -632,11 +654,11 @@ class CronJobManager:
                 and cron_event.get_extra(
                     "_send_message_to_user_current_session_delivery_confirmed", None
                 )
-                is False
+                is not True
             ):
                 raise RuntimeError(
                     "Scheduled message delivery failed: the latest send_message_to_user "
-                    "call did not confirm delivery to the target session."
+                    "call did not receive explicit acceptance from the target platform."
                 )
             cron_meta = extras.get("cron_job", {}) if extras else {}
             summary_note = (

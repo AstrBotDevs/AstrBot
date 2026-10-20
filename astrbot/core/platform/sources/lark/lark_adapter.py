@@ -544,7 +544,7 @@ class LarkPlatformAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ) -> None:
+    ) -> bool:
         fallback_chat_id = None
         if session.message_type == MessageType.GROUP_MESSAGE:
             id_type = "chat_id"
@@ -574,6 +574,7 @@ class LarkPlatformAdapter(Platform):
         )
 
         await super().send_by_session(session, message_chain)
+        return True
 
     def meta(self) -> PlatformMetadata:
         return PlatformMetadata(

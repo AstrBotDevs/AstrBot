@@ -62,13 +62,13 @@ class DiscordPlatformAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ) -> None:
+    ) -> bool:
         """通过会话发送消息"""
         if self.client.user is None:
             logger.error(
                 "[Discord] Client is not ready (self.client.user is None); message send skipped"
             )
-            return
+            return False
 
         # 创建一个 message_obj 以便在 event 中使用
         message_obj = AstrBotMessage()
@@ -108,6 +108,7 @@ class DiscordPlatformAdapter(Platform):
         temp_event = self.create_event(message_obj)
         await temp_event.send(message_chain)
         await super().send_by_session(session, message_chain)
+        return True
 
     @override
     def meta(self) -> PlatformMetadata:

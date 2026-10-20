@@ -135,10 +135,14 @@ class Platform(abc.ABC):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ) -> None:
+    ) -> bool | None:
         """通过会话发送消息。该方法旨在让插件能够直接通过**可持久化的会话数据**发送消息，而不需要保存 event 对象。
 
         异步方法。
+
+        Returns:
+            True if the adapter accepted the message, False if it knows the
+            message was skipped or rejected, or None if acceptance is unknown.
         """
         asyncio.create_task(
             Metric.upload(msg_event_tick=1, adapter_name=self.meta().name)

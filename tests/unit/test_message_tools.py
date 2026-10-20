@@ -43,10 +43,26 @@ def _make_context(
             event=event,
             context=SimpleNamespace(
                 get_config=lambda umo: cfg,
-                send_message=AsyncMock(),
+                send_message=AsyncMock(return_value=True),
             ),
         )
     )
+
+
+@pytest.mark.asyncio
+async def test_send_message_tool_rejects_unconfirmed_adapter_acceptance():
+    ctx = _make_context()
+    ctx.context.context.send_message.return_value = None
+
+    result = await SendMessageToUserTool().call(
+        ctx,
+        messages=[{"type": "plain", "text": "Reminder"}],
+    )
+
+    assert result.startswith("error: failed to send message")
+    assert ctx.context.event.get_extra(
+        "_send_message_to_user_current_session_delivery_confirmed"
+    ) is False
 
 
 class _DummyRespondEvent:
@@ -191,7 +207,7 @@ async def test_send_message_missing_platform_does_not_record_delivery():
     result = await SendMessageToUserTool().call(
         ctx, messages=[{"type": "plain", "text": "hello"}]
     )
-    assert result.startswith("error: failed to find platform")
+    assert result.startswith("error: no matching platform was found")
     ctx.context.event.trace.record.assert_not_called()
     assert ctx.context.event._has_send_oper is False
     assert (

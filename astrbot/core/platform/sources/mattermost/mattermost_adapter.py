@@ -69,9 +69,10 @@ class MattermostPlatformAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ) -> None:
+    ) -> bool:
         await self.client.send_message_chain(session.session_id, message_chain)
         await super().send_by_session(session, message_chain)
+        return True
 
     def meta(self) -> PlatformMetadata:
         return self.metadata

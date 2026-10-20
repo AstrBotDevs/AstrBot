@@ -217,7 +217,7 @@ class TelegramPlatformAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ) -> None:
+    ) -> bool:
         from_username = session.session_id
         await TelegramPlatformEvent.send_with_client(
             self.client,
@@ -225,6 +225,7 @@ class TelegramPlatformAdapter(Platform):
             from_username,
         )
         await super().send_by_session(session, message_chain)
+        return True
 
     @override
     def meta(self) -> PlatformMetadata:

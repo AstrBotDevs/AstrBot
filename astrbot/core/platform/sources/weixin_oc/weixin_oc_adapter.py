@@ -1651,7 +1651,7 @@ class WeixinOCAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ) -> None:
+    ) -> bool:
         target_user = session.session_id
         pending_text = ""
         has_supported_segment = False
@@ -1690,12 +1690,14 @@ class WeixinOCAdapter(Platform):
                 "weixin_oc(%s): outbound message ignored, no supported segments",
                 self.meta().id,
             )
+            return False
         if failed_segments:
             raise RuntimeError(
                 f"weixin_oc({self.meta().id}, target_user={target_user}) "
                 f"failed to send {failed_segments} message segment(s)"
             )
         await super().send_by_session(session, message_chain)
+        return True
 
     def meta(self) -> PlatformMetadata:
         return self.metadata

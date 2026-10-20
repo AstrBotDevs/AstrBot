@@ -567,7 +567,7 @@ class WecomAIBotAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ) -> None:
+    ) -> bool:
         """通过消息推送 webhook 发送消息。"""
         if not self.webhook_client:
             raise RuntimeError(
@@ -583,6 +583,7 @@ class WecomAIBotAdapter(Platform):
                 f"企业微信消息推送失败: session_id={session.session_id}, error={e}"
             ) from e
         await super().send_by_session(session, message_chain)
+        return True
 
     def run(self) -> Awaitable[Any]:
         """运行适配器，同时启动HTTP服务器和队列监听器"""

@@ -393,7 +393,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ) -> None:
+    ) -> bool:
         await super().send_by_session(session, message_chain)
         raise Exception("微信公众号不支持发送主动消息")
 

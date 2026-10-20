@@ -113,11 +113,13 @@ class LinePlatformAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ) -> None:
+    ) -> bool:
         messages = await LineMessageEvent.build_line_messages(message_chain)
-        if messages:
-            await self.line_api.push_message(session.session_id, messages)
+        if not messages:
+            return False
+        await self.line_api.push_message(session.session_id, messages)
         await super().send_by_session(session, message_chain)
+        return True
 
     def meta(self) -> PlatformMetadata:
         return PlatformMetadata(

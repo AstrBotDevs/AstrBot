@@ -1,5 +1,6 @@
 """Tests for CronJobManager."""
 
+import asyncio
 import json
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -551,9 +552,49 @@ class TestRunJob:
         # Should not update status
         mock_db.update_cron_job.assert_not_called()
 
+    @pytest.mark.asyncio
+    async def test_manual_run_skips_job_already_running(
+        self, cron_manager, mock_db, sample_cron_job
+    ):
+        """Manual runs share the scheduler's per-job in-flight protection."""
+        mock_db.get_cron_job.return_value = sample_cron_job
+        started = asyncio.Event()
+        release = asyncio.Event()
+        calls = 0
+
+        async def handler():
+            nonlocal calls
+            calls += 1
+            started.set()
+            await release.wait()
+
+        cron_manager._basic_handlers[sample_cron_job.job_id] = handler
+        scheduled_run = asyncio.create_task(
+            cron_manager._run_job(sample_cron_job.job_id)
+        )
+        await started.wait()
+
+        await cron_manager.run_job_now(sample_cron_job.job_id)
+        assert calls == 1
+
+        release.set()
+        await scheduled_run
+        assert calls == 1
+        assert cron_manager._running_job_ids == set()
+
 
 class TestRunActiveAgentJob:
     """Tests for active agent cron job execution."""
+
+    @pytest.mark.asyncio
+    async def test_invalid_delivery_session_fails_job(self, cron_manager):
+        with pytest.raises(RuntimeError, match="Invalid session for cron job"):
+            await cron_manager._woke_main_agent(
+                message="reminder",
+                session_str="invalid-session",
+                extras={},
+                delivery_session_str="invalid-session",
+            )
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(

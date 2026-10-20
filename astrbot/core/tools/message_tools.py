@@ -359,11 +359,16 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             sent = await context.context.context.send_message(
                 target_session,
                 message_chain,
+                require_delivery_confirmation=True,
             )
         except Exception as exc:
             return f"error: failed to send message to session {target_session}: {exc}"
         if not sent:
-            return f"error: failed to find platform for session {target_session}."
+            return (
+                "error: no matching platform was found or it did not explicitly "
+                "confirm message acceptance "
+                f"for session {target_session}."
+            )
         if str(target_session) == current_session:
             context.context.event.set_extra(
                 "_send_message_to_user_current_session_delivery_confirmed", True

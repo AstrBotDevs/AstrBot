@@ -82,7 +82,7 @@ class SlackAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ) -> None:
+    ) -> bool:
         channel_id = session.session_id
         if session.message_type == MessageType.GROUP_MESSAGE:
             channel_id = channel_id.split("_")[-1]
@@ -92,6 +92,7 @@ class SlackAdapter(Platform):
             channel_id=channel_id,
         )
         await super().send_by_session(session, message_chain)
+        return True
 
     async def convert_message(self, event: dict) -> AstrBotMessage:
         logger.debug(f"[slack] RawMessage {event}")

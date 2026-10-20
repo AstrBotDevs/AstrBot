@@ -330,14 +330,14 @@ class QQOfficialPlatformAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ) -> None:
-        await self._send_by_session_common(session, message_chain)
+    ) -> bool:
+        return await self._send_by_session_common(session, message_chain)
 
     async def _send_by_session_common(
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ) -> None:
+    ) -> bool:
         """Send a message after resolving the QQ Official delivery session.
 
         Args:
@@ -345,7 +345,7 @@ class QQOfficialPlatformAdapter(Platform):
             message_chain: Message content to send.
 
         Returns:
-            None.
+            Whether the QQ API returned an accepted message receipt.
 
         Raises:
             ValueError: If the message is empty or its type is unsupported.
@@ -363,8 +363,9 @@ class QQOfficialPlatformAdapter(Platform):
         )
         if len(message_chains) > 1:
             for split_message_chain in message_chains:
-                await self._send_by_session_common(session, split_message_chain)
-            return
+                if not await self._send_by_session_common(session, split_message_chain):
+                    return False
+            return True
 
         (
             plain_text,
@@ -580,6 +581,7 @@ class QQOfficialPlatformAdapter(Platform):
             sent_message_id,
         )
         await Platform.send_by_session(self, session, message_chain)
+        return True
 
     def remember_session_message_id(self, session_id: str, message_id: str) -> None:
         if not session_id or not message_id:

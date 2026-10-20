@@ -289,6 +289,37 @@ async def test_public_context_send_records_only_successful_delivery(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("adapter_result", [None, False, True])
+async def test_context_send_can_require_explicit_adapter_acceptance(
+    adapter_result,
+):
+    platform = SimpleNamespace(
+        meta=lambda: SimpleNamespace(id="target"),
+        send_by_session=AsyncMock(return_value=adapter_result),
+    )
+    context = SimpleNamespace(
+        platform_manager=SimpleNamespace(platform_insts=[platform]),
+        get_config=lambda **kwargs: {},
+    )
+
+    if adapter_result is True:
+        assert await Context.send_message(
+            context,
+            "target:FriendMessage:other",
+            MessageChain([Plain("Hello")]),
+            require_delivery_confirmation=True,
+        ) is True
+    else:
+        with pytest.raises(RuntimeError, match="did not explicitly confirm"):
+            await Context.send_message(
+                context,
+                "target:FriendMessage:other",
+                MessageChain([Plain("Hello")]),
+                require_delivery_confirmation=True,
+            )
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("scoped", [False, True])
 async def test_public_context_send_skips_unscoped_and_stream_chunk_records(
     astr_message_event, scoped

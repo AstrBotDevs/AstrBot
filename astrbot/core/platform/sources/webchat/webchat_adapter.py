@@ -87,7 +87,7 @@ class WebChatAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ) -> None:
+    ) -> bool:
         conversation_id = _extract_conversation_id(session.session_id)
         active_request_ids = self._webchat_queue_mgr.list_back_request_ids(
             conversation_id
@@ -101,14 +101,19 @@ class WebChatAdapter(Platform):
             # No active streams to consume this proactive message.
             # Persist directly and return to avoid creating an unused queue.
             try:
-                await self._save_proactive_message(conversation_id, message_chain)
+                saved = await self._save_proactive_message(
+                    conversation_id, message_chain
+                )
             except Exception as e:
                 logger.error(
                     f"[WebChatAdapter] Failed to save proactive message: {e}",
                     exc_info=True,
                 )
+                return False
+            if not saved:
+                return False
             await super().send_by_session(session, message_chain)
-            return
+            return True
 
         for request_id in target_request_ids:
             await WebChatMessageEvent._send(
@@ -132,19 +137,20 @@ class WebChatAdapter(Platform):
                 )
 
         await super().send_by_session(session, message_chain)
+        return True
 
     async def _save_proactive_message(
         self,
         conversation_id: str,
         message_chain: MessageChain,
-    ) -> None:
+    ) -> bool:
         message_parts = await message_chain_to_storage_message_parts(
             message_chain,
             insert_attachment=db_helper.insert_attachment,
             attachments_dir=self.attachments_dir,
         )
         if not message_parts:
-            return
+            return False
 
         await db_helper.insert_platform_message_history(
             platform_id="webchat",
@@ -153,6 +159,7 @@ class WebChatAdapter(Platform):
             sender_id="bot",
             sender_name="bot",
         )
+        return True
 
     async def _get_message_history(
         self, message_id: int

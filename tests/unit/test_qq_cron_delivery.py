@@ -130,8 +130,13 @@ async def delivery_env(tmp_path, adapter):
         ),
     )
 
-    async def send_message(session, message):
-        return await Context.send_message(context, session, message)
+    async def send_message(session, message, *, require_delivery_confirmation=False):
+        return await Context.send_message(
+            context,
+            session,
+            message,
+            require_delivery_confirmation=require_delivery_confirmation,
+        )
 
     context.send_message = send_message
     manager = CronJobManager(db)
@@ -314,12 +319,13 @@ async def test_partial_success_then_failed_send_is_not_completed(delivery_env):
 
 
 @pytest.mark.asyncio
-async def test_conditional_task_can_intentionally_send_nothing(delivery_env):
-    """Tasks that intentionally make no send attempt retain their behavior."""
+async def test_configured_delivery_requires_adapter_acceptance(delivery_env):
+    """A configured delivery session must be explicitly accepted by its adapter."""
     await delivery_env.manager._run_job(delivery_env.job.job_id)
 
     saved = await delivery_env.db.get_cron_job(delivery_env.job.job_id)
-    assert saved.status == "completed"
+    assert saved.status == "failed"
+    assert "did not receive explicit acceptance" in saved.last_error
     delivery_env.adapter.client.api.post_group_message.assert_not_awaited()
 
 

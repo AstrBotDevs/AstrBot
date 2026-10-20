@@ -269,7 +269,7 @@ class WecomPlatformAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ) -> None:
+    ) -> bool:
         # 企业微信客服不支持主动发送
         if hasattr(self.client, "kf_message"):
             await super().send_by_session(session, message_chain)
@@ -293,6 +293,7 @@ class WecomPlatformAdapter(Platform):
         event = self.create_event(message_obj)
         await event.send(message_chain)
         await super().send_by_session(session, message_chain)
+        return True
 
     @override
     def meta(self) -> PlatformMetadata:

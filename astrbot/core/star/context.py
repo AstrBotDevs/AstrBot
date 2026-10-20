@@ -656,22 +656,26 @@ class Context:
         self,
         session: str | MessageSesion,
         message_chain: MessageChain,
+        *,
+        require_delivery_confirmation: bool = False,
     ) -> bool:
         """根据 session(unified_msg_origin) 主动发送消息。
 
         Args:
             session: 消息会话。通过 event.session 或者 event.unified_msg_origin 获取。
             message_chain: 消息链。
+            require_delivery_confirmation: 为 True 时，只有适配器显式返回 True
+                才视为发送成功；默认保持旧行为，仅表示找到了匹配的平台。
 
         Returns:
-            是否找到匹配的平台。
+            默认表示是否找到匹配的平台；启用确认时表示适配器是否显式接受了消息。
 
         Raises:
             ValueError: session 字符串不合法时抛出。
+            RuntimeError: 平台拒绝发送，或启用确认时适配器未显式接受消息。
 
         Note:
             当 session 为字符串时，会尝试解析为 MessageSession 对象。(类名为MessageSesion是因为历史遗留拼写错误)
-            qq_official(QQ 官方 API 平台) 不支持此方法。
         """
         if isinstance(session, str):
             try:
@@ -681,7 +685,14 @@ class Context:
 
         for platform in self.platform_manager.platform_insts:
             if platform.meta().id == session.platform_name:
-                await platform.send_by_session(session, message_chain)
+                delivery_accepted = await platform.send_by_session(
+                    session, message_chain
+                )
+                if require_delivery_confirmation and delivery_accepted is not True:
+                    raise RuntimeError(
+                        f"Platform {platform.meta().id} did not explicitly confirm "
+                        "message acceptance."
+                    )
                 event = current_message_event.get()
                 if (
                     event is not None

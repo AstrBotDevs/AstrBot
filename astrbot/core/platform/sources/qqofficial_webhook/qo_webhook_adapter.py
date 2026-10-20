@@ -131,8 +131,8 @@ class QQOfficialWebhookPlatformAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ) -> None:
-        await QQOfficialPlatformAdapter._send_by_session_common(
+    ) -> bool:
+        return await QQOfficialPlatformAdapter._send_by_session_common(
             cast(Any, self),
             session,
             message_chain,

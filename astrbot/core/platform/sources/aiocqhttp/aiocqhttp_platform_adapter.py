@@ -110,7 +110,7 @@ class AiocqhttpAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ) -> None:
+    ) -> bool:
         is_group = session.message_type == MessageType.GROUP_MESSAGE
         if is_group:
             session_id = session.session_id.split("_")[-1]
@@ -124,6 +124,7 @@ class AiocqhttpAdapter(Platform):
             session_id=session_id,
         )
         await super().send_by_session(session, message_chain)
+        return True
 
     async def convert_message(self, event: Event) -> AstrBotMessage | None:
         logger.debug(f"[aiocqhttp] RawMessage {event}")

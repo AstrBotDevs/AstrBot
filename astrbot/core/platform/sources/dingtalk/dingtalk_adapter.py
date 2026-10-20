@@ -112,7 +112,7 @@ class DingtalkPlatformAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ) -> None:
+    ) -> bool:
         robot_code = self.client_id
 
         if session.message_type == MessageType.GROUP_MESSAGE:
@@ -136,6 +136,7 @@ class DingtalkPlatformAdapter(Platform):
             )
 
         await super().send_by_session(session, message_chain)
+        return True
 
     async def send_with_session(
         self,

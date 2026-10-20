@@ -92,7 +92,7 @@ class SatoriPlatformAdapter(Platform):
         self,
         session: MessageSession,
         message_chain: MessageChain,
-    ) -> None:
+    ) -> bool:
         from .satori_event import SatoriPlatformEvent
 
         await SatoriPlatformEvent.send_with_adapter(
@@ -101,6 +101,7 @@ class SatoriPlatformAdapter(Platform):
             session.session_id,
         )
         await super().send_by_session(session, message_chain)
+        return True
 
     def meta(self) -> PlatformMetadata:
         return self.metadata
