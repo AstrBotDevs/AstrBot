@@ -83,12 +83,12 @@
       "title": "PyPI 软件仓库地址",
       "subtitle": "安装 AstrBot 的 Python 依赖时使用的 PyPI 源。可选择国内镜像加速或自定义地址；修改后需重启 AstrBot 生效。",
       "label": "选择 PyPI 软件仓库",
-      "none": "不使用镜像（官方 PyPI）",
       "custom": "自定义地址",
       "customPlaceholder": "https://example.com/pypi/simple",
       "testConnection": "测试连通性",
       "unavailable": "不可用",
       "presets": {
+        "official": "官方",
         "aliyun": "阿里云",
         "tsinghua": "清华大学",
         "ustc": "中科大",

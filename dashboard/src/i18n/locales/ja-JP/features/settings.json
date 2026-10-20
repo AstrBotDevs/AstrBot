@@ -83,12 +83,12 @@
       "title": "PyPI パッケージインデックス",
       "subtitle": "AstrBot の Python 依存関係をインストールする際に使用する PyPI インデックスです。国内ミラーまたはカスタム URL を選択できます。変更は AstrBot の再起動後に反映されます。",
       "label": "PyPI パッケージインデックスを選択",
-      "none": "ミラーを使用しない（公式 PyPI）",
       "custom": "カスタム URL",
       "customPlaceholder": "https://example.com/pypi/simple",
       "testConnection": "接続をテスト",
       "unavailable": "利用不可",
       "presets": {
+        "official": "公式",
         "aliyun": "Alibaba Cloud",
         "tsinghua": "清華大学",
         "ustc": "中国科学技術大学",

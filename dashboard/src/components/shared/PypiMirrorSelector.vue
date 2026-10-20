@@ -9,17 +9,6 @@
         </div>
         <v-radio-group class="mt-2" :model-value="activeKey" hide-details="true"
             @update:model-value="onSelectionChange">
-            <v-radio value="none">
-                <template v-slot:label>
-                    <div class="pypi-mirror__option-label">
-                        <span>{{ tm('network.pypiMirror.none') }}</span>
-                        <v-chip v-if="status.official" :color="status.official.available ? 'success' : 'error'"
-                            size="x-small">
-                            {{ status.official.available ? `${status.official.latency}ms` : tm('network.pypiMirror.unavailable') }}
-                        </v-chip>
-                    </div>
-                </template>
-            </v-radio>
             <v-radio color="success" v-for="mirror in mirrors" :key="mirror.key" :value="mirror.key">
                 <template v-slot:label>
                     <div class="pypi-mirror__option-label">
@@ -55,7 +44,8 @@
 import { statsApi } from '@/api/v1';
 import { useModuleI18n } from '@/i18n/composables';
 
-// "No mirror" resolves to the official index, which is what pip uses by default.
+// The official index is what pip falls back to, so it is listed first like any
+// other preset instead of being a separate "no mirror" option.
 const OFFICIAL_INDEX_URL = "https://pypi.org/simple";
 
 export default {
@@ -73,12 +63,13 @@ export default {
     data() {
         return {
             mirrors: [
+                { key: "official", url: OFFICIAL_INDEX_URL },
                 { key: "aliyun", url: "https://mirrors.aliyun.com/pypi/simple/" },
                 { key: "tencent", url: "https://mirrors.cloud.tencent.com/pypi/simple" },
                 { key: "tsinghua", url: "https://pypi.tuna.tsinghua.edu.cn/simple" },
                 { key: "ustc", url: "https://pypi.mirrors.ustc.edu.cn/simple" },
             ],
-            activeKey: "none",
+            activeKey: "official",
             customUrl: "",
             status: {},
             testingConnections: false,
@@ -99,7 +90,8 @@ export default {
         syncFromValue(value) {
             const current = this.normalizeUrl(value);
             if (!current) {
-                this.activeKey = "none";
+                // An empty value means pip uses its default, i.e. the official index.
+                this.activeKey = "official";
                 this.customUrl = "";
                 return;
             }
@@ -116,10 +108,6 @@ export default {
         },
         onSelectionChange(key) {
             this.activeKey = key;
-            if (key === "none") {
-                this.$emit("update:modelValue", "");
-                return;
-            }
             const preset = this.mirrors.find((mirror) => mirror.key === key);
             if (preset) {
                 this.$emit("update:modelValue", preset.url);
@@ -129,7 +117,12 @@ export default {
         },
         onCustomInput(value) {
             this.customUrl = value;
-            this.$emit("update:modelValue", String(value || "").trim());
+            const trimmed = String(value || "").trim();
+            if (!trimmed) {
+                // Keep the saved value while the field is temporarily empty.
+                return;
+            }
+            this.$emit("update:modelValue", trimmed);
         },
         async testMirror(indexUrl, statusKey) {
             try {
@@ -161,7 +154,6 @@ export default {
                 const promises = this.mirrors.map((mirror) =>
                     this.testMirror(mirror.url, mirror.key)
                 );
-                promises.push(this.testMirror(OFFICIAL_INDEX_URL, "official"));
 
                 if (this.activeKey === "custom") {
                     const customIndex = this.normalizeUrl(this.customUrl);
