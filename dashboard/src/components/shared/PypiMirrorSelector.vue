@@ -57,6 +57,9 @@ import { useModuleI18n } from '@/i18n/composables';
 // The official index is what pip falls back to, so it is listed first like any
 // other preset instead of being a separate "no mirror" option.
 const OFFICIAL_INDEX_URL = "https://pypi.org/simple";
+// The typed custom URL is remembered separately from the saved config value, so
+// it stays visible (and testable) after a reload even while a preset is active.
+const CUSTOM_STORAGE_KEY = "selectedPypiMirrorCustom";
 
 export default {
     props: {
@@ -80,7 +83,7 @@ export default {
                 { key: "tsinghua", url: "https://pypi.tuna.tsinghua.edu.cn/simple" },
             ],
             activeKey: "official",
-            customUrl: "",
+            customUrl: localStorage.getItem(CUSTOM_STORAGE_KEY) || "",
             status: {},
             speed: {},
             testingConnections: false,
@@ -93,6 +96,9 @@ export default {
             handler(value) {
                 this.syncFromValue(value);
             },
+        },
+        customUrl(newVal) {
+            localStorage.setItem(CUSTOM_STORAGE_KEY, newVal || "");
         },
     },
     methods: {
