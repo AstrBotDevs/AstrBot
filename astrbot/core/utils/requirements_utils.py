@@ -411,6 +411,18 @@ def find_missing_requirements_from_lines(
 def classify_missing_requirements_from_lines(
     requirement_lines: Sequence[str],
 ) -> MissingRequirementsAnalysis | None:
+    for line in requirement_lines:
+        try:
+            requirement = Requirement(line)
+        except InvalidRequirement:
+            continue
+        if requirement.extras and (
+            requirement.marker is None or requirement.marker.evaluate()
+        ):
+            # An installed base distribution does not prove its extras are present.
+            # Let pip resolve their transitive dependencies and environment markers.
+            return None
+
     required = list(iter_requirements(lines=requirement_lines))
     if not required:
         return MissingRequirementsAnalysis(missing_names=frozenset())

@@ -476,3 +476,50 @@ def test_parse_requirement_name_and_spec_handles_plain_requirement_token():
         "demo-package",
         requirements_utils.Requirement("demo-package>=1.0").specifier,
     )
+
+@pytest.mark.parametrize(
+    "requirement",
+    [
+        "demo[socks]>=1.0",
+        "demo[socks,security]>=1.0",
+        'demo[socks]>=1.0; python_version >= "3.0"',
+    ],
+)
+def test_precheck_defers_active_extras_to_the_installer(
+    monkeypatch, tmp_path, requirement
+):
+    monkeypatch.setattr(
+        requirements_utils,
+        "collect_installed_distribution_versions",
+        lambda paths: {"demo": "2.0"},
+    )
+    requirements_path = tmp_path / "requirements.txt"
+    requirements_path.write_text(requirement + "\n", encoding="utf-8")
+
+    assert (
+        requirements_utils.classify_missing_requirements_from_lines([requirement])
+        is None
+    )
+    assert requirements_utils.find_missing_requirements(str(requirements_path)) is None
+    assert (
+        requirements_utils.plan_missing_requirements_install(str(requirements_path))
+        is None
+    )
+
+
+def test_precheck_does_not_install_extras_with_inactive_markers(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        requirements_utils,
+        "collect_installed_distribution_versions",
+        lambda paths: {"demo": "2.0"},
+    )
+    requirements_path = tmp_path / "requirements.txt"
+    requirements_path.write_text(
+        'demo[socks]>=1.0; python_version < "2.0"\ndemo>=1.0\n',
+        encoding="utf-8",
+    )
+
+    plan = requirements_utils.plan_missing_requirements_install(str(requirements_path))
+    assert plan is not None
+    assert plan.missing_names == frozenset()
+    assert plan.install_lines == ()

@@ -2928,3 +2928,26 @@ async def test_repeated_deactivated_loads_bind_handlers_once_when_activated(
         llm_tools.func_list = original_func_list
         cast(Any, plugin_manager_pm.context).stars.remove(metadata)
         _clear_star_runtime_state()
+
+@pytest.mark.asyncio
+async def test_plugin_precheck_installs_extras_even_when_base_package_is_present(
+    monkeypatch, tmp_path
+):
+    from astrbot.core.utils import requirements_utils
+
+    requirements_path = tmp_path / "requirements.txt"
+    requirements_path.write_text("demo[socks]>=1.0\n", encoding="utf-8")
+    monkeypatch.setattr(
+        requirements_utils,
+        "collect_installed_distribution_versions",
+        lambda paths: {"demo": "2.0"},
+    )
+    install = AsyncMock()
+    monkeypatch.setattr(star_manager_module.pip_installer, "install", install)
+
+    await star_manager_module._install_requirements_with_precheck(
+        plugin_label="extra-dependency-plugin",
+        requirements_path=str(requirements_path),
+    )
+
+    install.assert_awaited_once_with(requirements_path=str(requirements_path))
