@@ -52,6 +52,7 @@ from astrbot.dashboard.password_state import (
 class StatServiceError(Exception):
     pass
 
+
 # Speed tests download real payloads, so these budgets stop a single click
 # from pulling tens of megabytes.
 _SPEED_SAMPLE_SECONDS = 6.0
@@ -705,7 +706,9 @@ class StatService:
                     href = href.split("#", 1)[0]
                     file_name = href.rsplit("/", 1)[-1]
                     suffix = "-py3-none-any.whl"
-                    if not (file_name.startswith("pip-") and file_name.endswith(suffix)):
+                    if not (
+                        file_name.startswith("pip-") and file_name.endswith(suffix)
+                    ):
                         continue
                     try:
                         version = Version(file_name[len("pip-") : -len(suffix)])
