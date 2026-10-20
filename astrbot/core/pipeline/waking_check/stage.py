@@ -1,0 +1,252 @@
+from collections.abc import AsyncGenerator
+
+from astrbot import logger
+from astrbot.core.message.components import At, AtAll, Reply
+from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.star.filter.command_group import CommandGroupFilter
+from astrbot.core.star.filter.permission import PermissionTypeFilter
+from astrbot.core.star.session_plugin_manager import SessionPluginManager
+from astrbot.core.star.star import star_map
+from astrbot.core.star.star_handler import EventType, star_handlers_registry
+from astrbot.core.utils.session_waiter import FILTERS, USER_SESSIONS
+
+from ..context import PipelineContext
+from ..stage import Stage, register_stage
+from .umo_auto_name import UmoAutoNameRecorder
+
+
+@register_stage
+class WakingCheckStage(Stage):
+    """检查是否需要唤醒。唤醒机器人有如下几点条件：
+
+    1. 机器人被 @ 了
+    2. 机器人的消息被提到了
+    3. 以 wake_prefix 前缀开头，并且消息没有以 At 消息段开头
+    4. 插件（Star）的 handler filter 通过
+    5. 私聊情况下，位于 admins_id 列表中的管理员的消息（在白名单阶段中）
+    """
+
+    async def initialize(self, ctx: PipelineContext) -> None:
+        """初始化唤醒检查阶段
+
+        Args:
+            ctx (PipelineContext): 消息管道上下文对象, 包括配置和插件管理器
+
+        """
+        self.ctx = ctx
+        self.no_permission_reply = self.ctx.astrbot_config["platform_settings"].get(
+            "no_permission_reply",
+            True,
+        )
+        # 私聊是否需要 wake_prefix 才能唤醒机器人
+        self.friend_message_needs_wake_prefix = self.ctx.astrbot_config[
+            "platform_settings"
+        ].get("friend_message_needs_wake_prefix", False)
+        # 是否忽略机器人自己发送的消息
+        self.ignore_bot_self_message = self.ctx.astrbot_config["platform_settings"].get(
+            "ignore_bot_self_message",
+            False,
+        )
+        self.ignore_at_all = self.ctx.astrbot_config["platform_settings"].get(
+            "ignore_at_all",
+            False,
+        )
+        self.disable_builtin_commands = self.ctx.astrbot_config.get(
+            "disable_builtin_commands", False
+        )
+        self._umo_auto_name_recorder = UmoAutoNameRecorder(
+            ctx.db_helper,
+            ctx.astrbot_config_id,
+        )
+
+    async def process(
+        self,
+        event: AstrMessageEvent,
+    ) -> None | AsyncGenerator[None, None]:
+        # ignore bot self message
+        if (
+            self.ignore_bot_self_message
+            and event.get_self_id() == event.get_sender_id()
+        ):
+            event.stop_event()
+            return
+
+        # 设置 sender 身份
+        preserve_whitespace = event.get_platform_name() == "lark" and (
+            getattr(event.message_obj.raw_message, "message_type", None) == "post"
+        )
+        message_str = event.message_str.strip()
+        if not preserve_whitespace:
+            event.message_str = message_str
+        api_key_allow_admin_role = event.get_extra("_api_key_allow_admin_role")
+        for admin_id in self.ctx.astrbot_config["admins_id"]:
+            if (
+                api_key_allow_admin_role is not False
+                and str(event.get_sender_id()) == admin_id
+            ):
+                event.role = "admin"
+                break
+
+        # 检查 wake
+        wake_prefixes = self.ctx.astrbot_config["wake_prefix"]
+        messages = event.get_messages()
+        is_wake = False
+        for wake_prefix in wake_prefixes:
+            if message_str.startswith(wake_prefix):
+                if (
+                    not event.is_private_chat()
+                    and isinstance(messages[0], At)
+                    and str(messages[0].qq) != str(event.get_self_id())
+                    and str(messages[0].qq) != "all"
+                ):
+                    # 如果是群聊，且第一个消息段是 At 消息，但不是 At 机器人或 At 全体成员，则不唤醒
+                    break
+                is_wake = True
+                event.is_at_or_wake_command = True
+                event.is_wake = True
+                if preserve_whitespace:
+                    if wake_prefix:
+                        event.message_str = event.message_str.lstrip()[
+                            len(wake_prefix) :
+                        ]
+                else:
+                    event.message_str = message_str[len(wake_prefix) :].strip()
+                break
+        if not is_wake:
+            # 检查是否有at消息 / at全体成员消息 / 引用了bot的消息
+            for message in messages:
+                if (
+                    (
+                        isinstance(message, At)
+                        and (str(message.qq) == str(event.get_self_id()))
+                    )
+                    or (isinstance(message, AtAll) and not self.ignore_at_all)
+                    or (
+                        isinstance(message, Reply)
+                        and str(message.sender_id) == str(event.get_self_id())
+                    )
+                ):
+                    is_wake = True
+                    event.is_wake = True
+                    wake_prefix = ""
+                    event.is_at_or_wake_command = True
+                    break
+            # 检查是否是私聊
+            if event.is_private_chat() and (
+                not self.friend_message_needs_wake_prefix
+                or event.get_platform_name() == "webchat"
+            ):
+                is_wake = True
+                event.is_wake = True
+                event.is_at_or_wake_command = True
+                wake_prefix = ""
+
+        # 检查插件的 handler filter
+        activated_handlers = []
+        handlers_parsed_params = {}  # 注册了指令的 handler
+
+        # 将 plugins_name 设置到 event 中
+        enabled_plugins_name = self.ctx.astrbot_config.get("plugin_set", ["*"])
+        if enabled_plugins_name == ["*"]:
+            # 如果是 *，则表示所有插件都启用
+            event.plugins_name = None
+        else:
+            event.plugins_name = enabled_plugins_name
+        logger.debug(f"enabled_plugins_name: {enabled_plugins_name}")
+
+        for handler in star_handlers_registry.get_handlers_by_event_type(
+            EventType.AdapterMessageEvent,
+            plugins_name=event.plugins_name,
+        ):
+            if (
+                self.disable_builtin_commands
+                and handler.handler_module_path
+                == "astrbot.builtin_stars.builtin_commands.main"
+            ):
+                continue
+
+            # filter 需满足 AND 逻辑关系
+            passed = True
+            permission_not_pass = False
+            permission_filter_raise_error = False
+            if len(handler.event_filters) == 0:
+                continue
+
+            for filter in handler.event_filters:
+                try:
+                    if isinstance(filter, PermissionTypeFilter):
+                        if not filter.filter(event, self.ctx.astrbot_config):
+                            permission_not_pass = True
+                            permission_filter_raise_error = filter.raise_error
+                    elif not filter.filter(event, self.ctx.astrbot_config):
+                        passed = False
+                        break
+                except Exception as e:
+                    await event.send(
+                        MessageEventResult()
+                        .message(
+                            f"插件 {star_map[handler.handler_module_path].name}: {e}",
+                        )
+                        .use_markdown(False),
+                    )
+                    event.stop_event()
+                    passed = False
+                    break
+            if passed:
+                if permission_not_pass:
+                    if not permission_filter_raise_error:
+                        # 跳过
+                        continue
+                    if self.no_permission_reply:
+                        await event.send(
+                            MessageChain().message(
+                                f"您(ID: {event.get_sender_id()})的权限不足以使用此指令。通过 /sid 获取 ID 并请管理员添加。",
+                            ),
+                        )
+                    logger.info(
+                        f"User ID {event.get_sender_id()} lacks permission to trigger "
+                        f"{star_map[handler.handler_module_path].name}.",
+                    )
+                    event.stop_event()
+                    if event.is_wake:
+                        self._umo_auto_name_recorder.schedule(event)
+                    return
+
+                is_wake = True
+                event.is_wake = True
+
+                is_group_cmd_handler = any(
+                    isinstance(f, CommandGroupFilter) for f in handler.event_filters
+                )
+                if not is_group_cmd_handler:
+                    activated_handlers.append(handler)
+                    if "parsed_params" in event.get_extra(default={}):
+                        handlers_parsed_params[handler.handler_full_name] = (
+                            event.get_extra("parsed_params")
+                        )
+
+            event._extras.pop("parsed_params", None)
+
+        # 根据会话配置过滤插件处理器
+        activated_handlers = await SessionPluginManager.filter_handlers_by_session(
+            event,
+            activated_handlers,
+        )
+
+        event.set_extra("activated_handlers", activated_handlers)
+        event.set_extra("handlers_parsed_params", handlers_parsed_params)
+
+        # Admit follow-up input without invoking callbacks before access checks.
+        if not is_wake:
+            for session_filter in tuple(FILTERS):
+                session = USER_SESSIONS.get(session_filter.filter(event))
+                if session and not session.session_controller.future.done():
+                    is_wake = True
+                    event.is_wake = True
+                    break
+
+        if is_wake:
+            self._umo_auto_name_recorder.schedule(event)
+        else:
+            event.stop_event()

@@ -1,0 +1,155 @@
+# Connecting to Lark
+
+## Supported Message Types
+
+> Version v4.16.0.
+
+| Message Type | Receive Support | Send Support | Notes |
+| --- | --- | --- | --- |
+| Text | Yes | Yes | |
+| Image | Yes | Yes | |
+| Voice | Yes | Yes | Converted to wav on receive and opus on send |
+| Video | Yes | Yes | Converted to mp4 before sending |
+| File | Yes | Yes | |
+
+When you receive a quoted (reply) message, AstrBot parses the quoted text, images, videos, and files.
+
+In group chats, the bot responds to messages that @ mention it, @ all members (unless disabled), reply to it, or start with a wake prefix such as `/`.
+
+Proactive message push: Supported.
+
+Streaming output: Supported. You must enable the `Create and update cards (cardkit:card:write)` permission for your app in the Lark Developer Console.
+
+The Lark client version must be >= 7.20. Lower versions only display the title and an upgrade prompt.
+
+## Creating a Bot
+
+Lark supports two setup methods: one-click QR creation in AstrBot, or manually creating a custom enterprise app in the Lark Developer Console.
+
+### Option 1: One-click QR Creation
+
+AstrBot version requirement: >= v4.25.0.
+
+Open the AstrBot management panel, click `Platforms` in the left sidebar, click `Add Adapter`, and select `lark`.
+
+Under `Creation Method`, select `One-click QR Creation`, choose the China or international edition as needed, then scan the QR code with the Lark mobile app and confirm. After creation succeeds, AstrBot automatically fills in the app's `app_id`, `app_secret`, and domain configuration.
+
+> [!IMPORTANT]
+> In group chats, Lark only pushes messages that @ mention the bot to AstrBot by default. If you need the bot to receive all group messages, enable the `im:message.group_msg` permission in the Lark Developer Console.
+>
+> Replace `<APP_ID>` in the URL below with your Lark app ID, then open it to jump to the permission enablement page:
+>
+> To find the App ID, go back to AstrBot's `Platforms` page, select the Lark bot you just created, and check `app_id` under `Connection settings`.
+>
+> ```text
+> https://open.feishu.cn/app/<APP_ID>/auth?q=contact:contact.base:readonly,contact:user.base:readonly,im:message,im:message.p2p_msg:readonly,im:message.group_at_msg:readonly,im:message.group_msg,im:message:send_as_bot,im:resource,cardkit:card:write&op_from=openapi&token_type=tenant
+> ```
+
+After QR creation succeeds, continue checking the event subscription, permissions, version release, and group installation steps below.
+
+### Option 2: Manual Creation
+
+Navigate to the [Developer Console](https://open.feishu.cn/app) and create a custom enterprise application.
+
+![Create Custom Enterprise Application](https://files.astrbot.app/docs/source/images/lark/image.png)
+
+Add the Bot capability to your application.
+
+![Add Bot Capability](https://files.astrbot.app/docs/source/images/lark/image-1.png)
+
+Click on "Credentials & Basic Info" to obtain your app_id and app_secret.
+
+![Get app_id and app_secret](https://files.astrbot.app/docs/source/images/lark/image-4.png)
+
+## Configuring AstrBot
+
+1. Access the AstrBot management panel
+2. Click on `Platforms` in the left sidebar
+3. Click `Add Adapter` above the bot list
+4. Select `lark`
+5. If you want AstrBot to create the app for you, select `One-click QR Creation` and complete the scan. If you already created the app yourself, select `Manual Creation`
+
+Fill in the configuration fields as follows:
+
+- ID: Choose any identifier to distinguish between different messaging platform instances
+- Enable: Check this option
+- app_id: The app_id you obtained earlier
+- app_secret: The app_secret you obtained earlier
+
+For the domain field, if you're using Lark China, keep the default value. If you're using Lark International, set it to `https://open.larksuite.com`. If you're using a self-hosted enterprise Lark instance, enter your Lark instance's domain.
+
+For the subscription method, `socket` uses a long connection subscription approach, while `webhook` sends events to your developer server and requires a public server. Generally, `socket` is recommended, and both Lark China and Lark International support long connections. For a self-hosted Lark instance, choose `webhook` if long connections are unavailable. The subsequent configuration steps will differ accordingly.
+
+If you selected the `webhook` method, navigate to the Lark Developer Console, click on "Events & Callbacks," then "Encryption Policy," and fill in the Encrypt Key. While not mandatory, AstrBot takes your data security seriously, so we strongly recommend setting this up. After filling it in, copy the `Encrypt Key` and `Verification Token` into the corresponding `Encrypt Key` (`lark_encrypt_key`) and `Verification Token` (`lark_verification_token`) fields in AstrBot.
+
+Click `Save`.
+
+## Setting up Callbacks and Permissions
+
+The following steps vary depending on the subscription method you selected above. Please proceed to the corresponding section based on your choice.
+
+### `socket` Long Connection Method
+
+Next, click on "Events & Callbacks," select "Receive events using long connection," and click Save. **If the previous step didn't start successfully, you won't be able to save here.**
+
+![Configure Events & Callbacks](https://files.astrbot.app/docs/source/images/lark/image-6.png)
+
+### `webhook` Send Events to Developer Server Method
+
+> [!TIP]
+> To make better use of this method, please refer to [Unified Webhook Mode](/en/use/unified-webhook.md#how-to-use-unified-webhook-mode) for the necessary configuration.
+
+After clicking `Save`, select the bot in `Platforms` and click `View Webhook URL` to copy the callback URL.
+
+Next, return to Lark's Events & Callbacks page, click "Event Configuration," select "Send events to developer server," enter the callback URL you just copied as the "Request URL," and click Save. If everything is correct, no errors will appear.
+
+### Setting up Events
+
+After completing the event configuration in the previous step, click "Add Event," navigate to "Messages & Groups," scroll down to find `Receive Message`, and add it.
+
+![Add Event](https://files.astrbot.app/docs/source/images/lark/image-7.png)
+
+Click to enable the following permissions.
+
+![Enable Permissions](https://files.astrbot.app/docs/source/images/lark/image-8.png)
+
+Then click the `Save` button at the top.
+
+Next, click on "Permission Management," click "Enable Permissions," and enter `im:message,im:message:send_as_bot`. Add the filtered permissions.
+
+Enter `im:resource` to enable uploading and downloading images, files, and other resources.
+
+Enable `contact:contact.base:readonly` and `contact:user.base:readonly` so private-message senders can be shown by their display names.
+
+If you want to use the bot in group chats, additionally enable `im:message.group_at_msg:readonly` and `im:message.group_msg`.
+
+> [!TIP]
+> An app created through one-click QR creation only receives group messages that @ mention the bot by default. To receive every group message, make sure `im:message.group_msg` is enabled. You can also use the permission URL above to quickly open the corresponding page.
+
+If you want to use streaming output, additionally enable `Create and update cards (cardkit:card:write)`.
+
+The final set of permissions should look like this:
+
+![Final Permissions](https://files.astrbot.app/docs/source/images/lark/image-11.png)
+
+## Creating a Version
+
+Create a new version.
+
+![Create Version](https://files.astrbot.app/docs/source/images/lark/image-2.png)
+
+Fill in the version number, update notes, and visibility scope, then click Save and confirm the release.
+
+## Adding the Bot to a Group
+
+Open the Lark app (the web version doesn't support adding bots), enter a group chat, click the button in the upper right corner → Group Bots → Add Bot.
+
+Search for the bot you just created. For example, if you created the `AstrBot` bot as shown in this tutorial:
+
+![Add Bot](https://files.astrbot.app/docs/source/images/lark/image-9.png)
+
+## 🎉 All Done!
+
+Mention the bot in the group and send a `/help` command, and the bot will respond.
+
+![Success](https://files.astrbot.app/docs/source/images/lark/image-13.png)

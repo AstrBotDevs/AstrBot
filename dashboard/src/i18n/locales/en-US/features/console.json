@@ -1,0 +1,47 @@
+{
+  "title": "Console",
+  "hideUserChat": {
+    "label": "Hide user chat",
+    "enabled": "User chat hidden",
+    "disabled": "Hide user chat"
+  },
+  "search": {
+    "label": "Search logs",
+    "placeholder": "Filter logs by keyword"
+  },
+  "fontSize": {
+    "label": "Log font size",
+    "decrease": "Decrease font size",
+    "increase": "Increase font size"
+  },
+  "filters": {
+    "title": "Filters",
+    "button": "Filters",
+    "reset": "Reset",
+    "level": "Log level",
+    "source": "Source",
+    "allSources": "All sources",
+    "core": "Core",
+    "plugins": "Plugins",
+    "plugin": "Plugin",
+    "allPlugins": "All plugins",
+    "platform": "Bot platform",
+    "allPlatforms": "All platforms",
+    "unscopedPlatform": "System / Unscoped"
+  },
+  "pipInstall": {
+    "button": "Install pip Package",
+    "dialogTitle": "Install Pip Package",
+    "packageLabel": "*Package name, e.g. llmtuner",
+    "mirrorLabel": "Force PyPI repository URL (optional)",
+    "mirrorHint": "Force PyPI repository URL > Config item `PyPI Repository Address`",
+    "cancelButton": "Cancel",
+    "installButton": "Install",
+    "installSuccess": "Installation successful.",
+    "installFailed": "Installation failed.",
+    "requestFailed": "Request failed."
+  },
+  "debugHint": {
+    "text": "Debug logs can be enabled in \"Configuration File → System → Console Log Level\""
+  }
+}

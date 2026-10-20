@@ -1,0 +1,97 @@
+{
+  "title": "长期记忆",
+  "subtitle": "AI助手的长期记忆管理",
+  "memories": {
+    "title": "记忆列表",
+    "content": "记忆内容",
+    "importance": "重要程度",
+    "createTime": "创建时间",
+    "lastAccess": "最后访问",
+    "category": "分类"
+  },
+  "categories": {
+    "personal": "个人信息",
+    "preferences": "偏好设置",
+    "conversations": "对话历史",
+    "facts": "事实信息",
+    "skills": "技能知识"
+  },
+  "importance": {
+    "high": "高",
+    "medium": "中",
+    "low": "低"
+  },
+  "actions": {
+    "view": "查看详情",
+    "edit": "编辑",
+    "delete": "删除",
+    "pin": "置顶",
+    "unpin": "取消置顶"
+  },
+  "filters": {
+    "all": "全部",
+    "category": "按分类",
+    "importance": "按重要程度",
+    "dateRange": "按时间范围",
+    "title": "筛选",
+    "userIdLabel": "筛选用户 ID",
+    "filterButton": "筛选",
+    "resetButton": "重置筛选",
+    "refreshButton": "刷新图形"
+  },
+  "search": {
+    "title": "搜索记忆",
+    "userIdLabel": "用户 ID",
+    "queryLabel": "输入关键词",
+    "searchButton": "搜索",
+    "resultsTitle": "搜索结果",
+    "noResults": "未找到相关记忆内容",
+    "similarity": "相关度",
+    "noTextContent": "无文本内容"
+  },
+  "addMemory": {
+    "title": "添加记忆数据",
+    "textLabel": "输入文本内容",
+    "userIdLabel": "用户 ID",
+    "summarizeLabel": "需要摘要",
+    "addButton": "添加数据"
+  },
+  "nodeDetails": {
+    "title": "节点详情",
+    "id": "ID",
+    "type": "类型",
+    "name": "名称",
+    "userId": "用户ID",
+    "timestamp": "时间戳"
+  },
+  "graphStats": {
+    "title": "图形统计",
+    "nodeCount": "节点数",
+    "edgeCount": "边数"
+  },
+  "factDialog": {
+    "title": "记忆事实",
+    "id": "ID",
+    "docId": "文档ID",
+    "createdAt": "创建时间",
+    "updatedAt": "更新时间",
+    "metadata": "元数据",
+    "metadataKey": "键",
+    "metadataValue": "值",
+    "loading": "加载中...",
+    "close": "关闭",
+    "noValue": "无",
+    "unknown": "未知"
+  },
+  "messages": {
+    "searchQueryRequired": "请输入搜索关键词",
+    "searchSuccess": "找到 {count} 条相关记忆",
+    "searchNoResults": "未找到相关记忆内容",
+    "searchError": "搜索失败",
+    "addSuccess": "记忆数据添加成功！",
+    "addError": "添加记忆数据失败",
+    "factDetailsError": "获取记忆详情失败",
+    "metadataParseError": "无法解析元数据",
+    "relationNoMemoryData": "该关系没有关联的记忆数据"
+  }
+} 

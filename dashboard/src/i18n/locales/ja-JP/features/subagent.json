@@ -1,0 +1,87 @@
+{
+  "header": {
+    "eyebrow": "サブエージェント"
+  },
+  "page": {
+    "title": "サブエージェント",
+    "beta": "実験的機能",
+    "subtitle": "メインエージェントは自身のツールを直接使用するほか、一部のタスクを各サブエージェントへ委任できます。より複雑なタスクに対応し、メインエージェントのコンテキスト肥大化を防ぎます。"
+  },
+  "actions": {
+    "refresh": "再読み込み",
+    "save": "保存",
+    "add": "サブエージェントを追加",
+    "expand": "設定を展開",
+    "collapse": "設定を折りたたむ",
+    "delete": "削除",
+    "close": "閉じる"
+  },
+  "overview": {
+    "totalAgents": "サブエージェント総数",
+    "totalAgentsNote": "設定済みのサブエージェント数",
+    "enabledAgents": "有効なエージェント",
+    "enabledAgentsNote": "AstrBot から呼び出せるサブエージェント",
+    "mainOrchestration": "メインオーケストレーションの状態",
+    "boundPersonas": "関連付け済みペルソナ",
+    "boundPersonasNote": "ペルソナを関連付けたサブエージェント数"
+  },
+  "switches": {
+    "enable": "サブエージェントオーケストレーションを有効化",
+    "enableHint": "サブエージェント機能を有効にします",
+    "dedupe": "メイン LLM の重複ツールを除外（サブエージェントと重複するツールを非表示）",
+    "dedupeHint": "サブエージェントと重複するツールをメインエージェントから除外します"
+  },
+  "description": {
+    "disabled": "サブエージェントオーケストレーションは無効です。",
+    "enabled": "有効にすると、メインエージェントがこのサブエージェントを呼び出せます。"
+  },
+  "section": {
+    "title": "サブエージェント設定",
+    "subtitle": "メインエージェントが委任できるサブエージェント、ペルソナ、説明を設定します",
+    "globalSettings": "グローバル設定",
+    "agentSetup": "エージェント設定"
+  },
+  "cards": {
+    "statusEnabled": "有効",
+    "statusDisabled": "無効",
+    "unnamed": "名前のないサブエージェント",
+    "transferPrefix": "transfer_to_{name}",
+    "switchLabel": "有効",
+    "previewTitle": "プレビュー：メイン LLM に表示されるハンドオフツール",
+    "personaChip": "ペルソナ：{id}",
+    "noDescription": "説明がありません",
+    "personaPreview": "ペルソナのプレビュー",
+    "previewHint": "現在選択中のペルソナを確認し、ハンドオフ先が正しいことを確かめられます。"
+  },
+  "form": {
+    "nameLabel": "エージェント名（transfer_to_{name} に使用）",
+    "nameHint": "英小文字＋アンダースコアを推奨します。全体で一意にしてください",
+    "providerLabel": "チャットプロバイダー（任意）",
+    "providerHint": "空欄の場合はグローバルの既定プロバイダーを使用します。",
+    "personaLabel": "ペルソナを選択",
+    "personaHint": "サブエージェントは選択したペルソナのシステム設定とツールを直接継承します。ペルソナ設定ページでペルソナを管理・作成できます。",
+    "personaPreview": "ペルソナのプレビュー",
+    "descriptionLabel": "メイン LLM 向けの説明（ハンドオフの判断に使用）",
+    "descriptionHint": "メイン LLM には transfer_to_* ツールの説明として表示されます。短く明確に記述してください。"
+  },
+  "messages": {
+    "loadConfigFailed": "設定の取得に失敗しました",
+    "loadPersonaFailed": "ペルソナ一覧の取得に失敗しました",
+    "unsavedChangesNotice": "このページには未保存の変更があります。移動する前に保存してください。",
+    "unsavedChangesLeaveConfirm": "このページには未保存の変更があります。移動すると変更は破棄されます。移動しますか？",
+    "unsavedChangesReloadConfirm": "このページには未保存の変更があります。設定を再読み込みすると変更は破棄されます。再読み込みしますか？",
+    "nameMissing": "名前が入力されていないサブエージェントがあります",
+    "nameInvalid": "サブエージェント名が無効です。英小文字、数字、アンダースコアのみ使用でき、先頭は英字にしてください",
+    "nameDuplicate": "サブエージェント名が重複しています：{name}",
+    "personaMissing": "サブエージェント {name} のペルソナが選択されていません",
+    "saveSuccess": "保存しました",
+    "saveFailed": "保存に失敗しました",
+    "nameRequired": "名前は必須です",
+    "namePattern": "英小文字、数字、アンダースコアのみ使用できます"
+  },
+  "empty": {
+    "title": "サブエージェントが設定されていません",
+    "subtitle": "右上の「サブエージェントを追加」から作成できます。",
+    "action": "最初のエージェントを作成"
+  }
+}

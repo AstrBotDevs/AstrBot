@@ -1,0 +1,1009 @@
+import asyncio
+import copy
+import io
+import uuid
+from unittest.mock import AsyncMock
+
+import pytest
+import pytest_asyncio
+from werkzeug.datastructures import FileStorage
+
+from astrbot.core import LogBroker
+from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.db.sqlite import SQLiteDatabase
+from astrbot.core.utils.auth_password import (
+    hash_dashboard_password,
+    hash_md5_dashboard_password,
+)
+from astrbot.dashboard.api import open_api as open_api_routes
+from astrbot.dashboard.asgi_runtime import FastAPIAppAdapter
+from astrbot.dashboard.responses import ok
+from astrbot.dashboard.server import AstrBotDashboard
+
+_TEST_DASHBOARD_PASSWORD = "AstrbotTest123"
+
+
+async def _create_api_key(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    *,
+    scopes: list[str],
+    name_prefix: str = "openapi-test",
+) -> tuple[str, str]:
+    test_client = app.test_client()
+    create_res = await test_client.post(
+        "/api/apikey/create",
+        json={"name": f"{name_prefix}-{uuid.uuid4().hex[:8]}", "scopes": scopes},
+        headers=authenticated_header,
+    )
+    assert create_res.status_code == 200
+    create_data = await create_res.get_json()
+    assert create_data["status"] == "ok"
+    return create_data["data"]["api_key"], create_data["data"]["key_id"]
+
+
+@pytest_asyncio.fixture(scope="module")
+async def core_lifecycle_td(tmp_path_factory):
+    tmp_db_path = tmp_path_factory.mktemp("data") / "test_data_api_key.db"
+    db = SQLiteDatabase(str(tmp_db_path))
+    log_broker = LogBroker()
+    core_lifecycle = AstrBotCoreLifecycle(log_broker, db)
+    await core_lifecycle.initialize()
+    core_lifecycle.astrbot_config["admins_id"] = ["api-key-test-admin"]
+    generated_password = getattr(
+        core_lifecycle.astrbot_config,
+        "_generated_dashboard_password",
+        None,
+    )
+    dashboard_password = generated_password or _TEST_DASHBOARD_PASSWORD
+    if not generated_password:
+        core_lifecycle.astrbot_config["dashboard"]["pbkdf2_password"] = (
+            hash_dashboard_password(dashboard_password)
+        )
+        core_lifecycle.astrbot_config["dashboard"]["password"] = (
+            hash_md5_dashboard_password(dashboard_password)
+        )
+    object.__setattr__(
+        core_lifecycle,
+        "_dashboard_plain_password",
+        dashboard_password,
+    )
+    try:
+        yield core_lifecycle
+    finally:
+        try:
+            stop_result = core_lifecycle.stop()
+            if asyncio.iscoroutine(stop_result):
+                await stop_result
+        except Exception:
+            pass
+
+
+@pytest.fixture(scope="module")
+def app(core_lifecycle_td: AstrBotCoreLifecycle):
+    shutdown_event = asyncio.Event()
+    server = AstrBotDashboard(core_lifecycle_td, core_lifecycle_td.db, shutdown_event)
+    return server.app
+
+
+def _resolve_dashboard_password(core_lifecycle_td: AstrBotCoreLifecycle) -> str:
+    generated_password = getattr(core_lifecycle_td, "_dashboard_plain_password", None)
+    if generated_password:
+        return generated_password
+    password = core_lifecycle_td.astrbot_config["dashboard"]["pbkdf2_password"]
+    if isinstance(password, str) and password.startswith("pbkdf2_sha256$"):
+        return "astrbot"
+    return password
+
+
+@pytest_asyncio.fixture(scope="module")
+async def authenticated_header(
+    app: FastAPIAppAdapter, core_lifecycle_td: AstrBotCoreLifecycle
+):
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/auth/login",
+        json={
+            "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
+            "password": _resolve_dashboard_password(core_lifecycle_td),
+        },
+    )
+    data = await response.get_json()
+    token = data["data"]["token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.mark.asyncio
+async def test_api_key_scope_and_revoke(
+    app: FastAPIAppAdapter, authenticated_header: dict
+):
+    test_client = app.test_client()
+
+    raw_key, key_id = await _create_api_key(
+        app,
+        authenticated_header,
+        scopes=["im"],
+        name_prefix="im-scope-key",
+    )
+
+    open_bot_res = await test_client.get(
+        "/api/v1/im/bots",
+        headers={"X-API-Key": raw_key},
+    )
+    assert open_bot_res.status_code == 200
+    open_bot_data = await open_bot_res.get_json()
+    assert open_bot_data["status"] == "ok"
+    assert isinstance(open_bot_data["data"]["bot_ids"], list)
+
+    denied_chat_sessions_res = await test_client.get(
+        "/api/v1/chat/sessions?page=1&page_size=10",
+        headers={"X-API-Key": raw_key},
+    )
+    assert denied_chat_sessions_res.status_code == 403
+
+    denied_chat_configs_res = await test_client.get(
+        "/api/v1/configs",
+        headers={"X-API-Key": raw_key},
+    )
+    assert denied_chat_configs_res.status_code == 403
+
+    denied_res = await test_client.post(
+        "/api/v1/file",
+        files={
+            "file": FileStorage(
+                stream=io.BytesIO(b"scope denied"),
+                filename="denied.txt",
+                content_type="text/plain",
+            ),
+        },
+        headers={"X-API-Key": raw_key},
+    )
+    assert denied_res.status_code == 403
+
+    revoke_res = await test_client.post(
+        "/api/apikey/revoke",
+        json={"key_id": key_id},
+        headers=authenticated_header,
+    )
+    assert revoke_res.status_code == 200
+    revoke_data = await revoke_res.get_json()
+    assert revoke_data["status"] == "ok"
+
+    revoked_access_res = await test_client.get(
+        "/api/v1/im/bots",
+        headers={"X-API-Key": raw_key},
+    )
+    assert revoked_access_res.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_open_send_message_with_api_key(
+    app: FastAPIAppAdapter, authenticated_header: dict
+):
+    test_client = app.test_client()
+
+    raw_key, _ = await _create_api_key(
+        app,
+        authenticated_header,
+        scopes=["im"],
+        name_prefix="send-message-key",
+    )
+
+    send_res = await test_client.post(
+        "/api/v1/im/message",
+        json={
+            "umo": "webchat:FriendMessage:open_api_test_session",
+            "message": "hello",
+        },
+        headers={"X-API-Key": raw_key},
+    )
+    assert send_res.status_code == 200
+    send_data = await send_res.get_json()
+    assert send_data["status"] == "ok"
+
+
+@pytest.mark.asyncio
+async def test_open_chat_send_auto_session_id_and_username(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    test_client = app.test_client()
+
+    raw_key, _ = await _create_api_key(
+        app,
+        authenticated_header,
+        scopes=["chat"],
+        name_prefix="chat-send-key",
+    )
+
+    async def fake_chat_response(_chat_service, username: str, post_data: dict):
+        return ok(
+            {
+                "session_id": post_data.get("session_id"),
+                "creator": username,
+                "allow_admin_role": post_data.get("_api_key_allow_admin_role"),
+            }
+        )
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(
+        open_api_routes,
+        "_build_streaming_chat_response",
+        fake_chat_response,
+    )
+    try:
+        send_res = await test_client.post(
+            "/api/v1/chat",
+            json={
+                "message": "hello",
+                "username": "alice_auto_session",
+                "enable_streaming": False,
+            },
+            headers={"X-API-Key": raw_key},
+        )
+    finally:
+        monkeypatch.undo()
+
+    assert send_res.status_code == 200
+    send_data = await send_res.get_json()
+    assert send_data["status"] == "ok"
+    created_session_id = send_data["data"]["session_id"]
+    assert isinstance(created_session_id, str)
+    uuid.UUID(created_session_id)
+    assert send_data["data"]["creator"] == "alice_auto_session"
+    assert send_data["data"]["allow_admin_role"] is False
+    created_session = await core_lifecycle_td.db.get_platform_session_by_id(
+        created_session_id
+    )
+    assert created_session is not None
+    assert created_session.creator == "alice_auto_session"
+    assert created_session.platform_id == "webchat"
+
+    await core_lifecycle_td.db.create_platform_session(
+        creator="bob_auto_session",
+        platform_id="webchat",
+        session_id="open_api_existing_bob_session",
+        is_group=0,
+    )
+    another_user_session_res = await test_client.post(
+        "/api/v1/chat",
+        json={
+            "message": "hello",
+            "username": "alice",
+            "session_id": "open_api_existing_bob_session",
+            "enable_streaming": False,
+        },
+        headers={"X-API-Key": raw_key},
+    )
+    another_user_session_data = await another_user_session_res.get_json()
+    assert another_user_session_data["status"] == "error"
+    assert (
+        another_user_session_data["message"] == "session_id belongs to another username"
+    )
+
+    missing_username_res = await test_client.post(
+        "/api/v1/chat",
+        json={"message": "hello"},
+        headers={"X-API-Key": raw_key},
+    )
+    missing_username_data = await missing_username_res.get_json()
+    assert missing_username_data["status"] == "error"
+    assert missing_username_data["message"] == "Missing key: username"
+
+    admin_username = str(core_lifecycle_td.astrbot_config["admins_id"][0])
+    reserved_admin_res = await test_client.post(
+        "/api/v1/chat",
+        json={
+            "message": "hello",
+            "username": admin_username,
+            "enable_streaming": False,
+        },
+        headers={"X-API-Key": raw_key},
+    )
+    reserved_admin_data = await reserved_admin_res.get_json()
+    assert reserved_admin_data["status"] == "error"
+    assert reserved_admin_data["message"] == (
+        "username is reserved for an AstrBot administrator"
+    )
+
+
+@pytest.mark.asyncio
+async def test_chat_admin_subscope_allows_configured_admin_username(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """A chat-admin key may use an administrator ID from configuration."""
+    test_client = app.test_client()
+    raw_key, _ = await _create_api_key(
+        app,
+        authenticated_header,
+        scopes=["chat", "chat:admin"],
+        name_prefix="chat-admin-key",
+    )
+
+    async def fake_chat_response(_chat_service, username: str, post_data: dict):
+        return ok(
+            {
+                "session_id": post_data.get("session_id"),
+                "creator": username,
+                "allow_admin_role": post_data.get("_api_key_allow_admin_role"),
+            }
+        )
+
+    monkeypatch.setattr(
+        open_api_routes,
+        "_build_streaming_chat_response",
+        fake_chat_response,
+    )
+    admin_username = str(core_lifecycle_td.astrbot_config["admins_id"][0])
+
+    response = await test_client.post(
+        "/api/v1/chat",
+        json={
+            "message": "hello",
+            "username": admin_username,
+            "enable_streaming": False,
+        },
+        headers={"X-API-Key": raw_key},
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "ok"
+    assert data["data"]["creator"] == admin_username
+    assert data["data"]["allow_admin_role"] is True
+
+
+@pytest.mark.asyncio
+async def test_open_chat_sessions_pagination(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    test_client = app.test_client()
+
+    raw_key, _ = await _create_api_key(
+        app,
+        authenticated_header,
+        scopes=["chat"],
+        name_prefix="chat-scope-key",
+    )
+
+    creator = f"alice_{uuid.uuid4().hex[:8]}"
+    other_creator = f"bob_{uuid.uuid4().hex[:8]}"
+    for idx in range(3):
+        await core_lifecycle_td.db.create_platform_session(
+            creator=creator,
+            platform_id="webchat",
+            session_id=f"open_api_paginated_{idx}",
+            display_name=f"Open API Session {idx}",
+            is_group=0,
+        )
+    await core_lifecycle_td.db.create_platform_session(
+        creator=other_creator,
+        platform_id="webchat",
+        session_id=f"open_api_paginated_bob_{uuid.uuid4().hex[:8]}",
+        display_name="Open API Session Bob",
+        is_group=0,
+    )
+
+    page_1_res = await test_client.get(
+        f"/api/v1/chat/sessions?page=1&page_size=2&username={creator}",
+        headers={"X-API-Key": raw_key},
+    )
+    assert page_1_res.status_code == 200
+    page_1_data = await page_1_res.get_json()
+    assert page_1_data["status"] == "ok"
+    assert page_1_data["data"]["page"] == 1
+    assert page_1_data["data"]["page_size"] == 2
+    assert page_1_data["data"]["total"] == 3
+    assert len(page_1_data["data"]["sessions"]) == 2
+    assert all(item["creator"] == creator for item in page_1_data["data"]["sessions"])
+
+    page_2_res = await test_client.get(
+        f"/api/v1/chat/sessions?page=2&page_size=2&username={creator}",
+        headers={"X-API-Key": raw_key},
+    )
+    assert page_2_res.status_code == 200
+    page_2_data = await page_2_res.get_json()
+    assert page_2_data["status"] == "ok"
+    assert page_2_data["data"]["page"] == 2
+    assert len(page_2_data["data"]["sessions"]) == 1
+
+    missing_username_res = await test_client.get(
+        "/api/v1/chat/sessions?page=1&page_size=2",
+        headers={"X-API-Key": raw_key},
+    )
+    missing_username_data = await missing_username_res.get_json()
+    assert missing_username_data["status"] == "error"
+    assert missing_username_data["message"] == "Missing key: username"
+
+
+@pytest.mark.asyncio
+async def test_open_chat_configs_list(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+):
+    test_client = app.test_client()
+
+    raw_key, _ = await _create_api_key(
+        app,
+        authenticated_header,
+        scopes=["config"],
+        name_prefix="chat-config-key",
+    )
+
+    configs_res = await test_client.get(
+        "/api/v1/configs",
+        headers={"X-API-Key": raw_key},
+    )
+    assert configs_res.status_code == 200
+    configs_data = await configs_res.get_json()
+    assert configs_data["status"] == "ok"
+    assert isinstance(configs_data["data"]["configs"], list)
+    assert any(item["id"] == "default" for item in configs_data["data"]["configs"])
+    for item in configs_data["data"]["configs"]:
+        assert isinstance(item["id"], str)
+        assert isinstance(item["name"], str)
+        assert isinstance(item["path"], str)
+        assert isinstance(item["is_default"], bool)
+
+
+@pytest.mark.asyncio
+async def test_open_api_auth_validation_and_key_carriers(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+):
+    test_client = app.test_client()
+
+    missing_key_res = await test_client.get("/api/v1/im/bots")
+    assert missing_key_res.status_code == 401
+    missing_key_data = await missing_key_res.get_json()
+    assert missing_key_data["status"] == "error"
+    assert missing_key_data["message"] == "Missing API key"
+
+    invalid_key_res = await test_client.get(
+        "/api/v1/im/bots",
+        headers={"X-API-Key": "abk_invalid"},
+    )
+    assert invalid_key_res.status_code == 401
+    invalid_key_data = await invalid_key_res.get_json()
+    assert invalid_key_data["status"] == "error"
+    assert invalid_key_data["message"] == "Invalid API key"
+
+    raw_key, _ = await _create_api_key(
+        app,
+        authenticated_header,
+        scopes=["im"],
+        name_prefix="auth-carrier-key",
+    )
+
+    headers_and_urls = [
+        ({"X-API-Key": raw_key}, "/api/v1/im/bots"),
+        ({}, f"/api/v1/im/bots?api_key={raw_key}"),
+        ({}, f"/api/v1/im/bots?key={raw_key}"),
+        ({"Authorization": f"Bearer {raw_key}"}, "/api/v1/im/bots"),
+        ({"Authorization": f"ApiKey {raw_key}"}, "/api/v1/im/bots"),
+    ]
+    for headers, url in headers_and_urls:
+        res = await test_client.get(url, headers=headers)
+        assert res.status_code == 200
+        data = await res.get_json()
+        assert data["status"] == "ok"
+        assert isinstance(data["data"]["bot_ids"], list)
+
+
+@pytest.mark.asyncio
+async def test_open_chat_send_conversation_alias_and_blank_username(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    test_client = app.test_client()
+    raw_key, _ = await _create_api_key(
+        app,
+        authenticated_header,
+        scopes=["chat"],
+        name_prefix="chat-conversation-key",
+    )
+
+    async def fake_chat_response(_chat_service, _username: str, post_data: dict):
+        resolved_session_id = post_data.get("session_id") or post_data.get(
+            "conversation_id"
+        )
+        return ok({"session_id": resolved_session_id})
+
+    monkeypatch.setattr(
+        open_api_routes,
+        "_build_streaming_chat_response",
+        fake_chat_response,
+    )
+
+    conversation_id = f"open_api_conversation_{uuid.uuid4().hex[:10]}"
+    send_res = await test_client.post(
+        "/api/v1/chat",
+        json={
+            "message": "hello",
+            "username": "alias-user",
+            "conversation_id": conversation_id,
+            "enable_streaming": False,
+        },
+        headers={"X-API-Key": raw_key},
+    )
+    assert send_res.status_code == 200
+    send_data = await send_res.get_json()
+    assert send_data["status"] == "ok"
+    assert send_data["data"]["session_id"] == conversation_id
+
+    created_session = await core_lifecycle_td.db.get_platform_session_by_id(
+        conversation_id
+    )
+    assert created_session is not None
+    assert created_session.creator == "alias-user"
+
+    blank_username_res = await test_client.post(
+        "/api/v1/chat",
+        json={
+            "message": "hello",
+            "username": "   ",
+            "session_id": f"open_api_blank_{uuid.uuid4().hex[:8]}",
+            "enable_streaming": False,
+        },
+        headers={"X-API-Key": raw_key},
+    )
+    blank_username_data = await blank_username_res.get_json()
+    assert blank_username_data["status"] == "error"
+    assert blank_username_data["message"] == "username is empty"
+
+
+@pytest.mark.asyncio
+async def test_open_chat_send_config_resolution(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    test_client = app.test_client()
+    raw_key, _ = await _create_api_key(
+        app,
+        authenticated_header,
+        scopes=["chat"],
+        name_prefix="chat-config-resolution-key",
+    )
+    conf_list = [
+        {
+            "id": "default",
+            "name": "Default",
+            "path": "default.json",
+            "is_default": True,
+        },
+        {"id": "cfg-alpha", "name": "Alpha", "path": "alpha.json", "is_default": False},
+        {"id": "cfg-1", "name": "Duplicated", "path": "a.json", "is_default": False},
+        {"id": "cfg-2", "name": "Duplicated", "path": "b.json", "is_default": False},
+    ]
+    monkeypatch.setattr(
+        open_api_routes,
+        "_get_chat_config_list",
+        lambda _service: conf_list,
+    )
+
+    update_route = AsyncMock()
+    delete_route = AsyncMock()
+    monkeypatch.setattr(
+        app._dashboard_server.core_lifecycle.umop_config_router,
+        "update_route",
+        update_route,
+    )
+    monkeypatch.setattr(
+        app._dashboard_server.core_lifecycle.umop_config_router,
+        "delete_route",
+        delete_route,
+    )
+
+    async def fake_chat_response(_chat_service, username: str, post_data: dict):
+        return ok(
+            {
+                "session_id": post_data.get("session_id"),
+                "creator": username,
+            }
+        )
+
+    monkeypatch.setattr(
+        open_api_routes,
+        "_build_streaming_chat_response",
+        fake_chat_response,
+    )
+
+    invalid_config_id_res = await test_client.post(
+        "/api/v1/chat",
+        json={
+            "message": "hello",
+            "username": "alice",
+            "session_id": f"openapi_cfg_invalid_{uuid.uuid4().hex[:8]}",
+            "config_id": "missing",
+            "enable_streaming": False,
+        },
+        headers={"X-API-Key": raw_key},
+    )
+    invalid_config_id_data = await invalid_config_id_res.get_json()
+    assert invalid_config_id_data["status"] == "error"
+    assert invalid_config_id_data["message"] == "config_id not found: missing"
+
+    missing_config_name_res = await test_client.post(
+        "/api/v1/chat",
+        json={
+            "message": "hello",
+            "username": "alice",
+            "session_id": f"openapi_cfg_name_missing_{uuid.uuid4().hex[:8]}",
+            "config_name": "NotExists",
+            "enable_streaming": False,
+        },
+        headers={"X-API-Key": raw_key},
+    )
+    missing_config_name_data = await missing_config_name_res.get_json()
+    assert missing_config_name_data["status"] == "error"
+    assert missing_config_name_data["message"] == "config_name not found: NotExists"
+
+    ambiguous_config_name_res = await test_client.post(
+        "/api/v1/chat",
+        json={
+            "message": "hello",
+            "username": "alice",
+            "session_id": f"openapi_cfg_name_ambiguous_{uuid.uuid4().hex[:8]}",
+            "config_name": "Duplicated",
+            "enable_streaming": False,
+        },
+        headers={"X-API-Key": raw_key},
+    )
+    ambiguous_config_name_data = await ambiguous_config_name_res.get_json()
+    assert ambiguous_config_name_data["status"] == "error"
+    assert ambiguous_config_name_data["message"] == (
+        "config_name is ambiguous, please use config_id: Duplicated"
+    )
+
+    session_id = f"openapi_cfg_default_{uuid.uuid4().hex[:8]}"
+    use_default_res = await test_client.post(
+        "/api/v1/chat",
+        json={
+            "message": "hello",
+            "username": "alice",
+            "session_id": session_id,
+            "config_name": "Default",
+            "enable_streaming": False,
+        },
+        headers={"X-API-Key": raw_key},
+    )
+    use_default_data = await use_default_res.get_json()
+    assert use_default_data["status"] == "ok"
+    assert use_default_data["data"]["creator"] == "alice"
+    expected_umo = f"webchat:FriendMessage:webchat!alice!{session_id}"
+    delete_route.assert_awaited_with(expected_umo)
+
+    use_named_config_res = await test_client.post(
+        "/api/v1/chat",
+        json={
+            "message": "hello",
+            "username": "alice",
+            "session_id": f"openapi_cfg_alpha_{uuid.uuid4().hex[:8]}",
+            "config_name": "Alpha",
+            "enable_streaming": False,
+        },
+        headers={"X-API-Key": raw_key},
+    )
+    use_named_config_data = await use_named_config_res.get_json()
+    assert use_named_config_data["status"] == "ok"
+    assert use_named_config_data["data"]["creator"] == "alice"
+    update_route.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_open_chat_sessions_input_validation_and_filtering(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    test_client = app.test_client()
+    raw_key, _ = await _create_api_key(
+        app,
+        authenticated_header,
+        scopes=["chat"],
+        name_prefix="chat-sessions-bounds-key",
+    )
+
+    creator = f"chat_bounds_{uuid.uuid4().hex[:8]}"
+    webchat_sid = f"open_api_bounds_webchat_{uuid.uuid4().hex[:8]}"
+    telegram_sid = f"open_api_bounds_telegram_{uuid.uuid4().hex[:8]}"
+    await core_lifecycle_td.db.create_platform_session(
+        creator=creator,
+        platform_id="webchat",
+        session_id=webchat_sid,
+        display_name="Bounds Webchat",
+        is_group=0,
+    )
+    await core_lifecycle_td.db.create_platform_session(
+        creator=creator,
+        platform_id="telegram",
+        session_id=telegram_sid,
+        display_name="Bounds Telegram",
+        is_group=0,
+    )
+
+    invalid_page_res = await test_client.get(
+        f"/api/v1/chat/sessions?page=x&page_size=y&username={creator}",
+        headers={"X-API-Key": raw_key},
+    )
+    invalid_page_data = await invalid_page_res.get_json()
+    assert invalid_page_data["status"] == "error"
+    assert invalid_page_data["message"] == "page and page_size must be integers"
+
+    normalized_res = await test_client.get(
+        f"/api/v1/chat/sessions?page=0&page_size=0&username={creator}",
+        headers={"X-API-Key": raw_key},
+    )
+    normalized_data = await normalized_res.get_json()
+    assert normalized_data["status"] == "ok"
+    assert normalized_data["data"]["page"] == 1
+    assert normalized_data["data"]["page_size"] == 1
+    assert len(normalized_data["data"]["sessions"]) == 1
+
+    capped_page_size_res = await test_client.get(
+        f"/api/v1/chat/sessions?page=1&page_size=1000&username={creator}",
+        headers={"X-API-Key": raw_key},
+    )
+    capped_page_size_data = await capped_page_size_res.get_json()
+    assert capped_page_size_data["status"] == "ok"
+    assert capped_page_size_data["data"]["page_size"] == 100
+
+    filtered_res = await test_client.get(
+        f"/api/v1/chat/sessions?page=1&page_size=10&username={creator}&platform_id=telegram",
+        headers={"X-API-Key": raw_key},
+    )
+    filtered_data = await filtered_res.get_json()
+    assert filtered_data["status"] == "ok"
+    assert filtered_data["data"]["total"] == 1
+    assert len(filtered_data["data"]["sessions"]) == 1
+    assert filtered_data["data"]["sessions"][0]["platform_id"] == "telegram"
+
+    empty_username_res = await test_client.get(
+        "/api/v1/chat/sessions?page=1&page_size=2&username=%20%20",
+        headers={"X-API-Key": raw_key},
+    )
+    empty_username_data = await empty_username_res.get_json()
+    assert empty_username_data["status"] == "error"
+    assert empty_username_data["message"] == "username is empty"
+
+
+@pytest.mark.asyncio
+async def test_open_send_message_error_paths(
+    app: FastAPIAppAdapter, authenticated_header: dict
+):
+    test_client = app.test_client()
+    raw_key, _ = await _create_api_key(
+        app,
+        authenticated_header,
+        scopes=["im"],
+        name_prefix="im-errors-key",
+    )
+
+    missing_message_res = await test_client.post(
+        "/api/v1/im/message",
+        json={
+            "umo": f"webchat:FriendMessage:open_api_im_{uuid.uuid4().hex[:8]}",
+            "message": None,
+        },
+        headers={"X-API-Key": raw_key},
+    )
+    missing_message_data = await missing_message_res.get_json()
+    assert missing_message_data["status"] == "error"
+    assert missing_message_data["message"] == "Missing key: message"
+
+    missing_umo_res = await test_client.post(
+        "/api/v1/im/message",
+        json={"message": "hello"},
+        headers={"X-API-Key": raw_key},
+    )
+    missing_umo_data = await missing_umo_res.get_json()
+    assert missing_umo_data["status"] == "error"
+    assert missing_umo_data["message"] == "Missing key: umo"
+
+    invalid_umo_res = await test_client.post(
+        "/api/v1/im/message",
+        json={"umo": "broken-umo", "message": "hello"},
+        headers={"X-API-Key": raw_key},
+    )
+    invalid_umo_data = await invalid_umo_res.get_json()
+    assert invalid_umo_data["status"] == "error"
+    assert invalid_umo_data["message"].startswith("Invalid umo:")
+
+    missing_platform_res = await test_client.post(
+        "/api/v1/im/message",
+        json={
+            "umo": f"platform-not-running:FriendMessage:{uuid.uuid4().hex[:8]}",
+            "message": "hello",
+        },
+        headers={"X-API-Key": raw_key},
+    )
+    missing_platform_data = await missing_platform_res.get_json()
+    assert missing_platform_data["status"] == "error"
+    assert missing_platform_data["message"] == (
+        "Bot not found or not running for platform: platform-not-running"
+    )
+
+
+@pytest.mark.asyncio
+async def test_open_api_key_scope_normalization(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+):
+    test_client = app.test_client()
+
+    config_res = await test_client.post(
+        "/api/apikey/create",
+        json={"name": "config-contained-scopes-key", "scopes": ["config"]},
+        headers=authenticated_header,
+    )
+    config_data = await config_res.get_json()
+
+    assert config_res.status_code == 200
+    assert config_data["status"] == "ok"
+    assert set(config_data["data"]["scopes"]) == {"config", "bot", "provider"}
+
+    extra_scope_res = await test_client.post(
+        "/api/apikey/create",
+        json={"name": "mcp-skill-scope-key", "scopes": ["mcp", "skill"]},
+        headers=authenticated_header,
+    )
+    extra_scope_data = await extra_scope_res.get_json()
+
+    assert extra_scope_res.status_code == 200
+    assert extra_scope_data["status"] == "ok"
+    assert set(extra_scope_data["data"]["scopes"]) == {"mcp", "skill"}
+
+    edit_admin_res = await test_client.post(
+        "/api/apikey/create",
+        json={
+            "name": "config-edit-admin-key",
+            "scopes": ["config", "config:edit_admin"],
+        },
+        headers=authenticated_header,
+    )
+    edit_admin_data = await edit_admin_res.get_json()
+    assert edit_admin_res.status_code == 200
+    assert edit_admin_data["status"] == "ok"
+    assert set(edit_admin_data["data"]["scopes"]) == {
+        "config",
+        "config:edit_admin",
+        "bot",
+        "provider",
+    }
+
+    orphan_subscope_res = await test_client.post(
+        "/api/apikey/create",
+        json={"name": "orphan-edit-admin-key", "scopes": ["config:edit_admin"]},
+        headers=authenticated_header,
+    )
+    orphan_subscope_data = await orphan_subscope_res.get_json()
+    assert orphan_subscope_data["status"] == "error"
+    assert orphan_subscope_data["message"] == (
+        "config:edit_admin requires the config scope"
+    )
+
+    chat_admin_res = await test_client.post(
+        "/api/apikey/create",
+        json={"name": "chat-admin-key", "scopes": ["chat", "chat:admin"]},
+        headers=authenticated_header,
+    )
+    chat_admin_data = await chat_admin_res.get_json()
+    assert chat_admin_res.status_code == 200
+    assert chat_admin_data["status"] == "ok"
+    assert set(chat_admin_data["data"]["scopes"]) == {"chat", "chat:admin"}
+
+    orphan_chat_admin_res = await test_client.post(
+        "/api/apikey/create",
+        json={"name": "orphan-chat-admin-key", "scopes": ["chat:admin"]},
+        headers=authenticated_header,
+    )
+    orphan_chat_admin_data = await orphan_chat_admin_res.get_json()
+    assert orphan_chat_admin_data["status"] == "error"
+    assert orphan_chat_admin_data["message"] == (
+        "chat:admin requires the chat scope"
+    )
+
+
+@pytest.mark.asyncio
+async def test_config_edit_admin_subscope_controls_admin_id_changes(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    """Only the config edit-admin subscope may change administrator IDs."""
+    test_client = app.test_client()
+    config_key, _ = await _create_api_key(
+        app,
+        authenticated_header,
+        scopes=["config"],
+        name_prefix="config-without-edit-admin",
+    )
+    edit_admin_key, _ = await _create_api_key(
+        app,
+        authenticated_header,
+        scopes=["config", "config:edit_admin"],
+        name_prefix="config-with-edit-admin",
+    )
+    config_res = await test_client.get(
+        "/api/v1/system-config",
+        headers={"X-API-Key": config_key},
+    )
+    config_data = await config_res.get_json()
+    original_config = copy.deepcopy(config_data["data"]["config"])
+    changed_config = copy.deepcopy(original_config)
+    changed_config["admins_id"] = [*original_config["admins_id"], "api-admin-test"]
+
+    denied_res = await test_client.put(
+        "/api/v1/system-config",
+        json=changed_config,
+        headers={"X-API-Key": config_key},
+    )
+    denied_data = await denied_res.get_json()
+    assert denied_res.status_code == 403
+    assert denied_data["message"] == (
+        "config:edit_admin scope is required to change admins_id"
+    )
+
+    try:
+        allowed_res = await test_client.put(
+            "/api/v1/system-config",
+            json=changed_config,
+            headers={"X-API-Key": edit_admin_key},
+        )
+        allowed_data = await allowed_res.get_json()
+        assert allowed_res.status_code == 200
+        assert allowed_data["status"] == "ok"
+        assert "api-admin-test" in core_lifecycle_td.astrbot_config["admins_id"]
+    finally:
+        restore_res = await test_client.put(
+            "/api/v1/system-config",
+            json=original_config,
+            headers=authenticated_header,
+        )
+        assert restore_res.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_file_scope_is_available_for_developer_api_key(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+):
+    test_client = app.test_client()
+    create_res = await test_client.post(
+        "/api/apikey/create",
+        json={"name": "file-scope-key", "scopes": ["file"]},
+        headers=authenticated_header,
+    )
+    create_data = await create_res.get_json()
+
+    assert create_res.status_code == 200
+    assert create_data["status"] == "ok"
+    assert set(create_data["data"]["scopes"]) == {"file"}
+
+    upload_res = await test_client.post(
+        "/api/v1/file",
+        files={
+            "file": FileStorage(
+                stream=io.BytesIO(b"hello from api key"),
+                filename="api-key-upload.txt",
+                content_type="text/plain",
+            ),
+        },
+        headers={"X-API-Key": create_data["data"]["api_key"]},
+    )
+    upload_data = await upload_res.get_json()
+
+    assert upload_res.status_code == 200
+    assert upload_data["status"] == "ok"
+    assert upload_data["data"]["filename"] == "api-key-upload.txt"
+    assert upload_data["data"]["type"] == "file"
+    assert upload_data["data"]["attachment_id"]

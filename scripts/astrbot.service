@@ -1,0 +1,20 @@
+# user service
+[Unit]
+Description=AstrBot Service
+Documentation=https://github.com/AstrBotDevs/AstrBot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/.local/share/astrbot
+ExecStart=/usr/bin/sh -c '/usr/bin/astrbot run || { /usr/bin/astrbot init && /usr/bin/astrbot run; }'
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=astrbot-%u
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

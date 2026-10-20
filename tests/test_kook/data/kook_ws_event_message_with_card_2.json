@@ -1,0 +1,79 @@
+{
+    "s": 0,
+    "d": {
+        "channel_type": "GROUP",
+        "type": 10,
+        "target_id": "2723723449021809",
+        "author_id": "1237198731983",
+        "content": "[{\"theme\":\"invisible\",\"color\":\"\",\"size\":\"lg\",\"expand\":false,\"modules\":[{\"type\":\"section\",\"mode\":\"left\",\"accessory\":null,\"text\":{\"type\":\"kmarkdown\",\"content\":\"(met)(met) (met)all(met) #hello \\\\*\\\\*world\\\\*\\\\* \",\"elements\":[]},\"elements\":[]},{\"type\":\"audio\",\"cover\":\"\",\"duration\":0,\"title\":\"dancing_shot5.wav\",\"src\":\"https:\\/\\/img.kookapp.cn\\/attachments\\/2026-03\\/03\\/69a6841c3125d.wav\",\"external\":false,\"size\":443414,\"canDownload\":true,\"elements\":[]},{\"type\":\"section\",\"mode\":\"left\",\"accessory\":null,\"text\":{\"type\":\"kmarkdown\",\"content\":\"\\n😆 \",\"elements\":[]},\"elements\":[]}],\"type\":\"card\"}]",
+        "msg_id": "ec4046e9-ea43-4907-9fc3-8c6d0bd4ec56",
+        "msg_timestamp": 1772600762056,
+        "nonce": "sy8f91y248yda",
+        "from_type": 1,
+        "extra": {
+            "type": 10,
+            "code": "",
+            "author": {
+                "id": "1237198731983",
+                "username": "some_username",
+                "identify_num": "4198",
+                "nickname": "some_username",
+                "bot": false,
+                "online": true,
+                "avatar": "https://example.com",
+                "vip_avatar": "https://example.com",
+                "status": 1,
+                "roles": [
+                    12783219731984
+                ],
+                "os": "Websocket",
+                "banner": "",
+                "is_vip": false,
+                "vip_amp": false,
+                "nameplate": [],
+                "wealth_level": 0,
+                "is_sys": false
+            },
+            "kmarkdown": {
+                "raw_content": "@Bot_Test @全体成员 #hello **world**[音频]dancing_shot5.wav😆",
+                "mention_part": [
+                    {
+                        "id": "",
+                        "username": "Bot_Test",
+                        "full_name": "Bot_Test#9561",
+                        "avatar": "https://example.com",
+                        "wealth_level": 0
+                    }
+                ],
+                "mention_role_part": [],
+                "channel_part": []
+            },
+            "last_msg_content": "some_username：@Bot_Test @ 全体成员 #hello **world**[音频]dancing_shot5.wav😆",
+            "mention": [
+                ""
+            ],
+            "mention_all": true,
+            "mention_here": false,
+            "guild_id": "28321098321093",
+            "guild_type": 0,
+            "channel_name": "聊天大厅",
+            "visible_only": "",
+            "mention_no_at": [],
+            "mention_roles": [],
+            "nav_channels": [],
+            "emoji": [],
+            "editable": true,
+            "preview_content": "@Bot_Test @全体成员 #hello **world**[音频]dancing_shot5.wav😆",
+            "preview_content_search": "@Bot_Test @全体成员 #hello **world**[音频]dancing_shot5.wav😆",
+            "channel_type": 1,
+            "send_msg_device": 0
+        }
+    },
+    "extra": {
+        "verifyToken": "kW4FH_ASHio1hosd",
+        "encryptKey": "",
+        "callbackUrl": "",
+        "intent": 255
+    },
+    "sn": 5
+}

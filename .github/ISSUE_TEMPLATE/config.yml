@@ -1,0 +1,14 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Community Channels
+    url: https://docs.astrbot.app/en/community.html
+    about: Join our community, share your experience, and get support.
+  - name: 社区渠道
+    url: https://docs.astrbot.app/community.html
+    about: 加入我们的社区，与其他用户交流经验、获取支持。
+  - name: Submit Plugin
+    url: https://cloud.astrbot.app/publish
+    about: Go to the AstrBot Cloud to submit a plugin.
+  - name: 提交插件
+    url: https://cloud.astrbot.app/publish
+    about: 前往 AstrBot 市场提交插件。

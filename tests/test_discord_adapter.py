@@ -1,0 +1,611 @@
+import asyncio
+import base64
+from io import BufferedReader, BytesIO
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, Mock
+
+import aiohttp
+import discord
+import pytest
+
+from astrbot.api.message_components import File, Image, Plain, Record, Reply, Video
+from astrbot.api.platform import Group, MessageType
+from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.platform.sources.discord import (
+    discord_platform_adapter,
+    discord_platform_event,
+)
+from astrbot.core.platform.sources.discord.client import DiscordBotClient
+from astrbot.core.platform.sources.discord.discord_platform_adapter import (
+    DiscordPlatformAdapter,
+)
+from astrbot.core.platform.sources.discord.discord_platform_event import (
+    DiscordPlatformEvent,
+)
+
+_PNG_BYTES = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
+)
+_WAV_BYTES = b"RIFF\x24\x00\x00\x00WAVEfmt " + b"\x00" * 16
+_WAV_PATH = "/tmp/discord_voice.wav"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    [
+        (MessageChain().at_all().message(" test"), "@everyone test"),
+        (MessageChain().at("test", "123456789"), "<@123456789>"),
+    ],
+    ids=["everyone", "user"],
+)
+async def test_discord_formats_mentions(message, expected):
+    """Verify Discord mention syntax for everyone and individual users.
+
+    Args:
+        message: Message chain containing the mention.
+        expected: Expected Discord message content.
+    """
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+
+    content, *_ = await event._parse_to_discord(message)
+
+    assert content == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source", ["resolved", "cached", "fetched"])
+async def test_discord_reply_body_reaches_model_request(source):
+    """Verify that Discord reply text reaches the model request.
+
+    Args:
+        source: Where the referenced Discord message is available.
+    """
+    from astrbot.core.astr_main_agent import _process_quote_message
+    from astrbot.core.provider.entities import ProviderRequest
+
+    adapter = DiscordPlatformAdapter.__new__(DiscordPlatformAdapter)
+    adapter.bot_self_id = "1"
+    adapter.client = SimpleNamespace(user=SimpleNamespace(id=1))
+    quoted = Mock(
+        spec=discord.Message,
+        id=41,
+        content="<@1> TEST_CODE 1008",
+        author=SimpleNamespace(id=3, display_name="original sender"),
+    )
+    channel = SimpleNamespace(
+        id=123, guild=None, fetch_message=AsyncMock(return_value=quoted)
+    )
+    message = SimpleNamespace(
+        id=42,
+        type=discord.MessageType.reply,
+        content="<@1> What is the quoted code?",
+        channel=channel,
+        author=SimpleNamespace(id=2, display_name="tester"),
+        attachments=[],
+        reference=SimpleNamespace(
+            message_id=41,
+            resolved=quoted if source == "resolved" else None,
+            cached_message=quoted if source == "cached" else None,
+        ),
+    )
+
+    abm = await adapter.convert_message({"message": message})
+    req = ProviderRequest(prompt=abm.message_str)
+    await _process_quote_message(SimpleNamespace(message_obj=abm), req, "", Mock())
+
+    assert req.prompt == "What is the quoted code?"
+    quoted_text = "\n".join(part.text for part in req.extra_user_content_parts)
+    assert quoted.content in quoted_text
+    assert quoted.author.display_name in quoted_text
+    reply = next(comp for comp in abm.message if isinstance(comp, Reply))
+    assert str(reply.sender_id) == "3"
+    if source == "fetched":
+        channel.fetch_message.assert_awaited_once_with(41)
+    else:
+        channel.fetch_message.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "case",
+    ["deleted", "non_reply", "http_error", "timeout", "disconnect", "cancelled"],
+)
+async def test_discord_unavailable_reply_preserves_current_message(case):
+    """Preserve the current message on quote failure, but propagate cancellation.
+
+    Args:
+        case: Unavailable reference or interrupted lookup scenario.
+    """
+    adapter = DiscordPlatformAdapter.__new__(DiscordPlatformAdapter)
+    adapter.bot_self_id = "1"
+    adapter.client = SimpleNamespace(user=SimpleNamespace(id=1))
+    reference = SimpleNamespace(message_id=41, resolved=None, cached_message=None)
+    errors = {
+        "http_error": discord.Forbidden(
+            SimpleNamespace(status=403, reason="Forbidden"), "Cannot read message"
+        ),
+        "timeout": asyncio.TimeoutError("Lookup timed out"),
+        "disconnect": aiohttp.ServerDisconnectedError("Connection lost"),
+        "cancelled": asyncio.CancelledError(),
+    }
+    channel = SimpleNamespace(
+        id=123, guild=None, fetch_message=AsyncMock(side_effect=errors.get(case))
+    )
+    if case == "deleted":
+        reference.resolved = discord.DeletedReferencedMessage(reference)
+    message = SimpleNamespace(
+        id=42,
+        type=discord.MessageType.default
+        if case == "non_reply"
+        else discord.MessageType.reply,
+        content="<@1> Current question",
+        channel=channel,
+        author=SimpleNamespace(id=2, display_name="tester"),
+        attachments=[],
+        reference=reference,
+    )
+
+    if case == "cancelled":
+        with pytest.raises(asyncio.CancelledError):
+            await adapter.convert_message({"message": message})
+    else:
+        abm = await adapter.convert_message({"message": message})
+        assert abm.message_str == "Current question"
+        assert abm.message == [Plain(text="Current question")]
+    if case in errors:
+        channel.fetch_message.assert_awaited_once_with(41)
+    else:
+        channel.fetch_message.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("allow_bot_messages", [False, True])
+@pytest.mark.parametrize(("author_id", "is_bot"), [(1, True), (2, True), (3, False)])
+async def test_discord_filters_self_messages(allow_bot_messages, author_id, is_bot):
+    """Reject self messages while preserving the other-bot setting.
+
+    Args:
+        allow_bot_messages: Whether messages from other bots are enabled.
+        author_id: The sender ID; 1 is the connected bot.
+        is_bot: Whether the sender is a bot.
+    """
+    client = DiscordBotClient(token="test", allow_bot_messages=allow_bot_messages)
+    client._connection.user = SimpleNamespace(id=1)
+    client.on_message_received = AsyncMock()
+    message = SimpleNamespace(
+        id=42,
+        author=SimpleNamespace(
+            id=author_id, bot=is_bot, name="tester", display_name="tester"
+        ),
+        content="hello",
+        clean_content="hello",
+        channel=SimpleNamespace(id=123),
+        guild=None,
+        mentions=[],
+    )
+
+    await client.on_message(message)
+
+    if author_id == 1 or (is_bot and not allow_bot_messages):
+        client.on_message_received.assert_not_awaited()
+    else:
+        client.on_message_received.assert_awaited_once()
+        assert client.on_message_received.call_args.args[0]["message"] is message
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("component_type", ["video", "video_url", "file"])
+@pytest.mark.parametrize("with_text", [False, True])
+async def test_discord_sends_video_attachment(
+    tmp_path, monkeypatch, component_type, with_text
+):
+    video_path = tmp_path / (
+        "media_video_test.mp4" if component_type == "video_url" else "repro.mp4"
+    )
+    video_bytes = b"video attachment payload"
+    video_path.write_bytes(video_bytes)
+    if component_type == "video":
+        component = Video.fromFileSystem(str(video_path))
+    elif component_type == "video_url":
+        component = Video.fromURL("https://example.com/repro.mp4")
+        monkeypatch.setattr(
+            Video,
+            "convert_to_file_path",
+            AsyncMock(return_value=str(video_path)),
+        )
+    else:
+        component = File(name=video_path.name, file=str(video_path))
+
+    channel = MagicMock(spec=discord_platform_event.discord.abc.Messageable)
+    channel.send = AsyncMock()
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+    event.interaction_followup_webhook = None
+    event._get_channel = AsyncMock(return_value=channel)
+    monkeypatch.setattr(discord_platform_event.AstrMessageEvent, "send", AsyncMock())
+    chain = [Plain("Video test"), component] if with_text else [component]
+
+    await event.send(MessageChain(chain=chain))
+
+    channel.send.assert_awaited_once()
+    kwargs = channel.send.call_args.kwargs
+    assert kwargs.get("content", "") == ("Video test" if with_text else "")
+    assert len(kwargs["files"]) == 1
+    attachment = kwargs["files"][0]
+    try:
+        assert attachment.filename == "repro.mp4"
+        if component_type != "file":
+            assert isinstance(attachment.fp, BufferedReader)
+            assert attachment.fp.tell() == 0
+        assert attachment.fp.read() == video_bytes
+    finally:
+        attachment.close()
+    if component_type != "file":
+        assert attachment.fp.closed
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("url", "expected_name"),
+    [
+        ("https://example.com/clips/demo.mp4", "demo.mp4"),
+        ("https://example.com/demo.mp4?token=test#preview", "demo.mp4"),
+        ("https://example.com/%E6%B5%8B%E8%AF%95%20video.mp4", "测试 video.mp4"),
+        ("https://example.com", "media_video_test.mp4"),
+        ("https://example.com/clips/?token=test", "media_video_test.mp4"),
+    ],
+)
+async def test_discord_video_url_attachment_filename(
+    tmp_path, monkeypatch, url, expected_name
+):
+    video_path = tmp_path / "media_video_test.mp4"
+    video_path.write_bytes(b"video attachment payload")
+    monkeypatch.setattr(
+        Video, "convert_to_file_path", AsyncMock(return_value=str(video_path))
+    )
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+
+    _, files, _, _, _ = await event._parse_to_discord(
+        MessageChain(chain=[Video.fromURL(url)])
+    )
+
+    assert len(files) == 1
+    try:
+        assert files[0].filename == expected_name
+        assert files[0].fp.name == str(video_path)
+    finally:
+        files[0].close()
+
+
+@pytest.mark.asyncio
+async def test_discord_group_message_includes_guild_and_channel_name():
+    adapter = DiscordPlatformAdapter.__new__(DiscordPlatformAdapter)
+    adapter.bot_self_id = "1"
+    adapter.client = SimpleNamespace(user=SimpleNamespace(id=1))
+    guild = SimpleNamespace(name="AstrBot", get_member=lambda member_id: None)
+    message = SimpleNamespace(
+        id=42,
+        content="hello",
+        channel=SimpleNamespace(id=123, name="general", guild=guild),
+        author=SimpleNamespace(id=2, display_name="tester"),
+        attachments=[],
+        guild=guild,
+        role_mentions=[],
+    )
+
+    abm = await adapter.convert_message({"message": message})
+
+    assert abm.group is not None
+    assert abm.group.group_id == "123"
+    assert abm.group.group_name == "AstrBot-general"
+
+
+@pytest.mark.asyncio
+async def test_discord_private_message_does_not_get_group_name():
+    adapter = DiscordPlatformAdapter.__new__(DiscordPlatformAdapter)
+    adapter.bot_self_id = "1"
+    adapter.client = SimpleNamespace(user=SimpleNamespace(id=1))
+    message = SimpleNamespace(
+        id=42,
+        content="hello",
+        channel=SimpleNamespace(id=123, name="direct-message", guild=None),
+        author=SimpleNamespace(id=2, display_name="tester"),
+        attachments=[],
+        guild=None,
+        role_mentions=[],
+    )
+
+    abm = await adapter.convert_message({"message": message})
+
+    assert abm.type == MessageType.FRIEND_MESSAGE
+    assert abm.group is None
+    assert abm.group_id == ""
+    assert abm.sender.nickname == "tester"
+
+
+def test_discord_group_name_falls_back_when_one_name_is_missing():
+    assert (
+        DiscordPlatformAdapter._get_group_name(
+            SimpleNamespace(name="general", guild=SimpleNamespace(name=None))
+        )
+        == "general"
+    )
+    assert (
+        DiscordPlatformAdapter._get_group_name(
+            SimpleNamespace(name=None, guild=SimpleNamespace(name="AstrBot"))
+        )
+        == "AstrBot"
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("guild_name", "channel_name", "expected_name"),
+    [(None, "general", "general"), ("AstrBot", None, "AstrBot")],
+)
+async def test_discord_get_group_name_falls_back_when_one_name_is_missing(
+    guild_name, channel_name, expected_name
+):
+    guild = SimpleNamespace(
+        name=guild_name,
+        icon=None,
+        owner_id=None,
+        member_count=None,
+        members=[],
+        chunked=False,
+    )
+    channel = SimpleNamespace(id=123, name=channel_name, guild=guild)
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+    event.message_obj = SimpleNamespace(
+        type=MessageType.GROUP_MESSAGE,
+        group=Group(group_id="123", group_name="cached"),
+        group_id="123",
+    )
+    event.client = SimpleNamespace(
+        get_channel=lambda channel_id: channel,
+        intents=SimpleNamespace(members=False),
+    )
+
+    group = await event.get_group()
+
+    assert group is not None
+    assert group.group_name == expected_name
+
+
+@pytest.mark.asyncio
+async def test_discord_get_group_fetches_uncached_guild_name():
+    channel = SimpleNamespace(
+        id=123,
+        name="general",
+        guild=SimpleNamespace(id=456),
+    )
+    guild = SimpleNamespace(
+        id=456,
+        name="AstrBot",
+        icon=None,
+        owner_id=None,
+        member_count=None,
+        members=[],
+        chunked=False,
+    )
+    client = SimpleNamespace(
+        get_channel=lambda channel_id: None,
+        fetch_channel=AsyncMock(return_value=channel),
+        get_guild=lambda guild_id: None,
+        fetch_guild=AsyncMock(return_value=guild),
+        intents=SimpleNamespace(members=False),
+    )
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+    event.message_obj = SimpleNamespace(
+        type=MessageType.GROUP_MESSAGE,
+        group=Group(group_id="123"),
+        group_id="123",
+    )
+    event.client = client
+
+    group = await event.get_group()
+
+    assert group is not None
+    assert group.group_name == "AstrBot-general"
+    client.fetch_channel.assert_awaited_once_with(123)
+    client.fetch_guild.assert_awaited_once_with(456)
+
+
+@pytest.mark.asyncio
+async def test_discord_get_group_enriches_guild_metadata_from_complete_cache():
+    members = [
+        SimpleNamespace(
+            id=1,
+            display_name="owner",
+            guild_permissions=SimpleNamespace(administrator=True),
+        ),
+        SimpleNamespace(
+            id=2,
+            display_name="admin",
+            guild_permissions=SimpleNamespace(administrator=True),
+        ),
+        SimpleNamespace(
+            id=3,
+            display_name="member",
+            guild_permissions=SimpleNamespace(administrator=False),
+        ),
+    ]
+    guild = SimpleNamespace(
+        name="AstrBot",
+        icon=SimpleNamespace(url="https://cdn.discordapp.com/guild.png"),
+        owner_id=1,
+        member_count=3,
+        members=members,
+        chunked=True,
+    )
+    channel = SimpleNamespace(
+        id=123,
+        name="general",
+        guild=guild,
+        permissions_for=lambda member: SimpleNamespace(view_channel=True),
+    )
+    client = SimpleNamespace(
+        get_channel=lambda channel_id: channel,
+        fetch_channel=AsyncMock(),
+        intents=SimpleNamespace(members=True),
+    )
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+    event.message_obj = SimpleNamespace(
+        type=MessageType.GROUP_MESSAGE,
+        group=Group(group_id="123", group_name="general"),
+        group_id="123",
+    )
+    event.client = client
+
+    group = await event.get_group()
+
+    assert group is not None
+    assert group.group_id == "123"
+    assert group.group_name == "AstrBot-general"
+    assert group.group_avatar == "https://cdn.discordapp.com/guild.png"
+    assert group.group_owner == "1"
+    assert group.member_count == 3
+    assert group.group_admins == ["2"]
+    assert group.members is not None
+    assert [member.user_id for member in group.members] == ["1", "2", "3"]
+    client.fetch_channel.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_discord_get_group_returns_none_for_private_message():
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+    event.message_obj = SimpleNamespace(
+        type=MessageType.FRIEND_MESSAGE,
+        group=None,
+        group_id="123",
+    )
+    event.client = SimpleNamespace()
+
+    assert await event.get_group() is None
+
+
+@pytest.mark.asyncio
+async def test_discord_get_group_keeps_basic_metadata_when_channel_fetch_fails():
+    client = SimpleNamespace(
+        get_channel=lambda channel_id: None,
+        fetch_channel=AsyncMock(side_effect=RuntimeError("channel unavailable")),
+    )
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+    event.message_obj = SimpleNamespace(
+        type=MessageType.GROUP_MESSAGE,
+        group=Group(group_id="123", group_name="general"),
+        group_id="123",
+    )
+    event.client = client
+
+    group = await event.get_group()
+
+    assert group == Group(group_id="123", group_name="general")
+
+
+@pytest.mark.asyncio
+async def test_discord_audio_attachment_resolves_to_wav_record(monkeypatch):
+    class FakeMediaResolver:
+        def __init__(self, media_ref: str, **kwargs) -> None:
+            assert media_ref == "https://cdn.example/voice.ogg"
+            assert kwargs["media_type"] == "audio"
+
+        async def to_path(self, **kwargs) -> str:
+            assert kwargs["target_format"] == "wav"
+            return _WAV_PATH
+
+    monkeypatch.setattr(
+        discord_platform_adapter,
+        "MediaResolver",
+        FakeMediaResolver,
+    )
+
+    adapter = DiscordPlatformAdapter.__new__(DiscordPlatformAdapter)
+    adapter.bot_self_id = "1"
+    adapter.client = SimpleNamespace(user=SimpleNamespace(id=1))
+
+    message = SimpleNamespace(
+        id=42,
+        content="",
+        channel=SimpleNamespace(id=123, guild=None),
+        author=SimpleNamespace(id=2, display_name="tester"),
+        attachments=[
+            SimpleNamespace(
+                content_type="audio/ogg",
+                filename="voice.ogg",
+                url="https://cdn.example/voice.ogg",
+            )
+        ],
+        guild=None,
+        role_mentions=[],
+    )
+
+    abm = await adapter.convert_message({"message": message})
+
+    assert len(abm.message) == 1
+    assert isinstance(abm.message[0], Record)
+    assert abm.message[0].file == _WAV_PATH
+    assert abm.message[0].url == _WAV_PATH
+    assert abm.message[0].path == _WAV_PATH
+
+
+@pytest.mark.asyncio
+async def test_discord_send_image_resolves_data_uri_with_media_resolver(monkeypatch):
+    captured = {}
+
+    class FakeDiscordFile:
+        def __init__(self, fp: BytesIO, filename: str) -> None:
+            captured["bytes"] = fp.read()
+            captured["filename"] = filename
+
+    monkeypatch.setattr(discord_platform_event.discord, "File", FakeDiscordFile)
+
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+    image_base64 = base64.b64encode(_PNG_BYTES).decode("ascii")
+
+    content, files, view, embeds, reference_message_id = await event._parse_to_discord(
+        MessageChain(
+            chain=[
+                Image(file=f"data:image/png;base64,{image_base64}"),
+            ]
+        )
+    )
+
+    assert content == ""
+    assert len(files) == 1
+    assert captured["bytes"] == _PNG_BYTES
+    assert captured["filename"] == "image.png"
+    assert view is None
+    assert embeds == []
+    assert reference_message_id is None
+
+
+@pytest.mark.asyncio
+async def test_discord_send_record_resolves_audio_with_media_resolver(monkeypatch):
+    captured = {}
+
+    class FakeDiscordFile:
+        def __init__(self, fp: BytesIO, filename: str) -> None:
+            captured["bytes"] = fp.read()
+            captured["filename"] = filename
+
+    monkeypatch.setattr(discord_platform_event.discord, "File", FakeDiscordFile)
+
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+    audio_base64 = base64.b64encode(_WAV_BYTES).decode("ascii")
+
+    content, files, view, embeds, reference_message_id = await event._parse_to_discord(
+        MessageChain(
+            chain=[
+                Record.fromBase64(audio_base64),
+            ]
+        )
+    )
+
+    assert content == ""
+    assert len(files) == 1
+    assert captured["bytes"] == _WAV_BYTES
+    assert captured["filename"] == "audio.wav"
+    assert view is None
+    assert embeds == []
+    assert reference_message_id is None

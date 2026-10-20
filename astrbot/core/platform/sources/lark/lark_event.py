@@ -1,0 +1,1305 @@
+import asyncio
+import json
+import os
+import uuid
+
+import lark_oapi as lark
+from lark_oapi.api.cardkit.v1 import (
+    ContentCardElementRequest,
+    ContentCardElementRequestBody,
+    CreateCardRequest,
+    CreateCardRequestBody,
+    SettingsCardRequest,
+    SettingsCardRequestBody,
+)
+from lark_oapi.api.im.v1 import (
+    CreateFileRequest,
+    CreateFileRequestBody,
+    CreateImageRequest,
+    CreateImageRequestBody,
+    CreateMessageReactionRequest,
+    CreateMessageReactionRequestBody,
+    Emoji,
+    GetChatMembersRequest,
+    GetChatRequest,
+    ReplyMessageRequest,
+    ReplyMessageRequestBody,
+)
+
+from astrbot import logger
+from astrbot.api.event import AstrMessageEvent, MessageChain
+from astrbot.api.message_components import At, File, Json, Plain, Record, Video
+from astrbot.api.message_components import Image as AstrBotImage
+from astrbot.api.platform import Group, MessageMember
+from astrbot.core.utils.media_utils import (
+    MediaResolver,
+    convert_audio_to_opus,
+    convert_video_format,
+    get_media_duration,
+)
+from astrbot.core.utils.metrics import Metric
+
+
+class LarkMessageEvent(AstrMessageEvent):
+    def __init__(
+        self,
+        message_str,
+        message_obj,
+        platform_meta,
+        session_id,
+        bot: lark.Client,
+    ) -> None:
+        super().__init__(message_str, message_obj, platform_meta, session_id)
+        self.bot = bot
+
+    async def get_group(
+        self,
+        group_id: str | None = None,
+        **kwargs,
+    ) -> Group | None:
+        """Get Lark chat details and members.
+
+        Args:
+            group_id: Chat ID to query. Defaults to the current chat ID.
+            **kwargs: Reserved for platform-compatible query options.
+
+        Returns:
+            Enriched group details, a basic group when the API is unavailable, or
+            ``None`` when no chat ID can be resolved.
+        """
+        resolved_group_id = str(group_id or self.get_group_id())
+        if not resolved_group_id:
+            return None
+
+        basic_group = Group(group_id=resolved_group_id)
+        if (
+            self.message_obj.group
+            and self.message_obj.group.group_id == resolved_group_id
+        ):
+            basic_group = self.message_obj.group
+
+        if self.bot.im is None:
+            logger.warning("[Lark] IM API is unavailable while getting chat details")
+            return basic_group
+
+        try:
+            request = (
+                GetChatRequest.builder()
+                .chat_id(resolved_group_id)
+                .user_id_type("open_id")
+                .build()
+            )
+            response = await self.bot.im.v1.chat.aget(request)
+        except Exception as exc:
+            logger.warning(
+                "[Lark] Failed to get chat details for %s: %s",
+                resolved_group_id,
+                exc,
+            )
+            return basic_group
+
+        if not response.success() or response.data is None:
+            logger.warning(
+                "[Lark] Failed to get chat details for %s (%s): %s",
+                resolved_group_id,
+                response.code,
+                response.msg,
+            )
+            return basic_group
+
+        chat_data = response.data
+        member_count = None
+        if chat_data.user_count is not None:
+            try:
+                member_count = int(chat_data.user_count)
+            except (TypeError, ValueError):
+                logger.warning(
+                    "[Lark] Chat %s returned an invalid user count: %r",
+                    resolved_group_id,
+                    chat_data.user_count,
+                )
+
+        group = Group(
+            group_id=resolved_group_id,
+            group_name=chat_data.name or basic_group.group_name,
+            group_avatar=chat_data.avatar or basic_group.group_avatar,
+            group_owner=chat_data.owner_id or basic_group.group_owner,
+            group_admins=list(chat_data.user_manager_id_list or []),
+            member_count=member_count,
+        )
+
+        members: list[MessageMember] = []
+        members_complete = False
+        page_token: str | None = None
+        try:
+            while True:
+                request_builder = (
+                    GetChatMembersRequest.builder()
+                    .chat_id(resolved_group_id)
+                    .member_id_type("open_id")
+                    .page_size(100)
+                )
+                if page_token:
+                    request_builder.page_token(page_token)
+                members_response = await self.bot.im.v1.chat_members.aget(
+                    request_builder.build(),
+                )
+                if not members_response.success() or members_response.data is None:
+                    logger.warning(
+                        "[Lark] Failed to get members for chat %s (%s): %s",
+                        resolved_group_id,
+                        members_response.code,
+                        members_response.msg,
+                    )
+                    break
+
+                members_data = members_response.data
+                for member in members_data.items or []:
+                    if member.member_id:
+                        members.append(
+                            MessageMember(
+                                user_id=member.member_id,
+                                nickname=member.name,
+                            ),
+                        )
+                if group.member_count is None and members_data.member_total is not None:
+                    group.member_count = members_data.member_total
+
+                if getattr(members_data, "trigger_security_conf_limit", False):
+                    logger.warning(
+                        "[Lark] Member list for chat %s was truncated by its security policy",
+                        resolved_group_id,
+                    )
+                    break
+
+                page_token = members_data.page_token
+                if not members_data.has_more or not page_token:
+                    members_complete = True
+                    break
+        except Exception as exc:
+            logger.warning(
+                "[Lark] Failed to get members for chat %s: %s",
+                resolved_group_id,
+                exc,
+            )
+
+        if members_complete:
+            group.members = members
+        return group
+
+    @staticmethod
+    async def _send_im_message(
+        lark_client: lark.Client,
+        *,
+        content: str,
+        msg_type: str,
+        reply_message_id: str | None = None,
+        receive_id: str | None = None,
+        receive_id_type: str | None = None,
+        fallback_chat_id: str | None = None,
+    ) -> bool:
+        """Send one IM message, retrying rejected private sends by chat ID once.
+
+        Args:
+            lark_client: Lark API client.
+            content: JSON-encoded message content.
+            msg_type: Lark message type.
+            reply_message_id: Message to reply to, when sending a reply.
+            receive_id: Recipient for proactive messages.
+            receive_id_type: Recipient ID type for proactive messages.
+            fallback_chat_id: Known private chat to use if open ID is rejected.
+
+        Returns:
+            Whether the message was delivered.
+
+        Raises:
+            RuntimeError: A proactive send fails, including its fallback attempt.
+            ValueError: A proactive send has no recipient or recipient ID type.
+        """
+        if lark_client.im is None:
+            if not reply_message_id:
+                raise RuntimeError("[Lark] IM API client is not initialized")
+            logger.error("[Lark] API Client im 模块未初始化")
+            return False
+
+        if reply_message_id:
+            request = (
+                ReplyMessageRequest.builder()
+                .message_id(reply_message_id)
+                .request_body(
+                    ReplyMessageRequestBody.builder()
+                    .content(content)
+                    .msg_type(msg_type)
+                    .uuid(str(uuid.uuid4()))
+                    .reply_in_thread(False)
+                    .build()
+                )
+                .build()
+            )
+            response = await lark_client.im.v1.message.areply(request)
+        else:
+            from lark_oapi.api.im.v1 import (
+                CreateMessageRequest,
+                CreateMessageRequestBody,
+            )
+
+            if receive_id_type is None or receive_id is None:
+                raise ValueError(
+                    "[Lark] Proactive messages require receive_id and receive_id_type"
+                )
+
+            request = (
+                CreateMessageRequest.builder()
+                .receive_id_type(receive_id_type)
+                .request_body(
+                    CreateMessageRequestBody.builder()
+                    .receive_id(receive_id)
+                    .content(content)
+                    .msg_type(msg_type)
+                    .uuid(str(uuid.uuid4()))
+                    .build()
+                )
+                .build()
+            )
+            response = await lark_client.im.v1.message.acreate(request)
+            if (
+                not response.success()
+                and receive_id_type == "open_id"
+                and fallback_chat_id
+            ):
+                logger.warning(
+                    "[Lark] Open ID send failed (%s): %s; retrying with private chat ID",
+                    response.code,
+                    response.msg,
+                )
+                # Retry only this rejected message, preserving its deduplication UUID.
+                fallback_request = (
+                    CreateMessageRequest.builder()
+                    .receive_id_type("chat_id")
+                    .request_body(
+                        CreateMessageRequestBody.builder()
+                        .receive_id(fallback_chat_id)
+                        .content(content)
+                        .msg_type(msg_type)
+                        .uuid(request.request_body.uuid)
+                        .build()
+                    )
+                    .build()
+                )
+                response = await lark_client.im.v1.message.acreate(fallback_request)
+
+        if not response.success():
+            if not reply_message_id:
+                raise RuntimeError(
+                    f"[Lark] Message send failed ({response.code}): {response.msg}"
+                )
+            logger.error(f"[Lark] 发送飞书消息失败({response.code}): {response.msg}")
+            return False
+
+        return True
+
+    @staticmethod
+    async def _upload_lark_file(
+        lark_client: lark.Client,
+        *,
+        path: str,
+        file_type: str,
+        duration: int | None = None,
+    ) -> str | None:
+        """上传文件到飞书的通用辅助函数
+
+        Args:
+            lark_client: 飞书客户端
+            path: 文件路径
+            file_type: 文件类型（stream/opus/mp4等）
+            duration: 媒体时长（毫秒），可选
+
+        Returns:
+            成功返回file_key，失败返回None
+        """
+        if not path or not os.path.exists(path):
+            logger.error(f"[Lark] 文件不存在: {path}")
+            return None
+
+        if lark_client.im is None:
+            logger.error("[Lark] API Client im 模块未初始化，无法上传文件")
+            return None
+
+        try:
+            with open(path, "rb") as file_obj:
+                body_builder = (
+                    CreateFileRequestBody.builder()
+                    .file_type(file_type)
+                    .file_name(os.path.basename(path))
+                    .file(file_obj)
+                )
+                if duration is not None:
+                    body_builder.duration(duration)
+
+                request = (
+                    CreateFileRequest.builder()
+                    .request_body(body_builder.build())
+                    .build()
+                )
+                response = await lark_client.im.v1.file.acreate(request)
+
+                if not response.success():
+                    logger.error(
+                        f"[Lark] 无法上传文件({response.code}): {response.msg}"
+                    )
+                    return None
+
+                if response.data is None:
+                    logger.error("[Lark] 上传文件成功但未返回数据(data is None)")
+                    return None
+
+                file_key = response.data.file_key
+                logger.debug(f"[Lark] 文件上传成功: {file_key}")
+                return file_key
+
+        except Exception as e:
+            logger.error(f"[Lark] 无法打开或上传文件: {e}")
+            return None
+
+    @staticmethod
+    async def _convert_to_lark(message: MessageChain, lark_client: lark.Client) -> list:
+        ret = []
+        _stage = []
+        for comp in message.chain:
+            if isinstance(comp, Plain):
+                _stage.append({"tag": "md", "text": comp.text})
+            elif isinstance(comp, At):
+                _stage.append({"tag": "at", "user_id": comp.qq, "style": []})
+            elif isinstance(comp, AstrBotImage):
+                if not comp.file:
+                    logger.error("[Lark] 图片路径为空，无法上传")
+                    continue
+
+                try:
+                    async with MediaResolver(
+                        comp.file,
+                        media_type="image",
+                    ).as_path() as image:
+                        with image.open("rb") as image_file:
+                            request = (
+                                CreateImageRequest.builder()
+                                .request_body(
+                                    CreateImageRequestBody.builder()
+                                    .image_type("message")
+                                    .image(image_file)
+                                    .build(),
+                                )
+                                .build()
+                            )
+
+                            if lark_client.im is None:
+                                logger.error(
+                                    "[Lark] API Client im 模块未初始化，无法上传图片"
+                                )
+                                continue
+
+                            response = await lark_client.im.v1.image.acreate(request)
+                except Exception as e:
+                    logger.error(f"[Lark] 无法打开或上传图片文件: {e}")
+                    continue
+
+                if not response.success():
+                    logger.error(f"无法上传飞书图片({response.code}): {response.msg}")
+                    continue
+
+                if response.data is None:
+                    logger.error("[Lark] 上传图片成功但未返回数据(data is None)")
+                    continue
+
+                image_key = response.data.image_key
+                logger.debug(image_key)
+                if _stage:
+                    ret.append(_stage.copy())
+                    _stage.clear()
+                ret.append([{"tag": "img", "image_key": image_key}])
+            elif isinstance(comp, File):
+                # 文件将通过 _send_file_message 方法单独发送，这里跳过
+                logger.debug("[Lark] 检测到文件组件，将单独发送")
+                continue
+            elif isinstance(comp, Record):
+                # 音频将通过 _send_audio_message 方法单独发送，这里跳过
+                logger.debug("[Lark] 检测到音频组件，将单独发送")
+                continue
+            elif isinstance(comp, Video):
+                # 视频将通过 _send_media_message 方法单独发送，这里跳过
+                logger.debug("[Lark] 检测到视频组件，将单独发送")
+                continue
+            else:
+                logger.warning(f"飞书 暂时不支持消息段: {comp.type}")
+
+        if _stage:
+            ret.append(_stage)
+        return ret
+
+    @staticmethod
+    def _build_collapsible_panel_element(
+        reasoning_content: str,
+        title: str,
+        expanded: bool = False,
+    ) -> dict:
+        return {
+            "tag": "collapsible_panel",
+            "expanded": expanded,
+            "background_color": "grey",
+            "padding": "8px 8px 8px 8px",
+            "margin": "4px 0px 4px 0px",
+            "border": {
+                "color": "grey",
+                "corner_radius": "6px",
+            },
+            "header": {
+                "title": {
+                    "tag": "plain_text",
+                    "content": title,
+                },
+                "background_color": "grey",
+            },
+            "elements": [
+                {
+                    "tag": "markdown",
+                    "content": reasoning_content,
+                }
+            ],
+        }
+
+    @staticmethod
+    def _build_reasoning_collapsible_panel(reasoning_content: str, title: str) -> dict:
+        return {
+            "schema": "2.0",
+            "body": {
+                "elements": [
+                    LarkMessageEvent._build_collapsible_panel_element(
+                        reasoning_content=reasoning_content,
+                        title=title,
+                        expanded=False,
+                    )
+                ]
+            },
+        }
+
+    @staticmethod
+    def _build_reasoning_card(message_chain: MessageChain) -> dict | None:
+        elements: list[dict] = []
+        for comp in message_chain.chain:
+            if isinstance(comp, Json) and isinstance(comp.data, dict):
+                if comp.data.get("type") != "lark_collapsible_panel_reasoning":
+                    continue
+                reasoning_content = str(comp.data.get("content", "")).strip()
+                if not reasoning_content:
+                    continue
+                elements.append(
+                    LarkMessageEvent._build_collapsible_panel_element(
+                        reasoning_content=reasoning_content,
+                        title=str(comp.data.get("title", "💭 Thinking")),
+                        expanded=bool(comp.data.get("expanded", False)),
+                    )
+                )
+            elif isinstance(comp, Plain):
+                if comp.text:
+                    elements.append({"tag": "markdown", "content": comp.text})
+            else:
+                return None
+
+        return (
+            {
+                "schema": "2.0",
+                "body": {
+                    "elements": elements,
+                },
+            }
+            if elements
+            else None
+        )
+
+    @staticmethod
+    async def _send_interactive_card(
+        card_json: dict,
+        lark_client: lark.Client,
+        reply_message_id: str | None = None,
+        receive_id: str | None = None,
+        receive_id_type: str | None = None,
+        fallback_chat_id: str | None = None,
+    ) -> bool:
+        if lark_client.cardkit is None:
+            logger.error("[Lark] API Client cardkit 模块未初始化，无法发送卡片")
+            return False
+
+        try:
+            response = await lark_client.cardkit.v1.card.acreate(
+                CreateCardRequest.builder()
+                .request_body(
+                    CreateCardRequestBody.builder()
+                    .type("card_json")
+                    .data(json.dumps(card_json, ensure_ascii=False))
+                    .build()
+                )
+                .build()
+            )
+        except Exception as e:
+            logger.error(f"[Lark] 创建卡片失败: {e}")
+            return False
+
+        if not response.success():
+            logger.error(f"[Lark] 创建卡片失败({response.code}): {response.msg}")
+            return False
+        if response.data is None or not response.data.card_id:
+            logger.error("[Lark] 创建卡片成功但未返回 card_id")
+            return False
+
+        card_content = json.dumps(
+            {"type": "card", "data": {"card_id": response.data.card_id}},
+            ensure_ascii=False,
+        )
+        return await LarkMessageEvent._send_im_message(
+            lark_client,
+            content=card_content,
+            msg_type="interactive",
+            reply_message_id=reply_message_id,
+            receive_id=receive_id,
+            receive_id_type=receive_id_type,
+            fallback_chat_id=fallback_chat_id,
+        )
+
+    @staticmethod
+    async def _send_collapsible_reasoning_panel(
+        reasoning_content: str,
+        title: str,
+        lark_client: lark.Client,
+        reply_message_id: str | None = None,
+        receive_id: str | None = None,
+        receive_id_type: str | None = None,
+        fallback_chat_id: str | None = None,
+    ) -> bool:
+        if not reasoning_content:
+            return True
+        card_json = LarkMessageEvent._build_reasoning_collapsible_panel(
+            reasoning_content=reasoning_content,
+            title=title,
+        )
+        return await LarkMessageEvent._send_interactive_card(
+            card_json,
+            lark_client=lark_client,
+            reply_message_id=reply_message_id,
+            receive_id=receive_id,
+            receive_id_type=receive_id_type,
+            fallback_chat_id=fallback_chat_id,
+        )
+
+    @staticmethod
+    async def send_message_chain(
+        message_chain: MessageChain,
+        lark_client: lark.Client,
+        reply_message_id: str | None = None,
+        receive_id: str | None = None,
+        receive_id_type: str | None = None,
+        fallback_chat_id: str | None = None,
+    ) -> None:
+        """Send each message component with an optional private chat fallback.
+
+        Args:
+            message_chain: Message components to send.
+            lark_client: Lark API client.
+            reply_message_id: Message to reply to, when sending a reply.
+            receive_id: Recipient for proactive messages.
+            receive_id_type: Recipient ID type for proactive messages.
+            fallback_chat_id: Known private chat to use if open ID is rejected.
+
+        Raises:
+            RuntimeError: A proactive message cannot be delivered.
+        """
+        if lark_client.im is None:
+            if not reply_message_id:
+                raise RuntimeError("[Lark] IM API client is not initialized")
+            logger.error("[Lark] API Client im 模块未初始化")
+            return
+
+        # 分离文件、音频、视频组件和其他组件
+        file_components: list[File] = []
+        audio_components: list[Record] = []
+        media_components: list[Video] = []
+        other_components = []
+
+        for comp in message_chain.chain:
+            if isinstance(comp, File):
+                file_components.append(comp)
+            elif isinstance(comp, Record):
+                audio_components.append(comp)
+            elif isinstance(comp, Video):
+                media_components.append(comp)
+            else:
+                other_components.append(comp)
+
+        has_reasoning_marker = any(
+            isinstance(comp, Json)
+            and isinstance(comp.data, dict)
+            and comp.data.get("type") == "lark_collapsible_panel_reasoning"
+            for comp in other_components
+        )
+        if (
+            has_reasoning_marker
+            and not file_components
+            and not audio_components
+            and not media_components
+        ):
+            card_json = LarkMessageEvent._build_reasoning_card(message_chain)
+            if card_json and await LarkMessageEvent._send_interactive_card(
+                card_json,
+                lark_client=lark_client,
+                reply_message_id=reply_message_id,
+                receive_id=receive_id,
+                receive_id_type=receive_id_type,
+                fallback_chat_id=fallback_chat_id,
+            ):
+                return
+
+        # 先发送非文件内容（如果有）
+        if other_components:
+            buffered_components: list = []
+
+            async def _flush_buffer() -> None:
+                nonlocal buffered_components
+                if not buffered_components:
+                    return
+
+                pending_chain = MessageChain()
+                pending_chain.chain = buffered_components
+                buffered_components = []
+
+                res = await LarkMessageEvent._convert_to_lark(
+                    pending_chain,
+                    lark_client,
+                )
+                if res:  # 只在有内容时发送
+                    wrapped = {
+                        "zh_cn": {
+                            "title": "",
+                            "content": res,
+                        },
+                    }
+                    await LarkMessageEvent._send_im_message(
+                        lark_client,
+                        content=json.dumps(wrapped),
+                        msg_type="post",
+                        reply_message_id=reply_message_id,
+                        receive_id=receive_id,
+                        receive_id_type=receive_id_type,
+                        fallback_chat_id=fallback_chat_id,
+                    )
+
+            # 维持组件顺序：遇到折叠面板标记先 flush 当前普通内容并发送卡片
+            for comp in other_components:
+                if isinstance(comp, Json) and isinstance(comp.data, dict):
+                    comp_type = comp.data.get("type")
+                    if comp_type == "lark_collapsible_panel_reasoning":
+                        await _flush_buffer()
+                        if reason_text := str(comp.data.get("content", "")).strip():
+                            panel_title = str(
+                                comp.data.get("title", "💭 Thinking"),
+                            )
+                            success = await LarkMessageEvent._send_collapsible_reasoning_panel(
+                                reasoning_content=reason_text,
+                                title=panel_title,
+                                lark_client=lark_client,
+                                reply_message_id=reply_message_id,
+                                receive_id=receive_id,
+                                receive_id_type=receive_id_type,
+                                fallback_chat_id=fallback_chat_id,
+                            )
+                            if not success:
+                                buffered_components.append(
+                                    Plain(
+                                        f"🤔 {panel_title}: {reason_text}",
+                                    ),
+                                )
+                        continue
+                buffered_components.append(comp)
+
+            await _flush_buffer()
+
+        # 发送附件
+        for file_comp in file_components:
+            await LarkMessageEvent._send_file_message(
+                file_comp,
+                lark_client,
+                reply_message_id,
+                receive_id,
+                receive_id_type,
+                fallback_chat_id,
+            )
+
+        for audio_comp in audio_components:
+            await LarkMessageEvent._send_audio_message(
+                audio_comp,
+                lark_client,
+                reply_message_id,
+                receive_id,
+                receive_id_type,
+                fallback_chat_id,
+            )
+
+        for media_comp in media_components:
+            await LarkMessageEvent._send_media_message(
+                media_comp,
+                lark_client,
+                reply_message_id,
+                receive_id,
+                receive_id_type,
+                fallback_chat_id,
+            )
+
+    async def send(self, message: MessageChain) -> None:
+        """发送消息链到飞书，然后交给父类做框架级发送/记录"""
+        await LarkMessageEvent.send_message_chain(
+            message,
+            self.bot,
+            reply_message_id=self.message_obj.message_id,
+        )
+        await super().send(message)
+
+    @staticmethod
+    async def _send_file_message(
+        file_comp: File,
+        lark_client: lark.Client,
+        reply_message_id: str | None = None,
+        receive_id: str | None = None,
+        receive_id_type: str | None = None,
+        fallback_chat_id: str | None = None,
+    ) -> None:
+        """Upload and send a file.
+
+        Args:
+            file_comp: File component to upload.
+            lark_client: Lark API client.
+            reply_message_id: Message to reply to, when sending a reply.
+            receive_id: Recipient for proactive messages.
+            receive_id_type: Recipient ID type for proactive messages.
+            fallback_chat_id: Known private chat to use if open ID is rejected.
+
+        Raises:
+            RuntimeError: A proactive message cannot be delivered.
+        """
+        file_path = file_comp.file or ""
+        file_key = await LarkMessageEvent._upload_lark_file(
+            lark_client, path=file_path, file_type="stream"
+        )
+        if not file_key:
+            if not reply_message_id:
+                raise RuntimeError("[Lark] Attachment upload failed")
+            return
+
+        content = json.dumps({"file_key": file_key})
+        await LarkMessageEvent._send_im_message(
+            lark_client,
+            content=content,
+            msg_type="file",
+            reply_message_id=reply_message_id,
+            receive_id=receive_id,
+            receive_id_type=receive_id_type,
+            fallback_chat_id=fallback_chat_id,
+        )
+
+    @staticmethod
+    async def _send_audio_message(
+        audio_comp: Record,
+        lark_client: lark.Client,
+        reply_message_id: str | None = None,
+        receive_id: str | None = None,
+        receive_id_type: str | None = None,
+        fallback_chat_id: str | None = None,
+    ) -> None:
+        """Upload and send an audio message.
+
+        Args:
+            audio_comp: Audio component to upload.
+            lark_client: Lark API client.
+            reply_message_id: Message to reply to, when sending a reply.
+            receive_id: Recipient for proactive messages.
+            receive_id_type: Recipient ID type for proactive messages.
+            fallback_chat_id: Known private chat to use if open ID is rejected.
+
+        Raises:
+            RuntimeError: A proactive message cannot be delivered.
+        """
+        # 获取音频文件路径
+        try:
+            original_audio_path = await audio_comp.convert_to_file_path()
+        except Exception as e:
+            logger.error(f"[Lark] 无法获取音频文件路径: {e}")
+            return
+
+        if not original_audio_path or not os.path.exists(original_audio_path):
+            logger.error(f"[Lark] 音频文件不存在: {original_audio_path}")
+            return
+
+        # 转换为opus格式
+        converted_audio_path = None
+        try:
+            audio_path = await convert_audio_to_opus(original_audio_path)
+            # 如果转换后路径与原路径不同，说明生成了新文件
+            if audio_path != original_audio_path:
+                converted_audio_path = audio_path
+            else:
+                audio_path = original_audio_path
+        except Exception as e:
+            logger.error(f"[Lark] 音频格式转换失败，将尝试直接上传: {e}")
+            # 如果转换失败，继续尝试直接上传原始文件
+            audio_path = original_audio_path
+
+        # 获取音频时长
+        duration = await get_media_duration(audio_path)
+
+        # 上传音频文件
+        file_key = await LarkMessageEvent._upload_lark_file(
+            lark_client,
+            path=audio_path,
+            file_type="opus",
+            duration=duration,
+        )
+
+        # 清理转换后的临时音频文件
+        if converted_audio_path and os.path.exists(converted_audio_path):
+            try:
+                os.remove(converted_audio_path)
+                logger.debug(f"[Lark] 已删除转换后的音频文件: {converted_audio_path}")
+            except Exception as e:
+                logger.warning(f"[Lark] 删除转换后的音频文件失败: {e}")
+
+        if not file_key:
+            if not reply_message_id:
+                raise RuntimeError("[Lark] Attachment upload failed")
+            return
+
+        await LarkMessageEvent._send_im_message(
+            lark_client,
+            content=json.dumps({"file_key": file_key}),
+            msg_type="audio",
+            reply_message_id=reply_message_id,
+            receive_id=receive_id,
+            receive_id_type=receive_id_type,
+            fallback_chat_id=fallback_chat_id,
+        )
+
+    @staticmethod
+    async def _send_media_message(
+        media_comp: Video,
+        lark_client: lark.Client,
+        reply_message_id: str | None = None,
+        receive_id: str | None = None,
+        receive_id_type: str | None = None,
+        fallback_chat_id: str | None = None,
+    ) -> None:
+        """Upload and send a video message.
+
+        Args:
+            media_comp: Video component to upload.
+            lark_client: Lark API client.
+            reply_message_id: Message to reply to, when sending a reply.
+            receive_id: Recipient for proactive messages.
+            receive_id_type: Recipient ID type for proactive messages.
+            fallback_chat_id: Known private chat to use if open ID is rejected.
+
+        Raises:
+            RuntimeError: A proactive message cannot be delivered.
+        """
+        # 获取视频文件路径
+        try:
+            original_video_path = await media_comp.convert_to_file_path()
+        except Exception as e:
+            logger.error(f"[Lark] 无法获取视频文件路径: {e}")
+            return
+
+        if not original_video_path or not os.path.exists(original_video_path):
+            logger.error(f"[Lark] 视频文件不存在: {original_video_path}")
+            return
+
+        # 转换为mp4格式
+        converted_video_path = None
+        try:
+            video_path = await convert_video_format(original_video_path, "mp4")
+            # 如果转换后路径与原路径不同，说明生成了新文件
+            if video_path != original_video_path:
+                converted_video_path = video_path
+            else:
+                video_path = original_video_path
+        except Exception as e:
+            logger.error(f"[Lark] 视频格式转换失败，将尝试直接上传: {e}")
+            # 如果转换失败，继续尝试直接上传原始文件
+            video_path = original_video_path
+
+        # 获取视频时长
+        duration = await get_media_duration(video_path)
+
+        # 上传视频文件
+        file_key = await LarkMessageEvent._upload_lark_file(
+            lark_client,
+            path=video_path,
+            file_type="mp4",
+            duration=duration,
+        )
+
+        # 清理转换后的临时视频文件
+        if converted_video_path and os.path.exists(converted_video_path):
+            try:
+                os.remove(converted_video_path)
+                logger.debug(f"[Lark] 已删除转换后的视频文件: {converted_video_path}")
+            except Exception as e:
+                logger.warning(f"[Lark] 删除转换后的视频文件失败: {e}")
+
+        if not file_key:
+            if not reply_message_id:
+                raise RuntimeError("[Lark] Attachment upload failed")
+            return
+
+        await LarkMessageEvent._send_im_message(
+            lark_client,
+            content=json.dumps({"file_key": file_key}),
+            msg_type="media",
+            reply_message_id=reply_message_id,
+            receive_id=receive_id,
+            receive_id_type=receive_id_type,
+            fallback_chat_id=fallback_chat_id,
+        )
+
+    async def react(self, emoji: str) -> None:
+        if self.bot.im is None:
+            logger.error("[Lark] API Client im 模块未初始化，无法发送表情")
+            return
+
+        request = (
+            CreateMessageReactionRequest.builder()
+            .message_id(self.message_obj.message_id)
+            .request_body(
+                CreateMessageReactionRequestBody.builder()
+                .reaction_type(Emoji.builder().emoji_type(emoji).build())
+                .build(),
+            )
+            .build()
+        )
+
+        response = await self.bot.im.v1.message_reaction.acreate(request)
+        if not response.success():
+            logger.error(f"发送飞书表情回应失败({response.code}): {response.msg}")
+            return
+
+    async def _create_streaming_card(self) -> str | None:
+        """创建一个开启流式更新模式的卡片实体，返回 card_id。"""
+        if self.bot.cardkit is None:
+            logger.error("[Lark] API Client cardkit 模块未初始化")
+            return None
+
+        card_json = {
+            "schema": "2.0",
+            "header": {
+                "title": {"content": "", "tag": "plain_text"},
+            },
+            "config": {
+                "streaming_mode": True,
+                "summary": {"content": ""},
+                "streaming_config": {
+                    "print_frequency_ms": {"default": 50},
+                    "print_step": {"default": 2},
+                    "print_strategy": "fast",
+                },
+            },
+            "body": {
+                "elements": [
+                    {
+                        "tag": "markdown",
+                        "content": "",
+                        "element_id": "markdown_1",
+                    }
+                ]
+            },
+        }
+
+        request = (
+            CreateCardRequest.builder()
+            .request_body(
+                CreateCardRequestBody.builder()
+                .type("card_json")
+                .data(json.dumps(card_json, ensure_ascii=False))
+                .build()
+            )
+            .build()
+        )
+
+        try:
+            response = await self.bot.cardkit.v1.card.acreate(request)
+        except Exception as e:
+            logger.error(f"[Lark] 创建流式卡片实体失败: {e}")
+            return None
+
+        if not response.success():
+            logger.error(
+                f"[Lark] 创建流式卡片实体失败({response.code}): {response.msg}"
+            )
+            return None
+
+        if response.data is None or not response.data.card_id:
+            logger.error("[Lark] 创建流式卡片实体成功但未返回 card_id")
+            return None
+
+        card_id = response.data.card_id
+        logger.debug(f"[Lark] 创建流式卡片实体成功: {card_id}")
+        return card_id
+
+    async def _send_card_message(
+        self,
+        card_id: str,
+        reply_message_id: str | None = None,
+        receive_id: str | None = None,
+        receive_id_type: str | None = None,
+    ) -> bool:
+        """将卡片实体作为 interactive 消息发送。"""
+        content = json.dumps(
+            {"type": "card", "data": {"card_id": card_id}},
+            ensure_ascii=False,
+        )
+        return await self._send_im_message(
+            self.bot,
+            content=content,
+            msg_type="interactive",
+            reply_message_id=reply_message_id,
+            receive_id=receive_id,
+            receive_id_type=receive_id_type,
+        )
+
+    async def _update_streaming_text(
+        self,
+        card_id: str,
+        content: str,
+        sequence: int,
+    ) -> bool:
+        """调用 CardKit 流式更新文本接口，向 markdown_1 组件推送全量文本。"""
+        if self.bot.cardkit is None:
+            logger.error("[Lark] API Client cardkit 模块未初始化")
+            return False
+
+        request = (
+            ContentCardElementRequest.builder()
+            .card_id(card_id)
+            .element_id("markdown_1")
+            .request_body(
+                ContentCardElementRequestBody.builder()
+                .content(content)
+                .sequence(sequence)
+                .uuid(str(uuid.uuid4()))
+                .build()
+            )
+            .build()
+        )
+
+        try:
+            response = await self.bot.cardkit.v1.card_element.acontent(request)
+        except Exception as e:
+            logger.debug(f"[Lark] 流式更新文本失败 (ignored): {e}")
+            return False
+
+        if not response.success():
+            logger.debug(f"[Lark] 流式更新文本失败({response.code}): {response.msg}")
+            return False
+
+        return True
+
+    async def _close_streaming_mode(
+        self,
+        card_id: str,
+        sequence: int,
+    ) -> None:
+        """关闭卡片的流式更新模式，使其可正常转发、摘要恢复。"""
+        if self.bot.cardkit is None:
+            logger.error("[Lark] API Client cardkit 模块未初始化")
+            return
+
+        settings_json = json.dumps(
+            {"config": {"streaming_mode": False}},
+            ensure_ascii=False,
+        )
+
+        request = (
+            SettingsCardRequest.builder()
+            .card_id(card_id)
+            .request_body(
+                SettingsCardRequestBody.builder()
+                .settings(settings_json)
+                .sequence(sequence)
+                .uuid(str(uuid.uuid4()))
+                .build()
+            )
+            .build()
+        )
+
+        try:
+            response = await self.bot.cardkit.v1.card.asettings(request)
+        except Exception as e:
+            logger.error(f"[Lark] 关闭流式模式失败: {e}")
+            return
+
+        if not response.success():
+            logger.error(f"[Lark] 关闭流式模式失败({response.code}): {response.msg}")
+        else:
+            logger.debug(f"[Lark] 流式模式已关闭: {card_id}")
+
+    async def _fallback_send_streaming(self, generator, use_fallback: bool = False):
+        """回退到非流式发送：缓冲全部文本后一次性发送，并保留父类副作用。"""
+        buffer = None
+        async for chain in generator:
+            if not buffer:
+                buffer = chain
+            else:
+                buffer.chain.extend(chain.chain)
+
+        if buffer:
+            buffer.squash_plain()
+            await self.send(buffer)
+
+        asyncio.create_task(
+            Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
+        )
+        self._has_send_oper = True
+
+    async def send_streaming(self, generator, use_fallback: bool = False):
+        """使用 CardKit 流式卡片实现打字机效果。
+
+        流程：首字到来时创建卡片实体 → 发送消息 → 流式更新文本 → 关闭流式模式。
+        卡片创建延迟到第一个文本 token 到达时，避免工具调用阶段就渲染空卡片。
+        使用解耦发送循环，LLM token 到达时只更新 buffer 并唤醒发送协程，
+        发送频率由网络 RTT 自然限流。
+        """
+        # Lazy-init: card & sender loop created on first text token
+        card_id = None
+        sequence = 0
+        delta = ""
+        last_sent = ""
+        done = False
+        text_changed = asyncio.Event()
+        sender_task = None
+        fallback_used = False  # 回退路径已处理 Metric，避免重复上报
+
+        async def _sender_loop() -> None:
+            """信号驱动的文本发送循环，有新内容就发，RTT 自然限流。"""
+            nonlocal sequence, last_sent
+            while not done:
+                await text_changed.wait()
+                text_changed.clear()
+                snapshot = delta
+                if snapshot and snapshot != last_sent and card_id:
+                    sequence += 1
+                    ok = await self._update_streaming_text(card_id, snapshot, sequence)
+                    if ok:
+                        last_sent = snapshot
+                    if delta != snapshot:
+                        text_changed.set()
+
+        async def _consume_rest_and_fallback(gen, initial_text: str) -> None:
+            """Card creation failed; consume remaining chunks and send non-streaming."""
+            nonlocal fallback_used
+            fallback_used = True
+            buffer = MessageChain().message(initial_text) if initial_text else None
+            async for chain in gen:
+                if not isinstance(chain, MessageChain):
+                    continue
+                if buffer is None:
+                    buffer = chain
+                else:
+                    buffer.chain.extend(chain.chain)
+            if buffer:
+                buffer.squash_plain()
+                await self.send(buffer)
+            asyncio.create_task(
+                Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
+            )
+            self._has_send_oper = True
+
+        async def _flush_and_close_card() -> None:
+            """补发最终文本并关闭当前卡片的流式模式。"""
+            if not card_id:
+                return
+            nonlocal sequence
+            if delta and delta != last_sent:
+                sequence += 1
+                await self._update_streaming_text(card_id, delta, sequence)
+            sequence += 1
+            await self._close_streaming_mode(card_id, sequence)
+
+        try:
+            async for chain in generator:
+                if not isinstance(chain, MessageChain):
+                    continue
+
+                if chain.type == "break":
+                    # Tool call boundary: close current card, next text
+                    # token will lazily create a new one below the tool
+                    # status message.
+                    if card_id and sender_task:
+                        done = True
+                        text_changed.set()
+                        await sender_task
+                        await _flush_and_close_card()
+                        # Reset for lazy new-card creation
+                        card_id = None
+                        sequence = 0
+                        delta = ""
+                        last_sent = ""
+                        done = False
+                        sender_task = None
+                    continue
+
+                for comp in chain.chain:
+                    if isinstance(comp, Plain):
+                        delta += comp.text
+
+                        # Lazy card creation on first text token
+                        if card_id is None:
+                            card_id = await self._create_streaming_card()
+                            if not card_id:
+                                logger.warning(
+                                    "[Lark] 无法创建流式卡片，回退到非流式发送"
+                                )
+                                await _consume_rest_and_fallback(generator, delta)
+                                return
+
+                            sent = await self._send_card_message(
+                                card_id,
+                                reply_message_id=self.message_obj.message_id,
+                            )
+                            if not sent:
+                                logger.error(
+                                    "[Lark] 发送流式卡片消息失败，回退到非流式发送"
+                                )
+                                await _consume_rest_and_fallback(generator, delta)
+                                return
+
+                            logger.info("[Lark] 流式输出: 使用 CardKit 流式卡片")
+                            sender_task = asyncio.create_task(_sender_loop())
+
+                        text_changed.set()
+        finally:
+            done = True
+            text_changed.set()
+            if sender_task:
+                await sender_task
+
+        # If no text was produced at all, no card was created
+        if card_id is None:
+            if not fallback_used:
+                asyncio.create_task(
+                    Metric.upload(
+                        msg_event_tick=1, adapter_name=self.platform_meta.name
+                    )
+                )
+                self._has_send_oper = True
+            return
+
+        await _flush_and_close_card()
+
+        # 内联父类 send_streaming 的副作用
+        asyncio.create_task(
+            Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
+        )
+        self._has_send_oper = True

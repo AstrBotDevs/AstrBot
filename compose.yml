@@ -1,0 +1,20 @@
+version: '3.8'
+
+# When connecting to OneBot v11 Napcat, please use this compose file for one-click deployment: https://github.com/NapNeko/NapCat-Docker/blob/main/compose/astrbot.yml
+
+services:
+  astrbot:
+    image: soulter/astrbot:latest
+    container_name: astrbot
+    restart: always
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "6185:6185" # AstrBot WebUI
+      - "6199:6199" # Optional. OneBot v11 Napcat Websocket Port
+    environment:
+      - TZ=Asia/Shanghai
+    volumes:
+      - ./data:/AstrBot/data
+      # - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro

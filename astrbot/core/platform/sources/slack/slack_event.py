@@ -1,0 +1,409 @@
+import asyncio
+import re
+from collections.abc import AsyncGenerator
+from pathlib import Path
+from typing import cast
+from urllib.parse import urlsplit
+
+from slack_sdk.web.async_client import AsyncWebClient
+
+from astrbot.api import logger
+from astrbot.api.event import AstrMessageEvent, MessageChain
+from astrbot.api.message_components import (
+    At,
+    BaseMessageComponent,
+    File,
+    Image,
+    Plain,
+    Record,
+)
+from astrbot.api.platform import Group, MessageMember
+from astrbot.core.utils.media_utils import MediaResolver, file_uri_to_path
+
+
+class SlackMessageEvent(AstrMessageEvent):
+    def __init__(
+        self,
+        message_str,
+        message_obj,
+        platform_meta,
+        session_id,
+        web_client: AsyncWebClient,
+    ) -> None:
+        super().__init__(message_str, message_obj, platform_meta, session_id)
+        self.web_client = web_client
+
+    @staticmethod
+    async def _from_segment_to_slack_block(
+        segment: BaseMessageComponent,
+        web_client: AsyncWebClient,
+    ) -> dict | None:
+        """将消息段转换为 Slack 块格式"""
+        if isinstance(segment, Plain):
+            return {"type": "section", "text": {"type": "mrkdwn", "text": segment.text}}
+        if isinstance(segment, Image):
+            # upload file
+            url = segment.url or segment.file
+            if url and url.startswith("http"):
+                return {
+                    "type": "image",
+                    "image_url": url,
+                    "alt_text": "图片",
+                }
+            path = await segment.convert_to_file_path()
+            response = await web_client.files_upload_v2(
+                file=path,
+                filename=Path(path).name,
+            )
+            if not response["ok"]:
+                logger.error(f"Slack file upload failed: {response['error']}")
+                return {
+                    "type": "section",
+                    "text": {"type": "mrkdwn", "text": "图片上传失败"},
+                }
+            image_url = cast(list, response["files"])[0]["url_private"]
+            logger.debug(f"Slack file upload response: {response}")
+            return {
+                "type": "image",
+                "slack_file": {
+                    "url": image_url,
+                },
+                "alt_text": "图片",
+            }
+        if isinstance(segment, File):
+            source = segment.url
+            if source:
+                if source.lower().startswith(("http://", "https://")):
+                    # MediaResolver expects lowercase HTTP(S) schemes.
+                    scheme, separator, remainder = source.partition(":")
+                    source = scheme.lower() + separator + remainder
+                else:
+                    scheme = urlsplit(source).scheme
+                    if scheme not in ("", "file") and not Path(source).drive:
+                        raise ValueError("Slack file URLs must use HTTP or HTTPS.")
+                    local_path = Path(file_uri_to_path(source))
+                    if not await asyncio.to_thread(local_path.is_file):
+                        raise ValueError("Slack file upload requires an existing file.")
+                    source = str(local_path.absolute())
+            source = source or await segment.get_file()
+            if not source:
+                raise ValueError(
+                    "Slack file upload requires a URL or an existing file."
+                )
+            # Resolve remote files and clean only resolver-owned temporary files.
+            async with MediaResolver(source).as_path() as resolved:
+                response = await web_client.files_upload_v2(
+                    file=await asyncio.to_thread(resolved.path.read_bytes),
+                    filename=segment.name or "file",
+                )
+            if not response["ok"]:
+                logger.error(f"Slack file upload failed: {response['error']}")
+                return {
+                    "type": "section",
+                    "text": {"type": "mrkdwn", "text": "文件上传失败"},
+                }
+            file_url = cast(list, response["files"])[0]["permalink"]
+            return {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"文件: <{file_url}|{segment.name or '文件'}>",
+                },
+            }
+
+    @staticmethod
+    async def _parse_slack_blocks(
+        message_chain: MessageChain,
+        web_client: AsyncWebClient,
+        channel_id: str | None = None,
+        plain_texts: set[str] | None = None,
+    ):
+        """Build Slack blocks and upload audio to the destination conversation.
+
+        Args:
+            message_chain: Message components to send.
+            web_client: Slack client used for uploads.
+            channel_id: Destination channel or user ID, required for audio uploads.
+            plain_texts: Text already included in the reply, possibly sent separately.
+
+        Returns:
+            Blocks and fallback text. Both are empty for audio-only uploads.
+        """
+        blocks = []
+        text_content = ""
+        plain_texts = (plain_texts or set()) | {
+            segment.text
+            for segment in message_chain.chain
+            if isinstance(segment, Plain)
+        }
+
+        for segment in message_chain.chain:
+            if isinstance(segment, Plain):
+                text_content += segment.text
+            elif isinstance(segment, At):
+                text_content += f"<@{segment.qq}>"
+            elif isinstance(segment, Record):
+                try:
+                    if not channel_id:
+                        raise ValueError("Slack audio upload requires a destination.")
+                    path = Path(await segment.convert_to_file_path())
+                    # File uploads require a conversation ID, not a user ID.
+                    if channel_id.startswith(("U", "W")):
+                        response = await web_client.conversations_open(users=channel_id)
+                        channel_id = response["channel"]["id"]
+                    response = await web_client.files_upload_v2(
+                        file=await asyncio.to_thread(path.read_bytes),
+                        filename=path.name,
+                        channel=channel_id,
+                    )
+                    if not response["ok"]:
+                        raise RuntimeError(response.get("error", "Audio upload failed"))
+                except Exception:
+                    logger.warning(
+                        "Slack audio upload failed.",
+                        exc_info=True,
+                    )
+                    if segment.text not in plain_texts:
+                        text_content += segment.text or "[Audio]"
+            else:
+                # 如果有文本内容，先添加文本块
+                if text_content.strip():
+                    blocks.append(
+                        {
+                            "type": "section",
+                            "text": {"type": "mrkdwn", "text": text_content},
+                        },
+                    )
+                    text_content = ""
+
+                # 添加其他类型的块
+                block = await SlackMessageEvent._from_segment_to_slack_block(
+                    segment,
+                    web_client,
+                )
+                if block:
+                    blocks.append(block)
+
+        # 如果最后还有文本内容
+        if text_content.strip():
+            blocks.append(
+                {"type": "section", "text": {"type": "mrkdwn", "text": text_content}},
+            )
+
+        return blocks, "" if blocks else text_content
+
+    @staticmethod
+    async def _send_message(
+        message: MessageChain,
+        web_client: AsyncWebClient,
+        channel_id: str,
+        plain_texts: set[str] | None = None,
+    ) -> None:
+        """Send ordered Slack message parts with a plain-text retry.
+
+        Args:
+            message: Message components in delivery order.
+            web_client: Slack client used to deliver messages.
+            channel_id: Destination channel or user ID.
+            plain_texts: Text also delivered separately by the response pipeline.
+        """
+        plain_texts = (plain_texts or set()) | {
+            segment.text for segment in message.chain if isinstance(segment, Plain)
+        }
+        # Upload each audio segment only after delivering preceding components.
+        chains = []
+        start = 0
+        for index, segment in enumerate(message.chain):
+            if isinstance(segment, Record):
+                if start < index:
+                    chains.append(message.derive(message.chain[start:index]))
+                chains.append(message.derive([segment]))
+                start = index + 1
+        if start < len(message.chain):
+            chains.append(message.derive(message.chain[start:]))
+
+        for chain in chains:
+            blocks, text = await SlackMessageEvent._parse_slack_blocks(
+                chain,
+                web_client,
+                channel_id=channel_id,
+                plain_texts=plain_texts,
+            )
+            if not blocks and not text.strip():
+                continue
+
+            try:
+                await web_client.chat_postMessage(
+                    channel=channel_id,
+                    text=text,
+                    blocks=blocks or None,
+                )
+            except Exception:
+                # Retry only this part so already delivered parts are not repeated.
+                parts = []
+                for segment in chain.chain:
+                    if isinstance(segment, Plain):
+                        parts.append(segment.text)
+                    elif isinstance(segment, At):
+                        parts.append(f"<@{segment.qq}>")
+                    elif isinstance(segment, File):
+                        parts.append(f" [文件: {segment.name}] ")
+                    elif isinstance(segment, Image):
+                        parts.append(" [图片] ")
+                    elif (
+                        isinstance(segment, Record) and segment.text not in plain_texts
+                    ):
+                        parts.append(segment.text or "[Audio]")
+                await web_client.chat_postMessage(
+                    channel=channel_id,
+                    text="".join(parts),
+                )
+
+    async def send(self, message: MessageChain) -> None:
+        # RespondStage sends audio separately from the remaining dual-output text.
+        result = self.get_result()
+        plain_texts = {
+            segment.text
+            for segment in (result.chain if result else [])
+            if isinstance(segment, Plain)
+        }
+        await self._send_message(
+            message,
+            self.web_client,
+            channel_id=self.get_group_id() or self.get_sender_id(),
+            plain_texts=plain_texts,
+        )
+        await super().send(message)
+
+    async def send_streaming(
+        self,
+        generator: AsyncGenerator,
+        use_fallback: bool = False,
+    ):
+        if not use_fallback:
+            buffer = None
+            async for chain in generator:
+                if not buffer:
+                    buffer = chain
+                else:
+                    buffer.chain.extend(chain.chain)
+            if not buffer:
+                return None
+            buffer.squash_plain()
+            await self.send(buffer)
+            return await super().send_streaming(generator, use_fallback)
+
+        buffer = ""
+        pattern = re.compile(r"[^。？！~…]+[。？！~…]+")
+
+        async for chain in generator:
+            if isinstance(chain, MessageChain):
+                for comp in chain.chain:
+                    if isinstance(comp, Plain):
+                        buffer += comp.text
+                        if any(p in buffer for p in "。？！~…"):
+                            buffer = await self.process_buffer(buffer, pattern)
+                    else:
+                        await self.send(MessageChain(chain=[comp]))
+                        await asyncio.sleep(1.5)  # 限速
+
+        if buffer.strip():
+            await self.send(MessageChain([Plain(buffer)]))
+        return await super().send_streaming(generator, use_fallback)
+
+    async def get_group(self, group_id=None, **kwargs):
+        """Gets Slack channel information and all visible members.
+
+        Args:
+            group_id: Optional Slack channel identifier.
+            **kwargs: Reserved compatibility arguments.
+
+        Returns:
+            Enriched channel information, or a basic group if lookup fails.
+        """
+        channel_id = group_id or self.get_group_id()
+        if not channel_id:
+            return None
+
+        current_group = self.message_obj.group
+        group = Group(
+            group_id=channel_id,
+            group_name=(
+                current_group.group_name
+                if current_group and current_group.group_id == channel_id
+                else None
+            ),
+        )
+
+        try:
+            channel_info = await self.web_client.conversations_info(
+                channel=channel_id,
+                include_num_members=True,
+            )
+            channel_data = cast(dict, channel_info["channel"])
+            group.group_name = channel_data.get("name") or group.group_name
+            group.member_count = channel_data.get("num_members")
+        except Exception as exc:
+            logger.debug("Slack channel info lookup failed for %s: %s", channel_id, exc)
+            return group
+
+        member_ids: list[str] = []
+        cursor: str | None = None
+        try:
+            while True:
+                request: dict[str, str | int] = {
+                    "channel": channel_id,
+                    "limit": 200,
+                }
+                if cursor:
+                    request["cursor"] = cursor
+                members_response = await self.web_client.conversations_members(
+                    **request,
+                )
+                member_ids.extend(
+                    str(member_id) for member_id in members_response["members"]
+                )
+                response_metadata = members_response.get("response_metadata") or {}
+                cursor = str(response_metadata.get("next_cursor") or "")
+                if not cursor:
+                    break
+        except Exception as exc:
+            logger.debug(
+                "Slack channel member lookup failed for %s: %s",
+                channel_id,
+                exc,
+            )
+            return group
+
+        unique_member_ids = list(dict.fromkeys(member_ids))
+        members: list[MessageMember] = []
+        for offset in range(0, len(unique_member_ids), 20):
+            member_id_batch = unique_member_ids[offset : offset + 20]
+            user_responses = await asyncio.gather(
+                *(
+                    self.web_client.users_info(user=member_id)
+                    for member_id in member_id_batch
+                ),
+                return_exceptions=True,
+            )
+            for member_id, user_response in zip(member_id_batch, user_responses):
+                if isinstance(user_response, BaseException):
+                    members.append(MessageMember(user_id=member_id, nickname=member_id))
+                    continue
+                try:
+                    user_data = cast(dict, user_response["user"])
+                    nickname = (
+                        user_data.get("real_name") or user_data.get("name") or member_id
+                    )
+                except (KeyError, TypeError, AttributeError):
+                    nickname = member_id
+                members.append(
+                    MessageMember(
+                        user_id=member_id,
+                        nickname=nickname,
+                    ),
+                )
+
+        group.members = members
+        group.member_count = group.member_count or len(members)
+        return group

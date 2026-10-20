@@ -1,0 +1,22 @@
+﻿{
+    "loading": "Загрузка",
+    "success": "Успешно",
+    "error": "Ошибка",
+    "warning": "Внимание",
+    "info": "Информация",
+    "pending": "В ожидании",
+    "processing": "В процессе",
+    "completed": "Завершено",
+    "failed": "Ошибка",
+    "cancelled": "Отменено",
+    "timeout": "Тайм-аут",
+    "connecting": "Подключение",
+    "connected": "Подключено",
+    "disconnected": "Отключено",
+    "online": "В сети",
+    "offline": "Не в сети",
+    "active": "Активен",
+    "inactive": "Неактивен",
+    "ready": "Готов",
+    "busy": "Занят"
+}

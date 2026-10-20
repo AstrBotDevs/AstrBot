@@ -1,0 +1,65 @@
+﻿{
+    "title": "Логи платформы",
+    "subtitle": "Мониторинг и статистика в реальном времени",
+    "lastUpdate": "Последнее обновление",
+    "status": {
+        "loading": "Загрузка...",
+        "dataError": "Ошибка получения данных",
+        "noticeError": "Ошибка получения объявлений",
+        "online": "В сети",
+        "uptime": "Время работы",
+        "memoryUsage": "Память"
+    },
+    "stats": {
+        "totalMessage": {
+            "title": "Всего сообщений",
+            "subtitle": "Все сообщения со всех платформ"
+        },
+        "onlinePlatform": {
+            "title": "Платформы",
+            "subtitle": "Количество подключенных платформ"
+        },
+        "runningTime": {
+            "title": "Время работы",
+            "subtitle": "Общее время работы системы",
+            "format": "{hours} ч. {minutes} мин. {seconds} сек."
+        },
+        "memoryUsage": {
+            "title": "Память",
+            "subtitle": "Использование оперативной памяти",
+            "cpuLoad": "Загрузка CPU",
+            "status": {
+                "good": "Отлично",
+                "normal": "Нормально",
+                "high": "Высокая"
+            }
+        }
+    },
+    "charts": {
+        "messageTrend": {
+            "title": "Тренды сообщений",
+            "subtitle": "Изменение количества сообщений во времени",
+            "totalMessages": "Всего сообщений",
+            "dailyAverage": "В среднем за день",
+            "growthRate": "Скорость роста",
+            "timeLabel": "Время",
+            "messageCount": "Кол-во сообщений",
+            "timeRanges": {
+                "1day": "За 1 день",
+                "3days": "За 3 дня",
+                "1week": "За 7 дней",
+                "1month": "За 30 дней"
+            }
+        },
+        "platformStat": {
+            "title": "Статистика по платформам",
+            "subtitle": "Распределение сообщений по платформам",
+            "total": "Всего",
+            "noData": "Нет данных по платформам",
+            "messageUnit": "шт.",
+            "platformCount": "Кол-во платформ",
+            "mostActive": "Самый активный",
+            "totalPercentage": "Доля от общего числа"
+        }
+    }
+}

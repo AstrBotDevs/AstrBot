@@ -1,0 +1,44 @@
+﻿{
+    "title": "Лаборатория Alkaid",
+    "subtitle": "Исследуйте передовые возможности AI",
+    "comingSoon": "Этот мир еще впереди, заходите позже!",
+    "page": {
+        "title": "Проект Alkaid.",
+        "subtitle": "AstrBot Alpha Project",
+        "navigation": {
+            "knowledgeBase": "База знаний (Плагин)",
+            "longTermMemory": "Долгосрочная память",
+            "other": "..."
+        }
+    },
+    "features": {
+        "knowledgeBase": "База знаний",
+        "longTermMemory": "Долгосрочная память",
+        "advancedChat": "Продвинутый чат",
+        "multiModal": "Мультимодальность"
+    },
+    "status": {
+        "experimental": "Экспериментально",
+        "beta": "Бета",
+        "stable": "Стабильно",
+        "deprecated": "Устарело"
+    },
+    "sigma": {
+        "subtitle": "Экспериментальный проект AstrBot",
+        "visualization": "Визуализация",
+        "filterUserId": "Фильтр по User ID",
+        "filter": "Фильтр",
+        "resetFilter": "Сброс",
+        "refreshGraph": "Обновить граф",
+        "nodeDetails": "Детали узла",
+        "id": "ID",
+        "type": "Тип",
+        "name": "Имя",
+        "userId": "ID пользователя",
+        "timestamp": "Метка времени",
+        "graphStats": "Статистика графа",
+        "nodeCount": "Узлов",
+        "edgeCount": "Связей",
+        "inDevelopment": "В разработке"
+    }
+}

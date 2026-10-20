@@ -1,0 +1,173 @@
+{
+  "header": {
+    "eyebrow": "Automation",
+    "live": "Live Sync"
+  },
+  "page": {
+    "title": "Future Task Management",
+    "beta": "Experimental",
+    "subtitle": "AstrBot wakes up at the scheduled time, completes the task, and sends the result back to the target conversation.",
+    "proactive": {
+      "link": "Supported platforms",
+      "supported": "Proactive delivery is available only on the configured platforms below",
+      "unsupported": "No proactive messaging platforms enabled. Turn them on in Platform settings."
+    }
+  },
+  "actions": {
+    "create": "New Task",
+    "edit": "Edit",
+    "refresh": "Refresh",
+    "delete": "Delete",
+    "cancel": "Cancel",
+    "close": "Close",
+    "more": "More actions",
+    "runNow": "Run now",
+    "save": "Save",
+    "submit": "Create"
+  },
+  "platformDialog": {
+    "title": "Supported Platforms",
+    "description": "Only the following platforms support proactive message delivery. AstrBot can send future task results back only to target conversations on these platforms."
+  },
+  "card": {
+    "onceAt": "One-off · {time}",
+    "runAt": "Run at: {time}",
+    "nextRun": "Next run: {time}",
+    "dailyAt": "Daily at {time}",
+    "weeklyAt": "Every {day} at {time}",
+    "monthlyAt": "Monthly on day {day} at {time}",
+    "everyMinutes": "Every {count} minutes",
+    "everyHours": "Every {count} hours",
+    "everyDays": "Every {count} days",
+    "customCron": "Custom · {cron}",
+    "noDeliveryTarget": "No delivery target"
+  },
+  "filters": {
+    "search": "Search title and content",
+    "umo": "Filter by delivery target",
+    "noUmos": "No UMOs",
+    "noDeliveryTarget": "No delivery target",
+    "noMatches": "No matching future tasks."
+  },
+  "overview": {
+    "totalTasks": "Total Tasks",
+    "totalTasksNote": "Registered future tasks",
+    "enabledTasks": "Enabled Tasks",
+    "enabledTasksNote": "Tasks ready to wake and run",
+    "oneOffTasks": "One-off Tasks",
+    "recurringTasksNote": "{count} recurring tasks",
+    "proactivePlatforms": "Proactive Platforms",
+    "proactivePlatformsNote": "Platforms able to deliver results proactively"
+  },
+  "section": {
+    "registered": {
+      "title": "Task List",
+      "subtitle": "Review the registered tasks, execution timing, and current state"
+    },
+    "delivery": {
+      "title": "Delivery Status",
+      "subtitle": "After a task runs, results are proactively sent back through supported platforms",
+      "support": "Proactive delivery",
+      "available": "Available",
+      "unavailable": "Unavailable",
+      "enabledPlatforms": "Enabled platforms"
+    },
+    "quickCreate": {
+      "title": "Quick Create",
+      "runMode": "Task mode",
+      "target": "Targeting"
+    },
+    "platforms": {
+      "title": "Supported Platforms"
+    }
+  },
+  "table": {
+    "title": "Registered Tasks",
+    "subtitle": "Track cron setup, session target, last run history, and enabled state",
+    "empty": "No tasks yet.",
+    "headers": {
+      "name": "Name",
+      "type": "Type",
+      "cron": "Cron",
+      "session": "Session ID",
+      "nextRun": "Next Run",
+      "lastRun": "Last Run",
+      "note": "Note",
+      "actions": "Actions"
+    },
+    "type": {
+      "once": "One-off",
+      "recurring": "Recurring",
+      "activeAgent": "Active Agent",
+      "workflow": "Workflow",
+      "unknown": "{type}"
+    },
+    "timezoneLocal": "local",
+    "notAvailable": "—"
+  },
+  "form": {
+    "title": "New Task",
+    "editTitle": "Edit Task",
+    "chatHint": "You can ask AstrBot in chat to create future tasks instead of adding them here.",
+    "runOnce": "One-off task",
+    "name": "Task name *",
+    "note": "Task requirements *",
+    "scheduleMode": "Execution time *",
+    "scheduleModes": {
+      "once": "One-off",
+      "interval": "Interval",
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "monthly": "Monthly",
+      "cron": "Custom Cron"
+    },
+    "intervalEvery": "Every *",
+    "intervalUnit": "Unit *",
+    "intervalUnits": {
+      "minutes": "Minutes",
+      "hours": "Hours",
+      "days": "Days"
+    },
+    "dailyTime": "Time *",
+    "weeklyDay": "Weekday *",
+    "weeklyTime": "Time *",
+    "monthlyDay": "Day *",
+    "monthlyTime": "Time *",
+    "weekdays": {
+      "sunday": "Sunday",
+      "monday": "Monday",
+      "tuesday": "Tuesday",
+      "wednesday": "Wednesday",
+      "thursday": "Thursday",
+      "friday": "Friday",
+      "saturday": "Saturday"
+    },
+    "cron": "Cron expression *",
+    "cronPlaceholder": "0 9 * * *",
+    "runAt": "Run at *",
+    "session": "Deliver to",
+    "noUmos": "No sessions available",
+    "timezone": "Timezone (optional, e.g. Asia/Shanghai)",
+    "enabled": "Enabled"
+  },
+  "messages": {
+    "loadFailed": "Failed to load tasks",
+    "updateSuccess": "Updated successfully",
+    "updateFailed": "Failed to update",
+    "deleteSuccess": "Deleted",
+    "deleteFailed": "Failed to delete",
+    "nameRequired": "Task name is required",
+    "sessionRequired": "Delivery target is required",
+    "noteRequired": "Task requirements are required",
+    "cronRequired": "Cron expression is required",
+    "runAtRequired": "Please select run time",
+    "intervalRequired": "Please enter a valid interval",
+    "dailyTimeRequired": "Please select the daily run time",
+    "weeklyTimeRequired": "Please select the weekly day and time",
+    "monthlyTimeRequired": "Please select the monthly day and time",
+    "createSuccess": "Created successfully",
+    "createFailed": "Failed to create",
+    "runStarted": "Started",
+    "runFailed": "Failed to run"
+  }
+}

@@ -1,0 +1,148 @@
+{
+  "title": "追踪",
+  "autoScroll": {
+    "enabled": "自动滚动：开",
+    "disabled": "自动滚动：关"
+  },
+  "hint": "记录一次消息唤醒后的完整执行链：插件 Handler、Agent、工具调用与响应。数据仅保留在内存中。",
+  "toggleLabel": "记录追踪",
+  "recording": "记录中",
+  "paused": "已暂停",
+  "table": {
+    "time": "时间",
+    "eventId": "事件 ID",
+    "sender": "发送者",
+    "outline": "内容"
+  },
+  "expand": "展开",
+  "collapse": "收起",
+  "showMore": "显示更多",
+  "empty": "暂无追踪数据",
+  "search": "在 {count} 条记录中搜索消息、会话、插件",
+  "clearSearch": "清除搜索",
+  "live": "实时",
+  "connecting": "连接中",
+  "refresh": "刷新",
+  "records": "条记录",
+  "traceList": "追踪列表",
+  "loading": "加载追踪数据…",
+  "untitled": "未命名消息",
+  "steps": "步骤",
+  "duration": "耗时",
+  "handlers": "插件处理器",
+  "responses": "响应",
+  "details": "查看详情",
+  "selectTrace": "选择一条追踪查看完整执行链",
+  "closeDetails": "关闭详情",
+  "pagination": {
+    "perPage": "每页条数",
+    "range": "第 {0}–{1} 条，共 {2} 条"
+  },
+  "messagePreview": {
+    "expand": "展开全文",
+    "collapse": "收起"
+  },
+  "compact": {
+    "pluginHandler": "调用插件",
+    "agentExecution": "Agent 执行",
+    "rawData": "原始数据",
+    "toggleAgent": "{action} Agent 内部执行链"
+  },
+  "history": {
+    "loadFailed": "读取追踪历史失败，请重试",
+    "detailFailed": "读取追踪详情失败；记录可能已被清理，请重试",
+    "storageWarning": "部分追踪未能持久化，请检查数据库写入错误或容量限制。",
+    "loadMore": "加载更多",
+    "limitHint": "当前最多展示 {count} 条，请缩小搜索范围。",
+    "truncated": "此追踪内容或节点数量超过限制，部分数据已截断。"
+  },
+  "controls": {
+    "start": "启动",
+    "pauseButton": "暂停",
+    "pause": "暂停追踪记录",
+    "resume": "开始追踪记录",
+    "loadFailed": "读取追踪设置失败，请刷新页面重试",
+    "updateFailed": "切换追踪记录失败，请重试"
+  },
+  "tokens": {
+    "title": "Tokens",
+    "breakdown": "输入: {input} (缓存读: {cached})\n输出: {output}",
+    "unavailable": "暂无已上报的 Token 用量"
+  },
+  "classification": {
+    "agent": "Agent",
+    "command": "指令",
+    "group": "群聊",
+    "private": "私聊"
+  },
+  "columns": {
+    "category": "类型",
+    "duration": "时长",
+    "status": "状态",
+    "platform": "平台",
+    "timestamp": "时间戳",
+    "message": "消息",
+    "sender": "发送人",
+    "spansHint": "实际 Span 数（含消息根 Span），不包含事件；折叠不影响计数。"
+  },
+  "chips": {
+    "provider": "提供商：{id}",
+    "persona": "人格：{id}",
+    "toolCalls": "{count} 次工具调用"
+  },
+  "groups": {
+    "handlerStart": "触发多个插件处理器",
+    "agentStart": "启动多个 Agent",
+    "agentToolCall": "调用多个工具",
+    "agentToolResult": "多个工具返回",
+    "responseReady": "准备发送多个响应",
+    "responseSent": "发送多个响应",
+    "repeated": "多次{label}",
+    "count": "{count} 条",
+    "errors": "{count} 项错误"
+  },
+  "filters": {
+    "button": "过滤器",
+    "title": "过滤器",
+    "reset": "重置",
+    "close": "关闭过滤器",
+    "errors": "有错误",
+    "models": "有模型调用",
+    "plugins": "有插件调用",
+    "hint": "可勾选多个条件，结果需同时满足；不勾选则显示全部。"
+  },
+  "status": {
+    "error": "错误",
+    "complete": "已完成",
+    "live": "运行中"
+  },
+  "handlerDescription": {
+    "loading": "正在加载处理器说明…",
+    "loadFailed": "加载失败，请再次悬停重试",
+    "empty": "暂无处理器说明"
+  },
+  "handlerCategories": {
+    "command": "指令/指令组",
+    "listener": "事件监听器",
+    "hook": "事件钩子",
+    "llm_tool": "LLM 工具"
+  },
+  "actions": {
+    "selectPersona": "选择人格",
+    "eventReceived": "收到消息",
+    "pipelineStart": "开始处理管道",
+    "pipelineEnd": "完成",
+    "stageStart": "开始阶段",
+    "stageEnd": "阶段完成",
+    "handlerStart": "触发插件处理器",
+    "handlerEnd": "Handler 完成",
+    "agentStart": "启动 Agent",
+    "agentEnd": "Agent 完成",
+    "agentPrepare": "准备 Agent 请求",
+    "agentComplete": "完成模型请求",
+    "agentToolCall": "调用工具",
+    "agentToolResult": "工具返回",
+    "responseReady": "准备发送响应",
+    "responseSent": "发送响应"
+  }
+}

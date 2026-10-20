@@ -1,0 +1,185 @@
+import platform
+from dataclasses import dataclass, field
+
+import mcp
+
+from astrbot.api import FunctionTool
+from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.tool import ToolExecResult
+from astrbot.core.astr_agent_context import AstrAgentContext, AstrMessageEvent
+from astrbot.core.computer.booters.local import LocalPythonComponent
+from astrbot.core.computer.computer_client import get_booter, get_local_booter
+from astrbot.core.message.message_event_result import MessageChain
+
+from ..registry import builtin_tool
+from .fs import _read_allowed_roots, _write_allowed_roots
+from .util import (
+    check_admin_permission,
+    check_local_execution_permission,
+    workspace_root_for_context,
+)
+
+_OS_NAME = platform.system()
+_SANDBOX_PYTHON_TOOL_CONFIG = {
+    "provider_settings.computer_use_runtime": "sandbox",
+}
+_LOCAL_PYTHON_TOOL_CONFIG = {
+    "provider_settings.computer_use_runtime": "local",
+}
+
+param_schema = {
+    "type": "object",
+    "properties": {
+        "code": {
+            "type": "string",
+            "description": "The Python code to execute.",
+        },
+        "silent": {
+            "type": "boolean",
+            "description": "Whether to suppress the output of the code execution.",
+            "default": False,
+        },
+        "timeout": {
+            "type": "integer",
+            "description": "Optional timeout in seconds for code execution.",
+            "default": 30,
+        },
+    },
+    "required": ["code"],
+}
+
+
+async def handle_result(
+    result: dict, event: AstrMessageEvent
+) -> mcp.types.CallToolResult:
+    data = result.get("data", {})
+    output = data.get("output", {})
+    error = data.get("error", "")
+    images: list[dict] = output.get("images", [])
+    text: str = output.get("text", "")
+
+    resp = mcp.types.CallToolResult(content=[])
+
+    if error:
+        resp.content.append(mcp.types.TextContent(type="text", text=f"error: {error}"))
+
+    if images:
+        for img in images:
+            resp.content.append(
+                mcp.types.ImageContent(
+                    type="image", data=img["image/png"], mimeType="image/png"
+                )
+            )
+
+            if event.get_platform_name() == "webchat":
+                await event.send(message=MessageChain().base64_image(img["image/png"]))
+    if text:
+        resp.content.append(mcp.types.TextContent(type="text", text=text))
+
+    if not resp.content:
+        resp.content.append(mcp.types.TextContent(type="text", text="No output."))
+
+    return resp
+
+
+@builtin_tool(config=_SANDBOX_PYTHON_TOOL_CONFIG)
+@dataclass
+class PythonTool(FunctionTool):
+    name: str = "astrbot_execute_ipython"
+    description: str = f"Run codes in an IPython shell. Current OS: {_OS_NAME}."
+    parameters: dict = field(default_factory=lambda: param_schema)
+
+    async def call(
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        code: str,
+        silent: bool = False,
+        timeout: int = 30,
+    ) -> ToolExecResult:
+        if permission_error := check_admin_permission(context, "Python execution"):
+            return permission_error
+        sb = await get_booter(
+            context.context.context,
+            context.context.event.unified_msg_origin,
+        )
+        effective_timeout = (
+            min(timeout, context.tool_call_timeout)
+            if timeout > 0
+            else context.tool_call_timeout
+        )
+        try:
+            result = await sb.python.exec(
+                code,
+                timeout=effective_timeout,
+                silent=silent,
+            )
+            return await handle_result(result, context.context.event)
+        except Exception as e:
+            return f"Error executing code: {str(e)}"
+
+
+@builtin_tool(config=_LOCAL_PYTHON_TOOL_CONFIG)
+@dataclass
+class LocalPythonTool(FunctionTool):
+    name: str = "astrbot_execute_python"
+    description: str = (
+        f"Execute codes in a Python environment. Current OS: {_OS_NAME}. "
+        "Use system-compatible commands. Restricted Linux and macOS calls run "
+        "inside an operating-system sandbox."
+    )
+
+    parameters: dict = field(default_factory=lambda: param_schema)
+
+    async def call(
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        code: str,
+        silent: bool = False,
+        timeout: int = 30,
+    ) -> ToolExecResult:
+        local_policy, permission_error = check_local_execution_permission(
+            context,
+            "Python execution",
+        )
+        if permission_error:
+            return permission_error
+        if local_policy is None:
+            return "Error executing code: only local runtime is supported."
+        sandboxed = local_policy.requires_sandbox
+        sb = get_local_booter()
+        if not isinstance(sb.python, LocalPythonComponent):
+            return "Error executing code: local Python component is unavailable."
+        effective_timeout = (
+            min(timeout, context.tool_call_timeout)
+            if timeout > 0
+            else context.tool_call_timeout
+        )
+        if sandboxed:
+            effective_timeout = min(effective_timeout, 300)
+        try:
+            current_workspace_root = await workspace_root_for_context(context)
+            current_workspace_root.mkdir(parents=True, exist_ok=True)
+            sandbox_roots = {}
+            if sandboxed and local_policy.filesystem_scope == "workspace":
+                umo = context.context.event.unified_msg_origin
+                sandbox_roots = {
+                    "readable_roots": _read_allowed_roots(umo, current_workspace_root),
+                    "writable_roots": _write_allowed_roots(
+                        umo,
+                        current_workspace_root,
+                        include_installed_skills=context.context.event.role == "admin",
+                    ),
+                }
+            result = await sb.python.exec(
+                code,
+                timeout=effective_timeout,
+                silent=silent,
+                cwd=str(current_workspace_root),
+                sandboxed=sandboxed,
+                allow_network=local_policy.allow_network,
+                filesystem_scope=local_policy.filesystem_scope,
+                **sandbox_roots,
+            )
+            return await handle_result(result, context.context.event)
+        except Exception as e:
+            return f"Error executing code: {str(e)}"

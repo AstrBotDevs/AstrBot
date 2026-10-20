@@ -1,0 +1,23 @@
+{
+  "operation": {
+    "saved": "保存しました",
+    "created": "作成しました",
+    "updated": "更新しました",
+    "deleted": "削除しました",
+    "uploaded": "アップロードしました",
+    "downloaded": "ダウンロードしました",
+    "imported": "インポートしました",
+    "exported": "エクスポートしました",
+    "copied": "コピーしました",
+    "sent": "送信しました"
+  },
+  "connection": {
+    "connected": "接続しました",
+    "authenticated": "ログインしました",
+    "synchronized": "同期しました"
+  },
+  "validation": {
+    "valid": "検証に成功しました",
+    "completed": "操作が完了しました"
+  }
+}
