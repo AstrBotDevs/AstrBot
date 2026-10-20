@@ -95,7 +95,7 @@ async function pipInstall() {
               <Plus :size="15" aria-hidden="true" />
             </v-btn>
           </div>
-          <v-dialog v-model="pipDialog" width="440">
+          <v-dialog v-model="pipDialog" width="440" attach="#console-wrapper">
             <template #activator="{ props }">
               <v-btn
                 v-bind="props"

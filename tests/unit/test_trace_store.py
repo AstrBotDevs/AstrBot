@@ -416,7 +416,12 @@ def test_database_pages_filters_details_and_restart(persisted, capture):
         restarted.close()
 
 
-@pytest.mark.parametrize("prompt", ["x" * 8192, "字" * 20000, "x" * 131072])
+# Keep node IDs below Windows' PYTEST_CURRENT_TEST environment variable limit.
+@pytest.mark.parametrize(
+    "prompt",
+    ["x" * 8192, "字" * 20000, "x" * 131072],
+    ids=["ascii-8k", "unicode-20k", "ascii-128k"],
+)
 def test_long_prompt_is_preserved_in_spans_events_and_database(
     persisted, capture, prompt
 ):
@@ -530,11 +535,18 @@ def test_orphan_cleanup_preserves_live_and_pending_traces(persisted, capture, mo
     assert persisted._pending_bytes == 0
 
 
-def test_stale_updates_do_not_reopen_completed_trace(persisted, capture):
+@pytest.mark.parametrize("same_timestamp", [False, True])
+def test_stale_updates_do_not_reopen_completed_trace(
+    persisted, capture, same_timestamp
+):
     trace = TraceSpan("message", message_outline="Literal % _")
     trace.record("event_received")
     trace.record("pipeline_end", status="success")
     for frame in reversed(capture):
+        # Wall-clock timestamps can collide on Windows even for distinct updates.
+        if same_timestamp:
+            frame["time_unix_nano"] = capture[-1]["time_unix_nano"]
+            frame["trace"]["updated_time_unix_nano"] = frame["time_unix_nano"]
         assert persisted.append(frame)
     assert persisted.flush()
     detail = persisted.get_trace(trace.trace_id)
