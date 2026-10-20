@@ -249,7 +249,7 @@ async def helloworld(self, event: AstrMessageEvent):
 
 ### 自定义过滤器
 
-内置过滤器无法满足需求时，可以使用 `filter.custom_filter` 注册自定义过滤器。自定义过滤器同样参与 `AND` 判断，可以作用于单个指令、指令组或某个子指令。
+内置过滤器无法满足需求时，可以使用 `filter.custom_filter` 注册自定义过滤器。自定义过滤器同样参与 `AND` 判断，可以作用于单个指令、指令组 handler 或某个子指令。
 
 #### 编写过滤器
 
@@ -288,7 +288,7 @@ async def test(self, event: AstrMessageEvent):
 
 #### 作用于指令组
 
-装饰在 `command_group` 上时，组内所有子指令都会受到约束：
+装饰在 `command_group` 上时，过滤器只作用于**指令组 handler 本身**，不会级联到组内的子指令：
 
 ```python
 @filter.custom_filter(GroupWhitelist)
@@ -297,12 +297,30 @@ def math(self):
     pass
 ```
 
-只约束某个子指令时，请把 `custom_filter` 写在 `command` **上方**：
+> [!WARNING]
+> 组级过滤器不会约束子指令。每个子指令由自己的 handler 独立判断，其 `CommandFilter` 不会回查父指令组的过滤器，因此即使组级过滤器返回 `False`，组内子指令仍会照常执行。若要让整组子指令都受限，请把过滤器逐个挂到子指令上（子指令较多时可自行封装一个复用装饰器）。
+
+要为某个子指令加限制，请把 `custom_filter` 写在 `command` **上方**：
 
 ```python
 @math.custom_filter(GroupWhitelist)
 @math.command("reset")
 async def math_reset(self, event: AstrMessageEvent):
+    pass
+```
+
+要让组内每个子指令都受限，需要对每个子指令分别声明：
+
+```python
+@math.custom_filter(GroupWhitelist)
+@math.command("add")
+async def math_add(self, event: AstrMessageEvent):
+    pass
+
+
+@math.custom_filter(GroupWhitelist)
+@math.command("sub")
+async def math_sub(self, event: AstrMessageEvent):
     pass
 ```
 
@@ -328,7 +346,7 @@ async def b(self, event: AstrMessageEvent):
 - 过滤器返回 `False` 时，该 handler 会被静默跳过，不会向用户发送任何提示；需要提示时请自行发送（`filter` 是同步方法，可使用 `asyncio.create_task(event.send(...))`）。
 - 过滤器内部抛出的异常会被框架捕获，并向用户发送 `插件 <插件名>: <异常信息>`，同时停止事件传播。
 - 多个过滤器之间是 `AND` 关系，与内置过滤器完全一致。
-- 指令组级别和子指令级别的过滤器也会影响「只发送指令组名」时返回的提示树，被拦截的子指令不会出现在提示中。
+- 子指令级过滤器会让被拦截的子指令从「只发送指令组名」时的提示树中消失；组级过滤器返回 `False` 时，指令组 handler 本身不通过，整棵提示树都不会渲染。
 
 ### 事件钩子
 

@@ -249,7 +249,7 @@ async def helloworld(self, event: AstrMessageEvent):
 
 ### Custom Filters
 
-When the built-in filters are not enough, register your own filter with `filter.custom_filter`. Custom filters take part in the same `AND` check and can be attached to a single command, a command group, or one sub-command.
+When the built-in filters are not enough, register your own filter with `filter.custom_filter`. Custom filters take part in the same `AND` check and can be attached to a single command, a command-group handler, or one sub-command.
 
 #### Writing a Filter
 
@@ -288,7 +288,7 @@ async def test(self, event: AstrMessageEvent):
 
 #### Attaching to a Command Group
 
-When decorated on a `command_group`, every sub-command in the group is constrained:
+When decorated on a `command_group`, the filter constrains **the group handler only**; it does **not** cascade to the group's sub-commands:
 
 ```python
 @filter.custom_filter(GroupWhitelist)
@@ -297,12 +297,30 @@ def math(self):
     pass
 ```
 
+> [!WARNING]
+> A group-level filter does not constrain sub-commands. Each sub-command is evaluated by its own handler, and its `CommandFilter` never consults the parent group's filter, so sub-commands still run even when the group-level filter returns `False`. To restrict a whole group, attach the filter to every sub-command (wrap it in a small reusable decorator if there are many).
+
 To constrain a single sub-command, put `custom_filter` **above** `command`:
 
 ```python
 @math.custom_filter(GroupWhitelist)
 @math.command("reset")
 async def math_reset(self, event: AstrMessageEvent):
+    pass
+```
+
+To constrain every sub-command in the group, declare it on each one:
+
+```python
+@math.custom_filter(GroupWhitelist)
+@math.command("add")
+async def math_add(self, event: AstrMessageEvent):
+    pass
+
+
+@math.custom_filter(GroupWhitelist)
+@math.command("sub")
+async def math_sub(self, event: AstrMessageEvent):
     pass
 ```
 
@@ -328,7 +346,7 @@ async def b(self, event: AstrMessageEvent):
 - When a filter returns `False`, the handler is skipped silently and no message is sent to the user; send one yourself if you need to (`filter` is synchronous, so use `asyncio.create_task(event.send(...))`).
 - Exceptions raised inside a filter are caught by the framework, which sends `Plugin <plugin name>: <error message>` to the user and stops event propagation.
 - Multiple filters are combined with `AND`, exactly like the built-in filters.
-- Group-level and sub-command-level filters also affect the command tree returned when only the group name is sent: blocked sub-commands are not shown.
+- Sub-command-level filters hide blocked sub-commands from the command tree returned when only the group name is sent; a group-level filter that returns `False` blocks the group handler itself, so the whole tree is not rendered.
 
 ### Event Hooks
 
