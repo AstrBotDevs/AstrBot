@@ -11,10 +11,11 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from functools import cmp_to_key
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import aiohttp
 import psutil
+from packaging.version import InvalidVersion, Version
 from sqlmodel import col, func, select
 
 from astrbot.core import DEMO_MODE, logger
@@ -49,6 +50,18 @@ from astrbot.dashboard.password_state import (
 
 class StatServiceError(Exception):
     pass
+
+# Speed tests download real payloads, so these budgets stop a single click
+# from pulling tens of megabytes.
+_SPEED_SAMPLE_SECONDS = 6.0
+_SPEED_SAMPLE_MAX_BYTES = 4 * 1024 * 1024
+_PIP_USER_AGENT = "pip/24.3.1"
+# A real repository asset the dashboard downloads (the t2i runtime bundle),
+# large enough to produce a meaningful throughput number.
+_GITHUB_SPEED_TARGET_URL = (
+    "https://github.com/AstrBotDevs/AstrBot/raw/refs/heads/master/"
+    "astrbot/core/utils/t2i/template/shiki_runtime.iife.js"
+)
 
 
 class StatService:
@@ -583,7 +596,7 @@ class StatService:
                 session.get(
                     f"{normalized_url}/",
                     # Some mirrors reject non-pip user agents, so mimic pip itself.
-                    headers={"User-Agent": "pip/24.3.1"},
+                    headers={"User-Agent": _PIP_USER_AGENT},
                     timeout=aiohttp.ClientTimeout(total=10),
                 ) as response,
             ):
@@ -593,6 +606,153 @@ class StatService:
                         "latency": round((end_time - start_time) * 1000, 2),
                     }
                 raise StatServiceError(f"Failed. Status code: {response.status}")
+        except StatServiceError:
+            raise
+        except Exception as exc:
+            logger.error(traceback.format_exc())
+            raise StatServiceError(f"Error: {exc!s}") from exc
+
+    async def measure_pypi_index_speed(self, index_url: str | None) -> dict:
+        """Download a real wheel from a PyPI index and report the throughput.
+
+        The speed test pulls an actual package file, so the result reflects what
+        ``pip install`` would experience instead of a bare round trip. Only the
+        first few megabytes and seconds are sampled so slow mirrors answer fast.
+
+        Args:
+            index_url: Base URL of the PyPI index, e.g.
+                ``https://mirrors.aliyun.com/pypi/simple/``.
+
+        Returns:
+            A dict with the throughput in MB/s, the sampled byte count, and the
+            elapsed seconds.
+
+        Raises:
+            StatServiceError: If the URL is missing, malformed, or unreachable.
+        """
+        try:
+            normalized_url = (index_url or "").strip().rstrip("/")
+            if not normalized_url:
+                raise StatServiceError("index_url is required")
+
+            parsed = urlparse(normalized_url)
+            if parsed.scheme not in ("http", "https") or not parsed.netloc:
+                raise StatServiceError("index_url must be a valid http(s) URL")
+
+            async with aiohttp.ClientSession() as session:
+                # pip ships a single platform independent wheel and every mirror
+                # serves the same file, which keeps the numbers comparable.
+                package_page_url = f"{normalized_url}/pip/"
+                async with session.get(
+                    package_page_url,
+                    headers={"User-Agent": _PIP_USER_AGENT},
+                    timeout=aiohttp.ClientTimeout(total=15),
+                ) as response:
+                    if response.status != 200:
+                        raise StatServiceError(
+                            f"Failed. Status code: {response.status}"
+                        )
+                    page = await response.text()
+
+                wheels: list[tuple[Version, str]] = []
+                for href in re.findall(r'href="([^"#]+)', page):
+                    file_name = href.rsplit("/", 1)[-1]
+                    suffix = "-py3-none-any.whl"
+                    if not (file_name.startswith("pip-") and file_name.endswith(suffix)):
+                        continue
+                    try:
+                        version = Version(file_name[len("pip-") : -len(suffix)])
+                    except InvalidVersion:
+                        continue
+                    wheels.append((version, urljoin(package_page_url, href)))
+
+                if not wheels:
+                    raise StatServiceError("No pip wheel found on this index")
+                wheels.sort(key=lambda wheel: wheel[0])
+                wheel_url = wheels[-1][1]
+
+                start_time = time.time()
+                received = 0
+                async with session.get(
+                    wheel_url,
+                    headers={"User-Agent": _PIP_USER_AGENT},
+                    timeout=aiohttp.ClientTimeout(total=_SPEED_SAMPLE_SECONDS + 5),
+                ) as response:
+                    if response.status != 200:
+                        raise StatServiceError(
+                            f"Failed. Status code: {response.status}"
+                        )
+                    async for chunk in response.content.iter_chunked(65536):
+                        received += len(chunk)
+                        if (
+                            received >= _SPEED_SAMPLE_MAX_BYTES
+                            or time.time() - start_time > _SPEED_SAMPLE_SECONDS
+                        ):
+                            break
+
+            duration = time.time() - start_time
+            if not received or duration <= 0:
+                raise StatServiceError("No data received")
+            return {
+                "speed": round(received / 1048576 / duration, 2),
+                "bytes": received,
+                "duration": round(duration, 2),
+            }
+        except StatServiceError:
+            raise
+        except Exception as exc:
+            logger.error(traceback.format_exc())
+            raise StatServiceError(f"Error: {exc!s}") from exc
+
+    async def measure_ghproxy_speed(self, proxy_url: str | None) -> dict:
+        """Download a repository file through a GitHub proxy and report throughput.
+
+        Args:
+            proxy_url: Proxy prefix such as ``https://gh-proxy.com``; an empty
+                value measures the direct route.
+
+        Returns:
+            A dict with the throughput in MB/s, the sampled byte count, and the
+            elapsed seconds.
+
+        Raises:
+            StatServiceError: If the download fails.
+        """
+        try:
+            normalized_proxy = (proxy_url or "").strip().rstrip("/")
+            test_url = (
+                f"{normalized_proxy}/{_GITHUB_SPEED_TARGET_URL}"
+                if normalized_proxy
+                else _GITHUB_SPEED_TARGET_URL
+            )
+
+            start_time = time.time()
+            received = 0
+            async with (
+                aiohttp.ClientSession() as session,
+                session.get(
+                    test_url,
+                    timeout=aiohttp.ClientTimeout(total=_SPEED_SAMPLE_SECONDS + 5),
+                ) as response,
+            ):
+                if response.status != 200:
+                    raise StatServiceError(f"Failed. Status code: {response.status}")
+                async for chunk in response.content.iter_chunked(65536):
+                    received += len(chunk)
+                    if (
+                        received >= _SPEED_SAMPLE_MAX_BYTES
+                        or time.time() - start_time > _SPEED_SAMPLE_SECONDS
+                    ):
+                        break
+
+            duration = time.time() - start_time
+            if not received or duration <= 0:
+                raise StatServiceError("No data received")
+            return {
+                "speed": round(received / 1048576 / duration, 2),
+                "bytes": received,
+                "duration": round(duration, 2),
+            }
         except StatServiceError:
             raise
         except Exception as exc:

@@ -1850,6 +1850,16 @@ export const statsApi = {
       openApiV1.testPypiIndexConnection({ body: payload }),
     );
   },
+  measureGhproxySpeed(payload: GhproxyTestRequest) {
+    return typed<{ speed?: number; bytes?: number; duration?: number }>(
+      openApiV1.measureGhproxySpeed({ body: payload }),
+    );
+  },
+  measurePypiIndexSpeed(payload: PypiIndexTestRequest) {
+    return typed<{ speed?: number; bytes?: number; duration?: number }>(
+      openApiV1.measurePypiIndexSpeed({ body: payload }),
+    );
+  },
   startTime() {
     const v1Request = typed<StartTimeData>(openApiV1.getStartTime());
     const legacyRequest = httpClient.get<ApiEnvelope<StartTimeData>>(

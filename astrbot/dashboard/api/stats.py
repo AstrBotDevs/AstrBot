@@ -117,6 +117,24 @@ async def test_pypi_index_connection(
     return await _run(service.test_pypi_index_connection(payload.index_url))
 
 
+@router.post("/stats/pypi-index/speed")
+async def measure_pypi_index_speed(
+    payload: PypiIndexTestRequest,
+    _auth: AuthContext = Depends(require_system_scope),
+    service: StatService = Depends(get_service),
+):
+    return await _run(service.measure_pypi_index_speed(payload.index_url))
+
+
+@router.post("/stats/ghproxy/speed")
+async def measure_ghproxy_speed(
+    payload: GhProxyTestRequest,
+    _auth: AuthContext = Depends(require_system_scope),
+    service: StatService = Depends(get_service),
+):
+    return await _run(service.measure_ghproxy_speed(payload.proxy_url))
+
+
 @router.get("/changelogs")
 async def list_changelog_versions(
     _auth: AuthContext = Depends(require_system_scope),

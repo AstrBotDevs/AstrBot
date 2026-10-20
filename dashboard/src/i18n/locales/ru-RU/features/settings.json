@@ -86,6 +86,7 @@
             "custom": "Свой адрес",
             "customPlaceholder": "https://example.com/pypi/simple",
             "testConnection": "Проверить соединение",
+            "testSpeed": "Тест скорости",
             "unavailable": "Недоступен",
             "presets": {
                 "official": "Официальный",
@@ -99,7 +100,7 @@
             "title": "Ускорение GitHub",
             "noProxy": "Не использовать",
             "testConnection": "Проверить соединение",
-            "available": "Доступен",
+            "testSpeed": "Тест скорости",
             "unavailable": "Недоступен",
             "custom": "Свой вариант"
         }

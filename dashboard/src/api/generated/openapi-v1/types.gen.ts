@@ -3475,6 +3475,22 @@ export type TestPypiIndexConnectionResponse = (SuccessEnvelope);
 
 export type TestPypiIndexConnectionError = unknown;
 
+export type MeasurePypiIndexSpeedData = {
+    body: PypiIndexTestRequest;
+};
+
+export type MeasurePypiIndexSpeedResponse = (SuccessEnvelope);
+
+export type MeasurePypiIndexSpeedError = unknown;
+
+export type MeasureGhproxySpeedData = {
+    body: GhproxyTestRequest;
+};
+
+export type MeasureGhproxySpeedResponse = (SuccessEnvelope);
+
+export type MeasureGhproxySpeedError = unknown;
+
 export type ListChangelogVersionsResponse = (SuccessEnvelope);
 
 export type ListChangelogVersionsError = unknown;

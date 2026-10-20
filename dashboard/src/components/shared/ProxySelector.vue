@@ -10,24 +10,28 @@
                 @click="testAllProxies">
                 {{ tm('network.proxySelector.testConnection') }}
             </v-btn>
+            <v-btn
+                class="proxy-selector__test-button"
+                size="x-small"
+                variant="tonal"
+                :loading="loadingTestingSpeed"
+                @click="testAllSpeeds">
+                {{ tm('network.proxySelector.testSpeed') }}
+            </v-btn>
         </div>
         <v-radio-group class="proxy-selector__options mt-2" v-model="selection" hide-details="true">
             <v-radio value="none">
                 <template v-slot:label>
                     <div class="proxy-selector__option-label">
                         <span>{{ tm('network.proxySelector.noProxy') }}</span>
-                        <div v-if="proxyStatus.direct" class="proxy-selector__status">
-                            <v-chip
+                        <div class="proxy-selector__status">
+                            <v-chip v-if="proxyStatus.direct"
                                 :color="proxyStatus.direct.available ? 'success' : 'error'"
-                                size="x-small"
-                                class="mr-1">
-                                {{ proxyStatus.direct.available ? tm('network.proxySelector.available') : tm('network.proxySelector.unavailable') }}
-                            </v-chip>
-                            <v-chip
-                                v-if="proxyStatus.direct.available"
-                                color="info"
                                 size="x-small">
-                                {{ proxyStatus.direct.latency }}ms
+                                {{ proxyStatus.direct.available ? proxyStatus.direct.latency + 'ms' : tm('network.proxySelector.unavailable') }}
+                            </v-chip>
+                            <v-chip v-if="proxySpeed.direct" color="info" size="x-small">
+                                {{ proxySpeed.direct }}MB/s
                             </v-chip>
                         </div>
                     </div>
@@ -37,18 +41,14 @@
                 <template v-slot:label>
                     <div class="proxy-selector__option-label">
                         <span class="proxy-selector__url">{{ proxy }}</span>
-                        <div v-if="proxyStatus[idx]" class="proxy-selector__status">
-                            <v-chip
+                        <div class="proxy-selector__status">
+                            <v-chip v-if="proxyStatus[idx]"
                                 :color="proxyStatus[idx].available ? 'success' : 'error'"
-                                size="x-small"
-                                class="mr-1">
-                                {{ proxyStatus[idx].available ? tm('network.proxySelector.available') : tm('network.proxySelector.unavailable') }}
-                            </v-chip>
-                            <v-chip
-                                v-if="proxyStatus[idx].available"
-                                color="info"
                                 size="x-small">
-                                {{ proxyStatus[idx].latency }}ms
+                                {{ proxyStatus[idx].available ? proxyStatus[idx].latency + 'ms' : tm('network.proxySelector.unavailable') }}
+                            </v-chip>
+                            <v-chip v-if="proxySpeed[idx]" color="info" size="x-small">
+                                {{ proxySpeed[idx] }}MB/s
                             </v-chip>
                         </div>
                     </div>
@@ -62,18 +62,14 @@
                             :placeholder="tm('network.proxySelector.custom')" hide-details="true">
                         </v-text-field>
                         <span v-else>{{ tm('network.proxySelector.custom') }}</span>
-                        <div v-if="proxyStatus.custom" class="proxy-selector__status">
-                            <v-chip
+                        <div class="proxy-selector__status">
+                            <v-chip v-if="proxyStatus.custom"
                                 :color="proxyStatus.custom.available ? 'success' : 'error'"
-                                size="x-small"
-                                class="mr-1">
-                                {{ proxyStatus.custom.available ? tm('network.proxySelector.available') : tm('network.proxySelector.unavailable') }}
-                            </v-chip>
-                            <v-chip
-                                v-if="proxyStatus.custom.available"
-                                color="info"
                                 size="x-small">
-                                {{ proxyStatus.custom.latency }}ms
+                                {{ proxyStatus.custom.available ? proxyStatus.custom.latency + 'ms' : tm('network.proxySelector.unavailable') }}
+                            </v-chip>
+                            <v-chip v-if="proxySpeed.custom" color="info" size="x-small">
+                                {{ proxySpeed.custom }}MB/s
                             </v-chip>
                         </div>
                     </div>
@@ -105,8 +101,10 @@ export default {
             selectedGitHubProxy: "",
             radioValue: "0", // 0: 不使用, 1: 使用
             loadingTestingConnection: false,
+            loadingTestingSpeed: false,
             testingProxies: {},
             proxyStatus: {},
+            proxySpeed: {},
             initializing: true,
         }
     },
@@ -200,6 +198,46 @@ export default {
                 this.loadingTestingConnection = false;
             }
         },
+        // Real download throughput of a repository asset in MB/s, so the number
+        // reflects the bandwidth a route delivers instead of its round trip.
+        async measureProxy(proxyUrl, speedKey) {
+            try {
+                const response = await statsApi.measureGhproxySpeed({
+                    proxy_url: proxyUrl || ""
+                });
+                this.proxySpeed[speedKey] =
+                    response.status === 200
+                        ? Number(response.data.data.speed) || 0
+                        : 0;
+            } catch (error) {
+                this.proxySpeed[speedKey] = 0;
+            }
+        },
+        async testAllSpeeds() {
+            this.loadingTestingSpeed = true;
+
+            try {
+                const promises = this.githubProxies.map((proxy, idx) =>
+                    this.measureProxy(proxy, String(idx))
+                );
+                // An empty proxy_url tests the direct route, so "no proxy" is
+                // measured on the same footing as the mirrors.
+                promises.push(this.measureProxy("", "direct"));
+
+                if (this.selection === "custom") {
+                    const customProxy = (this.selectedGitHubProxy || "")
+                        .trim()
+                        .replace(/\/+$/, "");
+                    if (/^https?:\/\//i.test(customProxy)) {
+                        promises.push(this.measureProxy(customProxy, "custom"));
+                    }
+                }
+
+                await Promise.all(promises);
+            } finally {
+                this.loadingTestingSpeed = false;
+            }
+        },
     },
     mounted() {
         this.initializing = true;
@@ -270,6 +308,7 @@ export default {
 
 .proxy-selector__header {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 8px;
 }

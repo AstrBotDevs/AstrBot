@@ -6,6 +6,10 @@
                 :loading="testingConnections" @click="testAllMirrors">
                 {{ tm('network.pypiMirror.testConnection') }}
             </v-btn>
+            <v-btn class="pypi-mirror__test-button" size="x-small" variant="tonal"
+                :loading="testingSpeed" @click="testAllSpeeds">
+                {{ tm('network.pypiMirror.testSpeed') }}
+            </v-btn>
         </div>
         <v-radio-group class="mt-2" :model-value="activeKey" hide-details="true"
             @update:model-value="onSelectionChange">
@@ -14,9 +18,12 @@
                     <div class="pypi-mirror__option-label">
                         <span class="pypi-mirror__name">{{ tm(`network.pypiMirror.presets.${mirror.key}`) }}</span>
                         <span class="pypi-mirror__url">{{ mirror.url }}</span>
-                        <v-chip v-if="status[mirror.key]" :color="status[mirror.key].available ? 'success' : 'error'"
-                            size="x-small">
-                            {{ status[mirror.key].available ? `${status[mirror.key].latency}ms` : tm('network.pypiMirror.unavailable') }}
+                        <v-chip v-if="status[mirror.key]"
+                            :color="status[mirror.key].available ? 'success' : 'error'" size="x-small">
+                            {{ status[mirror.key].available ? status[mirror.key].latency + 'ms' : tm('network.pypiMirror.unavailable') }}
+                        </v-chip>
+                        <v-chip v-if="speed[mirror.key]" color="info" size="x-small">
+                            {{ speed[mirror.key] }}MB/s
                         </v-chip>
                     </div>
                 </template>
@@ -29,9 +36,12 @@
                             variant="outlined" :placeholder="tm('network.pypiMirror.customPlaceholder')"
                             hide-details="true" @update:model-value="onCustomInput">
                         </v-text-field>
-                        <v-chip v-if="status.custom" :color="status.custom.available ? 'success' : 'error'"
-                            size="x-small">
-                            {{ status.custom.available ? `${status.custom.latency}ms` : tm('network.pypiMirror.unavailable') }}
+                        <v-chip v-if="status.custom"
+                            :color="status.custom.available ? 'success' : 'error'" size="x-small">
+                            {{ status.custom.available ? status.custom.latency + 'ms' : tm('network.pypiMirror.unavailable') }}
+                        </v-chip>
+                        <v-chip v-if="speed.custom" color="info" size="x-small">
+                            {{ speed.custom }}MB/s
                         </v-chip>
                     </div>
                 </template>
@@ -72,7 +82,9 @@ export default {
             activeKey: "official",
             customUrl: "",
             status: {},
+            speed: {},
             testingConnections: false,
+            testingSpeed: false,
         }
     },
     watch: {
@@ -167,6 +179,41 @@ export default {
                 this.testingConnections = false;
             }
         },
+        // Real download throughput in MB/s, measured by pulling an actual wheel
+        // the way pip would, instead of timing a round trip.
+        async measureMirror(indexUrl, speedKey) {
+            try {
+                const response = await statsApi.measurePypiIndexSpeed({
+                    index_url: indexUrl
+                });
+                this.speed[speedKey] =
+                    response.status === 200
+                        ? Number(response.data.data.speed) || 0
+                        : 0;
+            } catch (error) {
+                this.speed[speedKey] = 0;
+            }
+        },
+        async testAllSpeeds() {
+            this.testingSpeed = true;
+
+            try {
+                const promises = this.mirrors.map((mirror) =>
+                    this.measureMirror(mirror.url, mirror.key)
+                );
+
+                if (this.activeKey === "custom") {
+                    const customIndex = this.normalizeUrl(this.customUrl);
+                    if (/^https?:\/\//i.test(customIndex)) {
+                        promises.push(this.measureMirror(customIndex, "custom"));
+                    }
+                }
+
+                await Promise.all(promises);
+            } finally {
+                this.testingSpeed = false;
+            }
+        },
     },
 }
 </script>
@@ -179,6 +226,7 @@ export default {
 
 .pypi-mirror__header {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 8px;
 }

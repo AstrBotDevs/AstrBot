@@ -86,6 +86,7 @@
       "custom": "カスタム URL",
       "customPlaceholder": "https://example.com/pypi/simple",
       "testConnection": "接続をテスト",
+      "testSpeed": "速度測定",
       "unavailable": "利用不可",
       "presets": {
         "official": "公式",
@@ -99,7 +100,7 @@
       "title": "GitHub プロキシ",
       "noProxy": "GitHub プロキシを使用しない",
       "testConnection": "接続をテスト",
-      "available": "利用可能",
+      "testSpeed": "速度測定",
       "unavailable": "利用不可",
       "custom": "カスタム"
     }

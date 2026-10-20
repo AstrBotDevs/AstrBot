@@ -4629,6 +4629,38 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
+  /api/v1/stats/pypi-index/speed:
+    post:
+      tags: [Stats]
+      summary: Download a wheel from a PyPI index and measure the throughput
+      operationId: measurePypiIndexSpeed
+      x-astrbot-scope: system
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PypiIndexTestRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/stats/ghproxy/speed:
+    post:
+      tags: [Stats]
+      summary: Download a repository file through a GitHub proxy and measure the throughput
+      operationId: measureGhproxySpeed
+      x-astrbot-scope: system
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GhproxyTestRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
   /api/v1/changelogs:
     get:
       tags: [Stats]

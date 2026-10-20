@@ -86,6 +86,7 @@
       "custom": "自定义地址",
       "customPlaceholder": "https://example.com/pypi/simple",
       "testConnection": "测试连通性",
+      "testSpeed": "测速",
       "unavailable": "不可用",
       "presets": {
         "official": "官方",
@@ -99,7 +100,7 @@
       "title": "GitHub 加速",
       "noProxy": "不使用 GitHub 加速",
       "testConnection": "测试代理连通性",
-      "available": "可用",
+      "testSpeed": "测速",
       "unavailable": "不可用",
       "custom": "自定义"
     }
