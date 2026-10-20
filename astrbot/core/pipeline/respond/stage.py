@@ -351,30 +351,41 @@ class RespondStage(Stage):
                         f"actual_chain: {result.chain}",
                     )
                     return
-               current_group = []
-        
+        current_group = []
+
         for comp in result.chain:
             i = await self._calc_comp_interval(comp)
             await asyncio.sleep(i)
-            
+
             try:
                 if comp.type in need_separately:
-                    # 1. 如果遇到必须单独发的（如语音），先把暂存列表里的发出去
+                    # 1. 遇到必须单独发的（如语音），先把暂存区发出去
                     if current_group:
                         await event.send(result.derive([*header_comps, *current_group]))
                         header_comps.clear()
                         current_group.clear()
                     
-                    # 2. 然后单独发送这个特殊组件
+                    # 2. 单独发送特殊组件（解决语音插队问题）
                     await event.send(result.derive([comp]))
                 else:
-                    # 3. 如果遇到文字、表情，先扔进暂存列表，不立刻发送
+                    # 3. 将文字、表情等加入暂存区
                     current_group.append(comp)
                     
             except Exception as e:
                 logger.error(
                     f"Failed to send the message chain: "
                     f"chain={MessageChain([comp])}, error = {e}",
+                    exc_info=True,
+                )
+
+        # 循环结束后，发送最后剩下的暂存区内容
+        if current_group:
+            try:
+                await event.send(result.derive([*header_comps, *current_group]))
+            except Exception as e:
+                logger.error(
+                    f"Failed to send the message chain: "
+                    f"chain={MessageChain([*current_group])}, error = {e}",
                     exc_info=True,
                 )
             else:
