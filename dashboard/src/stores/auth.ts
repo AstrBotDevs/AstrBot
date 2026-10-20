@@ -10,6 +10,7 @@ import {
   type VersionData,
 } from '@/api/v1';
 import { httpClient } from '@/api/http';
+import { useProviderModelSelection } from '@/composables/useProviderModelSelection';
 
 export const useAuthStore = defineStore("auth", {
   state: () => ({
@@ -178,6 +179,8 @@ export const useAuthStore = defineStore("auth", {
       localStorage.removeItem('change_pwd_hint');
       localStorage.removeItem('md5_pwd_hint');
       localStorage.removeItem('password_upgrade_required');
+      // Reset the shared in-memory selection too, so the next login starts clean.
+      useProviderModelSelection().setSelection('', '');
       void authApi.logout().catch(() => undefined);
       router.push('/auth/login');
     },

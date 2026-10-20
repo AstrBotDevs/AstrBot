@@ -5,7 +5,6 @@
     :fallback-model="selectedModelName"
     provider-type="chat_completion"
     :variant="variant"
-    :allow-empty="false"
     @update:model-value="updateSelection"
     @select="saveSelection"
   />
@@ -38,11 +37,15 @@ const providerSelectMenuRef = ref<InstanceType<
 const variant = props.variant;
 
 function updateSelection(value: string | string[]) {
-  if (typeof value === "string") setSelection(value, selectedModelName.value);
+  if (typeof value !== "string") return;
+  setSelection(value, value ? selectedModelName.value : "");
 }
 
 function saveSelection(provider: ProviderSelection | null) {
-  if (!provider) return;
+  if (!provider) {
+    setSelection("", "");
+    return;
+  }
   setSelection(provider.id, provider.model || "");
 }
 

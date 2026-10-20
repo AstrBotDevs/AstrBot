@@ -1,7 +1,9 @@
 import { ref } from "vue";
-
-const SELECTED_PROVIDER_KEY = "selectedProvider";
-const SELECTED_PROVIDER_MODEL_KEY = "selectedProviderModel";
+import {
+  SELECTED_PROVIDER_KEY,
+  SELECTED_PROVIDER_MODEL_KEY,
+  clearProviderSelectionStorage,
+} from "@/utils/providerSelectionStorage.mjs";
 
 // Module-level state so every ProviderModelMenu instance (header, input)
 // shares the same selection.
@@ -23,6 +25,10 @@ export function useProviderModelSelection() {
   function setSelection(providerId: string, modelName = "") {
     selectedProviderId.value = providerId;
     selectedModelName.value = modelName;
+    if (!providerId) {
+      clearProviderSelectionStorage(localStorage);
+      return;
+    }
     try {
       localStorage.setItem(SELECTED_PROVIDER_KEY, providerId);
       localStorage.setItem(SELECTED_PROVIDER_MODEL_KEY, modelName);

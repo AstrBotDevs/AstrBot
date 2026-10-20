@@ -1027,7 +1027,17 @@ function writeSessionProviderSelection(
 
 // Remember the model picked by the user for the active session.
 watch([currentProviderId, currentModelName], ([providerId, modelName]) => {
-  if (!currSessionId.value || !providerId) return;
+  if (!currSessionId.value) return;
+  if (!providerId) {
+    try {
+      localStorage.removeItem(
+        SESSION_PROVIDER_STORAGE_PREFIX + currSessionId.value,
+      );
+    } catch {
+      // Session model persistence must not block chat flows.
+    }
+    return;
+  }
   writeSessionProviderSelection(currSessionId.value, {
     providerId,
     modelName,
