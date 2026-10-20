@@ -61,6 +61,9 @@
       "tempStorage": {
         "title": "キャッシュ",
         "subtitle": "一時ディレクトリを自動消去するしきい値。"
+      },
+      "telemetry": {
+        "title": "ユーザー体験改善プログラム"
       }
     },
     "timePreview": {
