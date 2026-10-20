@@ -101,6 +101,8 @@ Select `Config` in the sidebar, then choose the profile to edit from the selecto
 - `Plugin` selects the plugins enabled for this profile. To edit an individual plugin's parameters, open `Extensions` and click that plugin's gear icon (`Extension Config`).
 - `Ext.` contains segmented reply, group chat context, and text-to-image settings (output toggle, word count threshold, rendering strategy, service endpoint, and custom templates).
 
+Under `Ext. → Segmented Reply`, turn on `Enable Segmented Reply` to configure segmentation, intervals, and content cleanup. Turning it off hides the detailed options. Random intervals, the log base, the segmentation regex, and split-word lists also depend on the selected mode.
+
 | Previous location | Current location |
 | --- | --- |
 | Platform | Platforms & Messages |
