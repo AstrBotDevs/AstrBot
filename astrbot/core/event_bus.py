@@ -12,12 +12,26 @@ class:
 
 import asyncio
 from asyncio import Queue
+from collections.abc import Callable
 
 from astrbot.core import logger
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+from astrbot.core.config import AstrBotConfig
 from astrbot.core.pipeline.scheduler import PipelineScheduler
+from astrbot.core.platform.message_type import MessageType
 
 from .platform import AstrMessageEvent
+
+UNIQUE_SESSION_ID_BUILDERS: dict[str, Callable[[AstrMessageEvent], str | None]] = {
+    "aiocqhttp": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
+    "slack": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
+    "dingtalk": lambda e: e.get_sender_id(),
+    "qq_official": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
+    "qq_official_webhook": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
+    "lark": lambda e: f"{e.get_sender_id()}%{e.get_group_id()}",
+    "misskey": lambda e: f"{e.get_session_id()}_{e.get_sender_id()}",
+    "matrix": lambda e: f"{e.get_sender_id()}_{e.get_group_id() or e.get_session_id()}",
+}
 
 
 class EventBus:
@@ -42,16 +56,40 @@ class EventBus:
             conf_info = self.astrbot_config_mgr.get_conf_info(event.unified_msg_origin)
             conf_id = conf_info["id"]
             conf_name = conf_info.get("name") or conf_id
-            self._print_event(event, conf_name)
+            with event.trace.context():
+                self._print_event(event, conf_name)
             scheduler = self.pipeline_scheduler_mapping.get(conf_id)
             if not scheduler:
                 logger.error(
                     f"PipelineScheduler not found for id: {conf_id}, event ignored."
                 )
                 continue
+            self._apply_session_isolation(event, scheduler.ctx.astrbot_config)
             task = asyncio.create_task(scheduler.execute(event))
             self._pending_tasks.add(task)
             task.add_done_callback(self._on_task_done)
+
+    def _apply_session_isolation(
+        self,
+        event: AstrMessageEvent,
+        config: AstrBotConfig,
+    ) -> None:
+        """Finalize the session before pipeline registration and stop lookup.
+
+        Args:
+            event: Incoming event whose original UMO was used to select a profile.
+            config: Selected profile's configuration controlling session isolation.
+        """
+        event.set_extra("_session_isolated", False)
+        platform_settings = config.get("platform_settings", {})
+        if platform_settings.get("unique_session", False) and (
+            event.message_obj.type == MessageType.GROUP_MESSAGE
+        ):
+            builder = UNIQUE_SESSION_ID_BUILDERS.get(event.get_platform_name())
+            sid = builder(event) if builder else None
+            if sid:
+                event.session_id = sid
+                event.set_extra("_session_isolated", True)
 
     def _on_task_done(self, task: asyncio.Task) -> None:
         """pipeline 任务结束回调: 移除强引用并暴露未捕获的异常"""
@@ -69,15 +107,20 @@ class EventBus:
             event (AstrMessageEvent): 事件对象
 
         """
+        log_extra = {
+            "category": "user_chat",
+            "platform_id": event.get_platform_id(),
+            "platform_type": event.get_platform_name(),
+        }
         # 如果有发送者名称: [平台名] 发送者名称/发送者ID: 消息概要
         if event.get_sender_name():
             logger.info(
                 f"[{conf_name}] [{event.get_platform_id()}({event.get_platform_name()})] {event.get_sender_name()}/{event.get_sender_id()}: {event.get_message_outline()}",
-                extra={"category": "user_chat"},
+                extra=log_extra,
             )
         # 没有发送者名称: [平台名] 发送者ID: 消息概要
         else:
             logger.info(
                 f"[{conf_name}] [{event.get_platform_id()}({event.get_platform_name()})] {event.get_sender_id()}: {event.get_message_outline()}",
-                extra={"category": "user_chat"},
+                extra=log_extra,
             )

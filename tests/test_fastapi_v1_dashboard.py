@@ -1,6 +1,7 @@
 import asyncio
 import copy
 import json
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -1060,17 +1061,21 @@ async def test_version_routes_return_startup_runtime_snapshot(
     platform = SimpleNamespace(
         system=Mock(return_value="Linux"), machine=Mock(return_value="aarch64")
     )
+    from astrbot.core.computer import process_sandbox
+
+    process_sandbox.get_process_sandbox_status.cache_clear()
+    monkeypatch.setattr(process_sandbox, "platform", platform)
     which = Mock(return_value=None if status == "missing" else "/usr/bin/bwrap")
     monkeypatch.setattr(stat_service, "platform", platform)
-    monkeypatch.setattr(stat_service, "shutil", SimpleNamespace(which=which))
+    monkeypatch.setattr(process_sandbox, "shutil", SimpleNamespace(which=which))
     error = "bwrap: setting up uid map: Permission denied"
     sandbox = Mock()
     sandbox.run.return_value = SimpleNamespace(
         returncode=1 if status == "unavailable" else 0, stderr=error.encode()
     )
     factory = Mock(return_value=sandbox)
-    monkeypatch.setattr(stat_service, "create_process_sandbox", factory)
-    monkeypatch.setattr(stat_service, "get_astrbot_temp_path", lambda: str(tmp_path))
+    monkeypatch.setattr(process_sandbox, "create_process_sandbox", factory)
+    monkeypatch.setattr(process_sandbox, "get_astrbot_temp_path", lambda: str(tmp_path))
     monkeypatch.setattr(
         stat_service, "is_desktop_session_auth_enabled", lambda: desktop_auth
     )
@@ -1123,9 +1128,10 @@ async def test_version_routes_return_startup_runtime_snapshot(
         assert "runtime" not in response.json()["data"]
 
     which.assert_called_once_with("bwrap")
-    platform.system.assert_called_once_with()
+    assert platform.system.call_count == 2
     platform.machine.assert_called_once_with()
     assert factory.call_count == (0 if status == "missing" else 1)
+    process_sandbox.get_process_sandbox_status.cache_clear()
 
 
 @pytest.mark.asyncio
@@ -1929,7 +1935,7 @@ async def test_config_update_revokes_only_affected_shell_sessions(
         "/api/config/astrbot/update",
     ],
 )
-async def test_config_api_validates_local_permissions(
+async def test_config_api_saves_local_permissions_without_isolation(
     asgi_app,
     asgi_client,
     fake_core_lifecycle,
@@ -1967,26 +1973,45 @@ async def test_config_api_validates_local_permissions(
         json={"conf_id": "default", "config": payload} if legacy else payload,
     )
 
-    assert response.status_code == (400 if scope == "workspace" and not legacy else 200)
-    if scope == "workspace":
-        assert response.json()["status"] == "error"
-        assert "Local permission member:" in response.json()["message"]
-        assert reason in response.json()["message"]
-        if status == "unavailable":
-            assert "installed but cannot start" in response.json()["message"]
-            assert "Missing" not in response.json()["message"]
-        assert fake_core_lifecycle.astrbot_config == original
-        assert fake_core_lifecycle.reloaded_config_ids == []
-    else:
-        assert response.json()["status"] == "ok"
-        payload["provider_settings"]["computer_use_local_permissions"]["admin"].update(
-            allow_execution=False, allow_network=False
-        )
-        assert (
-            fake_core_lifecycle.astrbot_config["provider_settings"]
-            == payload["provider_settings"]
-        )
-        assert fake_core_lifecycle.reloaded_config_ids == ["default"]
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+    payload["provider_settings"]["computer_use_local_permissions"]["admin"].update(
+        allow_execution=False, allow_network=False
+    )
+    assert (
+        fake_core_lifecycle.astrbot_config["provider_settings"]
+        == payload["provider_settings"]
+    )
+    assert fake_core_lifecycle.reloaded_config_ids == ["default"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["missing", "unavailable", "unsupported"])
+async def test_welcome_page_can_enable_local_computer_access_without_isolation(
+    asgi_app, asgi_client, fake_core_lifecycle, status
+):
+    """Welcome setup only changes the runtime and retains default permissions."""
+    from astrbot.core.config.default import get_local_permission_defaults
+
+    runtime = asgi_app.state.services.stats.runtime
+    runtime.update({"os": "linux", "sandbox": {"status": status}})
+    config = fake_core_lifecycle.astrbot_config
+    config["agent_runner"] = {"runner_type": "local"}
+    config["provider_settings"] = {
+        "computer_use_runtime": "none",
+        "computer_use_local_permissions": get_local_permission_defaults("Linux"),
+    }
+    payload = copy.deepcopy(config)
+    payload["provider_settings"]["computer_use_runtime"] = "local"
+
+    response = await asgi_client.put(
+        "/api/v1/config-profiles/default", headers=_jwt_headers(), json=payload
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "ok"
+    assert config["provider_settings"] == payload["provider_settings"]
+    assert fake_core_lifecycle.reloaded_config_ids == ["default"]
 
 
 @pytest.mark.asyncio
@@ -4312,3 +4337,117 @@ async def test_v1_platform_webhook_preserves_tuple_response(
     assert response.status_code == 202
     assert response.headers["content-type"] == "text/plain"
     assert response.text == "accepted"
+
+
+@pytest.mark.asyncio
+async def test_v1_persistent_trace_routes(asgi_client, monkeypatch, tmp_path):
+    """Verify durable history/detail validation and dashboard authentication."""
+    from astrbot.core.utils.trace_store import TraceStore
+    from astrbot.dashboard.services import log_service
+
+    store = TraceStore(tmp_path / "traces.db", {"trace_db_max_mb": 8})
+    monkeypatch.setattr(log_service, "get_trace_store", lambda *_: store)
+    stamp = str(time.time_ns())
+    trace_id = "a" * 32
+    span_id = "b" * 16
+    summary = {
+        "trace_id": trace_id,
+        "root_span_id": span_id,
+        "start_time_unix_nano": stamp,
+        "end_time_unix_nano": stamp,
+        "updated_time_unix_nano": stamp,
+        "state": "completed",
+        "has_errors": False,
+        "has_models": False,
+        "has_plugins": False,
+        "span_count": 1,
+        "attributes": {"astrbot.message_outline": "Hello"},
+    }
+    try:
+        assert store.append(
+            {
+                "trace": summary,
+                "time_unix_nano": stamp,
+                "span": {
+                    "trace_id": trace_id,
+                    "span_id": span_id,
+                    "parent_span_id": None,
+                    "name": "message",
+                    "start_time_unix_nano": stamp,
+                    "end_time_unix_nano": stamp,
+                    "attributes": {},
+                    "status": {"code": 1},
+                },
+            }
+        )
+        assert store.flush()
+        response = await asgi_client.get("/api/v1/trace/history")
+        assert response.status_code == 401
+        token = jwt.encode(
+            {"username": "astrbot", "exp": int(time.time()) + 600},
+            JWT_SECRET,
+            algorithm="HS256",
+        )
+        headers = {"Authorization": f"Bearer {token}"}
+        response = await asgi_client.get(
+            "/api/v1/trace/history",
+            params={"limit": 1, "query": "Hello"},
+            headers=headers,
+        )
+        assert response.status_code == 200
+        assert response.json()["data"]["total"] == 1
+        response = await asgi_client.get(
+            "/api/v1/trace/history", params={"limit": 1, "page": 999}, headers=headers
+        )
+        assert response.json()["data"]["page"] == 1
+        assert len(response.json()["data"]["traces"]) == 1
+        assert (
+            await asgi_client.get("/api/v1/trace/history?page=0", headers=headers)
+        ).status_code == 422
+        response = await asgi_client.get(f"/api/v1/trace/{trace_id}", headers=headers)
+        assert response.status_code == 200
+        assert response.json()["data"]["spans"][0]["span_id"] == span_id
+        assert (
+            await asgi_client.get("/api/v1/trace/history?limit=101", headers=headers)
+        ).status_code == 422
+        assert (
+            await asgi_client.get("/api/v1/trace/invalid", headers=headers)
+        ).status_code == 422
+        assert (
+            await asgi_client.get("/api/v1/trace/" + "c" * 32, headers=headers)
+        ).status_code == 404
+        assert (
+            await asgi_client.get("/api/v1/trace/settings", headers=headers)
+        ).status_code == 200
+    finally:
+        store.close()
+
+
+@pytest.mark.asyncio
+async def test_v1_trace_storage_cleanup_target(asgi_client, monkeypatch):
+    """Validate trace cleanup requests without touching application data."""
+    usage = {
+        "logs": {"size_bytes": 10},
+        "cache": {"size_bytes": 20},
+        "traces": {"size_bytes": 30},
+        "total_bytes": 60,
+    }
+    cleanup = AsyncMock(return_value={"removed_traces": 3, "status": usage})
+    monkeypatch.setattr(stat_service.StatService, "cleanup_storage", cleanup)
+    monkeypatch.setattr(stat_service.StatService, "get_storage_status", AsyncMock(return_value=usage))
+    token = jwt.encode(
+        {"username": "astrbot", "exp": int(time.time()) + 600},
+        JWT_SECRET, algorithm="HS256",
+    )
+    headers = {"Authorization": f"Bearer {token}"}
+    assert (await asgi_client.post("/api/v1/stats/storage/cleanup", json={"target": "traces"})).status_code == 401
+    response = await asgi_client.post(
+        "/api/v1/stats/storage/cleanup", json={"target": "traces"}, headers=headers,
+    )
+    assert response.status_code == 200
+    assert response.json()["data"]["removed_traces"] == 3
+    cleanup.assert_awaited_once_with("traces")
+    response = await asgi_client.get("/api/v1/stats/storage", headers=headers)
+    assert response.json()["data"]["total_bytes"] == 60
+    assert response.json()["data"]["traces"]["size_bytes"] == 30
+    assert (await asgi_client.post("/api/v1/stats/storage/cleanup", json={"target": "invalid"}, headers=headers)).status_code == 422
