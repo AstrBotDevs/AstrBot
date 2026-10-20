@@ -57,11 +57,12 @@
             <v-radio color="primary" value="custom">
                 <template v-slot:label>
                     <div class="proxy-selector__option-label">
-                        <v-text-field v-if="selection === 'custom'" class="proxy-selector__custom-input" density="compact"
-                            v-model="selectedGitHubProxy" variant="outlined"
-                            :placeholder="tm('network.proxySelector.custom')" hide-details="true">
+                        <span>{{ tm('network.proxySelector.custom') }}</span>
+                        <v-text-field class="proxy-selector__custom-input" density="compact"
+                            :model-value="customProxyValue" variant="outlined"
+                            :placeholder="tm('network.proxySelector.customPlaceholder')" hide-details="true"
+                            @update:model-value="onCustomInput">
                         </v-text-field>
-                        <span v-else>{{ tm('network.proxySelector.custom') }}</span>
                         <div class="proxy-selector__status">
                             <v-chip v-if="proxyStatus.custom"
                                 :color="proxyStatus.custom.available ? 'success' : 'error'"
@@ -99,6 +100,9 @@ export default {
             ],
             githubProxyRadioControl: "0", // the index of the selected proxy
             selectedGitHubProxy: "",
+            // Kept apart from selectedGitHubProxy so a typed URL survives preset
+            // switches and can still be read and tested while it is not selected.
+            customProxyValue: "",
             radioValue: "0", // 0: 不使用, 1: 使用
             loadingTestingConnection: false,
             loadingTestingSpeed: false,
@@ -143,6 +147,14 @@ export default {
             }
             return this.githubProxies[index] || "";
         },
+        onCustomInput(value) {
+            this.customProxyValue = value;
+            // Only a selected custom option feeds the saved setting; otherwise
+            // the box is just a place to keep and test a URL.
+            if (this.selection === "custom") {
+                this.selectedGitHubProxy = String(value || "").trim();
+            }
+        },
         // statusKey groups one probe result: an index of githubProxies, "direct"
         // for the no-acceleration route, or "custom" for a user supplied URL.
         async testProxy(proxyUrl, statusKey) {
@@ -184,13 +196,11 @@ export default {
                 // measured on the same footing as the mirrors.
                 promises.push(this.testProxy("", "direct"));
 
-                if (this.selection === "custom") {
-                    const customProxy = (this.selectedGitHubProxy || "")
-                        .trim()
-                        .replace(/\/+$/, "");
-                    if (/^https?:\/\//i.test(customProxy)) {
-                        promises.push(this.testProxy(customProxy, "custom"));
-                    }
+                const customProxy = (this.customProxyValue || "")
+                    .trim()
+                    .replace(/\/+$/, "");
+                if (/^https?:\/\//i.test(customProxy)) {
+                    promises.push(this.testProxy(customProxy, "custom"));
                 }
 
                 await Promise.all(promises);
@@ -224,13 +234,11 @@ export default {
                 // measured on the same footing as the mirrors.
                 promises.push(this.measureProxy("", "direct"));
 
-                if (this.selection === "custom") {
-                    const customProxy = (this.selectedGitHubProxy || "")
-                        .trim()
-                        .replace(/\/+$/, "");
-                    if (/^https?:\/\//i.test(customProxy)) {
-                        promises.push(this.measureProxy(customProxy, "custom"));
-                    }
+                const customProxy = (this.customProxyValue || "")
+                    .trim()
+                    .replace(/\/+$/, "");
+                if (/^https?:\/\//i.test(customProxy)) {
+                    promises.push(this.measureProxy(customProxy, "custom"));
                 }
 
                 await Promise.all(promises);
@@ -245,6 +253,7 @@ export default {
         const savedProxy = localStorage.getItem('selectedGitHubProxy') || "";
         const savedRadio = localStorage.getItem('githubProxyRadioValue') || "0";
         const savedControl = String(localStorage.getItem('githubProxyRadioControl') || "0");
+        const savedCustom = localStorage.getItem('selectedGitHubProxyCustom') || "";
 
         this.radioValue = savedRadio;
         this.githubProxyRadioControl = savedControl;
@@ -259,6 +268,9 @@ export default {
             this.selectedGitHubProxy = "";
         }
 
+        this.customProxyValue =
+            savedCustom || (savedControl === "-1" ? savedProxy : "");
+
         this.initializing = false;
     },
     watch: {
@@ -270,6 +282,12 @@ export default {
                 newVal = ""
             }
             localStorage.setItem('selectedGitHubProxy', newVal);
+        },
+        customProxyValue: function (newVal) {
+            if (this.initializing) {
+                return;
+            }
+            localStorage.setItem('selectedGitHubProxyCustom', newVal || "");
         },
         radioValue: function (newVal) {
             if (this.initializing) {
@@ -292,9 +310,11 @@ export default {
                 this.selectedGitHubProxy = "";
                 return;
             }
-            if (normalizedVal !== "-1") {
-                this.selectedGitHubProxy = this.getProxyByControl(normalizedVal);
+            if (normalizedVal === "-1") {
+                this.selectedGitHubProxy = String(this.customProxyValue || "").trim();
+                return;
             }
+            this.selectedGitHubProxy = this.getProxyByControl(normalizedVal);
         }
     }
 }
@@ -334,6 +354,7 @@ export default {
 
 .proxy-selector__option-label {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 8px;
     min-width: 0;
@@ -351,7 +372,10 @@ export default {
     align-items: center;
 }
 
+/* A fixed width keeps this box as long as the PyPI one, and stops percentage
+   sizing from collapsing it inside the flex label. */
 .proxy-selector__custom-input {
-    width: min(100%, 420px);
+    flex: 0 0 auto;
+    width: 272px;
 }
 </style>

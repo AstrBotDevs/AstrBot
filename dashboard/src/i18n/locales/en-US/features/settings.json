@@ -83,7 +83,7 @@
       "title": "PyPI Package Index",
       "subtitle": "PyPI index used by pip when installing AstrBot's Python dependencies. Pick a mirror or a custom URL. Restart AstrBot for changes to take effect.",
       "label": "Choose PyPI Package Index",
-      "custom": "Custom URL",
+      "custom": "Custom",
       "customPlaceholder": "https://example.com/pypi/simple",
       "testConnection": "Test Connectivity",
       "testSpeed": "Speed Test",
@@ -102,7 +102,8 @@
       "testConnection": "Test Connection",
       "testSpeed": "Speed Test",
       "unavailable": "Unavailable",
-      "custom": "Custom"
+      "custom": "Custom",
+      "customPlaceholder": "https://example.com"
     }
   },
   "theme": {

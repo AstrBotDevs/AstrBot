@@ -83,7 +83,7 @@
       "title": "PyPI パッケージインデックス",
       "subtitle": "AstrBot の Python 依存関係をインストールする際に使用する PyPI インデックスです。国内ミラーまたはカスタム URL を選択できます。変更は AstrBot の再起動後に反映されます。",
       "label": "PyPI パッケージインデックスを選択",
-      "custom": "カスタム URL",
+      "custom": "カスタム",
       "customPlaceholder": "https://example.com/pypi/simple",
       "testConnection": "接続をテスト",
       "testSpeed": "速度測定",
@@ -102,7 +102,8 @@
       "testConnection": "接続をテスト",
       "testSpeed": "速度測定",
       "unavailable": "利用不可",
-      "custom": "カスタム"
+      "custom": "カスタム",
+      "customPlaceholder": "https://example.com"
     }
   },
   "theme": {

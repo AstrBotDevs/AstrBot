@@ -31,8 +31,8 @@
             <v-radio color="primary" value="custom">
                 <template v-slot:label>
                     <div class="pypi-mirror__option-label">
-                        <span v-if="activeKey !== 'custom'">{{ tm('network.pypiMirror.custom') }}</span>
-                        <v-text-field v-else class="pypi-mirror__custom-input" density="compact" :model-value="customUrl"
+                        <span class="pypi-mirror__name">{{ tm('network.pypiMirror.custom') }}</span>
+                        <v-text-field class="pypi-mirror__custom-input" density="compact" :model-value="customUrl"
                             variant="outlined" :placeholder="tm('network.pypiMirror.customPlaceholder')"
                             hide-details="true" @update:model-value="onCustomInput">
                         </v-text-field>
@@ -101,18 +101,16 @@ export default {
         },
         syncFromValue(value) {
             const current = this.normalizeUrl(value);
-            if (!current) {
-                // An empty value means pip uses its default, i.e. the official index.
-                this.activeKey = "official";
-                this.customUrl = "";
-                return;
-            }
-            const preset = this.mirrors.find(
-                (mirror) => this.normalizeUrl(mirror.url) === current
-            );
+            // An empty value means pip uses its default, i.e. the official index.
+            const preset = current
+                ? this.mirrors.find(
+                    (mirror) => this.normalizeUrl(mirror.url) === current
+                )
+                : this.mirrors[0];
             if (preset) {
+                // The custom box keeps whatever is typed in it, so that URL can
+                // still be read and tested while it is not the selected source.
                 this.activeKey = preset.key;
-                this.customUrl = "";
                 return;
             }
             this.activeKey = "custom";
@@ -123,12 +121,21 @@ export default {
             const preset = this.mirrors.find((mirror) => mirror.key === key);
             if (preset) {
                 this.$emit("update:modelValue", preset.url);
+                return;
             }
-            // A custom URL is only emitted once the user types one, so picking
-            // this option does not wipe the value that is already saved.
+            // Picking the custom option applies the URL already typed, and an
+            // empty box leaves the saved source untouched.
+            const custom = String(this.customUrl || "").trim();
+            if (/^https?:\/\//i.test(custom)) {
+                this.$emit("update:modelValue", custom);
+            }
         },
         onCustomInput(value) {
             this.customUrl = value;
+            if (this.activeKey !== "custom") {
+                // Keep the saved source until the option itself is picked.
+                return;
+            }
             const trimmed = String(value || "").trim();
             if (!trimmed) {
                 // Keep the saved value while the field is temporarily empty.
@@ -167,11 +174,9 @@ export default {
                     this.testMirror(mirror.url, mirror.key)
                 );
 
-                if (this.activeKey === "custom") {
-                    const customIndex = this.normalizeUrl(this.customUrl);
-                    if (/^https?:\/\//i.test(customIndex)) {
-                        promises.push(this.testMirror(customIndex, "custom"));
-                    }
+                const customIndex = this.normalizeUrl(this.customUrl);
+                if (/^https?:\/\//i.test(customIndex)) {
+                    promises.push(this.testMirror(customIndex, "custom"));
                 }
 
                 await Promise.all(promises);
@@ -202,11 +207,9 @@ export default {
                     this.measureMirror(mirror.url, mirror.key)
                 );
 
-                if (this.activeKey === "custom") {
-                    const customIndex = this.normalizeUrl(this.customUrl);
-                    if (/^https?:\/\//i.test(customIndex)) {
-                        promises.push(this.measureMirror(customIndex, "custom"));
-                    }
+                const customIndex = this.normalizeUrl(this.customUrl);
+                if (/^https?:\/\//i.test(customIndex)) {
+                    promises.push(this.measureMirror(customIndex, "custom"));
                 }
 
                 await Promise.all(promises);
@@ -269,7 +272,10 @@ export default {
     overflow-wrap: anywhere;
 }
 
+/* A fixed width keeps the box as long as the longest mirror URL, and stops
+   percentage sizing from collapsing it inside the flex label. */
 .pypi-mirror__custom-input {
-    width: min(100%, 420px);
+    flex: 0 0 auto;
+    width: 272px;
 }
 </style>
