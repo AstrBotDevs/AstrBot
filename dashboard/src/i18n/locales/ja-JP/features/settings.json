@@ -82,25 +82,25 @@
     "pypiMirror": {
       "title": "PyPI パッケージインデックス",
       "subtitle": "AstrBot の Python 依存関係をインストールする際に使用する PyPI インデックスです。国内ミラーまたはカスタム URL を選択できます。変更は AstrBot の再起動後に反映されます。",
-      "label": "PyPI パッケージインデックスを選択",
+      "label": "PyPI ソースを選択",
       "custom": "カスタム",
       "customPlaceholder": "https://example.com/pypi/simple",
       "testConnection": "接続をテスト",
-      "testSpeed": "速度測定",
+      "testSpeed": "速度をテスト",
       "unavailable": "利用不可",
       "presets": {
         "official": "公式",
         "aliyun": "Alibaba Cloud",
-        "tsinghua": "清華大学",
         "ustc": "中国科学技術大学",
+        "tsinghua": "清華大学",
         "tencent": "Tencent Cloud"
       }
     },
     "proxySelector": {
-      "title": "GitHub プロキシ",
-      "noProxy": "GitHub プロキシを使用しない",
+      "title": "GitHub ミラーを選択",
+      "noProxy": "GitHub ミラーを使用しない",
       "testConnection": "接続をテスト",
-      "testSpeed": "速度測定",
+      "testSpeed": "速度をテスト",
       "unavailable": "利用不可",
       "custom": "カスタム",
       "customPlaceholder": "https://example.com"

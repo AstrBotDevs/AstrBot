@@ -74,10 +74,10 @@ export default {
         return {
             mirrors: [
                 { key: "official", url: OFFICIAL_INDEX_URL },
-                { key: "aliyun", url: "https://mirrors.aliyun.com/pypi/simple/" },
+                { key: "aliyun", url: "https://mirrors.aliyun.com/pypi/simple" },
                 { key: "tencent", url: "https://mirrors.cloud.tencent.com/pypi/simple" },
-                { key: "tsinghua", url: "https://pypi.tuna.tsinghua.edu.cn/simple" },
                 { key: "ustc", url: "https://pypi.mirrors.ustc.edu.cn/simple" },
+                { key: "tsinghua", url: "https://pypi.tuna.tsinghua.edu.cn/simple" },
             ],
             activeKey: "official",
             customUrl: "",

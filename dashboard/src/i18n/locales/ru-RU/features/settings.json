@@ -82,25 +82,25 @@
         "pypiMirror": {
             "title": "Индекс пакетов PyPI",
             "subtitle": "Индекс PyPI, который pip использует при установке Python-зависимостей AstrBot. Можно выбрать зеркало или указать свой адрес. Изменения вступят в силу после перезапуска AstrBot.",
-            "label": "Выбрать индекс PyPI",
+            "label": "Выбрать источник PyPI",
             "custom": "Свой вариант",
             "customPlaceholder": "https://example.com/pypi/simple",
             "testConnection": "Проверить соединение",
-            "testSpeed": "Тест скорости",
+            "testSpeed": "Проверить скорость",
             "unavailable": "Недоступен",
             "presets": {
                 "official": "Официальный",
                 "aliyun": "Alibaba Cloud",
-                "tsinghua": "Tsinghua",
                 "ustc": "USTC",
+                "tsinghua": "Tsinghua",
                 "tencent": "Tencent Cloud"
             }
         },
         "proxySelector": {
-            "title": "Ускорение GitHub",
-            "noProxy": "Не использовать",
+            "title": "Выбрать зеркало GitHub",
+            "noProxy": "Не использовать зеркало GitHub",
             "testConnection": "Проверить соединение",
-            "testSpeed": "Тест скорости",
+            "testSpeed": "Проверить скорость",
             "unavailable": "Недоступен",
             "custom": "Свой вариант",
       "customPlaceholder": "https://example.com"
