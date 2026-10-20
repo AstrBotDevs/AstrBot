@@ -18,8 +18,8 @@ from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import VERSION
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
 from astrbot.core.utils.storage_cleaner import StorageCleaner
-
 from astrbot.core.utils.trace_store import get_trace_store
+from astrbot.dashboard.services.diagnostic_service import collect_diagnostics
 
 
 class LogServiceError(Exception):
@@ -27,9 +27,12 @@ class LogServiceError(Exception):
 
 
 class LogService:
-    def __init__(self, log_broker: LogBroker, config: AstrBotConfig) -> None:
+    def __init__(
+        self, log_broker: LogBroker, config: AstrBotConfig, *, core=None
+    ) -> None:
         self.log_broker = log_broker
         self.config = config
+        self.core = core
         self._export_lock = threading.Lock()
 
     @staticmethod
@@ -83,74 +86,158 @@ class LogService:
             logger.error(f"获取日志历史失败: {exc}")
             raise LogServiceError(f"获取日志历史失败: {exc}") from exc
 
-    def export_logs(self) -> Path:
-        """Pack the log files and the in-memory logs into a zip archive.
+    def export_logs(self, *, redact: bool = True) -> Path:
+        """Build one diagnostic ZIP in a worker thread.
 
-        The archive holds the files found by ``StorageCleaner`` (data/logs plus
-        the configured log and trace log files), the in-memory cache split into
-        ``memory/logs.txt`` and ``memory/traces.jsonl``, and ``manifest.json``.
-        Only regular files are packed. Symlinks, files reached through a
-        symlinked directory, special files such as FIFOs and files that go away
-        while packing are skipped and listed in the manifest. Archive names
-        never contain absolute host paths and never repeat. Only one export
-        runs at a time.
+        Args:
+            redact: Mask credentials unless the administrator explicitly opts out.
 
         Returns:
-            Path of the archive in the temp directory. The caller removes it
-            once it has been sent.
+            Private temporary archive; the response removes it after delivery.
 
         Raises:
-            LogServiceError: If another export is running, the temp disk lacks
-                space for the log files, or the archive cannot be written.
+            LogServiceError: If an export is running or safe export is unavailable.
         """
         if not self._export_lock.acquire(blocking=False):
             raise LogServiceError("Another log export is already running")
-        cached = list(self.log_broker.log_cache)
-        logs = [
-            str(item.get("data", "")) for item in cached if item.get("type") != "trace"
-        ]
-        traces = [item for item in cached if item.get("type") == "trace"]
-        data_dir = Path(get_astrbot_data_path())
-        export_dir = Path(get_astrbot_temp_path()) / "log_exports"
-        archive_path = export_dir / f"astrbot-logs-{uuid.uuid4().hex}.zip"
-        log_files = sorted(StorageCleaner(self.config).collect_log_files())
-        manifest = {
-            "astrbot_version": VERSION,
-            "exported_at": time.strftime("%Y-%m-%d %H:%M:%S %z"),
-            "files": [],
-            "skipped": [],
-            "memory_logs": len(logs),
-            "memory_traces": len(traces),
-        }
-        # Reserve the generated entries so that no log file can take their names.
-        used_names = {"manifest.json", "memory/logs.txt", "memory/traces.jsonl"}
-        # Opening without following symlinks or blocking on FIFOs keeps a file
-        # that is swapped after the lstat() check from getting in.
-        open_flags = (
-            os.O_RDONLY
-            | getattr(os, "O_NOFOLLOW", 0)
-            | getattr(os, "O_NONBLOCK", 0)
-            | getattr(os, "O_BINARY", 0)
-        )
+        archive_path = None
         try:
-            export_dir.mkdir(parents=True, exist_ok=True)
-            # The response removes its archive, except when the download is cancelled.
-            for stale in export_dir.glob("*.zip"):
+            sections, redactor = collect_diagnostics(
+                self.config, self.core, redact=redact
+            )
+            cached = list(self.log_broker.log_cache)
+            logs = [
+                str(item.get("data", ""))
+                for item in cached
+                if item.get("type") != "trace"
+            ]
+            traces = [item for item in cached if item.get("type") == "trace"]
+            redactor.collect(traces)
+            data_dir = Path(get_astrbot_data_path())
+            export_dir = Path(get_astrbot_temp_path()) / "log_exports"
+            export_dir.mkdir(parents=True, mode=0o700, exist_ok=True)
+            if export_dir.resolve() != export_dir or not stat.S_ISDIR(
+                export_dir.lstat().st_mode
+            ):
+                raise LogServiceError("Unsafe diagnostic export directory")
+            export_dir.chmod(0o700)
+            archive_path = export_dir / f"astrbot-diagnostics-{uuid.uuid4().hex}.zip"
+            for stale in export_dir.glob("astrbot-*.zip"):
                 with contextlib.suppress(OSError):
-                    if time.time() - stale.stat().st_mtime > 3600:
+                    if time.time() - stale.lstat().st_mtime > 3600:
                         stale.unlink()
+            manifest = {
+                "schema_version": 1,
+                "astrbot_version": VERSION,
+                "exported_at": time.strftime("%Y-%m-%d %H:%M:%S %z"),
+                "redacted": redact,
+                "privacy_notice": (
+                    "Known credentials are masked and public IP addresses use consistent aliases. Local addresses, conversations and personal data may remain; review before sharing."
+                    if redact
+                    else "Redaction is disabled. This bundle contains original credentials and personal data; do not share publicly."
+                ),
+                "files": [],
+                "skipped": [],
+                "truncated": [],
+                "memory_logs": len(logs),
+                "memory_traces": len(traces),
+                "memory_log_range": {
+                    "first_timestamp": cached[0].get("time") if cached else None,
+                    "last_timestamp": cached[-1].get("time") if cached else None,
+                    "cache_limit": self.log_broker.log_cache.maxlen,
+                },
+                "trace_enabled": bool(self.config.get("trace_enable", False)),
+                "trace_history": {
+                    "count": 0,
+                    "limit": 50,
+                    "byte_limit": 16 * 1024 * 1024,
+                    "status": "no_history",
+                },
+            }
+            try:
+                log_files = sorted(StorageCleaner(self.config).collect_log_files())
+            except (OSError, RuntimeError) as exc:
+                log_files = []
+                manifest["skipped"].append(
+                    {"name": "disk_logs", "reason": type(exc).__name__}
+                )
+            history = []
+            trace_path = Path(self.config.get("trace_db_path") or "logs/traces.db")
+            if not trace_path.is_absolute():
+                trace_path = data_dir / trace_path
+            # Do not create a database, enable tracing, or change trace settings.
+            if trace_path.is_file():
+                try:
+                    store = get_trace_store(self.config)
+                    page = store.list_traces(limit=50)
+                    history_bytes = 0
+                    for summary in page["traces"]:
+                        detail = store.get_trace(summary["trace_id"])
+                        if detail is None:
+                            continue
+                        size = len(json.dumps(detail, ensure_ascii=False).encode())
+                        if history_bytes + size > 16 * 1024 * 1024:
+                            break
+                        history_bytes += size
+                        history.append(detail)
+                        redactor.collect(detail)
+                    manifest["trace_history"].update(
+                        count=len(history),
+                        status="available" if history else "no_history",
+                        truncated=len(history) < page["total"],
+                    )
+                except Exception as exc:
+                    manifest["trace_history"].update(
+                        count=len(history),
+                        status="partial" if history else "unavailable",
+                    )
+                    manifest["skipped"].append(
+                        {"name": "traces/history.jsonl", "reason": type(exc).__name__}
+                    )
+            elif not manifest["trace_enabled"]:
+                manifest["trace_history"]["status"] = "disabled_no_history"
             needed_bytes = 0
-            for file_path in log_files:
+            for path in log_files:
                 with contextlib.suppress(OSError):
-                    needed_bytes += file_path.lstat().st_size
-            if shutil.disk_usage(export_dir).free < needed_bytes:
-                raise LogServiceError("Not enough free disk space to export logs")
-            with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:
-                for file_path in log_files:
-                    if file_path.is_relative_to(data_dir):
-                        base_name = file_path.relative_to(data_dir).as_posix()
-                    else:
-                        base_name = f"external/{file_path.name}"
+                    needed_bytes += path.lstat().st_size
+            # The limits apply to source bytes, including files growing during export.
+            budget = 256 * 1024 * 1024
+            if (
+                shutil.disk_usage(export_dir).free
+                < min(needed_bytes, budget) + 20 * 1024 * 1024
+            ):
+                raise LogServiceError(
+                    "Not enough free disk space to export diagnostics"
+                )
+            flags = (
+                os.O_RDONLY
+                | getattr(os, "O_NOFOLLOW", 0)
+                | getattr(os, "O_NONBLOCK", 0)
+                | getattr(os, "O_BINARY", 0)
+            )
+            used_names = {
+                "manifest.json",
+                "memory/logs.txt",
+                "memory/traces.jsonl",
+                "traces/history.jsonl",
+                *sections,
+            }
+            fd = os.open(
+                archive_path,
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0),
+                0o600,
+            )
+            with (
+                os.fdopen(fd, "wb") as output,
+                zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive,
+            ):
+                for path in log_files:
+                    base_name = (
+                        path.relative_to(data_dir).as_posix()
+                        if path.is_relative_to(data_dir)
+                        else f"external/{path.name}"
+                    )
+                    base_name = redactor.text(base_name)
                     arcname, index = base_name, 2
                     while arcname in used_names:
                         parent, _, name = base_name.rpartition("/")
@@ -161,60 +248,105 @@ class LogService:
                     used_names.add(arcname)
                     try:
                         if (
-                            not stat.S_ISREG(file_path.lstat().st_mode)
-                            or file_path.resolve() != file_path
+                            not stat.S_ISREG(path.lstat().st_mode)
+                            or path.resolve() != path
                         ):
                             manifest["skipped"].append(
                                 {"name": arcname, "reason": "not a regular file"}
                             )
                             continue
-                        with open(os.open(file_path, open_flags), "rb") as source:
+                        if budget <= 0:
+                            manifest["skipped"].append(
+                                {"name": arcname, "reason": "export size limit"}
+                            )
+                            continue
+                        with open(os.open(path, flags), "rb") as source:
                             info = os.fstat(source.fileno())
-                            if not stat.S_ISREG(info.st_mode):
+                            if (
+                                not stat.S_ISREG(info.st_mode)
+                                or path.resolve() != path
+                                or not os.path.samestat(info, path.lstat())
+                            ):
                                 manifest["skipped"].append(
-                                    {"name": arcname, "reason": "not a regular file"}
+                                    {
+                                        "name": arcname,
+                                        "reason": "file changed during export",
+                                    }
                                 )
                                 continue
-                            entry = zipfile.ZipInfo(
-                                arcname,
-                                max(
-                                    time.localtime(info.st_mtime)[:6],
-                                    (1980, 1, 1, 0, 0, 0),
-                                ),
-                            )
-                            entry.compress_type = zipfile.ZIP_DEFLATED
-                            entry.file_size = info.st_size
-                            with archive.open(entry, "w") as target:
-                                shutil.copyfileobj(source, target)
+                            header = source.read(1024)
+                            source.seek(0)
+                            if b"\x00" in header or header.startswith(
+                                (b"PK\x03\x04", b"\x1f\x8b", b"SQLite format 3")
+                            ):
+                                manifest["skipped"].append(
+                                    {
+                                        "name": arcname,
+                                        "reason": "binary file cannot be redacted",
+                                    }
+                                )
+                                continue
+                            limit = min(info.st_size, 64 * 1024 * 1024, budget)
+                            if info.st_size > limit:
+                                # Keep the same source limits in both export modes.
+                                manifest["skipped"].append(
+                                    {
+                                        "name": arcname,
+                                        "reason": "file exceeds export size limit",
+                                    }
+                                )
+                                continue
+                            with archive.open(arcname, "w", force_zip64=True) as target:
+                                truncated = redactor.copy_log(source, target, limit)
+                            budget -= min(info.st_size, 64 * 1024 * 1024, budget)
+                            if truncated:
+                                manifest["truncated"].append(arcname)
                         manifest["files"].append(arcname)
                     except OSError as exc:
-                        # A log file can be rotated away while we are packing.
                         manifest["skipped"].append(
-                            {
-                                "name": arcname,
-                                "reason": exc.strerror or type(exc).__name__,
-                            }
+                            {"name": arcname, "reason": type(exc).__name__}
                         )
                 archive.writestr(
-                    "memory/logs.txt", "".join(f"{line}\n" for line in logs)
+                    "memory/logs.txt",
+                    redactor.text("".join(f"{line}\n" for line in logs)),
                 )
                 archive.writestr(
                     "memory/traces.jsonl",
                     "".join(
-                        json.dumps(trace, ensure_ascii=False, default=str) + "\n"
+                        json.dumps(redactor.redact(trace), ensure_ascii=False) + "\n"
                         for trace in traces
                     ),
                 )
                 archive.writestr(
-                    "manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2)
+                    "traces/history.jsonl",
+                    "".join(
+                        json.dumps(redactor.redact(trace), ensure_ascii=False) + "\n"
+                        for trace in history
+                    ),
                 )
+                for name, section in sections.items():
+                    archive.writestr(
+                        name,
+                        json.dumps(
+                            redactor.redact(section), ensure_ascii=False, indent=2
+                        ),
+                    )
+                archive.writestr(
+                    "manifest.json",
+                    json.dumps(redactor.redact(manifest), ensure_ascii=False, indent=2),
+                )
+            return archive_path
         except Exception as exc:
-            archive_path.unlink(missing_ok=True)
-            logger.error(f"Failed to export logs: {exc}")
-            raise LogServiceError(f"Failed to export logs: {exc}") from exc
+            if archive_path is not None:
+                with contextlib.suppress(OSError):
+                    archive_path.unlink(missing_ok=True)
+            # Exception messages can include host paths or credentials.
+            logger.error("Diagnostic export failed: %s", type(exc).__name__)
+            if isinstance(exc, LogServiceError):
+                raise
+            raise LogServiceError("Unable to create a diagnostic bundle") from exc
         finally:
             self._export_lock.release()
-        return archive_path
 
     def get_trace_settings(self) -> dict:
         try:

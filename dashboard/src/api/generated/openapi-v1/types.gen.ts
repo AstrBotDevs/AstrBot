@@ -3731,6 +3731,19 @@ export type GetLogHistoryResponse = (string);
 
 export type GetLogHistoryError = unknown;
 
+export type ExportLogsData = {
+    query?: {
+        /**
+         * Mask recognized credentials. Disable only for private diagnosis.
+         */
+        redact?: boolean;
+    };
+};
+
+export type ExportLogsResponse = ((Blob | File));
+
+export type ExportLogsError = unknown;
+
 export type ListTracesData = {
     query?: {
         /**

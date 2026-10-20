@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import stat
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -214,10 +215,21 @@ class StorageCleaner:
                 or path.name.endswith(("-wal", "-shm", "-journal"))
             ):
                 continue
+            if path.is_symlink() or path.resolve() != path:
+                candidates.add(path)
+                continue
             try:
                 # Protect custom database names, including an old active path
                 # after a configuration edit that has not restarted the core.
-                with path.open("rb") as stream:
+                flags = (
+                    os.O_RDONLY
+                    | getattr(os, "O_NOFOLLOW", 0)
+                    | getattr(os, "O_NONBLOCK", 0)
+                    | getattr(os, "O_BINARY", 0)
+                )
+                with open(os.open(path, flags), "rb") as stream:
+                    if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                        continue
                     if stream.read(16) == b"SQLite format 3\x00":
                         continue
             except OSError:
@@ -287,8 +299,8 @@ class StorageCleaner:
         path_value = configured_path or default_relative_path
         path = Path(path_value)
         if path.is_absolute():
-            return path.resolve()
-        return (self._data_dir / path).resolve()
+            return Path(os.path.abspath(path))
+        return Path(os.path.abspath(self._data_dir / path))
 
     def _iter_log_family_files(self, log_path: Path) -> set[Path]:
         files: set[Path] = set()

@@ -1240,8 +1240,9 @@ export const logApi = {
   history() {
     return typed<{ logs?: OpenConfig[] }>(openApiV1.getLogHistory());
   },
-  exportArchive() {
+  exportArchive(redact = true) {
     return openApiV1.exportLogs({
+      query: { redact },
       responseType: 'blob',
     }) as Promise<AxiosResponse<Blob>>;
   },

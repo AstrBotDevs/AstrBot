@@ -86,17 +86,19 @@ async def live_logs(
 
 @router.get("/logs/export")
 async def export_logs(
-    _auth: AuthContext = Depends(require_system_scope),
+    redact: bool = Query(default=True),
+    _username: str = Depends(require_dashboard_user),
     service: LogService = Depends(get_service),
 ):
     try:
-        archive_path = await asyncio.to_thread(service.export_logs)
+        archive_path = await asyncio.to_thread(service.export_logs, redact=redact)
     except LogServiceError as exc:
         _raise_log_error(exc)
     return FileResponse(
         archive_path,
         media_type="application/zip",
-        filename=f"astrbot-logs-{time.strftime('%Y%m%d-%H%M%S')}.zip",
+        filename=f"astrbot-diagnostics-{'raw-' if not redact else ''}{time.strftime('%Y%m%d-%H%M%S')}.zip",
+        headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
         background=BackgroundTask(archive_path.unlink, missing_ok=True),
     )
 
