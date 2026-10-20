@@ -82,7 +82,6 @@
     "proxySelector": {
       "title": "GitHub 加速",
       "noProxy": "不使用 GitHub 加速",
-      "useProxy": "使用 GitHub 加速",
       "testConnection": "测试代理连通性",
       "available": "可用",
       "unavailable": "不可用",

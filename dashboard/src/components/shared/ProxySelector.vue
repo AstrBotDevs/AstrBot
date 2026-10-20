@@ -1,52 +1,85 @@
 <template>
     <div class="proxy-selector">
-        <h5 class="proxy-selector__title">{{ tm('network.proxySelector.title') }}</h5>
-        <v-radio-group class="proxy-selector__mode mt-2" v-model="radioValue" hide-details="true">
-            <v-radio :label="tm('network.proxySelector.noProxy')" value="0"></v-radio>
-            <v-radio value="1">
+        <div class="proxy-selector__header">
+            <h5 class="proxy-selector__title">{{ tm('network.proxySelector.title') }}</h5>
+            <v-btn
+                class="proxy-selector__test-button"
+                size="x-small"
+                variant="tonal"
+                :loading="loadingTestingConnection"
+                @click="testAllProxies">
+                {{ tm('network.proxySelector.testConnection') }}
+            </v-btn>
+        </div>
+        <v-radio-group class="proxy-selector__options mt-2" v-model="selection" hide-details="true">
+            <v-radio value="none">
                 <template v-slot:label>
-                    <span>{{ tm('network.proxySelector.useProxy') }}</span>
-                    <v-btn v-if="radioValue === '1'" class="ml-2" @click="testAllProxies" size="x-small"
-                        variant="tonal" :loading="loadingTestingConnection">
-                        {{ tm('network.proxySelector.testConnection') }}
-                    </v-btn>
+                    <div class="proxy-selector__option-label">
+                        <span>{{ tm('network.proxySelector.noProxy') }}</span>
+                        <div v-if="proxyStatus.direct" class="proxy-selector__status">
+                            <v-chip
+                                :color="proxyStatus.direct.available ? 'success' : 'error'"
+                                size="x-small"
+                                class="mr-1">
+                                {{ proxyStatus.direct.available ? tm('network.proxySelector.available') : tm('network.proxySelector.unavailable') }}
+                            </v-chip>
+                            <v-chip
+                                v-if="proxyStatus.direct.available"
+                                color="info"
+                                size="x-small">
+                                {{ proxyStatus.direct.latency }}ms
+                            </v-chip>
+                        </div>
+                    </div>
+                </template>
+            </v-radio>
+            <v-radio color="success" v-for="(proxy, idx) in githubProxies" :key="proxy" :value="String(idx)">
+                <template v-slot:label>
+                    <div class="proxy-selector__option-label">
+                        <span class="proxy-selector__url">{{ proxy }}</span>
+                        <div v-if="proxyStatus[idx]" class="proxy-selector__status">
+                            <v-chip
+                                :color="proxyStatus[idx].available ? 'success' : 'error'"
+                                size="x-small"
+                                class="mr-1">
+                                {{ proxyStatus[idx].available ? tm('network.proxySelector.available') : tm('network.proxySelector.unavailable') }}
+                            </v-chip>
+                            <v-chip
+                                v-if="proxyStatus[idx].available"
+                                color="info"
+                                size="x-small">
+                                {{ proxyStatus[idx].latency }}ms
+                            </v-chip>
+                        </div>
+                    </div>
+                </template>
+            </v-radio>
+            <v-radio color="primary" value="custom">
+                <template v-slot:label>
+                    <div class="proxy-selector__option-label">
+                        <v-text-field v-if="selection === 'custom'" class="proxy-selector__custom-input" density="compact"
+                            v-model="selectedGitHubProxy" variant="outlined"
+                            :placeholder="tm('network.proxySelector.custom')" hide-details="true">
+                        </v-text-field>
+                        <span v-else>{{ tm('network.proxySelector.custom') }}</span>
+                        <div v-if="proxyStatus.custom" class="proxy-selector__status">
+                            <v-chip
+                                :color="proxyStatus.custom.available ? 'success' : 'error'"
+                                size="x-small"
+                                class="mr-1">
+                                {{ proxyStatus.custom.available ? tm('network.proxySelector.available') : tm('network.proxySelector.unavailable') }}
+                            </v-chip>
+                            <v-chip
+                                v-if="proxyStatus.custom.available"
+                                color="info"
+                                size="x-small">
+                                {{ proxyStatus.custom.latency }}ms
+                            </v-chip>
+                        </div>
+                    </div>
                 </template>
             </v-radio>
         </v-radio-group>
-        <v-expand-transition>
-            <div v-if="radioValue === '1'" class="proxy-selector__list">
-                <v-radio-group v-model="githubProxyRadioControl" class="mt-2" hide-details="true">
-                    <v-radio color="success" v-for="(proxy, idx) in githubProxies" :key="proxy" :value="String(idx)">
-                        <template v-slot:label>
-                            <div class="proxy-selector__option-label">
-                                <span class="proxy-selector__url">{{ proxy }}</span>
-                                <div v-if="proxyStatus[idx]" class="proxy-selector__status">
-                                    <v-chip
-                                        :color="proxyStatus[idx].available ? 'success' : 'error'"
-                                        size="x-small"
-                                        class="mr-1">
-                                        {{ proxyStatus[idx].available ? tm('network.proxySelector.available') : tm('network.proxySelector.unavailable') }}
-                                    </v-chip>
-                                    <v-chip
-                                        v-if="proxyStatus[idx].available"
-                                        color="info"
-                                        size="x-small">
-                                        {{ proxyStatus[idx].latency }}ms
-                                    </v-chip>
-                                </div>
-                            </div>
-                        </template>
-                    </v-radio>
-                    <v-radio color="primary" value="-1" :label="tm('network.proxySelector.custom')">
-                        <template v-slot:label v-if="String(githubProxyRadioControl) === '-1'">
-                            <v-text-field class="proxy-selector__custom-input" density="compact" v-model="selectedGitHubProxy" variant="outlined"
-                                :placeholder="tm('network.proxySelector.custom')" hide-details="true">
-                            </v-text-field>
-                        </template>
-                    </v-radio>
-                </v-radio-group>
-            </div>
-        </v-expand-transition>
     </div>
 </template>
 
@@ -77,6 +110,29 @@ export default {
             initializing: true,
         }
     },
+    computed: {
+        // The radio list is flat: "none", an index of githubProxies, or "custom".
+        // It is projected onto the persisted radioValue / githubProxyRadioControl
+        // pair that other pages still read from localStorage.
+        selection: {
+            get() {
+                if (String(this.radioValue) === "0") {
+                    return "none";
+                }
+                const control = String(this.githubProxyRadioControl);
+                return control === "-1" ? "custom" : control;
+            },
+            set(value) {
+                const normalized = String(value);
+                if (normalized === "none") {
+                    this.radioValue = "0";
+                    return;
+                }
+                this.radioValue = "1";
+                this.githubProxyRadioControl = normalized === "custom" ? "-1" : normalized;
+            },
+        },
+    },
     methods: {
         getProxyByControl(control) {
             const normalizedControl = String(control);
@@ -89,46 +145,60 @@ export default {
             }
             return this.githubProxies[index] || "";
         },
-        async testSingleProxy(idx) {
-            this.testingProxies[idx] = true;
-            
-            const proxy = this.githubProxies[idx];
-            
+        // statusKey groups one probe result: an index of githubProxies, "direct"
+        // for the no-acceleration route, or "custom" for a user supplied URL.
+        async testProxy(proxyUrl, statusKey) {
+            this.testingProxies[statusKey] = true;
+
             try {
                 const response = await statsApi.testGhproxy({
-                    proxy_url: proxy
+                    proxy_url: proxyUrl || ""
                 });
-                console.log(response.data);
                 if (response.status === 200) {
-                    this.proxyStatus[idx] = {
+                    this.proxyStatus[statusKey] = {
                         available: true,
                         latency: Math.round(response.data.data.latency)
                     };
                 } else {
-                    this.proxyStatus[idx] = {
+                    this.proxyStatus[statusKey] = {
                         available: false,
                         latency: 0
                     };
                 }
             } catch (error) {
-                this.proxyStatus[idx] = {
+                this.proxyStatus[statusKey] = {
                     available: false,
                     latency: 0
                 };
             } finally {
-                this.testingProxies[idx] = false;
+                this.testingProxies[statusKey] = false;
             }
         },
-        
+
         async testAllProxies() {
             this.loadingTestingConnection = true;
-            
-            const promises = this.githubProxies.map((proxy, idx) => 
-                this.testSingleProxy(idx)
-            );
-            
-            await Promise.all(promises);
-            this.loadingTestingConnection = false;
+
+            try {
+                const promises = this.githubProxies.map((proxy, idx) =>
+                    this.testProxy(proxy, idx)
+                );
+                // An empty proxy_url tests the direct route, so "no proxy" is
+                // measured on the same footing as the mirrors.
+                promises.push(this.testProxy("", "direct"));
+
+                if (this.selection === "custom") {
+                    const customProxy = (this.selectedGitHubProxy || "")
+                        .trim()
+                        .replace(/\/+$/, "");
+                    if (/^https?:\/\//i.test(customProxy)) {
+                        promises.push(this.testProxy(customProxy, "custom"));
+                    }
+                }
+
+                await Promise.all(promises);
+            } finally {
+                this.loadingTestingConnection = false;
+            }
         },
     },
     mounted() {
@@ -198,16 +268,22 @@ export default {
     min-width: 0;
 }
 
+.proxy-selector__header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.proxy-selector__test-button {
+    flex: 0 0 auto;
+}
+
 .proxy-selector__title {
     margin: 0;
     color: rgb(var(--v-theme-on-surface));
     font-size: 0.88rem;
     font-weight: 700;
     line-height: 1.4;
-}
-
-.proxy-selector__list {
-    margin-left: 16px;
 }
 
 .proxy-selector :deep(.v-label) {

@@ -82,7 +82,6 @@
     "proxySelector": {
       "title": "GitHub プロキシ",
       "noProxy": "GitHub プロキシを使用しない",
-      "useProxy": "GitHub プロキシを使用",
       "testConnection": "接続をテスト",
       "available": "利用可能",
       "unavailable": "利用不可",

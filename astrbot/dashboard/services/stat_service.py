@@ -523,11 +523,12 @@ class StatService:
 
     async def test_ghproxy_connection(self, proxy_url: str | None) -> dict:
         try:
-            if not proxy_url:
-                raise StatServiceError("proxy_url is required")
-
-            proxy_url = proxy_url.rstrip("/")
-            test_url = f"{proxy_url}/https://github.com/AstrBotDevs/AstrBot/raw/refs/heads/master/.python-version"
+            target_url = "https://github.com/AstrBotDevs/AstrBot/raw/refs/heads/master/.python-version"
+            # An empty proxy_url means "no acceleration", so GitHub is tested directly.
+            normalized_proxy = (proxy_url or "").strip().rstrip("/")
+            test_url = (
+                f"{normalized_proxy}/{target_url}" if normalized_proxy else target_url
+            )
             start_time = time.time()
 
             async with (

@@ -82,7 +82,6 @@
     "proxySelector": {
       "title": "GitHub Proxy",
       "noProxy": "Don't use GitHub Proxy",
-      "useProxy": "Use GitHub Proxy",
       "testConnection": "Test Connection",
       "available": "Available",
       "unavailable": "Unavailable",

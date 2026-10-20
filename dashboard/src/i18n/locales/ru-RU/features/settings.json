@@ -82,7 +82,6 @@
         "proxySelector": {
             "title": "Ускорение GitHub",
             "noProxy": "Не использовать",
-            "useProxy": "Включить",
             "testConnection": "Проверить соединение",
             "available": "Доступен",
             "unavailable": "Недоступен",
