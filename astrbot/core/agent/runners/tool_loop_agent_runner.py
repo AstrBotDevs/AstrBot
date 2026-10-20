@@ -28,7 +28,7 @@ from astrbot import logger
 from astrbot.core.agent.message import ImageURLPart, TextPart, ThinkPart
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_image_cache import tool_image_cache
-from astrbot.core.exceptions import EmptyModelOutputError
+from astrbot.core.exceptions import ContextCompressionError, EmptyModelOutputError
 from astrbot.core.message.components import Json
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -827,12 +827,29 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         # Process request-time context before sending it to the provider.
         token_usage = self.req.conversation.token_usage if self.req.conversation else 0
         self._simple_print_message_role("[BefCompact]", self.run_context.messages)
-        processed_messages = await self._await_or_stop(
-            self.request_context_manager.process(
-                self.run_context.messages,
-                trusted_token_usage=token_usage,
+        try:
+            processed_messages = await self._await_or_stop(
+                self.request_context_manager.process(
+                    self.run_context.messages,
+                    trusted_token_usage=token_usage,
+                )
             )
-        )
+        except ContextCompressionError as e:
+            max_tokens = self.provider.provider_config.get("max_context_tokens", 0)
+            # Keep the count from before compression; a fresh local estimate may
+            # undercount the unchanged history and conceal a context overflow.
+            if max_tokens > 0 and e.token_count > max_tokens:
+                self._transition_state(AgentState.ERROR)
+                self.stats.end_time = time.time()
+                raise RuntimeError(
+                    f"Context compression failed and the context exceeds the model's "
+                    f"maximum context length ({e.token_count} > {max_tokens} tokens): {e}"
+                ) from e
+            logger.warning(
+                f"{e}. Attempting the uncompressed request "
+                f"({e.token_count} tokens, context limit: {max_tokens})."
+            )
+            processed_messages = e.messages
         if processed_messages is None:
             yield await self._finalize_aborted_step()
             return

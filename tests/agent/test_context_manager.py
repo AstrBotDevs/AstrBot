@@ -19,6 +19,7 @@ from astrbot.core.agent.message import (
     TextPart,
     ToolCall,
 )
+from astrbot.core.exceptions import ContextCompressionError
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.sources.request_retry import retry_provider_request
 
@@ -81,9 +82,11 @@ class RateLimitedProvider(MockProvider):
 
 
 class CharTokenCounter:
-    """Counts one token per character of text content."""
+    """Use reported usage, or count one token per character of text content."""
 
     def count_tokens(self, messages, trusted_token_usage: int = 0) -> int:
+        if trusted_token_usage > 0:
+            return trusted_token_usage
         return sum(len(m.content) for m in messages if isinstance(m.content, str))
 
 
@@ -140,7 +143,7 @@ class TestContextManager:
         assert isinstance(manager.compressor, TruncateByTurnsCompressor)
 
     @pytest.mark.asyncio
-    async def test_llm_compressor_keeps_history_when_summary_is_empty(self):
+    async def test_llm_compressor_raises_when_summary_is_empty(self):
         from astrbot.core.agent.context.compressor import LLMSummaryCompressor
 
         provider = MockProvider()
@@ -150,13 +153,21 @@ class TestContextManager:
         compressor = LLMSummaryCompressor(provider=provider, keep_recent_ratio=0.15)  # type: ignore[arg-type]
         messages = self.create_messages(6)
 
-        with patch("astrbot.core.agent.context.compressor.logger") as mock_logger:
-            result = await compressor(messages)
+        with pytest.raises(RuntimeError, match="returned an empty summary"):
+            await compressor(messages)
 
-        assert result == messages
-        mock_logger.warning.assert_called_once_with(
-            "LLM context compression returned an empty summary."
+    @pytest.mark.asyncio
+    async def test_llm_compressor_raises_when_provider_returns_error(self):
+        from astrbot.core.agent.context.compressor import LLMSummaryCompressor
+
+        provider = MockProvider()
+        provider.text_chat = AsyncMock(
+            return_value=LLMResponse(role="err", completion_text="summary unavailable")
         )
+        compressor = LLMSummaryCompressor(provider=provider)  # type: ignore[arg-type]
+
+        with pytest.raises(RuntimeError, match="summary unavailable"):
+            await compressor(self.create_messages(6))
 
     @pytest.mark.asyncio
     async def test_llm_compressor_handles_textpart_content(self):
@@ -648,8 +659,8 @@ class TestContextManager:
         ]
 
     @pytest.mark.asyncio
-    async def test_failed_summary_drops_oldest_rounds_until_within_limit(self):
-        """When the summary fails, whole rounds are dropped until the context fits."""
+    async def test_failed_summary_preserves_context_and_usage_for_runner(self):
+        """A failed summary must not discard history or lower the known count."""
         provider = FailingProvider()
         config = ContextConfig(
             max_context_tokens=1000,
@@ -658,43 +669,52 @@ class TestContextManager:
         )
         manager = ContextManager(config)
         messages = self._rounds_with_tool_chain("f" * 20)
+        original_messages = list(messages)
 
-        result = await manager.process(messages)
+        with patch("astrbot.core.agent.context.manager.logger") as mock_logger:
+            with pytest.raises(ContextCompressionError) as error:
+                await manager.process(messages, trusted_token_usage=1_043_200)
 
         assert provider.last_text_chat_kwargs["request_max_retries"] == 1
-        # Dropping the first round (600 tokens) is enough to get under 820, so
-        # the round with the tool chain stays intact.
-        assert result == [messages[0], *messages[3:]]
+        assert error.value.messages is messages
+        assert error.value.token_count == 1_043_200
+        assert "summary model unavailable" in str(error.value)
+        assert messages == original_messages
+        mock_logger.info.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_fallback_keeps_latest_round_when_it_alone_exceeds_limit(
-        self, caplog
+    async def test_successful_summary_keeps_latest_round_when_it_alone_exceeds_limit(
+        self,
     ):
         config = ContextConfig(
             max_context_tokens=1000,
-            llm_compress_provider=FailingProvider(),  # type: ignore[arg-type]
+            llm_compress_provider=MockProvider(),  # type: ignore[arg-type]
             custom_token_counter=CharTokenCounter(),
         )
         manager = ContextManager(config)
         messages = self._rounds_with_tool_chain("f" * 900)
 
-        result = await manager.process(messages)
+        with patch("astrbot.core.agent.context.manager.logger") as mock_logger:
+            result = await manager.process(messages)
 
         assert result == [messages[0], messages[-1]]
-        assert "only the latest round left" in caplog.text
+        mock_logger.warning.assert_called_once_with(
+            "Context still exceeds max tokens with only the latest round left; "
+            "sending it as is."
+        )
 
     @pytest.mark.asyncio
     async def test_llm_summary_is_requested_once(self):
-        """A failed summary falls back to truncation instead of being retried."""
+        """A failed summary raises instead of retrying or returning the history."""
         from astrbot.core.agent.context.compressor import LLMSummaryCompressor
 
         provider = RateLimitedProvider()
         compressor = LLMSummaryCompressor(provider=provider, keep_recent_ratio=0.15)  # type: ignore[arg-type]
         messages = self._rounds_with_tool_chain("f" * 20)
 
-        result = await compressor(messages)
+        with pytest.raises(QuotaExhaustedError):
+            await compressor(messages)
 
-        assert result is messages
         assert provider.attempts == 1
 
     # ==================== Combined Truncation and Compression Tests ====================
@@ -744,9 +764,9 @@ class TestContextManager:
 
         messages = self.create_messages(5)
 
-        # Make compressor raise an exception
+        # Preserve the existing fallback for failures outside the compressor.
         with patch.object(
-            manager.compressor, "__call__", side_effect=Exception("Test error")
+            manager.token_counter, "count_tokens", side_effect=Exception("Test error")
         ):
             result = await manager.process(messages)
 
@@ -754,8 +774,8 @@ class TestContextManager:
             assert result == messages
 
     @pytest.mark.asyncio
-    async def test_error_handling_logs_exception(self):
-        """Test that errors are logged."""
+    async def test_custom_compressor_error_propagates_to_runner(self):
+        """Custom compressor errors carry the pre-compression count as well."""
         config = ContextConfig(max_context_tokens=100)
         manager = ContextManager(config)
 
@@ -769,12 +789,12 @@ class TestContextManager:
         manager.compressor = mock_compressor
 
         with patch("astrbot.core.agent.context.manager.logger") as mock_logger:
-            result = await manager.process(messages)
+            with pytest.raises(ContextCompressionError, match="Test error") as error:
+                await manager.process(messages)
 
-            # Logger error method should be called
-            assert mock_logger.error.called
-            # Should return original messages on error
-            assert result == messages
+        assert error.value.messages is messages
+        assert error.value.token_count == 90
+        mock_logger.error.assert_not_called()
 
     # ==================== Multi-modal Content Tests ====================
 

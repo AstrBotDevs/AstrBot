@@ -16,6 +16,7 @@ from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.message import ImageURLPart, Message, TextPart
 from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.runners.base import AgentState
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.astr_agent_run_util import run_agent
@@ -617,6 +618,127 @@ async def test_tool_loop_next_request_includes_tool_result(
     assert len(tool_messages) == 1
     assert tool_messages[0].tool_call_id == "call_context_refresh"
     assert "工具执行结果" in tool_messages[0].content
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize(
+    ("reported_tokens", "prompt_size", "context_limit", "exceeds_limit"),
+    [
+        pytest.param(1_048_577, 300, 1_048_576, True, id="reported-over-limit"),
+        pytest.param(1_043_200, 300, 1_048_576, False, id="issue-10551-under-limit"),
+        pytest.param(100, 300, 100, False, id="reported-at-limit"),
+        pytest.param(0, 300, 100, False, id="estimated-under-limit"),
+        pytest.param(0, 400, 100, True, id="estimated-over-limit"),
+    ],
+)
+async def test_failed_compression_only_blocks_requests_over_model_context_limit(
+    runner,
+    mock_tool_executor,
+    mock_hooks,
+    streaming,
+    reported_tokens,
+    prompt_size,
+    context_limit,
+    exceeds_limit,
+):
+    """Compression failure preserves history and checks 100%, rather than 82%."""
+    provider = CapturingProvider(["text"])
+    provider.provider_config["max_context_tokens"] = context_limit
+    summary_provider = MockFailingProvider()
+    request = ProviderRequest(
+        prompt="x" * prompt_size,
+        contexts=[
+            {"role": "user", "content": "Old question"},
+            {"role": "assistant", "content": "Old answer"},
+        ],
+        conversation=SimpleNamespace(
+            cid="compression-test", token_usage=reported_tokens
+        ),
+    )
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        llm_compress_provider=summary_provider,
+        streaming=streaming,
+    )
+    original_messages = list(runner.run_context.messages)
+
+    if exceeds_limit:
+        with pytest.raises(RuntimeError, match="exceeds the model's maximum context"):
+            async for _ in runner.step():
+                pass
+        assert provider.call_count == 0
+        assert runner.state == AgentState.ERROR
+        assert runner.run_context.messages == original_messages
+    else:
+        async for _ in runner.step():
+            pass
+        assert provider.call_count == 1
+        assert provider.received_contexts[0] == [
+            *request.contexts,
+            {"role": "user", "content": [{"type": "text", "text": request.prompt}]},
+        ]
+        assert runner.run_context.messages[:-1] == original_messages
+        assert runner.state == AgentState.DONE
+
+    assert summary_provider.call_count == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("custom_error", [None, "Please start a new conversation."])
+async def test_run_agent_handles_compression_overflow_error(
+    runner, mock_tool_executor, mock_hooks, streaming, custom_error
+):
+    """Deliver a real compression overflow exception through the chat bridge."""
+    event = MagicMock()
+    event.is_stopped.return_value = False
+    event.get_extra.side_effect = lambda key: (
+        custom_error if key == "persona_custom_error_message" else None
+    )
+    provider = CapturingProvider(["text"])
+    provider.provider_config["max_context_tokens"] = 100
+    summary_provider = MockFailingProvider()
+    await runner.reset(
+        provider=provider,
+        request=ProviderRequest(
+            prompt="Current question",
+            contexts=[
+                {"role": "user", "content": "Old question"},
+                {"role": "assistant", "content": "Old answer"},
+            ],
+            conversation=SimpleNamespace(cid="compression-test", token_usage=101),
+        ),
+        run_context=ContextWrapper(context=SimpleNamespace(event=event)),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        llm_compress_provider=summary_provider,
+        streaming=streaming,
+    )
+
+    chains = [chain async for chain in run_agent(runner)]
+
+    if streaming:
+        assert len(chains) == 1
+        error_text = chains[0].get_plain_text()
+        event.set_result.assert_not_called()
+    else:
+        assert chains == []
+        event.set_result.assert_called_once()
+        error_text = event.set_result.call_args.args[0].get_plain_text()
+    if custom_error:
+        assert error_text == custom_error
+    else:
+        assert "Error Type: RuntimeError" in error_text
+        assert "maximum context length (101 > 100 tokens)" in error_text
+    assert runner.state == AgentState.ERROR
+    assert mock_hooks.agent_done_called
+    assert provider.call_count == 0
+    assert summary_provider.call_count == 1
 
 
 @pytest.mark.asyncio

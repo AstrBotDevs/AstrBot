@@ -8,16 +8,6 @@ from ..message import Message
 from .token_counter import EstimateTokenCounter, TokenCounter
 
 if TYPE_CHECKING:
-    from astrbot import logger
-else:
-    try:
-        from astrbot import logger
-    except ImportError:
-        import logging
-
-        logger = logging.getLogger("astrbot")
-
-if TYPE_CHECKING:
     from astrbot.core.provider.provider import Provider
 
 from ..context.truncator import ContextTruncator
@@ -207,8 +197,16 @@ class LLMSummaryCompressor:
         """Use LLM to generate a summary of the conversation history.
 
         Uses round-based splitting to preserve user-assistant turn boundaries.
-        On LLM failure, returns the original messages unchanged (caller should
-        fall back to truncation).
+
+        Args:
+            messages: The original message list.
+
+        Returns:
+            System messages, the generated summary, and recent exact context.
+
+        Raises:
+            RuntimeError: If the provider returns an error or an empty summary.
+            Exception: If the summary request fails.
         """
         from .round_utils import split_into_rounds
 
@@ -271,22 +269,18 @@ class LLMSummaryCompressor:
         )
         log_context_sanitize_stats(sanitize_stats)
 
-        # Generate summary. A single attempt is enough: on failure the caller
-        # falls back to truncation, so retrying (e.g. on an exhausted quota)
-        # would only hold up the reply.
-        try:
-            response = await self.provider.text_chat(
-                contexts=sanitized_summary_contexts,
-                request_max_retries=1,
+        # Try once and let the runner decide whether the uncompressed request fits.
+        response = await self.provider.text_chat(
+            contexts=sanitized_summary_contexts,
+            request_max_retries=1,
+        )
+        if response.role == "err":
+            raise RuntimeError(
+                f"LLM context compression failed: {response.completion_text}"
             )
-            summary_content = (response.completion_text or "").strip()
-        except Exception as e:
-            logger.error(f"Failed to generate summary: {e}")
-            return messages
-
+        summary_content = (response.completion_text or "").strip()
         if not summary_content:
-            logger.warning("LLM context compression returned an empty summary.")
-            return messages
+            raise RuntimeError("LLM context compression returned an empty summary.")
 
         # Build result: system messages + summary pair + recent rounds
         result = _extract_system_messages(messages)

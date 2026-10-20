@@ -1,4 +1,5 @@
 from astrbot import logger
+from astrbot.core.exceptions import ContextCompressionError
 
 from ..message import Message
 from .compressor import LLMSummaryCompressor, TruncateByTurnsCompressor
@@ -50,9 +51,13 @@ class ContextManager:
 
         Args:
             messages: The original message list.
+            trusted_token_usage: Provider-reported usage for the request context.
 
         Returns:
             The processed message list.
+
+        Raises:
+            ContextCompressionError: If the compressor fails.
         """
         try:
             result = messages
@@ -77,6 +82,8 @@ class ContextManager:
                     result = await self._run_compression(result, total_tokens)
 
             return result
+        except ContextCompressionError:
+            raise
         except Exception as e:
             logger.error(f"Error during context processing: {e}", exc_info=True)
             return messages
@@ -87,10 +94,9 @@ class ContextManager:
         """
         Compress/truncate the messages.
 
-        If the context still exceeds the limit after compression (for example
-        because the summary request failed), whole rounds are dropped, oldest
-        first, until it fits. The latest round is always kept, even when it
-        alone exceeds the limit.
+        If successful compression leaves the context above the threshold, drop
+        whole rounds, oldest first. Always keep the latest round. Compression
+        failures propagate so the runner can check the model's hard limit.
 
         Args:
             messages: The original message list.
@@ -98,10 +104,20 @@ class ContextManager:
 
         Returns:
             The compressed/truncated message list.
+
+        Raises:
+            ContextCompressionError: If the compressor fails.
         """
         logger.debug("Compress triggered, starting compression...")
 
-        messages = await self.compressor(messages)
+        try:
+            messages = await self.compressor(messages)
+        except Exception as e:
+            raise ContextCompressionError(
+                f"Context compression failed: {e}",
+                messages=messages,
+                token_count=prev_tokens,
+            ) from e
 
         # double check
         tokens_after_summary = self.token_counter.count_tokens(messages)
