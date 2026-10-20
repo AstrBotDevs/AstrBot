@@ -55,6 +55,9 @@ class StatServiceError(Exception):
 # from pulling tens of megabytes.
 _SPEED_SAMPLE_SECONDS = 6.0
 _SPEED_SAMPLE_MAX_BYTES = 4 * 1024 * 1024
+# The simple index page of one package lists every release ever published, so
+# it can grow without bound on a misbehaving or hostile mirror.
+_PACKAGE_PAGE_MAX_BYTES = 8 * 1024 * 1024
 _PIP_USER_AGENT = "pip/24.3.1"
 # A real repository asset the dashboard downloads (the t2i runtime bundle),
 # large enough to produce a meaningful throughput number.
@@ -619,6 +622,9 @@ class StatService:
         ``pip install`` would experience instead of a bare round trip. Only the
         first few megabytes and seconds are sampled so slow mirrors answer fast.
 
+        The package listing page is streamed with a hard byte budget, so a
+        misbehaving mirror cannot push an unbounded page into memory.
+
         Args:
             index_url: Base URL of the PyPI index, e.g.
                 ``https://mirrors.aliyun.com/pypi/simple/``.
@@ -652,7 +658,20 @@ class StatService:
                         raise StatServiceError(
                             f"Failed. Status code: {response.status}"
                         )
-                    page = await response.text()
+                    # Stream the page and reject it as soon as it exceeds the
+                    # budget, so an oversized or endless response cannot be
+                    # buffered into memory first.
+                    page_bytes = bytearray()
+                    async for chunk in response.content.iter_chunked(65536):
+                        page_bytes += chunk
+                        if len(page_bytes) > _PACKAGE_PAGE_MAX_BYTES:
+                            raise StatServiceError(
+                                "Package page from this index is too large "
+                                f"(over {_PACKAGE_PAGE_MAX_BYTES // 1048576} MB)"
+                            )
+                    page = page_bytes.decode(
+                        response.charset or "utf-8", errors="replace"
+                    )
 
                 wheels: list[tuple[Version, str]] = []
                 for href in re.findall(r'href="([^"#]+)', page):
