@@ -12,7 +12,6 @@
                     <v-chip size="small" variant="tonal" class="storage-cleanup-chip">
                         {{ formatBytes(storageStatus.total_bytes || 0) }}
                     </v-chip>
-                    <LogExportButton />
                     <v-menu location="bottom end">
                         <template #activator="{ props }">
                             <v-btn
@@ -55,7 +54,6 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import { statsApi } from '@/api/v1';
-import LogExportButton from '@/components/shared/LogExportButton.vue';
 import { useModuleI18n } from '@/i18n/composables';
 import { useToastStore } from '@/stores/toast';
 import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog';
