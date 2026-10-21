@@ -104,6 +104,7 @@ async function exportLogs() {
         v-bind="props"
         size="small"
         variant="tonal"
+        color="primary"
         prepend-icon="mdi-download"
         :loading="exporting"
         @click="openDialog"

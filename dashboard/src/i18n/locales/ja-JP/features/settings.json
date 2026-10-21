@@ -155,6 +155,10 @@
         "cleanupWithTracesSuccess": "{count} ファイルと {traces} 件のトレースを消去し、{size} を解放しました"
       },
       "confirmWithTraces": "{target}を消去しますか？過去のトレースは復元できません。実行中のトレースは保持します。"
+    },
+    "diagnostics": {
+      "title": "診断",
+      "subtitle": "診断パッケージを出力して AstrBot の問題を調査します。"
     }
   },
   "backup": {

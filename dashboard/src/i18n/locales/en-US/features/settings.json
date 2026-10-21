@@ -155,6 +155,10 @@
         "cleanupWithTracesSuccess": "Cleared {count} files and {traces} traces, freeing {size}"
       },
       "confirmWithTraces": "Clean {target} now? Historical traces cannot be recovered. Running traces are retained."
+    },
+    "diagnostics": {
+      "title": "Diagnostics",
+      "subtitle": "Export a diagnostic bundle to troubleshoot AstrBot."
     }
   },
   "backup": {
