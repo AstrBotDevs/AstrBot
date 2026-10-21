@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from deprecated import deprecated
-from sqlalchemy import CursorResult, Row, case, literal, not_
+from sqlalchemy import CursorResult, Row, Text, case, cast, literal, not_
 from sqlalchemy.dialects.sqlite import dialect as sqlite_dialect
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -383,6 +383,8 @@ class SQLiteDatabase(BaseDatabase):
             session: AsyncSession
             # Build the base query with filters
             base_query = select(ConversationV2)
+            # Cast JSON explicitly for portable substring searches.
+            content_text = cast(ConversationV2.content, Text)
             conditions = []
 
             if platform_ids:
@@ -399,8 +401,8 @@ class SQLiteDatabase(BaseDatabase):
                         col(ConversationV2.title).ilike(f"%{search_query}%"),
                         col(ConversationV2.user_id).ilike(f"%{search_query}%"),
                         col(ConversationV2.conversation_id).ilike(f"%{search_query}%"),
-                        col(ConversationV2.content).ilike(f"%{search_query}%"),
-                        col(ConversationV2.content).ilike(f"%{escaped_search_query}%"),
+                        content_text.ilike(f"%{search_query}%"),
+                        content_text.ilike(f"%{escaped_search_query}%"),
                         _webchat_session_title_match(search_query),
                     )
                 )
@@ -413,8 +415,8 @@ class SQLiteDatabase(BaseDatabase):
                 conditions.append(
                     or_(
                         col(ConversationV2.title).ilike(f"%{keyword_query}%"),
-                        col(ConversationV2.content).ilike(f"%{keyword_query}%"),
-                        col(ConversationV2.content).ilike(f"%{escaped_keyword_query}%"),
+                        content_text.ilike(f"%{keyword_query}%"),
+                        content_text.ilike(f"%{escaped_keyword_query}%"),
                         _webchat_session_title_match(keyword_query),
                     )
                 )
@@ -680,13 +682,12 @@ class SQLiteDatabase(BaseDatabase):
         async with self.get_db() as session:
             session: AsyncSession
             offset = (page - 1) * page_size
+            conversation_id = col(Preference.value)["val"].as_string()
 
             base_query = (
                 select(
                     col(Preference.scope_id).label("session_id"),
-                    func.json_extract(Preference.value, "$.val").label(
-                        "conversation_id",
-                    ),  # type: ignore
+                    conversation_id.label("conversation_id"),
                     col(ConversationV2.persona_id).label("persona_id"),
                     col(ConversationV2.title).label("title"),
                     col(Persona.persona_id).label("persona_name"),
@@ -694,8 +695,7 @@ class SQLiteDatabase(BaseDatabase):
                 .select_from(Preference)
                 .outerjoin(
                     ConversationV2,
-                    func.json_extract(Preference.value, "$.val")
-                    == ConversationV2.conversation_id,
+                    conversation_id == ConversationV2.conversation_id,
                 )
                 .outerjoin(
                     Persona,
@@ -736,8 +736,7 @@ class SQLiteDatabase(BaseDatabase):
                 .select_from(Preference)
                 .outerjoin(
                     ConversationV2,
-                    func.json_extract(Preference.value, "$.val")
-                    == ConversationV2.conversation_id,
+                    conversation_id == ConversationV2.conversation_id,
                 )
                 .outerjoin(
                     Persona,
