@@ -69,6 +69,8 @@ class LogService:
     ) -> AsyncGenerator[str, None]:
         queue = None
         try:
+            # Flush response headers through gzip before waiting for log events.
+            yield ": connected\n\n"
             if last_event_id:
                 async for event in self.replay_cached_logs(last_event_id):
                     yield event
