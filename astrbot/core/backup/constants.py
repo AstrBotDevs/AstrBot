@@ -6,19 +6,23 @@
 from sqlmodel import SQLModel
 
 from astrbot.core.db.po import (
+    ApiKey,
     Attachment,
     ChatUIProject,
     CommandConfig,
     CommandConflict,
     ConversationV2,
     CronJob,
+    DashboardTrustedDevice,
     Persona,
     PersonaFolder,
     PlatformMessageHistory,
     PlatformSession,
     PlatformStat,
     Preference,
+    ProviderStat,
     SessionProjectRelation,
+    UmoAlias,
     WebChatThread,
 )
 from astrbot.core.knowledge_base.models import (
@@ -34,6 +38,7 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_t2i_templates_path,
     get_astrbot_temp_path,
     get_astrbot_webchat_path,
+    get_astrbot_workspaces_path,
 )
 
 # ============================================================
@@ -43,6 +48,7 @@ from astrbot.core.utils.astrbot_path import (
 # 主数据库模型类映射
 MAIN_DB_MODELS: dict[str, type[SQLModel]] = {
     "platform_stats": PlatformStat,
+    "provider_stats": ProviderStat,
     "conversations": ConversationV2,
     "cron_jobs": CronJob,
     "personas": Persona,
@@ -56,6 +62,13 @@ MAIN_DB_MODELS: dict[str, type[SQLModel]] = {
     "attachments": Attachment,
     "command_configs": CommandConfig,
     "command_conflicts": CommandConflict,
+    "umo_aliases": UmoAlias,
+    "api_keys": ApiKey,
+}
+
+# Device trust must be re-established after restore, never copied from a backup.
+EXCLUDED_MAIN_DB_MODELS: dict[str, type[SQLModel]] = {
+    "dashboard_trusted_devices": DashboardTrustedDevice,
 }
 
 # 知识库元数据模型类映射
@@ -82,6 +95,7 @@ def get_backup_directories() -> dict[str, str]:
         "webchat": get_astrbot_webchat_path(),  # WebChat 数据
         "temp": get_astrbot_temp_path(),  # 临时文件
         "skills": get_astrbot_skills_path(),  # Skills
+        "workspaces": get_astrbot_workspaces_path(),  # Session and project files
     }
 
 
