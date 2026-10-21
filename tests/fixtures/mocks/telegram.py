@@ -9,15 +9,19 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 
-class MockTelegramNetworkError(Exception):
+class MockTelegramError(Exception):
+    """Mock telegram.error.TelegramError used in tests."""
+
+
+class MockTelegramNetworkError(MockTelegramError):
     """Mock telegram.error.NetworkError used in tests."""
 
 
-class MockTelegramForbidden(Exception):
+class MockTelegramForbidden(MockTelegramError):
     """Mock telegram.error.Forbidden used in tests."""
 
 
-class MockTelegramInvalidToken(Exception):
+class MockTelegramInvalidToken(MockTelegramError):
     """Mock telegram.error.InvalidToken used in tests."""
 
 
@@ -43,6 +47,7 @@ def create_mock_telegram_modules():
     mock_telegram.error.Forbidden = MockTelegramForbidden
     mock_telegram.error.InvalidToken = MockTelegramInvalidToken
     mock_telegram.error.NetworkError = MockTelegramNetworkError
+    mock_telegram.error.TelegramError = MockTelegramError
     mock_telegram.ReactionTypeCustomEmoji = MagicMock
     mock_telegram.ReactionTypeEmoji = MagicMock
 

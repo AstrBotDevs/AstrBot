@@ -35,8 +35,9 @@
 - ID(id)：随意填写，用于区分不同的消息平台实例。
 - 启用(enable): 勾选。
 - Bot Token: 你的 Telegram 机器人的 `token`。
+- Telegram 代理地址：可选，如 `http://ip:port` 或 `socks5://ip:port`。
 
-请确保你的网络环境可以访问 Telegram。你可能需要使用 `设置 → 网络 → 代理与依赖源 → HTTP 代理` 来设置代理。
+请确保你的网络环境可以访问 Telegram。你可以在 `Telegram 代理地址` 中为该机器人单独设置代理，或在 `设置 → 网络 → 代理与依赖源 → HTTP 代理` 中设置全局代理。
 
 ## 流式输出
 
