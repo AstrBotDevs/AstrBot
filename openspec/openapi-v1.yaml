@@ -5135,6 +5135,37 @@ paths:
         "200":
           $ref: "#/components/responses/Text"
 
+  /api/v1/logs/export:
+    get:
+      tags: [Logs]
+      summary: Export a diagnostic bundle
+      description: Requires a dashboard administrator session. Developer API keys are not accepted. Includes available disk and memory logs, trace history, configuration, plugin status and environment details. Credentials are masked by default; setting redact=false exports original sensitive values.
+      operationId: exportLogs
+      security:
+        - BearerAuth: []
+      x-astrbot-scope: system
+      parameters:
+        - name: redact
+          in: query
+          description: Mask recognized credentials. Disable only for private diagnosis.
+          schema: {type: boolean, default: true}
+        - name: start_time
+          in: query
+          description: Inclusive minimum log timestamp or trace start time, in Unix seconds. Omit for no lower bound. Undated standalone log content is excluded when a time bound is set.
+          schema: {type: integer, minimum: 0}
+        - name: end_time
+          in: query
+          description: Inclusive maximum log timestamp or trace start time, in Unix seconds. Omit for no upper bound. Must not be before start_time. Matching traces retain their complete details.
+          schema: {type: integer, minimum: 0}
+      responses:
+        "200":
+          description: Diagnostic ZIP. With redact=false it contains original sensitive values; personal data may remain in either mode.
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+
   /api/v1/trace/history:
     get:
       tags: [Logs]

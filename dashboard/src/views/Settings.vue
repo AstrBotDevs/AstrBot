@@ -224,6 +224,16 @@
 
                             <div class="settings-item">
                                 <div class="settings-item__label">
+                                    <div class="settings-item__title">{{ tm('system.diagnostics.title') }}</div>
+                                    <div class="settings-item__subtitle">{{ tm('system.diagnostics.subtitle') }}</div>
+                                </div>
+                                <div class="settings-item__control">
+                                    <LogExportButton />
+                                </div>
+                            </div>
+
+                            <div class="settings-item">
+                                <div class="settings-item__label">
                                     <div class="settings-item__title">{{ tm('system.restart.title') }}</div>
                                     <div class="settings-item__subtitle">{{ tm('system.restart.subtitle') }}</div>
                                 </div>
@@ -495,6 +505,7 @@ import ProxySelector from '@/components/shared/ProxySelector.vue';
 import PypiMirrorSelector from '@/components/shared/PypiMirrorSelector.vue';
 import BackupDialog from '@/components/shared/BackupDialog.vue';
 import StorageCleanupPanel from '@/components/shared/StorageCleanupPanel.vue';
+import LogExportButton from '@/components/shared/LogExportButton.vue';
 import DashboardTwoFactorDialog from '@/components/shared/DashboardTwoFactorDialog.vue';
 import ChangelogDialog from '@/components/shared/ChangelogDialog.vue';
 import { restartAstrBot as restartAstrBotRuntime } from '@/utils/restartAstrBot';
