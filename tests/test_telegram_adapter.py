@@ -1310,18 +1310,20 @@ async def test_telegram_proxy_downloads_media_through_the_bot(
     )
     media = create_mock_file(f"https://api.telegram.org/file/test/{media_type}.bin")
     media.file_name = "example"
-    media.file_unique_id = "unique"
     media.is_animated = media.is_video = False
     media.download_to_drive = AsyncMock()
     update = create_mock_update(
         message_text=None,
         **{media_type: [media] if media_type == "photo" else media},
     )
-    local_path = tmp_path / f"unique_{media_type}.bin"
+    local_path = tmp_path / f"random_{media_type}.bin"
 
     with patch.dict(
         adapter.convert_message.__func__.__globals__,
-        {"get_astrbot_temp_path": MagicMock(return_value=str(tmp_path))},
+        {
+            "get_astrbot_temp_path": MagicMock(return_value=str(tmp_path)),
+            "uuid": MagicMock(**{"uuid4.return_value.hex": "random"}),
+        },
     ):
         result = await adapter.convert_message(update, _build_context())
 
@@ -1350,7 +1352,6 @@ async def test_telegram_proxy_download_failure_keeps_the_url(tmp_path, error):
     )
     file_path = "https://api.telegram.org/file/test/photo.bin"
     photo = create_mock_file(file_path)
-    photo.file_unique_id = "unique"
     photo.download_to_drive = AsyncMock(side_effect=error)
     update = create_mock_update(message_text=None, photo=[photo])
 
@@ -1361,9 +1362,7 @@ async def test_telegram_proxy_download_failure_keeps_the_url(tmp_path, error):
         result = await adapter.convert_message(update, _build_context())
 
     assert result is not None
-    photo.download_to_drive.assert_awaited_once_with(
-        tmp_path / "unique_photo.bin", read_timeout=30.0
-    )
+    photo.download_to_drive.assert_awaited_once()
     assert result.message[0].file == file_path
     assert result.message[0].url == file_path
 

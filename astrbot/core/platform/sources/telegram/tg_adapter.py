@@ -495,11 +495,10 @@ class TelegramPlatformAdapter(Platform):
         file_path = cast(str, file.file_path)
         if not self.config.get("telegram_proxy"):
             return file_path
-        # The pipeline reads this path later, and file paths are numbered per
-        # bot, so file_unique_id prevents name clashes between bots.
+        # The pipeline reads this path later, so each download writes its own file
+        # and never rewrites one that is still being read.
         temp_path = (
-            Path(get_astrbot_temp_path())
-            / f"{file.file_unique_id}_{Path(file_path).name}"
+            Path(get_astrbot_temp_path()) / f"{uuid.uuid4().hex}_{Path(file_path).name}"
         )
         try:
             await file.download_to_drive(
