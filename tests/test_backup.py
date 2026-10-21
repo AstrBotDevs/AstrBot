@@ -1220,16 +1220,16 @@ class TestBackupIntegration:
     @pytest.mark.parametrize(
         "existing_target", [True, False], ids=["existing", "fresh"]
     )
-    async def test_mcp_and_workspaces_roundtrip(
+    async def test_mcp_config_roundtrip(
         self, tmp_path, monkeypatch, include_mcp, existing_target
     ):
-        """Restore configuration and workspace files across distinct AstrBot roots.
+        """Restore MCP configuration across distinct AstrBot roots.
 
         Args:
             tmp_path: Temporary directory for both instances and their databases.
             monkeypatch: Fixture used to switch between instance roots.
             include_mcp: Whether the backup contains an MCP configuration.
-            existing_target: Whether the target already has configuration and files.
+            existing_target: Whether the target already has MCP configuration.
         """
         source_root = tmp_path / "source"
         target_root = tmp_path / "target"
@@ -1245,20 +1245,10 @@ class TestBackupIntegration:
         ).encode("utf-8")
         if include_mcp:
             (source_data / "mcp_server.json").write_bytes(mcp_content)
-        workspace_files = {
-            "project_demo/report.txt": b"Project report",
-            "session/skills/example/SKILL.md": b"# Workspace skill",
-            "session/output.bin": bytes(range(256)),
-        }
-        for relative_path, content in workspace_files.items():
-            file_path = source_data / "workspaces" / relative_path
-            file_path.parent.mkdir(parents=True, exist_ok=True)
-            file_path.write_bytes(content)
         target_data = target_root / "data"
         target_mcp = target_data / "mcp_server.json"
         if existing_target:
-            (target_data / "workspaces").mkdir(parents=True)
-            (target_data / "workspaces" / "stale.txt").write_text("Old workspace")
+            target_data.mkdir(parents=True)
             target_mcp.write_bytes(b'{"mcpServers": {}}')
 
         source = SQLiteDatabase(str(tmp_path / "source.db"))
@@ -1271,7 +1261,6 @@ class TestBackupIntegration:
             zip_path = await exporter.export_all(output_dir=str(tmp_path / "backups"))
             with zipfile.ZipFile(zip_path) as archive:
                 manifest = json.loads(archive.read("manifest.json"))
-                assert "workspaces" in manifest["directories"]
                 assert ("config/mcp_server.json" in archive.namelist()) == include_mcp
                 if include_mcp:
                     assert manifest["checksums"]["config/mcp_server.json"] == (
@@ -1284,12 +1273,6 @@ class TestBackupIntegration:
             ).import_all(zip_path)
             assert result.success, result.errors
             assert not result.warnings
-            assert result.imported_directories["workspaces"] == len(workspace_files)
-            for relative_path, content in workspace_files.items():
-                assert (
-                    target_data / "workspaces" / relative_path
-                ).read_bytes() == content
-            assert not (target_data / "workspaces" / "stale.txt").exists()
             if include_mcp:
                 assert target_mcp.read_bytes() == mcp_content
                 assert result.imported_files["mcp_config"] == 1

@@ -38,7 +38,6 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_t2i_templates_path,
     get_astrbot_temp_path,
     get_astrbot_webchat_path,
-    get_astrbot_workspaces_path,
 )
 
 # ============================================================
@@ -95,7 +94,6 @@ def get_backup_directories() -> dict[str, str]:
         "webchat": get_astrbot_webchat_path(),  # WebChat 数据
         "temp": get_astrbot_temp_path(),  # 临时文件
         "skills": get_astrbot_skills_path(),  # Skills
-        "workspaces": get_astrbot_workspaces_path(),  # Session and project files
     }
 
 

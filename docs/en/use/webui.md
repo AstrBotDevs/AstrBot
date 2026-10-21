@@ -135,7 +135,7 @@ The page title and section navigation stay fixed while only the settings pane on
 
 System configuration changes save automatically. Check for a successful save message and restart AstrBot if the page indicates that a restart is required.
 
-Backups under `Maintenance` include session aliases, model usage statistics, OpenAPI access keys, MCP server configuration, and session and project files under `data/workspaces/`. Custom workspace directories outside `data/workspaces/` require a separate backup. TOTP trusted devices are excluded; replacing data from a backup clears existing device trust and requires device verification again. Older backups cannot recover data they did not include: export a new backup from the original instance before migrating. If a backup has no MCP configuration, the target instance's MCP configuration is kept.
+Backups under `Maintenance` include session aliases, model usage statistics, OpenAPI access keys, and MCP server configuration. Workspace files require a separate backup. TOTP trusted devices are excluded; replacing data from a backup clears existing device trust and requires device verification again. Older backups cannot recover data they did not include: export a new backup from the original instance before migrating. If a backup has no MCP configuration, the target instance's MCP configuration is kept.
 
 ## Plugins
 
