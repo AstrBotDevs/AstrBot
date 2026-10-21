@@ -7,19 +7,22 @@ from fastapi import FastAPI
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.responses import StreamingResponse
 
+from astrbot.core import LogBroker
 from astrbot.dashboard.services.log_service import LogService
 
 
 class LogSSEStreamTests(IsolatedAsyncioTestCase):
     async def test_idle_stream_starts_with_comment(self):
-        broker = Mock()
+        broker = LogBroker()
         service = LogService(broker, {})
         stream = service.stream_log_events(None)
         try:
             first = await asyncio.wait_for(anext(stream), timeout=1)
             self.assertEqual(first, ": connected\n\n")
+            self.assertEqual(len(broker.subscribers), 1)
         finally:
             await stream.aclose()
+        self.assertEqual(broker.subscribers, [])
 
     async def test_comment_preserves_cached_and_live_events(self):
         queue = asyncio.Queue()
@@ -31,12 +34,39 @@ class LogSSEStreamTests(IsolatedAsyncioTestCase):
         service = LogService(broker, {})
         stream = service.stream_log_events("10")
         try:
+            self.assertEqual(
+                await anext(stream),
+                'id: 11.0\ndata: {"type": "log", "time": 11, "level": "INFO", "data": "cached"}\n\n',
+            )
             self.assertEqual(await anext(stream), ": connected\n\n")
-            self.assertEqual(await anext(stream), service.format_log_sse(cached, 11.0))
-            self.assertEqual(await anext(stream), service.format_log_sse(live, 12))
+            self.assertEqual(
+                await anext(stream),
+                'id: 12\ndata: {"type": "log", "time": 12, "level": "INFO", "data": "live"}\n\n',
+            )
         finally:
             await stream.aclose()
         broker.unregister.assert_called_once_with(queue)
+
+    async def test_logs_published_during_greeting_are_delivered(self):
+        for last_event_id in (None, "10"):
+            with self.subTest(last_event_id=last_event_id):
+                broker = LogBroker()
+                stream = LogService(broker, {}).stream_log_events(last_event_id)
+                try:
+                    self.assertEqual(await anext(stream), ": connected\n\n")
+                    broker.publish(
+                        {"time": 12.5, "level": "INFO", "data": "during greeting"}
+                    )
+                    event = await asyncio.wait_for(anext(stream), timeout=1)
+                    self.assertEqual(
+                        event,
+                        'id: 12.5\ndata: {"type": "log", "time": 12.5, "level": "INFO", "data": "during greeting"}\n\n',
+                    )
+                    self.assertEqual(len(broker.subscribers), 1)
+                    self.assertTrue(broker.subscribers[0].empty())
+                finally:
+                    await stream.aclose()
+                self.assertEqual(broker.subscribers, [])
 
     async def test_cancelled_idle_stream_unregisters_subscription(self):
         queue = asyncio.Queue()

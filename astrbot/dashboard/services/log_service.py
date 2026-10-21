@@ -69,13 +69,13 @@ class LogService:
     ) -> AsyncGenerator[str, None]:
         queue = None
         try:
-            # Flush response headers through gzip before waiting for log events.
-            yield ": connected\n\n"
             if last_event_id:
                 async for event in self.replay_cached_logs(last_event_id):
                     yield event
 
             queue = self.log_broker.register()
+            # Flush response headers through gzip before waiting for log events.
+            yield ": connected\n\n"
             while True:
                 message = await queue.get()
                 current_ts = message.get("time", time.time())
