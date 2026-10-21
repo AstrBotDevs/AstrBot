@@ -87,11 +87,18 @@ async def live_logs(
 @router.get("/logs/export")
 async def export_logs(
     redact: bool = Query(default=True),
+    start_time: int | None = Query(default=None, ge=0),
+    end_time: int | None = Query(default=None, ge=0),
     _username: str = Depends(require_dashboard_user),
     service: LogService = Depends(get_service),
 ):
     try:
-        archive_path = await asyncio.to_thread(service.export_logs, redact=redact)
+        archive_path = await asyncio.to_thread(
+            service.export_logs,
+            redact=redact,
+            start_time=start_time,
+            end_time=end_time,
+        )
     except LogServiceError as exc:
         _raise_log_error(exc)
     return FileResponse(

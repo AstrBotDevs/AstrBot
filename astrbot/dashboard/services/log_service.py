@@ -16,6 +16,7 @@ from pathlib import Path
 from astrbot.core import LogBroker, logger
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import VERSION
+from astrbot.core.dashboard_assets import get_dashboard_version
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
 from astrbot.core.utils.storage_cleaner import StorageCleaner
 from astrbot.core.utils.trace_store import get_trace_store
@@ -28,11 +29,17 @@ class LogServiceError(Exception):
 
 class LogService:
     def __init__(
-        self, log_broker: LogBroker, config: AstrBotConfig, *, core=None
+        self,
+        log_broker: LogBroker,
+        config: AstrBotConfig,
+        *,
+        core=None,
+        dashboard_static_folder: str | None = None,
     ) -> None:
         self.log_broker = log_broker
         self.config = config
         self.core = core
+        self.dashboard_static_folder = dashboard_static_folder
         self._export_lock = threading.Lock()
 
     @staticmethod
@@ -86,11 +93,19 @@ class LogService:
             logger.error(f"获取日志历史失败: {exc}")
             raise LogServiceError(f"获取日志历史失败: {exc}") from exc
 
-    def export_logs(self, *, redact: bool = True) -> Path:
+    def export_logs(
+        self,
+        *,
+        redact: bool = True,
+        start_time: int | None = None,
+        end_time: int | None = None,
+    ) -> Path:
         """Build one diagnostic ZIP in a worker thread.
 
         Args:
             redact: Mask credentials unless the administrator explicitly opts out.
+            start_time: Inclusive minimum log or trace start time, in Unix seconds.
+            end_time: Inclusive maximum log or trace start time, in Unix seconds.
 
         Returns:
             Private temporary archive; the response removes it after delivery.
@@ -98,14 +113,29 @@ class LogService:
         Raises:
             LogServiceError: If an export is running or safe export is unavailable.
         """
+        if start_time is not None and end_time is not None and start_time > end_time:
+            raise LogServiceError("Start time must not be after end time")
         if not self._export_lock.acquire(blocking=False):
             raise LogServiceError("Another log export is already running")
         archive_path = None
         try:
             sections, redactor = collect_diagnostics(
-                self.config, self.core, redact=redact
+                self.config,
+                self.core,
+                redact=redact,
+                webui_version=asyncio.run(
+                    get_dashboard_version(self.dashboard_static_folder)
+                ),
             )
             cached = list(self.log_broker.log_cache)
+            if start_time is not None or end_time is not None:
+                cached = [
+                    item
+                    for item in cached
+                    if isinstance(item.get("time"), (int, float))
+                    and (start_time is None or item["time"] >= start_time)
+                    and (end_time is None or item["time"] <= end_time)
+                ]
             logs = [
                 str(item.get("data", ""))
                 for item in cached
@@ -131,6 +161,13 @@ class LogService:
                 "astrbot_version": VERSION,
                 "exported_at": time.strftime("%Y-%m-%d %H:%M:%S %z"),
                 "redacted": redact,
+                "time_range": {
+                    "start_time": start_time,
+                    "end_time": end_time,
+                    "disk_log_timezone": list(time.tzname),
+                    "undated_logs": "Only continuations of matching dated records are included when a range is selected.",
+                    "trace_selection": "Trace start time; matching traces retain their complete details.",
+                },
                 "privacy_notice": (
                     "Known credentials are masked and public IP addresses use consistent aliases. Local addresses, conversations and personal data may remain; review before sharing."
                     if redact
@@ -169,7 +206,9 @@ class LogService:
             if trace_path.is_file():
                 try:
                     store = get_trace_store(self.config)
-                    page = store.list_traces(limit=50)
+                    page = store.list_traces(
+                        limit=50, start_time=start_time, end_time=end_time
+                    )
                     history_bytes = 0
                     for summary in page["traces"]:
                         detail = store.get_trace(summary["trace_id"])
@@ -217,8 +256,8 @@ class LogService:
             )
             used_names = {
                 "manifest.json",
-                "memory/logs.txt",
-                "memory/traces.jsonl",
+                "logs/astrbot.in-memory.log",
+                "traces/history.in-memory.jsonl",
                 "traces/history.jsonl",
                 *sections,
             }
@@ -297,7 +336,13 @@ class LogService:
                                 )
                                 continue
                             with archive.open(arcname, "w", force_zip64=True) as target:
-                                truncated = redactor.copy_log(source, target, limit)
+                                truncated = redactor.copy_log(
+                                    source,
+                                    target,
+                                    limit,
+                                    start_time=start_time,
+                                    end_time=end_time,
+                                )
                             budget -= min(info.st_size, 64 * 1024 * 1024, budget)
                             if truncated:
                                 manifest["truncated"].append(arcname)
@@ -307,11 +352,11 @@ class LogService:
                             {"name": arcname, "reason": type(exc).__name__}
                         )
                 archive.writestr(
-                    "memory/logs.txt",
+                    "logs/astrbot.in-memory.log",
                     redactor.text("".join(f"{line}\n" for line in logs)),
                 )
                 archive.writestr(
-                    "memory/traces.jsonl",
+                    "traces/history.in-memory.jsonl",
                     "".join(
                         json.dumps(redactor.redact(trace), ensure_ascii=False) + "\n"
                         for trace in traces
