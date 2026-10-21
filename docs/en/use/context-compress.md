@@ -36,7 +36,7 @@ LLM compression adds a model request, which takes time and may incur a charge. S
 | Recent Context Token Ratio to Keep | Defaults to `0.15`: a budget of 15% of the current context's tokens is used to retain recent content unchanged. The range is `0–0.3`. AstrBot keeps whole turns rather than cutting at an exact token boundary; a positive ratio keeps at least the latest turn. |
 | Context Compression Instruction | Leave empty for the default prompt. A custom prompt can ask the summary to preserve the task goal, completed steps, key conclusions, file paths, and next actions. |
 
-The default summary focuses on the user's goal, task progress, conclusions, useful tool results, and materials already read so work can continue. If the selected compression model is unavailable, AstrBot tries the current chat model. If it cannot generate a summary, it falls back to removing older turns.
+The default summary focuses on the user's goal, task progress, conclusions, useful tool results, and materials already read so work can continue. If the selected compression model is unavailable, AstrBot tries the current chat model. If summary generation fails, AstrBot checks the uncompressed context against the chat model's configured context limit. It attempts the uncompressed request if the context is within that limit, or stops with an error if it exceeds the limit.
 
 ## When Context Is Processed
 
@@ -44,7 +44,7 @@ The default summary focuses on the user's goal, task progress, conclusions, usef
 
 AstrBot checks context **before every model request**, including follow-up requests after an Agent calls tools. The selected strategy is triggered when context usage exceeds approximately **82%** of the model's context window.
 
-AstrBot checks again after processing. If the context is still too long, it removes complete turns from the oldest first while keeping the latest turn. Tool calls and their results are handled together to avoid leaving incomplete call records.
+AstrBot checks again after successful compression. If the context is still too long, it removes complete turns from the oldest first while keeping the latest turn. Tool calls and their results are handled together to avoid leaving incomplete call records.
 
 If the latest turn alone is too large, automatic compression may still be unable to fit the request into the model's window. Reduce the size of the input or tool output, or choose a model with a larger context window.
 
@@ -81,6 +81,12 @@ Check that you edited the profile used by the current session and saved it. Toke
 ### Why Do I Still Get a Context Limit Error?
 
 Check the window sizes of both the chat model and the compression model. One large message, file, or tool result can make the latest turn exceed the limit on its own. Compression does not discard the current task indefinitely; reduce the input size and try again.
+
+### What If Compression Fails and the Context Exceeds the Limit?
+
+An error containing `Context compression failed and the context exceeds the model's maximum context length` means summary generation failed and the uncompressed context exceeds the chat model's configured context limit. AstrBot therefore stops the current request.
+
+Check the logs for the compression failure's cause; the underlying exception is also included at the end of the error message. Check the compression model's service availability, quota, and context window. Try selecting an available model with a large enough context window under **Model Provider ID for Context Compression**, save the configuration, and retry.
 
 ### How Do I Start Fresh?
 
