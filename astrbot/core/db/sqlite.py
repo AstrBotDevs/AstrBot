@@ -714,13 +714,12 @@ class SQLiteDatabase(BaseDatabase):
         async with self.get_db() as session:
             session: AsyncSession
             offset = (page - 1) * page_size
+            conversation_id = col(Preference.value)["val"].as_string()
 
             base_query = (
                 select(
                     col(Preference.scope_id).label("session_id"),
-                    func.json_extract(Preference.value, "$.val").label(
-                        "conversation_id",
-                    ),  # type: ignore
+                    conversation_id.label("conversation_id"),
                     col(ConversationV3.persona_id).label("persona_id"),
                     col(ConversationV3.title).label("title"),
                     col(Persona.persona_id).label("persona_name"),
@@ -728,11 +727,7 @@ class SQLiteDatabase(BaseDatabase):
                 .select_from(Preference)
                 .outerjoin(
                     ConversationV3,
-                    ConversationEvent,
-                    ConversationV3,
-                    ConversationEvent,
-                    func.json_extract(Preference.value, "$.val")
-                    == ConversationV3.conversation_id,
+                    conversation_id == ConversationV3.conversation_id,
                 )
                 .outerjoin(
                     Persona,
@@ -773,11 +768,7 @@ class SQLiteDatabase(BaseDatabase):
                 .select_from(Preference)
                 .outerjoin(
                     ConversationV3,
-                    ConversationEvent,
-                    ConversationV3,
-                    ConversationEvent,
-                    func.json_extract(Preference.value, "$.val")
-                    == ConversationV3.conversation_id,
+                    conversation_id == ConversationV3.conversation_id,
                 )
                 .outerjoin(
                     Persona,
