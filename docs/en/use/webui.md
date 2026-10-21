@@ -89,7 +89,7 @@ ChatUI supports these common workflows:
 - Edit a user message and continue generation from that point, or start a thread from a specific excerpt.
 - Switch between streaming/normal response modes and SSE/WebSocket transport modes.
 
-To return to the model configured in the selected profile, open the model selector and choose **None** (**Clear current selection**). This clears the override for the current conversation; other conversations retain their saved model choices. Logging out clears all saved ChatUI model choices in this browser.
+To return to the model configured in the selected profile, open the model selector and choose **Default model** (**Follow the selected profile's default model**). This clears the override for the current conversation; other conversations retain their saved model choices. Logging out clears all saved ChatUI model choices in this browser.
 
 > [!NOTE]
 > To keep message delivery ordered, keep only one ChatUI page open for the same browser session. If you open chat in multiple tabs, the system may ask you to reconnect.
