@@ -4442,6 +4442,7 @@ async def test_diagnostic_export_time_range_filters_logs_and_persisted_traces(
         + f"[{datetime.fromtimestamp(base + 3).isoformat(sep=' ')}] outside-after\n"
         "  outside traceback\n",
         encoding="utf-8",
+        newline="\n",
     )
     (logs_dir / "undated.log").write_text("unrelated undated log\n", encoding="utf-8")
     service.log_broker.publish({"time": base, "data": "outside-before"})
