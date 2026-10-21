@@ -966,17 +966,17 @@ const tokenUsageIndicator = computed(() => {
 
 function getSelectedProviderSelection() {
   const inputSelection = inputRef.value?.getCurrentSelection();
-  if (inputSelection?.providerId) {
+  if (
+    currentProviderId.value &&
+    inputSelection?.providerId === currentProviderId.value
+  ) {
     selectedTokenProviderId.value = inputSelection.providerId;
     return inputSelection;
   }
-  if (typeof window === "undefined") {
-    return { providerId: "", modelName: "" };
-  }
-  syncSelectedTokenProvider();
+  selectedTokenProviderId.value = currentProviderId.value;
   return {
-    providerId: localStorage.getItem("selectedProvider") || "",
-    modelName: localStorage.getItem("selectedProviderModel") || "",
+    providerId: currentProviderId.value,
+    modelName: currentModelName.value,
   };
 }
 
@@ -1011,8 +1011,12 @@ function writeSessionProviderSelection(
   sessionId: string,
   selection: { providerId?: string; modelName?: string } | null,
 ) {
-  if (!sessionId || !selection?.providerId) return;
+  if (!sessionId) return;
   try {
+    if (!selection?.providerId) {
+      localStorage.removeItem(SESSION_PROVIDER_STORAGE_PREFIX + sessionId);
+      return;
+    }
     localStorage.setItem(
       SESSION_PROVIDER_STORAGE_PREFIX + sessionId,
       JSON.stringify({
@@ -1027,7 +1031,6 @@ function writeSessionProviderSelection(
 
 // Remember the model picked by the user for the active session.
 watch([currentProviderId, currentModelName], ([providerId, modelName]) => {
-  if (!currSessionId.value || !providerId) return;
   writeSessionProviderSelection(currSessionId.value, {
     providerId,
     modelName,
@@ -1503,9 +1506,10 @@ async function selectSession(sessionId: string, pushRoute = true) {
     if (currSessionId.value !== sessionId) return;
   }
   const storedSelection = readSessionProviderSelection(sessionId);
-  if (storedSelection) {
-    setProviderSelection(storedSelection.providerId, storedSelection.modelName);
-  }
+  setProviderSelection(
+    storedSelection?.providerId || "",
+    storedSelection?.modelName || "",
+  );
   scrollToBottom(true);
   await focusChatInput();
 }
