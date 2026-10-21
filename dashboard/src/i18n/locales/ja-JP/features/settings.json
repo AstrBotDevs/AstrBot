@@ -86,7 +86,6 @@
       "custom": "カスタム",
       "customPlaceholder": "https://example.com/pypi/simple",
       "testConnection": "接続をテスト",
-      "testSpeed": "速度をテスト",
       "unavailable": "利用不可",
       "presets": {
         "official": "公式",
@@ -100,7 +99,6 @@
       "title": "GitHub ミラーを選択",
       "noProxy": "GitHub ミラーを使用しない",
       "testConnection": "接続をテスト",
-      "testSpeed": "速度をテスト",
       "unavailable": "利用不可",
       "custom": "カスタム",
       "customPlaceholder": "https://example.com"

@@ -3,12 +3,8 @@
         <div class="pypi-mirror__header">
             <h5 class="pypi-mirror__title">{{ tm('network.pypiMirror.label') }}</h5>
             <v-btn class="pypi-mirror__test-button" size="x-small" variant="tonal"
-                :loading="testingConnections" @click="testAllMirrors">
+                :loading="testing" @click="runTests">
                 {{ tm('network.pypiMirror.testConnection') }}
-            </v-btn>
-            <v-btn class="pypi-mirror__test-button" size="x-small" variant="tonal"
-                :loading="testingSpeed" @click="testAllSpeeds">
-                {{ tm('network.pypiMirror.testSpeed') }}
             </v-btn>
         </div>
         <v-radio-group class="mt-2" :model-value="activeKey" hide-details="true"
@@ -86,8 +82,7 @@ export default {
             customUrl: localStorage.getItem(CUSTOM_STORAGE_KEY) || "",
             status: {},
             speed: {},
-            testingConnections: false,
-            testingSpeed: false,
+            testing: false,
         }
     },
     watch: {
@@ -172,22 +167,34 @@ export default {
                 };
             }
         },
-        async testAllMirrors() {
-            this.testingConnections = true;
+        // One button runs both stages: latency for every source first, then
+        // throughput, so the speed test only ever starts after all latency
+        // results are in.
+        async runTests() {
+            this.testing = true;
 
             try {
-                const promises = this.mirrors.map((mirror) =>
-                    this.testMirror(mirror.url, mirror.key)
-                );
+                const targets = this.mirrors.map((mirror) => ({
+                    url: mirror.url,
+                    key: mirror.key,
+                }));
 
                 const customIndex = this.normalizeUrl(this.customUrl);
                 if (/^https?:\/\//i.test(customIndex)) {
-                    promises.push(this.testMirror(customIndex, "custom"));
+                    targets.push({ url: customIndex, key: "custom" });
                 }
 
-                await Promise.all(promises);
+                this.status = {};
+                this.speed = {};
+
+                await Promise.all(
+                    targets.map((target) => this.testMirror(target.url, target.key))
+                );
+                await Promise.all(
+                    targets.map((target) => this.measureMirror(target.url, target.key))
+                );
             } finally {
-                this.testingConnections = false;
+                this.testing = false;
             }
         },
         // Real download throughput in MB/s, measured by pulling an actual wheel
@@ -203,24 +210,6 @@ export default {
                         : 0;
             } catch (error) {
                 this.speed[speedKey] = 0;
-            }
-        },
-        async testAllSpeeds() {
-            this.testingSpeed = true;
-
-            try {
-                const promises = this.mirrors.map((mirror) =>
-                    this.measureMirror(mirror.url, mirror.key)
-                );
-
-                const customIndex = this.normalizeUrl(this.customUrl);
-                if (/^https?:\/\//i.test(customIndex)) {
-                    promises.push(this.measureMirror(customIndex, "custom"));
-                }
-
-                await Promise.all(promises);
-            } finally {
-                this.testingSpeed = false;
             }
         },
     },

@@ -6,17 +6,9 @@
                 class="proxy-selector__test-button"
                 size="x-small"
                 variant="tonal"
-                :loading="loadingTestingConnection"
-                @click="testAllProxies">
+                :loading="testing"
+                @click="runTests">
                 {{ tm('network.proxySelector.testConnection') }}
-            </v-btn>
-            <v-btn
-                class="proxy-selector__test-button"
-                size="x-small"
-                variant="tonal"
-                :loading="loadingTestingSpeed"
-                @click="testAllSpeeds">
-                {{ tm('network.proxySelector.testSpeed') }}
             </v-btn>
         </div>
         <v-radio-group class="proxy-selector__options mt-2" v-model="selection" hide-details="true">
@@ -104,8 +96,7 @@ export default {
             // switches and can still be read and tested while it is not selected.
             customProxyValue: "",
             radioValue: "0", // 0: 不使用, 1: 使用
-            loadingTestingConnection: false,
-            loadingTestingSpeed: false,
+            testing: false,
             testingProxies: {},
             proxyStatus: {},
             proxySpeed: {},
@@ -185,27 +176,39 @@ export default {
             }
         },
 
-        async testAllProxies() {
-            this.loadingTestingConnection = true;
+        // One button runs both stages: latency for every route first, then
+        // throughput, so the speed test only ever starts after all latency
+        // results are in.
+        async runTests() {
+            this.testing = true;
 
             try {
-                const promises = this.githubProxies.map((proxy, idx) =>
-                    this.testProxy(proxy, idx)
-                );
+                const targets = this.githubProxies.map((proxy, idx) => ({
+                    url: proxy,
+                    key: String(idx),
+                }));
                 // An empty proxy_url tests the direct route, so "no proxy" is
                 // measured on the same footing as the mirrors.
-                promises.push(this.testProxy("", "direct"));
+                targets.push({ url: "", key: "direct" });
 
                 const customProxy = (this.customProxyValue || "")
                     .trim()
                     .replace(/\/+$/, "");
                 if (/^https?:\/\//i.test(customProxy)) {
-                    promises.push(this.testProxy(customProxy, "custom"));
+                    targets.push({ url: customProxy, key: "custom" });
                 }
 
-                await Promise.all(promises);
+                this.proxyStatus = {};
+                this.proxySpeed = {};
+
+                await Promise.all(
+                    targets.map((target) => this.testProxy(target.url, target.key))
+                );
+                await Promise.all(
+                    targets.map((target) => this.measureProxy(target.url, target.key))
+                );
             } finally {
-                this.loadingTestingConnection = false;
+                this.testing = false;
             }
         },
         // Real download throughput of a repository asset in MB/s, so the number
@@ -221,29 +224,6 @@ export default {
                         : 0;
             } catch (error) {
                 this.proxySpeed[speedKey] = 0;
-            }
-        },
-        async testAllSpeeds() {
-            this.loadingTestingSpeed = true;
-
-            try {
-                const promises = this.githubProxies.map((proxy, idx) =>
-                    this.measureProxy(proxy, String(idx))
-                );
-                // An empty proxy_url tests the direct route, so "no proxy" is
-                // measured on the same footing as the mirrors.
-                promises.push(this.measureProxy("", "direct"));
-
-                const customProxy = (this.customProxyValue || "")
-                    .trim()
-                    .replace(/\/+$/, "");
-                if (/^https?:\/\//i.test(customProxy)) {
-                    promises.push(this.measureProxy(customProxy, "custom"));
-                }
-
-                await Promise.all(promises);
-            } finally {
-                this.loadingTestingSpeed = false;
             }
         },
     },
@@ -370,6 +350,7 @@ export default {
     display: flex;
     flex: 0 0 auto;
     align-items: center;
+    gap: 8px;
 }
 
 /* A fixed width keeps this box as long as the PyPI one, and stops percentage

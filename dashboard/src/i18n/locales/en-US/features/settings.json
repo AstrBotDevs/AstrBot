@@ -86,7 +86,6 @@
       "custom": "Custom",
       "customPlaceholder": "https://example.com/pypi/simple",
       "testConnection": "Test Connectivity",
-      "testSpeed": "Test Speed",
       "unavailable": "Unavailable",
       "presets": {
         "official": "Official",
@@ -100,7 +99,6 @@
       "title": "Select GitHub Mirror",
       "noProxy": "Don't use GitHub Mirror",
       "testConnection": "Test Connectivity",
-      "testSpeed": "Test Speed",
       "unavailable": "Unavailable",
       "custom": "Custom",
       "customPlaceholder": "https://example.com"
