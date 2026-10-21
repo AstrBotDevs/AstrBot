@@ -172,9 +172,7 @@ class EmbeddingStorage:
         vector = np.asarray(vector, dtype=np.float32).ravel()
         if not np.all(np.isfinite(vector)):
             nan_count = int(np.sum(~np.isfinite(vector)))
-            raise RuntimeError(
-                f"查询向量包含 {nan_count} 个非有限值 (NaN/Inf)。"
-            )
+            raise RuntimeError(f"查询向量包含 {nan_count} 个非有限值 (NaN/Inf)。")
         if vector.shape[0] != self.dimension:
             raise ValueError(
                 f"向量维度不匹配, 期望: {self.dimension}, 实际: {vector.shape[0]}",

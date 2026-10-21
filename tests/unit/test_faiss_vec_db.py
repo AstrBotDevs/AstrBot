@@ -1,5 +1,5 @@
 import asyncio
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, call
 
 import numpy as np
 import pytest
@@ -137,6 +137,62 @@ async def test_insert_batch_rejects_embedding_content_count_mismatch() -> None:
     }
     vec_db.embedding_provider.get_embeddings_batch.assert_not_awaited()
     vec_db.document_storage.insert_documents_batch.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("int_ids", [[], [11], [11, 12, 13]])
+async def test_insert_batch_rolls_back_mismatched_internal_ids(int_ids) -> None:
+    vec_db = FaissVecDB.__new__(FaissVecDB)
+    vec_db.embedding_provider = AsyncMock()
+    vec_db.embedding_provider.get_embeddings_batch.return_value = [[0.1], [0.2]]
+    vec_db.document_storage = AsyncMock()
+    vec_db.document_storage.insert_documents_batch.return_value = int_ids
+    vec_db.embedding_storage = AsyncMock()
+    vec_db.embedding_storage.dimension = 1
+
+    with pytest.raises(KnowledgeBaseUploadError) as exc_info:
+        await vec_db.insert_batch(["chunk-1", "chunk-2"], ids=["doc-1", "doc-2"])
+
+    assert exc_info.value.stage == "storage"
+    assert exc_info.value.details == {
+        "expected_contents": 2,
+        "actual_int_ids": len(int_ids),
+    }
+    vec_db.embedding_storage.insert_batch.assert_not_awaited()
+    if int_ids:
+        vec_db.embedding_storage.delete.assert_awaited_once_with(int_ids)
+    else:
+        vec_db.embedding_storage.delete.assert_not_awaited()
+    assert vec_db.document_storage.delete_document_by_doc_id.await_args_list == [
+        call("doc-1"),
+        call("doc-2"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_insert_batch_rolls_back_faiss_failure_with_diagnostics() -> None:
+    vec_db = FaissVecDB.__new__(FaissVecDB)
+    vec_db.embedding_provider = AsyncMock()
+    vec_db.embedding_provider.get_embeddings_batch.return_value = [[0.1], [0.2]]
+    vec_db.document_storage = AsyncMock()
+    vec_db.document_storage.insert_documents_batch.return_value = [11, 12]
+    vec_db.embedding_storage = AsyncMock()
+    vec_db.embedding_storage.dimension = 1
+    error = RuntimeError("index write failed")
+    vec_db.embedding_storage.insert_batch.side_effect = error
+
+    with pytest.raises(KnowledgeBaseUploadError) as exc_info:
+        await vec_db.insert_batch(["chunk-1", "chunk-2"], ids=["doc-1", "doc-2"])
+
+    assert exc_info.value.stage == "storage"
+    assert exc_info.value.__cause__ is error
+    assert exc_info.value.details["cause"] == "index write failed"
+    assert "RuntimeError: index write failed" in exc_info.value.details["traceback"]
+    vec_db.embedding_storage.delete.assert_awaited_once_with([11, 12])
+    assert vec_db.document_storage.delete_document_by_doc_id.await_args_list == [
+        call("doc-1"),
+        call("doc-2"),
+    ]
 
 
 @pytest.mark.asyncio
