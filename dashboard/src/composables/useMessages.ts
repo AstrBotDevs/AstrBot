@@ -1,6 +1,8 @@
 import { computed, onBeforeUnmount, reactive, ref, type Ref } from "vue";
+import { useI18n } from "@/i18n/composables";
 import { chatApi, fileApi } from "@/api/v1";
 import { fetchWithAuth } from "@/api/http";
+import type { Session } from "@/composables/useSessions";
 
 export type TransportMode = "sse" | "websocket";
 
@@ -160,10 +162,12 @@ interface UseMessagesOptions {
 }
 
 export function useMessages(options: UseMessagesOptions) {
+  const { locale } = useI18n();
   const loadingMessagesState = ref(false);
   const sending = ref(false);
   const messagesBySession = reactive<Record<string, ChatRecord[]>>({});
   const loadedSessions = reactive<Record<string, boolean>>({});
+  const sessionDetails = reactive<Record<string, Session>>({});
   const paginationBySession = reactive<Record<string, HistoryPaginationState>>(
     {},
   );
@@ -358,6 +362,7 @@ export function useMessages(options: UseMessagesOptions) {
         };
       }
       sessionProjects[sessionId] = normalizeSessionProject(payload.project);
+      if (payload.session) sessionDetails[sessionId] = payload.session;
       loadedSessions[sessionId] = true;
       if (resumeRuns && Array.isArray(payload.active_runs)) {
         await restoreNextActiveRun(sessionId, payload.active_runs);
@@ -696,6 +701,7 @@ export function useMessages(options: UseMessagesOptions) {
             selected_provider: selectedProvider,
             selected_model: selectedModel,
             flags: buildChatRequestFlags(enableStreaming, enableReasoning),
+            locale: locale.value,
           }),
           signal: abort.signal,
         },
@@ -818,6 +824,7 @@ export function useMessages(options: UseMessagesOptions) {
         session_id: sessionId,
         message: parts.map(partToPayload),
         flags: buildChatRequestFlags(enableStreaming, enableReasoning),
+        locale: locale.value,
         selected_provider: selectedProvider,
         selected_model: selectedModel,
         _skip_user_history: skipUserHistory,
@@ -969,6 +976,7 @@ export function useMessages(options: UseMessagesOptions) {
       message_id: messageId,
       message: parts.map(partToPayload),
       flags: buildChatRequestFlags(enableStreaming, enableReasoning),
+      locale: locale.value,
       selected_provider: selectedProvider,
       selected_model: selectedModel,
     });
@@ -1337,6 +1345,7 @@ export function useMessages(options: UseMessagesOptions) {
     sending,
     messagesBySession,
     loadedSessions,
+    sessionDetails,
     paginationBySession,
     sessionProjects,
     activeMessages,

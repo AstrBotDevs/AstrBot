@@ -5,6 +5,8 @@
   "copy": "コピー",
   "copied": "コピーしました",
   "copyFailed": "コピーに失敗しました",
+  "collapse": "折りたたむ",
+  "expand": "展開する",
   "delete": "削除",
   "edit": "編集",
   "add": "追加",
@@ -133,6 +135,7 @@
       "jsonValue": "JSON"
     }
   },
+  "unauthorized": "認証されていません。もう一度ログインしてください",
   "firstNotice": {
     "title": "初回のお知らせ",
     "loading": "初回のお知らせを読み込んでいます…",

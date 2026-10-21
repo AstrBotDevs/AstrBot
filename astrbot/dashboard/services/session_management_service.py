@@ -130,9 +130,8 @@ class SessionManagementService:
                 else:
                     umo_rules[umo_id][pref.key] = pref.value["val"]
 
-        alias_map = await self.get_umo_alias_map(list(umo_rules.keys()))
-
         if search:
+            alias_map = await self.get_umo_alias_map(list(umo_rules.keys()))
             search_lower = search.lower()
             filtered_rules = {}
             for umo_id, rules in umo_rules.items():

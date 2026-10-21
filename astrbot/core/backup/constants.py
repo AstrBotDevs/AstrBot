@@ -6,19 +6,24 @@
 from sqlmodel import SQLModel
 
 from astrbot.core.db.po import (
+    ApiKey,
     Attachment,
     ChatUIProject,
     CommandConfig,
     CommandConflict,
     ConversationEvent,
     ConversationV3,
+    CronJob,
+    DashboardTrustedDevice,
     Persona,
     PersonaFolder,
     PlatformMessageHistory,
     PlatformSession,
     PlatformStat,
     Preference,
+    ProviderStat,
     SessionProjectRelation,
+    UmoAlias,
     WebChatThread,
 )
 from astrbot.core.knowledge_base.models import (
@@ -45,6 +50,8 @@ MAIN_DB_MODELS: dict[str, type[SQLModel]] = {
     "platform_stats": PlatformStat,
     "conversations_v3": ConversationV3,
     "conversation_events": ConversationEvent,
+    "provider_stats": ProviderStat,
+    "cron_jobs": CronJob,
     "personas": Persona,
     "persona_folders": PersonaFolder,
     "preferences": Preference,
@@ -56,6 +63,13 @@ MAIN_DB_MODELS: dict[str, type[SQLModel]] = {
     "attachments": Attachment,
     "command_configs": CommandConfig,
     "command_conflicts": CommandConflict,
+    "umo_aliases": UmoAlias,
+    "api_keys": ApiKey,
+}
+
+# Device trust must be re-established after restore, never copied from a backup.
+EXCLUDED_MAIN_DB_MODELS: dict[str, type[SQLModel]] = {
+    "dashboard_trusted_devices": DashboardTrustedDevice,
 }
 
 # 知识库元数据模型类映射

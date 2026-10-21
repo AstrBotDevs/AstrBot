@@ -1,7 +1,6 @@
 """如需修改配置，请在 `data/cmd_config.json` 中修改或者在管理面板中可视化修改。"""
 
 import os
-import platform
 
 from astrbot import __version__
 from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
@@ -11,26 +10,25 @@ from .agent_runner import get_agent_runner_config_default
 
 
 def get_local_permission_defaults(system: str | None = None) -> dict:
-    """Return fresh Local permission defaults for the operating system.
+    """Return fresh Local permission defaults shared by all operating systems.
 
     Args:
-        system: Operating system name, or None to use the current system.
+        system: Retained for callers supplying an operating system name.
 
     Returns:
-        Per-role policies. Windows disables member access and gives admins
-        unrestricted access because workspace isolation is unavailable.
+        Workspace files without execution for members and unrestricted local
+        execution for administrators. Neither policy requires process isolation.
     """
-    windows = (system or platform.system()).lower() == "windows"
     return {
         "member": {
             "allow_execution": False,
             "allow_network": False,
-            "filesystem_scope": "none" if windows else "workspace",
+            "filesystem_scope": "workspace",
         },
         "admin": {
             "allow_execution": True,
             "allow_network": True,
-            "filesystem_scope": "host" if windows else "workspace",
+            "filesystem_scope": "host",
         },
     }
 
@@ -90,7 +88,7 @@ WEBHOOK_SUPPORTED_PLATFORMS = [
 
 # 默认配置
 DEFAULT_CONFIG = {
-    "config_version": 4,
+    "config_version": 5,
     "platform_settings": {
         "unique_session": False,
         "rate_limit": {
@@ -150,6 +148,8 @@ DEFAULT_CONFIG = {
         "websearch_firecrawl_key": [],
         "websearch_exa_key": [],
         "websearch_anysearch_key": [],
+        "websearch_deepseek_key": [],
+        "websearch_serpapi_key": [],
         "web_search_link": False,
         "display_reasoning_text": False,
         "identifier": False,
@@ -309,9 +309,9 @@ DEFAULT_CONFIG = {
     "log_file_max_mb": 20,
     "temp_dir_max_size": 1024,
     "trace_enable": False,
-    "trace_log_enable": False,
-    "trace_log_path": "logs/astrbot.trace.log",
-    "trace_log_max_mb": 20,
+    "trace_db_path": "logs/traces.db",
+    "trace_db_max_mb": 80,
+    "trace_retention_days": 7,
     "pip_install_arg": "",
     "pypi_index_url": "https://mirrors.aliyun.com/pypi/simple/",
     "persona": [],  # deprecated
@@ -376,16 +376,6 @@ CONFIG_METADATA_2 = {
                         "ws_reverse_port": 6199,
                         "ws_reverse_token": "",
                     },
-                    "个人微信": {
-                        "id": "weixin_personal",
-                        "type": "weixin_oc",
-                        "enable": True,
-                        "weixin_oc_base_url": "https://ilinkai.weixin.qq.com",
-                        "weixin_oc_bot_type": "3",
-                        "weixin_oc_qr_poll_interval": 1,
-                        "weixin_oc_long_poll_timeout_ms": 35_000,
-                        "weixin_oc_api_timeout_ms": 120_000,
-                    },
                     "飞书(Lark)": {
                         "id": "lark",
                         "type": "lark",
@@ -397,6 +387,16 @@ CONFIG_METADATA_2 = {
                         "webhook_uuid": "",
                         "lark_encrypt_key": "",
                         "lark_verification_token": "",
+                    },
+                    "个人微信": {
+                        "id": "weixin_personal",
+                        "type": "weixin_oc",
+                        "enable": True,
+                        "weixin_oc_base_url": "https://ilinkai.weixin.qq.com",
+                        "weixin_oc_bot_type": "3",
+                        "weixin_oc_qr_poll_interval": 1,
+                        "weixin_oc_long_poll_timeout_ms": 35_000,
+                        "weixin_oc_api_timeout_ms": 120_000,
                     },
                     "企业微信 (智能机器人)": {
                         "id": "wecom_ai_bot",
@@ -435,14 +435,6 @@ CONFIG_METADATA_2 = {
                         "callback_server_host": "0.0.0.0",
                         "port": 6195,
                     },
-                    "钉钉(DingTalk)": {
-                        "id": "dingtalk",
-                        "type": "dingtalk",
-                        "enable": True,
-                        "client_id": "",
-                        "client_secret": "",
-                        "card_template_id": "",
-                    },
                     "微信公众平台": {
                         "id": "weixin_official_account",
                         "type": "weixin_official_account",
@@ -458,11 +450,19 @@ CONFIG_METADATA_2 = {
                         "port": 6194,
                         "active_send_mode": False,
                     },
+                    "钉钉(DingTalk)": {
+                        "id": "dingtalk",
+                        "type": "dingtalk",
+                        "enable": True,
+                        "client_id": "",
+                        "client_secret": "",
+                        "card_template_id": "",
+                    },
                     "Telegram": {
                         "id": "telegram",
                         "type": "telegram",
                         "enable": True,
-                        "telegram_token": "your_bot_token",
+                        "telegram_token": "",
                         "start_message": "Hello, I'm AstrBot!",
                         "telegram_api_base_url": "https://api.telegram.org/bot",
                         "telegram_file_base_url": "https://api.telegram.org/file/bot",
@@ -1240,7 +1240,7 @@ CONFIG_METADATA_2 = {
                     "id_whitelist": {
                         "type": "list",
                         "items": {"type": "string"},
-                        "hint": "只处理填写的 ID 发来的消息事件，为空时不启用。可使用 /sid 指令获取在平台上的会话 ID(类似 abc:GroupMessage:123)。管理员可在 WebUI 的平台设置中管理白名单",
+                        "hint": "只处理填写的 ID 发来的消息事件，为空时不启用。可使用 /sid 指令获取在平台上的会话 ID(类似 abc:GroupMessage:123)。管理员可在 WebUI 的配置文件 -> 访问控制 -> 白名单中管理白名单。",
                     },
                     "id_whitelist_log": {
                         "type": "bool",
@@ -1995,7 +1995,7 @@ CONFIG_METADATA_2 = {
                         "enable": True,
                         "embedding_api_key": "",
                         "embedding_api_base": "",
-                        "embedding_model": "gemini-embedding-exp-03-07",
+                        "embedding_model": "gemini-embedding-001",
                         "embedding_dimensions": 768,
                         "timeout": 20,
                         "proxy": "",
@@ -3236,15 +3236,10 @@ CONFIG_METADATA_2 = {
             "log_file_path": {"type": "string", "condition": {"log_file_enable": True}},
             "log_file_max_mb": {"type": "int", "condition": {"log_file_enable": True}},
             "temp_dir_max_size": {"type": "int"},
-            "trace_log_enable": {"type": "bool"},
-            "trace_log_path": {
-                "type": "string",
-                "condition": {"trace_log_enable": True},
-            },
-            "trace_log_max_mb": {
-                "type": "int",
-                "condition": {"trace_log_enable": True},
-            },
+            "trace_enable": {"type": "bool"},
+            "trace_db_path": {"type": "string"},
+            "trace_db_max_mb": {"type": "int"},
+            "trace_retention_days": {"type": "int"},
             "t2i_strategy": {
                 "type": "string",
                 "options": ["remote", "local"],
@@ -3284,7 +3279,7 @@ Dashboard locale.
 """
 CONFIG_METADATA_3 = {
     "ai_group": {
-        "name": "AI 配置",
+        "name": "AI",
         "metadata": {
             "agent_runner": {
                 "description": "Agent 执行方式",
@@ -3549,7 +3544,7 @@ CONFIG_METADATA_3 = {
                         "description": "图片转述模型",
                         "type": "string",
                         "_special": "select_provider",
-                        "hint": "留空代表不使用，可用于非多模态模型",
+                        "hint": "当对话模型不支持图片输入时，调用图片转述模型来获得图片描述。留空代表不使用。",
                     },
                     "provider_stt_settings.enable": {
                         "description": "语音识别",
@@ -3559,7 +3554,7 @@ CONFIG_METADATA_3 = {
                     "provider_stt_settings.provider_id": {
                         "description": "默认语音转文本模型",
                         "type": "string",
-                        "hint": "用户也可使用 /provider 指令单独选择会话的 STT 模型。",
+                        "hint": "也可使用 /provider 指令单独选择会话的模型。",
                         "_special": "select_provider_stt",
                         "condition": {
                             "provider_stt_settings.enable": True,
@@ -3572,6 +3567,7 @@ CONFIG_METADATA_3 = {
                     },
                     "provider_tts_settings.provider_id": {
                         "description": "默认文本转语音模型",
+                        "hint": "也可使用 /provider 指令单独选择会话的模型。",
                         "type": "string",
                         "_special": "select_provider_tts",
                         "condition": {
@@ -3580,6 +3576,7 @@ CONFIG_METADATA_3 = {
                     },
                     "provider_tts_settings.trigger_probability": {
                         "description": "TTS 触发概率",
+                        "hint": "采用随机概率触发语音回复。",
                         "type": "float",
                         "slider": {"min": 0, "max": 1, "step": 0.05},
                         "condition": {
@@ -3588,6 +3585,7 @@ CONFIG_METADATA_3 = {
                     },
                     "provider_settings.image_caption_prompt": {
                         "description": "图片转述提示词",
+                        "hint": "用于图片转述模型的提示词。",
                         "type": "text",
                         "collapsed": True,
                     },
@@ -3673,6 +3671,8 @@ CONFIG_METADATA_3 = {
                         "description": "网页搜索提供商",
                         "type": "string",
                         "options": [
+                            "serpapi",
+                            "deepseek",
                             "tavily",
                             "baidu_ai_search",
                             "bocha",
@@ -3680,6 +3680,28 @@ CONFIG_METADATA_3 = {
                             "firecrawl",
                             "exa",
                             "anysearch",
+                        ],
+                        "labels": [
+                            "SerpApi",
+                            "DeepSeek Search API",
+                            "Tavily",
+                            "Baidu AI Search",
+                            "Bocha",
+                            "Brave",
+                            "Firecrawl",
+                            "Exa",
+                            "AnySearch",
+                        ],
+                        "subtitles": [
+                            "Google 网页、图片、学术和财经搜索",
+                            "DeepSeek 官方搜索接口",
+                            "",
+                            "",
+                            "",
+                            "",
+                            "",
+                            "",
+                            "",
                         ],
                         "condition": {
                             "provider_settings.web_search": True,
@@ -3760,6 +3782,28 @@ CONFIG_METADATA_3 = {
                             "provider_settings.web_search": True,
                         },
                     },
+                    "provider_settings.websearch_deepseek_key": {
+                        "description": "DeepSeek API Key",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "Configure a DeepSeek API key for search and page extraction. Multiple keys rotate. Get a key: [https://platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys)",
+                        "secret": True,
+                        "condition": {
+                            "provider_settings.websearch_provider": "deepseek",
+                            "provider_settings.web_search": True,
+                        },
+                    },
+                    "provider_settings.websearch_serpapi_key": {
+                        "description": "SerpApi API Key",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "支持 Google 网页、图片、学术和财经搜索。可添加多个 Key 轮询。获取 Key：[https://serpapi.com/manage-api-key](https://serpapi.com/manage-api-key)",
+                        "secret": True,
+                        "condition": {
+                            "provider_settings.websearch_provider": "serpapi",
+                            "provider_settings.web_search": True,
+                        },
+                    },
                     "provider_settings.web_search_link": {
                         "description": "显示来源引用",
                         "type": "bool",
@@ -3825,7 +3869,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.computer_use_require_admin": {
                         "description": "沙箱能力需要 AstrBot 管理员权限",
                         "type": "bool",
-                        "hint": "开启后，需要 AstrBot 管理员权限才能调用远程沙箱能力。在平台配置->管理员中可添加管理员。使用 /sid 指令查看管理员 ID。",
+                        "hint": "开启后，需要 AstrBot 管理员权限才能调用远程沙箱能力。在配置文件 -> 访问控制 -> 管理员 -> 管理员 ID 中可添加管理员。给机器人发送 /sid 指令以获取 ID。",
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
                         },
@@ -4105,6 +4149,7 @@ CONFIG_METADATA_3 = {
                 "items": {
                     "provider_settings.display_reasoning_text": {
                         "description": "显示思考内容",
+                        "hint": "显示模型的思维链信息到最终回复中。",
                         "type": "bool",
                         "condition": {
                             "agent_runner.runner_type": "local",
@@ -4112,6 +4157,7 @@ CONFIG_METADATA_3 = {
                     },
                     "provider_settings.streaming_response": {
                         "description": "流式输出",
+                        "hint": "在受支持的聊天平台中以打字机的形式输出响应。",
                         "type": "bool",
                     },
                     "provider_settings.unsupported_streaming_strategy": {
@@ -4127,23 +4173,24 @@ CONFIG_METADATA_3 = {
                     "provider_settings.identifier": {
                         "description": "用户识别",
                         "type": "bool",
-                        "hint": "启用后，会在提示词前包含用户 ID 信息。",
+                        "hint": "在用户提示词前带上用户 ID 信息。",
                     },
                     "provider_settings.group_name_display": {
                         "description": "显示群名称",
                         "type": "bool",
-                        "hint": "启用后，在支持的平台(OneBot v11)上会在提示词前包含群名称信息。",
+                        "hint": "在受支持的消息平台的群聊中的用户提示词前带上群名称信息。",
                     },
                     "provider_settings.datetime_system_prompt": {
                         "description": "现实世界时间感知",
                         "type": "bool",
-                        "hint": "启用后，会在系统提示词中附带当前时间信息。",
+                        "hint": "在用户提示词中带上当前的时间信息。",
                         "condition": {
                             "agent_runner.runner_type": "local",
                         },
                     },
                     "provider_settings.show_tool_use_status": {
                         "description": "输出工具调用信息",
+                        "hint": "有工具调用时，同时发送带有工具调用名字的消息。",
                         "type": "bool",
                         "condition": {
                             "agent_runner.runner_type": "local",
@@ -4280,17 +4327,12 @@ CONFIG_METADATA_3 = {
         },
     },
     "platform_group": {
-        "name": "平台配置",
+        "name": "平台与消息",
         "metadata": {
             "general": {
                 "description": "基本",
                 "type": "object",
                 "items": {
-                    "admins_id": {
-                        "description": "管理员 ID",
-                        "type": "list",
-                        "items": {"type": "string"},
-                    },
                     "platform_settings.unique_session": {
                         "description": "隔离对话",
                         "type": "bool",
@@ -4298,67 +4340,44 @@ CONFIG_METADATA_3 = {
                     },
                     "wake_prefix": {
                         "description": "唤醒词",
+                        "hint": "唤醒机器人的消息前缀的列表。也可以通过 @ 机器人来唤醒。",
                         "type": "list",
                         "items": {"type": "string"},
                     },
                     "platform_settings.friend_message_needs_wake_prefix": {
                         "description": "私聊消息需要唤醒词",
+                        "hint": "私聊消息也必须带上唤醒前缀才能唤醒机器人。",
                         "type": "bool",
                     },
                     "platform_settings.reply_prefix": {
                         "description": "回复时的文本前缀",
+                        "hint": "回复中附带的文本前缀。",
                         "type": "string",
                     },
                     "platform_settings.reply_with_mention": {
                         "description": "回复时 @ 发送人",
+                        "hint": "回复时提及发送人。",
                         "type": "bool",
                     },
                     "platform_settings.reply_with_quote": {
                         "description": "回复时引用发送人消息",
+                        "hint": "回复时引用发送人的对应消息。",
                         "type": "bool",
                     },
                     "platform_settings.forward_threshold": {
                         "description": "转发消息的字数阈值",
+                        "hint": "在受支持的平台上，当回复消息过长时，采用 “合并消息转发” 的方式发送消息。",
                         "type": "int",
                     },
                     "platform_settings.empty_mention_waiting": {
                         "description": "只 @ 机器人是否触发等待",
+                        "hint": "当发送一条只有提及机器人的消息时，是否在接下来的 1 分钟内保持唤醒状态等待用户的第二条消息。",
                         "type": "bool",
                     },
                     "disable_builtin_commands": {
                         "description": "禁用自带指令",
                         "type": "bool",
                         "hint": "禁用所有 AstrBot 的自带指令，如 help, sid, new 等。",
-                    },
-                },
-            },
-            "whitelist": {
-                "description": "白名单",
-                "type": "object",
-                "items": {
-                    "platform_settings.enable_id_white_list": {
-                        "description": "启用白名单",
-                        "type": "bool",
-                        "hint": "启用后，只有在白名单内的会话会被响应。",
-                    },
-                    "platform_settings.id_whitelist": {
-                        "description": "白名单 ID 列表",
-                        "type": "list",
-                        "items": {"type": "string"},
-                        "hint": "使用 /sid 获取 ID。当白名单列表为空时，代表不启用白名单（即所有 ID 都在白名单内）。",
-                    },
-                    "platform_settings.id_whitelist_log": {
-                        "description": "输出日志",
-                        "type": "bool",
-                        "hint": "启用后，当一条消息没通过白名单时，会输出 INFO 级别的日志。",
-                    },
-                    "platform_settings.wl_ignore_admin_on_group": {
-                        "description": "管理员群组消息无视 ID 白名单",
-                        "type": "bool",
-                    },
-                    "platform_settings.wl_ignore_admin_on_friend": {
-                        "description": "管理员私聊消息无视 ID 白名单",
-                        "type": "bool",
                     },
                 },
             },
@@ -4429,20 +4448,6 @@ CONFIG_METADATA_3 = {
                     },
                 },
             },
-            "t2i": {
-                "description": "文本转图像",
-                "type": "object",
-                "items": {
-                    "t2i": {
-                        "description": "文本转图像输出",
-                        "type": "bool",
-                    },
-                    "t2i_word_threshold": {
-                        "description": "文本转图像字数阈值",
-                        "type": "int",
-                    },
-                },
-            },
             "others": {
                 "description": "其他配置",
                 "type": "object",
@@ -4502,8 +4507,55 @@ CONFIG_METADATA_3 = {
             },
         },
     },
+    "access_group": {
+        "name": "访问控制",
+        "metadata": {
+            "admins": {
+                "description": "管理员",
+                "type": "object",
+                "items": {
+                    "admins_id": {
+                        "description": "管理员 ID",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "给机器人发送 /sid 指令以获取 ID。",
+                    },
+                },
+            },
+            "whitelist": {
+                "description": "白名单",
+                "type": "object",
+                "items": {
+                    "platform_settings.enable_id_white_list": {
+                        "description": "启用白名单",
+                        "type": "bool",
+                        "hint": "启用后,只有在白名单内的会话会被响应。",
+                    },
+                    "platform_settings.id_whitelist": {
+                        "description": "白名单 ID 列表",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "给机器人发送 /sid 指令以获取 ID。为空时代表不启用白名单功能。",
+                    },
+                    "platform_settings.id_whitelist_log": {
+                        "description": "输出拦截日志",
+                        "type": "bool",
+                        "hint": "输出未通过白名单校验的消息的日志。",
+                    },
+                    "platform_settings.wl_ignore_admin_on_group": {
+                        "description": "管理员群组消息无视 ID 白名单",
+                        "type": "bool",
+                    },
+                    "platform_settings.wl_ignore_admin_on_friend": {
+                        "description": "管理员私聊消息无视 ID 白名单",
+                        "type": "bool",
+                    },
+                },
+            },
+        },
+    },
     "plugin_group": {
-        "name": "插件配置",
+        "name": "插件",
         "metadata": {
             "plugin": {
                 "description": "插件",
@@ -4528,23 +4580,31 @@ CONFIG_METADATA_3 = {
                 "items": {
                     "platform_settings.segmented_reply.enable": {
                         "description": "启用分段回复",
+                        "hint": "以分段输出的方式发送回复消息。",
                         "type": "bool",
                     },
                     "platform_settings.segmented_reply.only_llm_result": {
                         "description": "仅对 LLM 结果分段",
                         "type": "bool",
+                        "condition": {
+                            "platform_settings.segmented_reply.enable": True,
+                        },
                     },
                     "platform_settings.segmented_reply.interval_method": {
                         "description": "间隔方法。",
                         "hint": "random 为随机时间，log 为根据消息长度计算，$y=log_<log_base>(x)$，x为字数，y的单位为秒。",
                         "type": "string",
                         "options": ["random", "log"],
+                        "condition": {
+                            "platform_settings.segmented_reply.enable": True,
+                        },
                     },
                     "platform_settings.segmented_reply.interval": {
                         "description": "随机间隔时间",
                         "type": "string",
                         "hint": "格式：最小值,最大值（如：1.5,3.5）",
                         "condition": {
+                            "platform_settings.segmented_reply.enable": True,
                             "platform_settings.segmented_reply.interval_method": "random",
                         },
                     },
@@ -4553,6 +4613,7 @@ CONFIG_METADATA_3 = {
                         "type": "float",
                         "hint": "对数间隔的底数，默认为 2.6。取值范围为 1.0-10.0。",
                         "condition": {
+                            "platform_settings.segmented_reply.enable": True,
                             "platform_settings.segmented_reply.interval_method": "log",
                         },
                     },
@@ -4560,18 +4621,25 @@ CONFIG_METADATA_3 = {
                         "description": "分段回复字数阈值",
                         "hint": "分段回复的字数上限。只有字数小于此值的消息才会被分段，超过此值的长消息将直接发送（不分段）。默认为 150",
                         "type": "int",
+                        "condition": {
+                            "platform_settings.segmented_reply.enable": True,
+                        },
                     },
                     "platform_settings.segmented_reply.split_mode": {
                         "description": "分段模式",
                         "type": "string",
                         "options": ["regex", "words"],
                         "labels": ["正则表达式", "分段词列表"],
+                        "condition": {
+                            "platform_settings.segmented_reply.enable": True,
+                        },
                     },
                     "platform_settings.segmented_reply.regex": {
                         "description": "分段正则表达式",
                         "hint": "用于分隔一段消息。默认情况下会根据句号、问号等标点符号分隔。如填写 `[。？！]` 将移除所有的句号、问号、感叹号。re.findall(r'<regex>', text)",
                         "type": "string",
                         "condition": {
+                            "platform_settings.segmented_reply.enable": True,
                             "platform_settings.segmented_reply.split_mode": "regex",
                         },
                     },
@@ -4580,6 +4648,7 @@ CONFIG_METADATA_3 = {
                         "type": "list",
                         "hint": "检测到列表中的任意词时进行分段，如：。、？、！等",
                         "condition": {
+                            "platform_settings.segmented_reply.enable": True,
                             "platform_settings.segmented_reply.split_mode": "words",
                         },
                     },
@@ -4587,6 +4656,9 @@ CONFIG_METADATA_3 = {
                         "description": "内容过滤正则表达式",
                         "type": "string",
                         "hint": "移除分段后内容中的指定内容。如填写 `[。？！]` 将移除所有的句号、问号、感叹号。",
+                        "condition": {
+                            "platform_settings.segmented_reply.enable": True,
+                        },
                     },
                 },
             },
@@ -4596,10 +4668,12 @@ CONFIG_METADATA_3 = {
                 "items": {
                     "provider_ltm_settings.group_icl_enable": {
                         "description": "群聊消息记录注入上下文",
+                        "hint": "是否记录群聊非唤醒机器人的消息，并在唤醒机器人时将消息传给模型。",
                         "type": "bool",
                     },
                     "provider_ltm_settings.group_message_max_cnt": {
                         "description": "注入上下文最大消息数量",
+                        "hint": "传给模型的消息的最大数量。",
                         "type": "int",
                         "condition": {
                             "provider_ltm_settings.group_icl_enable": True,
@@ -4608,7 +4682,7 @@ CONFIG_METADATA_3 = {
                     "provider_ltm_settings.image_caption": {
                         "description": "自动理解图片",
                         "type": "bool",
-                        "hint": "需要设置群聊图片转述模型。",
+                        "hint": "对非唤醒机器人的图片消息启用图片转述，转换成图片描述文本。对于图片消息频繁的群聊，此功能可能造成较大的开销，请慎用。",
                         "condition": {
                             "provider_ltm_settings.group_icl_enable": True,
                         },
@@ -4626,10 +4700,11 @@ CONFIG_METADATA_3 = {
                     "provider_ltm_settings.group_message_history_enable": {
                         "description": "持久化群聊消息记录",
                         "type": "bool",
-                        "hint": "启用后保存群消息，并向模型提供当前群聊历史查询工具。暂时不支持媒体消息记录，媒体消息将保存为 [Image] 等占位文本。",
+                        "hint": "将群内的所有消息都持久化保存，并允许模型通过工具来查询群内消息。",
                     },
                     "provider_ltm_settings.group_message_history_max_cnt": {
                         "description": "持久化最大消息数量",
+                        "hint": "持久化保存的消息的最大数量，超过后抛弃旧的消息。",
                         "type": "int",
                         "condition": {
                             "provider_ltm_settings.group_message_history_enable": True,
@@ -4637,6 +4712,7 @@ CONFIG_METADATA_3 = {
                     },
                     "provider_ltm_settings.active_reply.enable": {
                         "description": "主动回复",
+                        "hint": "是否在合适的时机主动发消息。",
                         "type": "bool",
                     },
                     "provider_ltm_settings.active_reply.method": {
@@ -4667,6 +4743,58 @@ CONFIG_METADATA_3 = {
                     },
                 },
             },
+            "t2i": {
+                "description": "文本转图像",
+                "type": "object",
+                "items": {
+                    "t2i": {
+                        "description": "文本转图像输出",
+                        "hint": "将模型回复转换成图片后再发送，防止刷屏。",
+                        "type": "bool",
+                    },
+                    "t2i_word_threshold": {
+                        "description": "文本转图像字数阈值",
+                        "type": "int",
+                        "condition": {
+                            "t2i": True,
+                        },
+                    },
+                    "t2i_strategy": {
+                        "description": "文本转图像策略",
+                        "type": "string",
+                        "hint": "文本转图像策略。`remote` 为使用远程基于 HTML 的渲染服务，`local` 为使用 PIL 本地渲染。当使用 local 时，将 ttf 字体命名为 'font.ttf' 放在 data/ 目录下可自定义字体。",
+                        "options": ["remote", "local"],
+                        "condition": {
+                            "t2i": True,
+                        },
+                    },
+                    "t2i_endpoint": {
+                        "description": "文本转图像服务 API 地址",
+                        "type": "string",
+                        "hint": "为空时使用 AstrBot API 服务",
+                        "condition": {
+                            "t2i": True,
+                            "t2i_strategy": "remote",
+                        },
+                    },
+                    "t2i_template": {
+                        "description": "文本转图像自定义模版",
+                        "type": "bool",
+                        "hint": "启用后可自定义 HTML 模板用于文转图渲染。",
+                        "condition": {
+                            "t2i": True,
+                            "t2i_strategy": "remote",
+                        },
+                        "_special": "t2i_template",
+                    },
+                    "t2i_active_template": {
+                        "description": "当前应用的文转图渲染模板",
+                        "type": "string",
+                        "hint": "此处的值由文转图模板管理页面进行维护。",
+                        "invisible": True,
+                    },
+                },
+            },
         },
     },
 }
@@ -4679,35 +4807,6 @@ CONFIG_METADATA_3_SYSTEM = {
                 "description": "系统配置",
                 "type": "object",
                 "items": {
-                    "t2i_strategy": {
-                        "description": "文本转图像策略",
-                        "type": "string",
-                        "hint": "文本转图像策略。`remote` 为使用远程基于 HTML 的渲染服务，`local` 为使用 PIL 本地渲染。当使用 local 时，将 ttf 字体命名为 'font.ttf' 放在 data/ 目录下可自定义字体。",
-                        "options": ["remote", "local"],
-                    },
-                    "t2i_endpoint": {
-                        "description": "文本转图像服务 API 地址",
-                        "type": "string",
-                        "hint": "为空时使用 AstrBot API 服务",
-                        "condition": {
-                            "t2i_strategy": "remote",
-                        },
-                    },
-                    "t2i_template": {
-                        "description": "文本转图像自定义模版",
-                        "type": "bool",
-                        "hint": "启用后可自定义 HTML 模板用于文转图渲染。",
-                        "condition": {
-                            "t2i_strategy": "remote",
-                        },
-                        "_special": "t2i_template",
-                    },
-                    "t2i_active_template": {
-                        "description": "当前应用的文转图渲染模板",
-                        "type": "string",
-                        "hint": "此处的值由文转图模板管理页面进行维护。",
-                        "invisible": True,
-                    },
                     "log_level": {
                         "description": "控制台日志级别",
                         "type": "string",
@@ -4785,20 +4884,25 @@ CONFIG_METADATA_3_SYSTEM = {
                         "type": "int",
                         "hint": "用于限制 data/temp 目录总大小，单位为 MB。系统每 10 分钟检查一次，超限时按文件修改时间从旧到新删除，释放约 30% 当前体积。",
                     },
-                    "trace_log_enable": {
-                        "description": "启用 Trace 文件日志",
+                    "trace_enable": {
+                        "description": "启用追踪记录",
                         "type": "bool",
-                        "hint": "将 Trace 事件写入独立文件（不影响控制台输出）。",
+                        "hint": "追踪用户的每次指令和 AI 调用。",
                     },
-                    "trace_log_path": {
-                        "description": "Trace 日志文件路径",
+                    "trace_db_path": {
+                        "description": "追踪数据库路径",
                         "type": "string",
-                        "hint": "相对路径以 data 目录为基准，例如 logs/astrbot.trace.log；支持绝对路径。",
+                        "hint": "相对路径以 data 目录为基准，例如 logs/traces.db；支持绝对路径。",
                     },
-                    "trace_log_max_mb": {
-                        "description": "Trace 日志大小上限 (MB)",
+                    "trace_db_max_mb": {
+                        "description": "追踪数据库容量预算 (MB)",
                         "type": "int",
-                        "hint": "超过大小后自动轮转，默认 20MB。",
+                        "hint": "默认 80 MB，最小 32 MB，低于最小值时按 32 MB 生效。超出后自动清除旧数据。",
+                    },
+                    "trace_retention_days": {
+                        "description": "追踪保留天数",
+                        "type": "int",
+                        "hint": "默认 7 天，期限或容量先达到者触发清理。",
                     },
                     "pip_install_arg": {
                         "description": "pip 安装额外参数",

@@ -18,7 +18,7 @@ export function getProviderIcon(type) {
     'anthropic': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/anthropic.svg',
     'ollama': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/ollama.svg',
     'google': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/gemini-color.svg',
-    'deepseek': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/deepseek.svg',
+    'deepseek': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/deepseek-color.svg',
     'modelscope': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/modelscope.svg',
     'zhipu': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/zhipu.svg',
     'nvidia': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/nvidia-color.svg',
@@ -73,7 +73,6 @@ export function isMonochromeProviderIcon(type) {
     'xai',
     'anthropic',
     'ollama',
-    'deepseek',
     'modelscope',
     'zhipu',
     'siliconflow',
@@ -88,7 +87,13 @@ export function isMonochromeProviderIcon(type) {
     'xiaomi',
     'xiaomi-token-plan',
     'openrouter',
-    'groq'
+    'groq',
+    'microsoft',
+    'fishaudio',
+    'vllm',
+    'huggingface',
+    'coze',
+    'deerflow'
   ].includes(type);
 }
 

@@ -157,6 +157,7 @@ async def test_wakeup_uses_same_compression_settings_as_chat(
                 extras={"cron_job": {"id": "job-1"}, "cron_payload": {}},
             )
         else:
+            event_extras: dict[str, object] = {}
             ctx.get_llm_tool_manager.return_value.get_builtin_tool.return_value = (
                 FunctionTool(
                     name="send_message_to_user",
@@ -170,6 +171,8 @@ async def test_wakeup_uses_same_compression_settings_as_chat(
                         event=SimpleNamespace(
                             unified_msg_origin="test:FriendMessage:user123",
                             role="member",
+                            get_extra=event_extras.get,
+                            set_extra=event_extras.__setitem__,
                         ),
                         context=ctx,
                     ),
@@ -181,6 +184,10 @@ async def test_wakeup_uses_same_compression_settings_as_chat(
                 tool_args={},
                 note="Background task finished",
                 summary_name="BackgroundTask",
+            )
+            assert (
+                build.await_args.kwargs["event"].get_extra("_background_stop_signal")
+                is event_extras["_background_stop_signal"]
             )
 
     ctx.get_config.assert_called_once_with(umo="test:FriendMessage:user123")

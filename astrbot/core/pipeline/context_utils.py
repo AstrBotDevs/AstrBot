@@ -121,15 +121,31 @@ async def call_event_hook(
             writer.stage_history(history, origin="unknown")
     try:
         for handler in handlers:
+            plugin = star_map.get(handler.handler_module_path)
+            plugin_name = plugin.name if plugin else handler.handler_module_path
+            plugin_display_name = plugin.display_name if plugin else None
+            handler_category = (
+                "llm_tool" if hook_type == EventType.OnCallingFuncToolEvent else "hook"
+            )
+            event.trace.record(
+                "handler_start",
+                kind="plugin_handler",
+                status="running",
+                plugin=plugin_name,
+                plugin_display_name=plugin_display_name or plugin_name,
+                handler=handler.handler_name,
+                handler_full_name=handler.handler_full_name,
+                handler_type=handler.event_type.name,
+                handler_category=handler_category,
+                hook=hook_type.name,
+            )
             try:
                 assert inspect.iscoroutinefunction(handler.handler)
                 logger.debug(
-                    f"hook({hook_type.name}) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
+                    f"hook({hook_type.name}) -> {plugin_name} - {handler.handler_name}",
                 )
                 writer_token = active_conversation_writer.set(event.conversation_events)
-                plugin_token = active_plugin_id.set(
-                    star_map[handler.handler_module_path].name
-                )
+                plugin_token = active_plugin_id.set(plugin_name)
                 try:
                     await handler.handler(event, *args, **kwargs)
                 finally:
@@ -137,15 +153,40 @@ async def call_event_hook(
                     active_conversation_writer.reset(writer_token)
             except BaseException:
                 logger.error(traceback.format_exc())
+                event.trace.record(
+                    "handler_end",
+                    kind="plugin_handler",
+                    status="error",
+                    plugin=plugin_name,
+                    plugin_display_name=plugin_display_name or plugin_name,
+                    handler=handler.handler_name,
+                    handler_full_name=handler.handler_full_name,
+                    handler_type=handler.event_type.name,
+                    handler_category=handler_category,
+                    hook=hook_type.name,
+                )
+            else:
+                event.trace.record(
+                    "handler_end",
+                    kind="plugin_handler",
+                    status="success",
+                    plugin=plugin_name,
+                    plugin_display_name=plugin_display_name or plugin_name,
+                    handler=handler.handler_name,
+                    handler_full_name=handler.handler_full_name,
+                    handler_type=handler.event_type.name,
+                    handler_category=handler_category,
+                    hook=hook_type.name,
+                )
 
             if event.is_stopped():
                 logger.info(
-                    f"{star_map[handler.handler_module_path].name} - "
-                    f"{handler.handler_name} stopped event propagation.",
+                    f"{plugin_name} - {handler.handler_name} stopped event propagation.",
                 )
                 return True
 
         return event.is_stopped()
+
     finally:
         if handlers and writer is not None and not writer.closed:
             if writer.runtime_context is not None:

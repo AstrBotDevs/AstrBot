@@ -5,6 +5,8 @@
   "copy": "Copy",
   "copied": "Copied",
   "copyFailed": "Copy failed",
+  "collapse": "Collapse",
+  "expand": "Expand",
   "delete": "Delete",
   "edit": "Edit",
   "add": "Add",
@@ -133,6 +135,7 @@
       "jsonValue": "JSON"
     }
   },
+  "unauthorized": "Unauthorized access, please login again",
   "firstNotice": {
     "title": "First Notice",
     "loading": "Loading first notice...",

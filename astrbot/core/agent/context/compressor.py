@@ -292,7 +292,9 @@ class LLMSummaryCompressor:
         )
         log_context_sanitize_stats(sanitize_stats)
 
-        # Generate summary
+        # Generate summary. A single attempt is enough: on failure the caller
+        # falls back to truncation, so retrying (e.g. on an exhausted quota)
+        # would only hold up the reply.
         try:
             recorder = None
             if self.request_event_emitter:
@@ -309,6 +311,7 @@ class LLMSummaryCompressor:
             try:
                 response = await self.provider.text_chat(
                     contexts=sanitized_summary_contexts,
+                    request_max_retries=1,
                     **request_recorder_kwargs(self.provider.text_chat, recorder),
                 )
                 if recorder:

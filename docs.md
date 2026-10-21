@@ -8,13 +8,13 @@ AstrBot 默认使用 SQLite（`data_v4.db`），通过 SQLModel / SQLAlchemy 和
 
 - `ConversationV2.content` 保存整份模型消息数组。Manager 为兼容旧接口，又将其转换为 `Conversation.history` JSON 字符串。
 
-- 内置 Agent 主要按“读取完整历史 → 在内存中修改、压缩 → 整体覆盖保存”工作。压缩后的内容会替代原历史。 
+- 内置 Agent 主要按“读取完整历史 → 在内存中修改、压缩 → 整体覆盖保存”工作。压缩后的内容会替代原历史。
 
 - 平台可见消息另存于 `platform_message_history`。内部 checkpoint 用于关联平台消息与上下文轮次，不是执行快照；WebChat 侧边对话目前通过复制历史实现。
 
 - 插件可以直接修改上下文；保存上下文时会过滤 `_no_save` 内容。执行状态主要在内存中，数据库写入缺少统一的并发版本校验。
 
-    
+
 
 ## 目标与边界
 
@@ -69,7 +69,7 @@ AstrBot 默认使用 SQLite（`data_v4.db`），通过 SQLModel / SQLAlchemy 和
 
 - `(conversation_ref, type, seq)` 支持按类型查询；恢复基线及执行、快照关联使用专门索引。可回收插件基线使用局部索引，避免每次清理扫描全部历史。不索引整个 payload。
 
-    
+
 
 ## 分支、读取与并发
 

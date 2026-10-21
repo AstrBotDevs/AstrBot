@@ -3,7 +3,7 @@
 import json
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -701,11 +701,16 @@ class TestRunActiveAgentJob:
             def get_final_llm_resp(self):
                 return None
 
-        captured = {}
+        captured = {"requests": []}
+        started_ats = (
+            "2026-10-13T00:00:00+00:00",
+            "2026-10-13T01:00:00+00:00",
+        )
 
         async def fake_build_main_agent(*, event, plugin_context, config, req):
             captured["config"] = config
             captured["req"] = req
+            captured["requests"].append(req)
             return MagicMock(agent_runner=FakeRunner(), conversation_events=writer)
 
         async def fake_persist_agent_history(*args, **kwargs):
@@ -725,11 +730,19 @@ class TestRunActiveAgentJob:
                 side_effect=fake_persist_agent_history,
             ),
         ):
-            await cron_manager._woke_main_agent(
-                message="run scheduled task",
-                session_str="test:FriendMessage:user123",
-                extras={"cron_job": {"id": "job-1"}, "cron_payload": {}},
-            )
+            for started_at in started_ats:
+                await cron_manager._woke_main_agent(
+                    message="run scheduled task",
+                    session_str="test:FriendMessage:user123",
+                    extras={
+                        "cron_job": {
+                            "id": "job-1",
+                            "note": "提醒喝水",
+                            "run_started_at": started_at,
+                        },
+                        "cron_payload": {},
+                    },
+                )
 
         config = captured["config"]
         assert config.tool_call_timeout == 77
@@ -739,9 +752,25 @@ class TestRunActiveAgentJob:
         assert "old question" not in request.system_prompt
         assert "old answer" not in request.system_prompt
         assert request.contexts == history
-        writer.consume.assert_awaited_once_with(started)
-        writer.finish_turn.assert_awaited_once_with("failed")
+        assert writer.consume.await_args_list == [call(started), call(started)]
+        assert writer.finish_turn.await_args_list == [call("failed"), call("failed")]
         assert writer.runtime_context is FakeRunner.run_context
+        first, second = captured["requests"]
+        assert first.system_prompt == second.system_prompt
+        assert first.contexts == second.contexts == history
+        assert first.prompt != second.prompt
+        for request, started_at in zip(captured["requests"], started_ats, strict=True):
+            assert "# CRON JOB CONTEXT" not in request.system_prompt
+            assert "run_started_at" not in request.system_prompt
+            context, instruction = request.prompt.split("\n\n", 1)
+            assert context.startswith("# CRON JOB CONTEXT\n")
+            job = json.loads(context.split("\n", 2)[2])
+            assert job == {
+                "id": "job-1",
+                "note": "提醒喝水",
+                "run_started_at": started_at,
+            }
+            assert instruction.startswith("You are now responding to a scheduled task.")
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(

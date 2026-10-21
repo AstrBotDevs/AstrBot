@@ -1,6 +1,7 @@
 """Plugin attribution and legacy mutation behavior for the linear journal."""
 
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 import pytest_asyncio
@@ -38,11 +39,15 @@ def install_hook(monkeypatch):
                     handler=handler,
                     handler_module_path="test.memory",
                     handler_name="mutate",
+                    handler_full_name="test.memory.mutate",
+                    event_type=EventType.OnLLMRequestEvent,
                 )
             ],
         )
         monkeypatch.setitem(
-            context_utils.star_map, "test.memory", SimpleNamespace(name="memory")
+            context_utils.star_map,
+            "test.memory",
+            SimpleNamespace(name="memory", display_name=None),
         )
 
     return install
@@ -67,7 +72,10 @@ async def test_iris_clear_is_plugin_reset_and_previous_body_is_reclaimed(
         writer = ConversationEventWriter(store, snapshot)
         writer.request = SimpleNamespace(contexts=snapshot.messages, conversation=conv)
         event = SimpleNamespace(
-            conversation_events=writer, plugins_name=None, is_stopped=lambda: False
+            conversation_events=writer,
+            plugins_name=None,
+            is_stopped=lambda: False,
+            trace=MagicMock(),
         )
         await writer.start_turn({"kind": "test"})
         await context_utils.call_event_hook(
@@ -119,7 +127,10 @@ async def test_pre_hook_changes_stay_unknown_and_done_hook_changes_are_plugin(
         messages=[Message(role="user", content="custom runner changed history")]
     )
     event = SimpleNamespace(
-        conversation_events=writer, plugins_name=None, is_stopped=lambda: False
+        conversation_events=writer,
+        plugins_name=None,
+        is_stopped=lambda: False,
+        trace=MagicMock(),
     )
 
     async def edit_history(event, context):
@@ -237,7 +248,10 @@ async def test_transcript_only_runner_does_not_clear_history_on_request_hook(
     writer = ConversationEventWriter(store, await store.read(conv.conversation_id))
     writer.request = SimpleNamespace(contexts=[], conversation=None)
     event = SimpleNamespace(
-        conversation_events=writer, plugins_name=None, is_stopped=lambda: False
+        conversation_events=writer,
+        plugins_name=None,
+        is_stopped=lambda: False,
+        trace=MagicMock(),
     )
 
     async def inject_remote_context(event, req):
