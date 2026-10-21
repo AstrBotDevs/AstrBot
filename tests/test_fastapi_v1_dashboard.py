@@ -7,6 +7,7 @@ import stat
 import time
 import zipfile
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
@@ -4389,19 +4390,19 @@ async def test_v1_log_export_packs_log_files_and_memory_logs(
             "external/2/custom.log",
             "external/custom.1.log",
             "external/custom.log",
+            "logs/astrbot.in-memory.log",
             "logs/event_loop_watchdog.log",
             "manifest.json",
-            "memory/logs.txt",
-            "memory/traces.jsonl",
             "plugins.json",
+            "traces/history.in-memory.jsonl",
             "traces/history.jsonl",
         ]
         assert archive.read("external/custom.log") == b"current"
         assert archive.read("external/custom.1.log") == b"rotated"
         assert archive.read("external/2/custom.log") == b"same name"
         assert archive.read("logs/event_loop_watchdog.log") == b"watchdog"
-        assert archive.read("memory/logs.txt").decode() == "[INFO] hello\n"
-        traces = archive.read("memory/traces.jsonl").decode().splitlines()
+        assert archive.read("logs/astrbot.in-memory.log").decode() == "[INFO] hello\n"
+        traces = archive.read("traces/history.in-memory.jsonl").decode().splitlines()
         # Current LogBroker only retains ordinary logs; traces are persisted.
         assert traces == []
         manifest = json.loads(archive.read("manifest.json"))
@@ -4415,6 +4416,140 @@ async def test_v1_log_export_packs_log_files_and_memory_logs(
     assert (manifest["memory_logs"], manifest["memory_traces"]) == (1, 0)
     assert str(tmp_path) not in json.dumps(manifest)
     assert not any((tmp_path / "data" / "temp" / "log_exports").iterdir())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("redact", [True, False])
+async def test_diagnostic_export_time_range_filters_logs_and_persisted_traces(
+    monkeypatch, tmp_path, asgi_app, asgi_client, redact
+):
+    from astrbot.core.utils.trace_store import TraceStore
+
+    monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
+    service = asgi_app.state.services.logs
+    base = int(time.time()) - 3600
+    logs_dir = tmp_path / "data" / "logs"
+    logs_dir.mkdir(parents=True)
+    selected = (
+        f"[{datetime.fromtimestamp(base + 1).isoformat(sep=' ')}] token=private-range-value\n"
+        "  selected traceback\n"
+        f"[{datetime.fromtimestamp(base + 2).isoformat(sep=' ')}] last selected log\n"
+    )
+    (logs_dir / "astrbot.log").write_text(
+        "undated preamble\n"
+        f"[{datetime.fromtimestamp(base).isoformat(sep=' ')}] outside-before\n"
+        + selected
+        + f"[{datetime.fromtimestamp(base + 3).isoformat(sep=' ')}] outside-after\n"
+        "  outside traceback\n",
+        encoding="utf-8",
+    )
+    (logs_dir / "undated.log").write_text("unrelated undated log\n", encoding="utf-8")
+    service.log_broker.publish({"time": base, "data": "outside-before"})
+    service.log_broker.publish({"time": base + 1, "data": "selected memory log"})
+    service.log_broker.publish({"time": base + 3, "data": "outside-after"})
+    service.log_broker.log_cache.append({"type": "trace", "time": base, "data": "outside"})
+    service.log_broker.log_cache.append({"type": "trace", "time": base + 1, "data": "selected"})
+    path = logs_dir / "traces.db"
+    service.config["trace_db_path"] = str(path)
+    store = TraceStore(path, {"trace_db_max_mb": 8})
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.log_service.get_trace_store", lambda *_: store
+    )
+    try:
+        for index in range(60):
+            trace_id = f"{index + 1:032x}"
+            stamp = str((base + index) * 1_000_000_000)
+            summary = {
+                "trace_id": trace_id,
+                "root_span_id": "b" * 16,
+                "start_time_unix_nano": stamp,
+                "end_time_unix_nano": stamp,
+                "updated_time_unix_nano": stamp,
+                "state": "completed",
+                "has_errors": False,
+                "has_models": False,
+                "has_plugins": False,
+                "has_commands": False,
+                "span_count": 0,
+                "attributes": {},
+            }
+            assert store.append({"trace": summary, "time_unix_nano": stamp})
+        assert store.flush()
+        response = await asgi_client.get(
+            "/api/v1/logs/export",
+            headers=_jwt_headers(),
+            params={"redact": str(redact).lower(), "start_time": base + 1, "end_time": base + 2},
+        )
+        assert response.status_code == 200
+        with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+            disk_log = archive.read("logs/astrbot.log").decode()
+            assert disk_log == (
+                selected.replace("private-range-value", "[REDACTED]") if redact else selected
+            )
+            assert archive.read("logs/undated.log") == b""
+            assert archive.read("logs/astrbot.in-memory.log") == b"selected memory log\n"
+            assert json.loads(archive.read("traces/history.in-memory.jsonl"))["data"] == "selected"
+            history = [json.loads(line) for line in archive.read("traces/history.jsonl").splitlines()]
+            assert [item["trace"]["trace_id"] for item in history] == [f"{3:032x}", f"{2:032x}"]
+            assert "config.json" in archive.namelist()
+            assert "environment.json" in archive.namelist()
+            manifest = json.loads(archive.read("manifest.json"))
+            assert manifest["time_range"]["start_time"] == base + 1
+            assert manifest["time_range"]["end_time"] == base + 2
+            assert manifest["memory_logs"] == 1
+            assert manifest["memory_traces"] == 1
+            assert manifest["trace_history"]["count"] == 2
+            assert manifest["trace_history"]["truncated"] is False
+        assert store.list_traces(start_time=base + 58)["total"] == 2
+        assert store.list_traces(end_time=base + 2)["total"] == 3
+    finally:
+        store.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("params", "status"),
+    [
+        ({"start_time": 20, "end_time": 10}, 400),
+        ({"start_time": -1}, 422),
+        ({"end_time": "invalid"}, 422),
+    ],
+)
+async def test_diagnostic_export_rejects_invalid_time_ranges(asgi_client, params, status):
+    response = await asgi_client.get(
+        "/api/v1/logs/export", headers=_jwt_headers(), params=params
+    )
+    assert response.status_code == status
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("webui_version", ["v9.8.7", None])
+async def test_diagnostic_export_includes_active_webui_version(
+    monkeypatch, tmp_path, fake_core_lifecycle, fake_db, webui_version
+):
+    monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
+    static_folder = tmp_path / "custom-webui"
+    assets_folder = static_folder / "assets"
+    assets_folder.mkdir(parents=True)
+    if webui_version is not None:
+        (assets_folder / "version").write_text(webui_version, encoding="utf-8")
+    default_assets = tmp_path / "data" / "dist" / "assets"
+    default_assets.mkdir(parents=True)
+    (default_assets / "version").write_text("v0.0.1", encoding="utf-8")
+    app = create_dashboard_asgi_app(
+        core_lifecycle=fake_core_lifecycle,
+        db=fake_db,
+        jwt_secret=JWT_SECRET,
+        static_folder=str(static_folder),
+    )
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.get("/api/v1/logs/export", headers=_jwt_headers())
+    assert response.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        environment = json.loads(archive.read("environment.json"))
+    assert environment["webui_version"] == webui_version
 
 
 @pytest.mark.asyncio
@@ -4463,12 +4598,14 @@ async def test_v1_log_export_keeps_archive_names_unique(
     """Log files never take the names of the generated entries."""
     monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
     data_dir = tmp_path / "data"
-    (data_dir / "memory").mkdir(parents=True)
-    (data_dir / "memory" / "logs.txt").write_text("file log", encoding="utf-8")
+    (data_dir / "logs").mkdir(parents=True)
+    (data_dir / "logs" / "astrbot.in-memory.log").write_text("file log", encoding="utf-8")
+    (data_dir / "traces").mkdir()
+    (data_dir / "traces" / "history.in-memory.jsonl").write_text("file trace", encoding="utf-8")
     (data_dir / "manifest.json").write_text("trace log", encoding="utf-8")
     service = asgi_app.state.services.logs
-    service.config["log_file_path"] = "memory/logs.txt"
-    service.config["trace_log_path"] = "manifest.json"
+    service.config["log_file_path"] = "manifest.json"
+    service.config["trace_log_path"] = "traces/history.in-memory.jsonl"
 
     response = await asgi_client.get("/api/v1/logs/export", headers=_jwt_headers())
 
@@ -4476,10 +4613,15 @@ async def test_v1_log_export_keeps_archive_names_unique(
     with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
         names = archive.namelist()
         assert len(names) == len(set(names))
-        assert archive.read("memory/2/logs.txt") == b"file log"
+        assert archive.read("logs/2/astrbot.in-memory.log") == b"file log"
+        assert archive.read("traces/2/history.in-memory.jsonl") == b"file trace"
         assert archive.read("2/manifest.json") == b"trace log"
         manifest = json.loads(archive.read("manifest.json"))
-    assert sorted(manifest["files"]) == ["2/manifest.json", "memory/2/logs.txt"]
+    assert sorted(manifest["files"]) == [
+        "2/manifest.json",
+        "logs/2/astrbot.in-memory.log",
+        "traces/2/history.in-memory.jsonl",
+    ]
 
 
 @pytest.mark.asyncio
@@ -4576,6 +4718,8 @@ async def test_diagnostic_export_respects_redaction_for_every_section(
     secret = "private/configured+credential"
     plugin_secret = "private-plugin-credential"
     trace_secret = "previous-provider-credential"
+    aes_secret = "private-aes-credential"
+    config["platform"] = [{"encoding_aes_key": aes_secret}]
     config["diagnostic_network"] = {
         "public_endpoint": "http://8.8.8.8:8080/v1",
         "public_ipv6": "https://[2606:4700:4700::1111]:443/v1",
@@ -4596,6 +4740,7 @@ async def test_diagnostic_export_respects_redaction_for_every_section(
     logs = tmp_path / "data/logs"
     logs.mkdir(parents=True)
     (logs / "astrbot.log").write_text(
+        f"{aes_secret}\n"
         f"{secret}\n{quote(secret, safe='')}\n{plugin_secret}\n{trace_secret}\nhttp://8.8.8.8:8080/v1 https://[2606:4700:4700::1111]:443/v1 http://192.168.1.2:6185/health\nAuthorization: Bearer unknown-header-token\nCookie: session=unknown; second=secret\n-----BEGIN PRIVATE KEY-----\nprivate-key-body\n-----END PRIVATE KEY-----\n",
         encoding="utf-8",
     )
@@ -4637,6 +4782,7 @@ async def test_diagnostic_export_respects_redaction_for_every_section(
             quote(secret, safe=""),
             plugin_secret,
             trace_secret,
+            aes_secret,
             "private-password",
             "private-jwt-secret",
             "unknown-header-token",
@@ -4652,7 +4798,7 @@ async def test_diagnostic_export_respects_redaction_for_every_section(
         if redact:
             assert exported["diagnostic_network"]["public_endpoint"] == "http://[PUBLIC_IP_1]:8080/v1"
             assert exported["diagnostic_network"]["public_ipv6"] == "https://[PUBLIC_IP_2]:443/v1"
-            assert b"peer=[PUBLIC_IP_1]" in archive.read("memory/logs.txt")
+            assert b"peer=[PUBLIC_IP_1]" in archive.read("logs/astrbot.in-memory.log")
             trace = json.loads(archive.read("traces/history.jsonl"))["spans"][0]["attributes"]
             assert trace["peer"] == "[PUBLIC_IP_1]"
             assert trace["ipv6"] == "[PUBLIC_IP_2]"
@@ -4673,7 +4819,7 @@ async def test_diagnostic_export_respects_redaction_for_every_section(
         assert manifest["redacted"] is redact
         assert "logs/traces.db" not in archive.namelist()
         assert "logs/binary.log" not in archive.namelist()
-        assert archive.read("memory/traces.jsonl") == b""
+        assert archive.read("traces/history.in-memory.jsonl") == b""
 
 
 @pytest.mark.asyncio
