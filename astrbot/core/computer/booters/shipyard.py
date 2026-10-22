@@ -24,6 +24,31 @@ def _maybe_model_dump(value: Any) -> dict[str, Any]:
     return {}
 
 
+def _flatten_shipyard_payload(result: object) -> dict[str, Any]:
+    """Flatten the Shipyard SDK execution result envelope.
+
+    Shipyard SDK 1.0.0 wraps every execution result in
+    ``{"success": ..., "data": {...}, "error": ...}``, while older servers
+    returned the fields at the top level. Merging both levels lets callers
+    keep reading a single flat mapping.
+
+    Args:
+        result: Raw result returned by the Shipyard SDK.
+
+    Returns:
+        Flat mapping with the top-level fields plus the ``data`` fields; the
+        ``data`` key itself is removed.
+    """
+    payload = _maybe_model_dump(result)
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        return payload
+
+    flat = {**payload, **data}
+    flat.pop("data", None)
+    return flat
+
+
 class ShipyardShellWrapper:
     def __init__(self, _shipyard_shell: ShellComponent):
         self._shell = _shipyard_shell
@@ -60,11 +85,15 @@ class ShipyardShellWrapper:
             timeout=timeout or 300,
             cwd=cwd,
         )
-        payload = _maybe_model_dump(result)
+        payload = _flatten_shipyard_payload(result)
 
-        stdout = payload.get("output", payload.get("stdout", "")) or ""
-        stderr = payload.get("error", payload.get("stderr", "")) or ""
+        # Shell output lives under `data` on SDK 1.0.0 and at the top level on
+        # older servers; keep both shapes working.
+        stdout = payload.get("output") or payload.get("stdout") or ""
+        stderr = payload.get("error") or payload.get("stderr") or ""
         exit_code = payload.get("exit_code")
+        if exit_code is None:
+            exit_code = payload.get("return_code")
         if background:
             pid: int | None = None
             try:
@@ -107,7 +136,9 @@ class ShipyardFileSystemWrapper:
     async def create_file(
         self, path: str, content: str = "", mode: int = 420
     ) -> dict[str, Any]:
-        return await self._fs.create_file(path=path, content=content, mode=mode)
+        return _flatten_shipyard_payload(
+            await self._fs.create_file(path=path, content=content, mode=mode)
+        )
 
     async def read_file(
         self,
@@ -116,24 +147,30 @@ class ShipyardFileSystemWrapper:
         offset: int | None = None,
         limit: int | None = None,
     ) -> dict[str, Any]:
-        return await self._fs.read_file(
-            path=path, encoding=encoding, offset=offset, limit=limit
+        return _flatten_shipyard_payload(
+            await self._fs.read_file(
+                path=path, encoding=encoding, offset=offset, limit=limit
+            )
         )
 
     async def write_file(
         self, path: str, content: str, mode: str = "w", encoding: str = "utf-8"
     ) -> dict[str, Any]:
-        return await self._fs.write_file(
-            path=path, content=content, mode=mode, encoding=encoding
+        return _flatten_shipyard_payload(
+            await self._fs.write_file(
+                path=path, content=content, mode=mode, encoding=encoding
+            )
         )
 
     async def list_dir(
         self, path: str = ".", show_hidden: bool = False
     ) -> dict[str, Any]:
-        return await self._fs.list_dir(path=path, show_hidden=show_hidden)
+        return _flatten_shipyard_payload(
+            await self._fs.list_dir(path=path, show_hidden=show_hidden)
+        )
 
     async def delete_file(self, path: str) -> dict[str, Any]:
-        return await self._fs.delete_file(path=path)
+        return _flatten_shipyard_payload(await self._fs.delete_file(path=path))
 
     async def search_files(
         self,
@@ -160,12 +197,14 @@ class ShipyardFileSystemWrapper:
         replace_all: bool = False,
         encoding: str = "utf-8",
     ) -> dict[str, Any]:
-        return await self._fs.edit_file(
-            path=path,
-            old_string=old_string,
-            new_string=new_string,
-            replace_all=replace_all,
-            encoding=encoding,
+        return _flatten_shipyard_payload(
+            await self._fs.edit_file(
+                path=path,
+                old_string=old_string,
+                new_string=new_string,
+                replace_all=replace_all,
+                encoding=encoding,
+            )
         )
 
 

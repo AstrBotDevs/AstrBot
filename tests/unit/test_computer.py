@@ -402,6 +402,132 @@ class TestShipyardBooter:
     """Tests for ShipyardBooter."""
 
     @pytest.mark.asyncio
+    async def test_shipyard_shell_unwraps_bay_exec_response(self):
+        """Bay exec responses keep shell output under the data field."""
+        from astrbot.core.computer.booters.shipyard import ShipyardShellWrapper
+
+        raw_shell = MagicMock()
+        raw_shell.exec = AsyncMock(
+            return_value={
+                "success": True,
+                "data": {
+                    "success": True,
+                    "return_code": 0,
+                    "stdout": "hello_from_shipyard_bay\n/workspace\n",
+                    "stderr": "",
+                    "pid": 16,
+                    "process_id": None,
+                    "error": None,
+                },
+                "error": None,
+            },
+        )
+
+        result = await ShipyardShellWrapper(raw_shell).exec(
+            "echo hello_from_shipyard_bay && pwd"
+        )
+
+        assert result["stdout"] == "hello_from_shipyard_bay\n/workspace\n"
+        assert result["stderr"] == ""
+        assert result["exit_code"] == 0
+        assert result["success"] is True
+
+    @pytest.mark.asyncio
+    async def test_shipyard_shell_keeps_flat_exec_response_compatible(self):
+        """Flat shell responses remain compatible with ShipyardShellWrapper."""
+        from astrbot.core.computer.booters.shipyard import ShipyardShellWrapper
+
+        raw_shell = MagicMock()
+        raw_shell.exec = AsyncMock(
+            return_value={
+                "success": True,
+                "stdout": "hello_from_legacy_shell\n/workspace\n",
+                "stderr": "",
+                "exit_code": 0,
+                "execution_id": "exec-legacy",
+                "execution_time_ms": 45,
+                "command": "echo hello_from_legacy_shell && pwd",
+            },
+        )
+
+        result = await ShipyardShellWrapper(raw_shell).exec(
+            "echo hello_from_legacy_shell && pwd"
+        )
+
+        assert result == {
+            "stdout": "hello_from_legacy_shell\n/workspace\n",
+            "stderr": "",
+            "exit_code": 0,
+            "success": True,
+            "execution_id": "exec-legacy",
+            "execution_time_ms": 45,
+            "command": "echo hello_from_legacy_shell && pwd",
+        }
+
+    @pytest.mark.asyncio
+    async def test_shipyard_shell_maps_nonzero_return_code(self):
+        """A non-zero Bay return_code is exposed as exit_code and failure."""
+        from astrbot.core.computer.booters.shipyard import ShipyardShellWrapper
+
+        raw_shell = MagicMock()
+        raw_shell.exec = AsyncMock(
+            return_value={
+                "success": True,
+                "data": {
+                    "success": False,
+                    "return_code": 3,
+                    "stdout": "",
+                    "stderr": "oops",
+                },
+                "error": None,
+            },
+        )
+
+        result = await ShipyardShellWrapper(raw_shell).exec("echo oops >&2; exit 3")
+
+        assert result["stdout"] == ""
+        assert result["stderr"] == "oops"
+        assert result["exit_code"] == 3
+        assert result["success"] is False
+
+    @pytest.mark.asyncio
+    async def test_shipyard_file_tools_unwrap_bay_exec_response(self):
+        """Bay file responses keep their payload under the data field too."""
+        from astrbot.core.computer.booters.shipyard import (
+            ShipyardFileSystemWrapper,
+        )
+
+        raw_fs = MagicMock()
+        raw_fs.read_file = AsyncMock(
+            return_value={
+                "success": True,
+                "data": {"content": "hello-file", "path": "probe.txt", "size": 10},
+                "error": None,
+            },
+        )
+        raw_fs.list_dir = AsyncMock(
+            return_value={
+                "success": True,
+                "data": {
+                    "files": [{"name": "probe.txt", "is_file": True}],
+                    "current_path": "/workspace",
+                },
+                "error": None,
+            },
+        )
+
+        wrapper = ShipyardFileSystemWrapper(raw_fs, MagicMock())
+
+        read_result = await wrapper.read_file("probe.txt")
+        assert read_result["content"] == "hello-file"
+        assert "data" not in read_result
+
+        list_result = await wrapper.list_dir(".")
+        assert list_result["files"] == [{"name": "probe.txt", "is_file": True}]
+        assert list_result["current_path"] == "/workspace"
+        assert "data" not in list_result
+
+    @pytest.mark.asyncio
     async def test_shipyard_booter_init(self):
         """Test ShipyardBooter initialization."""
         with patch("astrbot.core.computer.booters.shipyard.ShipyardClient"):
