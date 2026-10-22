@@ -294,6 +294,40 @@ class DiscordPlatformAdapter(Platform):
         # 由于 on_interaction 已被禁用，我们只处理普通消息
         abm = self._convert_message_to_abm(data)
         message = data["message"]
+
+        # The Discord API client's proxy is not inherited by the generic media
+        # downloader. Resolve image attachments here with the platform proxy,
+        # so message preprocessing can consume them without a direct CDN request.
+        proxy = self.config.get("discord_proxy") if message.attachments else None
+        if proxy:
+            attachments = [
+                att
+                for att in message.attachments
+                if (att.content_type or "").startswith("image/")
+            ]
+            images = (comp for comp in abm.message if isinstance(comp, Image))
+            if attachments:
+                async with aiohttp.ClientSession(
+                    timeout=aiohttp.ClientTimeout(total=30),
+                ) as session:
+                    for attachment, image in zip(attachments, images):
+                        try:
+                            async with session.get(attachment.url, proxy=proxy) as resp:
+                                resp.raise_for_status()
+                                image.file = Image.fromBytes(await resp.read()).file
+                        except (
+                            aiohttp.ClientError,
+                            asyncio.TimeoutError,
+                            OSError,
+                        ) as e:
+                            # Leave the original URL intact for normal retry.
+                            logger.warning(
+                                "[Discord] Unable to fetch image attachment %s "
+                                "through configured proxy (%s)",
+                                attachment.id,
+                                type(e).__name__,
+                            )
+
         reference = getattr(message, "reference", None)
         if reference and message.type == discord.MessageType.reply:
             quoted = reference.resolved

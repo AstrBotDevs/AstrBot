@@ -160,6 +160,140 @@ async def test_discord_unavailable_reply_preserves_current_message(case):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("proxy_enabled", [True, False])
+async def test_discord_image_attachments_use_platform_proxy_when_configured(
+    monkeypatch, proxy_enabled
+):
+    """Discord CDN images use the platform proxy; other attachments are unchanged."""
+    adapter = DiscordPlatformAdapter.__new__(DiscordPlatformAdapter)
+    adapter.bot_self_id = "1"
+    adapter.client = SimpleNamespace(user=SimpleNamespace(id=1))
+    adapter.config = {
+        "discord_proxy": "http://discord-proxy:8080" if proxy_enabled else ""
+    }
+    img = SimpleNamespace(
+        content_type="image/png",
+        url="https://cdn.discordapp.com/attachments/test/image.png",
+        filename="image.png",
+        id=100,
+    )
+    text_file = SimpleNamespace(
+        content_type="text/plain",
+        url="https://cdn.discordapp.com/attachments/test/notes.txt",
+        filename="notes.txt",
+        id=101,
+    )
+    second_img = SimpleNamespace(
+        content_type="image/png",
+        url="https://cdn.discordapp.com/attachments/test/second.png",
+        filename="second.png",
+        id=102,
+    )
+    message = SimpleNamespace(
+        id=42,
+        type=discord.MessageType.default,
+        content="What is in these images?",
+        channel=SimpleNamespace(id=123, guild=None),
+        author=SimpleNamespace(id=2, display_name="tester"),
+        attachments=[img, text_file, second_img],
+        reference=None,
+    )
+    urls = [img.url, second_img.url]
+    responses = []
+
+    class FakeResponse:
+        def __init__(self, url):
+            self.url = url
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        def raise_for_status(self):
+            return None
+
+        async def read(self):
+            return _PNG_BYTES
+
+    class FakeSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        def get(self, url, *, proxy):
+            responses.append((url, proxy))
+            return FakeResponse(url)
+
+    session_mock = Mock(return_value=FakeSession())
+    monkeypatch.setattr(discord_platform_adapter.aiohttp, "ClientSession", session_mock)
+
+    abm = await adapter.convert_message({"message": message})
+    images = [c for c in abm.message if isinstance(c, Image)]
+    files = [c for c in abm.message if isinstance(c, File)]
+    assert len(images) == 2
+    assert len(files) == 1
+    assert files[0].url == text_file.url
+    if proxy_enabled:
+        assert responses == [(url, "http://discord-proxy:8080") for url in urls]
+        assert all(
+            base64.b64decode(c.file.removeprefix("base64://")) == _PNG_BYTES
+            for c in images
+        )
+    else:
+        assert responses == []
+        assert [c.file for c in images] == urls
+        session_mock.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_discord_image_proxy_failure_preserves_original_url(monkeypatch, caplog):
+    """When CDN access fails, keep the original URL for downstream retry."""
+    adapter = DiscordPlatformAdapter.__new__(DiscordPlatformAdapter)
+    adapter.bot_self_id = "1"
+    adapter.client = SimpleNamespace(user=SimpleNamespace(id=1))
+    adapter.config = {"discord_proxy": "http://discord-proxy:8080"}
+    attachment = SimpleNamespace(
+        content_type="image/png",
+        url="https://cdn.discordapp.com/attachments/test/unavailable.png",
+        filename="unavailable.png",
+        id=123,
+    )
+    message = SimpleNamespace(
+        id=42,
+        type=discord.MessageType.default,
+        content="describe image",
+        channel=SimpleNamespace(id=123, guild=None),
+        author=SimpleNamespace(id=2, display_name="tester"),
+        attachments=[attachment],
+        reference=None,
+    )
+
+    class FailingSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        def get(self, url, *, proxy):
+            raise aiohttp.ClientConnectionError("connection unavailable")
+
+    monkeypatch.setattr(
+        discord_platform_adapter.aiohttp,
+        "ClientSession",
+        Mock(return_value=FailingSession()),
+    )
+    abm = await adapter.convert_message({"message": message})
+    assert next(c for c in abm.message if isinstance(c, Image)).file == attachment.url
+    assert "Unable to fetch image attachment 123" in caplog.text
+    assert attachment.url not in caplog.text
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("allow_bot_messages", [False, True])
 @pytest.mark.parametrize(("author_id", "is_bot"), [(1, True), (2, True), (3, False)])
 async def test_discord_filters_self_messages(allow_bot_messages, author_id, is_bot):
