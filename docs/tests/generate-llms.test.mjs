@@ -1,5 +1,12 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
@@ -119,6 +126,22 @@ English documentation.
     `# Plugin Guide
 
 Build an AstrBot plugin.
+
+## Requirements
+
+### Details
+
+[Local anchor](#details)
+
+[Clean root document](/dev/star/next)
+
+[Root Markdown document](/dev/star/next.md)
+
+[Root asset](/logo.png)
+
+[Encoded document](/dev/star/guide%20page.md)
+
+[Reserved filename](/dev/star/name%23part.md)
 `,
   );
 
@@ -151,6 +174,14 @@ test("maps VitePress page paths to raw Markdown routes", () => {
   assert.equal(
     rawMarkdownPathForPage("en/use/plugin page.md"),
     "/raw/en/use/plugin%20page.md",
+  );
+  assert.equal(
+    rawMarkdownPathForPage("en/use/guide%20page.md"),
+    "/raw/en/use/guide%20page.md",
+  );
+  assert.equal(
+    rawMarkdownPathForPage("zh/dev/star/name#part?.md"),
+    "/raw/zh/dev/star/name%23part%3F.md",
   );
   assert.equal(rawMarkdownPathForPage("README.md"), null);
 });
@@ -206,6 +237,31 @@ test("generates raw, index, and full Markdown outputs", async (t) => {
     combinedFullText,
     /\[下一篇\]\(https:\/\/docs\.astrbot\.app\/dev\/star\/next\)/,
   );
+  assert.match(
+    combinedFullText,
+    /\[Local anchor\]\(https:\/\/docs\.astrbot\.app\/en\/dev\/star\/plugin-new#details\)/,
+  );
+  assert.match(
+    combinedFullText,
+    /\[Clean root document\]\(https:\/\/docs\.astrbot\.app\/en\/dev\/star\/next\)/,
+  );
+  assert.match(
+    combinedFullText,
+    /\[Root Markdown document\]\(https:\/\/docs\.astrbot\.app\/en\/dev\/star\/next\)/,
+  );
+  assert.match(
+    combinedFullText,
+    /\[Root asset\]\(https:\/\/docs\.astrbot\.app\/logo\.png\)/,
+  );
+  assert.match(
+    combinedFullText,
+    /\[Encoded document\]\(https:\/\/docs\.astrbot\.app\/en\/dev\/star\/guide%20page\)/,
+  );
+  assert.match(
+    combinedFullText,
+    /\[Reserved filename\]\(https:\/\/docs\.astrbot\.app\/en\/dev\/star\/name%23part\)/,
+  );
+  assert.doesNotMatch(combinedFullText, /%2520/);
   assert.match(combinedFullText, /\*\*Tip: 注意事项\*\*/);
   assert.match(combinedFullText, /<script setup>\n# This heading is inside/);
   assert.doesNotMatch(combinedFullText, /import \{ onMounted \}/);
@@ -257,6 +313,9 @@ test("rejects full-text output that exceeds the configured limit", async (t) => 
   const project = await createFixtureProject();
   t.after(() => rm(project.temporaryRoot, { recursive: true, force: true }));
 
+  await mkdir(project.publicDir, { recursive: true });
+  await writeFile(join(project.publicDir, "llms.txt"), "previous output");
+
   await assert.rejects(
     generateLlms({
       docsRoot: project.docsRoot,
@@ -264,5 +323,42 @@ test("rejects full-text output that exceeds the configured limit", async (t) => 
       maxLanguageBytes: 10,
     }),
     /Chinese full documentation .* exceeding the 10-byte limit/,
+  );
+  assert.equal(
+    await readFile(join(project.publicDir, "llms.txt"), "utf8"),
+    "previous output",
+  );
+});
+
+test("serializes concurrent generator runs without temporary output", async (t) => {
+  const project = await createFixtureProject();
+  t.after(() => rm(project.temporaryRoot, { recursive: true, force: true }));
+
+  await Promise.all([
+    generateLlms({
+      docsRoot: project.docsRoot,
+      publicDir: project.publicDir,
+    }),
+    generateLlms({
+      docsRoot: project.docsRoot,
+      publicDir: project.publicDir,
+    }),
+  ]);
+
+  const outputs = await readdir(project.publicDir);
+  assert.equal(
+    outputs.filter((filename) => filename.startsWith(".llms-")).length,
+    0,
+  );
+  assert.match(
+    await readFile(join(project.publicDir, "llms.txt"), "utf8"),
+    /^# AstrBot Documentation/m,
+  );
+  assert.match(
+    await readFile(
+      join(project.publicDir, "raw", "en", "dev", "star", "plugin-new.md"),
+      "utf8",
+    ),
+    /Plugin Guide/,
   );
 });

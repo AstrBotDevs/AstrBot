@@ -43,6 +43,7 @@ astrbot/dashboard/dist/
 # Generated documentation artifacts for AI agents
 docs/public/llms*.txt
 docs/public/raw/
+docs/public/.llms-*
 
 # Operating System
 **/.DS_Store

@@ -1,11 +1,16 @@
+import { randomUUID } from "node:crypto";
 import {
   mkdir,
+  open,
   readFile,
   readdir,
+  rename,
   rm,
+  stat,
   writeFile,
 } from "node:fs/promises";
 import { dirname, join, posix, relative, resolve, sep } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
 export const SITE_URL = "https://docs.astrbot.app";
@@ -15,6 +20,15 @@ const DOCS_ROOT = dirname(dirname(SCRIPT_PATH));
 const DEFAULT_PUBLIC_DIR = join(DOCS_ROOT, "public");
 const MAX_LANGUAGE_BYTES = 3 * 1024 * 1024;
 const MAX_FULL_BYTES = 5 * 1024 * 1024;
+const GENERATED_TEXT_FILES = [
+  "llms.txt",
+  "llms-full.txt",
+  "llms-zh.txt",
+  "llms-en.txt",
+];
+const GENERATOR_LOCK_FILE = ".llms-generator.lock";
+const GENERATOR_LOCK_TIMEOUT_MS = 30_000;
+const GENERATOR_LOCK_STALE_MS = 5 * 60 * 1000;
 
 const LOCALES = {
   zh: {
@@ -115,9 +129,18 @@ function compareStrings(left, right) {
  * @returns {string} URL-safe site path.
  */
 function encodeSitePath(pathname) {
-  return encodeURI(pathname)
-    .replaceAll("(", "%28")
-    .replaceAll(")", "%29");
+  return pathname
+    .split("/")
+    .map((segment) => {
+      let decodedSegment = segment;
+      try {
+        decodedSegment = decodeURIComponent(segment);
+      } catch {
+        // A literal percent sign is encoded safely below.
+      }
+      return encodeURIComponent(decodedSegment);
+    })
+    .join("/");
 }
 
 /**
@@ -498,6 +521,40 @@ function cleanSitePath(pathname) {
 }
 
 /**
+ * Adds the English locale prefix to documentation links without changing assets.
+ *
+ * @param {string} pathname Site-root path.
+ * @param {"zh" | "en"} language Source documentation language.
+ * @returns {string} Locale-aware site path.
+ */
+function localizeSiteRootPath(pathname, language) {
+  const cleanPath = cleanSitePath(pathname);
+  if (
+    language !== "en" ||
+    cleanPath === "/en" ||
+    cleanPath.startsWith("/en/") ||
+    cleanPath.startsWith("/raw/") ||
+    cleanPath.startsWith("/api/") ||
+    cleanPath.startsWith("/assets/") ||
+    cleanPath.startsWith("/llms") ||
+    pathname === "/scalar.html"
+  ) {
+    return cleanPath;
+  }
+
+  const hasFileExtension = /\.[A-Za-z0-9]+$/.test(pathname);
+  const isDocumentLink =
+    pathname === "/" ||
+    /\.(?:md|html?)$/i.test(pathname) ||
+    !hasFileExtension;
+  if (!isDocumentLink) {
+    return cleanPath;
+  }
+
+  return cleanPath === "/" ? "/en/" : `/en${cleanPath}`;
+}
+
+/**
  * Resolves a relative or site-root link from a documentation page.
  *
  * @param {string} target Original Markdown link target.
@@ -505,9 +562,13 @@ function cleanSitePath(pathname) {
  * @returns {string} Absolute URL suitable for full-text output.
  */
 function resolveInternalLink(target, document) {
+  if (!target) {
+    return target;
+  }
+  if (target.startsWith("#")) {
+    return `${document.canonicalUrl}${target}`;
+  }
   if (
-    !target ||
-    target.startsWith("#") ||
     target.startsWith("//") ||
     /^[A-Za-z][A-Za-z0-9+.-]*:/.test(target)
   ) {
@@ -523,7 +584,7 @@ function resolveInternalLink(target, document) {
 
   let sitePath;
   if (pathname.startsWith("/")) {
-    sitePath = cleanSitePath(pathname);
+    sitePath = localizeSiteRootPath(pathname, document.language);
   } else {
     const languagePrefix = document.language === "en" ? "/en" : "";
     const baseDirectory = posix.dirname(document.relativePath);
@@ -760,6 +821,199 @@ function assertSize(label, content, limit) {
 }
 
 /**
+ * Checks whether a filesystem path currently exists.
+ *
+ * @param {string} pathname Filesystem path.
+ * @returns {Promise<boolean>} True when the path exists.
+ */
+async function pathExists(pathname) {
+  try {
+    await stat(pathname);
+    return true;
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      return false;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Serializes generator runs with a cross-process lock file.
+ *
+ * @param {string} publicDir VitePress public directory.
+ * @returns {Promise<() => Promise<void>>} Lock release function.
+ */
+async function acquireGeneratorLock(publicDir) {
+  await mkdir(publicDir, { recursive: true });
+  const lockPath = join(publicDir, GENERATOR_LOCK_FILE);
+  const deadline = Date.now() + GENERATOR_LOCK_TIMEOUT_MS;
+
+  while (true) {
+    try {
+      const handle = await open(lockPath, "wx");
+      try {
+        await handle.writeFile(`${process.pid}\n`);
+      } catch (error) {
+        await handle.close();
+        await rm(lockPath, { force: true });
+        throw error;
+      }
+
+      let released = false;
+      return async () => {
+        if (released) {
+          return;
+        }
+        released = true;
+        await handle.close();
+        await rm(lockPath, { force: true });
+      };
+    } catch (error) {
+      if (error.code !== "EEXIST") {
+        throw error;
+      }
+
+      let isStale = false;
+      try {
+        const [lockContent, lockStat] = await Promise.all([
+          readFile(lockPath, "utf8"),
+          stat(lockPath),
+        ]);
+        const ownerPid = Number.parseInt(lockContent.trim(), 10);
+        if (Number.isInteger(ownerPid) && ownerPid > 0) {
+          try {
+            process.kill(ownerPid, 0);
+          } catch (ownerError) {
+            isStale = ownerError.code === "ESRCH";
+          }
+        }
+        if (Date.now() - lockStat.mtimeMs > GENERATOR_LOCK_STALE_MS) {
+          isStale = true;
+        }
+      } catch (lockError) {
+        if (lockError.code === "ENOENT") {
+          continue;
+        }
+        isStale = true;
+      }
+
+      if (isStale) {
+        await rm(lockPath, { force: true });
+        continue;
+      }
+      if (Date.now() >= deadline) {
+        throw new Error(
+          `Timed out waiting for the llms generator lock at ${lockPath}.`,
+        );
+      }
+      await delay(100);
+    }
+  }
+}
+
+/**
+ * Publishes fully staged outputs while preserving the previous version on error.
+ *
+ * @param {string} stagingDir Completed staging directory.
+ * @param {string} publicDir VitePress public directory.
+ * @returns {Promise<void>} Resolves after outputs are published.
+ */
+async function publishGeneratedOutputs(stagingDir, publicDir) {
+  const backupDir = join(publicDir, `.llms-backup-${randomUUID()}`);
+  const rawRoot = join(publicDir, "raw");
+  const stagedRawRoot = join(stagingDir, "raw");
+  const stagedRawFiles = await collectMarkdownFiles(stagedRawRoot);
+  const stagedRawFileSet = new Set(stagedRawFiles);
+  const previousRawFiles = (await pathExists(rawRoot))
+    ? await collectMarkdownFiles(rawRoot)
+    : [];
+  const movedToBackup = [];
+  const installedOutputs = [];
+  let canCleanupBackup = false;
+
+  await mkdir(backupDir, { recursive: true });
+  try {
+    for (const relativePath of stagedRawFiles) {
+      const outputPath = join(rawRoot, ...relativePath.split("/"));
+      await mkdir(dirname(outputPath), { recursive: true });
+      if (await pathExists(outputPath)) {
+        const backupPath = join(
+          backupDir,
+          "raw",
+          ...relativePath.split("/"),
+        );
+        await mkdir(dirname(backupPath), { recursive: true });
+        await rename(outputPath, backupPath);
+        movedToBackup.push({ original: outputPath, backup: backupPath });
+      }
+      await rename(
+        join(stagedRawRoot, ...relativePath.split("/")),
+        outputPath,
+      );
+      installedOutputs.push(outputPath);
+    }
+
+    for (const relativePath of previousRawFiles) {
+      if (stagedRawFileSet.has(relativePath)) {
+        continue;
+      }
+      const outputPath = join(rawRoot, ...relativePath.split("/"));
+      if (await pathExists(outputPath)) {
+        const backupPath = join(
+          backupDir,
+          "raw",
+          ...relativePath.split("/"),
+        );
+        await mkdir(dirname(backupPath), { recursive: true });
+        await rename(outputPath, backupPath);
+        movedToBackup.push({ original: outputPath, backup: backupPath });
+      }
+    }
+
+    for (const filename of GENERATED_TEXT_FILES) {
+      const outputPath = join(publicDir, filename);
+      if (await pathExists(outputPath)) {
+        const backupPath = join(backupDir, filename);
+        await rename(outputPath, backupPath);
+        movedToBackup.push({ original: outputPath, backup: backupPath });
+      }
+      await rename(join(stagingDir, filename), outputPath);
+      installedOutputs.push(outputPath);
+    }
+    canCleanupBackup = true;
+  } catch (error) {
+    const restorationErrors = [];
+    for (const outputPath of installedOutputs.reverse()) {
+      try {
+        await rm(outputPath, { recursive: true, force: true });
+      } catch (restoreError) {
+        restorationErrors.push(restoreError);
+      }
+    }
+    for (const { original, backup } of movedToBackup.reverse()) {
+      try {
+        await rename(backup, original);
+      } catch (restoreError) {
+        restorationErrors.push(restoreError);
+      }
+    }
+    if (restorationErrors.length > 0) {
+      throw new AggregateError(
+        [error, ...restorationErrors],
+        `Failed to publish generated documentation and restore the previous outputs. Backups remain at ${backupDir}.`,
+      );
+    }
+    canCleanupBackup = true;
+    throw error;
+  } finally {
+    if (canCleanupBackup) {
+      await rm(backupDir, { recursive: true, force: true });
+    }
+  }
+}
+
+/**
  * Generates llms discovery files and raw Markdown under the public directory.
  *
  * @param {object} [options] Generator options.
@@ -828,34 +1082,37 @@ export async function generateLlms({
     index: Buffer.byteLength(llmsIndex),
   };
 
-  const rawRoot = join(publicDir, "raw");
-  await mkdir(publicDir, { recursive: true });
-  await rm(rawRoot, { recursive: true, force: true });
-  await Promise.all(
-    ["llms.txt", "llms-full.txt", "llms-zh.txt", "llms-en.txt"].map(
-      (filename) => rm(join(publicDir, filename), { force: true }),
-    ),
-  );
+  const releaseLock = await acquireGeneratorLock(publicDir);
+  const stagingDir = join(publicDir, `.llms-staging-${randomUUID()}`);
+  const stagedRawRoot = join(stagingDir, "raw");
+  try {
+    await mkdir(stagedRawRoot, { recursive: true });
 
-  for (const document of allDocuments) {
-    if (document.isDraft) {
-      continue;
+    for (const document of allDocuments) {
+      if (document.isDraft) {
+        continue;
+      }
+      const rawOutputPath = join(
+        stagedRawRoot,
+        document.language,
+        ...document.relativePath.split("/"),
+      );
+      await mkdir(dirname(rawOutputPath), { recursive: true });
+      await writeFile(rawOutputPath, document.sourceBuffer);
     }
-    const rawOutputPath = join(
-      rawRoot,
-      document.language,
-      ...document.relativePath.split("/"),
-    );
-    await mkdir(dirname(rawOutputPath), { recursive: true });
-    await writeFile(rawOutputPath, document.sourceBuffer);
-  }
 
-  await Promise.all([
-    writeFile(join(publicDir, "llms.txt"), llmsIndex),
-    writeFile(join(publicDir, "llms-full.txt"), combinedFullText),
-    writeFile(join(publicDir, "llms-zh.txt"), languageFullText.zh),
-    writeFile(join(publicDir, "llms-en.txt"), languageFullText.en),
-  ]);
+    await Promise.all([
+      writeFile(join(stagingDir, "llms.txt"), llmsIndex),
+      writeFile(join(stagingDir, "llms-full.txt"), combinedFullText),
+      writeFile(join(stagingDir, "llms-zh.txt"), languageFullText.zh),
+      writeFile(join(stagingDir, "llms-en.txt"), languageFullText.en),
+    ]);
+
+    await publishGeneratedOutputs(stagingDir, publicDir);
+  } finally {
+    await rm(stagingDir, { recursive: true, force: true });
+    await releaseLock();
+  }
 
   return {
     sourceDocuments: allDocuments.length,
