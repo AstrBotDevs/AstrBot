@@ -208,6 +208,7 @@ async def test_failed_llm_response_persists_checkpoint_for_retry():
             {"role": "_checkpoint", "content": {"id": "cp-1"}},
         ],
         token_usage=None,
+        expected_history_epoch=0,
     )
 
 
@@ -256,6 +257,7 @@ async def test_aborted_response_persists_synthetic_stop_turn():
             },
         ],
         token_usage=None,
+        expected_history_epoch=0,
     )
 
 
@@ -328,6 +330,7 @@ async def test_terminal_tool_result_persists_history_without_checkpoint():
             },
         ],
         token_usage=1234,
+        expected_history_epoch=0,
     )
 
 
@@ -401,6 +404,7 @@ async def test_terminal_tool_result_with_checkpoint_uses_none_token_usage():
             {"role": "_checkpoint", "content": {"id": "cp-1"}},
         ],
         token_usage=None,
+        expected_history_epoch=0,
     )
 
 
