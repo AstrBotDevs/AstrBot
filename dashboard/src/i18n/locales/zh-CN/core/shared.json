@@ -48,6 +48,7 @@
     "filterSource": "筛选提供商源",
     "notSelected": "未选择",
     "defaultModel": "默认模型",
+    "defaultModelSubtitle": "跟随配置文件默认模型",
     "model": "模型",
     "searchPlaceholder": "搜索模型",
     "buttonText": "选择提供商...",

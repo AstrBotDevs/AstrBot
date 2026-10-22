@@ -42,8 +42,7 @@ function updateSelection(value: string | string[]) {
 }
 
 function saveSelection(provider: ProviderSelection | null) {
-  if (!provider) return;
-  setSelection(provider.id, provider.model || "");
+  setSelection(provider?.id || "", provider?.model || "");
 }
 
 function getCurrentSelection() {
