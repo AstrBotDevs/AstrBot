@@ -62,6 +62,18 @@ For users who want one-click 24-hour-online deployment and do not want to manage
 
 [![Deploy on RainYun](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-en.svg)](https://app.rainyun.com/apps/rca/store/5994?ref=NjU1ODg0)
 
+### One-Click Cloud Deployment (RepoCloud)
+
+Deploy AstrBot to a VPS with RepoCloud:
+
+<a href="https://repocloud.io/details/AstrBot/"><img src="https://d16t0pc4846x52.cloudfront.net/deploylobe.svg" alt="Deploy on RepoCloud" height="50"></a>
+
+### One-Click Cloud Deployment (Railway)
+
+Deploy AstrBot on Railway with a community template:
+
+<a href="https://railway.com/deploy/astrbot-openclaw-alternative"><img src="https://railway.com/button.svg" alt="Deploy on Railway" height="50"></a>
+
 ### One-Click Deployment
 
 > [!NOTE]
