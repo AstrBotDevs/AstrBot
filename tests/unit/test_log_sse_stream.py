@@ -8,13 +8,14 @@ from starlette.middleware.gzip import GZipMiddleware
 from starlette.responses import StreamingResponse
 
 from astrbot.core import LogBroker
+from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.dashboard.services.log_service import LogService
 
 
 class LogSSEStreamTests(IsolatedAsyncioTestCase):
     async def test_idle_stream_starts_with_comment(self):
         broker = LogBroker()
-        service = LogService(broker, {})
+        service = LogService(broker, Mock(spec=AstrBotConfig))
         stream = service.stream_log_events(None)
         try:
             first = await asyncio.wait_for(anext(stream), timeout=1)
@@ -31,7 +32,7 @@ class LogSSEStreamTests(IsolatedAsyncioTestCase):
         queue.put_nowait(live)
         broker = Mock(log_cache=[{"time": 9, "data": "old"}, cached])
         broker.register.return_value = queue
-        service = LogService(broker, {})
+        service = LogService(broker, Mock(spec=AstrBotConfig))
         stream = service.stream_log_events("10")
         try:
             self.assertEqual(
@@ -51,7 +52,9 @@ class LogSSEStreamTests(IsolatedAsyncioTestCase):
         for last_event_id in (None, "10"):
             with self.subTest(last_event_id=last_event_id):
                 broker = LogBroker()
-                stream = LogService(broker, {}).stream_log_events(last_event_id)
+                stream = LogService(broker, Mock(spec=AstrBotConfig)).stream_log_events(
+                    last_event_id
+                )
                 try:
                     self.assertEqual(await anext(stream), ": connected\n\n")
                     broker.publish(
@@ -78,7 +81,7 @@ class LogSSEStreamTests(IsolatedAsyncioTestCase):
 
         broker = Mock()
         broker.register.side_effect = register
-        stream = LogService(broker, {}).stream_log_events(None)
+        stream = LogService(broker, Mock(spec=AstrBotConfig)).stream_log_events(None)
         try:
             self.assertEqual(await anext(stream), ": connected\n\n")
             pending = asyncio.create_task(anext(stream))
@@ -102,7 +105,7 @@ class LogSSEStreamTests(IsolatedAsyncioTestCase):
 
                 broker = Mock()
                 broker.register.side_effect = register
-                service = LogService(broker, {})
+                service = LogService(broker, Mock(spec=AstrBotConfig))
                 app = FastAPI()
                 app.add_middleware(GZipMiddleware, minimum_size=1024)
 
