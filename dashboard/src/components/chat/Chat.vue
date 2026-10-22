@@ -1007,6 +1007,15 @@ function readSessionProviderSelection(sessionId: string) {
   return null;
 }
 
+function clearSessionProviderSelection(sessionId: string) {
+  if (!sessionId) return;
+  try {
+    localStorage.removeItem(SESSION_PROVIDER_STORAGE_PREFIX + sessionId);
+  } catch {
+    // Session model persistence must not block chat flows.
+  }
+}
+
 function writeSessionProviderSelection(
   sessionId: string,
   selection: { providerId?: string; modelName?: string } | null,
@@ -1027,7 +1036,11 @@ function writeSessionProviderSelection(
 
 // Remember the model picked by the user for the active session.
 watch([currentProviderId, currentModelName], ([providerId, modelName]) => {
-  if (!currSessionId.value || !providerId) return;
+  if (!currSessionId.value) return;
+  if (!providerId) {
+    clearSessionProviderSelection(currSessionId.value);
+    return;
+  }
   writeSessionProviderSelection(currSessionId.value, {
     providerId,
     modelName,

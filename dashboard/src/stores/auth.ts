@@ -10,6 +10,7 @@ import {
   type VersionData,
 } from '@/api/v1';
 import { httpClient } from '@/api/http';
+import { clearProviderSelectionStorage } from '@/composables/useProviderModelSelection';
 
 export const useAuthStore = defineStore("auth", {
   state: () => ({
@@ -178,6 +179,13 @@ export const useAuthStore = defineStore("auth", {
       localStorage.removeItem('change_pwd_hint');
       localStorage.removeItem('md5_pwd_hint');
       localStorage.removeItem('password_upgrade_required');
+      clearProviderSelectionStorage();
+      for (let i = localStorage.length - 1; i >= 0; i -= 1) {
+        const key = localStorage.key(i);
+        if (key?.startsWith('chat.sessionProvider.')) {
+          localStorage.removeItem(key);
+        }
+      }
       void authApi.logout().catch(() => undefined);
       router.push('/auth/login');
     },

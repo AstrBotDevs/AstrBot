@@ -5,7 +5,7 @@
     :fallback-model="selectedModelName"
     provider-type="chat_completion"
     :variant="variant"
-    :allow-empty="false"
+    :allow-empty="true"
     @update:model-value="updateSelection"
     @select="saveSelection"
   />

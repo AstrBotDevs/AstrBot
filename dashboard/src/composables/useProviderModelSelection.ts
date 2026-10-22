@@ -17,10 +17,27 @@ function syncFromStorage() {
     localStorage.getItem(SELECTED_PROVIDER_MODEL_KEY) || "";
 }
 
+export function clearProviderSelectionStorage() {
+  syncedFromStorage = false;
+  selectedProviderId.value = "";
+  selectedModelName.value = "";
+  try {
+    localStorage.removeItem(SELECTED_PROVIDER_KEY);
+    localStorage.removeItem(SELECTED_PROVIDER_MODEL_KEY);
+  } catch {
+    // Selection persistence must not block the UI.
+  }
+}
+
 export function useProviderModelSelection() {
   syncFromStorage();
 
   function setSelection(providerId: string, modelName = "") {
+    if (!providerId) {
+      clearProviderSelectionStorage();
+      return;
+    }
+
     selectedProviderId.value = providerId;
     selectedModelName.value = modelName;
     try {
@@ -31,5 +48,10 @@ export function useProviderModelSelection() {
     }
   }
 
-  return { selectedProviderId, selectedModelName, setSelection };
+  return {
+    selectedProviderId,
+    selectedModelName,
+    setSelection,
+    clearSelection: clearProviderSelectionStorage,
+  };
 }
