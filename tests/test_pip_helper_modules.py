@@ -506,6 +506,7 @@ def test_precheck_defers_active_extras_to_the_installer(
     assert analysis is not None
     assert analysis.missing_names == frozenset({name})
     assert analysis.version_mismatch_names == frozenset()
+    assert analysis.extras_names == frozenset({name})
     assert requirements_utils.find_missing_requirements(str(requirements_path)) == {
         name
     }
@@ -513,6 +514,7 @@ def test_precheck_defers_active_extras_to_the_installer(
     assert plan is not None
     assert plan.install_lines == (requirement,)
     assert plan.version_mismatch_names == frozenset()
+    assert plan.extras_names == frozenset({name})
 
 
 def test_precheck_does_not_install_extras_with_inactive_markers(monkeypatch, tmp_path):

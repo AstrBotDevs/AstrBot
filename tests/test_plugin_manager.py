@@ -2932,7 +2932,7 @@ async def test_repeated_deactivated_loads_bind_handlers_once_when_activated(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "installed_version, expected_upgrade", [("2.0", False), ("0.5", True)]
+    "installed_version, expected_upgrade", [("2.0", True), ("0.5", True)]
 )
 async def test_plugin_precheck_installs_extras_even_when_base_package_is_present(
     monkeypatch, tmp_path, installed_version, expected_upgrade

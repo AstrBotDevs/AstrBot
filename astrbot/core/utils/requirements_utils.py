@@ -33,6 +33,7 @@ class ParsedPackageInput:
 class MissingRequirementsAnalysis:
     missing_names: frozenset[str]
     version_mismatch_names: frozenset[str] = frozenset()
+    extras_names: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -41,6 +42,7 @@ class MissingRequirementsPlan:
     install_lines: tuple[str, ...]
     version_mismatch_names: frozenset[str] = frozenset()
     fallback_reason: str | None = None
+    extras_names: frozenset[str] = frozenset()
 
 
 def canonicalize_distribution_name(name: str) -> str:
@@ -422,7 +424,7 @@ def classify_missing_requirements_from_lines(
         ):
             # An installed base distribution does not prove its extras are present.
             # Keep these requirements in the install plan for pip to resolve,
-            # without reinstalling unrelated requirements or forcing an upgrade.
+            # without including unrelated satisfied requirements.
             extras_names.add(canonicalize_distribution_name(requirement.name))
 
     required = list(iter_requirements(lines=requirement_lines))
@@ -447,6 +449,7 @@ def classify_missing_requirements_from_lines(
     return MissingRequirementsAnalysis(
         missing_names=frozenset(missing),
         version_mismatch_names=frozenset(version_mismatch_names),
+        extras_names=frozenset(extras_names),
     )
 
 
@@ -509,12 +512,14 @@ def plan_missing_requirements_install(
             version_mismatch_names=frozenset(version_mismatch_names),
             install_lines=(),
             fallback_reason="unmapped missing requirement names",
+            extras_names=analysis.extras_names,
         )
 
     return MissingRequirementsPlan(
         missing_names=frozenset(missing),
         version_mismatch_names=frozenset(version_mismatch_names),
         install_lines=install_lines,
+        extras_names=analysis.extras_names,
     )
 
 
