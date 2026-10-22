@@ -1327,7 +1327,7 @@
       },
       "pip_install_arg": {
         "description": "Additional pip Installation Arguments",
-        "hint": "When installing plugin dependencies, Python's pip tool will be used. Additional arguments can be provided here, such as `--break-system-package`."
+        "hint": "When installing plugin dependencies, Python's pip tool will be used. Additional arguments can be provided here, such as `--break-system-package`. TLS certificates of the PyPI index are verified by default; for self-signed/private-CA mirrors, pass `--cert <CA bundle path>` (recommended) or explicitly add `--trusted-host <host>`."
       },
       "pypi_index_url": {
         "description": "PyPI Repository URL",
