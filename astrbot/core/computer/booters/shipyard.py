@@ -37,14 +37,20 @@ def _flatten_shipyard_payload(result: object) -> dict[str, Any]:
 
     Returns:
         Flat mapping with the top-level fields plus the ``data`` fields; the
-        ``data`` key itself is removed.
+        ``data`` key itself is removed. Nested ``None`` values never overwrite
+        a real top-level value, so an envelope ``error`` is not hidden by
+        ``data.error = None``.
     """
     payload = _maybe_model_dump(result)
     data = payload.get("data")
     if not isinstance(data, dict):
         return payload
 
-    flat = {**payload, **data}
+    flat = dict(payload)
+    for key, value in data.items():
+        if key == "data" or value is None:
+            continue
+        flat[key] = value
     flat.pop("data", None)
     return flat
 
@@ -94,6 +100,11 @@ class ShipyardShellWrapper:
         exit_code = payload.get("exit_code")
         if exit_code is None:
             exit_code = payload.get("return_code")
+        success = payload.get("success")
+        if success is None:
+            # Older servers omit `success`; fall back to the exit code so a
+            # failing command with quiet stderr is not reported as a success.
+            success = exit_code in (0, None) and not stderr
         if background:
             pid: int | None = None
             try:
@@ -109,7 +120,7 @@ class ShipyardShellWrapper:
                 ),
                 "stderr": stderr,
                 "exit_code": exit_code,
-                "success": bool(payload.get("success", not stderr)),
+                "success": bool(success),
                 "execution_id": payload.get("execution_id"),
                 "execution_time_ms": payload.get("execution_time_ms"),
                 "command": payload.get("command"),
@@ -119,7 +130,7 @@ class ShipyardShellWrapper:
             "stdout": stdout,
             "stderr": stderr,
             "exit_code": exit_code,
-            "success": bool(payload.get("success", not stderr)),
+            "success": bool(success),
             "execution_id": payload.get("execution_id"),
             "execution_time_ms": payload.get("execution_time_ms"),
             "command": payload.get("command"),

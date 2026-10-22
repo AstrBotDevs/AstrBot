@@ -491,6 +491,47 @@ class TestShipyardBooter:
         assert result["success"] is False
 
     @pytest.mark.asyncio
+    async def test_shipyard_shell_failure_without_success_field(self):
+        """A nonzero return code without `success` is reported as a failure."""
+        from astrbot.core.computer.booters.shipyard import ShipyardShellWrapper
+
+        raw_shell = MagicMock()
+        raw_shell.exec = AsyncMock(
+            return_value={"data": {"return_code": 1, "stdout": "", "stderr": ""}}
+        )
+
+        result = await ShipyardShellWrapper(raw_shell).exec("false")
+
+        assert result["exit_code"] == 1
+        assert result["success"] is False
+
+    @pytest.mark.asyncio
+    async def test_shipyard_shell_keeps_envelope_error(self):
+        """A nested `data.error = None` must not hide the envelope error."""
+        from astrbot.core.computer.booters.shipyard import ShipyardShellWrapper
+
+        raw_shell = MagicMock()
+        raw_shell.exec = AsyncMock(
+            return_value={
+                "success": False,
+                "data": {
+                    "success": False,
+                    "return_code": 1,
+                    "stdout": "",
+                    "stderr": "",
+                    "error": None,
+                },
+                "error": "Ship returned 500: exec failed",
+            },
+        )
+
+        result = await ShipyardShellWrapper(raw_shell).exec("false")
+
+        assert result["stderr"] == "Ship returned 500: exec failed"
+        assert result["exit_code"] == 1
+        assert result["success"] is False
+
+    @pytest.mark.asyncio
     async def test_shipyard_file_tools_unwrap_bay_exec_response(self):
         """Bay file responses keep their payload under the data field too."""
         from astrbot.core.computer.booters.shipyard import (
