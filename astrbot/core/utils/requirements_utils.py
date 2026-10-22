@@ -411,6 +411,7 @@ def find_missing_requirements_from_lines(
 def classify_missing_requirements_from_lines(
     requirement_lines: Sequence[str],
 ) -> MissingRequirementsAnalysis | None:
+    extras_names: set[str] = set()
     for line in requirement_lines:
         try:
             requirement = Requirement(line)
@@ -420,8 +421,9 @@ def classify_missing_requirements_from_lines(
             requirement.marker is None or requirement.marker.evaluate()
         ):
             # An installed base distribution does not prove its extras are present.
-            # Let pip resolve their transitive dependencies and environment markers.
-            return None
+            # Keep these requirements in the install plan for pip to resolve,
+            # without reinstalling unrelated requirements or forcing an upgrade.
+            extras_names.add(canonicalize_distribution_name(requirement.name))
 
     required = list(iter_requirements(lines=requirement_lines))
     if not required:
@@ -431,7 +433,7 @@ def classify_missing_requirements_from_lines(
     if installed is None:
         return None
 
-    missing: set[str] = set()
+    missing: set[str] = set(extras_names)
     version_mismatch_names: set[str] = set()
     for name, specifier in required:
         installed_version = installed.get(name)
