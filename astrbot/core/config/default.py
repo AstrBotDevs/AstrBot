@@ -4181,9 +4181,9 @@ CONFIG_METADATA_3 = {
                         "hint": "在受支持的消息平台的群聊中的用户提示词前带上群名称信息。",
                     },
                     "provider_settings.datetime_system_prompt": {
-                        "description": "现实世界时间感知",
+                        "description": "附带当前时间信息",
                         "type": "bool",
-                        "hint": "在用户提示词中带上当前的时间信息。",
+                        "hint": "启用后，会在用户提示词中附带当前日期、时间、时区和星期，供模型参考。",
                         "condition": {
                             "agent_runner.runner_type": "local",
                         },

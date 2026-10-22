@@ -348,7 +348,7 @@ SerpApi Google Search、Google Images Light、Google Finance 和 Google Scholar 
 
 #### `provider_settings.datetime_system_prompt`
 
-是否在系统提示词中加上当前机器的日期时间。默认为 `true`。
+是否在用户提示词中附带当前日期、时间、时区和星期。默认为 `true`。
 
 #### `provider_settings.default_personality`
 

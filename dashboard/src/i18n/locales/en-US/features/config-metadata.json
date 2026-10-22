@@ -481,8 +481,8 @@
           "hint": "Prepend the group name to user prompts in group chats on supported messaging platforms."
         },
         "datetime_system_prompt": {
-          "description": "Real-world Time Awareness",
-          "hint": "Include the current time in the user prompt."
+          "description": "Include Current Time Information",
+          "hint": "When enabled, the current date, time, timezone, and weekday are included in the user prompt for the model to reference."
         },
         "show_tool_use_status": {
           "description": "Show Tool Call Information",
