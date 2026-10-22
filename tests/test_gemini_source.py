@@ -386,6 +386,49 @@ async def test_gemini_stream_keeps_conversation_header_until_consumed(
 
 
 @pytest.mark.asyncio
+async def test_gemini_stream_retries_error_before_first_chunk(monkeypatch):
+    monkeypatch.setattr(request_retry, "REQUEST_RETRY_WAIT_MIN_S", 0)
+    monkeypatch.setattr(request_retry, "REQUEST_RETRY_WAIT_MAX_S", 0)
+    provider = _gemini_stream_provider()
+    calls = 0
+
+    async def fake_generate_content_stream(**kwargs):
+        async def stream():
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                request = httpx.Request("GET", "http://localhost/generate")
+                response = httpx.Response(500, request=request)
+                raise httpx.HTTPStatusError(
+                    "server error", request=request, response=response
+                )
+            yield _gemini_stream_chunk(text="ok")
+
+        return stream()
+
+    provider.client.models.generate_content_stream = fake_generate_content_stream
+
+    async def fake_prepare_query_config(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(provider, "_prepare_query_config", fake_prepare_query_config)
+    responses = [
+        response
+        async for response in provider._query_stream(
+            payloads={
+                "messages": [{"role": "user", "content": "hello"}],
+                "model": "gemini-3.7-flash",
+            },
+            tools=None,
+            request_max_retries=2,
+        )
+    ]
+
+    assert calls == 2
+    assert responses[-1].completion_text == "ok"
+
+
+@pytest.mark.asyncio
 async def test_gemini_stream_keeps_reasoning_from_tool_call_chunk(monkeypatch):
     """Reasoning on the tool-call chunk itself must not be overwritten."""
     provider = _gemini_stream_provider()

@@ -766,13 +766,27 @@ class ProviderGoogleGenAI(Provider):
                     system_instruction,
                 )
                 async with self._conversation_header(conversation_id):
-                    result = await retry_provider_request(
-                        "Gemini",
-                        lambda: self.client.models.generate_content_stream(
+                    stream_start = object()
+
+                    async def open_stream():
+                        stream = await self.client.models.generate_content_stream(
                             model=model,
                             contents=cast(types.ContentListUnion, conversation),
                             config=config,
-                        ),
+                        )
+                        first_chunk = await anext(stream, stream_start)
+
+                        async def replay_first_chunk():
+                            if first_chunk is not stream_start:
+                                yield first_chunk
+                            async for chunk in stream:
+                                yield chunk
+
+                        return replay_first_chunk()
+
+                    result = await retry_provider_request(
+                        "Gemini",
+                        open_stream,
                         max_attempts=request_max_retries,
                     )
                 break
