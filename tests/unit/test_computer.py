@@ -569,6 +569,54 @@ class TestShipyardBooter:
         assert "data" not in list_result
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("method", "kwargs", "inner"),
+        [
+            (
+                "create_file",
+                {"path": "probe.txt", "content": "hello-file"},
+                {"success": True, "path": "probe.txt", "size": 10},
+            ),
+            (
+                "write_file",
+                {"path": "probe.txt", "content": "hello-file"},
+                {"success": True, "path": "probe.txt", "bytes_written": 10},
+            ),
+            (
+                "delete_file",
+                {"path": "probe.txt"},
+                {"success": True, "path": "probe.txt"},
+            ),
+            (
+                "edit_file",
+                {"path": "probe.txt", "old_string": "a", "new_string": "b"},
+                {"success": True, "replacements": 1},
+            ),
+        ],
+    )
+    async def test_shipyard_remaining_file_tools_unwrap_bay_exec_response(
+        self, method, kwargs, inner
+    ):
+        """Every fs wrapper flattens the envelope, not only read_file/list_dir."""
+        from astrbot.core.computer.booters.shipyard import (
+            ShipyardFileSystemWrapper,
+        )
+
+        raw_fs = MagicMock()
+        setattr(
+            raw_fs,
+            method,
+            AsyncMock(return_value={"success": True, "data": inner, "error": None}),
+        )
+
+        wrapper = ShipyardFileSystemWrapper(raw_fs, MagicMock())
+        result = await getattr(wrapper, method)(**kwargs)
+
+        for key, value in inner.items():
+            assert result[key] == value
+        assert "data" not in result
+
+    @pytest.mark.asyncio
     async def test_shipyard_booter_init(self):
         """Test ShipyardBooter initialization."""
         with patch("astrbot.core.computer.booters.shipyard.ShipyardClient"):
