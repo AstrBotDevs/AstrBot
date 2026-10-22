@@ -15,7 +15,7 @@ from mcp.types import CallToolResult, ImageContent
 from PIL import Image
 
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.computer import file_read_utils, local_file_security
+from astrbot.core.computer import file_read_utils
 from astrbot.core.computer.booters.local import LocalBooter
 from astrbot.core.tools.computer_tools import fs as fs_tools
 from astrbot.core.tools.computer_tools import util as computer_util
@@ -306,7 +306,6 @@ def _make_epub_bytes(*, chapter_count: int = 1) -> bytes:
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(os.name == "nt", reason="Restricted file access needs POSIX.")
 async def test_restricted_local_member_can_read_plugin_provided_skill(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
@@ -332,7 +331,6 @@ async def test_restricted_local_member_can_read_plugin_provided_skill(
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(os.name == "nt", reason="Restricted file access needs POSIX.")
 async def test_restricted_local_member_can_read_builtin_plugin_skill(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
@@ -358,7 +356,6 @@ async def test_restricted_local_member_can_read_builtin_plugin_skill(
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(os.name == "nt", reason="Restricted file access needs POSIX.")
 async def test_restricted_local_member_can_read_plugin_skill_inventory_even_if_plugin_inactive(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
@@ -430,7 +427,6 @@ async def test_local_filesystem_scope_can_grant_member_host_access(
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(os.name == "nt", reason="Restricted file access needs POSIX.")
 async def test_restricted_local_member_can_write_to_new_workspace(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
@@ -480,7 +476,6 @@ async def test_restricted_local_member_cannot_write_plugin_provided_skill(
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(os.name == "nt", reason="Restricted file access needs POSIX.")
 async def test_restricted_local_member_cannot_modify_locally_installed_skill(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
@@ -524,7 +519,6 @@ async def test_restricted_local_member_cannot_modify_locally_installed_skill(
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(os.name == "nt", reason="Restricted file access needs POSIX.")
 async def test_local_admin_can_modify_locally_installed_skill(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
@@ -579,6 +573,37 @@ async def test_restricted_local_member_rejects_workspace_hardlink_alias(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("role", ["member", "admin"])
+@pytest.mark.parametrize("status", ["missing", "unavailable", "unsupported"])
+@pytest.mark.parametrize(
+    "tool_type,arguments",
+    [
+        (fs_tools.FileReadTool, {}),
+        (fs_tools.FileWriteTool, {"content": "changed"}),
+        (fs_tools.FileEditTool, {"old": "original", "new": "changed"}),
+        (fs_tools.GrepTool, {"pattern": "original"}),
+    ],
+)
+async def test_isolation_failure_does_not_expand_workspace_file_access(
+    monkeypatch, tmp_path, role, status, tool_type, arguments
+):
+    """Keep both roles inside their saved file scope after execution is disabled."""
+    _setup_local_fs_tools(monkeypatch, tmp_path)
+    monkeypatch.setattr(computer_util, "get_process_sandbox_status", lambda: {"status": status})
+    outside = tmp_path / "outside.txt"
+    outside.write_text("original secret", encoding="utf-8")
+    context = _make_context(role=role, local_permissions={role: {
+        "filesystem_scope": "workspace", "allow_execution": True, "allow_network": True,
+    }})
+
+    result = await tool_type().call(context, path=str(outside), **arguments)
+
+    assert "access is restricted for this user" in result
+    assert "original secret" not in result
+    assert outside.read_text(encoding="utf-8") == "original secret"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["member", "admin"])
 @pytest.mark.parametrize(
     ("tool_type", "arguments"),
     [
@@ -591,29 +616,31 @@ async def test_restricted_local_member_rejects_workspace_hardlink_alias(
         ),
     ],
 )
-async def test_unavailable_restricted_file_access_fails_closed(
+async def test_restricted_file_access_preserves_files_when_native_open_fails(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
     role,
     tool_type,
     arguments,
 ):
-    """Missing safe file primitives reject access without side effects."""
+    """A native open failure must not read or modify files through their paths."""
     workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
     existing_file = workspace / "existing.txt"
     existing_file.write_text("original secret\n", encoding="utf-8")
-    # Simulate missing POSIX primitives without changing pathlib's OS view.
-    monkeypatch.setattr(local_file_security, "os", SimpleNamespace(name="posix"))
+    def unavailable_open(*args, **kwargs):
+        raise PermissionError("Native workspace open denied")
+
+    monkeypatch.setattr(fs_tools, "open_file_in_allowed_roots", unavailable_open)
 
     result = await tool_type().call(
         _make_context(
             role=role,
-            local_permissions={role: {"filesystem_scope": "workspace"}},
+            local_permissions={role: {"filesystem_scope": "workspace", "allow_execution": False}},
         ),
         **arguments,
     )
 
-    assert "Race-resistant restricted file access is unavailable" in result
+    assert "Native workspace open denied" in result
     assert "original secret" not in result
     assert existing_file.read_text(encoding="utf-8") == "original secret\n"
     assert not (workspace / "new.txt").exists()
@@ -751,11 +778,14 @@ async def test_restricted_local_edit_reuses_first_opened_file(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("path", ["target.txt", None])
-async def test_restricted_local_grep_requests_read_only_os_sandbox(
+@pytest.mark.parametrize("status", ["detected", "missing", "unavailable", "unsupported"])
+async def test_restricted_local_grep_uses_isolation_only_when_available(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
     path,
+    status,
 ):
+    monkeypatch.setattr(computer_util, "get_process_sandbox_status", lambda: {"status": status})
     workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
     (workspace / "target.txt").write_text("needle\n", encoding="utf-8")
     missing_root = tmp_path / "missing-temp"
@@ -788,8 +818,9 @@ async def test_restricted_local_grep_requests_read_only_os_sandbox(
     assert "needle" in result
     assert len(calls) == 1
     assert not missing_root.exists()
-    assert calls[0]["sandboxed"] is True
-    assert calls[0]["sandbox_root"] == str(workspace)
+    assert calls[0].get("sandboxed", False) == (status == "detected")
+    if status == "detected":
+        assert calls[0]["sandbox_root"] == str(workspace)
 
 
 def test_detect_text_encoding_allows_utf8_probe_cut_mid_character():
@@ -799,7 +830,6 @@ def test_detect_text_encoding_allows_utf8_probe_cut_mid_character():
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(os.name == "nt", reason="Restricted file access needs POSIX.")
 async def test_file_read_tool_rejects_large_full_text_read_before_local_stream_read(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
@@ -823,7 +853,6 @@ async def test_file_read_tool_rejects_large_full_text_read_before_local_stream_r
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(os.name == "nt", reason="Restricted file access needs POSIX.")
 async def test_file_read_tool_allows_partial_read_for_large_text_file(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
@@ -844,7 +873,6 @@ async def test_file_read_tool_allows_partial_read_for_large_text_file(
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(os.name == "nt", reason="Restricted file access needs POSIX.")
 async def test_file_read_tool_returns_image_call_tool_result_for_images(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
@@ -866,7 +894,6 @@ async def test_file_read_tool_returns_image_call_tool_result_for_images(
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(os.name == "nt", reason="Restricted file access needs POSIX.")
 async def test_file_read_tool_treats_svg_as_text(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
@@ -887,7 +914,6 @@ async def test_file_read_tool_treats_svg_as_text(
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(os.name == "nt", reason="Restricted file access needs POSIX.")
 async def test_file_read_tool_reads_pdf_via_parser(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
@@ -910,7 +936,6 @@ async def test_file_read_tool_reads_pdf_via_parser(
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(os.name == "nt", reason="Restricted file access needs POSIX.")
 async def test_file_read_tool_reads_docx_via_parser_and_magic(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
@@ -945,7 +970,6 @@ def test_is_epub_bytes_rejects_plain_zip_archive():
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(os.name == "nt", reason="Restricted file access needs POSIX.")
 async def test_file_read_tool_reads_epub_via_parser_and_magic(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
@@ -968,7 +992,6 @@ async def test_file_read_tool_reads_epub_via_parser_and_magic(
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(os.name == "nt", reason="Restricted file access needs POSIX.")
 async def test_file_read_tool_stores_long_converted_document_in_workspace(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
@@ -1135,7 +1158,6 @@ async def test_file_edit_inserts_a_literal_escape_unchanged(
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(os.name == "nt", reason="Restricted file access needs POSIX.")
 async def test_restricted_file_edit_matches_a_literal_escape(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,

@@ -15,6 +15,7 @@ import {
 
 export interface menu {
   header?: string;
+  value?: string;
   title?: string;
   icon?: string | Component;
   to?: string;
@@ -40,10 +41,6 @@ export interface menu {
 
 export const SYSTEM_GROUP_KEY = 'core.navigation.groups.system';
 export const EXTENSION_GROUP_KEY = 'core.navigation.groups.extension';
-
-// Kept for the legacy sidebar customization storage; the default layout no
-// longer uses a collapsible "more" group.
-export const MORE_GROUP_KEY = 'core.navigation.groups.more';
 
 // 注意：这个文件现在包含i18n键值而不是直接的文本
 // 在组件中使用时需要通过t()函数进行翻译

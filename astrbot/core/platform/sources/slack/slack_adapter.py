@@ -83,34 +83,14 @@ class SlackAdapter(Platform):
         session: MessageSesion,
         message_chain: MessageChain,
     ) -> None:
-        blocks, text = await SlackMessageEvent._parse_slack_blocks(
-            message_chain=message_chain,
+        channel_id = session.session_id
+        if session.message_type == MessageType.GROUP_MESSAGE:
+            channel_id = channel_id.split("_")[-1]
+        await SlackMessageEvent._send_message(
+            message=message_chain,
             web_client=self.web_client,
+            channel_id=channel_id,
         )
-
-        try:
-            if session.message_type == MessageType.GROUP_MESSAGE:
-                # 发送到频道
-                channel_id = (
-                    session.session_id.split("_")[-1]
-                    if "_" in session.session_id
-                    else session.session_id
-                )
-                await self.web_client.chat_postMessage(
-                    channel=channel_id,
-                    text=text,
-                    blocks=blocks if blocks else None,
-                )
-            else:
-                # 发送私信
-                await self.web_client.chat_postMessage(
-                    channel=session.session_id,
-                    text=text,
-                    blocks=blocks if blocks else None,
-                )
-        except Exception as e:
-            logger.error(f"Slack 发送消息失败: {e}")
-
         await super().send_by_session(session, message_chain)
 
     async def convert_message(self, event: dict) -> AstrBotMessage:

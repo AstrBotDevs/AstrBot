@@ -98,16 +98,6 @@
                     </div>
                     <div class="settings-section__content">
                         <div class="settings-list-card">
-                            <div class="settings-item">
-                                <div class="settings-item__label">
-                                    <div class="settings-item__title">{{ tm('sidebar.customize.title') }}</div>
-                                    <div class="settings-item__subtitle">{{ tm('sidebar.customize.subtitle') }}</div>
-                                </div>
-                                <div class="settings-item__control">
-                                    <SidebarCustomizer />
-                                </div>
-                            </div>
-
                             <div class="settings-item settings-item--color">
                                 <div class="settings-item__label">
                                     <div class="settings-item__title">{{ tm('theme.customize.title') }}</div>
@@ -217,6 +207,16 @@
                                         <v-icon class="mr-2">mdi-backup-restore</v-icon>
                                         {{ tm('system.backup.button') }}
                                     </v-btn>
+                                </div>
+                            </div>
+
+                            <div class="settings-item">
+                                <div class="settings-item__label">
+                                    <div class="settings-item__title">{{ tm('system.diagnostics.title') }}</div>
+                                    <div class="settings-item__subtitle">{{ tm('system.diagnostics.subtitle') }}</div>
+                                </div>
+                                <div class="settings-item__control">
+                                    <LogExportButton />
                                 </div>
                             </div>
 
@@ -490,9 +490,9 @@ import { apiKeyApi, systemConfigApi } from '@/api/v1';
 import AstrBotConfigV4 from '@/components/shared/AstrBotConfigV4.vue';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import ProxySelector from '@/components/shared/ProxySelector.vue';
-import SidebarCustomizer from '@/components/shared/SidebarCustomizer.vue';
 import BackupDialog from '@/components/shared/BackupDialog.vue';
 import StorageCleanupPanel from '@/components/shared/StorageCleanupPanel.vue';
+import LogExportButton from '@/components/shared/LogExportButton.vue';
 import DashboardTwoFactorDialog from '@/components/shared/DashboardTwoFactorDialog.vue';
 import ChangelogDialog from '@/components/shared/ChangelogDialog.vue';
 import { restartAstrBot as restartAstrBotRuntime } from '@/utils/restartAstrBot';
@@ -758,9 +758,10 @@ const systemConfigGroups = computed(() => {
             'log_file_enable',
             'log_file_path',
             'log_file_max_mb',
-            'trace_log_enable',
-            'trace_log_path',
-            'trace_log_max_mb'
+            'trace_enable',
+            'trace_db_path',
+            'trace_db_max_mb',
+            'trace_retention_days'
         ]),
         createGroup('tempStorage', [
             'temp_dir_max_size'
@@ -1149,9 +1150,12 @@ onUnmounted(() => {
 .settings-page {
     --settings-border: rgba(17, 24, 39, 0.13);
     --settings-divider: rgba(17, 24, 39, 0.09);
+    display: flex;
+    flex-direction: column;
     width: min(100%, 940px);
+    height: 100%;
     margin: 0 auto;
-    padding: 36px 18px 48px;
+    padding: 36px 18px 8px;
 }
 
 .settings-page__header {
@@ -1170,21 +1174,28 @@ onUnmounted(() => {
 .settings-layout {
     display: grid;
     grid-template-columns: 126px minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
     gap: 34px;
-    align-items: start;
+    align-items: stretch;
+    flex: 1;
+    min-height: 0;
 }
 
 .settings-main {
     min-width: 0;
+    height: 100%;
+    overflow-y: auto;
 }
 
 .settings-nav {
-    position: sticky;
-    top: 76px;
+    /* The fixed layout keeps navigation outside the scrolling settings pane. */
+    position: static;
     display: flex;
     flex-direction: column;
     gap: 5px;
+    height: 100%;
     padding-top: 2px;
+    overflow-y: auto;
 }
 
 .settings-nav__item {
@@ -1763,7 +1774,7 @@ onUnmounted(() => {
 
 @media (max-width: 720px) {
     .settings-page {
-        padding: 32px 14px 44px;
+        padding: 32px 14px 8px;
     }
 
     .settings-page__header {
@@ -1776,6 +1787,7 @@ onUnmounted(() => {
 
     .settings-layout {
         grid-template-columns: 1fr;
+        grid-template-rows: auto minmax(0, 1fr);
         gap: 22px;
     }
 
@@ -1783,6 +1795,8 @@ onUnmounted(() => {
         position: static;
         flex-flow: row wrap;
         gap: 6px;
+        height: auto;
+        overflow-y: hidden;
     }
 
     .settings-nav__item {

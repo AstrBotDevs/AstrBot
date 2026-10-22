@@ -1,0 +1,54 @@
+name: Test install scripts
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'docs/public/install.ps1'
+      - 'docs/public/install.sh'
+      - 'tests/test_install_script.py'
+      - 'tests/install_script.Tests.ps1'
+      - '.github/workflows/install_script_test.yml'
+  pull_request:
+    paths:
+      - 'docs/public/install.ps1'
+      - 'docs/public/install.sh'
+      - 'tests/test_install_script.py'
+      - 'tests/install_script.Tests.ps1'
+      - '.github/workflows/install_script_test.yml'
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Windows PowerShell compatibility
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Test Windows PowerShell 5.1
+        shell: powershell
+        run: .\tests\install_script.Tests.ps1
+
+      - name: Test PowerShell 7
+        shell: pwsh
+        run: .\tests\install_script.Tests.ps1
+
+  shell:
+    name: Bash installer (${{ matrix.os }})
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Test Bash installer
+        shell: bash
+        run: |
+          /bin/bash -n docs/public/install.sh
+          python3 tests/test_install_script.py

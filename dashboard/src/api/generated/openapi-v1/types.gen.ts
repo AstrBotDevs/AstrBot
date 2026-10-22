@@ -102,6 +102,10 @@ export type ChatMessagePatchRequest = {
 };
 
 export type ChatMessageRegenerateRequest = {
+    /**
+     * UI locale for built-in LLM error messages. Omitted or unsupported locales fall back to zh-CN.
+     */
+    locale?: string;
     selected_provider?: string;
     selected_model?: string;
     /**
@@ -132,6 +136,10 @@ export type ChatProjectRequest = {
 export type workspace_type = 'session' | 'project' | 'custom';
 
 export type ChatRequest = {
+    /**
+     * UI locale for built-in LLM error messages. Omitted or unsupported locales fall back to zh-CN.
+     */
+    locale?: string;
     /**
      * Caller-declared WebChat sender/session owner. Configured AstrBot administrator IDs require the chat:admin API key sub-scope.
      */
@@ -185,6 +193,10 @@ export type ChatThreadCreateRequest = {
 };
 
 export type ChatThreadMessageRequest = {
+    /**
+     * UI locale for built-in LLM error messages. Omitted or unsupported locales fall back to zh-CN.
+     */
+    locale?: string;
     message: (string | Array<MessagePart>);
     selected_provider?: string;
     selected_model?: string;
@@ -677,6 +689,12 @@ export type SkillUploadRequest = {
     file: (Blob | File);
     overwrite?: boolean;
 };
+
+export type StorageCleanupRequest = {
+    target?: 'logs' | 'cache' | 'traces' | 'all';
+};
+
+export type target = 'logs' | 'cache' | 'traces' | 'all';
 
 export type SuccessEnvelope = {
     status: "ok";
@@ -3468,7 +3486,7 @@ export type GetStorageStatusResponse = (SuccessEnvelope);
 export type GetStorageStatusError = unknown;
 
 export type CleanupStorageData = {
-    body?: DynamicConfig;
+    body?: StorageCleanupRequest;
 };
 
 export type CleanupStorageResponse = (SuccessEnvelope);
@@ -3712,6 +3730,56 @@ export type StreamLiveLogsError = unknown;
 export type GetLogHistoryResponse = (string);
 
 export type GetLogHistoryError = unknown;
+
+export type ExportLogsData = {
+    query?: {
+        /**
+         * Inclusive maximum log timestamp or trace start time, in Unix seconds. Omit for no upper bound. Must not be before start_time. Matching traces retain their complete details.
+         */
+        end_time?: number;
+        /**
+         * Mask recognized credentials. Disable only for private diagnosis.
+         */
+        redact?: boolean;
+        /**
+         * Inclusive minimum log timestamp or trace start time, in Unix seconds. Omit for no lower bound. Undated standalone log content is excluded when a time bound is set.
+         */
+        start_time?: number;
+    };
+};
+
+export type ExportLogsResponse = ((Blob | File));
+
+export type ExportLogsError = unknown;
+
+export type ListTracesData = {
+    query?: {
+        /**
+         * Legacy keyset cursor; use page for numbered pagination.
+         */
+        cursor?: string;
+        errors?: boolean;
+        limit?: number;
+        models?: boolean;
+        page?: number;
+        plugins?: boolean;
+        query?: string;
+    };
+};
+
+export type ListTracesResponse = (SuccessEnvelope);
+
+export type ListTracesError = unknown;
+
+export type GetTraceDetailData = {
+    path: {
+        trace_id: string;
+    };
+};
+
+export type GetTraceDetailResponse = (SuccessEnvelope);
+
+export type GetTraceDetailError = (unknown);
 
 export type GetTraceSettingsResponse = (SuccessEnvelope);
 

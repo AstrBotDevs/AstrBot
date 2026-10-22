@@ -6,7 +6,7 @@ AstrBot 内置 AI 支持让 Agent 通过执行代码、读写文件等方式访�
 
 目前，“使用电脑能力” 支持两种运行环境：
 
-- 本机环境：让 AstrBot Agent 在 AstrBot **所在的本机环境**中**直接**执行代码和文件操作，**直接**访问本机环境内的文件和命令。利用 macOS 的 `Seatbelt` 或 Linux 的 `bubblewrap(bwrap)` 技术，可以在本机环境中为 AstrBot Agent 提供**受限的文件访问和执行能力**，以保护本机环境的安全性，限制机器人的不同用户使用 AstrBot Agent 时的文件访问范围和联网权限，获得一定的安全性保证。
+- 本机环境：让 AstrBot Agent 在 AstrBot **所在的本机环境**中**直接**执行代码和文件操作，**直接**访问本机环境内的文件和命令。利用 Windows 的 `AppContainer`、macOS 的 `Seatbelt` 或 Linux 的 `bubblewrap(bwrap)` 技术，可以在本机环境中为 AstrBot Agent 提供**受限的文件访问和执行能力**，以保护本机环境的安全性，限制机器人的不同用户使用 AstrBot Agent 时的文件访问范围和联网权限，获得一定的安全性保证。
 - 第三方沙箱环境：让 AstrBot Agent 在**独立的环境**中执行代码和文件操作，避免直接访问宿主机或 AstrBot 容器内的文件和命令。由于是独立环境，因此可以直接限制机器人的不同用户使用 AstrBot Agent 时的文件访问范围和联网权限，获得更高的安全性保证。由于是独立的环境，第三方沙箱环境通常也需要额外部署和配置，并对机器性能有更高要求。
 
 您可以在 `配置文件 -> AI -> 能力 -> 使用电脑能力` 中选择 “运行环境” 为 “本机环境” 或者 “第三方沙箱环境”。
@@ -26,7 +26,7 @@ AstrBot 内置 AI 支持让 Agent 通过执行代码、读写文件等方式访�
 
 具体的权限支持按普通成员和管理员分别设置，以矩阵的形式展示，见下图。
 
-![本地权限策略矩阵](./images/config-local-permissions-zh.png)
+![本地权限策略矩阵](./images/config-local-permissions-zh.jpg)
 
 当勾选 “允许执行代码” 时，AstrBot 会为 Agent 提供 `astrbot_execute_shell` 和 `astrbot_execute_python` 两个工具，以让 Agent 在本机环境中执行 Shell 和 Python 代码。
 
@@ -49,19 +49,30 @@ AstrBot 内置 AI 支持让 Agent 通过执行代码、读写文件等方式访�
 
 AstrBot 为 Agent 提供的文件工具包括 `astrbot_file_read_tool`, `astrbot_file_write_tool`, `astrbot_file_edit_tool` 和 `astrbot_grep_tool`，分别对应文件的读取、写入、编辑和搜索功能。Agent 可以通过这些工具访问本机环境内的文件。
 
-以下是上述权限矩阵的一些逻辑上的限制：
+新安装的 Windows、Linux 和 macOS 使用相同的默认权限：
 
-- 当不勾选 “允许执行代码” 时，无法勾选 “允许联网”，因为**联网权限只在执行代码时生效**。
-- 当“文件访问范围”选择“关闭”时，无法勾选 “允许执行代码” 和 “允许联网”，因为**执行代码和联网权限都需要文件访问权限**。
+| 用户身份 | 允许执行代码 | 允许执行环境联网 | 文件访问范围 |
+| --- | --- | --- | --- |
+| 普通成员 | 否 | 否 | 工作区 |
+| 管理员 | 是 | 是 | 整个环境 |
 
-如果您的环境**未满足本机隔离的要求**（如 Linux 系统未安装 bubblewrap、macOS 系统未安装 Seatbelt，或 Windows 上 AppContainer 尚未就绪等），您会看到界面上没有显示 “允许联网” 选项，并且只能配置以下权限组合：
+这两组默认权限均不依赖本机进程隔离能力。已有配置中保存的权限保持不变，但 Windows 有一次升级迁移：普通成员同时关闭执行、联网和文件访问的旧配置，会迁移为允许工作区文件访问。旧默认值与手动关闭的配置相同，因此两者都会迁移，适用于全局配置和配置文件。升级后再次关闭文件访问，后续重启会保留该设置；管理员和其他普通成员策略不变。
 
-- 文件访问范围：关闭，允许执行代码：否
-- 文件访问范围：工作区，允许执行代码：否
-- 文件访问范围：整个环境，允许执行代码：否
-- 文件访问范围：整个环境，允许执行代码：是
+权限矩阵有以下依赖关系：
 
-如果您发现您的环境未满足本机隔离的要求，您可以根据您的系统和环境参考下方的文档阅读，了解如何安装和配置。
+- 不勾选“允许执行代码”时，无法勾选“允许联网”，因为联网权限只在执行代码时生效。
+- “文件访问范围”选择“关闭”时，无法启用执行或联网。
+
+本机隔离不可用时仍可保存配置，包括在欢迎页允许使用电脑能力。工具调用时会检查隔离状态。如果缺少 bubblewrap、AppContainer 尚未就绪、启动检查失败或系统不支持隔离，**普通成员和管理员需要隔离的执行权限都会暂停生效**：
+
+- 禁用代码执行及执行时联网，保留已配置的文件范围，不会将工作区访问扩大为整个环境。
+- 不依赖隔离的权限继续生效，包括不执行代码的工作区文件访问，以及允许整个环境访问和联网的执行权限；已关闭的文件访问仍保持关闭。
+- 已保存的权限不会被覆盖。修复隔离环境并重启 AstrBot 后，工具重新使用已保存的执行策略。
+- 权限矩阵保留已勾选的执行选项并标记“未生效”；悬浮或点击旁边的问号可查看原因，也可以取消勾选。Shell、Python 和 Shell 会话工具被拒绝时会将原因返回给模型，启动失败时附带诊断详情。
+
+隔离不可用时，权限矩阵隐藏联网列。原矩阵左下角的隔离安装链接已移除，请按下方的操作系统或 Docker 说明配置环境。
+
+![隔离启动检查失败后，管理员的受限执行暂停生效](./images/config-local-permissions-isolation-unavailable-zh.jpg)
 
 ### macOS 用户 {#local-macos}
 
@@ -136,11 +147,13 @@ Docker 已提供容器级的隔离。在容器内，AstrBot 默认只能访问�
 
 ### Windows 用户 {#local-windows}
 
-Windows 10/11（含家庭版）可在“配置文件 → AI 配置 → 能力 → 使用电脑能力”中选择 `Computer Use Runtime = local`，为相应角色选择工作区文件访问并开启代码执行。不需要 WSL、Hyper-V 或 Docker。Windows 原有角色默认权限保持不变；允许主机文件访问、执行和联网的组合仍属于完全信任模式。
+Windows 通过原生文件句柄支持工作区内的文件读取、写入和编辑，拒绝符号链接、目录联接和多硬链接文件。普通成员使用工作区文件工具不需要启用执行沙盒。
+
+Windows 10/11（含家庭版）可在“配置文件 → AI 配置 → 能力 → 使用电脑能力”中选择 `Computer Use Runtime = local`，为相应角色选择工作区文件访问并开启代码执行。不需要 WSL、Hyper-V 或 Docker。普通成员默认可访问工作区文件，不允许执行代码；管理员默认允许整个环境的文件访问、执行和联网，仍属于完全信任模式。
 
 启用 Local 后重启 AstrBot。启动时会为 Python、PowerShell 运行时准备只读权限，并实际启动 AppContainer 检查可用性。如果受保护的安装目录需要授权，本次启动最多请求一次 UAC。运行时权限会保留，后续启动通常无需再次授权。取消或准备失败会禁用受限执行并显示原因；工具调用不会再次弹窗，也不会降级为无隔离执行。需要重试时重启 AstrBot。工作区及工具额外授权目录需由运行 AstrBot 的账户拥有管理权限。
 
-界面显示“AppContainer · 尚未就绪”时，按提示保存配置并重启，必要时允许管理员授权；具体错误可展开“查看诊断详情”。“整个环境”下执行代码时，联网项保持勾选并锁定。悬停锁旁的问号可查看 Windows 限制说明；切换到“工作区”后可关闭联网。
+出现 Windows 沙盒准备提示时，保存配置并重启，必要时允许管理员授权。展开“查看诊断详情”可查看 AppContainer 错误，也可通过未生效执行权限旁的问号查看原因。“整个环境”下执行代码时，联网项保持勾选并锁定。悬停联网项旁的问号可查看 Windows 限制说明；切换到“工作区”后可关闭联网。
 
 每次受限执行使用独立的 AppContainer 身份，并通过 Job Object 管理进程树。工作区和明确授权的目录获得临时权限，会话清理时撤销。Windows 自身允许的系统资源及只读运行时仍可见。这是 ACL 权限边界，并非 bubblewrap 的文件系统命名空间：操作系统层面不会隐藏或重新映射路径。联网开关控制 AppContainer 网络能力；允许联网不保证能访问 localhost。“主机文件访问 + 执行 + 禁止联网”的组合不受支持，会明确拒绝。
 
@@ -150,9 +163,11 @@ Shell 优先使用 PowerShell 7，未安装时使用 Windows PowerShell 5.1。�
 
 本机集成测试需显式启用：启动准备完成后，设置 `ASTRBOT_TEST_WINDOWS_SANDBOX=1`，运行 `uv run pytest tests/test_windows_process_sandbox.py`。测试实际进程、工作区外访问拒绝、目录联接、并发身份隔离、只读目录、PowerShell 7/5.1、标准输入、文件搜索、超时清理和输出限制。测试不会请求 UAC。
 
-![Windows Local 初始化提示和整个环境联网说明](/windows-sandbox/network-zh.png)
+![Windows Local 整个环境联网说明](/windows-sandbox/network-zh.jpg)
 
-![Windows Local 工作区模式（关闭联网）](/windows-sandbox/workspace-en.png)
+![Windows Local 工作区模式（关闭联网）](/windows-sandbox/workspace-en.jpg)
+
+![Windows 沙盒初始化提示](/windows-sandbox/setup-zh.jpg)
 
 源码测试时，如果 Windows 页面仍显示 `bubblewrap` 或 Linux 排障提示，说明正在使用旧版 Dashboard。在仓库根目录构建并指定本分支的前端：
 
@@ -162,7 +177,7 @@ pnpm --dir dashboard build
 uv run main.py --webui-dir dashboard/dist
 ```
 
-刷新浏览器后，本地隔离应显示 `AppContainer`。Windows 原生运行不会探测或使用 WSL 中的 bubblewrap。
+刷新浏览器以加载 Windows 专用的设置提示。Windows 原生执行使用 AppContainer，不会探测或使用 WSL 中的 bubblewrap。
 
 ## 第三方沙箱环境 {#third-party-sandbox-environment}
 

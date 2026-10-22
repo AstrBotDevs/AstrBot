@@ -36,23 +36,6 @@ def open_file_in_allowed_roots(
         RuntimeError: If descriptor-relative no-follow access is unavailable.
         ValueError: If an unsupported access mode is requested.
     """
-    if os.name == "nt":
-        from .windows_file_security import open_windows_file_in_allowed_roots
-
-        return open_windows_file_in_allowed_roots(
-            path, allowed_roots, access=access, create_parents=create_parents
-        )
-    if (
-        not hasattr(os, "O_DIRECTORY")
-        or not hasattr(os, "O_NOFOLLOW")
-        or not hasattr(os, "pread")
-        or os.open not in os.supports_dir_fd
-        or os.mkdir not in os.supports_dir_fd
-    ):
-        raise RuntimeError(
-            "Race-resistant restricted file access is unavailable on this platform."
-        )
-
     candidate = Path(path)
     if not candidate.is_absolute():
         raise PermissionError(f"Restricted file path must be absolute: {path}.")
@@ -74,6 +57,23 @@ def open_file_in_allowed_roots(
         raise IsADirectoryError(path)
     if any(part in {"", ".", ".."} for part in parts):
         raise PermissionError(f"Access denied: unsafe restricted path: {path}.")
+
+    if os.name == "nt":
+        from .local_file_security_windows import open_windows_file
+
+        return open_windows_file(
+            root, parts, access=access, create_parents=create_parents
+        )
+
+    if (
+        not hasattr(os, "O_DIRECTORY")
+        or not hasattr(os, "O_NOFOLLOW")
+        or os.open not in os.supports_dir_fd
+        or os.mkdir not in os.supports_dir_fd
+    ):
+        raise RuntimeError(
+            "Race-resistant restricted file access is unavailable on this platform."
+        )
 
     directory_flags = (
         os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)

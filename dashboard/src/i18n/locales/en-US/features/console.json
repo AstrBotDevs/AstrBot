@@ -1,10 +1,5 @@
 {
   "title": "Console",
-  "autoScroll": {
-    "label": "Auto-scroll",
-    "enabled": "Auto-scroll enabled",
-    "disabled": "Auto-scroll disabled"
-  },
   "hideUserChat": {
     "label": "Hide user chat",
     "enabled": "User chat hidden",
@@ -13,6 +8,26 @@
   "search": {
     "label": "Search logs",
     "placeholder": "Filter logs by keyword"
+  },
+  "fontSize": {
+    "label": "Log font size",
+    "decrease": "Decrease font size",
+    "increase": "Increase font size"
+  },
+  "filters": {
+    "title": "Filters",
+    "button": "Filters",
+    "reset": "Reset",
+    "level": "Log level",
+    "source": "Source",
+    "allSources": "All sources",
+    "core": "Core",
+    "plugins": "Plugins",
+    "plugin": "Plugin",
+    "allPlugins": "All plugins",
+    "platform": "Bot platform",
+    "allPlatforms": "All platforms",
+    "unscopedPlatform": "System / Unscoped"
   },
   "pipInstall": {
     "button": "Install pip Package",
@@ -25,6 +40,29 @@
     "installSuccess": "Installation successful.",
     "installFailed": "Installation failed.",
     "requestFailed": "Request failed."
+  },
+  "exportLogs": {
+    "button": "Export diagnostics",
+    "hint": "Export logs, traces, configuration, plugin status and environment details.",
+    "failed": "Could not export diagnostics. Please try again.",
+    "contents": "Includes available disk and rotated logs, up to 500 cached events, available trace history, AstrBot configuration, plugin status and environment details. Console filters do not affect the export. Existing data can be exported even when file logging or tracing is disabled.",
+    "privacy": "Recognized passwords, keys and tokens are masked, and public IPs use consistent aliases throughout the bundle. Local and other non-public addresses remain. Logs, traces and settings may still contain conversations, account identifiers or other personal data. Review before sharing. The bundle is downloaded locally.",
+    "cancel": "Cancel",
+    "redact": "Redact credentials (recommended)",
+    "rawPrivacy": "Redaction is off: the bundle retains original passwords, keys, tokens, public IPs and other sensitive information. Use only for private diagnosis with someone you trust; do not upload it to public issues or group chats.",
+    "download": "Download bundle",
+    "startTime": "Start time",
+    "endTime": "End time",
+    "timeRangeHint": "Choose start and end times in your browser’s local time.",
+    "invalidTimeRange": "Select valid times. Start time must not be after end time.",
+    "timeRange": "Log time range",
+    "lastHour": "Last hour",
+    "last12Hours": "Last 12 hours",
+    "lastDay": "Last day",
+    "last3Days": "Last 3 days",
+    "customRange": "Custom",
+    "stillExporting": "Still exporting.",
+    "largeExport": "There is a large amount of log data. Export is still in progress. Please wait."
   },
   "debugHint": {
     "text": "Debug logs can be enabled in \"Configuration File → System → Console Log Level\""

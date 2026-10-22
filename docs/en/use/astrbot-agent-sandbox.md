@@ -6,7 +6,7 @@ AstrBot's built-in AI lets the Agent access a computer environment by executing 
 
 Agent Computer Use currently supports two runtime environments:
 
-- **Local environment**: AstrBot Agent executes code and file operations **directly in the environment running AstrBot**, accessing its files and commands. Using `Seatbelt` on macOS or `bubblewrap (bwrap)` on Linux, AstrBot can provide **restricted file access and code execution**, limiting file access scope and network permissions for different bot users to improve the security of the local environment.
+- **Local environment**: AstrBot Agent executes code and file operations **directly in the environment running AstrBot**, accessing its files and commands. Using `AppContainer` on Windows, `Seatbelt` on macOS, or `bubblewrap (bwrap)` on Linux, AstrBot can provide **restricted file access and code execution**, limiting file access scope and network permissions for different bot users to improve the security of the local environment.
 - **Third-party sandbox environment**: AstrBot Agent executes code and file operations in a **separate environment**, avoiding direct access to files and commands on the host or inside the AstrBot container. This separation can provide stronger isolation, with file access, networking, and isolation between users depending on the sandbox's capabilities and configuration. Third-party sandboxes usually require additional deployment and configuration, as well as more computing resources.
 
 Open **Config → AI → Capabilities → Agent Computer Use** and set **Computer Use Runtime** to **Local machine** or **Third-party sandbox**.
@@ -26,7 +26,7 @@ AstrBot gives the Agent a set of tools, including Shell, Python, and filesystem 
 
 Permissions are configured separately for members and administrators in the matrix shown below.
 
-![Local permission policy matrix](./images/config-local-permissions-en.png)
+![Local permission policy matrix](./images/config-local-permissions-en.jpg)
 
 Enabling **Execute code** gives the Agent the `astrbot_execute_shell` and `astrbot_execute_python` tools to execute Shell commands and Python code in the local environment.
 
@@ -49,19 +49,38 @@ Enabling **Allow network during execution** permits network access during Shell/
 
 AstrBot provides `astrbot_file_read_tool`, `astrbot_file_write_tool`, `astrbot_file_edit_tool`, and `astrbot_grep_tool` for file reading, writing, editing, and content searching, respectively. When restricted code execution is enabled, the isolation backend also exposes the system tools, libraries, and Python runtime needed to execute code.
 
+New installations use the same default permissions on Windows, Linux, and macOS:
+
+| Role | Execute code | Network during execution | File access |
+| --- | --- | --- | --- |
+| Member | No | No | Workspace |
+| Administrator | Yes | Yes | Entire environment |
+
+These defaults do not require Local process isolation. Existing saved permissions are preserved, with one upgrade exception: on Windows, an older member policy with execution disabled, execution networking disabled, and file access disabled is migrated once to workspace file access. The old default and a manually disabled policy have identical saved values, so both matching policies are migrated. This applies to the global configuration and configuration profiles. Disabling member file access again after the upgrade is respected on subsequent restarts; administrator and other member policies are unchanged.
+
 The permission matrix applies these dependencies:
 
 - When **Execute code** is unchecked, **Allow network during execution** cannot be checked, because **network permissions only apply during code execution**.
 - When **File access scope** is **Disabled**, neither execution nor networking can be enabled, because **code execution and network access require file access**.
 
-If your environment **does not meet the requirements for local isolation**, such as a missing bubblewrap on Linux, an unusable Seatbelt launcher on macOS, or an AppContainer that is not ready on Windows, the network option is hidden. The following permission combinations remain available:
+Saving configuration succeeds even when Local isolation is unavailable, including selecting **Yes** for computer access on the welcome page. Tools check isolation availability when resolving access. If bubblewrap is missing, AppContainer is not ready, the startup probe fails (including timeout or container restrictions), or isolation is unsupported, **execution policies that require isolation fail closed for both members and administrators**:
 
-- File access scope: Disabled; Execute code: No.
-- File access scope: Workspace; Execute code: No. This option is available on Linux/macOS.
-- File access scope: Entire environment; Execute code: No.
-- File access scope: Entire environment; Execute code: Yes. Network access during execution cannot be restricted separately.
+- Code execution and execution network access are disabled. The saved file scope stays unchanged; workspace access never expands to the entire environment.
+- Policies that need no isolation, including workspace files without execution and entire-environment execution with networking, stay effective as configured. Explicitly disabled file access stays disabled.
+- Saved permissions are not overwritten. After restoring isolation and restarting AstrBot, tools use the saved execution policy again.
+- The permission matrix preserves saved execution checkboxes and marks unavailable execution as **Inactive**. Hover over or select the adjacent help icon to see the cause; the permission can still be unchecked. The LLM receives the explanation in rejected Shell, Python, and shell-session tool responses; it is not added to the system prompt. Missing dependencies, unsupported platforms, and startup failures have distinct messages; startup failures include the probe diagnostic.
 
-If local isolation is unavailable, follow the instructions for your operating system and deployment environment below.
+The permission matrix hides the network column when isolation is unavailable. The former isolation setup link in the bottom-left corner of the matrix has been removed; use the operating system and Docker instructions below instead.
+
+For example, if an administrator saved workspace-only execution and bubblewrap is missing, the LLM receives this Shell tool response:
+
+```text
+error: Local isolation unavailable. Shell execution was blocked. The saved execution restrictions require isolation, but bubblewrap is not installed. Code execution and execution network access are disabled; file access keeps its configured scope (workspace). Saved permissions have not been changed. Ask the administrator to restore isolation and restart AstrBot. Do not bypass this restriction using another tool, command, or runtime.
+```
+
+The same rule applies to administrators and members. Role defaults apply only when a role has no saved policy; they never replace an incompatible saved policy.
+
+![Restricted administrator execution disabled after an isolation probe failure](./images/config-local-permissions-isolation-unavailable-en.jpg)
 
 ### macOS users {#local-macos}
 
@@ -136,11 +155,13 @@ Installing bwrap is only one part of the setup. Enabling local isolation inside 
 
 ### Windows users {#local-windows}
 
-For native Windows 10/11 (including Home), select `Computer Use Runtime = local` in **Config → AI → Capabilities → Agent Computer Use**, then choose workspace filesystem access and enable execution for the appropriate role. No WSL, Hyper-V, or Docker is required. Existing Windows role defaults remain unchanged; host access with execution and networking is still full trust.
+Windows supports workspace-scoped file reading, writing, and editing through native file handles using Python standard-library modules. File operations reject symbolic links, directory junctions, and multiply linked files. Ordinary members can use workspace file tools without an execution sandbox.
+
+For native Windows 10/11 (including Home), select `Computer Use Runtime = local` in **Config → AI → Capabilities → Agent Computer Use**, then choose workspace filesystem access and enable execution for the appropriate role. No WSL, Hyper-V, or Docker is required. The default member policy allows workspace files without execution; administrator execution with entire-environment access and networking remains full trust.
 
 Restart after enabling Local. At startup, AstrBot prepares read-only access to its Python and PowerShell runtimes and probes AppContainer execution. If protected installation directories require authorization, it makes at most one UAC request during that startup. These runtime grants persist, so subsequent startups normally need no prompt. Cancellation or failure disables restricted execution with an error; tools never prompt again or silently run without isolation. To retry, restart AstrBot. Workspace and extra tool directories must already be manageable by the account running AstrBot.
 
-When the UI shows “AppContainer · Not ready”, save the configuration and restart, allowing administrator approval if prompted. Expand “View diagnostic details” for the underlying error. Executing with entire-environment access keeps networking checked and locked. Hover over the question mark beside the lock for the Windows-specific explanation; switch to workspace access to disable networking.
+When the Windows sandbox setup alert appears, save the configuration and restart, allowing administrator approval if prompted. Expand “View diagnostic details” for the AppContainer error, or use the help icon beside an inactive execution permission. Executing with entire-environment access keeps networking checked and locked. Hover over the networking help icon for the Windows-specific explanation; switch to workspace access to disable networking.
 
 Restricted processes use a separate AppContainer identity for each execution and a Job Object for the process tree. Workspace and explicitly authorized directories receive temporary access grants, removed on session cleanup. System resources permitted by Windows and the read-only runtimes remain visible. This is an ACL boundary, not bubblewrap's filesystem namespace: paths are not hidden or remapped at the OS level. The network toggle controls AppContainer network capabilities; enabling it does not guarantee localhost access. Host filesystem access combined with disabled networking is unsupported and is rejected.
 
@@ -150,9 +171,11 @@ Timeouts and termination stop the entire process tree. CPU time, process count, 
 
 Native integration tests are opt-in: after startup preparation, set `ASTRBOT_TEST_WINDOWS_SANDBOX=1` and run `uv run pytest tests/test_windows_process_sandbox.py`. They test real processes, outside-workspace denial, junctions, concurrent identities, read-only roots, PowerShell 7/5.1, stdin, file search, timeout cleanup, and output bounds. The tests never request UAC.
 
-![Windows Local workspace with networking disabled](/windows-sandbox/workspace-en.png)
+![Windows Local workspace with networking disabled](/windows-sandbox/workspace-en.jpg)
 
-![Windows host networking explanation](/windows-sandbox/network-zh.png)
+![Windows host networking explanation](/windows-sandbox/network-zh.jpg)
+
+![Windows sandbox initialization prompt](/windows-sandbox/setup-zh.jpg)
 
 When testing from source, `bubblewrap` or Linux troubleshooting advice on Windows indicates an older Dashboard build. Build and serve the frontend from the same branch, starting at the repository root:
 
@@ -162,7 +185,7 @@ pnpm --dir dashboard build
 uv run main.py --webui-dir dashboard/dist
 ```
 
-Refresh the browser; local isolation should show `AppContainer`. Native Windows execution does not detect or use bubblewrap inside WSL.
+Refresh the browser to load the Windows-specific setup guidance. Native Windows execution uses AppContainer; it does not detect or use bubblewrap inside WSL.
 
 ## Third-party sandbox environment {#third-party-sandbox-environment}
 

@@ -688,6 +688,12 @@ export const apiKeyApi = {
 };
 
 export const traceApi = {
+  history(query?: { limit?: number; page?: number; cursor?: string; query?: string; errors?: boolean; models?: boolean; plugins?: boolean }) {
+    return typed<OpenConfig>(openApiV1.listTraces({ query }));
+  },
+  detail(traceId: string) {
+    return typed<OpenConfig>(openApiV1.getTraceDetail({ path: { trace_id: traceId } }));
+  },
   getSettings() {
     return typed<OpenConfig>(openApiV1.getTraceSettings());
   },
@@ -1233,6 +1239,12 @@ export const t2iApi = {
 export const logApi = {
   history() {
     return typed<{ logs?: OpenConfig[] }>(openApiV1.getLogHistory());
+  },
+  exportArchive(redact = true, startTime?: number, endTime?: number) {
+    return openApiV1.exportLogs({
+      query: { redact, start_time: startTime, end_time: endTime },
+      responseType: 'blob',
+    }) as Promise<AxiosResponse<Blob>>;
   },
   liveUrl() {
     return '/api/v1/logs/live';
@@ -1855,7 +1867,7 @@ export const statsApi = {
   storage() {
     return typed<OpenConfig>(openApiV1.getStorageStatus());
   },
-  cleanupStorage(target?: string) {
+  cleanupStorage(target: 'logs' | 'cache' | 'traces' | 'all' = 'all') {
     return typed<OpenConfig>(
       openApiV1.cleanupStorage({
         body: target ? { target } : undefined,
