@@ -50,6 +50,11 @@ def _flatten_shipyard_payload(result: object) -> dict[str, Any]:
     for key, value in data.items():
         if key == "data" or value is None:
             continue
+        # The envelope `success` describes the request itself, so a
+        # command-level `data.success` must not turn a failed request into a
+        # success.
+        if key == "success" and flat.get("success") is False:
+            continue
         flat[key] = value
     flat.pop("data", None)
     return flat

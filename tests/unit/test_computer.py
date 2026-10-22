@@ -617,6 +617,52 @@ class TestShipyardBooter:
         assert "data" not in result
 
     @pytest.mark.asyncio
+    async def test_shipyard_shell_envelope_failure_wins_over_data_success(self):
+        """A failed request is not reported as a success by data.success."""
+        from astrbot.core.computer.booters.shipyard import ShipyardShellWrapper
+
+        raw_shell = MagicMock()
+        raw_shell.exec = AsyncMock(
+            return_value={
+                "success": False,
+                "data": {
+                    "success": True,
+                    "return_code": 0,
+                    "stdout": "stale-body",
+                    "stderr": "",
+                    "error": None,
+                },
+                "error": "Ship returned 500: exec failed",
+            },
+        )
+
+        result = await ShipyardShellWrapper(raw_shell).exec("echo hi")
+
+        assert result["success"] is False
+        assert result["stderr"] == "Ship returned 500: exec failed"
+
+    @pytest.mark.asyncio
+    async def test_shipyard_shell_envelope_failure_without_data(self):
+        """A request-level failure carrying no `data` is still a failure."""
+        from astrbot.core.computer.booters.shipyard import ShipyardShellWrapper
+
+        raw_shell = MagicMock()
+        raw_shell.exec = AsyncMock(
+            return_value={
+                "success": False,
+                "data": None,
+                "error": "Ship returned 500: exec failed",
+            },
+        )
+
+        result = await ShipyardShellWrapper(raw_shell).exec("echo hi")
+
+        assert result["stdout"] == ""
+        assert result["stderr"] == "Ship returned 500: exec failed"
+        assert result["exit_code"] is None
+        assert result["success"] is False
+
+    @pytest.mark.asyncio
     async def test_shipyard_booter_init(self):
         """Test ShipyardBooter initialization."""
         with patch("astrbot.core.computer.booters.shipyard.ShipyardClient"):
