@@ -217,7 +217,14 @@ class ResultDecorateStage(Stage):
                     new_chain = []
                     for comp in result.chain:
                         if isinstance(comp, Plain):
-                            if len(comp.text) > self.words_count_threshold:
+                            # Count words for space-separated (ASCII) text and
+                            # characters otherwise, e.g. for CJK text.
+                            word_count = (
+                                len(comp.text.split())
+                                if comp.text.isascii()
+                                else len(comp.text)
+                            )
+                            if word_count > self.words_count_threshold:
                                 # 不分段回复
                                 new_chain.append(comp)
                                 continue
