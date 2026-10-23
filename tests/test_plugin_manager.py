@@ -1,6 +1,7 @@
 import asyncio
 import errno
 import functools
+import importlib
 import json
 import os
 import sys
@@ -16,6 +17,7 @@ import yaml
 from astrbot.core.star import star_manager as star_manager_module
 from astrbot.core.star.star_handler import EventType, StarHandlerMetadata
 from astrbot.core.star.star_manager import PluginDependencyInstallError, PluginManager
+from astrbot.core.utils import requirements_utils
 from astrbot.core.utils.pip_installer import PipInstallError
 from astrbot.core.utils.requirements_utils import MissingRequirementsPlan
 
@@ -1656,6 +1658,109 @@ async def test_import_plugin_prefers_installed_dependencies_before_first_import(
         ("prefer", str(requirements_path)),
         ("import", "data.plugins.helloworld.main", ("main",)),
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("installed_requirement_first", [True, False])
+async def test_import_plugin_installs_missing_dependency_before_optional_import(
+    plugin_manager_pm: PluginManager,
+    local_updater: Path,
+    tmp_path: Path,
+    monkeypatch,
+    installed_requirement_first: bool,
+):
+    """Install declared missing packages before a plugin caches its fallback."""
+    missing_name = "astrbot-test-startup-dependency"
+    dependency_module = "astrbot_test_startup_dependency"
+    plugin_module = "astrbot_test_startup_plugin"
+    requirement_lines = ["aiohttp>=3.11.18", missing_name]
+    if not installed_requirement_first:
+        requirement_lines.reverse()
+    requirements_path = local_updater / "requirements.txt"
+    requirements_path.write_text("\n".join(requirement_lines) + "\n", encoding="utf-8")
+    (tmp_path / f"{plugin_module}.py").write_text(
+        f"try:\n    import {dependency_module}\n"
+        "except ModuleNotFoundError:\n    dependency_available = False\n"
+        "else:\n    dependency_available = True\n",
+        encoding="utf-8",
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    monkeypatch.setattr(
+        requirements_utils,
+        "collect_installed_distribution_versions",
+        lambda paths: {"aiohttp": "3.11.18"},
+    )
+    monkeypatch.setattr(
+        star_manager_module.pip_installer,
+        "prefer_installed_dependencies",
+        lambda **kwargs: None,
+    )
+    installed_requirements = []
+
+    async def install_missing(*, requirements_path, allow_target_upgrade=False):
+        assert allow_target_upgrade is False
+        installed_requirements.append(
+            Path(requirements_path).read_text(encoding="utf-8")
+        )
+        (tmp_path / f"{dependency_module}.py").write_text(
+            "available = True\n", encoding="utf-8"
+        )
+        importlib.invalidate_caches()
+
+    monkeypatch.setattr(
+        star_manager_module.pip_installer, "install", install_missing
+    )
+    try:
+        module = await plugin_manager_pm._import_plugin_with_dependency_recovery(
+            path=plugin_module,
+            module_str=plugin_module,
+            root_dir_name=TEST_PLUGIN_DIR,
+            requirements_path=str(requirements_path),
+        )
+
+        assert module.dependency_available is True
+        assert installed_requirements == [f"{missing_name}\n"]
+    finally:
+        sys.modules.pop(plugin_module, None)
+        sys.modules.pop(dependency_module, None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cancelled", [False, True])
+async def test_import_plugin_does_not_run_after_missing_dependency_install_fails(
+    plugin_manager_pm: PluginManager,
+    local_updater: Path,
+    tmp_path: Path,
+    monkeypatch,
+    cancelled: bool,
+):
+    """Propagate install failures and cancellation without importing the plugin."""
+    _write_requirements(local_updater)
+    _mock_missing_requirements(monkeypatch, {"networkx"})
+    plugin_module = "astrbot_test_failed_dependency_install"
+    (tmp_path / f"{plugin_module}.py").write_text(
+        "raise AssertionError('plugin imported before dependencies were installed')\n",
+        encoding="utf-8",
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    async def fail_install(**kwargs):
+        if cancelled:
+            raise asyncio.CancelledError
+        raise PipInstallError("synthetic pip failure", code=1)
+
+    monkeypatch.setattr(star_manager_module.pip_installer, "install", fail_install)
+    expected_error = (
+        asyncio.CancelledError if cancelled else PluginDependencyInstallError
+    )
+    with pytest.raises(expected_error):
+        await plugin_manager_pm._import_plugin_with_dependency_recovery(
+            path=plugin_module,
+            module_str=plugin_module,
+            root_dir_name=TEST_PLUGIN_DIR,
+            requirements_path=str(local_updater / "requirements.txt"),
+        )
+    assert plugin_module not in sys.modules
 
 
 @pytest.mark.asyncio
