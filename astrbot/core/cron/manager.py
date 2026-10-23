@@ -191,17 +191,21 @@ class CronJobManager:
         # If run_once with run_at, store run_at in payload for later reference.
         if run_once and run_at:
             payload = {**payload, "run_at": run_at.isoformat()}
-        job = await self.db.create_cron_job(
-            name=name,
-            job_type="active_agent",
-            cron_expression=cron_expression,
-            timezone=timezone,
-            payload=payload,
-            description=description,
-            enabled=enabled,
-            persistent=persistent,
-            run_once=run_once,
-        )
+        job_data: dict[str, Any] = {
+            "name": name,
+            "job_type": "active_agent",
+            "cron_expression": cron_expression,
+            "timezone": timezone,
+            "payload": payload,
+            "description": description,
+            "enabled": enabled,
+            "persistent": persistent,
+            "run_once": run_once,
+        }
+        if enabled:
+            # Reject invalid schedules before writing an enabled, durable job.
+            self._build_trigger(CronJob(**job_data))
+        job = await self.db.create_cron_job(**job_data)
         if enabled:
             self._schedule_job(job)
         return job
