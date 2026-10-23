@@ -53,6 +53,19 @@ test("plugin options prefer display names and keep stable IDs as values and subt
   assert.equal(options.find((item) => item.value === "unknown").title, "unknown");
 });
 
+test("plugin options come from the retained log cache, not the installed plugin list", () => {
+  const { component, state } = setup();
+  // Installed plugins known only by display name must not create options.
+  state.pluginDisplayNames = { weather: "Weather Forecast" };
+  assert.equal(component.computed.pluginOptions.call(state).length, 0);
+  // A plugin that is no longer installed but still has cached logs remains selectable.
+  state.localLogCache = [{ plugin_name: "uninstalled" }];
+  const options = component.computed.pluginOptions.call(state);
+  assert.equal(options.length, 1);
+  assert.equal(options[0].value, "uninstalled");
+  assert.equal(options[0].title, "uninstalled");
+});
+
 test("new logs follow the bottom without interrupting reading older entries", () => {
   const term = {
     scrollHeight: 1000, scrollTop: 900, clientHeight: 100, entries: [],
