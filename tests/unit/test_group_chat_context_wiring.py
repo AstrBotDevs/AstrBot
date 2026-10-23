@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -300,3 +301,88 @@ async def test_format_message_truncates_long_json_card_fields():
     formatted = await context._format_message(event, {})
 
     assert f"Description: {'a' * 200}...]" in formatted
+
+
+@pytest.mark.asyncio
+async def test_image_caption_uses_normalized_image(monkeypatch, tmp_path):
+    """Animated images are prepared (montage JPEG) before captioning."""
+    from astrbot.api.message_components import Image
+    from astrbot.api.provider import Provider
+    from astrbot.builtin_stars.astrbot import group_chat_context as gcc_module
+
+    prepared = tmp_path / "model_image_montage.jpg"
+    prepared.write_bytes(b"\xff\xd8fake-jpeg")
+    seen: dict[str, object] = {}
+
+    async def fake_prepare_model_image(image_ref, *, max_size, output_dir):
+        seen.update(ref=image_ref, max_size=max_size, output_dir=output_dir)
+        return str(prepared), True, True, "/tmp/original.gif"
+
+    monkeypatch.setattr(gcc_module, "prepare_model_image", fake_prepare_model_image)
+
+    provider = MagicMock(spec=Provider)
+    provider.text_chat = AsyncMock(
+        return_value=SimpleNamespace(completion_text="a red square"),
+    )
+    context = MagicMock()
+    context.get_provider_by_id.return_value = provider
+
+    gcc = gcc_module.GroupChatContext(MagicMock(), context)
+    event = MagicMock()
+    event.message_obj = SimpleNamespace(sender=SimpleNamespace(nickname="Alice"))
+    event.get_messages.return_value = [Image(file="anim.jpg", url="https://example.com/anim")]
+
+    cfg = {
+        "image_caption": True,
+        "image_caption_prompt": "describe",
+        "image_caption_provider_id": "ollama/vision",
+        "image_max_size": 1280,
+    }
+    formatted = await gcc._format_message(event, cfg)
+
+    assert "[Image: a red square]" in formatted
+    assert seen == {
+        "ref": "https://example.com/anim",
+        "max_size": 1280,
+        "output_dir": Path(gcc_module.get_astrbot_temp_path()),
+    }
+    assert provider.text_chat.await_args.kwargs["image_urls"] == [str(prepared)]
+    assert not prepared.exists(), "temporary prepared image must be cleaned up"
+
+
+@pytest.mark.asyncio
+async def test_image_caption_falls_back_to_original_ref(monkeypatch):
+    """A preparation failure keeps the previous behaviour (raw reference)."""
+    from astrbot.api.message_components import Image
+    from astrbot.api.provider import Provider
+    from astrbot.builtin_stars.astrbot import group_chat_context as gcc_module
+
+    async def boom(*args, **kwargs):
+        raise RuntimeError("download failed")
+
+    monkeypatch.setattr(gcc_module, "prepare_model_image", boom)
+
+    provider = MagicMock(spec=Provider)
+    provider.text_chat = AsyncMock(
+        return_value=SimpleNamespace(completion_text="fallback"),
+    )
+    context = MagicMock()
+    context.get_provider_by_id.return_value = provider
+
+    gcc = gcc_module.GroupChatContext(MagicMock(), context)
+    event = MagicMock()
+    event.message_obj = SimpleNamespace(sender=SimpleNamespace(nickname="Alice"))
+    event.get_messages.return_value = [Image(file="anim.jpg", url="https://example.com/anim")]
+
+    cfg = {
+        "image_caption": True,
+        "image_caption_prompt": "describe",
+        "image_caption_provider_id": "ollama/vision",
+        "image_max_size": 1280,
+    }
+    formatted = await gcc._format_message(event, cfg)
+
+    assert "[Image: fallback]" in formatted
+    assert provider.text_chat.await_args.kwargs["image_urls"] == [
+        "https://example.com/anim"
+    ]

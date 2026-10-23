@@ -4,6 +4,7 @@ import json
 import random
 import uuid
 from collections import defaultdict, deque
+from pathlib import Path
 
 from astrbot import logger
 from astrbot.api import star
@@ -25,6 +26,11 @@ from astrbot.api.platform import MessageType
 from astrbot.api.provider import Provider, ProviderRequest
 from astrbot.core.agent.message import TextPart
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.media_utils import (
+    normalize_model_image_max_size,
+    prepare_model_image,
+)
 
 """
 Group chat context awareness.
@@ -69,6 +75,14 @@ class GroupChatContext:
         ar_possibility = active_reply["possibility_reply"]
         ar_prompt = active_reply.get("prompt", "")
         ar_whitelist = active_reply.get("whitelist", [])
+        image_compress_options = cfg.get("provider_settings", {}).get(
+            "image_compress_options",
+        )
+        image_max_size = normalize_model_image_max_size(
+            image_compress_options.get("max_size")
+            if isinstance(image_compress_options, dict)
+            else None,
+        )
         return {
             "group_message_max_cnt": _positive_int(
                 group_context_cfg.get(
@@ -80,6 +94,7 @@ class GroupChatContext:
             "image_caption": image_caption,
             "image_caption_prompt": image_caption_prompt,
             "image_caption_provider_id": image_caption_provider_id,
+            "image_max_size": image_max_size,
             "enable_active_reply": enable_active_reply,
             "ar_method": ar_method,
             "ar_possibility": ar_possibility,
@@ -92,6 +107,7 @@ class GroupChatContext:
         image_url: str,
         image_caption_provider_id: str,
         image_caption_prompt: str,
+        image_max_size: int,
     ) -> str:
         if not image_caption_provider_id:
             provider = await self.context.get_using_provider_async()
@@ -101,12 +117,40 @@ class GroupChatContext:
                 raise Exception(f"没有找到 ID 为 {image_caption_provider_id} 的提供商")
         if not isinstance(provider, Provider):
             raise Exception(f"提供商类型错误({type(provider)})，无法获取图片描述")
-        response = await provider.text_chat(
-            prompt=image_caption_prompt,
-            session_id=uuid.uuid4().hex,
-            image_urls=[image_url],
-            persist=False,
-        )
+
+        # Normalize the image before captioning so animations become a still
+        # montage and non-model-friendly formats are re-encoded. Without this
+        # the raw reference (often an animated GIF) is forwarded verbatim and
+        # vision APIs may reject it with `invalid image input`.
+        image_ref = image_url
+        temporary_path: str | None = None
+        try:
+            prepared = await prepare_model_image(
+                image_url,
+                max_size=image_max_size,
+                output_dir=Path(get_astrbot_temp_path()),
+            )
+        except Exception as e:
+            logger.warning(f"图片转述预处理失败，回退原图: {e}")
+            prepared = None
+        if prepared:
+            image_ref, _is_montage, temporary, _original_path = prepared
+            if temporary:
+                temporary_path = image_ref
+
+        try:
+            response = await provider.text_chat(
+                prompt=image_caption_prompt,
+                session_id=uuid.uuid4().hex,
+                image_urls=[image_ref],
+                persist=False,
+            )
+        finally:
+            if temporary_path:
+                try:
+                    Path(temporary_path).unlink(missing_ok=True)
+                except OSError as e:
+                    logger.warning(f"清理临时图片失败: {e}")
         return response.completion_text
 
     async def need_active_reply(self, event: AstrMessageEvent) -> bool:
@@ -213,6 +257,7 @@ class GroupChatContext:
                             url,
                             cfg["image_caption_provider_id"],
                             cfg["image_caption_prompt"],
+                            cfg["image_max_size"],
                         )
                         parts.append(f" [Image: {caption}]")
                     except Exception as e:
