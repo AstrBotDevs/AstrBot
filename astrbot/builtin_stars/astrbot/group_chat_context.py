@@ -6,6 +6,8 @@ import uuid
 from collections import defaultdict, deque
 from pathlib import Path
 
+from PIL.Image import DecompressionBombError
+
 from astrbot import logger
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent
@@ -28,6 +30,7 @@ from astrbot.core.agent.message import TextPart
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import (
+    ImageInputTooLargeError,
     normalize_model_image_max_size,
     prepare_model_image,
 )
@@ -35,6 +38,13 @@ from astrbot.core.utils.media_utils import (
 """
 Group chat context awareness.
 """
+
+IMAGE_CAPTION_SKIPPED = "图片过大，已跳过转述"
+ANIMATION_MONTAGE_CAPTION_NOTICE = (
+    "\n\nThis image is a montage of evenly sampled frames from an animation, "
+    "laid out in reading order. Describe what the animation shows and how it "
+    "changes over time; do not describe the grid layout."
+)
 
 GROUP_HISTORY_HEADER = (
     "<system_reminder>"
@@ -123,32 +133,56 @@ class GroupChatContext:
         # the raw reference (often an animated GIF) is forwarded verbatim and
         # vision APIs may reject it with `invalid image input`.
         image_ref = image_url
-        temporary_path: str | None = None
+        caption_prompt = image_caption_prompt
+        cleanup_paths: list[Path] = []
         try:
             prepared = await prepare_model_image(
                 image_url,
                 max_size=image_max_size,
                 output_dir=Path(get_astrbot_temp_path()),
             )
+        except ImageInputTooLargeError:
+            # The source is over the input cap; never forward it to the provider.
+            logger.warning(f"图片超过转述输入上限，已跳过: {image_url}")
+            return IMAGE_CAPTION_SKIPPED
+        except DecompressionBombError:
+            # Pillow's decoded-pixel safety limit tripped; never decode it again.
+            logger.warning(f"图片解码尺寸超过安全上限，已跳过: {image_url}")
+            return IMAGE_CAPTION_SKIPPED
         except Exception as e:
             logger.warning(f"图片转述预处理失败，回退原图: {e}")
             prepared = None
         if prepared:
-            image_ref, _is_montage, temporary, _original_path = prepared
+            image_ref, is_montage, temporary, original_path = prepared
             if temporary:
-                temporary_path = image_ref
+                cleanup_paths.append(Path(image_ref))
+            # `prepare_model_image` detaches its downloaded source file, so the
+            # caption path owns it. Only remove copies that live in our temp dir
+            # to avoid deleting user files.
+            try:
+                original = Path(original_path).resolve()
+                if original.is_relative_to(
+                    Path(get_astrbot_temp_path()).resolve(),
+                ):
+                    cleanup_paths.append(original)
+            except OSError as e:
+                logger.warning(f"检查临时图片路径失败: {e}")
+            if is_montage:
+                caption_prompt = (
+                    f"{image_caption_prompt}{ANIMATION_MONTAGE_CAPTION_NOTICE}"
+                )
 
         try:
             response = await provider.text_chat(
-                prompt=image_caption_prompt,
+                prompt=caption_prompt,
                 session_id=uuid.uuid4().hex,
                 image_urls=[image_ref],
                 persist=False,
             )
         finally:
-            if temporary_path:
+            for path in cleanup_paths:
                 try:
-                    Path(temporary_path).unlink(missing_ok=True)
+                    path.unlink(missing_ok=True)
                 except OSError as e:
                     logger.warning(f"清理临时图片失败: {e}")
         return response.completion_text
