@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import httpx
 import pytest
 from openai import AsyncAzureOpenAI, AsyncOpenAI
+from openai._models import construct_type
 from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 from PIL import Image as PILImage
@@ -1690,6 +1691,50 @@ async def test_query_stream_normalizes_tool_call_identity_and_index(monkeypatch)
             }
         )
 
+    def lenient_chunk(
+        delta: dict, finish_reason: str | None = None
+    ) -> ChatCompletionChunk:
+        """Build a chunk the way the SDK parses streamed JSON, without validation.
+
+        A gateway that omits `index` (the case behind AstrBotDevs/AstrBot#6661)
+        reaches the provider as `index=None`; `model_validate` would reject it before
+        the provider could see it.
+        """
+        return construct_type(
+            type_=ChatCompletionChunk,
+            value={
+                "id": "chatcmpl-stream",
+                "object": "chat.completion.chunk",
+                "created": 0,
+                "model": "gpt-4o-mini",
+                "choices": [
+                    {"index": 0, "delta": delta, "finish_reason": finish_reason}
+                ],
+            },
+        )
+
+    def tool(
+        index: int | None = None,
+        *,
+        id: str | None = None,
+        name: str | None = None,
+        arguments: str | None = None,
+    ) -> dict:
+        entry: dict = {}
+        if index is not None:
+            entry["index"] = index
+        if id is not None:
+            entry["id"] = id
+            entry["type"] = "function"
+        function: dict = {}
+        if name is not None:
+            function["name"] = name
+        if arguments is not None:
+            function["arguments"] = arguments
+        if function:
+            entry["function"] = function
+        return entry
+
     async def run(chunks: list[ChatCompletionChunk]) -> LLMResponse:
         async def fake_stream():
             for item in chunks:
@@ -1776,6 +1821,96 @@ async def test_query_stream_normalizes_tool_call_identity_and_index(monkeypatch)
         assert incremental.tools_call_name == ["read"]
         assert incremental.tools_call_ids == ["call_b"]
         assert incremental.tools_call_args == [{"path": "y"}]
+
+        # The gateway sends the id and the name on separate frames and streams the
+        # name in fragments: one call, with the fragments concatenated.
+        fragmented = await run(
+            [
+                chunk(
+                    {
+                        "role": "assistant",
+                        "tool_calls": [tool(0, id="call_c", arguments='{"p')],
+                    }
+                ),
+                chunk({"tool_calls": [tool(0, id="call_c", name="re", arguments="a")]}),
+                chunk({"tool_calls": [tool(0, name="ad", arguments='th": "z"}')]}),
+                chunk({}, "tool_calls"),
+            ]
+        )
+        assert fragmented.tools_call_name == ["read"]
+        assert fragmented.tools_call_ids == ["call_c"]
+        assert fragmented.tools_call_args == [{"path": "z"}]
+
+        # The gateway omits `index` on the continuation frames of a call that started
+        # at index 1: the fragments must stay on the same call.
+        omitted_index = await run(
+            [
+                chunk(
+                    {
+                        "role": "assistant",
+                        "tool_calls": [
+                            tool(1, id="call_d", name="read", arguments='{"pa')
+                        ],
+                    }
+                ),
+                lenient_chunk(
+                    {"tool_calls": [tool(id="call_d", arguments='th": "w"}')]}
+                ),
+                lenient_chunk({"tool_calls": [tool(arguments="")]}),
+                chunk({}, "tool_calls"),
+            ]
+        )
+        assert omitted_index.tools_call_name == ["read"]
+        assert omitted_index.tools_call_ids == ["call_d"]
+        assert omitted_index.tools_call_args == [{"path": "w"}]
+
+        # Two calls reported under the same incoming index stay two calls.
+        reused_index = await run(
+            [
+                chunk(
+                    {
+                        "role": "assistant",
+                        "tool_calls": [
+                            tool(0, id="call_e", name="read", arguments='{"path": "a"}')
+                        ],
+                    }
+                ),
+                chunk(
+                    {
+                        "tool_calls": [
+                            tool(0, id="call_f", name="read", arguments='{"path": "b"}')
+                        ]
+                    }
+                ),
+                chunk({}, "tool_calls"),
+            ]
+        )
+        assert reused_index.tools_call_ids == ["call_e", "call_f"]
+        assert reused_index.tools_call_args == [{"path": "a"}, {"path": "b"}]
+
+        # Sparse upstream indices (a reasoning block takes 0) become 0 and 1.
+        sparse = await run(
+            [
+                chunk(
+                    {
+                        "role": "assistant",
+                        "tool_calls": [
+                            tool(1, id="call_g", name="read", arguments='{"path": "c"}')
+                        ],
+                    }
+                ),
+                chunk(
+                    {
+                        "tool_calls": [
+                            tool(2, id="call_h", name="read", arguments='{"path": "d"}')
+                        ]
+                    }
+                ),
+                chunk({}, "tool_calls"),
+            ]
+        )
+        assert sparse.tools_call_ids == ["call_g", "call_h"]
+        assert sparse.tools_call_args == [{"path": "c"}, {"path": "d"}]
     finally:
         await provider.terminate()
 

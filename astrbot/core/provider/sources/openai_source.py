@@ -643,15 +643,18 @@ class ProviderOpenAIOfficial(Provider):
 
         state = ChatCompletionStreamState()
 
-        # Some OpenAI-compatible gateways resend the full tool call `id` and
-        # `function.name` on every chunk of one call while reusing the same `index`.
-        # The SDK accumulates both string fields by concatenation, so the tool name
-        # becomes "readreadread" and the id doubles (AstrBotDevs/AstrBot#7694). Track
-        # which call each incoming index belongs to: keep id/name on the first frame,
-        # drop them on later frames, and hand out indices in call order so the SDK can
-        # use them as positions in its own tool call list.
-        tool_call_slots: dict[int, tuple[int, tuple[str, str]]] = {}
-        next_tool_index = 0
+        # Some OpenAI-compatible gateways replay the full tool call `id` or
+        # `function.name` on every chunk of one call, send the two fields on separate
+        # frames, stream the name in fragments, or omit `index` on continuation
+        # frames. The SDK concatenates every string field it receives, so a replayed
+        # name accumulates to "readreadread" (AstrBotDevs/AstrBot#7694) and a sparse
+        # upstream index is used as a position in its own tool call list. Keep one
+        # slot per call, forward only what the SDK has not accumulated yet, and hand
+        # out dense positions in the order the calls arrive: renumbering by upstream
+        # index is impossible here because earlier frames have already been yielded.
+        tool_call_slots: list[dict] = []
+        slot_of_index: dict[int, dict] = {}
+        slot_of_id: dict[str, dict] = {}
 
         async for chunk in stream:
             choice = chunk.choices[0] if chunk.choices else None
@@ -666,28 +669,54 @@ class ProviderOpenAIOfficial(Provider):
                     # Gemini and some OpenAI-compatible proxies omit this field
                     if not hasattr(tc, "index") or tc.index is None:
                         tc.index = idx
-                # Normalize the repeated identity and the sparse upstream indices,
+                # Normalize the replayed identity and the sparse upstream indices,
                 # see the comment above `tool_call_slots`.
                 for tc in dtcs:
-                    identity = (
-                        tc.id or "",
-                        tc.function.name if tc.function and tc.function.name else "",
+                    incoming_id = tc.id or ""
+                    incoming_name = (
+                        tc.function.name if tc.function and tc.function.name else ""
                     )
-                    slot = tool_call_slots.get(tc.index)
-                    if slot is not None and identity == slot[1]:
-                        # The same call repeating its id/name: drop the repeated fields.
-                        tc.index = slot[0]
-                        tc.id = None
-                        if tc.function:
-                            tc.function.name = None
-                    elif slot is not None and identity == ("", ""):
-                        # A continuation frame without identity: keep its assigned slot.
-                        tc.index = slot[0]
-                    else:
-                        # First frame of a call, or the incoming index reused by a new call.
-                        tool_call_slots[tc.index] = (next_tool_index, identity)
-                        tc.index = next_tool_index
-                        next_tool_index += 1
+                    slot = slot_of_id.get(incoming_id) if incoming_id else None
+                    if slot is None and tc.index is not None:
+                        slot = slot_of_index.get(tc.index)
+                    if slot is None and not incoming_id and not incoming_name:
+                        # A continuation frame without identity belongs to the call
+                        # that is still streaming.
+                        slot = tool_call_slots[-1] if tool_call_slots else None
+                    if (
+                        slot is not None
+                        and incoming_id
+                        and slot["id"]
+                        and not incoming_id.startswith(slot["id"])
+                        and not slot["id"].startswith(incoming_id)
+                    ):
+                        # The same incoming index now carries a different call.
+                        slot = None
+                    if slot is None:
+                        slot = {"id": "", "name": "", "position": len(tool_call_slots)}
+                        tool_call_slots.append(slot)
+                    # Forward only the part the SDK has not accumulated yet: a replayed
+                    # value contributes nothing, a fragment is appended as it arrives.
+                    id_delta = (
+                        incoming_id[len(slot["id"]) :]
+                        if incoming_id.startswith(slot["id"])
+                        else incoming_id
+                    )
+                    name_delta = (
+                        incoming_name[len(slot["name"]) :]
+                        if incoming_name.startswith(slot["name"])
+                        else incoming_name
+                    )
+                    slot["id"] += id_delta
+                    slot["name"] += name_delta
+                    if tc.index is not None:
+                        slot_of_index[tc.index] = slot
+                    if slot["id"]:
+                        slot_of_id[slot["id"]] = slot
+                    tc.index = slot["position"]
+                    tc.id = id_delta
+                    if tc.function:
+                        tc.function.name = name_delta
             # 跳过 delta=None 的 chunk，避免 SDK 内部 _convert_initial_chunk_into_snapshot
             # 第 747 行 choice.delta.to_dict() 抛出 NoneType 错误。
             # refs: AstrBot#6689 / openai-python#5069 / #5047
