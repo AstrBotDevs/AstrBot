@@ -566,7 +566,7 @@ class TelegramPlatformAdapter(Platform):
             return None
         message.sender = MessageMember(
             str(_from_user.id),
-            _from_user.username or "Unknown",
+            _from_user.username or _from_user.full_name or "Unknown",
         )
         message.self_id = str(context.bot.username)
         message.raw_message = update
