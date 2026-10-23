@@ -149,7 +149,7 @@ async def test_future_task_edit_updates_existing_job():
         name="new name",
         note="new note",
         run_once=True,
-        run_at="2026-02-02T08:00:00+08:00",
+        run_at="2099-02-02T08:00:00+08:00",
     )
 
     cron_mgr.update_job.assert_awaited_once_with(
@@ -163,7 +163,7 @@ async def test_future_task_edit_updates_existing_job():
             "sender_id": "user-1",
             "note": "new note",
             "origin": "tool",
-            "run_at": "2026-02-02T08:00:00+08:00",
+            "run_at": "2099-02-02T08:00:00+08:00",
         },
     )
     assert result == "Updated future task job-1 (new name)."
@@ -373,11 +373,51 @@ async def test_future_task_create_falls_back_to_run_at_when_scheduler_has_no_tim
         _context(cron_mgr, tz_name="Asia/Shanghai"),
         action="create",
         run_once=True,
-        run_at="2026-02-02T08:00:00+08:00",
+        run_at="2099-02-02T08:00:00+08:00",
         note="one-time reminder",
     )
 
-    assert "2026-02-02 08:00:00+08:00" in result
+    assert "2099-02-02 08:00:00+08:00" in result
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("run_at", ["2020-02-02T08:00:00+08:00", "2020-02-02T08:00:00"])
+async def test_future_task_create_rejects_past_run_at(run_at):
+    """A past one-time run_at would be dropped by the scheduler, so reject it."""
+    tool = FutureTaskTool()
+    cron_mgr = SimpleNamespace(add_active_job=AsyncMock())
+
+    result = await tool.call(
+        _context(cron_mgr, tz_name="Asia/Shanghai"),
+        action="create",
+        run_once=True,
+        run_at=run_at,
+        note="one-time reminder",
+    )
+
+    assert result.startswith("error: run_at 2020-02-02T08:00:00")
+    assert "in the past" in result
+    cron_mgr.add_active_job.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_future_task_edit_rejects_past_run_at():
+    tool = FutureTaskTool()
+    cron_mgr = SimpleNamespace(
+        db=SimpleNamespace(get_cron_job=AsyncMock(return_value=_job("job-1"))),
+        update_job=AsyncMock(),
+    )
+
+    result = await tool.call(
+        _context(cron_mgr),
+        action="edit",
+        job_id="job-1",
+        run_once=True,
+        run_at="2020-02-02T08:00:00+08:00",
+    )
+
+    assert "in the past" in result
+    cron_mgr.update_job.assert_not_awaited()
 
 
 def _raw_job(

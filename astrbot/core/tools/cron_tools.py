@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from datetime import timezone as dt_timezone
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -150,6 +150,24 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
                         tz_name,
                     )
 
+            if run_once and run_at_dt is not None:
+                # The scheduler silently drops one-time jobs that are already
+                # past its misfire grace time, so report it to the model instead.
+                aware_run_at = (
+                    run_at_dt
+                    if run_at_dt.tzinfo
+                    else (
+                        run_at_dt.replace(tzinfo=tzinfo)
+                        if tzinfo
+                        else run_at_dt.astimezone()
+                    )
+                )
+                if aware_run_at < datetime.now(dt_timezone.utc) - timedelta(minutes=1):
+                    return (
+                        f"error: run_at {run_at_dt.isoformat()} is in the past. "
+                        "Check the current date and time and use a future run_at."
+                    )
+
             try:
                 job = await cron_mgr.add_active_job(
                     name=name,
@@ -270,6 +288,29 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
             if run_once:
                 if run_at_dt is None:
                     return "error: run_at is required when run_once=true."
+                if "run_at" in kwargs:
+                    job_tzinfo = None
+                    if job_tz_name := getattr(job, "timezone", None):
+                        try:
+                            job_tzinfo = ZoneInfo(job_tz_name)
+                        except ZoneInfoNotFoundError:
+                            pass
+                    aware_run_at = (
+                        run_at_dt
+                        if run_at_dt.tzinfo
+                        else (
+                            run_at_dt.replace(tzinfo=job_tzinfo)
+                            if job_tzinfo
+                            else run_at_dt.astimezone()
+                        )
+                    )
+                    if aware_run_at < datetime.now(dt_timezone.utc) - timedelta(
+                        minutes=1
+                    ):
+                        return (
+                            f"error: run_at {run_at_dt.isoformat()} is in the past. "
+                            "Check the current date and time and use a future run_at."
+                        )
                 cron_expression = None
                 payload["run_at"] = run_at_dt.isoformat()
             else:
