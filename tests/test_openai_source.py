@@ -13,6 +13,7 @@ from PIL import Image as PILImage
 
 import astrbot.core.provider.sources.openai_source as openai_source_module
 import astrbot.core.provider.sources.request_retry as request_retry
+from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.sources.groq_source import ProviderGroq
@@ -1648,6 +1649,133 @@ async def test_query_stream_extracts_usage_from_empty_choices_chunk(monkeypatch)
         assert final_response.usage.input_other == 62
         assert final_response.usage.input_cached == 2488
         assert final_response.usage.output == 125
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_query_stream_normalizes_tool_call_identity_and_index(monkeypatch):
+    """Streamed tool calls must not inherit repeated identities or sparse indices.
+
+    Some OpenAI-compatible gateways resend the full `id` and `function.name` on every
+    chunk of one call and number tool calls with sparse indices (e.g. after a
+    reasoning block). The SDK concatenates repeated strings and uses the index as a
+    position in its tool call list, which surfaced downstream as duplicated tool
+    names such as `astr_kb_searchastr_kb_search` (AstrBotDevs/AstrBot#7694).
+    """
+    provider = _make_provider()
+    tool_set = ToolSet(
+        [
+            FunctionTool(
+                name="read",
+                description="Read a file.",
+                parameters={
+                    "type": "object",
+                    "properties": {"path": {"type": "string"}},
+                },
+            )
+        ]
+    )
+
+    def chunk(delta: dict, finish_reason: str | None = None) -> ChatCompletionChunk:
+        return ChatCompletionChunk.model_validate(
+            {
+                "id": "chatcmpl-stream",
+                "object": "chat.completion.chunk",
+                "created": 0,
+                "model": "gpt-4o-mini",
+                "choices": [
+                    {"index": 0, "delta": delta, "finish_reason": finish_reason}
+                ],
+            }
+        )
+
+    async def run(chunks: list[ChatCompletionChunk]) -> LLMResponse:
+        async def fake_stream():
+            for item in chunks:
+                yield item
+
+        async def fake_create(**kwargs):
+            return fake_stream()
+
+        monkeypatch.setattr(provider.client.chat.completions, "create", fake_create)
+        responses = [
+            response
+            async for response in provider._query_stream(
+                payloads={
+                    "model": "gpt-4o-mini",
+                    "messages": [{"role": "user", "content": "hello"}],
+                },
+                tools=tool_set,
+            )
+        ]
+        return responses[-1]
+
+    try:
+        # The gateway repeats id/name on every chunk and starts the call at index 1.
+        repeated = await run(
+            [
+                chunk(
+                    {
+                        "role": "assistant",
+                        "tool_calls": [
+                            {
+                                "index": 1,
+                                "id": "call_a",
+                                "type": "function",
+                                "function": {"name": "read", "arguments": '{"pa'},
+                            }
+                        ],
+                    }
+                ),
+                chunk(
+                    {
+                        "tool_calls": [
+                            {
+                                "index": 1,
+                                "id": "call_a",
+                                "type": "function",
+                                "function": {"name": "read", "arguments": 'th": "x"}'},
+                            }
+                        ]
+                    }
+                ),
+                chunk({}, "tool_calls"),
+            ]
+        )
+        assert repeated.tools_call_name == ["read"]
+        assert repeated.tools_call_ids == ["call_a"]
+        assert repeated.tools_call_args == [{"path": "x"}]
+
+        # The gateway sends id/name once and only arguments afterwards.
+        incremental = await run(
+            [
+                chunk(
+                    {
+                        "role": "assistant",
+                        "tool_calls": [
+                            {
+                                "index": 0,
+                                "id": "call_b",
+                                "type": "function",
+                                "function": {"name": "read", "arguments": ""},
+                            }
+                        ],
+                    }
+                ),
+                chunk(
+                    {
+                        "tool_calls": [
+                            {"index": 0, "function": {"arguments": '{"path": "y"}'}}
+                        ]
+                    }
+                ),
+                chunk({}, "tool_calls"),
+            ]
+        )
+        assert incremental.tools_call_name == ["read"]
+        assert incremental.tools_call_ids == ["call_b"]
+        assert incremental.tools_call_args == [{"path": "y"}]
     finally:
         await provider.terminate()
 

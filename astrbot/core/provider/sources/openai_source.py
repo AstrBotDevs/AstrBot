@@ -643,6 +643,16 @@ class ProviderOpenAIOfficial(Provider):
 
         state = ChatCompletionStreamState()
 
+        # Some OpenAI-compatible gateways resend the full tool call `id` and
+        # `function.name` on every chunk of one call while reusing the same `index`.
+        # The SDK accumulates both string fields by concatenation, so the tool name
+        # becomes "readreadread" and the id doubles (AstrBotDevs/AstrBot#7694). Track
+        # which call each incoming index belongs to: keep id/name on the first frame,
+        # drop them on later frames, and hand out indices in call order so the SDK can
+        # use them as positions in its own tool call list.
+        tool_call_slots: dict[int, tuple[int, tuple[str, str]]] = {}
+        next_tool_index = 0
+
         async for chunk in stream:
             choice = chunk.choices[0] if chunk.choices else None
             delta = choice.delta if choice else None
@@ -656,6 +666,28 @@ class ProviderOpenAIOfficial(Provider):
                     # Gemini and some OpenAI-compatible proxies omit this field
                     if not hasattr(tc, "index") or tc.index is None:
                         tc.index = idx
+                # Normalize the repeated identity and the sparse upstream indices,
+                # see the comment above `tool_call_slots`.
+                for tc in dtcs:
+                    identity = (
+                        tc.id or "",
+                        tc.function.name if tc.function and tc.function.name else "",
+                    )
+                    slot = tool_call_slots.get(tc.index)
+                    if slot is not None and identity == slot[1]:
+                        # The same call repeating its id/name: drop the repeated fields.
+                        tc.index = slot[0]
+                        tc.id = None
+                        if tc.function:
+                            tc.function.name = None
+                    elif slot is not None and identity == ("", ""):
+                        # A continuation frame without identity: keep its assigned slot.
+                        tc.index = slot[0]
+                    else:
+                        # First frame of a call, or the incoming index reused by a new call.
+                        tool_call_slots[tc.index] = (next_tool_index, identity)
+                        tc.index = next_tool_index
+                        next_tool_index += 1
             # 跳过 delta=None 的 chunk，避免 SDK 内部 _convert_initial_chunk_into_snapshot
             # 第 747 行 choice.delta.to_dict() 抛出 NoneType 错误。
             # refs: AstrBot#6689 / openai-python#5069 / #5047
