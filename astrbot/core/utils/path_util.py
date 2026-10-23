@@ -45,7 +45,8 @@ def path_Mapping(mappings, srcPath: str) -> str:
         # logger.debug(f"\t路径映射-规则(处理): {from_} -> {to_}")
 
         url = file_uri_to_path(srcPath) if is_file_uri(srcPath) else srcPath
-        if url.startswith(from_):
+        # Match whole path segments only, so "/data" does not map "/data2/x".
+        if url == from_ or url.startswith((from_ + "/", from_ + "\\")):
             srcPath = url.replace(from_, to_, 1)
             if ":" in srcPath:
                 # Windows路径处理

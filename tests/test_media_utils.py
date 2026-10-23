@@ -613,7 +613,9 @@ async def test_media_resolver_rejects_directory_ref(tmp_path, media_type):
         await media_utils.MediaResolver(str(tmp_path), media_type=media_type).to_path()
 
     with pytest.raises(ValueError, match="not a regular file"):
-        await media_utils.MediaResolver(tmp_path.as_uri(), media_type=media_type).to_path()
+        await media_utils.MediaResolver(
+            tmp_path.as_uri(), media_type=media_type
+        ).to_path()
 
 
 @pytest.mark.asyncio
@@ -661,7 +663,9 @@ async def test_image_base64_data_degrades_for_unresolved_ref_when_not_strict():
     ref = "/api/v1/files/tokens/ddbb1afd-84d9-4b1d-9b0e-5c7e6fe75684"
 
     assert await media_utils.resolve_image_ref_to_base64_data(ref) is None
-    assert await media_utils.MediaResolver(ref, media_type="image").to_data_url() is None
+    assert (
+        await media_utils.MediaResolver(ref, media_type="image").to_data_url() is None
+    )
 
     with pytest.raises(FileNotFoundError):
         await media_utils.resolve_image_ref_to_base64_data(ref, strict=True)
@@ -675,7 +679,9 @@ async def test_image_base64_data_degrades_for_non_regular_ref_when_not_strict(
     ref = str(tmp_path) if kind == "directory" else ""
 
     assert await media_utils.resolve_image_ref_to_base64_data(ref) is None
-    assert await media_utils.MediaResolver(ref, media_type="image").to_data_url() is None
+    assert (
+        await media_utils.MediaResolver(ref, media_type="image").to_data_url() is None
+    )
 
     with pytest.raises(ValueError):
         await media_utils.resolve_image_ref_to_base64_data(ref, strict=True)
@@ -722,7 +728,9 @@ async def test_media_resolver_prefers_existing_file_over_base64(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_media_resolver_still_materializes_bare_base64_image(tmp_path, monkeypatch):
+async def test_media_resolver_still_materializes_bare_base64_image(
+    tmp_path, monkeypatch
+):
     monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
     payload = base64.b64encode(b"abcd").decode()
 
@@ -1015,6 +1023,15 @@ def test_path_mapping_accepts_standard_and_legacy_file_uri(tmp_path):
     if os.name != "nt":
         legacy_file_uri = f"file:///{source_file.as_posix()}"
         assert path_Mapping(mapping, legacy_file_uri) == expected_path
+
+
+def test_path_mapping_only_matches_whole_path_segments():
+    mapping = ["/app/data:/mnt/data"]
+
+    assert path_Mapping(mapping, "/app/data/a.png") == "/mnt/data/a.png"
+    assert path_Mapping(mapping, "/app/data") == "/mnt/data"
+    assert path_Mapping(mapping, "/app/data2/a.png") == "/app/data2/a.png"
+    assert path_Mapping(mapping, "/app/database.db") == "/app/database.db"
 
 
 @pytest.mark.asyncio
