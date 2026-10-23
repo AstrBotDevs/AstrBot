@@ -668,6 +668,35 @@ async def test_normal_completion_without_max_step(
 
 
 @pytest.mark.asyncio
+async def test_skills_like_mode_without_tools_still_initializes_run(
+    runner, mock_provider, mock_tool_executor, mock_hooks
+):
+    """skills_like mode with no tools must still build messages and stats."""
+    request = ProviderRequest(
+        prompt="hello", system_prompt="sys", func_tool=None, contexts=[]
+    )
+
+    await runner.reset(
+        provider=mock_provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        tool_schema_mode="skills_like",
+    )
+
+    assert [m.role for m in runner.run_context.messages] == ["system", "user"]
+    assert runner.stats.start_time > 0
+
+    async for _ in runner.step_until_done(3):
+        pass
+
+    assert runner.done()
+    assert runner.stats.end_time >= runner.stats.start_time
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("streaming", [False, True])
 async def test_stats_separate_latest_context_from_cumulative_usage(
     runner, provider_request, mock_tool_executor, mock_hooks, streaming
