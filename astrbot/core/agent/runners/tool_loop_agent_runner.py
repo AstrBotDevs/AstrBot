@@ -27,7 +27,7 @@ from tenacity import (
 from astrbot import logger
 from astrbot.core.agent.message import ImageURLPart, TextPart, ThinkPart
 from astrbot.core.agent.tool import FunctionTool, ToolSet
-from astrbot.core.agent.tool_image_cache import tool_image_cache
+from astrbot.core.agent.tool_image_cache import CachedImage, tool_image_cache
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.components import Json
 from astrbot.core.message.message_event_result import (
@@ -47,6 +47,7 @@ from astrbot.core.provider.modalities import (
 )
 from astrbot.core.provider.provider import Provider
 from astrbot.core.utils.async_generator import iterate_in_task
+from astrbot.core.utils.media_utils import compress_image
 
 from ..context.compressor import ContextCompressor
 from ..context.config import ContextConfig
@@ -111,6 +112,14 @@ AwaitableResultT = T.TypeVar("AwaitableResultT")
 class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     TOOL_RESULT_MAX_ESTIMATED_TOKENS = 27_500
     TOOL_RESULT_PREVIEW_MAX_ESTIMATED_TOKENS = 7000
+    IMAGE_CAPTION_FALLBACK_TOOL_NAMES = frozenset(
+        {
+            # Only the built-in file read tool gets a text fallback when the
+            # model cannot read images. Other tools (MCP, third-party) own
+            # their image handling and must not be described here.
+            "astrbot_file_read_tool",
+        }
+    )
     EMPTY_OUTPUT_RETRY_ATTEMPTS = 3
     EMPTY_OUTPUT_RETRY_WAIT_MIN_S = 1
     EMPTY_OUTPUT_RETRY_WAIT_MAX_S = 4
@@ -1175,6 +1184,104 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             async for resp in self.step():
                 yield resp
 
+    def _provider_supports_image(self) -> bool:
+        """Return whether the model selected for this turn can read images.
+
+        Returns:
+            True when the model accepts the image modality. Empty or missing
+            modalities is treated as supporting images for backward
+            compatibility with unconfigured providers.
+        """
+        modalities = self.provider.provider_config.get("modalities", [])
+        return not modalities or "image" in modalities
+
+    async def _caption_tool_image(self, cached_img: CachedImage) -> str | None:
+        """Describe one cached tool image using the configured caption provider.
+
+        Used when the model selected for this turn cannot read images, so the
+        image content still reaches the model through the tool result.
+
+        Args:
+            cached_img: Image cached during the current tool step.
+
+        Returns:
+            The image description, or None when captioning is not possible (no
+            provider configured, provider unavailable, or an empty description).
+            Failures are logged, never raised.
+        """
+        event = getattr(self.run_context.context, "event", None)
+        star_context = getattr(self.run_context.context, "context", None)
+        umo = getattr(event, "unified_msg_origin", None)
+        if star_context is None or not umo:
+            return None
+
+        try:
+            cfg = star_context.get_config(umo=umo)
+        except Exception as exc:
+            logger.warning(f"[ImageCaption] Failed to load config: {exc}")
+            return None
+        provider_settings = (
+            cfg.get("provider_settings", {}) if isinstance(cfg, dict) else {}
+        )
+        if not isinstance(provider_settings, dict):
+            logger.warning("[ImageCaption] provider_settings is not a mapping.")
+            return None
+        provider_id = str(
+            provider_settings.get("default_image_caption_provider_id", "") or ""
+        ).strip()
+        if not provider_id:
+            logger.debug(
+                "[ImageCaption] No image caption provider configured; skipping."
+            )
+            return None
+
+        try:
+            caption_provider = await star_context.provider_manager.get_provider_by_id(
+                provider_id
+            )
+        except Exception as exc:
+            logger.warning(
+                f"[ImageCaption] Failed to resolve provider `{provider_id}`: {exc}"
+            )
+            return None
+        if not isinstance(caption_provider, Provider):
+            logger.warning(
+                f"[ImageCaption] Provider `{provider_id}` is unavailable; skipping."
+            )
+            return None
+
+        prompt = str(
+            provider_settings.get("image_caption_prompt", "Please describe the image.")
+            or "Please describe the image."
+        ).strip()
+        # Shrink the image to the project's model-image limit before sending it
+        # out, so a large tool image is not shipped verbatim to the caption
+        # provider. compress_image returns the original path when nothing needs
+        # to be done, so only a newly written temp file is cleaned up.
+        image_ref = cached_img.file_path
+        try:
+            image_ref = await compress_image(cached_img.file_path)
+        except Exception as exc:
+            logger.warning(f"[ImageCaption] Compression failed: {exc}")
+        try:
+            llm_resp = await caption_provider.text_chat(
+                prompt=prompt,
+                image_urls=[image_ref],
+            )
+        except Exception as exc:
+            logger.error(f"[ImageCaption] Failed to describe {image_ref}: {exc}")
+            return None
+        finally:
+            if image_ref != cached_img.file_path:
+                Path(image_ref).unlink(missing_ok=True)
+        caption = (getattr(llm_resp, "completion_text", None) or "").strip()
+        if not caption:
+            logger.warning(
+                f"[ImageCaption] Empty description for {cached_img.file_path}."
+            )
+            return None
+        return f"[Image caption]: {caption}"
+
     async def _handle_function_tools(
         self,
         req: ProviderRequest,
@@ -1322,6 +1429,14 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                     f"with type='image' and path='{cached_img.file_path}'."
                                 )
                                 # Yield image info for LLM visibility (will be handled in step())
+                                if (
+                                    func_tool_name
+                                    in self.IMAGE_CAPTION_FALLBACK_TOOL_NAMES
+                                    and not self._provider_supports_image()
+                                ):
+                                    caption = await self._caption_tool_image(cached_img)
+                                    if caption:
+                                        result_parts.append(caption)
                                 yield _HandleFunctionToolsResult.from_cached_image(
                                     cached_img
                                 )
@@ -1348,6 +1463,16 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                         f"with type='image' and path='{cached_img.file_path}'."
                                     )
                                     # Yield image info for LLM visibility
+                                    if (
+                                        func_tool_name
+                                        in self.IMAGE_CAPTION_FALLBACK_TOOL_NAMES
+                                        and not self._provider_supports_image()
+                                    ):
+                                        caption = await self._caption_tool_image(
+                                            cached_img
+                                        )
+                                        if caption:
+                                            result_parts.append(caption)
                                     yield _HandleFunctionToolsResult.from_cached_image(
                                         cached_img
                                     )
