@@ -220,6 +220,13 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             ):
                 return permission_error
         messages = kwargs.get("messages")
+        if isinstance(messages, str):
+            # Some models send the array as a JSON-encoded string, especially
+            # for long multi-line text.
+            try:
+                messages = json.loads(messages)
+            except json.JSONDecodeError:
+                pass
         if not isinstance(messages, list) or not messages:
             return "error: messages parameter is empty or invalid."
 
