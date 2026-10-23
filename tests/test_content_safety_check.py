@@ -132,3 +132,22 @@ async def test_content_safety_skips_invalid_keyword_regex():
 
     # The valid "blocked" keyword still matches, so the message is stopped.
     assert stopped is True
+
+
+def test_content_safety_skips_non_string_keyword():
+    """A non-string extra_keywords entry must not abort strategy setup.
+
+    re.compile raises TypeError (not re.error) on a non-string value, which
+    would otherwise abort KeywordsStrategy construction and break content
+    safety stage initialization. Such entries should be skipped while valid
+    keywords keep working.
+    """
+    from astrbot.core.pipeline.content_safety_check.strategies.keywords import (
+        KeywordsStrategy,
+    )
+
+    strategy = KeywordsStrategy([123, None, "blocked"])
+
+    assert strategy.check("nothing here") == (True, "")
+    ok, _ = strategy.check("this mentions blocked")
+    assert ok is False

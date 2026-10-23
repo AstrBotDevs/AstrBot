@@ -10,9 +10,10 @@ class KeywordsStrategy(ContentSafetyStrategy):
         """Compile the configured keyword patterns once.
 
         The extra_keywords option documents regex support, so each entry is
-        treated as a regular expression. Invalid patterns are skipped with a
-        warning instead of being allowed to raise at match time, which would
-        otherwise crash the message pipeline on every inbound message.
+        treated as a regular expression. Invalid patterns (bad regex or a
+        non-string value) are skipped with a warning instead of being allowed
+        to raise, which would otherwise abort strategy setup or crash the
+        message pipeline on every inbound message.
 
         Args:
             extra_keywords: User-configured blocked keywords, each a regex.
@@ -28,9 +29,9 @@ class KeywordsStrategy(ContentSafetyStrategy):
         for keyword in extra_keywords or []:
             try:
                 self._patterns.append(re.compile(keyword))
-            except re.error as e:
+            except (re.error, TypeError) as e:
                 logger.warning(
-                    f"Skipping invalid content-safety keyword regex {keyword!r}: {e}"
+                    f"Skipping invalid content-safety keyword {keyword!r}: {e}"
                 )
 
     def check(self, content: str) -> tuple[bool, str]:
