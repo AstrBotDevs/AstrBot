@@ -348,7 +348,7 @@ Whether to let the model know the name of the group it's in. Default is `false`.
 
 #### `provider_settings.datetime_system_prompt`
 
-Whether to include the current machine date and time in the system prompt. Default is `true`.
+Whether to append the current date, time, time zone, and weekday to the user prompt. The information is attached to the current user message inside a `<system_reminder>` block; the system prompt is not modified. The configured `timezone` is used when set, otherwise the machine's local time zone. Default is `true`.
 
 #### `provider_settings.default_personality`
 

@@ -348,7 +348,7 @@ SerpApi Google Search、Google Images Light、Google Finance 和 Google Scholar 
 
 #### `provider_settings.datetime_system_prompt`
 
-是否在系统提示词中加上当前机器的日期时间。默认为 `true`。
+是否在用户提示词中附带当前日期、时间、时区和星期。该信息以 `<system_reminder>` 的形式附加在当前用户消息中，不会修改系统提示词。时区优先使用配置的 `timezone`，未配置时使用机器本地时区。默认为 `true`。
 
 #### `provider_settings.default_personality`
 
