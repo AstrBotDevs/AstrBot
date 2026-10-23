@@ -2,31 +2,73 @@
 
 from pathlib import Path
 
+from packaging.markers import Marker
 from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
 
+from astrbot.core.utils.requirements_utils import _iter_requirement_lines
 from astrbot.core.utils.toml_parser import read_pyproject_project_dependencies
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 REQUIREMENTS_PATH = PROJECT_ROOT / "requirements.txt"
 PYPROJECT_PATH = PROJECT_ROOT / "pyproject.toml"
 
+MarkerKey = frozenset | tuple[str, frozenset]
 
-def _read_requirements() -> list[str]:
-    """Read non-comment, non-empty requirement lines from requirements.txt.
+
+def _read_requirements(path: Path = REQUIREMENTS_PATH) -> list[str]:
+    """Read requirement lines, expanding includes and skipping pip directives.
+
+    Args:
+        path: Requirements file to read.
 
     Returns:
-        Requirement strings declared in requirements.txt.
+        Requirement strings with nested ``-r`` includes expanded, comments
+        stripped, and pip options such as ``--extra-index-url``, ``-c``, and
+        ``-e`` removed.
     """
     entries = []
-    for line in REQUIREMENTS_PATH.read_text(encoding="utf-8").splitlines():
-        candidate = line.split("#", 1)[0].strip()
+    for line in _iter_requirement_lines(str(path)):
+        if line.startswith("-"):
+            continue
+        candidate = line.split(" --", 1)[0].strip()
         if candidate:
             entries.append(candidate)
     return entries
 
 
-def _normalize(entries: list[str]) -> dict[str, tuple[frozenset[str], str, str]]:
+def _canonical_marker(marker: Marker | None) -> MarkerKey:
+    """Build an order-insensitive canonical key for a marker.
+
+    Args:
+        marker: Parsed environment marker, or ``None``.
+
+    Returns:
+        Canonical key where reordered ``and``/``or`` clauses compare equal via
+        ``frozenset`` membership while operator precedence is preserved.
+    """
+    if marker is None:
+        return frozenset()
+
+    def render(items: list) -> tuple[str, frozenset]:
+        # Split on "or"; each group is an AND of operands. Nested parenthesized
+        # clauses become nested keys, so precedence is preserved.
+        groups: list[list[str | tuple]] = [[]]
+        for item in items:
+            if isinstance(item, str):
+                if item == "or":
+                    groups.append([])
+                continue
+            if isinstance(item, list):
+                groups[-1].append(render(item))
+            else:
+                groups[-1].append(str(item))
+        return ("or", frozenset(frozenset(group) for group in groups))
+
+    return render(marker._markers)
+
+
+def _normalize(entries: list[str]) -> dict[str, tuple[frozenset[str], str, MarkerKey]]:
     """Normalize requirement strings for order-independent comparison.
 
     Args:
@@ -42,7 +84,7 @@ def _normalize(entries: list[str]) -> dict[str, tuple[frozenset[str], str, str]]
         dependencies[canonicalize_name(requirement.name)] = (
             frozenset(requirement.extras),
             str(requirement.specifier),
-            str(requirement.marker or ""),
+            _canonical_marker(requirement.marker),
         )
     return dependencies
 
