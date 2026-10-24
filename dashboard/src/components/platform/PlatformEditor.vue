@@ -493,7 +493,10 @@ const defaultConfigOptions = computed(() => [
     id: SYSTEM_DEFAULT_CONFIG,
     name: tm("workspace.routes.systemDefault"),
   },
-  ...configProfiles.value,
+  // The backend always appends the built-in "default" profile to the list, but
+  // the sentinel above already stands for it here, so drop it to avoid showing
+  // two options that resolve to the same configuration.
+  ...configProfiles.value.filter((profile) => profile.id !== "default"),
 ]);
 
 const boundSessionSet = computed(
@@ -696,7 +699,11 @@ function loadBotRoutes(platformId) {
     if (!parsed || parsed.platform !== platformId) continue;
 
     if (!fallbackFound && isBotFallbackPattern(parsed)) {
-      fallbackConfigId.value = configId;
+      // Routes saved by older versions may point the fallback at the real
+      // "default" profile, which the selector above no longer lists. Map it to
+      // the sentinel so the selection stays consistent with the offered options.
+      fallbackConfigId.value =
+        configId === "default" ? SYSTEM_DEFAULT_CONFIG : configId;
       fallbackFound = true;
       continue;
     }
