@@ -1007,6 +1007,15 @@ function readSessionProviderSelection(sessionId: string) {
   return null;
 }
 
+function clearSessionProviderSelection(sessionId: string) {
+  if (!sessionId) return;
+  try {
+    localStorage.removeItem(SESSION_PROVIDER_STORAGE_PREFIX + sessionId);
+  } catch {
+    // Session model persistence must not block chat flows.
+  }
+}
+
 function writeSessionProviderSelection(
   sessionId: string,
   selection: { providerId?: string; modelName?: string } | null,
