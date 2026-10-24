@@ -74,9 +74,21 @@ class ProviderXinferenceSTT(STTProvider):
             )
 
     async def get_text(self, audio_url: str) -> str:
+        """Transcribe audio and propagate failures to the caller.
+
+        Args:
+            audio_url: Audio URL or local file path.
+
+        Returns:
+            The transcription text returned by Xinference.
+
+        Raises:
+            RuntimeError: If the model is uninitialized or the HTTP response fails.
+            ValueError: If the resolved audio is empty.
+            aiohttp.ClientError: If the request fails.
+        """
         if not self.model_uid or self.client is None or self.client.session is None:
-            logger.error("Xinference STT model is not initialized.")
-            return ""
+            raise RuntimeError("Xinference STT model is not initialized.")
 
         try:
             async with MediaResolver(
@@ -87,8 +99,7 @@ class ProviderXinferenceSTT(STTProvider):
                 audio_bytes = audio.read_bytes()
 
                 if not audio_bytes:
-                    logger.error("Audio bytes are empty.")
-                    return ""
+                    raise ValueError("Audio bytes are empty.")
 
                 # 官方asyncCLient的客户端似乎实现有点问题，这里直接用aiohttp实现openai标准兼容请求，提交issue等待官方修复后再改回来
                 url = f"{self.base_url}/v1/audio/transcriptions"
@@ -119,15 +130,14 @@ class ProviderXinferenceSTT(STTProvider):
                         logger.debug(f"Xinference STT result: {text}")
                         return text
                     error_text = await resp.text()
-                    logger.error(
+                    raise RuntimeError(
                         f"Xinference STT transcription failed with status {resp.status}: {error_text}",
                     )
-                    return ""
 
         except Exception as e:
             logger.error(f"Xinference STT failed: {e}")
             logger.debug(f"Xinference STT failed with exception: {e}", exc_info=True)
-            return ""
+            raise
 
     async def terminate(self) -> None:
         """关闭客户端会话"""

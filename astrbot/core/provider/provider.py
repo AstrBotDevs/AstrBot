@@ -227,12 +227,19 @@ class STTProvider(AbstractProvider):
         raise NotImplementedError
 
     async def test(self) -> None:
+        """Check that the sample audio produces a non-empty transcription.
+
+        Raises:
+            RuntimeError: If the transcription is empty or contains only whitespace.
+        """
         sample_audio_path = os.path.join(
             get_astrbot_path(),
             "samples",
             "stt_health_check.wav",
         )
-        await self.get_text(sample_audio_path)
+        text = await self.get_text(sample_audio_path)
+        if not text or not text.strip():
+            raise RuntimeError("STT health check returned an empty transcription.")
 
 
 class TTSProvider(AbstractProvider):
