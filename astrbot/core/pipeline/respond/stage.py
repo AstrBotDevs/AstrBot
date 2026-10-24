@@ -142,12 +142,11 @@ class RespondStage(Stage):
             return True
 
         for comp in chain:
-            comp_type = type(comp)
-
-            # 检查组件类型是否在字典中
-            if comp_type in self._component_validators:
-                if self._component_validators[comp_type](comp):
-                    return False
+            validator = self._component_validators.get(type(comp))
+            # Platform-specific components (e.g. Discord embeds) have no
+            # validator here; leave them for the platform adapter to handle.
+            if validator is None or validator(comp):
+                return False
 
         # 如果所有组件都为空
         return True
