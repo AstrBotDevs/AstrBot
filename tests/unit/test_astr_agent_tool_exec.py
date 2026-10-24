@@ -129,9 +129,21 @@ async def test_handoff_collects_audio_once_in_both_paths(
     monkeypatch.setattr(Record, "_resolve_file_source", resolve)
     args = {"input": "listen", "audio_urls": [" /tmp/voice.wav ", "/tmp/other.wav"]}
     if background:
-        await FunctionToolExecutor._do_handoff_background(
-            tool, run_context, task_id="audio-test", **args
+        registry = ActiveEventRegistry()
+        monkeypatch.setattr(
+            "astrbot.core.astr_agent_tool_exec.active_event_registry", registry
         )
+        results = [
+            r
+            async for r in FunctionToolExecutor.execute(
+                tool, run_context, background_task=True, **args
+            )
+        ]
+        task = next(
+            iter(registry._background_tasks[run_context.context.event.unified_msg_origin])
+        )
+        await task
+        assert "submitted" in results[0].content[0].text
         wake.assert_awaited_once()
         assert "heard" in wake.await_args.kwargs["result_text"]
     else:
