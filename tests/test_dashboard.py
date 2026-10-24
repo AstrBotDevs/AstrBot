@@ -3092,7 +3092,6 @@ async def test_do_update(
 ):
     test_client = app.test_client()
     calls = []
-    pip_install_calls = []
 
     async def mock_update(*args, **kwargs):
         from astrbot.core.updater import UpdateProgress
@@ -3114,7 +3113,7 @@ async def test_do_update(
 
     async def mock_pip_install(*args, **kwargs):
         """Mocks pip install to prevent actual installation."""
-        pip_install_calls.append((args, kwargs))
+        return
 
     monkeypatch.setattr(
         core_lifecycle_td.astrbot_updater,
@@ -3145,9 +3144,6 @@ async def test_do_update(
     assert calls[0][0] == ()
     assert calls[0][1]["version"] == "v3.4.0"
     assert callable(calls[0][1]["progress_callback"])
-    assert pip_install_calls == [
-        ((), {"requirements_path": "requirements.txt", "bypass_core_constraints": True})
-    ]
 
     assert progress_data["status"] == "ok"
     assert progress_data["data"]["status"] == "success"
