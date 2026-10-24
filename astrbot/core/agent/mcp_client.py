@@ -652,12 +652,31 @@ class MCPClient:
         await self.session.initialize()
 
     async def list_tools_and_save(self) -> mcp.ListToolsResult:
-        """List all tools from the server and save them to self.tools"""
+        """List all tools from the server and save them to self.tools.
+
+        Returns:
+            The combined result from all pages, preserving metadata from the first.
+
+        Raises:
+            RuntimeError: If the server repeats a pagination cursor.
+        """
         if not self.session:
             raise Exception("MCP Client is not initialized")
         response = await self.session.list_tools()
-        self.tools = response.tools
-        return response
+        tools = list(response.tools)
+        cursor = response.nextCursor
+        seen_cursors = set()
+        while cursor is not None:
+            if cursor in seen_cursors:
+                raise RuntimeError(f"MCP server repeated tools/list cursor: {cursor}")
+            seen_cursors.add(cursor)
+            page = await self.session.list_tools(cursor=cursor)
+            tools.extend(page.tools)
+            cursor = page.nextCursor
+
+        result = response.model_copy(update={"tools": tools, "nextCursor": None})
+        self.tools = tools
+        return result
 
     def _cancel_connection_task(self, task: asyncio.Task) -> None:
         """Cancel a connection owner task and track it until it finishes."""
