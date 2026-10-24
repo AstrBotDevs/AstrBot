@@ -291,7 +291,7 @@ class LarkPlatformAdapter(Platform):
                     user_key = str(comp.get("user_id", ""))
                     if user_key in at_map:
                         components.append(at_map[user_key])
-                elif tag == "text":
+                elif tag in ("text", "md", "code_block"):
                     text = str(comp.get("text", ""))
                     if text:
                         components.append(Comp.Plain(text))
