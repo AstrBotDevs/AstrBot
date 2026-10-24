@@ -222,6 +222,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         llm_compress_instruction: str | None = None,
         llm_compress_keep_recent_ratio: float = 0.15,
         llm_compress_provider: Provider | None = None,
+        # share of the context window that triggers compression
+        context_compression_threshold: float = 0.82,
         # truncate by turns compressor
         truncate_turns: int = 1,
         # customize
@@ -240,6 +242,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.llm_compress_instruction = llm_compress_instruction
         self.llm_compress_keep_recent_ratio = llm_compress_keep_recent_ratio
         self.llm_compress_provider = llm_compress_provider
+        self.context_compression_threshold = context_compression_threshold
         self.truncate_turns = truncate_turns
         self.custom_token_counter = custom_token_counter
         self.custom_compressor = custom_compressor
@@ -256,6 +259,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             llm_compress_instruction=self.llm_compress_instruction,
             llm_compress_keep_recent_ratio=self.llm_compress_keep_recent_ratio,
             llm_compress_provider=self.llm_compress_provider,
+            compression_threshold=self.context_compression_threshold,
             custom_token_counter=self.custom_token_counter,
             custom_compressor=self.custom_compressor,
         )

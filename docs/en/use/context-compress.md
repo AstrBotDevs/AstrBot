@@ -42,7 +42,7 @@ The default summary focuses on the user's goal, task progress, conclusions, usef
 
 ### 1. A Request Approaches the Model's Context Limit
 
-AstrBot checks context **before every model request**, including follow-up requests after an Agent calls tools. The selected strategy is triggered when context usage exceeds approximately **82%** of the model's context window.
+AstrBot checks context **before every model request**, including follow-up requests after an Agent calls tools. The selected strategy is triggered when context usage exceeds a share of the model's context window. **Context Usage Ratio That Triggers Compression** sets that share: **0.82** (about 82%) by default, adjustable from 0.1 to 0.95. Lower values compress earlier but more often.
 
 AstrBot checks again after processing. If the context is still too long, it removes complete turns from the oldest first while keeping the latest turn. Tool calls and their results are handled together to avoid leaving incomplete call records.
 
@@ -76,7 +76,7 @@ A summary does not retain every word, and truncation removes older content altog
 
 ### Why Has Compression Not Started?
 
-Check that you edited the profile used by the current session and saved it. Token compression normally waits until usage exceeds approximately 82% of the context window. An oversized window setting can delay it.
+Check that you edited the profile used by the current session and saved it. Token compression normally waits until usage exceeds the configured trigger ratio (about 82% of the context window by default). An oversized window setting can delay it.
 
 ### Why Do I Still Get a Context Limit Error?
 

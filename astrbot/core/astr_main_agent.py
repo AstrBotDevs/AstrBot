@@ -220,6 +220,8 @@ class MainAgentBuildConfig:
     """Percent of current context tokens to keep as exact recent context during llm_compress strategy."""
     llm_compress_provider_id: str = ""
     """The provider ID for the LLM used in context compression."""
+    context_compression_threshold: float = 0.82
+    """Share of the model context window that triggers compression or truncation."""
     max_context_length: int = 50
     """The maximum number of turns to keep in context. -1 means no limit.
     This enforce max turns before compression"""
@@ -2008,6 +2010,7 @@ async def build_main_agent(
         streaming=config.streaming_response,
         llm_compress_instruction=config.llm_compress_instruction,
         llm_compress_keep_recent_ratio=config.llm_compress_keep_recent_ratio,
+        context_compression_threshold=config.context_compression_threshold,
         llm_compress_provider=await _get_compress_provider(
             config,
             plugin_context,
