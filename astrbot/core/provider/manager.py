@@ -471,6 +471,10 @@ class ProviderManager:
                 from .sources.kimi_code_source import (
                     ProviderKimiCode as ProviderKimiCode,
                 )
+            case "opencode_go_chat_completion":
+                from .sources.opencode_go_source import (
+                    ProviderOpenCodeGo as ProviderOpenCodeGo,
+                )
             case "googlegenai_chat_completion":
                 from .sources.gemini_source import (
                     ProviderGoogleGenAI as ProviderGoogleGenAI,
