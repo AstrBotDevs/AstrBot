@@ -118,7 +118,7 @@
           </div>
 
           <div class="mcp-server-tools text-caption text-medium-emphasis">
-            <template v-if="server.tools && server.tools.length > 0">
+            <template v-if="(server.tools && server.tools.length > 0) || server.oauth2_enabled">
               <v-dialog max-width="600px">
                 <template v-slot:activator="{ props: listToolsProps }">
                   <button
@@ -164,6 +164,27 @@
                   </v-card>
                 </template>
               </v-dialog>
+              <div v-if="server.oauth2_enabled" class="mt-1">
+                <v-icon size="small" :color="server.oauth2_authorized ? 'success' : 'warning'" class="me-2">
+                  mdi-shield-key-outline
+                </v-icon>
+                <button
+                  v-if="server.oauth2_grant_type !== 'client_credentials'"
+                  type="button"
+                  class="text-caption text-medium-emphasis oauth-status-action"
+                  :disabled="loading"
+                  @click.stop="authorizeExistingServer(server)"
+                >
+                  {{ server.oauth2_authorized
+                    ? tm('mcpServers.status.oauthAuthorized')
+                    : tm('mcpServers.status.oauthLoginRequired') }}
+                </button>
+                <span v-else class="text-caption text-medium-emphasis">
+                  {{ server.oauth2_grant_type === 'client_credentials'
+                    ? tm('mcpServers.status.oauthClientCredentials')
+                    : tm('mcpServers.status.oauthAuthorized') }}
+                </span>
+              </div>
             </template>
             <template v-else>
               <v-icon size="small" color="warning" class="me-1">
@@ -317,6 +338,9 @@
               <v-btn size="small" color="primary" variant="tonal" @click="setConfigTemplate('sse')" class="me-1">
                 {{ tm('mcpServers.buttons.useTemplateSse') }}
               </v-btn>
+              <v-btn size="small" color="primary" variant="tonal" @click="setConfigTemplate('streamable_http_oauth')">
+                {{ tm('mcpServers.buttons.useTemplateOauth2') }}
+              </v-btn>
             </div>
 
             <small style="color: grey">*{{ tm('dialogs.addServer.tips.timeoutConfig') }}</small>
@@ -343,6 +367,56 @@
               <span>{{ jsonError }}</span>
             </div>
 
+            <div v-if="hasAuthorizationCodeOAuthConfig" class="mt-3">
+              <div class="d-flex align-center mb-2">
+                <v-icon size="small" :color="oauthFlowStatusColor" class="me-2">mdi-shield-key-outline</v-icon>
+                <span :class="oauthFlowStatusClass" class="text-caption font-weight-bold">{{ oauthFlowStatusText }}</span>
+
+                <v-spacer></v-spacer>
+                <v-btn
+                  size="small"
+                  variant="text"
+                  color="primary"
+                  :loading="loading"
+                  :disabled="loading || oauthFlowStatus === 'authorizing'"
+                  @click="authorizeOauth"
+                >
+                  <v-icon start size="small">mdi-shield-key-outline</v-icon>
+                  {{
+                    oauthFlowStatus === 'completed'
+                      ? tm('mcpServers.buttons.reauthorize')
+                      : tm('mcpServers.buttons.authorize')
+                  }}
+                </v-btn>
+              </div>
+
+              <div v-if="oauthUrl && oauthFlowStatus === 'awaiting_user'" class="mt-2 pa-3 bg-grey-lighten-4 rounded border">
+                <div class="text-caption text-grey-darken-1 mb-1">请复制以下链接在浏览器中打开：</div>
+                <div class="d-flex align-center">
+                  <v-text-field
+                    :value="oauthUrl"
+                    readonly
+                    density="compact"
+                    variant="plain"
+                    hide-details
+                    class="text-body-2"
+                  ></v-text-field>
+                  <v-btn icon="mdi-content-copy" size="x-small" variant="text" @click="copyOauthUrl"></v-btn>
+                </div>
+                <v-btn
+                  block
+                  color="info"
+                  variant="tonal"
+                  size="small"
+                  class="mt-3"
+                  prepend-icon="mdi-qrcode-scan"
+                  @click="showQrCodeDialog = true"
+                >
+                  扫描二维码登录
+                </v-btn>
+              </div>
+            </div>
+
           </v-form>
           <div style="margin-top: 8px;">
             <small>{{ addServerDialogMessage }}</small>
@@ -361,6 +435,26 @@
           <v-btn color="primary" variant="tonal" @click="saveServer" :loading="loading" :disabled="!isServerFormValid">
             {{ tm('dialogs.addServer.buttons.save') }}
           </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- 二维码对话框 -->
+    <v-dialog v-model="showQrCodeDialog" max-width="320px">
+      <v-card>
+        <v-card-title class="text-center py-4">扫描二维码登录</v-card-title>
+        <v-card-text class="text-center pb-6">
+          <QrCodeViewer
+            v-if="oauthUrl"
+            :value="oauthUrl"
+            :size="240"
+            class="mx-auto border rounded-lg"
+          />
+          <div class="mt-4 text-caption text-grey">请使用移动端或浏览器扫描此二维码完成授权</div>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn color="primary" block @click="showQrCodeDialog = false">关闭</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -431,6 +525,7 @@
 <script>
 import { LazyMonacoEditor as VueMonacoEditor } from '@/components/shared/LazyMonacoEditor';
 import { mcpApi } from '@/api/v1';
+import QrCodeViewer from '@/components/shared/QrCodeViewer.vue';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import OutlinedActionListItem from '@/components/shared/OutlinedActionListItem.vue';
 import { buildSearchQuery, matchesText } from '@/utils/pluginSearch';
@@ -443,7 +538,8 @@ export default {
   name: 'McpServersSection',
   components: {
     VueMonacoEditor,
-    OutlinedActionListItem
+    OutlinedActionListItem,
+    QrCodeViewer
   },
   setup() {
     const { t } = useI18n();
@@ -470,6 +566,13 @@ export default {
       batchDeleteTargets: [],
       batchDeleteDialog: false,
       batchDeleting: false,
+      oauthFlowId: '',
+      oauthUrl: '',
+      showQrCodeDialog: false,
+      oauthFlowStatus: '',
+      oauthFlowError: '',
+      oauthPollTimer: null,
+      oauthPollInFlight: false,
       isEditMode: false,
       serverConfigJson: '',
       jsonError: null,
@@ -504,6 +607,59 @@ export default {
         server => this.selectedMcpServerNames.includes(server.name)
       );
     },
+    parsedServerConfig() {
+      try {
+        if (!this.serverConfigJson.trim()) {
+          return null;
+        }
+        return JSON.parse(this.serverConfigJson);
+      } catch {
+        return null;
+      }
+    },
+    currentOauthConfig() {
+      if (!this.parsedServerConfig || typeof this.parsedServerConfig !== 'object') {
+        return null;
+      }
+      return this.parsedServerConfig.oauth2 || this.parsedServerConfig.oauth || null;
+    },
+    hasAuthorizationCodeOAuthConfig() {
+      return !!this.currentOauthConfig
+        && (this.currentOauthConfig.grant_type || 'authorization_code') === 'authorization_code';
+    },
+    oauthFlowStatusColor() {
+      if (this.oauthFlowStatus === 'completed') {
+        return 'success';
+      }
+      if (this.oauthFlowStatus === 'failed') {
+        return 'error';
+      }
+      return 'warning';
+    },
+    oauthFlowStatusClass() {
+      if (this.oauthFlowStatus === 'completed') {
+        return 'text-success';
+      }
+      if (this.oauthFlowStatus === 'failed') {
+        return 'text-error';
+      }
+      return 'text-medium-emphasis';
+    },
+    oauthFlowStatusText() {
+      if (this.oauthFlowStatus === 'completed') {
+        return this.tm('dialogs.addServer.oauth.status.authorized');
+      }
+      if (this.oauthFlowStatus === 'awaiting_user') {
+        return this.tm('dialogs.addServer.oauth.status.awaitingUser');
+      }
+      if (this.oauthFlowStatus === 'authorizing') {
+        return this.tm('dialogs.addServer.oauth.status.authorizing');
+      }
+      if (this.oauthFlowStatus === 'failed') {
+        return this.oauthFlowError || this.tm('dialogs.addServer.oauth.status.failed');
+      }
+      return this.tm('dialogs.addServer.oauth.status.notAuthorized');
+    },
     getServerConfigSummary() {
       return (server) => {
         if (server.transport) {
@@ -512,8 +668,11 @@ export default {
         if (server.command) {
           return `${server.command} ${(server.args || []).join(' ')}`;
         }
+        if (server.url) {
+          return server.url;
+        }
         const configKeys = Object.keys(server).filter(key =>
-          !['name', 'active', 'connected', 'tools', 'errlogs'].includes(key)
+          !['name', 'active', 'connected', 'tools', 'errlogs', 'oauth2_enabled', 'oauth2_authorized', 'oauth2_grant_type'].includes(key)
         );
         if (configKeys.length > 0) {
           return this.tm('mcpServers.status.configSummary', { keys: configKeys.join(', ') });
@@ -548,6 +707,7 @@ export default {
     if (this.refreshInterval) {
       clearInterval(this.refreshInterval);
     }
+    this.stopOauthPolling();
   },
   watch: {
     filteredMcpServers(visibleServers) {
@@ -617,6 +777,18 @@ export default {
           headers: {},
           timeout: 5,
           sse_read_timeout: 300
+        };
+      } else if (type === 'streamable_http_oauth') {
+        template = {
+          transport: 'streamable_http',
+          url: 'your mcp server url',
+          headers: {},
+          timeout: 25,
+          sse_read_timeout: 300,
+          oauth2: {
+            grant_type: 'authorization_code',
+            client_name: 'AstrBot MCP Client'
+          }
         };
       } else {
         template = {
@@ -756,15 +928,31 @@ export default {
       delete configCopy.connected;
       delete configCopy.tools;
       delete configCopy.errlogs;
+      delete configCopy.oauth2_enabled;
+      delete configCopy.oauth2_authorized;
+      delete configCopy.oauth2_grant_type;
       this.currentServer = {
         name: server.name,
         active: server.active,
         tools: server.tools || []
       };
       this.originalServerName = server.name;
+      this.oauthFlowStatus = server.oauth2_authorized ? 'completed' : '';
+      this.oauthFlowError = '';
       this.serverConfigJson = JSON.stringify(configCopy, null, 2);
       this.isEditMode = true;
       this.showMcpServerDialog = true;
+    },
+    async authorizeExistingServer(server) {
+      const config = this.mcpServers.find(item => item.name === server.name);
+      if (!config) return;
+      const configCopy = { ...config };
+      for (const key of ['name', 'active', 'connected', 'tools', 'errlogs', 'oauth2_enabled', 'oauth2_authorized', 'oauth2_grant_type']) {
+        delete configCopy[key];
+      }
+      this.currentServer = { name: server.name };
+      this.serverConfigJson = JSON.stringify(configCopy, null, 2);
+      await this.authorizeOauth();
     },
     updateServerStatus(server) {
       this.mcpServerUpdateLoaders[server.name] = true;
@@ -787,6 +975,108 @@ export default {
       this.showMcpServerDialog = false;
       this.addServerDialogMessage = '';
       this.resetForm();
+    },
+    stopOauthPolling() {
+      if (this.oauthPollTimer) {
+        clearInterval(this.oauthPollTimer);
+        this.oauthPollTimer = null;
+      }
+      this.oauthPollInFlight = false;
+    },
+    async pollOauthStatus() {
+      if (!this.oauthFlowId || this.oauthPollInFlight) {
+        return;
+      }
+      this.oauthPollInFlight = true;
+      const serverName = this.currentServer.name || 'unknown';
+      try {
+        const response = await mcpApi.getOAuthStatus(this.oauthFlowId, serverName);
+        if (response.data.status === 'error') {
+          this.stopOauthPolling();
+          this.oauthFlowStatus = 'failed';
+          this.oauthFlowError = response.data.message || this.tm('dialogs.addServer.oauth.status.failed');
+          this.showError(this.oauthFlowError);
+          return;
+        }
+        const flow = response.data.data || {};
+        this.oauthFlowStatus = flow.status || '';
+        this.oauthFlowError = flow.error || '';
+        if (this.oauthFlowStatus === 'completed') {
+          this.stopOauthPolling();
+          this.addServerDialogMessage = this.tm('messages.oauthAuthorized');
+          this.showSuccess(this.tm('messages.oauthAuthorized'));
+        } else if (this.oauthFlowStatus === 'failed') {
+          this.stopOauthPolling();
+          const errorMessage = flow.error || this.tm('dialogs.addServer.oauth.status.failed');
+          this.addServerDialogMessage = errorMessage;
+          this.showError(errorMessage);
+        }
+      } catch (error) {
+        this.stopOauthPolling();
+        this.oauthFlowStatus = 'failed';
+        this.oauthFlowError = error.response?.data?.message || error.message;
+        this.showError(this.oauthFlowError);
+      } finally {
+        this.oauthPollInFlight = false;
+      }
+    },
+    startOauthPolling() {
+      this.stopOauthPolling();
+      this.pollOauthStatus();
+      this.oauthPollTimer = setInterval(() => {
+        this.pollOauthStatus();
+      }, 1500);
+    },
+    copyOauthUrl() {
+      if (!this.oauthUrl) return;
+      navigator.clipboard.writeText(this.oauthUrl).then(() => {
+        this.showSuccess('链接已复制到剪贴板');
+      }).catch(err => {
+        this.showError('复制失败：' + err);
+      });
+    },
+    async authorizeOauth() {
+      if (!this.validateJson()) {
+        return;
+      }
+      const configObj = this.parsedServerConfig;
+      if (!configObj) {
+        this.showError(this.tm('dialogs.addServer.errors.configEmpty'));
+        return;
+      }
+
+      this.loading = true;
+      this.oauthFlowError = '';
+      this.oauthUrl = '';
+      this.showMcpServerDialog = true;
+      const serverName = this.currentServer.name || 'unknown';
+
+      try {
+        const response = await mcpApi.startOAuth({
+          mcp_server_config: configObj,
+          force: true
+        }, serverName);
+
+        if (response.data.status === 'error') {
+          this.showError(response.data.message || this.tm('messages.oauthStartError', { error: 'Unknown error' }));
+          return;
+        }
+
+        const flow = response.data.data || {};
+        this.oauthFlowId = flow.flow_id || '';
+        this.oauthFlowStatus = flow.status || '';
+        this.addServerDialogMessage = '';
+
+        if (flow.authorization_url) {
+          this.oauthUrl = flow.authorization_url;
+          this.startOauthPolling();
+          window.open(flow.authorization_url, '_blank', 'noopener,noreferrer');
+        }
+      } catch (error) {
+        this.showError(error.response?.data?.message || error.message);
+      } finally {
+        this.loading = false;
+      }
     },
     testServerConnection() {
       if (!this.validateJson()) {
@@ -812,6 +1102,7 @@ export default {
         });
     },
     resetForm() {
+      this.stopOauthPolling();
       this.currentServer = {
         name: '',
         active: true,
@@ -819,6 +1110,9 @@ export default {
       };
       this.serverConfigJson = '';
       this.jsonError = null;
+      this.oauthFlowId = '';
+      this.oauthFlowStatus = '';
+      this.oauthFlowError = '';
       this.isEditMode = false;
       this.originalServerName = '';
     },
@@ -927,8 +1221,9 @@ export default {
 }
 
 .mcp-server-tools {
-  align-items: center;
+  align-items: flex-start;
   display: flex;
+  flex-direction: column;
   margin-top: 6px;
 }
 

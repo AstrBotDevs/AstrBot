@@ -50,6 +50,10 @@
         "title": "代理与依赖源",
         "subtitle": "运行时代理、Python 依赖安装参数和 PyPI 源。"
       },
+      "mcp": {
+        "title": "MCP",
+        "subtitle": "配置 MCP OAuth 客户端和授权回调。"
+      },
       "webuiSecurity": {
         "title": "WebUI 安全",
         "subtitle": "HTTPS、代理头、登录限速与 TOTP。"

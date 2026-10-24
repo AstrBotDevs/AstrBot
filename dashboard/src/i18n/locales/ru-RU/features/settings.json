@@ -50,6 +50,10 @@
                 "title": "Прокси и источники зависимостей",
                 "subtitle": "Runtime-прокси, параметры установки Python-зависимостей и источник PyPI."
             },
+            "mcp": {
+                "title": "MCP",
+                "subtitle": "Настройка клиента MCP OAuth и обратного вызова авторизации."
+            },
             "webuiSecurity": {
                 "title": "Безопасность WebUI",
                 "subtitle": "HTTPS, proxy-заголовки, ограничения входа и TOTP."

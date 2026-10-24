@@ -1438,6 +1438,26 @@
         "description": "外部からアクセス可能なコールバック API アドレス",
         "hint": "外部サービスは、AstrBot が生成したコールバックリンク（ファイルダウンロードリンクなど）を通じて AstrBot バックエンドへアクセスする場合があります。AstrBot はデプロイ環境で外部から到達可能なホストアドレス（ホスト）を自動判定できないため、この設定で外部サービスから AstrBot へアクセスするアドレスを明示的に指定します。例: [http://localhost:6185](http://localhost:6185)、[https://example.com](https://example.com)。"
       },
+      "mcp_oauth_callback_base": {
+        "description": "MCP OAuth コールバックアドレス",
+        "hint": "MCP OAuth 2.0 の認証コールバックに使用する、外部から到達可能な AstrBot のアドレス。"
+      },
+      "mcp_oauth_client_name": {
+        "description": "MCP OAuth クライアント名",
+        "hint": "OAuth クライアントの登録時に使用される名前。"
+      },
+      "mcp_oauth_scope": {
+        "description": "MCP OAuth のデフォルトスコープ",
+        "hint": "各サーバーの設定で上書きできます。"
+      },
+      "mcp_oauth_client_id": {
+        "description": "MCP OAuth のデフォルト Client ID",
+        "hint": "クライアントを事前登録できるサービス向けです。各サーバーで個別に上書きできます。"
+      },
+      "mcp_oauth_client_secret": {
+        "description": "MCP OAuth のデフォルト Client Secret",
+        "hint": "機密情報です。クライアントを事前登録できるサービス向けで、各サーバーで個別に上書きできます。"
+      },
       "disable_metrics": {
         "description": "匿名利用統計を無効化",
         "hint": "この設定を有効にすると、AstrBot は匿名の利用統計データをアップロードしません。"

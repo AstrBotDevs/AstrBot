@@ -3,7 +3,12 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import HTMLResponse
 
+from astrbot.core.agent.mcp_oauth import (
+    get_mcp_oauth_callback_base,
+    get_shared_mcp_oauth_defaults,
+)
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import ApiError, ok
 from astrbot.dashboard.schemas import (
@@ -13,13 +18,21 @@ from astrbot.dashboard.schemas import (
     ToolEnabledRequest,
     ToolPermissionRequest,
 )
-from astrbot.dashboard.services.tools_service import ToolsService, ToolsServiceError
+from astrbot.dashboard.services.tools_service import (
+    ToolsService,
+    ToolsServiceError,
+    extract_mcp_server_config,
+)
 
 from .auth import AuthContext, ScopeDependency, require_dashboard_user, require_scope
 
 router = APIRouter(tags=["Extension Components"])
 legacy_router = APIRouter(
     prefix="/api",
+    tags=["Dashboard Extension Components"],
+    include_in_schema=False,
+)
+oauth_callback_router = APIRouter(
     tags=["Dashboard Extension Components"],
     include_in_schema=False,
 )
@@ -88,6 +101,20 @@ def _test_config_body(
         return stored_config
 
     return {"name": server_name}
+
+
+def _mcp_oauth_config_body(body: dict[str, Any]) -> dict[str, Any]:
+    config = body.get("mcp_server_config") or body.get("config")
+    if not isinstance(config, dict) or not config:
+        raise ApiError("Invalid MCP server configuration")
+
+    if "mcpServers" in config:
+        try:
+            config = extract_mcp_server_config(config["mcpServers"])
+        except ValueError as exc:
+            raise ApiError(f"{exc!s}") from exc
+
+    return dict(config)
 
 
 def _raise_tools_error(exc: ToolsServiceError) -> None:
@@ -174,6 +201,42 @@ async def _sync_modelscope_mcp_servers(
         ),
         result_as_message=True,
     )
+
+
+async def _start_mcp_oauth_authorization(
+    request: Request,
+    service: ToolsService,
+):
+    body = await _json_or_empty(request)
+    config = _mcp_oauth_config_body(body)
+
+    core_lifecycle = request.app.state.core_lifecycle
+    callback_api_base = core_lifecycle.astrbot_config.get("mcp_oauth_callback_base", "")
+    callback_base_value = (
+        callback_api_base or body.get("callback_base_url") or str(request.base_url)
+    )
+    callback_base_url = str(callback_base_value).rstrip("/")
+    callback_base_url = get_mcp_oauth_callback_base(config, callback_base_url)
+    oauth_defaults = get_shared_mcp_oauth_defaults()
+    server_name = request.query_params.get("name")
+
+    return await _run(
+        lambda: service.start_mcp_oauth_authorization(
+            config,
+            callback_base_url=callback_base_url,
+            oauth_defaults=oauth_defaults,
+            server_name=server_name,
+            force=bool(body.get("force", False)),
+        ),
+        message="OAuth 2.0 authorization flow is ready.",
+    )
+
+
+async def _get_mcp_oauth_status(flow_id: str, service: ToolsService):
+    flow_id = flow_id.strip()
+    if not flow_id:
+        raise ApiError("Missing required parameter: flow_id")
+    return await _run(lambda: service.get_mcp_oauth_flow_status(flow_id))
 
 
 @router.get("/tools")
@@ -412,6 +475,24 @@ async def test_dashboard_mcp_connection(
     )
 
 
+@legacy_router.post("/tools/mcp/oauth/start")
+async def start_dashboard_mcp_oauth_authorization(
+    request: Request,
+    _username: str = Depends(require_dashboard_user),
+    service: ToolsService = Depends(get_service),
+):
+    return await _start_mcp_oauth_authorization(request, service)
+
+
+@legacy_router.get("/tools/mcp/oauth/status")
+async def get_dashboard_mcp_oauth_status(
+    flow_id: str = Query(""),
+    _username: str = Depends(require_dashboard_user),
+    service: ToolsService = Depends(get_service),
+):
+    return await _get_mcp_oauth_status(flow_id, service)
+
+
 @legacy_router.post("/tools/mcp/sync-provider")
 async def sync_dashboard_mcp_provider(
     request: Request,
@@ -422,4 +503,47 @@ async def sync_dashboard_mcp_provider(
     return await _run(
         lambda: service.sync_provider(body),
         result_as_message=True,
+    )
+
+
+@oauth_callback_router.get("/mcp/oauth/callback", response_class=HTMLResponse)
+async def handle_mcp_oauth_callback(
+    request: Request,
+    service: ToolsService = Depends(get_service),
+):
+    error = request.query_params.get("error")
+    error_description = request.query_params.get("error_description")
+    if error_description:
+        error = f"{error or 'oauth_error'}: {error_description}"
+
+    try:
+        await service.submit_mcp_oauth_callback(
+            None,
+            code=request.query_params.get("code"),
+            state=request.query_params.get("state"),
+            error=error,
+        )
+    except KeyError:
+        return HTMLResponse(
+            "<html><body><h3>OAuth flow not found or expired.</h3></body></html>",
+            status_code=404,
+        )
+    except ToolsServiceError as exc:
+        return HTMLResponse(
+            f"<html><body><h3>OAuth callback failed: {exc!s}</h3></body></html>",
+            status_code=500,
+        )
+
+    return HTMLResponse(
+        """
+<html>
+  <body style="font-family: sans-serif; padding: 24px;">
+    <h3>OAuth authorization completed.</h3>
+    <p>You can return to AstrBot and wait for the status to update.</p>
+    <script>
+      window.close();
+    </script>
+  </body>
+</html>
+""",
     )

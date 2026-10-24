@@ -1435,6 +1435,26 @@
       },
       "no_proxy": {
         "description": "Direct Connection Address List"
+      },
+      "mcp_oauth_callback_base": {
+        "description": "MCP OAuth Callback Base URL",
+        "hint": "Public AstrBot URL used for MCP OAuth 2.0 callbacks."
+      },
+      "mcp_oauth_client_name": {
+        "description": "MCP OAuth Client Name",
+        "hint": "Name used when registering the OAuth client."
+      },
+      "mcp_oauth_scope": {
+        "description": "Default MCP OAuth Scope",
+        "hint": "Can be overridden in each server configuration."
+      },
+      "mcp_oauth_client_id": {
+        "description": "Default MCP OAuth Client ID",
+        "hint": "For pre-registered clients; can be overridden per server."
+      },
+      "mcp_oauth_client_secret": {
+        "description": "Default MCP OAuth Client Secret",
+        "hint": "Sensitive. For pre-registered clients; can be overridden per server."
       }
     }
   },

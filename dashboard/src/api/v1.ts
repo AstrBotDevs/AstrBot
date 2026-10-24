@@ -118,6 +118,19 @@ export interface ProviderEmbeddingDimensionData {
   [key: string]: unknown;
 }
 
+export interface McpOAuthStartPayload {
+  mcp_server_config: DynamicConfig;
+  force?: boolean;
+}
+
+export interface McpOAuthFlowData {
+  flow_id?: string;
+  authorization_url?: string;
+  status?: string;
+  error?: string | null;
+  [key: string]: unknown;
+}
+
 export interface VersionData {
   version?: string;
   dashboard_version?: string;
@@ -1187,6 +1200,19 @@ export const mcpApi = {
           ...(config ? { mcp_server_config: config } : {}),
         },
       }),
+    );
+  },
+  startOAuth(payload: McpOAuthStartPayload, serverName: string) {
+    return httpClient.post<ApiEnvelope<McpOAuthFlowData>>(
+      '/api/tools/mcp/oauth/start',
+      payload,
+      { params: { name: serverName } },
+    );
+  },
+  getOAuthStatus(flowId: string, serverName: string) {
+    return httpClient.get<ApiEnvelope<McpOAuthFlowData>>(
+      '/api/tools/mcp/oauth/status',
+      { params: { flow_id: flowId, name: serverName } },
     );
   },
   syncModelScope(payload?: ModelScopeSyncRequest) {

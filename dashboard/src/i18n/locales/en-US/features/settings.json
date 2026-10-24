@@ -50,6 +50,10 @@
         "title": "Proxy & Dependency Sources",
         "subtitle": "Runtime proxy, Python dependency install options, and PyPI source."
       },
+      "mcp": {
+        "title": "MCP",
+        "subtitle": "Configure the MCP OAuth client and authorization callback."
+      },
       "webuiSecurity": {
         "title": "WebUI Security",
         "subtitle": "HTTPS, trusted proxy headers, login rate limits, and TOTP."

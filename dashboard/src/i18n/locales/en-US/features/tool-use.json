@@ -21,7 +21,10 @@
       "useTemplateStdio": "Stdio Template",
       "useTemplateStreamableHttp": "Streamable HTTP Template",
       "useTemplateSse": "SSE Template",
-      "sync": "Sync MCP Servers"
+      "useTemplateOauth2": "OAuth 2.0 Template",
+      "sync": "Sync MCP Servers",
+      "authorize": "Authorize",
+      "reauthorize": "Re-authorize"
     },
     "empty": "No MCP servers available, click Add Server to add one",
     "searchPlaceholder": "Search MCP servers...",
@@ -44,7 +47,10 @@
       "connected": "Connected",
       "disconnected": "Disconnected",
       "configSummary": "Config: {keys}",
-      "noConfig": "No configuration set"
+      "noConfig": "No configuration set",
+      "oauthAuthorized": "OAuth 2.0 authorized",
+      "oauthLoginRequired": "OAuth 2.0 login required",
+      "oauthClientCredentials": "OAuth 2.0 client_credentials"
     }
   },
   "functionTools": {
@@ -124,7 +130,17 @@
         "cancel": "Cancel",
         "save": "Save",
         "testConnection": "Test Connection",
+        "oauthLogin": "OAuth 2.0 Login",
         "sync": "Sync"
+      },
+      "oauth": {
+        "status": {
+          "notAuthorized": "Authorization code OAuth 2.0 was detected. Complete login before saving.",
+          "awaitingUser": "Waiting for user authorization. Please use the link or QR code below.",
+          "authorizing": "Completing the OAuth authorization.",
+          "authorized": "OAuth 2.0 authorization completed.",
+          "failed": "OAuth 2.0 authorization failed."
+        }
       },
       "tips": {
         "timeoutConfig": "Please configure tool call timeout separately in the configuration page",
@@ -140,7 +156,43 @@
         "importConfig": "Import Configuration"
       }
     },
-    "confirmDelete": "Are you sure you want to delete server {name}?"
+    "confirmDelete": "Are you sure you want to delete server {name}?",
+    "syncProvider": {
+      "title": "Sync MCP Servers",
+      "subtitle": "Sync MCP server configurations from a provider to local",
+      "steps": {
+        "selectProvider": "Step 1: Select a provider",
+        "configureAuth": "Step 2: Configure authentication",
+        "syncServers": "Step 3: Sync servers"
+      },
+      "providers": {
+        "modelscope": "ModelScope",
+        "description": "ModelScope is an open-source model community offering MCP servers for various machine learning and AI services"
+      },
+      "fields": {
+        "provider": "Select a provider",
+        "accessToken": "Access token",
+        "tokenRequired": "Access token is required",
+        "tokenHint": "Enter your ModelScope access token"
+      },
+      "buttons": {
+        "cancel": "Cancel",
+        "previous": "Previous",
+        "next": "Next",
+        "sync": "Start sync",
+        "getToken": "Get token"
+      },
+      "status": {
+        "selectProvider": "Select an MCP server provider to continue",
+        "enterToken": "Enter your access token to continue",
+        "readyToSync": "Ready to sync server configuration"
+      },
+      "messages": {
+        "syncSuccess": "MCP servers synced successfully!",
+        "syncError": "Sync failed: {error}",
+        "tokenHelp": "How do I get a ModelScope access token? Click the button on the right for instructions"
+      }
+    }
   },
   "syncProvider": {
     "title": "Sync MCP Servers",
@@ -201,6 +253,10 @@
     "updateToolPermissionSuccess": "Permission for {name} updated",
     "updateToolPermissionFailed": "Failed to update tool permission",
     "updateToolPermissionBuiltin": "Builtin tools do not support per-tool permission configuration.",
-    "testError": "Test connection failed: {error}"
+    "testError": "Test connection failed: {error}",
+    "oauthPopupOpened": "The OAuth login page has been opened. Complete authorization in the new window.",
+    "oauthPopupBlocked": "The browser blocked the OAuth popup. Allow popups and try again.",
+    "oauthAuthorized": "OAuth 2.0 authorization completed!",
+    "oauthStartError": "Failed to start OAuth 2.0 authorization: {error}"
   }
 }

@@ -1439,8 +1439,28 @@
                 "hint": "URL репозитория PyPI. По умолчанию: [https://mirrors.aliyun.com/pypi/simple/](https://mirrors.aliyun.com/pypi/simple/)"
             },
             "callback_api_base": {
-                "description": "Внешний адрес для Callback API",
-                "hint": "Используется для сервисов, требующих обратных выливов (например, в песочнице)."
+                "description": "Адрес обратного вызова MCP OAuth",
+                "hint": "Адрес используется для обратного вызова MCP OAuth 2.0 и других ссылок обратного вызова, которым нужен доступ к AstrBot. Например: https://example.com или http://localhost:6185. Оставьте пустым, чтобы использовать текущий адрес."
+            },
+            "mcp_oauth_callback_base": {
+                "description": "Базовый адрес обратного вызова MCP OAuth",
+                "hint": "Публичный адрес AstrBot, используемый для обратных вызовов MCP OAuth 2.0."
+            },
+            "mcp_oauth_client_name": {
+                "description": "Имя клиента MCP OAuth",
+                "hint": "Имя, используемое при регистрации клиента OAuth."
+            },
+            "mcp_oauth_scope": {
+                "description": "Область доступа (scope) MCP OAuth по умолчанию",
+                "hint": "Можно переопределить в конфигурации каждого сервера."
+            },
+            "mcp_oauth_client_id": {
+                "description": "Client ID MCP OAuth по умолчанию",
+                "hint": "Для предварительно зарегистрированных клиентов; можно переопределить для каждого сервера."
+            },
+            "mcp_oauth_client_secret": {
+                "description": "Client Secret MCP OAuth по умолчанию",
+                "hint": "Конфиденциально. Для предварительно зарегистрированных клиентов; можно переопределить для каждого сервера."
             },
             "disable_metrics": {
                 "description": "Отключить анонимную статистику",
