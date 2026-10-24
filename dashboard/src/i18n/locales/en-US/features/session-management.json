@@ -51,7 +51,11 @@
     "title": "Add Custom Rule",
     "description": "Select a session (UMO) to configure custom rules. Custom rules take priority over global settings.",
     "selectUmo": "Select Session",
-    "noUmos": "No sessions available"
+    "noUmos": "No sessions available",
+    "manualEntry": "Enter a session manually",
+    "enterUmo": "Session UMO",
+    "umoHint": "Paste the full UMO returned by /sid, for example: my-bot:GroupMessage:123456",
+    "invalidUmo": "Use platform:message-type:session-id, with GroupMessage, FriendMessage or OtherMessage as the message type."
   },
   "ruleEditor": {
     "title": "Edit Custom Rules",

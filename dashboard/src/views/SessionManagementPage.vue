@@ -373,7 +373,9 @@
               {{ tm('addRule.description') }}
             </v-alert>
 
-            <v-autocomplete v-model="selectedNewUmo" :items="availableUmos" :loading="loadingUmos" :label="tm('addRule.selectUmo')" variant="outlined" clearable :no-data-text="tm('addRule.noUmos')">
+            <v-switch v-model="manualUmoEntry" :label="tm('addRule.manualEntry')" color="primary" hide-details class="mb-4" @update:model-value="selectedNewUmo = null" />
+            <v-text-field v-if="manualUmoEntry" v-model="selectedNewUmo" :label="tm('addRule.enterUmo')" :hint="tm('addRule.umoHint')" persistent-hint :error-messages="newUmoError" variant="outlined" clearable />
+            <v-autocomplete v-else v-model="selectedNewUmo" :items="availableUmos" :loading="loadingUmos" :label="tm('addRule.selectUmo')" variant="outlined" clearable :no-data-text="tm('addRule.noUmos')">
               <template v-slot:item="{ props, item }">
                 <v-list-item v-bind="props">
                   <template v-slot:title>
@@ -397,7 +399,7 @@
           <v-card-actions class="px-4 pb-4">
             <v-spacer></v-spacer>
             <v-btn variant="text" @click="addRuleDialog = false">{{ tm('buttons.cancel') }}</v-btn>
-            <v-btn color="primary" variant="tonal" @click="createNewRule" :disabled="!selectedNewUmo">
+            <v-btn color="primary" variant="tonal" @click="createNewRule" :disabled="!selectedNewUmo?.trim() || !!newUmoError">
               {{ tm('buttons.next') }}
             </v-btn>
           </v-card-actions>
@@ -726,6 +728,7 @@ export default {
       availableUmos: [],
       availableUmoInfoMap: {},
       selectedNewUmo: null,
+      manualUmoEntry: false,
 
       // 规则编辑
       ruleDialog: false,
@@ -805,6 +808,14 @@ export default {
   },
 
   computed: {
+    newUmoError() {
+      if (!this.manualUmoEntry || !this.selectedNewUmo) return ''
+      const [platform, messageType, ...sessionParts] = this.selectedNewUmo.trim().split(':')
+      // Session IDs may contain colons, matching MessageSession.from_str().
+      return platform.trim() && ['GroupMessage', 'FriendMessage', 'OtherMessage'].includes(messageType) && sessionParts.join(':').trim()
+        ? ''
+        : this.tm('addRule.invalidUmo')
+    },
     headers() {
       return [
         {
@@ -1162,14 +1173,15 @@ export default {
     async openAddRuleDialog() {
       this.addRuleDialog = true
       this.selectedNewUmo = null
+      this.manualUmoEntry = false
       await this.loadUmos()
     },
 
     createNewRule() {
-      if (!this.selectedNewUmo) return
+      if (!this.selectedNewUmo?.trim() || this.newUmoError) return
 
       // 创建一个新的规则项并打开编辑器
-      const newItem = this.buildUmoItem(this.selectedNewUmo)
+      const newItem = this.buildUmoItem(this.selectedNewUmo.trim())
 
       this.addRuleDialog = false
       this.openRuleEditor(newItem)
