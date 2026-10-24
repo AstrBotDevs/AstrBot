@@ -1,53 +1,50 @@
-import asyncio
 import json
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
-import aiohttp
 import pytest
+import requests
 
 from astrbot.core.tools import registry
 from astrbot.core.tools import web_search_tools as tools
 
 
-def _response(status=200, data=None, reason=""):
-    """Build a mock aiohttp response.
+def _http_error(status: int, reason: str):
+    """Build a SerpApi SDK HTTP error.
 
     Args:
         status: HTTP status code.
-        data: JSON response body.
         reason: Text response body for HTTP errors.
 
     Returns:
-        An asynchronous response context manager.
+        An SDK exception carrying the status and API error message.
     """
-    response = MagicMock(status=status)
-    response.__aenter__.return_value = response
-    response.json = AsyncMock(return_value=data or {})
-    response.text = AsyncMock(return_value=reason)
-    return response
+    response = requests.Response()
+    response.status_code = status
+    response._content = json.dumps({"error": reason}).encode()
+    response.headers["Content-Type"] = "application/json"
+    return tools.serpapi.HTTPError(requests.HTTPError(reason, response=response))
 
 
 @pytest.fixture
 def serpapi_http(monkeypatch):
-    """Mock the SerpApi transport and reset key rotation.
+    """Mock the SerpApi SDK client and reset key rotation.
 
     Args:
         monkeypatch: Pytest patch fixture.
 
     Returns:
-        The session and session factory mocks.
+        The client and client factory mocks.
     """
-    session = MagicMock()
-    session.__aenter__.return_value = session
-    factory = MagicMock(return_value=session)
-    monkeypatch.setattr(tools.aiohttp, "ClientSession", factory)
+    client = MagicMock()
+    factory = MagicMock(return_value=client)
+    monkeypatch.setattr(tools.serpapi, "Client", factory)
     monkeypatch.setattr(
         tools,
         "_SERPAPI_KEY_ROTATOR",
         tools._KeyRotator("websearch_serpapi_key", "SerpApi"),
     )
-    return SimpleNamespace(session=session, factory=factory)
+    return SimpleNamespace(client=client, factory=factory)
 
 
 @pytest.fixture
@@ -96,7 +93,7 @@ async def test_serpapi_finance_preserves_quotes_fundamentals_and_sources(
         ],
         "graph": [{"price": 229.0, "date": "Oct 16 2026, 09:30 AM UTC-04:00"}],
     }
-    serpapi_http.session.get.return_value = _response(data=data)
+    serpapi_http.client.search.return_value = data
 
     result = json.loads(
         await tools.SerpApiFinanceSearchTool().call(
@@ -104,9 +101,8 @@ async def test_serpapi_finance_preserves_quotes_fundamentals_and_sources(
         )
     )
 
-    assert serpapi_http.session.get.call_args.kwargs["params"] == {
+    assert serpapi_http.client.search.call_args.args[0] == {
         "engine": "google_finance",
-        "api_key": "test-key",
         "q": "AAPL:NASDAQ",
         "hl": "en",
     }
@@ -122,13 +118,11 @@ async def test_serpapi_finance_preserves_quotes_fundamentals_and_sources(
 @pytest.mark.asyncio
 async def test_serpapi_finance_returns_requested_history(serpapi_http, serpapi_context):
     graph = [{"price": i, "currency": "USD", "date": f"Day {i}"} for i in range(120)]
-    serpapi_http.session.get.return_value = _response(
-        data={
-            "summary": {"title": "Apple Inc", "price": "$230.00"},
-            "graph": graph,
-            "key_events": [{"title": "Earnings", "date": "Day 100"}],
-        }
-    )
+    serpapi_http.client.search.return_value = {
+        "summary": {"title": "Apple Inc", "price": "$230.00"},
+        "graph": graph,
+        "key_events": [{"title": "Earnings", "date": "Day 100"}],
+    }
 
     result = json.loads(
         await tools.SerpApiFinanceSearchTool().call(
@@ -136,7 +130,7 @@ async def test_serpapi_finance_returns_requested_history(serpapi_http, serpapi_c
         )
     )
 
-    assert serpapi_http.session.get.call_args.kwargs["params"]["window"] == "1Y"
+    assert serpapi_http.client.search.call_args.args[0]["window"] == "1Y"
     assert result["graph"] == graph
     assert result["key_events"] == [{"title": "Earnings", "date": "Day 100"}]
     assert (
@@ -155,7 +149,7 @@ async def test_serpapi_finance_preserves_suggestions_for_unknown_symbol(
             "link": "https://www.google.com/finance/quote/MSFT:NASDAQ",
         }
     ]
-    serpapi_http.session.get.return_value = _response(data={"suggestions": suggestions})
+    serpapi_http.client.search.return_value = {"suggestions": suggestions}
 
     result = json.loads(
         await tools.SerpApiFinanceSearchTool().call(serpapi_context, query="MSFTR:")
@@ -193,26 +187,24 @@ async def test_serpapi_scholar_preserves_publication_metadata_and_filters(
             "file_format": "PDF",
         }
     ]
-    serpapi_http.session.get.return_value = _response(
-        data={
-            "organic_results": [
-                {
-                    "title": "A research paper",
-                    "link": "https://example.com/paper",
-                    "snippet": "Abstract excerpt",
-                    "publication_info": publication_info,
-                    "resources": resources,
-                    "inline_links": {
-                        "cited_by": {
-                            "total": 42,
-                            "link": "https://scholar.google.com/scholar?cites=123",
-                        },
-                        "serpapi_cite_link": "https://serpapi.com/private-cite",
+    serpapi_http.client.search.return_value = {
+        "organic_results": [
+            {
+                "title": "A research paper",
+                "link": "https://example.com/paper",
+                "snippet": "Abstract excerpt",
+                "publication_info": publication_info,
+                "resources": resources,
+                "inline_links": {
+                    "cited_by": {
+                        "total": 42,
+                        "link": "https://scholar.google.com/scholar?cites=123",
                     },
-                }
-            ]
-        }
-    )
+                    "serpapi_cite_link": "https://serpapi.com/private-cite",
+                },
+            }
+        ]
+    }
 
     result = json.loads(
         await tools.SerpApiScholarSearchTool().call(
@@ -225,9 +217,8 @@ async def test_serpapi_scholar_preserves_publication_metadata_and_filters(
         )
     )["results"]
 
-    assert serpapi_http.session.get.call_args.kwargs["params"] == {
+    assert serpapi_http.client.search.call_args.args[0] == {
         "engine": "google_scholar",
-        "api_key": "test-key",
         "q": "retrieval augmented generation",
         "num": 3,
         "hl": "en",
@@ -252,9 +243,9 @@ async def test_serpapi_scholar_preserves_publication_metadata_and_filters(
 async def test_serpapi_scholar_limits_results_and_handles_citation_only_entries(
     serpapi_http, serpapi_context, limit, expected
 ):
-    serpapi_http.session.get.return_value = _response(
-        data={"organic_results": [{"title": f"Paper {i}"} for i in range(22)]}
-    )
+    serpapi_http.client.search.return_value = {
+        "organic_results": [{"title": f"Paper {i}"} for i in range(22)]
+    }
     kwargs = {} if limit is None else {"max_results": limit}
 
     results = json.loads(
@@ -264,7 +255,7 @@ async def test_serpapi_scholar_limits_results_and_handles_citation_only_entries(
     )["results"]
 
     assert len(results) == expected
-    assert serpapi_http.session.get.call_args.kwargs["params"]["num"] == expected
+    assert serpapi_http.client.search.call_args.args[0]["num"] == expected
     assert results[0]["url"] == "https://scholar.google.com/scholar?q=Paper%200"
     assert results[0]["cited_by_count"] is None
 
@@ -273,16 +264,14 @@ async def test_serpapi_scholar_limits_results_and_handles_citation_only_entries(
 async def test_serpapi_scholar_uses_full_text_link_if_publisher_link_is_missing(
     serpapi_http, serpapi_context
 ):
-    serpapi_http.session.get.return_value = _response(
-        data={
-            "organic_results": [
-                {
-                    "title": "Paper",
-                    "resources": [{"link": "https://example.com/paper.pdf"}],
-                }
-            ]
-        }
-    )
+    serpapi_http.client.search.return_value = {
+        "organic_results": [
+            {
+                "title": "Paper",
+                "resources": [{"link": "https://example.com/paper.pdf"}],
+            }
+        ]
+    }
 
     result = json.loads(
         await tools.SerpApiScholarSearchTool().call(
@@ -291,8 +280,8 @@ async def test_serpapi_scholar_uses_full_text_link_if_publisher_link_is_missing(
     )["results"]
 
     assert result[0]["url"] == "https://example.com/paper.pdf"
-    assert serpapi_http.session.get.call_args.kwargs["params"]["as_ylo"] == 2024
-    assert "as_yhi" not in serpapi_http.session.get.call_args.kwargs["params"]
+    assert serpapi_http.client.search.call_args.args[0]["as_ylo"] == 2024
+    assert "as_yhi" not in serpapi_http.client.search.call_args.args[0]
 
 
 @pytest.mark.asyncio
@@ -323,10 +312,7 @@ async def test_serpapi_scholar_validates_query_and_years(
 async def test_serpapi_specialized_search_handles_empty_and_failed_responses(
     serpapi_http, serpapi_context, tool_class
 ):
-    serpapi_http.session.get.side_effect = [
-        _response(),
-        _response(503, reason="API unavailable"),
-    ]
+    serpapi_http.client.search.side_effect = [{}, _http_error(503, "API unavailable")]
 
     result = json.loads(await tool_class().call(serpapi_context, query="example"))
 
@@ -341,31 +327,29 @@ async def test_serpapi_images_light_maps_images_and_sources(
 ):
     cache = {}
     monkeypatch.setitem(tools.sp.temporary_cache, "_ws_favicon", cache)
-    serpapi_http.session.get.return_value = _response(
-        data={
-            "images_results": [
-                {"title": "Missing image"},
-                {
-                    "title": "AstrBot 标志",
-                    "source": "Example",
-                    "link": "https://example.com/article",
-                    "original": "https://example.com/image.png",
-                    "thumbnail": "https://example.com/thumb.png",
-                    "original_width": 1200,
-                    "original_height": 800,
-                    "source_logo": "https://example.com/favicon.ico",
-                },
-                {
-                    "original": "x-raw-image:///pdf-image",
-                    "thumbnail": "https://example.com/pdf-thumb.png",
-                    "original_width": 500,
-                    "original_height": 300,
-                },
-                {"serpapi_thumbnail": "https://example.com/serpapi-thumb.png"},
-                {"original": "data:image/png;base64,invalid"},
-            ]
-        }
-    )
+    serpapi_http.client.search.return_value = {
+        "images_results": [
+            {"title": "Missing image"},
+            {
+                "title": "AstrBot 标志",
+                "source": "Example",
+                "link": "https://example.com/article",
+                "original": "https://example.com/image.png",
+                "thumbnail": "https://example.com/thumb.png",
+                "original_width": 1200,
+                "original_height": 800,
+                "source_logo": "https://example.com/favicon.ico",
+            },
+            {
+                "original": "x-raw-image:///pdf-image",
+                "thumbnail": "https://example.com/pdf-thumb.png",
+                "original_width": 500,
+                "original_height": 300,
+            },
+            {"serpapi_thumbnail": "https://example.com/serpapi-thumb.png"},
+            {"original": "data:image/png;base64,invalid"},
+        ]
+    }
 
     result = json.loads(
         await tools.SerpApiImageSearchTool().call(
@@ -373,9 +357,8 @@ async def test_serpapi_images_light_maps_images_and_sources(
         )
     )["results"]
 
-    assert serpapi_http.session.get.call_args.kwargs["params"] == {
+    assert serpapi_http.client.search.call_args.args[0] == {
         "engine": "google_images_light",
-        "api_key": "test-key",
         "q": "AstrBot logo",
         "gl": "us",
         "hl": "en",
@@ -406,13 +389,11 @@ async def test_serpapi_images_light_maps_images_and_sources(
 async def test_serpapi_images_light_limits_results(
     serpapi_http, serpapi_context, limit, expected
 ):
-    serpapi_http.session.get.return_value = _response(
-        data={
-            "images_results": [
-                {"original": f"https://example.com/{i}.png"} for i in range(12)
-            ]
-        }
-    )
+    serpapi_http.client.search.return_value = {
+        "images_results": [
+            {"original": f"https://example.com/{i}.png"} for i in range(12)
+        ]
+    }
     kwargs = {} if limit is None else {"max_results": limit}
 
     result = json.loads(
@@ -422,9 +403,8 @@ async def test_serpapi_images_light_limits_results(
     )
 
     assert len(result["results"]) == expected
-    assert serpapi_http.session.get.call_args.kwargs["params"] == {
+    assert serpapi_http.client.search.call_args.args[0] == {
         "engine": "google_images_light",
-        "api_key": "test-key",
         "q": "AstrBot",
     }
 
@@ -433,12 +413,10 @@ async def test_serpapi_images_light_limits_results(
 async def test_serpapi_images_light_handles_empty_success(
     serpapi_http, serpapi_context
 ):
-    serpapi_http.session.get.return_value = _response(
-        data={
-            "search_metadata": {"status": "Success"},
-            "error": "No image results found.",
-        }
-    )
+    serpapi_http.client.search.return_value = {
+        "search_metadata": {"status": "Success"},
+        "error": "No image results found.",
+    }
 
     result = await tools.SerpApiImageSearchTool().call(serpapi_context, query="AstrBot")
 
@@ -447,7 +425,7 @@ async def test_serpapi_images_light_handles_empty_success(
 
 @pytest.mark.asyncio
 async def test_serpapi_images_light_surfaces_api_errors(serpapi_http, serpapi_context):
-    serpapi_http.session.get.return_value = _response(503, reason="Search failed")
+    serpapi_http.client.search.side_effect = _http_error(503, "Search failed")
 
     with pytest.raises(RuntimeError, match="status: 503"):
         await tools.SerpApiImageSearchTool().call(serpapi_context, query="AstrBot")
@@ -455,21 +433,19 @@ async def test_serpapi_images_light_surfaces_api_errors(serpapi_http, serpapi_co
 
 @pytest.mark.asyncio
 async def test_serpapi_tool_maps_query_results_and_citations(serpapi_http, monkeypatch):
-    serpapi_http.session.get.return_value = _response(
-        data={
-            "search_metadata": {"status": "Success"},
-            "organic_results": [
-                {"title": "Missing link"},
-                {
-                    "title": "AstrBot 搜索",
-                    "link": "https://example.com",
-                    "snippet": "Search result",
-                    "favicon": "https://example.com/favicon.ico",
-                },
-                {"link": "https://example.org", "title": None, "snippet": None},
-            ],
-        }
-    )
+    serpapi_http.client.search.return_value = {
+        "search_metadata": {"status": "Success"},
+        "organic_results": [
+            {"title": "Missing link"},
+            {
+                "title": "AstrBot 搜索",
+                "link": "https://example.com",
+                "snippet": "Search result",
+                "favicon": "https://example.com/favicon.ico",
+            },
+            {"link": "https://example.org", "title": None, "snippet": None},
+        ],
+    }
     cache = {}
     monkeypatch.setattr(tools.sp, "temporary_cache", {"_ws_favicon": cache})
     config = {"provider_settings": {"websearch_serpapi_key": ["test-key"]}}
@@ -492,18 +468,15 @@ async def test_serpapi_tool_maps_query_results_and_citations(serpapi_http, monke
     )["results"]
 
     get_config.assert_called_once_with(umo="test:private:session")
-    serpapi_http.factory.assert_called_once_with(trust_env=True)
-    call = serpapi_http.session.get.call_args
-    assert call.args == ("https://serpapi.com/search.json",)
-    assert call.kwargs["params"] == {
+    serpapi_http.factory.assert_called_once_with(api_key="test-key", timeout=60)
+    serpapi_http.client.session.close.assert_called_once_with()
+    assert serpapi_http.client.search.call_args.args[0] == {
         "engine": "google",
-        "api_key": "test-key",
         "q": "AstrBot 搜索",
         "gl": "cn",
         "hl": "zh-cn",
         "location": "Shanghai, China",
     }
-    assert call.kwargs["timeout"].total == 60
     assert result[0] == {
         "title": "AstrBot 搜索",
         "url": "https://example.com",
@@ -518,11 +491,9 @@ async def test_serpapi_tool_maps_query_results_and_citations(serpapi_http, monke
 @pytest.mark.asyncio
 @pytest.mark.parametrize("limit,expected", [(None, 5), (-2, 1), (3, 3), (100, 10)])
 async def test_serpapi_tool_limits_first_page_results(serpapi_http, limit, expected):
-    serpapi_http.session.get.return_value = _response(
-        data={
-            "organic_results": [{"link": f"https://example.com/{i}"} for i in range(12)]
-        }
-    )
+    serpapi_http.client.search.return_value = {
+        "organic_results": [{"link": f"https://example.com/{i}"} for i in range(12)]
+    }
     config = {"provider_settings": {"websearch_serpapi_key": ["test-key"]}}
     context = SimpleNamespace(
         context=SimpleNamespace(
@@ -535,9 +506,8 @@ async def test_serpapi_tool_limits_first_page_results(serpapi_http, limit, expec
     result = await tools.SerpApiWebSearchTool().call(context, query="AstrBot", **kwargs)
 
     assert len(json.loads(result)["results"]) == expected
-    assert serpapi_http.session.get.call_args.kwargs["params"] == {
+    assert serpapi_http.client.search.call_args.args[0] == {
         "engine": "google",
-        "api_key": "test-key",
         "q": "AstrBot",
     }
 
@@ -548,10 +518,10 @@ async def test_serpapi_tool_limits_first_page_results(serpapi_http, limit, expec
     "engine", ["google", "google_images_light", "google_finance", "google_scholar"]
 )
 async def test_serpapi_rotates_and_retries_key_errors(serpapi_http, status, engine):
-    serpapi_http.session.get.side_effect = [
-        _response(status, reason="Key rejected"),
-        _response(),
-        _response(),
+    serpapi_http.client.search.side_effect = [
+        _http_error(status, "Key rejected"),
+        {},
+        {},
     ]
     settings = {"websearch_serpapi_key": ["first-key", "second-key"]}
     payload = {"q": "AstrBot"}
@@ -559,22 +529,23 @@ async def test_serpapi_rotates_and_retries_key_errors(serpapi_http, status, engi
     assert await tools._serpapi_request(settings, payload, engine=engine) == {}
     assert await tools._serpapi_request(settings, payload, engine=engine) == {}
 
-    assert [
-        call.kwargs["params"]["api_key"]
-        for call in serpapi_http.session.get.call_args_list
-    ] == ["first-key", "second-key", "first-key"]
+    assert [call.kwargs["api_key"] for call in serpapi_http.factory.call_args_list] == [
+        "first-key",
+        "second-key",
+        "first-key",
+    ]
     assert all(
-        call.kwargs["params"]["engine"] == engine
-        for call in serpapi_http.session.get.call_args_list
+        call.args[0]["engine"] == engine
+        for call in serpapi_http.client.search.call_args_list
     )
     assert payload == {"q": "AstrBot"}
 
 
 @pytest.mark.asyncio
 async def test_serpapi_exhausts_keys_and_redacts_error(serpapi_http):
-    serpapi_http.session.get.side_effect = [
-        _response(401, reason="Invalid first-key"),
-        _response(429, reason="Quota for second-key"),
+    serpapi_http.client.search.side_effect = [
+        _http_error(401, "Invalid first-key"),
+        _http_error(429, "Quota for second-key"),
     ]
 
     with pytest.raises(RuntimeError, match="Quota for \\[redacted\\], status: 429"):
@@ -582,28 +553,29 @@ async def test_serpapi_exhausts_keys_and_redacts_error(serpapi_http):
             {"websearch_serpapi_key": ["first-key", "second-key"]}, {"q": "AstrBot"}
         )
 
-    assert serpapi_http.session.get.call_count == 2
+    assert serpapi_http.client.search.call_count == 2
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("status", [400, 500, 503])
 async def test_serpapi_does_not_retry_other_http_errors(serpapi_http, status):
-    serpapi_http.session.get.return_value = _response(status, reason="Request failed")
+    serpapi_http.client.search.side_effect = _http_error(status, "Request failed")
 
     with pytest.raises(RuntimeError, match=f"status: {status}"):
         await tools._serpapi_search(
             {"websearch_serpapi_key": ["first-key", "second-key"]}, {"q": "AstrBot"}
         )
 
-    assert serpapi_http.session.get.call_count == 1
+    assert serpapi_http.client.search.call_count == 1
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("metadata", [{}, {"status": "Error"}])
 async def test_serpapi_surfaces_json_errors(serpapi_http, metadata):
-    serpapi_http.session.get.return_value = _response(
-        data={"search_metadata": metadata, "error": "Failed for test-key"}
-    )
+    serpapi_http.client.search.return_value = {
+        "search_metadata": metadata,
+        "error": "Failed for test-key",
+    }
 
     with pytest.raises(RuntimeError, match="Failed for \\[redacted\\]"):
         await tools._serpapi_search(
@@ -613,13 +585,11 @@ async def test_serpapi_surfaces_json_errors(serpapi_http, metadata):
 
 @pytest.mark.asyncio
 async def test_serpapi_success_with_empty_results_is_not_an_error(serpapi_http):
-    serpapi_http.session.get.return_value = _response(
-        data={
-            "search_metadata": {"status": "Success"},
-            "search_information": {"organic_results_state": "Fully empty"},
-            "error": "Google hasn't returned any results for this query.",
-        }
-    )
+    serpapi_http.client.search.return_value = {
+        "search_metadata": {"status": "Success"},
+        "search_information": {"organic_results_state": "Fully empty"},
+        "error": "Google hasn't returned any results for this query.",
+    }
 
     assert (
         await tools._serpapi_search(
@@ -630,21 +600,52 @@ async def test_serpapi_success_with_empty_results_is_not_an_error(serpapi_http):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("error_type", [aiohttp.ClientError, asyncio.TimeoutError])
-async def test_serpapi_transport_errors_do_not_expose_credentials(
-    serpapi_http, error_type
-):
-    serpapi_http.session.get.side_effect = error_type(
-        "Request failed: https://serpapi.com/search.json?api_key=secret-key"
+async def test_serpapi_accepts_sdk_result_objects(serpapi_http):
+    data = {
+        "search_metadata": {"status": "Success"},
+        "news_results": [{"title": "News", "link": "https://example.com/news"}],
+    }
+    serpapi_http.client.search.return_value = tools.serpapi.SerpResults(
+        data,
+        client=serpapi_http.client,
     )
 
-    with pytest.raises(RuntimeError, match="request failed or timed out") as error:
+    result = await tools._serpapi_request(
+        {"websearch_serpapi_key": ["test-key"]},
+        {"q": "OpenAI"},
+        engine="google_news",
+    )
+
+    assert result == data
+    assert isinstance(result, dict)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "transport_error",
+    [
+        tools.serpapi.HTTPConnectionError(
+            requests.ConnectionError(
+                "Request failed: https://serpapi.com/search.json?api_key=secret-key"
+            )
+        ),
+        tools.serpapi.TimeoutError(
+            "Request failed: https://serpapi.com/search.json?api_key=secret-key"
+        ),
+    ],
+)
+async def test_serpapi_transport_errors_do_not_expose_credentials(
+    serpapi_http, transport_error
+):
+    serpapi_http.client.search.side_effect = transport_error
+
+    with pytest.raises(RuntimeError, match="request failed or timed out") as caught:
         await tools._serpapi_search(
             {"websearch_serpapi_key": ["secret-key"]}, {"q": "AstrBot"}
         )
 
-    assert "secret-key" not in str(error.value)
-    assert error.value.__suppress_context__
+    assert "secret-key" not in str(caught.value)
+    assert caught.value.__suppress_context__
 
 
 @pytest.mark.asyncio
