@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.hooks import BaseAgentRunHooks
-from astrbot.core.agent.message import ImageURLPart, Message, TextPart
+from astrbot.core.agent.message import ImageURLPart, Message, TextPart, ThinkPart
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool, ToolSet
@@ -24,6 +24,43 @@ from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
 from astrbot.core.provider.provider import Provider
+
+
+@pytest.mark.parametrize("modalities", [None, []])
+@pytest.mark.asyncio
+async def test_history_sanitization_with_unconfigured_modalities(
+    modalities, runner, mock_provider, provider_request, mock_hooks, mock_tool_executor
+):
+    """Sanitize historical thoughts while retaining default image support."""
+    mock_provider.provider_config["modalities"] = modalities
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+    )
+    messages = [
+        Message(role="user", content="Previous question"),
+        Message(
+            role="assistant",
+            content=[ThinkPart(think="Historical thought"), TextPart(text="Answer")],
+        ),
+        Message(
+            role="user",
+            content=[
+                TextPart(text="Current question"),
+                ImageURLPart(image_url={"url": "https://example.com/current.png"}),
+            ],
+        ),
+    ]
+
+    result = runner._sanitize_contexts_for_provider(messages)
+
+    assert result[1].content == [TextPart(text="Answer")]
+    assert isinstance(messages[1].content[0], ThinkPart)
+    assert result[-1] is messages[-1]
+    assert isinstance(result[-1].content[1], ImageURLPart)
 
 
 class MockProvider(Provider):
@@ -972,6 +1009,47 @@ async def test_tool_result_includes_all_calltoolresult_content(
             "mime_type": "image/png",
         }
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mime_type", [None, "application/pdf"])
+async def test_tool_result_preserves_unsupported_blob_notice(
+    mime_type, runner, mock_provider, provider_request, mock_hooks
+):
+    """Keep a paired tool response for blobs with unsupported or missing MIME types."""
+    from mcp.types import BlobResourceContents, CallToolResult, EmbeddedResource
+
+    async def execute(**kwargs):
+        yield CallToolResult(
+            content=[
+                EmbeddedResource(
+                    type="resource",
+                    resource=BlobResourceContents(
+                        uri="file:///document.pdf", mimeType=mime_type, blob="dGVzdA=="
+                    ),
+                )
+            ]
+        )
+
+    mock_provider.max_calls_before_normal_response = 1
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=SimpleNamespace(execute=execute),
+        agent_hooks=mock_hooks,
+    )
+
+    async for _ in runner.step_until_done(3):
+        pass
+
+    tool_messages = [m for m in runner.run_context.messages if m.role == "tool"]
+    assert len(tool_messages) == 1
+    assert tool_messages[0].tool_call_id == "call_123"
+    assert (
+        tool_messages[0].content
+        == "The tool has returned a data type that is not supported."
+    )
 
 
 @pytest.mark.asyncio
