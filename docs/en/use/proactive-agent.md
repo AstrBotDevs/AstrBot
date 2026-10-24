@@ -54,11 +54,13 @@ Open **Extensions → Future Tasks** and click **New Task**. You do not need to 
 | Task name | A recognizable name, such as “Daily technology briefing.” |
 | Task requirements | Instructions the Agent executes when woken. Specify sources, steps, result format, and whether to send the result. |
 | Schedule | Choose one-off, interval, daily, weekly, monthly, or custom. |
-| Deliver to (optional) | Select an existing conversation. Leaving it empty allows execution but does not automatically deliver results to a user or group. |
+| Deliver to (optional) | Select one or more existing conversations. Leaving it empty allows execution but does not automatically deliver results to a user or group. |
 
 If no conversations appear, talk to AstrBot on the target platform first, then return to select it. The target is identified by a UMO (unified message origin), which includes the platform, message type, and conversation identifier.
 
-The list shows each schedule, delivery target, and next run. Search by name or content, or filter by target. Click a task to edit it, use its switch to disable scheduled execution, and use **More actions** for **Run now** or **Delete**. Hover over its timing information to see the last execution time and any recorded error.
+When you select multiple targets, the task wakes the Agent once per target and delivers the result to each conversation. Every target keeps its own conversation context, and one failing target does not stop delivery to the others. Use the chips below the selector to review or remove individual targets.
+
+The list shows each schedule, delivery targets, and next run. Search by name or content, or filter by target. Click a task to edit it, use its switch to disable scheduled execution, and use **More actions** for **Run now** or **Delete**. Hover over its timing information to see the last execution time and any recorded error.
 
 - **Disabling** preserves the task while pausing scheduled triggers.
 - **Run now** really executes the task. It may call paid models or external services and send messages. It also works for disabled tasks.
@@ -87,7 +89,7 @@ AstrBot must be online to execute tasks. Saved schedules are reloaded after a re
 
 ## What a scheduled task can use
 
-Tasks use the target conversation's configuration and conversation context. Later changes to models, Personas, and tools can affect subsequent runs. Put required details in the task instructions instead of writing only “do what we discussed.” Tasks without a delivery target use a separate scheduling conversation and the default configuration.
+Tasks use the target conversation's configuration and conversation context. Later changes to models, Personas, and tools can affect subsequent runs. Put required details in the task instructions instead of writing only “do what we discussed.” A multi-target task resolves the configuration and context for each delivery conversation independently. Tasks without a delivery target use a separate scheduling conversation and the default configuration.
 
 Scheduling does not grant extra capabilities:
 
