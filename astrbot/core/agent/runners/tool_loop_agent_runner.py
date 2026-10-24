@@ -1004,9 +1004,21 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             )
                     return
                 else:
+                    # The re-query produced the tool calls that actually run, so
+                    # its provider replay state moves as one bundle: call IDs,
+                    # per-call metadata (e.g. Gemini thought signatures) and the
+                    # reasoning/signature pair. Only the first response's
+                    # user-visible narration is kept, as in the fallback above.
+                    # Mixing the two responses replays a missing or stale
+                    # signature to the provider on the next turn.
                     llm_resp.tools_call_name = requery_resp.tools_call_name
                     llm_resp.tools_call_args = requery_resp.tools_call_args
                     llm_resp.tools_call_ids = requery_resp.tools_call_ids
+                    llm_resp.tools_call_extra_content = (
+                        requery_resp.tools_call_extra_content
+                    )
+                    llm_resp.reasoning_content = requery_resp.reasoning_content
+                    llm_resp.reasoning_signature = requery_resp.reasoning_signature
 
             tool_call_result_blocks = []
             cached_images = []  # Collect cached images for LLM visibility
