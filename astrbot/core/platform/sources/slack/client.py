@@ -2,7 +2,9 @@ import asyncio
 import hashlib
 import hmac
 import json
+from collections import OrderedDict
 from collections.abc import Callable
+from time import monotonic
 from typing import cast
 
 from fastapi.responses import Response
@@ -14,6 +16,9 @@ from slack_sdk.web.async_client import AsyncWebClient
 
 from astrbot.api import logger
 from astrbot.core.platform.webhook_server import FastAPIWebhookServer
+
+_EVENT_CACHE_TTL = 600
+_EVENT_PROCESSING_TIMEOUT = 120
 
 
 class SlackWebhookClient:
@@ -34,6 +39,8 @@ class SlackWebhookClient:
         self.port = port
         self.path = path
         self.event_handler = event_handler
+        self._processing_event_ids: set[str] = set()
+        self._completed_event_ids: OrderedDict[str, float] = OrderedDict()
 
         self.app = FastAPIWebhookServer("slack-webhook")
         self._setup_routes()
@@ -93,7 +100,34 @@ class SlackWebhookClient:
                 return {"challenge": event_data.get("challenge")}
             # 处理事件
             if self.event_handler and event_data.get("type") == "event_callback":
-                await self.event_handler(event_data)
+                event_id = event_data.get("event_id")
+                if not isinstance(event_id, str) or not event_id:
+                    return Response("Missing or invalid event_id", status_code=400)
+
+                now = monotonic()
+                while self._completed_event_ids:
+                    completed_at = next(iter(self._completed_event_ids.values()))
+                    if now - completed_at < _EVENT_CACHE_TTL:
+                        break
+                    self._completed_event_ids.popitem(last=False)
+
+                if event_id in self._completed_event_ids:
+                    return Response("", status_code=200)
+                if event_id in self._processing_event_ids:
+                    # Do not acknowledge work that might still fail before enqueueing.
+                    return Response("Event is still processing", status_code=503)
+                # Claim the ID before yielding to prevent concurrent processing.
+                self._processing_event_ids.add(event_id)
+                try:
+                    # Leave time for a later Slack retry if preprocessing stalls.
+                    await asyncio.wait_for(
+                        self.event_handler(event_data),
+                        timeout=_EVENT_PROCESSING_TIMEOUT,
+                    )
+                    self._completed_event_ids[event_id] = monotonic()
+                finally:
+                    # Failures and cancellation must allow a subsequent delivery.
+                    self._processing_event_ids.discard(event_id)
 
             return Response("", status_code=200)
 
