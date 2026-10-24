@@ -105,6 +105,7 @@ async def test_install_targets_site_packages_for_desktop_client(monkeypatch, tmp
     ensure_preferred_calls = []
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+    monkeypatch.setattr(PipInstaller, "_run_pip_subprocess", run_pip)
     monkeypatch.setattr(
         "astrbot.core.utils.pip_installer.get_astrbot_site_packages_path",
         lambda: str(site_packages_path),
@@ -141,6 +142,7 @@ async def test_install_keeps_target_upgrade_enabled_by_default_for_desktop_clien
     run_pip = _make_run_pip_mock()
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+    monkeypatch.setattr(PipInstaller, "_run_pip_subprocess", run_pip)
     monkeypatch.setattr(
         "astrbot.core.utils.pip_installer.get_astrbot_site_packages_path",
         lambda: str(site_packages_path),
@@ -167,6 +169,7 @@ async def test_install_skips_target_upgrade_when_disabled_for_desktop_client(
     run_pip = _make_run_pip_mock()
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+    monkeypatch.setattr(PipInstaller, "_run_pip_subprocess", run_pip)
     monkeypatch.setattr(
         "astrbot.core.utils.pip_installer.get_astrbot_site_packages_path",
         lambda: str(site_packages_path),
@@ -696,6 +699,7 @@ async def test_install_raises_dedicated_pip_install_error_on_non_conflict_failur
         return 2
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", failing_run_pip)
+    monkeypatch.setattr(PipInstaller, "_run_pip_subprocess", failing_run_pip)
 
     installer = PipInstaller("")
 
@@ -715,6 +719,7 @@ async def test_run_pip_with_classification_raises_install_error_on_non_conflict_
         return 3
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", failing_run_pip)
+    monkeypatch.setattr(PipInstaller, "_run_pip_subprocess", failing_run_pip)
 
     installer = PipInstaller("")
 
@@ -1104,6 +1109,7 @@ async def test_install_adds_desktop_core_lock_constraints_for_packaged_runtime(
         return 0
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", capture_pip_args)
+    monkeypatch.setattr(PipInstaller, "_run_pip_subprocess", capture_pip_args)
     monkeypatch.setattr(
         "astrbot.core.utils.pip_installer.get_astrbot_site_packages_path",
         lambda: str(site_packages_path),
@@ -1212,6 +1218,7 @@ async def test_install_splits_space_separated_packages(monkeypatch):
     run_pip = _make_run_pip_mock()
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+    monkeypatch.setattr(PipInstaller, "_run_pip_subprocess", run_pip)
 
     installer = PipInstaller("")
     await installer.install(package_name="demo-package another-package>=1.0")
@@ -1227,6 +1234,7 @@ async def test_install_splits_three_space_separated_packages(monkeypatch):
     run_pip = _make_run_pip_mock()
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+    monkeypatch.setattr(PipInstaller, "_run_pip_subprocess", run_pip)
 
     installer = PipInstaller("")
     await installer.install(
@@ -1249,6 +1257,7 @@ async def test_install_splits_three_bare_packages(monkeypatch):
     run_pip = _make_run_pip_mock()
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+    monkeypatch.setattr(PipInstaller, "_run_pip_subprocess", run_pip)
 
     installer = PipInstaller("")
     await installer.install(package_name="demo-package another-package extra-package")
@@ -1276,6 +1285,7 @@ async def test_install_tracks_multiline_packages_for_desktop_client(
     ensure_preferred_calls = []
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+    monkeypatch.setattr(PipInstaller, "_run_pip_subprocess", run_pip)
     monkeypatch.setattr(
         "astrbot.core.utils.pip_installer.get_astrbot_site_packages_path",
         lambda: str(site_packages_path),
@@ -1308,6 +1318,7 @@ async def test_install_splits_space_separated_packages_within_multiline_input(
     run_pip = _make_run_pip_mock()
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+    monkeypatch.setattr(PipInstaller, "_run_pip_subprocess", run_pip)
 
     installer = PipInstaller("")
     await installer.install(
@@ -1330,6 +1341,7 @@ async def test_install_keeps_single_requirement_with_marker_intact(monkeypatch):
     run_pip = _make_run_pip_mock()
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+    monkeypatch.setattr(PipInstaller, "_run_pip_subprocess", run_pip)
 
     installer = PipInstaller("")
     await installer.install(package_name="demo-package ; python_version < '4'")
@@ -1348,6 +1360,7 @@ async def test_install_keeps_single_requirement_with_compact_marker_intact(monke
     run_pip = _make_run_pip_mock()
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+    monkeypatch.setattr(PipInstaller, "_run_pip_subprocess", run_pip)
 
     installer = PipInstaller("")
     await installer.install(package_name='demo-package; python_version < "4"')
@@ -1366,6 +1379,7 @@ async def test_install_keeps_single_requirement_with_version_range_intact(monkey
     run_pip = _make_run_pip_mock()
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+    monkeypatch.setattr(PipInstaller, "_run_pip_subprocess", run_pip)
 
     installer = PipInstaller("")
     await installer.install(package_name="demo-package >= 1.0, < 2.0")
@@ -1391,6 +1405,7 @@ async def test_install_tracks_only_real_requirement_names_for_spaced_single_requ
     ensure_preferred_calls = []
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+    monkeypatch.setattr(PipInstaller, "_run_pip_subprocess", run_pip)
     monkeypatch.setattr(
         "astrbot.core.utils.pip_installer.get_astrbot_site_packages_path",
         lambda: str(site_packages_path),
@@ -1449,6 +1464,7 @@ async def test_install_multiline_input_strips_comments_and_splits_options(monkey
     run_pip = _make_run_pip_mock()
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+    monkeypatch.setattr(PipInstaller, "_run_pip_subprocess", run_pip)
 
     installer = PipInstaller("")
     await installer.install(
@@ -1476,6 +1492,7 @@ async def test_install_single_line_input_strips_inline_comment(monkeypatch):
     run_pip = _make_run_pip_mock()
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+    monkeypatch.setattr(PipInstaller, "_run_pip_subprocess", run_pip)
 
     installer = PipInstaller("")
     await installer.install(package_name="requests==2.31.0  # latest")
@@ -1491,6 +1508,7 @@ async def test_install_splits_single_line_editable_option_input(monkeypatch):
     run_pip = _make_run_pip_mock()
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+    monkeypatch.setattr(PipInstaller, "_run_pip_subprocess", run_pip)
 
     installer = PipInstaller("")
     await installer.install(package_name="-e .")
@@ -1506,6 +1524,7 @@ async def test_install_splits_single_line_option_with_url(monkeypatch):
     run_pip = _make_run_pip_mock()
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+    monkeypatch.setattr(PipInstaller, "_run_pip_subprocess", run_pip)
 
     installer = PipInstaller("")
     await installer.install(
@@ -1537,6 +1556,7 @@ async def test_install_tracks_requirement_name_for_single_line_option_input(
     ensure_preferred_calls = []
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+    monkeypatch.setattr(PipInstaller, "_run_pip_subprocess", run_pip)
     monkeypatch.setattr(
         "astrbot.core.utils.pip_installer.get_astrbot_site_packages_path",
         lambda: str(site_packages_path),
@@ -1563,6 +1583,7 @@ async def test_install_keeps_equals_form_index_override(monkeypatch):
     run_pip = _make_run_pip_mock()
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+    monkeypatch.setattr(PipInstaller, "_run_pip_subprocess", run_pip)
 
     installer = PipInstaller("")
     await installer.install(
@@ -1585,6 +1606,7 @@ async def test_install_keeps_short_form_index_override(monkeypatch):
     run_pip = _make_run_pip_mock()
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+    monkeypatch.setattr(PipInstaller, "_run_pip_subprocess", run_pip)
 
     installer = PipInstaller("")
     await installer.install(package_name="-ihttps://example.com/simple demo-package")
@@ -1605,6 +1627,7 @@ async def test_install_preserves_url_fragment_in_option_input(monkeypatch):
     run_pip = _make_run_pip_mock()
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+    monkeypatch.setattr(PipInstaller, "_run_pip_subprocess", run_pip)
 
     installer = PipInstaller("")
     await installer.install(
@@ -1657,6 +1680,7 @@ async def test_install_strips_inline_comment_from_option_line(monkeypatch):
     run_pip = _make_run_pip_mock()
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+    monkeypatch.setattr(PipInstaller, "_run_pip_subprocess", run_pip)
 
     installer = PipInstaller("")
     await installer.install(
@@ -1681,6 +1705,7 @@ async def test_install_falls_back_to_raw_input_for_invalid_token_string(monkeypa
     run_pip = _make_run_pip_mock()
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+    monkeypatch.setattr(PipInstaller, "_run_pip_subprocess", run_pip)
 
     installer = PipInstaller("")
     raw_input = "demo-package !!! another-package"
@@ -1697,6 +1722,7 @@ async def test_install_ignores_whitespace_only_package_string(monkeypatch):
     run_pip = _make_run_pip_mock()
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+    monkeypatch.setattr(PipInstaller, "_run_pip_subprocess", run_pip)
 
     installer = PipInstaller("")
     await installer.install(package_name="   ")
@@ -1709,6 +1735,7 @@ async def test_install_ignores_missing_package_and_requirements(monkeypatch):
     run_pip = _make_run_pip_mock()
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+    monkeypatch.setattr(PipInstaller, "_run_pip_subprocess", run_pip)
 
     installer = PipInstaller("")
     await installer.install()
@@ -1721,6 +1748,7 @@ async def test_install_respects_index_override_in_pip_install_arg(monkeypatch):
     run_pip = _make_run_pip_mock()
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+    monkeypatch.setattr(PipInstaller, "_run_pip_subprocess", run_pip)
 
     installer = PipInstaller("--index-url https://example.com/simple")
     await installer.install(package_name="demo-package")
@@ -1742,6 +1770,7 @@ async def test_install_respects_no_index_with_find_links(monkeypatch):
     run_pip = _make_run_pip_mock()
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+    monkeypatch.setattr(PipInstaller, "_run_pip_subprocess", run_pip)
 
     installer = PipInstaller("")
     await installer.install(
@@ -1823,6 +1852,7 @@ async def test_install_logs_redacted_pip_argv_when_credentials_present(monkeypat
     logged_lines = []
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+    monkeypatch.setattr(PipInstaller, "_run_pip_subprocess", run_pip)
     monkeypatch.setattr(
         "astrbot.core.utils.pip_installer.logger.info",
         lambda line, *args: logged_lines.append(line % args if args else line),
@@ -1848,6 +1878,7 @@ async def test_install_does_not_add_aliyun_trusted_host_for_default_index(monkey
     run_pip = _make_run_pip_mock()
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+    monkeypatch.setattr(PipInstaller, "_run_pip_subprocess", run_pip)
 
     installer = PipInstaller("")
     await installer.install(package_name="demo-package")
@@ -1865,6 +1896,7 @@ async def test_install_adds_aliyun_trusted_host_only_for_aliyun_index(monkeypatc
     run_pip = _make_run_pip_mock()
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+    monkeypatch.setattr(PipInstaller, "_run_pip_subprocess", run_pip)
 
     installer = PipInstaller("", pypi_index_url="https://mirrors.aliyun.com/simple")
     await installer.install(package_name="demo-package")
