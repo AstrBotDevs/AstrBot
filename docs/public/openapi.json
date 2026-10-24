@@ -3168,6 +3168,92 @@
         "description": "**Required scope:** `plugin`"
       }
     },
+    "/api/v1/plugins/config-files/preview": {
+      "get": {
+        "tags": [
+          "Plugins"
+        ],
+        "summary": "Preview an uploaded image in a plugin file configuration field",
+        "description": "Requires plugin scope. Returns a metadata-free PNG with a maximum edge of 1024 pixels. Only raster images up to 10 MiB and 20 million pixels inside the selected field's upload directory are accepted. Animated images preview their first frame. The original file is not modified.\n\n**Required scope:** `plugin`",
+        "operationId": "previewPluginConfigImageById",
+        "x-astrbot-scope": "plugin",
+        "parameters": [
+          {
+            "name": "plugin_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "config_key",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "description": "Uploaded path relative to the plugin data directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Image preview",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string",
+                  "const": "nosniff"
+                }
+              }
+            },
+            "content": {
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid plugin, configuration field, or file path"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Plugin scope required"
+          },
+          "404": {
+            "description": "Image file not found"
+          },
+          "413": {
+            "description": "Image exceeds the input size or pixel limit"
+          },
+          "415": {
+            "description": "Unsupported or invalid image"
+          },
+          "503": {
+            "description": "Image storage temporarily unavailable"
+          }
+        }
+      }
+    },
     "/api/v1/plugins/readme": {
       "get": {
         "tags": [
