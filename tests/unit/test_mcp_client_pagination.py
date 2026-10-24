@@ -103,30 +103,35 @@ async def test_list_tools_cancellation_keeps_previous_cache():
 
 
 @pytest.mark.asyncio
-async def test_list_tools_repeated_cursor_fails_without_changing_cache():
+@pytest.mark.parametrize("cursor", ["repeat", "page\r\nFORGED LOG\x1b[0m"])
+async def test_list_tools_repeated_cursor_fails_without_changing_cache(cursor):
     client = MCPClient()
     client.tools = [make_tool("cached")]
     client.session = AsyncMock()
     client.session.list_tools.side_effect = [
-        types.ListToolsResult(nextCursor="repeat", tools=[]),
-        types.ListToolsResult(nextCursor="repeat", tools=[]),
+        types.ListToolsResult(nextCursor=cursor, tools=[]),
+        types.ListToolsResult(nextCursor=cursor, tools=[]),
     ]
 
-    with pytest.raises(RuntimeError, match="repeated tools/list cursor"):
+    with pytest.raises(RuntimeError, match="repeated tools/list cursor") as exc_info:
         await client.list_tools_and_save()
 
+    assert str(exc_info.value) == f"MCP server repeated tools/list cursor: {cursor!r}"
+    assert not any(char in str(exc_info.value) for char in "\r\n\x1b")
     assert [tool.name for tool in client.tools] == ["cached"]
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("split_pages", [False, True])
+@pytest.mark.parametrize("second_name", ["foo_bar", "foo.bar"])
 async def test_list_tools_rejects_normalized_name_collisions_without_changing_cache(
     split_pages,
+    second_name,
 ):
     client = MCPClient()
     cached = [make_tool("cached")]
     client.tools = cached
-    conflicting = [make_tool("foo.bar"), make_tool("foo_bar")]
+    conflicting = [make_tool("foo.bar"), make_tool(second_name, {"type": "string"})]
     pages = (
         [
             types.ListToolsResult(nextCursor="next", tools=conflicting[:1]),
@@ -142,7 +147,7 @@ async def test_list_tools_rejects_normalized_name_collisions_without_changing_ca
         await client.list_tools_and_save()
 
     assert str(exc_info.value) == (
-        "MCP tool names 'foo.bar' and 'foo_bar' both normalize to 'foo_bar'"
+        f"MCP tool names 'foo.bar' and {second_name!r} both normalize to 'foo_bar'"
     )
     assert client.tools is cached
 

@@ -659,7 +659,7 @@ class MCPClient:
 
         Raises:
             RuntimeError: If the server repeats a pagination cursor.
-            ValueError: If distinct tool names normalize to the same provider name.
+            ValueError: If tool names repeat or normalize to the same provider name.
         """
         if not self.session:
             raise Exception("MCP Client is not initialized")
@@ -669,7 +669,7 @@ class MCPClient:
         seen_cursors = set()
         while cursor is not None:
             if cursor in seen_cursors:
-                raise RuntimeError(f"MCP server repeated tools/list cursor: {cursor}")
+                raise RuntimeError(f"MCP server repeated tools/list cursor: {cursor!r}")
             seen_cursors.add(cursor)
             page = await self.session.list_tools(cursor=cursor)
             tools.extend(page.tools)
@@ -680,7 +680,7 @@ class MCPClient:
             # Match MCPTool's provider-facing name before publishing the cache.
             normalized_name = re.sub(r"[^A-Za-z0-9_-]+", "_", tool.name)
             previous_name = normalized_names.get(normalized_name)
-            if previous_name is not None and previous_name != tool.name:
+            if previous_name is not None:
                 raise ValueError(
                     f"MCP tool names {previous_name!r} and {tool.name!r} "
                     f"both normalize to {normalized_name!r}"
