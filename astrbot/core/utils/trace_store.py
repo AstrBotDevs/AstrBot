@@ -257,7 +257,8 @@ class TraceStore:
                     has_models=MAX(traces.has_models, excluded.has_models),
                     has_plugins=MAX(traces.has_plugins, excluded.has_plugins),
                     search=excluded.search, data=excluded.data, size_bytes=excluded.size_bytes
-                    WHERE excluded.updated_ns >= traces.updated_ns""",
+                    WHERE excluded.updated_ns >= traces.updated_ns
+                        AND (traces.state = 'running' OR excluded.state != 'running')""",
                     (
                         trace_id,
                         int(summary["start_time_unix_nano"]),
@@ -489,6 +490,8 @@ class TraceStore:
         errors: bool = False,
         models: bool = False,
         plugins: bool = False,
+        start_time: int | None = None,
+        end_time: int | None = None,
     ) -> dict:
         """Read one numbered or keyset page, never all stored span bodies.
 
@@ -500,6 +503,8 @@ class TraceStore:
             errors: Require an error.
             models: Require an Agent call.
             plugins: Require a plugin call.
+            start_time: Inclusive minimum trace start time, in Unix seconds.
+            end_time: Inclusive maximum trace start time, in Unix seconds.
 
         Returns:
             Summaries, filtered count, next cursor, and storage health.
@@ -514,6 +519,12 @@ class TraceStore:
         if page < 1 or (cursor and page != 1):
             raise ValueError("Invalid trace page.")
         conditions, values = [], []
+        if start_time is not None:
+            conditions.append("start_ns >= ?")
+            values.append(start_time * 1_000_000_000)
+        if end_time is not None:
+            conditions.append("start_ns <= ?")
+            values.append(end_time * 1_000_000_000)
         for key, enabled in (
             ("has_errors", errors),
             ("has_models", models),

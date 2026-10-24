@@ -136,12 +136,15 @@ const { tm } = useModuleI18n("features/console");
             item-title="title"
             item-value="value"
             :disabled="selectedSource === 'core' || pluginOptions.length === 0"
-            :placeholder="tm('filters.allPlugins')"
+            :placeholder="tm('filters.pluginsInLogs')"
           >
             <template #item="{ props: itemProps, item }">
               <v-list-item v-bind="itemProps" :subtitle="item.raw.subtitle" />
             </template>
           </v-select>
+          <div class="console-filter-hint">
+            {{ tm("filters.pluginsInLogsHint") }}
+          </div>
         </div>
 
         <div class="console-filter-block">
@@ -174,7 +177,7 @@ const { tm } = useModuleI18n("features/console");
       </aside>
 
       <div
-        id="term"
+        ref="term"
         class="console-term"
         :style="{ '--console-log-font-size': `${fontSize}px` }"
       ></div>
@@ -225,6 +228,7 @@ export default {
       searchKeyword: "",
       searchTimer: null,
       eventSource: null,
+      isUnmounted: false,
       retryTimer: null,
       retryAttempts: 0,
       maxRetryAttempts: 10,
@@ -354,13 +358,17 @@ export default {
   },
   async mounted() {
     await this.fetchLogHistory();
+    if (this.isUnmounted) return;
     if (this.workspaceMode) {
       await this.fetchPluginDisplayNames();
+      if (this.isUnmounted) return;
     }
     this.connectSSE();
     document.addEventListener("fullscreenchange", this.handleFullscreenChange);
   },
   beforeUnmount() {
+    // Pending initialization and reconnect requests may finish after teardown.
+    this.isUnmounted = true;
     document.removeEventListener(
       "fullscreenchange",
       this.handleFullscreenChange,
@@ -381,6 +389,7 @@ export default {
   },
   methods: {
     connectSSE() {
+      if (this.isUnmounted) return;
       if (this.eventSource) {
         this.eventSource.close();
         this.eventSource = null;
@@ -467,7 +476,7 @@ export default {
       if (!newLogs || newLogs.length === 0) return;
 
       let hasUpdate = false;
-      const termElement = document.getElementById("term");
+      const termElement = this.$refs.term;
       const shouldStickToBottom =
         !termElement ||
         termElement.scrollHeight -
@@ -667,7 +676,7 @@ export default {
     },
 
     refreshDisplay() {
-      const termElement = document.getElementById("term");
+      const termElement = this.$refs.term;
       if (!termElement) return;
 
       const shouldStickToBottom =
@@ -903,6 +912,13 @@ export default {
   font-weight: 650;
   letter-spacing: 0.02em;
   margin-bottom: 5px;
+}
+
+.console-filter-hint {
+  color: rgba(var(--v-theme-on-surface), 0.52);
+  font-size: 0.68rem;
+  line-height: 1.45;
+  margin-top: 6px;
 }
 
 .console-filter-option {
