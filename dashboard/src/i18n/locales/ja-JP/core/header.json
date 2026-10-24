@@ -55,6 +55,9 @@
       "latestLabel": "最新バージョン"
     },
     "progress": {
+      "restartUnconfirmed": "再起動を確認できませんでした",
+      "restartRecovery": "90 秒以内に再起動を確認できませんでした。サーバーログを確認し、必要に応じてデプロイ用ツールで AstrBot を再起動してください。再確認または手動で再読み込みできますが、更新の成功を保証するものではありません。",
+      "checkAgain": "再確認",
       "target": "対象バージョン：",
       "preparing": "更新を準備しています…",
       "dashboard": "WebUI をダウンロード",
