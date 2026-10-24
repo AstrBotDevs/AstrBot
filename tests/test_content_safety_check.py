@@ -5,6 +5,9 @@ import pytest
 
 from astrbot.core.message.components import Plain, Reply
 from astrbot.core.pipeline.content_safety_check.stage import ContentSafetyCheckStage
+from astrbot.core.pipeline.content_safety_check.strategies.keywords import (
+    KeywordsStrategy,
+)
 from astrbot.core.pipeline.content_safety_check.strategies.strategy import (
     StrategySelector,
 )
@@ -92,3 +95,24 @@ async def test_content_safety_checks_quoted_text_only_for_inbound_messages(
         pass
 
     assert stopped is expected_stopped
+
+
+def test_keywords_strategy_treats_string_config_as_one_pattern():
+    """A bare-string extra_keywords value is one keyword, not N char patterns.
+
+    The config schema declares a list, but a hand-edited config can hold a plain
+    string. Iterating it turns every character into its own keyword, so any
+    message containing one of those letters is blocked.
+    """
+    strategy = KeywordsStrategy("blocked")
+
+    assert strategy.check("the old clock") == (True, "")
+    ok, _ = strategy.check("this mentions blocked")
+    assert ok is False
+
+
+def test_keywords_strategy_ignores_empty_string_config():
+    """An empty string means no keywords, not a pattern that matches everything."""
+    strategy = KeywordsStrategy("")
+
+    assert strategy.check("anything") == (True, "")
