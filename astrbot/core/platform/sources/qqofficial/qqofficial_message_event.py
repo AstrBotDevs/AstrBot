@@ -40,6 +40,9 @@ class APIReturnNoneError(Exception):
     pass
 
 
+_IMAGE_UPLOAD_MAX_ATTEMPTS = 3
+
+
 def _patch_qq_botpy_formdata() -> None:
     """Patch qq-botpy for aiohttp>=3.12 compatibility.
 
@@ -60,7 +63,7 @@ def _patch_qq_botpy_formdata() -> None:
 _patch_qq_botpy_formdata()
 
 
-def _qqofficial_retry(max_attempts: int = 5):
+def _qqofficial_retry(max_attempts: int = 5, *, log_retries: bool = True):
     """Retry decorator for QQ Official API transient errors (HTTP 500/504)"""
     return retry(
         retry=retry_if_exception_type(
@@ -74,7 +77,7 @@ def _qqofficial_retry(max_attempts: int = 5):
         ),
         stop=stop_after_attempt(max_attempts),
         wait=wait_exponential(multiplier=2, min=2, max=30),
-        before_sleep=before_sleep_log(logger, logging.WARNING),
+        before_sleep=before_sleep_log(logger, logging.WARNING) if log_retries else None,
         reraise=True,
     )
 
@@ -749,7 +752,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             "srv_send_msg": False,
         }
 
-        @_qqofficial_retry()
+        @_qqofficial_retry(_IMAGE_UPLOAD_MAX_ATTEMPTS, log_retries=False)
         async def _do_upload():
             if "openid" in kwargs:
                 payload["openid"] = kwargs["openid"]
@@ -775,7 +778,14 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         try:
             result = await _do_upload()
         except APIReturnNoneError:
-            logger.warning(f"上传图片API返回None，共尝试5次后放弃: {payload}")
+            logger.warning(
+                "[QQOfficial] 上传图片失败：API 返回 None（共尝试 %s 次），"
+                "file_type=%s, target=%s, data_size=%s bytes",
+                _IMAGE_UPLOAD_MAX_ATTEMPTS,
+                file_type,
+                kwargs.get("group_openid") or kwargs.get("openid") or "-",
+                len(image_base64),
+            )
             raise
 
         if not isinstance(result, dict):
