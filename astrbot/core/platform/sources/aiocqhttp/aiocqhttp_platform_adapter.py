@@ -5,6 +5,7 @@ import logging
 import time
 import uuid
 from collections.abc import Awaitable
+from pathlib import Path
 from typing import Any, cast
 
 from aiocqhttp import CQHttp, Event
@@ -299,6 +300,39 @@ class AiocqhttpAdapter(Platform):
                             logger.error(f"获取文件失败: {e}，此消息段将被忽略。")
                         except BaseException as e:
                             logger.error(f"获取文件失败: {e}，此消息段将被忽略。")
+
+            elif t == "record":
+                for m in m_group:
+                    data = dict(m["data"])
+                    file_ref = data.get("file") or ""
+                    # Some implementations (e.g. NapCat, LLOneBot) only send a bare
+                    # file name like "<hash>.amr" without a usable url/path. Ask the
+                    # protocol side for the real local file.
+                    if (
+                        file_ref
+                        and not data.get("url")
+                        and not data.get("path")
+                        and "://" not in file_ref
+                        and not Path(file_ref).is_absolute()
+                    ):
+                        try:
+                            ret = await self.bot.call_action(
+                                action="get_record",
+                                file=file_ref,
+                                out_format="wav",
+                                **routing_params,
+                            )
+                            if isinstance(ret, dict) and ret.get("file"):
+                                data["file"] = Path(ret["file"]).as_uri()
+                                data["path"] = ret["file"]
+                            else:
+                                logger.warning(f"get_record returned no file: {ret}")
+                        except Exception as e:
+                            logger.warning(f"get_record failed: {e}")
+                    try:
+                        abm.message.append(Record(**data))
+                    except Exception as e:
+                        logger.exception(f"消息段解析失败: type={t}, data={data}. {e}")
 
             elif t == "reply":
                 for m in m_group:
