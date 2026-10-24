@@ -353,25 +353,56 @@ class QQOfficialPlatformAdapter(Platform):
                 session.session_id.rsplit("_", 1)[-1],
             )
 
-        message_chains = QQOfficialMessageEvent._split_message_chain_by_media(
-            message_chain
+        use_md = getattr(message_chain, "use_markdown_", None)
+        markdown_disabled = use_md is False or (
+            use_md is None and not self.use_markdown_default
         )
-        if len(message_chains) > 1:
-            for split_message_chain in message_chains:
-                await self._send_by_session_common(session, split_message_chain)
-            return
 
-        (
-            plain_text,
-            image_base64,
-            image_path,
-            record_file_path,
-            video_file_source,
-            file_source,
-            file_name,
-        ) = await QQOfficialMessageEvent._parse_to_qqofficial(message_chain)
+        # 图片是公网 URL 时优先内嵌进 Markdown，让 QQ 按原有图文顺序渲染；
+        # 走 msg_type=7 富媒体时 QQ 固定把图片渲染在文字上方。
+        # 这条路径无需下载图片或上传富媒体，QQ 会自行下载转存该 URL。
+        markdown_with_images = (
+            None
+            if markdown_disabled
+            else QQOfficialMessageEvent._build_markdown_with_public_images(
+                message_chain
+            )
+        )
+
+        # Markdown 能在同一条消息里承载多张图片，所以只有富媒体路径才需要按
+        # 媒体拆分消息链。
+        if markdown_with_images is None:
+            message_chains = QQOfficialMessageEvent._split_message_chain_by_media(
+                message_chain
+            )
+            if len(message_chains) > 1:
+                for split_message_chain in message_chains:
+                    await self._send_by_session_common(session, split_message_chain)
+                return
+
+        if markdown_with_images is not None:
+            markdown_content, plain_text = markdown_with_images
+            image_base64 = None
+            image_path = None
+            record_file_path = None
+            video_file_source = None
+            file_source = None
+            file_name = None
+        else:
+            markdown_content = None
+            (
+                plain_text,
+                image_base64,
+                image_path,
+                record_file_path,
+                video_file_source,
+                file_source,
+                file_name,
+            ) = await QQOfficialMessageEvent._parse_to_qqofficial(message_chain)
+
         if (
-            not plain_text
+            markdown_content is None
+            and not plain_text
             and not image_path
             and not image_base64
             and not record_file_path
@@ -399,9 +430,13 @@ class QQOfficialPlatformAdapter(Platform):
             )
             return
 
-        use_md = getattr(message_chain, "use_markdown_", None)
-        if use_md is False or (use_md is None and not self.use_markdown_default):
-            payload: dict[str, Any] = {"content": plain_text}
+        if markdown_content is not None:
+            payload: dict[str, Any] = {
+                "markdown": MarkdownPayload(content=markdown_content),
+                "msg_type": 2,
+            }
+        elif markdown_disabled:
+            payload = {"content": plain_text}
         else:
             payload = {
                 "markdown": MarkdownPayload(content=plain_text) if plain_text else None,
