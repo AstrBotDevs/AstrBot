@@ -131,6 +131,7 @@
                     :is-source-modified="isSourceModified"
                     :supports-image-input="supportsImageInput"
                     :supports-audio-input="supportsAudioInput"
+                    :supports-video-input="supportsVideoInput"
                     :supports-tool-call="supportsToolCall"
                     :supports-reasoning="supportsReasoning"
                     :format-context-limit="formatContextLimit"
@@ -357,6 +358,7 @@ const {
   getSourceDisplayName,
   supportsImageInput,
   supportsAudioInput,
+  supportsVideoInput,
   supportsToolCall,
   supportsReasoning,
   formatContextLimit,
