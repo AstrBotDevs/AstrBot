@@ -24,7 +24,8 @@
     "core": "Core",
     "plugins": "Плагины",
     "plugin": "Плагин",
-    "allPlugins": "Все плагины",
+    "pluginsInLogs": "Плагины в текущих логах",
+    "pluginsInLogsHint": "Список основан на текущих логах, а не на установленных плагинах",
     "platform": "Платформа бота",
     "allPlatforms": "Все платформы",
     "unscopedPlatform": "Система / Без платформы"
