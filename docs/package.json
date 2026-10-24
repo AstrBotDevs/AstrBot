@@ -1,7 +1,9 @@
 {
   "scripts": {
-    "docs:dev": "vitepress dev --host",
-    "docs:build": "vitepress build",
+    "docs:generate": "node scripts/generate-llms.mjs",
+    "docs:test": "node --test tests/generate-llms.test.mjs",
+    "docs:dev": "node scripts/generate-llms.mjs && vitepress dev --host",
+    "docs:build": "node scripts/generate-llms.mjs && vitepress build",
     "docs:preview": "vitepress preview"
   },
   "devDependencies": {
