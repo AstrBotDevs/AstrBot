@@ -915,6 +915,48 @@ class TestRunActiveAgentJob:
         assert final["status"] == "failed"
         assert "build main agent" in final["last_error"]
 
+    @pytest.mark.asyncio
+    async def test_invalid_session_marks_job_failed(self, cron_manager, mock_db):
+        """An unparseable delivery session must record 'failed', not 'completed'."""
+        job = CronJob(
+            job_id="active-job",
+            name="Active",
+            job_type="active_agent",
+            cron_expression="0 9 * * *",
+            enabled=True,
+            persistent=True,
+            payload={"session": "bad-session"},
+        )
+        mock_db.get_cron_job.return_value = job
+
+        await cron_manager._run_job("active-job")
+
+        status_calls = [c.kwargs for c in mock_db.update_cron_job.call_args_list]
+        final = status_calls[-1]
+        assert final["status"] == "failed"
+        assert "Invalid session" in final["last_error"]
+
+    @pytest.mark.asyncio
+    async def test_run_once_job_deleted_after_failed_run(self, cron_manager, mock_db):
+        """A failed run_once job is still removed after the run."""
+        job = CronJob(
+            job_id="once-job",
+            name="Once",
+            job_type="active_agent",
+            cron_expression=None,
+            enabled=True,
+            persistent=True,
+            run_once=True,
+            payload={"session": "bad-session", "run_at": "2030-01-01T00:00:00"},
+        )
+        mock_db.get_cron_job.return_value = job
+
+        await cron_manager._run_job("once-job")
+
+        status_calls = [c.kwargs for c in mock_db.update_cron_job.call_args_list]
+        assert status_calls[-1]["status"] == "failed"
+        mock_db.delete_cron_job.assert_called_once_with("once-job")
+
     """Tests for _run_basic_job method."""
 
     @pytest.mark.asyncio

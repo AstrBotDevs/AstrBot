@@ -452,8 +452,9 @@ class CronJobManager:
                 else MessageSession.from_str(session_str)
             )
         except Exception as e:  # noqa: BLE001
-            logger.error(f"Invalid session for cron job: {e}")
-            return
+            # Surface the failure to _run_job; swallowing it here recorded the
+            # run as completed even though nothing was delivered (#10555).
+            raise RuntimeError(f"Invalid session for cron job: {e}") from e
 
         cron_event = CronMessageEvent(
             context=self.ctx,
