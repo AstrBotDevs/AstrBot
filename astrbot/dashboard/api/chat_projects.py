@@ -151,10 +151,16 @@ async def delete_dashboard_chat_project(
 @router.get("/chat/projects/{project_id}/sessions")
 async def list_chat_project_sessions(
     project_id: str,
+    page: int | None = Query(default=None, ge=1),
+    page_size: int | None = Query(default=None, ge=1, le=100),
     auth: AuthContext = Depends(require_chat_scope),
     service: ChatUIProjectService = Depends(get_service),
 ):
-    return await _run(lambda: service.get_project_sessions(auth.username, project_id))
+    return await _run(
+        lambda: service.get_project_sessions(
+            auth.username, project_id, page=page, page_size=page_size
+        )
+    )
 
 
 @router.get("/chat/projects/{project_id}/workspace/files")

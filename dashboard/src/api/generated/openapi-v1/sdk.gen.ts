@@ -949,6 +949,7 @@ export const deleteChatProject = <ThrowOnError extends boolean = false>(options:
 
 /**
  * List sessions in a ChatUI project
+ * Without pagination parameters, returns the legacy list of up to 100 sessions. With page or page_size, returns sessions, total, page, and page_size.
  */
 export const listChatProjectSessions = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<ListChatProjectSessionsData, ThrowOnError>) => {
     return (options?.client ?? client).get<ListChatProjectSessionsResponse, ListChatProjectSessionsError, ThrowOnError>({
