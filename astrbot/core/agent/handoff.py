@@ -48,6 +48,11 @@ class HandoffTool(FunctionTool, Generic[TContext]):
                     "items": {"type": "string"},
                     "description": "Optional: An array of image sources (public HTTP URLs or local file paths) used as references in multimodal tasks such as video generation.",
                 },
+                "audio_urls": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional: An array of audio sources (public HTTP URLs, base64:// data or local file paths) used as references when the delegated task needs to listen to or analyze audio.",
+                },
                 "background_task": {
                     "type": "boolean",
                     "description": (
