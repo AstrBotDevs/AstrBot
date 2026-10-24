@@ -215,13 +215,15 @@ def test_openai_schema_preserves_const_and_enum_intersection(constant, enum):
         },
     )
 
+    original = copy.deepcopy(tool.parameters)
     result = tool_module.ToolSet([tool]).openai_schema()[0]["function"]["parameters"]
 
+    assert tool.parameters == original
     assert "const" not in result["properties"]["kind"]
     for value in ("a", "b", True, 1, None):
         instance = {"kind": value}
         assert jsonschema.Draft202012Validator(result).is_valid(instance) == (
-            jsonschema.Draft202012Validator(tool.parameters).is_valid(instance)
+            jsonschema.Draft202012Validator(original).is_valid(instance)
         )
 
 
@@ -245,6 +247,7 @@ def test_openai_schema_converts_const_in_schema_keywords(keyword):
     child = {"const": "a"}
     nested = [child] if keyword in {"allOf", "anyOf", "oneOf", "prefixItems"} else child
     parameters = {"type": "object", "properties": {"value": {keyword: nested}}}
+    original = copy.deepcopy(parameters)
     tool = tool_module.FunctionTool(
         name="query", description="Query records.", parameters=parameters
     )
@@ -253,7 +256,7 @@ def test_openai_schema_converts_const_in_schema_keywords(keyword):
 
     expected = [{"enum": ["a"]}] if isinstance(nested, list) else {"enum": ["a"]}
     assert result["properties"]["value"][keyword] == expected
-    assert tool.parameters == parameters
+    assert tool.parameters == original
 
 
 def test_openai_schema_keeps_other_provider_constraints_and_empty_parameter_option():
