@@ -480,5 +480,33 @@
   },
   "pluginChangelog": {
     "menuTitle": "查看更新日志"
+  },
+  "organizer": {
+    "title": "文件夹",
+    "hint": "拖动插件卡片到文件夹即可归类",
+    "all": "全部插件",
+    "uncategorized": "未分类",
+    "count": "{count} 个插件",
+    "stats": {
+      "plugins": "{count} 个插件",
+      "running": "{count} 个运行中",
+      "updates": "{count} 个可更新"
+    },
+    "newFolder": "新建文件夹",
+    "newFolderTitle": "新建插件文件夹",
+    "folderName": "文件夹名称",
+    "duplicateFolder": "这个文件夹名称已存在。",
+    "createFolder": "创建文件夹",
+    "deleteFolder": "删除当前文件夹",
+    "noMatch": "当前筛选条件下没有插件，试试切换筛选或文件夹。",
+    "moveToFolder": "移动到文件夹",
+    "filters": {
+      "all": "全部",
+      "active": "运行中",
+      "stopped": "已停止",
+      "updates": "可更新",
+      "pinned": "已收藏"
+    },
+    "filterLabel": "快速筛选插件"
   }
 }
