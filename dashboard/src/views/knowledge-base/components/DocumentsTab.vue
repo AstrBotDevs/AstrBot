@@ -226,11 +226,6 @@
       </v-card>
     </v-dialog>
 
-    <!-- 消息提示 -->
-    <v-snackbar v-model="snackbar.show" :color="snackbar.color">
-      {{ snackbar.text }}
-    </v-snackbar>
-
     <!-- Tavily Key 配置对话框 -->
     <TavilyKeyDialog v-model="showTavilyDialog" @success="onTavilyKeySet" />
   </div>
@@ -242,10 +237,12 @@ import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { configProfileApi, knowledgeApi, providerApi } from '@/api/v1'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
+import { useToast } from '@/utils/toast'
 
 const { tm: t } = useModuleI18n('features/knowledge-base/detail')
 const { locale } = useI18n()
 const router = useRouter()
+const toast = useToast()
 
 const props = defineProps<{
   kbId: string
@@ -277,18 +274,6 @@ const progressPollingInterval = ref<number | null>(null)
 const tavilyConfigStatus = ref('loading') // 'loading', 'configured', 'not_configured', 'error'
 const showTavilyDialog = ref(false)
 let documentsRequestId = 0
-
-const snackbar = ref({
-  show: false,
-  text: '',
-  color: 'success'
-})
-
-const showSnackbar = (text: string, color: string = 'success') => {
-  snackbar.value.text = text
-  snackbar.value.color = color
-  snackbar.value.show = true
-}
 
 // 上传设置
 const uploadSettings = ref({
@@ -362,7 +347,7 @@ const loadDocuments = async () => {
   } catch (error) {
     if (requestId !== documentsRequestId) return
     console.error('Failed to load documents:', error)
-    showSnackbar('加载文档列表失败', 'error')
+    toast.error('加载文档列表失败')
   } finally {
     if (requestId === documentsRequestId) {
       loading.value = false
@@ -423,7 +408,7 @@ const startUpload = async () => {
 // 上传文件
 const uploadFiles = async () => {
   if (selectedFiles.value.length === 0) {
-    showSnackbar(t('upload.fileRequired'), 'warning')
+    toast.warning(t('upload.fileRequired'))
     return
   }
 
@@ -454,7 +439,7 @@ const uploadFiles = async () => {
       const result = response.data.data
       const taskId = result.task_id
 
-      showSnackbar(`正在后台上传 ${result.file_count} 个文件...`, 'info')
+      toast.info(`正在后台上传 ${result.file_count} 个文件...`, { group: `kb-upload:${taskId}` })
 
       // 为每个文件添加占位条目到文档列表
       const uploadingDocs = selectedFiles.value.map((file, index) => ({
@@ -484,11 +469,11 @@ const uploadFiles = async () => {
         startProgressPolling(taskId)
       }
     } else {
-      showSnackbar(response.data.message || t('documents.uploadFailed'), 'error')
+      toast.error(response.data.message || t('documents.uploadFailed'))
     }
   } catch (error) {
     console.error('Failed to upload document:', error)
-    showSnackbar(t('documents.uploadFailed'), 'error')
+    toast.error(t('documents.uploadFailed'))
   } finally {
     uploading.value = false
   }
@@ -497,7 +482,7 @@ const uploadFiles = async () => {
 // 从 URL 上传
 const uploadFromUrl = async () => {
   if (!uploadUrl.value) {
-    showSnackbar(t('upload.urlRequired'), 'warning')
+    toast.warning(t('upload.urlRequired'))
     return
   }
 
@@ -531,7 +516,7 @@ const uploadFromUrl = async () => {
       const result = response.data.data
       const taskId = result.task_id
 
-      showSnackbar(`正在从 URL 后台提取内容...`, 'info')
+      toast.info(`正在从 URL 后台提取内容...`, { group: `kb-upload:${taskId}` })
 
       // 添加占位条目
       const uploadingDoc = {
@@ -557,12 +542,12 @@ const uploadFromUrl = async () => {
         startProgressPolling(taskId)
       }
     } else {
-      showSnackbar(response.data.message || t('documents.uploadFailed'), 'error')
+      toast.error(response.data.message || t('documents.uploadFailed'))
     }
   } catch (error: any) {
     console.error('Failed to upload from URL:', error)
     const message = error.response?.data?.message || t('documents.uploadFailed')
-    showSnackbar(message, 'error')
+    toast.error(message)
   } finally {
     uploading.value = false
   }
@@ -621,9 +606,9 @@ const startProgressPolling = (taskId: string) => {
           emit('refresh')
 
           if (failedCount === 0) {
-            showSnackbar(`成功上传 ${successCount} 个文档`)
+            toast.success(`成功上传 ${successCount} 个文档`, { group: `kb-upload:${taskId}` })
           } else {
-            showSnackbar(`上传完成: ${successCount} 个成功, ${failedCount} 个失败`, 'warning')
+            toast.warning(`上传完成: ${successCount} 个成功, ${failedCount} 个失败`, { group: `kb-upload:${taskId}` })
           }
         } else if (status === 'failed') {
           // 任务失败
@@ -632,7 +617,7 @@ const startProgressPolling = (taskId: string) => {
           // 移除上传中的占位文档
           documents.value = documents.value.filter(doc => doc.taskId !== taskId)
 
-          showSnackbar(`上传失败: ${data.error || '未知错误'}`, 'error')
+          toast.error(`上传失败: ${data.error || '未知错误'}`, { group: `kb-upload:${taskId}` })
         }
       } else {
         // 任务不存在，停止轮询
@@ -707,7 +692,7 @@ const deleteDocument = async () => {
     const response = await knowledgeApi.deleteDocument(props.kbId, deleteTarget.value.doc_id)
 
     if (response.data.status === 'ok') {
-      showSnackbar(t('documents.deleteSuccess'))
+      toast.success(t('documents.deleteSuccess'))
       showDeleteDialog.value = false
       // If current page becomes empty after delete and is not the first page, go back one page
       if (documents.value.length === 1 && page.value > 1) {
@@ -716,11 +701,11 @@ const deleteDocument = async () => {
       await loadDocuments()
       emit('refresh')
     } else {
-      showSnackbar(response.data.message || t('documents.deleteFailed'), 'error')
+      toast.error(response.data.message || t('documents.deleteFailed'))
     }
   } catch (error) {
     console.error('Failed to delete document:', error)
-    showSnackbar(t('documents.deleteFailed'), 'error')
+    toast.error(t('documents.deleteFailed'))
   } finally {
     deleting.value = false
   }
@@ -807,7 +792,7 @@ const checkTavilyConfig = async () => {
 }
 
 const onTavilyKeySet = () => {
-  showSnackbar('Tavily API Key 配置成功', 'success')
+  toast.success('Tavily API Key 配置成功')
   checkTavilyConfig()
 }
 
