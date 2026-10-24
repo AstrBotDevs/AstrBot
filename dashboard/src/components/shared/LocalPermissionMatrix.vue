@@ -67,14 +67,29 @@
             </div>
           </td>
           <td v-if="!isolationUnavailable">
-            <v-checkbox-btn
-              :model-value="policy(role, false).allow_network"
-              :disabled="permissionLocks[role].network"
-              :aria-label="`${tm(`roles.${role}`)} · ${tm('network')}`"
-              color="primary"
-              density="compact"
-              @update:model-value="updatePermission(role, { allow_network: Boolean($event) })"
-            />
+            <div class="execution-cell">
+              <v-checkbox-btn
+                :model-value="policy(role, false).allow_network"
+                :disabled="permissionLocks[role].network"
+                :aria-label="`${tm(`roles.${role}`)} · ${tm('network')}`"
+                color="primary"
+                density="compact"
+                @update:model-value="updatePermission(role, { allow_network: Boolean($event) })"
+              />
+              <v-tooltip
+                v-if="runtime?.os === 'windows' && policy(role, false).filesystem_scope === 'host' && policy(role, false).allow_execution"
+                location="top"
+                open-on-click
+                :max-width="320"
+                :text="tm('windowsHostNetworkHint')"
+              >
+                <template #activator="{ props: helpProps }">
+                  <button v-bind="helpProps" type="button" class="scope-help" :aria-label="`${tm(`roles.${role}`)} · ${tm('network')}`">
+                    <CircleHelp :size="14" aria-hidden="true" />
+                  </button>
+                </template>
+              </v-tooltip>
+            </div>
           </td>
           <td>
             <v-select
@@ -126,6 +141,14 @@
       </tbody>
     </v-table>
 
+    <v-alert v-if="windowsSandbox && sandboxUnavailable" type="warning" variant="tonal" density="compact">
+      <div>{{ tm('runtime.windowsSetupHint') }}</div>
+      <details v-if="runtime.sandbox.error" class="sandbox-diagnostics mt-2">
+        <summary>{{ tm('runtime.errorDetails') }}</summary>
+        <pre class="mt-2">{{ runtime.sandbox.error }}</pre>
+      </details>
+    </v-alert>
+
     <v-alert v-if="memberHasElevatedAccess" type="warning" variant="tonal" density="compact">
       {{ tm('memberWarning') }}
     </v-alert>
@@ -159,18 +182,30 @@ const runtimeLoading = ref(true)
 const unsupported = computed(() => runtime.value?.sandbox?.status === 'unsupported')
 const sandboxUnavailable = computed(() => ['missing', 'unavailable'].includes(runtime.value?.sandbox?.status))
 const isolationUnavailable = computed(() => unsupported.value || sandboxUnavailable.value)
-const executionUnavailableHint = computed(() => isolationUnavailable.value ? tm(
-  `runtime.executionUnavailable.${runtime.value.sandbox.status}`,
-  {
-    backend: runtime.value.sandbox.backend === 'seatbelt' ? 'Seatbelt' : 'bubblewrap',
-    dependency: runtime.value.sandbox.backend === 'seatbelt' ? 'sandbox-exec' : 'bwrap'
-  }
-) : '')
+const windowsSandbox = computed(() => runtime.value?.sandbox?.backend === 'appcontainer')
+const sandboxBackendLabel = computed(() => ({
+  seatbelt: 'Seatbelt',
+  bubblewrap: 'bubblewrap',
+  appcontainer: 'AppContainer'
+}[runtime.value?.sandbox?.backend] ?? runtime.value?.sandbox?.backend ?? ''))
+const sandboxDependencyLabel = computed(() => ({
+  seatbelt: 'sandbox-exec',
+  bubblewrap: 'bwrap',
+  appcontainer: 'AppContainer'
+}[runtime.value?.sandbox?.backend] ?? runtime.value?.sandbox?.backend ?? ''))
+const executionUnavailableHint = computed(() => {
+  if (!isolationUnavailable.value) return ''
+  if (windowsSandbox.value && sandboxUnavailable.value) return tm('runtime.windowsSetupHint')
+  return tm(`runtime.executionUnavailable.${runtime.value.sandbox.status}`, {
+    backend: sandboxBackendLabel.value,
+    dependency: sandboxDependencyLabel.value
+  })
+})
 const isolationFailureReason = computed(() => {
   if (!isolationUnavailable.value) return ''
   const reason = tm(`runtime.isolationFailure.${runtime.value.sandbox.status}`, {
-    backend: runtime.value.sandbox.backend === 'seatbelt' ? 'Seatbelt' : 'bubblewrap',
-    dependency: runtime.value.sandbox.backend === 'seatbelt' ? 'sandbox-exec' : 'bwrap'
+    backend: sandboxBackendLabel.value,
+    dependency: sandboxDependencyLabel.value
   })
   return runtime.value.sandbox.error ? `${reason} ${runtime.value.sandbox.error}` : reason
 })
@@ -221,6 +256,9 @@ function updatePermission(role, changes) {
     updatedRole.allow_execution = updatedRole.filesystem_scope === 'host'
     updatedRole.allow_network = updatedRole.allow_execution
   }
+  if (runtime.value?.os === 'windows' && updatedRole.filesystem_scope === 'host' && updatedRole.allow_execution) {
+    updatedRole.allow_network = true
+  }
   if (!updatedRole.allow_execution) {
     updatedRole.allow_network = false
   }
@@ -235,7 +273,8 @@ const permissionLocks = computed(() => Object.fromEntries(roles.map(role => {
   return [role, {
     execution: !runtime.value || current.filesystem_scope === 'none' ||
       (isolationUnavailable.value && current.filesystem_scope === 'workspace' && !current.allow_execution),
-    network: !runtime.value || !current.allow_execution
+    network: !runtime.value || !current.allow_execution ||
+      (runtime.value.os === 'windows' && current.filesystem_scope === 'host')
   }]
 })))
 const memberHasElevatedAccess = computed(() => {
@@ -270,6 +309,15 @@ const memberHasElevatedAccess = computed(() => {
   width: 100%;
   min-width: 0;
   padding-top: 12px;
+}
+
+.sandbox-diagnostics summary {
+  cursor: pointer;
+}
+
+.sandbox-diagnostics pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .permission-table {

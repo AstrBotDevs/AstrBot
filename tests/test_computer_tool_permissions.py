@@ -23,6 +23,7 @@ from astrbot.core.tools.computer_tools.util import (
 def available_local_sandbox(monkeypatch):
     """Test configured policies independently of the test host's isolation."""
     monkeypatch.setattr(util, "get_process_sandbox_status", lambda: {"status": "detected"})
+    monkeypatch.setattr(util, "sys", SimpleNamespace(platform="linux"))
 
 
 class _FakeBrowser:
@@ -224,6 +225,21 @@ async def test_none_scope_denies_all_local_tools_before_accessing_resources(
     sandbox.assert_not_called()
 
 
+@pytest.mark.parametrize("role", ["member", "admin"])
+@pytest.mark.parametrize("allow_network", [False, True])
+def test_windows_host_execution_requires_network(monkeypatch, role, allow_network):
+    """Windows host execution cannot promise network isolation."""
+    monkeypatch.setattr(util, "sys", SimpleNamespace(platform="win32"))
+    context = _make_local_run_context(role, {
+        role: {"filesystem_scope": "host", "allow_execution": True, "allow_network": allow_network},
+    })
+    _, error = check_local_execution_permission(context, "Shell execution")
+    if allow_network:
+        assert error is None
+    else:
+        assert "workspace scope only" in error
+
+
 def test_local_permission_policy_denies_disabled_execution():
     policy = {
         "member": {
@@ -395,6 +411,7 @@ def test_unavailable_isolation_preserves_disabled_local_access(monkeypatch, role
         ({"status": "unsupported", "backend": None}, "not supported on this platform", "Run AstrBot in an environment that supports Local process isolation"),
         ({"status": "unavailable", "backend": "seatbelt", "error": "SandboxTimeoutError"}, "seatbelt failed its startup probe: SandboxTimeoutError", "Restore macOS Seatbelt (`sandbox-exec`) availability"),
         ({"status": "missing", "backend": "seatbelt"}, "seatbelt is not installed", "Restore macOS Seatbelt (`sandbox-exec`) availability"),
+        ({"status": "unavailable", "backend": "appcontainer", "error": "initialization has not run"}, "appcontainer failed its startup probe: initialization has not run", "Fix the appcontainer startup failure"),
         ({"status": "unavailable", "backend": "bubblewrap", "error": "Operation not permitted"}, "bubblewrap failed its startup probe: Operation not permitted", "Fix the bubblewrap startup failure"),
     ],
 )

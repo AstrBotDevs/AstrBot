@@ -5,7 +5,7 @@ import vm from 'node:vm';
 import { computed, ref, shallowReactive } from 'vue';
 import { parse } from 'vue/compiler-sfc';
 
-function setup(status, modelValue = {}) {
+function setup(status, modelValue = {}, os = 'linux') {
   const source = readFileSync(new URL('../src/components/shared/LocalPermissionMatrix.vue', import.meta.url), 'utf8');
   const { descriptor } = parse(source);
   const props = shallowReactive({ modelValue });
@@ -15,12 +15,12 @@ function setup(status, modelValue = {}) {
     defineProps: () => props,
     defineEmits: () => (_event, value) => { saved = value; props.modelValue = value; },
     onMounted() {},
-    useModuleI18n: () => ({ tm: key => key }),
+    useModuleI18n: () => ({ tm: (key, params = {}) => `${key} ${Object.values(params).join(' ')}`.trim() }),
   });
   const script = descriptor.script.content.replace('export const', 'const');
   const setupScript = descriptor.scriptSetup.content.replace(/^import .*$/gm, '');
-  const component = vm.runInContext(`${script}\n${setupScript}\n;({ policy, updatePermission, runtime, executionBlockedRoles, isolationFailureReason, permissionLocks })`, scope);
-  component.runtime.value = { os: status === 'unsupported' ? 'windows' : 'linux', sandbox: { status } };
+  const component = vm.runInContext(`${script}\n${setupScript}\n;({ policy, updatePermission, runtime, executionBlockedRoles, isolationFailureReason, executionUnavailableHint, permissionLocks })`, scope);
+  component.runtime.value = { os, sandbox: { status, backend: os === 'windows' ? 'appcontainer' : 'bubblewrap' } };
   return {
     component,
     policy: role => JSON.parse(JSON.stringify(component.policy(role))),
@@ -117,4 +117,47 @@ test('choosing entire-environment execution synchronizes the hidden network perm
   component.updatePermission('member', { allow_execution: true });
   assert.deepEqual(saved().member, { filesystem_scope: 'host', allow_execution: true, allow_network: true });
   assert.deepEqual(policy('member'), saved().member);
+});
+
+test('Windows entire-environment execution always enables and locks networking', () => {
+  for (const status of ['detected', 'unavailable']) {
+    const { component, saved } = setup(status, {
+      admin: { filesystem_scope: 'workspace', allow_execution: true, allow_network: false },
+    }, 'windows');
+    component.updatePermission('admin', { filesystem_scope: 'host' });
+    assert.deepEqual(saved().admin, { filesystem_scope: 'host', allow_execution: true, allow_network: true });
+    assert.equal(component.permissionLocks.value.admin.network, true);
+    component.updatePermission('admin', { allow_network: false });
+    assert.equal(saved().admin.allow_network, true);
+    component.updatePermission('admin', { allow_execution: false });
+    assert.equal(saved().admin.allow_network, false);
+    component.updatePermission('admin', { allow_execution: true });
+    assert.equal(saved().admin.allow_network, true);
+  }
+});
+
+test('Windows workspace execution keeps independent network permission', () => {
+  const { component, saved } = setup('detected', {}, 'windows');
+  component.updatePermission('member', { allow_execution: true });
+  assert.equal(saved().member.allow_network, false);
+  assert.equal(component.permissionLocks.value.member.network, false);
+  component.updatePermission('member', { allow_network: true });
+  assert.equal(saved().member.allow_network, true);
+  component.updatePermission('member', { allow_network: false });
+  assert.equal(saved().member.allow_network, false);
+});
+
+test('Windows startup failures retain saved workspace grants and identify AppContainer', () => {
+  const configured = { filesystem_scope: 'workspace', allow_execution: true, allow_network: false };
+  const { component, policy, saved } = setup('unavailable', { admin: configured }, 'windows');
+  assert.deepEqual(policy('admin'), { ...configured, allow_execution: false });
+  assert.equal(component.policy('admin', false).allow_execution, true);
+  assert.deepEqual(Array.from(component.executionBlockedRoles.value), ['admin']);
+  assert.match(component.isolationFailureReason.value, /AppContainer/);
+  assert.doesNotMatch(component.isolationFailureReason.value, /bubblewrap/);
+  assert.equal(component.executionUnavailableHint.value, 'runtime.windowsSetupHint');
+  component.updatePermission('member', { filesystem_scope: 'none' });
+  assert.deepEqual(saved().admin, configured);
+  component.runtime.value.sandbox.status = 'detected';
+  assert.deepEqual(policy('admin'), configured);
 });

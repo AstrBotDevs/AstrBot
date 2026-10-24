@@ -362,6 +362,17 @@ def validate_config(
                     is False
                 ):
                     policy["allow_network"] = False
+                if (
+                    runtime is not None
+                    and runtime["os"] == "windows"
+                    and scope == "host"
+                    and policy.get("allow_execution", defaults[role]["allow_execution"])
+                    and not policy.get("allow_network", defaults[role]["allow_network"])
+                ):
+                    errors.append(
+                        f"Local permission {role}: Windows Local isolation supports workspace scope only; "
+                        "host access with networking disabled is unavailable."
+                    )
 
     else:
         validate(data, schema)

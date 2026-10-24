@@ -36,6 +36,7 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_root,
     get_astrbot_system_tmp_path,
 )
+from astrbot.core.utils.runtime_env import resolve_windows_shell
 
 from ..olayer import FileSystemComponent, PythonComponent, ShellComponent
 from .base import ComputerBooter
@@ -80,11 +81,6 @@ sys.stdout.write("".join(results))
 def _is_safe_command(command: str) -> bool:
     cmd = f" {command.strip().lower()} "
     return not any(pat in cmd for pat in _BLOCKED_COMMAND_PATTERNS)
-
-
-def resolve_windows_shell() -> str:
-    """Prefer PowerShell 7 (pwsh.exe) when on PATH, else Windows PowerShell 5.1."""
-    return "pwsh.exe" if shutil.which("pwsh") else "powershell.exe"
 
 
 def _decode_bytes_with_fallback(
@@ -896,7 +892,11 @@ class LocalShellComponent(ShellComponent):
         Args:
             session: Managed shell session to terminate.
         """
-        if os.name == "nt" and session.process.returncode is not None:
+        if (
+            os.name == "nt"
+            and not session.sandboxed
+            and session.process.returncode is not None
+        ):
             return
         if session.sandboxed:
             session.process.terminate()
@@ -962,6 +962,10 @@ class LocalShellComponent(ShellComponent):
                 pass
         with session.output_lock:
             session.output_file.close()
+        if session.sandboxed and (close := getattr(session.process, "close", None)):
+            # The native waiter must finish before its process handle is closed.
+            await session.wait_task
+            await asyncio.to_thread(close)
 
 
 @dataclass

@@ -283,7 +283,7 @@ def test_process_sandbox_selects_system_implementation(
 
 
 def test_process_sandbox_fails_closed_on_unsupported_system(monkeypatch):
-    monkeypatch.setattr(process_sandbox.sys, "platform", "win32")
+    monkeypatch.setattr(process_sandbox.sys, "platform", "unsupported")
 
     with pytest.raises(RuntimeError, match="No Local process sandbox backend"):
         process_sandbox.create_process_sandbox()
