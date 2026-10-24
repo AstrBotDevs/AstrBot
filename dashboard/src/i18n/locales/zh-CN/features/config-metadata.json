@@ -201,11 +201,13 @@
             "Brave",
             "Firecrawl",
             "Exa",
-            "AnySearch"
+            "AnySearch",
+            "Keenable"
           ],
           "subtitles": [
             "Google 网页、图片、学术和财经搜索",
             "DeepSeek 官方搜索接口",
+            "",
             "",
             "",
             "",
@@ -253,6 +255,10 @@
         "websearch_deepseek_key": {
           "description": "DeepSeek API Key",
           "hint": "填入 DeepSeek API Key。可使用与对话模型相同的 Key（需独立填写）。可添加多个 Key 轮询。 获取 Key: [https://platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys)"
+        },
+        "websearch_keenable_key": {
+          "description": "Keenable API Key",
+          "hint": "可添加多个 Key 进行轮询。留空则使用免费的匿名模式（有请求频率限制），填写 Key 可提高限额。获取 Key: [https://keenable.ai/console](https://keenable.ai/console)"
         }
       }
     },

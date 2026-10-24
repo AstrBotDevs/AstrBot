@@ -31,6 +31,8 @@ WEB_SEARCH_TOOL_NAMES = [
     "scholar_search_serpapi",
     "web_search_deepseek",
     "deepseek_fetch_web_page",
+    "web_search_keenable",
+    "keenable_extract_web_page",
 ]
 _TAVILY_WEB_SEARCH_TOOL_CONFIG = {
     "provider_settings.web_search": True,
@@ -67,6 +69,10 @@ _DEEPSEEK_WEB_SEARCH_TOOL_CONFIG = {
 _SERPAPI_WEB_SEARCH_TOOL_CONFIG = {
     "provider_settings.web_search": True,
     "provider_settings.websearch_provider": "serpapi",
+}
+_KEENABLE_WEB_SEARCH_TOOL_CONFIG = {
+    "provider_settings.web_search": True,
+    "provider_settings.websearch_provider": "keenable",
 }
 
 
@@ -134,6 +140,7 @@ _EXA_KEY_ROTATOR = _KeyRotator("websearch_exa_key", "Exa")
 _ANYSEARCH_KEY_ROTATOR = _KeyRotator("websearch_anysearch_key", "AnySearch")
 _DEEPSEEK_KEY_ROTATOR = _KeyRotator("websearch_deepseek_key", "DeepSeek")
 _SERPAPI_KEY_ROTATOR = _KeyRotator("websearch_serpapi_key", "SerpApi")
+_KEENABLE_KEY_ROTATOR = _KeyRotator("websearch_keenable_key", "Keenable")
 
 
 def normalize_legacy_web_search_config(cfg) -> None:
@@ -160,6 +167,7 @@ def normalize_legacy_web_search_config(cfg) -> None:
         "websearch_exa_key",
         "websearch_anysearch_key",
         "websearch_serpapi_key",
+        "websearch_keenable_key",
     ):
         value = provider_settings.get(setting_name)
         if isinstance(value, str):
@@ -2117,6 +2125,204 @@ class DeepSeekFetchWebPageTool(FunctionTool[AstrAgentContext]):
         return f"URL: {url}\nTitle: {data.get('title', '')}\nContent: {data['content']}"
 
 
+_KEENABLE_API_BASE = "https://api.keenable.ai"
+# Identifies AstrBot to Keenable. Requests without an API key are rejected
+# unless this header is present.
+_KEENABLE_APP_TITLE = "astrbot"
+
+
+async def _keenable_request(
+    provider_settings: dict,
+    path: str,
+    action: str,
+    *,
+    payload: dict | None = None,
+    params: dict | None = None,
+) -> dict:
+    """Call a Keenable API endpoint with API key failover.
+
+    Keenable serves requests without an API key on `<path>/public` under a
+    free rate limit, so an empty key list is valid and results in a single
+    request there. Configured keys use `<path>` and raise that limit.
+
+    Args:
+        provider_settings: Provider settings containing Keenable API keys.
+        path: Endpoint path, for example "/v1/search".
+        action: Name used in error messages, for example "web search".
+        payload: JSON body; when given the request is a POST.
+        params: Query parameters; used for a GET when no payload is given.
+
+    Returns:
+        The decoded JSON response.
+
+    Raises:
+        Exception: If the request fails after all configured keys are exhausted,
+            or if a non-retryable HTTP error is returned.
+    """
+    keys = provider_settings.get("websearch_keenable_key") or []
+
+    last_error = None
+    for _ in range(len(keys) or 1):
+        headers = {"X-Keenable-Title": _KEENABLE_APP_TITLE}
+        url = f"{_KEENABLE_API_BASE}{path}"
+        if keys:
+            headers["X-API-Key"] = await _KEENABLE_KEY_ROTATOR.get(provider_settings)
+        else:
+            url += "/public"
+
+        async with aiohttp.ClientSession(trust_env=True) as session:
+            if payload is not None:
+                request = session.post(url, json=payload, headers=headers)
+            else:
+                request = session.get(url, params=params, headers=headers)
+            async with request as response:
+                if response.status == 200:
+                    return await response.json()
+                reason = await response.text()
+                error = Exception(
+                    f"Keenable {action} failed: {reason}, status: {response.status}",
+                )
+                if keys and response.status in _RETRYABLE_HTTP_STATUSES:
+                    last_error = error
+                    continue
+                raise error
+
+    if last_error is not None:
+        raise last_error
+    raise Exception(f"Keenable {action} failed with all configured keys.")
+
+
+async def _keenable_search(
+    provider_settings: dict,
+    payload: dict,
+) -> list[SearchResult]:
+    """Call the Keenable search endpoint and return normalized results."""
+    data = await _keenable_request(
+        provider_settings, "/v1/search", "web search", payload=payload
+    )
+    return [
+        SearchResult(
+            title=item.get("title") or "",
+            url=item["url"],
+            # `snippet` carries the page text; `description` is usually empty.
+            # The text keeps the page's line breaks, so collapse whitespace.
+            snippet=" ".join(
+                (item.get("snippet") or item.get("description") or "").split()
+            ),
+        )
+        for item in data.get("results") or []
+        if item.get("url")
+    ]
+
+
+async def _keenable_fetch(provider_settings: dict, params: dict) -> dict:
+    """Call the Keenable fetch endpoint and return the page as a dict."""
+    return await _keenable_request(
+        provider_settings, "/v1/fetch", "page fetch", params=params
+    )
+
+
+@builtin_tool(config=_KEENABLE_WEB_SEARCH_TOOL_CONFIG)
+@pydantic_dataclass
+class KeenableWebSearchTool(FunctionTool[AstrAgentContext]):
+    """Web search tool powered by the Keenable Search API."""
+
+    name: str = "web_search_keenable"
+    description: str = (
+        "A web search tool powered by Keenable. Returns relevant web pages "
+        "with a text excerpt of each, and can restrict results to one site."
+    )
+    parameters: dict = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Required. Search query."},
+                "max_results": {
+                    "type": "integer",
+                    "description": "Optional. The maximum number of results to return. Default is 10. Range is 1-50.",
+                },
+                "site": {
+                    "type": "string",
+                    "description": 'Optional. Restrict results to one domain, for example "github.com".',
+                },
+            },
+            "required": ["query"],
+        }
+    )
+
+    async def call(self, context, **kwargs) -> ToolExecResult:
+        _, provider_settings, _ = _get_runtime(context)
+
+        try:
+            max_results = int(kwargs.get("max_results", 10))
+        except (TypeError, ValueError):
+            max_results = 10
+        max_results = min(max(max_results, 1), 50)
+
+        payload: dict = {
+            "query": kwargs["query"],
+            "max_results": max_results,
+            "snippet_max_length": 500,
+        }
+
+        site = str(kwargs.get("site") or "").strip()
+        if site:
+            payload["site"] = site
+
+        results = await _keenable_search(provider_settings, payload)
+        if not results:
+            return "Error: Keenable web search does not return any results."
+        return _search_result_payload(results)
+
+
+@builtin_tool(config=_KEENABLE_WEB_SEARCH_TOOL_CONFIG)
+@pydantic_dataclass
+class KeenableExtractWebPageTool(FunctionTool[AstrAgentContext]):
+    """Extract page content from a URL using the Keenable Fetch API."""
+
+    name: str = "keenable_extract_web_page"
+    description: str = "Extract the content of a web page as Markdown using Keenable."
+    parameters: dict = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "Required. A URL to extract content from.",
+                },
+                "max_chars": {
+                    "type": "integer",
+                    "description": "Optional. Maximum number of characters of content to return.",
+                },
+            },
+            "required": ["url"],
+        }
+    )
+
+    async def call(self, context, **kwargs) -> ToolExecResult:
+        _, provider_settings, _ = _get_runtime(context)
+
+        url = str(kwargs.get("url", "")).strip()
+        if not url:
+            return "Error: url must be a non-empty string."
+        if urlsplit(url).scheme.lower() not in ("http", "https"):
+            return "Error: url must be an http or https URL."
+
+        params: dict = {"url": url}
+        try:
+            max_chars = int(kwargs.get("max_chars") or 0)
+        except (TypeError, ValueError):
+            max_chars = 0
+        if max_chars > 0:
+            params["max_chars"] = max_chars
+
+        result = await _keenable_fetch(provider_settings, params)
+        content = result.get("content")
+        if not content:
+            return "Error: Keenable page fetch does not return any content."
+        return f"URL: {result.get('url') or url}\nContent: {content}"
+
+
 __all__ = [
     "AnySearchWebSearchTool",
     "BaiduWebSearchTool",
@@ -2130,6 +2336,8 @@ __all__ = [
     "SerpApiImageSearchTool",
     "SerpApiScholarSearchTool",
     "SerpApiWebSearchTool",
+    "KeenableExtractWebPageTool",
+    "KeenableWebSearchTool",
     "TavilyExtractWebPageTool",
     "TavilyWebSearchTool",
     "WEB_SEARCH_TOOL_NAMES",

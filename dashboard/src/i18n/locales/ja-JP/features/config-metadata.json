@@ -273,11 +273,13 @@
             "Brave",
             "Firecrawl",
             "Exa",
-            "AnySearch"
+            "AnySearch",
+            "Keenable"
           ],
           "subtitles": [
             "Google のウェブ・画像・学術・金融検索",
             "DeepSeek 公式検索 API",
+            "",
             "",
             "",
             "",
@@ -325,6 +327,10 @@
         "websearch_deepseek_key": {
           "description": "DeepSeek API Key",
           "hint": "DeepSeek API Key を入力します。チャットモデルと同じ Key も使用可能（個別に入力が必要）。複数 Key のローテーションに対応しています。 Key の取得: [https://platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys)"
+        },
+        "websearch_keenable_key": {
+          "description": "Keenable API Key",
+          "hint": "複数の Key を追加してローテーションできます。空欄の場合は無料の匿名モードを使用します（リクエスト頻度の制限あり）。Key を設定すると上限が引き上げられます。Key の取得: [https://keenable.ai/console](https://keenable.ai/console)"
         }
       }
     },

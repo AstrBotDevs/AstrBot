@@ -150,6 +150,7 @@ DEFAULT_CONFIG = {
         "websearch_anysearch_key": [],
         "websearch_deepseek_key": [],
         "websearch_serpapi_key": [],
+        "websearch_keenable_key": [],
         "web_search_link": False,
         "display_reasoning_text": False,
         "identifier": False,
@@ -3680,6 +3681,7 @@ CONFIG_METADATA_3 = {
                             "firecrawl",
                             "exa",
                             "anysearch",
+                            "keenable",
                         ],
                         "labels": [
                             "SerpApi",
@@ -3691,10 +3693,12 @@ CONFIG_METADATA_3 = {
                             "Firecrawl",
                             "Exa",
                             "AnySearch",
+                            "Keenable",
                         ],
                         "subtitles": [
                             "Google 网页、图片、学术和财经搜索",
                             "DeepSeek 官方搜索接口",
+                            "",
                             "",
                             "",
                             "",
@@ -3801,6 +3805,17 @@ CONFIG_METADATA_3 = {
                         "secret": True,
                         "condition": {
                             "provider_settings.websearch_provider": "serpapi",
+                            "provider_settings.web_search": True,
+                        },
+                    },
+                    "provider_settings.websearch_keenable_key": {
+                        "description": "Keenable API Key",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "可添加多个 Key 进行轮询。留空则使用免费的匿名模式（有请求频率限制），填写 Key 可提高限额。获取 Key：[https://keenable.ai/console](https://keenable.ai/console)",
+                        "secret": True,
+                        "condition": {
+                            "provider_settings.websearch_provider": "keenable",
                             "provider_settings.web_search": True,
                         },
                     },
