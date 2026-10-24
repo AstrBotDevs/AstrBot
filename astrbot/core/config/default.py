@@ -1883,6 +1883,7 @@ CONFIG_METADATA_2 = {
                         "api_key": "",
                         "model": "cosyvoice-v1",
                         "dashscope_tts_voice": "loongstella",
+                        "dashscope_tts_websocket_url": "",
                         "timeout": "20",
                     },
                     "Azure TTS": {
@@ -2551,6 +2552,11 @@ CONFIG_METADATA_2 = {
                         "secret": True,
                     },
                     "dashscope_tts_voice": {"description": "音色", "type": "string"},
+                    "dashscope_tts_websocket_url": {
+                        "description": "WebSocket Endpoint",
+                        "type": "string",
+                        "hint": "可选，仅用于 Qwen-Audio-TTS 和 CosyVoice 的 SpeechSynthesizer 调用。留空使用 DashScope SDK 默认地址。请填写完整 WebSocket 地址，例如 wss://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference，并将 {WorkspaceId} 替换为实际业务空间 ID。",
+                    },
                     "gm_resp_image_modal": {
                         "description": "启用图片模态",
                         "type": "bool",
