@@ -155,6 +155,10 @@
         "cleanupWithTracesSuccess": "已清理 {count} 个文件和 {traces} 条追踪，释放 {size}"
       },
       "confirmWithTraces": "确定要清理 {target} 吗？历史追踪数据将无法恢复，运行中的追踪会保留。"
+    },
+    "diagnostics": {
+      "title": "诊断",
+      "subtitle": "导出诊断包，帮助排查 AstrBot 运行问题。"
     }
   },
   "backup": {

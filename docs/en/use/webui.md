@@ -18,6 +18,7 @@ These paths use the current default sidebar with a fixed menu order. Extension i
 | Commands / Command Management | Extensions → Handlers → Command |
 | Standalone MCP / Skills entries | Extensions → MCP Servers / Skills |
 | Extensions → Installed → Update All | Extensions → Installed → Batch Update Plugins; all updates are selected by default, and individual plugins can be unchecked |
+| System Settings → General → Cache → Export diagnostics | System Settings → Maintenance → Diagnostics → Export diagnostics |
 | System Settings → Appearance → Customize Sidebar | Removed; the sidebar uses the default menu layout |
 | Custom Rules / Future Tasks / SubAgents | Custom Rules is under the sidebar `System` group; Future Tasks and SubAgents are under the `Extensions` group |
 
@@ -89,6 +90,8 @@ ChatUI supports these common workflows:
 - Edit a user message and continue generation from that point, or start a thread from a specific excerpt.
 - Switch between streaming/normal response modes and SSE/WebSocket transport modes.
 
+To return to the model configured in the selected profile, open the model selector and choose **Default model** (**Follow the selected profile's default model**). This clears the override for the current conversation; other conversations retain their saved model choices. Logging out clears all saved ChatUI model choices in this browser.
+
 > [!NOTE]
 > To keep message delivery ordered, keep only one ChatUI page open for the same browser session. If you open chat in multiple tabs, the system may ask you to reconnect.
 
@@ -101,6 +104,8 @@ Select `Config` in the sidebar, then choose the profile to edit from the selecto
 - `Platforms & Messages` contains message-trigger, session-isolation, and delivery settings.
 - `Plugin` selects the plugins enabled for this profile. To edit an individual plugin's parameters, open `Extensions` and click that plugin's gear icon (`Extension Config`).
 - `Ext.` contains segmented reply, group chat context, and text-to-image settings (output toggle, word count threshold, rendering strategy, service endpoint, and custom templates).
+
+Under `Ext. → Segmented Reply`, turn on `Enable Segmented Reply` to configure segmentation, intervals, and content cleanup. Turning it off hides the detailed options. Random intervals, the log base, the segmentation regex, and split-word lists also depend on the selected mode.
 
 | Previous location | Current location |
 | --- | --- |
@@ -128,10 +133,12 @@ The page title and section navigation stay fixed while only the settings pane on
 - `Appearance`: theme colors.
 - `Network`: HTTP proxy, Python package sources, and GitHub proxy. For the address to use when AstrBot runs in Docker, see [Deploy with Docker](/en/deploy/astrbot/docker.md).
 - `Security`: WebUI HTTPS, login rate limits, and TOTP.
-- `Maintenance`: backup, restore, and restart.
+- `Maintenance`: backup, restore, diagnostic export, and restart.
 - `OpenAPI`: developer access keys.
 
 System configuration changes save automatically. Check for a successful save message and restart AstrBot if the page indicates that a restart is required.
+
+Backups under `Maintenance` include session aliases, model usage statistics, OpenAPI access keys, and MCP server configuration. Workspace files require a separate backup. TOTP trusted devices are excluded; replacing data from a backup clears existing device trust and requires device verification again. Older backups cannot recover data they did not include: export a new backup from the original instance before migrating. If a backup has no MCP configuration, the target instance's MCP configuration is kept.
 
 ## Plugins
 
@@ -167,7 +174,13 @@ Use the `Conversations` tab to find and manage saved conversation records:
 
 The `Logs` tab shows AstrBot runtime logs in real time. You can filter by log level and install missing Pip packages from this page. To view DEBUG logs, first set `Console Log Level` to `DEBUG` under `System Settings → General → Logs`.
 
-Open `Filters` next to the search box to filter by level, source (System/Plugin), individual plugin, and bot platform, or exclude user-chat logs. Combine these conditions with `Search logs`. Plugin menus prefer display names and show plugin IDs as subtitles; `System` replaces the former Core source label.
+Click `Export diagnostics` and confirm the content and privacy notice to download a ZIP. It includes available disk and rotated logs, configured custom logs, up to 500 cached events, available trace history, configuration profiles and routes, plugin versions and status, environment details and a manifest. Existing data remains exportable when file logging or tracing is disabled; missing trace history is recorded without enabling tracing. Trace history is limited to the latest 50 traces and 16 MiB in total. Disk logs are limited to 256 MiB of source data, skipping individual files larger than 64 MiB and, in redacted mode, oversized lines. Truncation and missing items are recorded. Raw databases and plugin source code are excluded. The dialog enables `Redact credentials (recommended)` by default. Recognized credentials are masked, and public IPv4/IPv6 addresses use consistent aliases such as `[PUBLIC_IP_1]` across the bundle. Alternate spellings of the same address share an alias; protocols, ports, paths, local and other non-public addresses remain. No original-address mapping is included. Conversations and personal data may remain; review before sharing. Uncheck this option when diagnosis requires original values. This retains passwords, keys, tokens, public IPs and other sensitive data, and adds `raw` to the filename; share only privately with someone you trust. Reopening the dialog resets the option to enabled. Only authenticated dashboard administrators can download bundles; developer API keys are not accepted. The `Export diagnostics` button under `System Settings → Maintenance → Diagnostics` uses the same export. This settings entry was moved from `System Settings → General → Cache`.
+
+The export dialog offers `Last hour`, `Last 12 hours`, `Last day`, `Last 3 days` and `Custom`, with `Last day` selected by default. Preset ranges are calculated when you click download. Select `Custom` to enter start and end times using your browser’s local time. Only disk logs, cached logs and traces within that range are exported. Timestamp-free continuation lines follow the preceding disk-log record; standalone content without a recognized timestamp is excluded. Disk timestamps without an explicit offset use the server’s local time. Traces are selected by start time and retain their complete details, with the existing limit of the latest 50 matching traces and 16 MiB. Configuration, plugin status and environment details remain current snapshots. The selected range is recorded in `manifest.json`.
+
+In the diagnostic bundle, cached logs are stored in `logs/astrbot.in-memory.log`, cached traces in `traces/history.in-memory.jsonl`, and persisted trace history in `traces/history.jsonl`. The `webui_version` field in `environment.json` records the version declared by the WebUI assets being served, or `null` when unavailable.
+
+Open `Filters` next to the search box to filter by level, source (System/Plugin), individual plugin, and bot platform, or exclude user-chat logs. Combine these conditions with `Search logs`. The plugin dropdown lists only plugins that appear in the current logs, not every installed plugin, so installed plugins that have not logged anything are absent. Plugin menus prefer display names and show plugin IDs as subtitles; `System` replaces the former Core source label.
 
 The toolbar contains search, fullscreen, font-size controls, and `Install Pip packages`. The default font size is 12px, adjustable from 8–16px in 2px steps. The former auto-scroll switch is replaced by bottom-following behavior: new logs follow when you are at the bottom, without interrupting reading older entries. Top-row filters move into the `Filters` sidebar; closing it preserves selections. Logs remain in memory, without new file-reading or database persistence.
 

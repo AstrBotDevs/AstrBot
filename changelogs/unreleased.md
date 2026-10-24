@@ -54,6 +54,9 @@
 
 ## Logs
 
+- WebUI: Diagnostic export moved from `System Settings → General → Cache` to a dedicated `System Settings → Maintenance → Diagnostics` item.
+- WebUI：诊断包导出入口从 `系统设置 → 常规 → 缓存` 移至独立的 `系统设置 → 维护 → 诊断` 项。
+
 - Add structured source, plugin, platform, and category metadata for in-memory log filtering.
 - Logs: top-row filters → the Filters sidebar, with combined level/source/plugin/platform/keyword filtering and an option to hide user-chat logs.
 - Core source label → System; plugin selectors prefer display names and show IDs as subtitles.

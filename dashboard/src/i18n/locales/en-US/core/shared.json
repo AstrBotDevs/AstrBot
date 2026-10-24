@@ -48,6 +48,7 @@
     "filterSource": "Filter by provider source",
     "notSelected": "Not selected",
     "defaultModel": "Default model",
+    "defaultModelSubtitle": "Follow the selected profile's default model",
     "model": "Model",
     "searchPlaceholder": "Search models",
     "buttonText": "Select Provider...",
