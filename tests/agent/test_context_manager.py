@@ -994,6 +994,40 @@ class TestContextManager:
         assert manager.config.truncate_turns == 2
         assert manager.config.llm_compress_keep_recent_ratio == 0.15
 
+    @pytest.mark.parametrize(
+        ("configured", "expected"), [(0.82, 0.82), (0.5, 0.5), (0.0, 0.1), (2, 0.95)]
+    )
+    def test_compression_threshold_reaches_both_compressors(self, configured, expected):
+        """The configured trigger ratio is clamped and used by either strategy."""
+        truncating = ContextManager(
+            ContextConfig(max_context_tokens=1000, compression_threshold=configured)
+        )
+        summarizing = ContextManager(
+            ContextConfig(
+                max_context_tokens=1000,
+                compression_threshold=configured,
+                llm_compress_provider=MagicMock(),
+            )
+        )
+
+        assert truncating.compressor.compression_threshold == expected
+        assert summarizing.compressor.compression_threshold == expected
+
+    @pytest.mark.asyncio
+    async def test_lower_threshold_triggers_compression_earlier(self):
+        """Usage between a custom threshold and 0.82 now compresses."""
+        messages = self.create_messages(6)
+        default = ContextManager(ContextConfig(max_context_tokens=1000))
+        early = ContextManager(
+            ContextConfig(max_context_tokens=1000, compression_threshold=0.5)
+        )
+
+        untouched = await default.process(messages, trusted_token_usage=600)
+        compressed = await early.process(messages, trusted_token_usage=600)
+
+        assert untouched == messages
+        assert len(compressed) < len(messages)
+
     # ==================== Run Compression Tests ====================
 
     @pytest.mark.asyncio

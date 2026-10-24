@@ -4100,6 +4100,15 @@ CONFIG_METADATA_3 = {
                         },
                         "hint": "普通会话历史仅在超过“压缩前最多保留对话轮数”后执行该策略；请求发送前也会在上下文 token 接近模型窗口时使用同一策略保护本次请求。",
                     },
+                    "agent_runner.config.compression.trigger_ratio": {
+                        "description": "触发压缩的上下文占用比例",
+                        "type": "float",
+                        "slider": {"min": 0.1, "max": 0.95, "step": 0.01},
+                        "hint": "请求前上下文 token 超过模型上下文窗口的该比例时，执行上面的处理方式。范围 0.1-0.95，默认 0.82；调低可提前压缩，但会更频繁地调用压缩。",
+                        "condition": {
+                            "agent_runner.runner_type": "local",
+                        },
+                    },
                     "agent_runner.config.compression.instruction": {
                         "description": "上下文压缩提示词",
                         "type": "text",

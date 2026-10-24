@@ -243,6 +243,8 @@ class MainAgentBuildConfig:
     timezone: str | None = None
     max_quoted_fallback_images: int = 20
     """Maximum number of images injected from quoted-message fallback extraction."""
+    context_compression_threshold: float = 0.82
+    """Share of the model context window that triggers compression or truncation."""
 
 
 @dataclass(slots=True)
@@ -2008,6 +2010,7 @@ async def build_main_agent(
         streaming=config.streaming_response,
         llm_compress_instruction=config.llm_compress_instruction,
         llm_compress_keep_recent_ratio=config.llm_compress_keep_recent_ratio,
+        context_compression_threshold=config.context_compression_threshold,
         llm_compress_provider=await _get_compress_provider(
             config,
             plugin_context,
