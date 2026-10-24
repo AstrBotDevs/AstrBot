@@ -1,0 +1,9 @@
+{
+  "client_id": {"description": "Registered public OAuth client ID", "type": "string", "default": ""},
+  "authorization_endpoint": {"description": "Supplier authorization endpoint (HTTPS)", "type": "string", "default": ""},
+  "token_endpoint": {"description": "Supplier token endpoint (HTTPS)", "type": "string", "default": ""},
+  "redirect_uri": {"description": "Exact registered redirect URI; paste the full redirected URL back into the plugin page", "type": "string", "default": "http://127.0.0.1:14567/callback"},
+  "api_base": {"description": "Supplier OpenAI-compatible API base (HTTPS)", "type": "string", "default": ""},
+  "scopes": {"description": "Scopes supported by your supplier, including refresh access when required", "type": "list", "default": []},
+  "proxy": {"description": "Optional proxy for OAuth token requests", "type": "string", "default": ""}
+}

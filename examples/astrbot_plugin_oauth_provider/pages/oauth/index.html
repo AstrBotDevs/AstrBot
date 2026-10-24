@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="referrer" content="no-referrer">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Provider OAuth</title>
+  <style>
+    :root { color-scheme: light dark; font: 16px system-ui, sans-serif; }
+    body { max-width: 42rem; margin: 2rem auto; padding: 0 1rem; }
+    label, textarea { display: block; width: 100%; box-sizing: border-box; }
+    textarea { margin: .5rem 0 1rem; padding: .75rem; }
+    button { margin: .4rem .5rem .4rem 0; padding: .6rem 1rem; }
+    #status { min-height: 2rem; overflow-wrap: anywhere; }
+  </style>
+</head>
+<body>
+  <h1>Provider OAuth</h1>
+  <p>Connect the supplier configured in this plugin. All models of this adapter share one account.</p>
+  <button id="start">Start sign-in</button>
+  <label for="authorization">Open this URL in your browser</label>
+  <textarea id="authorization" rows="4" readonly autocomplete="off"></textarea>
+  <p>After approval, copy the full redirected URL below. A loopback page may show a connection error; this plugin does not open a callback listener.</p>
+  <label for="callback">Redirected URL (includes code and state)</label>
+  <textarea id="callback" rows="3" autocomplete="off" spellcheck="false"></textarea>
+  <button id="complete">Complete sign-in</button>
+  <button id="cancel">Cancel sign-in</button>
+  <button id="activate">Activate saved models</button>
+  <button id="disconnect">Disconnect locally</button>
+  <p id="status" role="status" aria-live="polite"></p>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
