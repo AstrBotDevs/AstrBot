@@ -12,7 +12,7 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
-from astrbot.core.message.components import Image
+from astrbot.core.message.components import Image, Plain, Record
 from astrbot.core.provider.func_tool_manager import (
     FunctionToolManager,
     _PermissionGuardedTool,
@@ -45,6 +45,177 @@ def _build_run_context(message_components: list[object] | None = None):
     event = _DummyEvent(message_components=message_components)
     ctx = SimpleNamespace(event=event, context=SimpleNamespace())
     return ContextWrapper(context=ctx)
+
+
+@pytest.fixture
+def audio_handoff(monkeypatch):
+    """Provide a handoff with the real executor and an isolated model boundary.
+
+    Args:
+        monkeypatch: Fixture used to replace background result delivery.
+
+    Returns:
+        The tool, execution context, and background delivery mock.
+    """
+    run_context = _build_run_context()
+    run_context.context.context = SimpleNamespace(
+        get_current_chat_provider_id=AsyncMock(return_value="audio-provider"),
+        tool_loop_agent=AsyncMock(
+            return_value=SimpleNamespace(completion_text="heard")
+        ),
+        get_config=lambda **_kwargs: {"provider_settings": {}},
+    )
+    wake = AsyncMock()
+    monkeypatch.setattr(
+        FunctionToolExecutor, "_wake_main_agent_for_background_result", wake
+    )
+    return HandoffTool(Agent(name="audio", tools=[])), run_context, wake
+
+
+def test_handoff_audio_schema_is_optional_and_preserves_custom_schema():
+    tool = HandoffTool(Agent(name="audio"))
+    assert tool.parameters["properties"]["audio_urls"]["items"] == {"type": "string"}
+    assert "audio_urls" not in tool.parameters.get("required", [])
+    custom = {"type": "object", "properties": {"input": {"type": "string"}}}
+    assert HandoffTool(Agent(name="custom"), parameters=custom).parameters == custom
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        (None, []),
+        ([], []),
+        (" https://example.com/audio.wav ", ["https://example.com/audio.wav"]),
+        ([" a.wav ", "a.wav", "", 123, None, "b.wav"], ["a.wav", "b.wav"]),
+        (("a.wav", "b.wav"), ["a.wav", "b.wav"]),
+        ({"a.wav"}, ["a.wav"]),
+        (b"audio.wav", []),
+        (123, []),
+    ],
+)
+async def test_handoff_forwards_normalized_audio(audio_handoff, raw, expected):
+    tool, run_context, _ = audio_handoff
+    results = [
+        result
+        async for result in FunctionToolExecutor.execute(
+            tool, run_context, input="listen", audio_urls=raw
+        )
+    ]
+    request = run_context.context.context.tool_loop_agent.await_args.kwargs
+    assert request["audio_urls"] == expected
+    assert request["prompt"] == "listen"
+    assert request["chat_provider_id"] == "audio-provider"
+    assert results[0].content[0].text == "heard"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("background", [False, True])
+async def test_handoff_collects_audio_once_in_both_paths(
+    monkeypatch, audio_handoff, background
+):
+    tool, run_context, wake = audio_handoff
+    run_context.context.event.message_obj.message = [
+        Plain("listen"),
+        Record(file="bad"),
+        Record(file="good"),
+        Record(file="empty"),
+    ]
+    convert = AsyncMock(side_effect=[RuntimeError("unavailable"), "/tmp/voice.wav", ""])
+    monkeypatch.setattr(Record, "convert_to_file_path", convert)
+    args = {"input": "listen", "audio_urls": [" /tmp/voice.wav ", "/tmp/other.wav"]}
+    if background:
+        await FunctionToolExecutor._do_handoff_background(
+            tool, run_context, task_id="audio-test", **args
+        )
+        wake.assert_awaited_once()
+        assert "heard" in wake.await_args.kwargs["result_text"]
+    else:
+        _ = [r async for r in FunctionToolExecutor.execute(tool, run_context, **args)]
+        wake.assert_not_awaited()
+    assert convert.await_count == 3
+    request = run_context.context.context.tool_loop_agent.await_args.kwargs
+    assert request["audio_urls"] == ["/tmp/voice.wav", "/tmp/other.wav"]
+    assert args["audio_urls"] == [" /tmp/voice.wav ", "/tmp/other.wav"]
+
+
+@pytest.mark.asyncio
+async def test_handoff_collects_event_audio_without_explicit_sources(
+    monkeypatch, audio_handoff
+):
+    tool, run_context, _ = audio_handoff
+    run_context.context.event.message_obj.message = [Record(file="voice")]
+    convert = AsyncMock(return_value="/tmp/voice.wav")
+    monkeypatch.setattr(Record, "convert_to_file_path", convert)
+    _ = [
+        r async for r in FunctionToolExecutor.execute(tool, run_context, input="listen")
+    ]
+    convert.assert_awaited_once()
+    request = run_context.context.context.tool_loop_agent.await_args.kwargs
+    assert request["audio_urls"] == ["/tmp/voice.wav"]
+
+
+@pytest.mark.asyncio
+async def test_background_handoff_submits_before_audio_ready_and_can_cancel(
+    monkeypatch, audio_handoff
+):
+    tool, run_context, wake = audio_handoff
+    run_context.context.event.message_obj.message = [Record(file="voice")]
+    started, release, closed = asyncio.Event(), asyncio.Event(), asyncio.Event()
+
+    async def convert(_record):
+        started.set()
+        try:
+            await release.wait()
+            return "/tmp/voice.wav"
+        finally:
+            closed.set()
+
+    registry = ActiveEventRegistry()
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_tool_exec.active_event_registry", registry
+    )
+    monkeypatch.setattr(Record, "convert_to_file_path", convert)
+    results = [
+        r
+        async for r in FunctionToolExecutor.execute(
+            tool, run_context, input="listen", background_task=True
+        )
+    ]
+    assert "submitted" in results[0].content[0].text
+    task = next(
+        iter(registry._background_tasks[run_context.context.event.unified_msg_origin])
+    )
+    try:
+        await asyncio.wait_for(started.wait(), timeout=1)
+        assert not release.is_set()
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        assert task.cancelled() and closed.is_set()
+        run_context.context.context.tool_loop_agent.assert_not_awaited()
+        wake.assert_not_awaited()
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_handoff_audio_conversion_cancellation_propagates(
+    monkeypatch, audio_handoff
+):
+    tool, run_context, _ = audio_handoff
+    run_context.context.event.message_obj.message = [Record(file="voice")]
+    monkeypatch.setattr(
+        Record, "convert_to_file_path", AsyncMock(side_effect=asyncio.CancelledError)
+    )
+    with pytest.raises(asyncio.CancelledError):
+        _ = [
+            r
+            async for r in FunctionToolExecutor.execute(
+                tool, run_context, input="listen"
+            )
+        ]
+    run_context.context.context.tool_loop_agent.assert_not_awaited()
 
 
 @pytest.mark.asyncio

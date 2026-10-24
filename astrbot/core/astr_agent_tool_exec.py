@@ -23,7 +23,7 @@ from astrbot.core.astr_main_agent_resources import (
 )
 from astrbot.core.config.agent_runner import resolve_context_compression_config
 from astrbot.core.cron.events import CronMessageEvent
-from astrbot.core.message.components import Image
+from astrbot.core.message.components import Image, Record
 from astrbot.core.message.message_event_result import (
     CommandResult,
     MessageChain,
@@ -355,6 +355,34 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         event = run_context.context.event
         umo = event.unified_msg_origin
 
+        audio_urls_raw = tool_args.get("audio_urls")
+        audio_candidates: list[str] = []
+        if isinstance(audio_urls_raw, str):
+            audio_candidates.append(audio_urls_raw)
+        elif isinstance(audio_urls_raw, (Sequence, AbstractSet)) and not isinstance(
+            audio_urls_raw, (bytes, bytearray)
+        ):
+            audio_candidates.extend(
+                item for item in audio_urls_raw if isinstance(item, str)
+            )
+        message_obj = getattr(event, "message_obj", None)
+        for idx, component in enumerate(getattr(message_obj, "message", None) or []):
+            if not isinstance(component, Record):
+                continue
+            try:
+                path = await component.convert_to_file_path()
+                if path:
+                    audio_candidates.append(path)
+            except Exception:
+                logger.warning(
+                    "Failed to prepare handoff audio component at index %d.",
+                    idx,
+                    exc_info=True,
+                )
+        audio_urls = (
+            normalize_and_dedupe_strings(audio_candidates) if audio_candidates else []
+        )
+
         # Use per-subagent provider override if configured; otherwise fall back
         # to the current/default provider resolution.
         prov_id = getattr(
@@ -390,6 +418,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             chat_provider_id=prov_id,
             prompt=input_,
             image_urls=image_urls,
+            audio_urls=audio_urls,
             system_prompt=tool.agent.instructions,
             tools=toolset,
             contexts=contexts,
