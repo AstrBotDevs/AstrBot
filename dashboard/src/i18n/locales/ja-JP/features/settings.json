@@ -79,14 +79,29 @@
       "subtitle": "プラグインのダウンロードや AstrBot の更新に使用する GitHub プロキシアドレスを設定します。中国本土のネットワーク環境で有効です。カスタム入力は即時反映されます。各アドレスの安定性は保証されません。プラグインやプロジェクトの更新時にエラーが発生した場合は、まずプロキシアドレスが正常に利用できるか確認してください。",
       "label": "GitHub プロキシアドレスを選択"
     },
-    "proxySelector": {
-      "title": "GitHub プロキシ",
-      "noProxy": "GitHub プロキシを使用しない",
-      "useProxy": "GitHub プロキシを使用",
+    "pypiMirror": {
+      "title": "PyPI パッケージインデックス",
+      "subtitle": "AstrBot の Python 依存関係をインストールする際に使用する PyPI インデックスです。国内ミラーまたはカスタム URL を選択できます。変更は AstrBot の再起動後に反映されます。",
+      "label": "PyPI ソースを選択",
+      "custom": "カスタム",
+      "customPlaceholder": "https://example.com/pypi/simple",
       "testConnection": "接続をテスト",
-      "available": "利用可能",
       "unavailable": "利用不可",
-      "custom": "カスタム"
+      "presets": {
+        "official": "公式",
+        "aliyun": "Alibaba Cloud",
+        "ustc": "中国科学技術大学",
+        "tsinghua": "清華大学",
+        "tencent": "Tencent Cloud"
+      }
+    },
+    "proxySelector": {
+      "title": "GitHub ミラーを選択",
+      "noProxy": "GitHub ミラーを使用しない",
+      "testConnection": "接続をテスト",
+      "unavailable": "利用不可",
+      "custom": "カスタム",
+      "customPlaceholder": "https://example.com"
     }
   },
   "theme": {

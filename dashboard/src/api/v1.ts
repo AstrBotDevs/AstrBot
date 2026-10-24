@@ -46,6 +46,7 @@ import {
   type PluginValidateRepoRequest,
   type PluginConfigFileDeleteRequest,
   type ProviderConfigRequest,
+  type PypiIndexTestRequest,
   type RuntimeInfo,
   type BatchSessionProviderRequest,
   type BatchSessionServiceRequest,
@@ -1848,6 +1849,21 @@ export const statsApi = {
           '/api/stat/test-ghproxy-connection',
           payload,
         ),
+    );
+  },
+  testPypiIndex(payload: PypiIndexTestRequest) {
+    return typed<{ latency?: number }>(
+      openApiV1.testPypiIndexConnection({ body: payload }),
+    );
+  },
+  measureGhproxySpeed(payload: GhproxyTestRequest) {
+    return typed<{ speed?: number; bytes?: number; duration?: number }>(
+      openApiV1.measureGhproxySpeed({ body: payload }),
+    );
+  },
+  measurePypiIndexSpeed(payload: PypiIndexTestRequest) {
+    return typed<{ speed?: number; bytes?: number; duration?: number }>(
+      openApiV1.measurePypiIndexSpeed({ body: payload }),
     );
   },
   startTime() {

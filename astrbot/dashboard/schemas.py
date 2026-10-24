@@ -211,6 +211,10 @@ class GhProxyTestRequest(BaseModel):
     proxy_url: str | None = None
 
 
+class PypiIndexTestRequest(BaseModel):
+    index_url: str | None = None
+
+
 class OpenApiChatRequest(OpenModel):
     locale: str | None = None
     message: Any = None
