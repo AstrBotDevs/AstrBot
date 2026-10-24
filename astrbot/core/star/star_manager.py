@@ -560,6 +560,7 @@ class PluginManager:
                 if isinstance(metadata.get("pages"), list)
                 else [],
                 i18n=PluginManager._load_plugin_i18n(plugin_path),
+                readmes=PluginManager._load_plugin_readmes(metadata.get("readmes")),
             )
 
         return metadata
@@ -669,6 +670,30 @@ class PluginManager:
             raise Exception(f"{metadata_path.name} 中 name 字段内容非法。")
         PluginManager._validate_importable_name(plugin_dir_name)
         return plugin_dir_name
+
+    @staticmethod
+    def _load_plugin_readmes(raw_readmes: object) -> dict[str, str]:
+        """Normalize the optional metadata.yaml "readmes" mapping.
+
+        Args:
+            raw_readmes: Parsed "readmes" value from metadata.yaml.
+
+        Returns:
+            Mapping of locale (or "default") to a relative Markdown path.
+            Invalid entries are dropped so a typo cannot break plugin loading.
+        """
+        if not isinstance(raw_readmes, dict):
+            return {}
+        readmes: dict[str, str] = {}
+        for locale, path in raw_readmes.items():
+            if not isinstance(locale, str) or not isinstance(path, str):
+                continue
+            locale = locale.strip()
+            path = path.strip()
+            if not locale or not path:
+                continue
+            readmes[locale] = path
+        return readmes
 
     @staticmethod
     def _validate_astrbot_version_specifier(

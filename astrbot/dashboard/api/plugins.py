@@ -832,11 +832,12 @@ async def delete_plugin_config_file_by_id(
 @router.get("/plugins/readme")
 async def get_plugin_readme_by_id(
     plugin_id: str = Query(...),
+    locale: str | None = Query(None),
     _auth: AuthContext = Depends(require_plugin_scope),
     service: PluginService = Depends(get_service),
 ):
     return await _run_service(
-        lambda: service.get_plugin_readme(plugin_id),
+        lambda: service.get_plugin_readme(plugin_id, locale),
         log_label="/api/plugin/readme",
     )
 
@@ -1082,11 +1083,12 @@ async def delete_plugin_config_file(
 @router.get("/plugins/{plugin_id}/readme")
 async def get_plugin_readme(
     plugin_id: str,
+    locale: str | None = Query(None),
     _auth: AuthContext = Depends(require_plugin_scope),
     service: PluginService = Depends(get_service),
 ):
     return await _run_service(
-        lambda: service.get_plugin_readme(plugin_id),
+        lambda: service.get_plugin_readme(plugin_id, locale),
         log_label="/api/plugin/readme",
     )
 
@@ -1424,7 +1426,10 @@ async def dashboard_get_plugin_readme(
     service: PluginService = Depends(get_service),
 ):
     return await _run_service(
-        lambda: service.get_plugin_readme(request.query_params.get("name")),
+        lambda: service.get_plugin_readme(
+            request.query_params.get("name"),
+            request.query_params.get("locale"),
+        ),
         log_label="/api/plugin/readme",
     )
 

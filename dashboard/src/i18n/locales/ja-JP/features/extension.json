@@ -111,6 +111,8 @@
     "notFound": "プラグインが見つかりません",
     "docsTitle": "ドキュメント",
     "docsEmpty": "ドキュメントはありません",
+    "readmeLanguage": "ドキュメントの言語",
+    "readmeLanguageAuto": "UI 言語に合わせる",
     "changelogTitle": "変更履歴",
     "changelogEmpty": "変更履歴はありません",
     "subCommandsCount": "{count} 件のサブコマンド",

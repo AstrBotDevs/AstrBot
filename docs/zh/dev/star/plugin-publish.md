@@ -26,9 +26,16 @@ repo: https://github.com/your-name/repo      # 插件仓库地址
 # social_link: https://github.com/your-web   # （可选）你的个人网站、GitHub 主页等
 # tags:                                      # （可选）标签列表，用于插件市场分类和搜索
   # - example
+# readmes:                                   # （可选）多语言 README，按 WebUI 语言自动切换
+#   default: README.md                       # 默认版本（缺省时回退到 README.md）
+#   zh-CN: README_zh.md
+#   en-US: README_en.md
 ```
 
 [目前支持的平台适配器](plugin-new.md#声明支持平台-optional)
+
+`readmes` 用于为插件文档提供多语言版本。管理面板会先按当前界面语言精确匹配，再回退到基础语言（例如 `zh-TW` 回退到 `zh`），最后回退到 `default`。声明的路径必须是插件目录内的相对 Markdown 路径，包含 `..`、绝对路径或指向插件目录外的符号链接都会被拒绝。没有声明 `readmes` 的插件继续读取仓库根目录的 `README.md`。
+
 
 ::: warning 大小限制
 发布到插件市场的插件压缩包（zip）大小**不得超过 16MB**。
