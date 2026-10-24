@@ -53,3 +53,4 @@ from astrbot.core.platform import (
 from astrbot.core.platform.register import register_platform_adapter
 
 from .message_components import *
+from .knowledge_base import *

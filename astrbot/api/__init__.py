@@ -8,6 +8,17 @@ from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.star.register import register_agent as agent
 from astrbot.core.star.register import register_llm_tool as llm_tool
 
+from .knowledge_base import (
+    BaseKnowledgeBaseBackend,
+    KnowledgeBaseBackendError,
+    KnowledgeBaseError,
+    KnowledgeBaseHit,
+    KnowledgeBaseInfo,
+    KnowledgeBaseQuery,
+    KnowledgeBaseRef,
+    KnowledgeBaseResponse,
+)
+
 _fallback_logger = logging.getLogger("astrbot")
 _logger_cache: dict[
     str,
@@ -73,7 +84,15 @@ tuned independently; non-plugin callers fall back to the global logger."""
 __all__ = [
     "AstrBotConfig",
     "BaseFunctionToolExecutor",
+    "BaseKnowledgeBaseBackend",
     "FunctionTool",
+    "KnowledgeBaseBackendError",
+    "KnowledgeBaseError",
+    "KnowledgeBaseHit",
+    "KnowledgeBaseInfo",
+    "KnowledgeBaseQuery",
+    "KnowledgeBaseRef",
+    "KnowledgeBaseResponse",
     "ToolSet",
     "agent",
     "html_renderer",
