@@ -367,31 +367,85 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         return str(ret_id) if ret_id is not None else None
 
     @staticmethod
-    def _split_message_chain_by_media(message: MessageChain) -> list[MessageChain]:
+    def _split_message_chain_by_media(
+        message: MessageChain,
+        *,
+        separate_mentions: bool = False,
+    ) -> list[MessageChain]:
+        media_types = Image | Record | Video | File
+
+        def is_media(component) -> bool:
+            return isinstance(component, media_types)
+
+        def is_user_mention(component) -> bool:
+            if not isinstance(component, At):
+                return False
+            mention_id = str(component.qq) if component.qq else ""
+            # At(qq="all") and empty mentions are dropped by the serializer.
+            return bool(mention_id) and mention_id != "all"
+
         chunks: list[MessageChain] = []
         current_chain = []
         current_has_media = False
+        current_has_mention = False
+
+        def flush_chunk() -> None:
+            nonlocal current_chain, current_has_media, current_has_mention
+            if current_chain:
+                chunks.append(message.derive(current_chain))
+            current_chain = []
+            current_has_media = False
+            current_has_mention = False
 
         for component in message.chain:
-            is_media = isinstance(component, Image | Record | Video | File)
-            if is_media and current_has_media:
-                chunks.append(message.derive(current_chain))
-                current_chain = []
-                current_has_media = False
+            component_is_media = is_media(component)
+            component_is_mention = is_user_mention(component)
+            # A request only carries one media payload slot.
+            if component_is_media and current_has_media:
+                flush_chunk()
+            # Media messages (msg_type=7) do not parse <qqbot-at-user>, so a
+            # serialized user mention and media must not share one message.
+            if separate_mentions and (
+                (component_is_media and current_has_mention)
+                or (component_is_mention and current_has_media)
+            ):
+                flush_chunk()
 
             current_chain.append(component)
-            current_has_media = current_has_media or is_media
+            current_has_media = current_has_media or component_is_media
+            current_has_mention = current_has_mention or component_is_mention
 
-        if current_chain or not message.chain:
-            chunks.append(message.derive(current_chain))
+        flush_chunk()
+        if not chunks:
+            chunks.append(message.derive([]))
 
+        # The quote reference is read from the chunk being sent, so carry it
+        # into every split chunk to keep the reply attached to all of them.
+        quote = next(
+            (component for component in message.chain if isinstance(component, Reply)),
+            None,
+        )
+        if quote is not None:
+            for chunk in chunks:
+                if not any(isinstance(c, Reply) for c in chunk.chain):
+                    chunk.chain.insert(0, quote)
         return chunks
 
     async def _post_send(self, stream: dict | None = None):
         if not self.send_buffer:
             return None
 
-        message_chains = self._split_message_chain_by_media(self.send_buffer)
+        # Guild channels and guild DMs send text and media in one request, so
+        # the mention must stay in the same message there.
+        source = self.message_obj.raw_message
+        separate_mentions = isinstance(
+            source,
+            botpy.message.GroupMessage | botpy.message.C2CMessage,
+        )
+        message_chains = self._split_message_chain_by_media(
+            self.send_buffer,
+            separate_mentions=separate_mentions,
+        )
         stream_for_chain = stream if len(message_chains) == 1 else None
 
         ret = None
