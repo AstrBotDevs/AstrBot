@@ -42,6 +42,11 @@ from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 from ..headers import build_conversation_headers
 from ..register import register_provider_adapter
+from .minimax_models import (
+    MINIMAX_TEXT_MODELS,
+    filter_minimax_gateway_models,
+    is_minimax_api,
+)
 from .request_retry import retry_provider_request
 
 
@@ -394,7 +399,12 @@ class ProviderOpenAIOfficial(Provider):
             self.client.chat.completions.create,
         ).parameters.keys()
 
-        model = provider_config.get("model", "unknown")
+        default_model = (
+            MINIMAX_TEXT_MODELS[0]
+            if is_minimax_api(str(self.client.base_url))
+            else "unknown"
+        )
+        model = provider_config.get("model", default_model)
         self.set_model(model)
 
         self.reasoning_key = "reasoning_content"
@@ -436,6 +446,9 @@ class ProviderOpenAIOfficial(Provider):
         extra_body["reasoning_effort"] = "none"
 
     async def get_models(self):
+        if is_minimax_api(str(self.client.base_url)):
+            # Discovery choices do not constrain saved or manually entered IDs.
+            return list(MINIMAX_TEXT_MODELS)
         try:
             models_str = []
             models = await retry_provider_request(
@@ -445,7 +458,7 @@ class ProviderOpenAIOfficial(Provider):
             models = sorted(models.data, key=lambda x: x.id)
             for model in models:
                 models_str.append(model.id)
-            return models_str
+            return filter_minimax_gateway_models(str(self.client.base_url), models_str)
         except NotFoundError as e:
             raise Exception(f"获取模型列表失败：{e}")
 
