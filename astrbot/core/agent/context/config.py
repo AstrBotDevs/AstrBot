@@ -29,9 +29,9 @@ class ContextConfig:
     """Percent of current context tokens to keep as exact recent context during LLM-based compression."""
     llm_compress_provider: "Provider | None" = None
     """LLM provider used for compression tasks. If None, truncation strategy is used."""
-    compression_threshold: float = 0.82
-    """Share of max_context_tokens above which the context is compressed. Clamped to 0.1-0.95."""
     custom_token_counter: TokenCounter | None = None
     """Custom token counting method. If None, the default method is used."""
     custom_compressor: ContextCompressor | None = None
     """Custom context compression method. If None, the default method is used."""
+    compression_threshold: float = 0.82
+    """Share of max_context_tokens above which the context is compressed. Clamped to 0.1-0.95."""

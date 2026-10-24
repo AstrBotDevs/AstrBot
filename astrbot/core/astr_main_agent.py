@@ -220,8 +220,6 @@ class MainAgentBuildConfig:
     """Percent of current context tokens to keep as exact recent context during llm_compress strategy."""
     llm_compress_provider_id: str = ""
     """The provider ID for the LLM used in context compression."""
-    context_compression_threshold: float = 0.82
-    """Share of the model context window that triggers compression or truncation."""
     max_context_length: int = 50
     """The maximum number of turns to keep in context. -1 means no limit.
     This enforce max turns before compression"""
@@ -245,6 +243,8 @@ class MainAgentBuildConfig:
     timezone: str | None = None
     max_quoted_fallback_images: int = 20
     """Maximum number of images injected from quoted-message fallback extraction."""
+    context_compression_threshold: float = 0.82
+    """Share of the model context window that triggers compression or truncation."""
 
 
 @dataclass(slots=True)
