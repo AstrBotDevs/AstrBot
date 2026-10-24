@@ -273,7 +273,8 @@
                         "Brave",
                         "Firecrawl",
                         "Exa",
-                        "AnySearch"
+                        "AnySearch",
+                        "Serply"
                     ],
                     "subtitles": [
                         "Веб-поиск, изображения, научные публикации и финансы Google",
@@ -284,7 +285,8 @@
                         "",
                         "",
                         "",
-                        ""
+                        "",
+                        "Поиск Google по вебу, новостям и научным публикациям"
                     ]
                 },
                 "websearch_tavily_key": {
@@ -325,6 +327,10 @@
                 "websearch_deepseek_key": {
                     "description": "API-ключ DeepSeek",
                     "hint": "Введите API-ключ DeepSeek. Можно использовать тот же ключ, что и для чат-модели (не подставляется автоматически). Поддерживается ротация нескольких ключей. Получить ключ: [https://platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys)"
+                },
+                "websearch_serply_key": {
+                    "description": "API-ключ Serply",
+                    "hint": "Можно добавить несколько ключей для ротации. Получить ключ: https://serply.io"
                 }
             }
         },
