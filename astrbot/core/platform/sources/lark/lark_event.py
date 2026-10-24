@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import uuid
+from pathlib import Path
 
 import lark_oapi as lark
 from lark_oapi.api.cardkit.v1 import (
@@ -35,7 +36,9 @@ from astrbot.core.utils.media_utils import (
     MediaResolver,
     convert_audio_to_opus,
     convert_video_format,
+    file_uri_to_path,
     get_media_duration,
+    is_file_uri,
 )
 from astrbot.core.utils.metrics import Metric
 
@@ -305,6 +308,7 @@ class LarkMessageEvent(AstrMessageEvent):
         path: str,
         file_type: str,
         duration: int | None = None,
+        file_name: str | None = None,
     ) -> str | None:
         """上传文件到飞书的通用辅助函数
 
@@ -313,6 +317,7 @@ class LarkMessageEvent(AstrMessageEvent):
             path: 文件路径
             file_type: 文件类型（stream/opus/mp4等）
             duration: 媒体时长（毫秒），可选
+            file_name: Display filename. Defaults to the local path's basename.
 
         Returns:
             成功返回file_key，失败返回None
@@ -330,7 +335,7 @@ class LarkMessageEvent(AstrMessageEvent):
                 body_builder = (
                     CreateFileRequestBody.builder()
                     .file_type(file_type)
-                    .file_name(os.path.basename(path))
+                    .file_name(file_name or os.path.basename(path))
                     .file(file_obj)
                 )
                 if duration is not None:
@@ -783,10 +788,34 @@ class LarkMessageEvent(AstrMessageEvent):
         Raises:
             RuntimeError: A proactive message cannot be delivered.
         """
-        file_path = file_comp.file or ""
-        file_key = await LarkMessageEvent._upload_lark_file(
-            lark_client, path=file_path, file_type="stream"
-        )
+        try:
+            source = file_comp.file_ or ""
+            if not source.lower().startswith(("http://", "https://")):
+                if is_file_uri(source):
+                    source = file_uri_to_path(source)
+                local_path = Path(source)
+                # Keep local paths out of the resolver's bare-base64 fallback.
+                source = local_path.absolute().as_uri()
+                if (not file_comp.file_ or not local_path.exists()) and file_comp.url:
+                    if not file_comp.url.lower().startswith(("http://", "https://")):
+                        raise ValueError("Lark file URLs must use HTTP or HTTPS.")
+                    source = file_comp.url
+            if source.lower().startswith(("http://", "https://")):
+                # MediaResolver expects lowercase HTTP(S) schemes.
+                scheme, separator, remainder = source.partition(":")
+                source = scheme.lower() + separator + remainder
+            async with MediaResolver(source).as_path() as resolved:
+                file_key = await LarkMessageEvent._upload_lark_file(
+                    lark_client,
+                    path=str(resolved.path),
+                    file_type="stream",
+                    file_name=file_comp.name,
+                )
+        except Exception as exc:
+            logger.error("[Lark] Failed to download attachment: %s", exc)
+            if not reply_message_id:
+                raise RuntimeError("[Lark] Attachment download failed") from exc
+            return
         if not file_key:
             if not reply_message_id:
                 raise RuntimeError("[Lark] Attachment upload failed")
