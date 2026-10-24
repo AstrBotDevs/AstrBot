@@ -92,6 +92,7 @@ def register_command(
                 alias,
                 None,
                 parent_command_names=parent_command_names,
+                parent_group=command_name.parent_group,
             )
             command_name.parent_group.add_sub_command_filter(new_command)
         else:

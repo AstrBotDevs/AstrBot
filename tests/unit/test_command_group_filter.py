@@ -35,6 +35,15 @@ def test_nested_group_matches_whole_words_only():
     assert not child.startswith("tool configure")
 
 
+def make_event(message: str) -> SimpleNamespace:
+    """Build a minimal event double, including the extras API the filters use."""
+    event = SimpleNamespace(is_at_or_wake_command=True, message_str=message)
+    event._extras = {}
+    event.get_extra = lambda key=None, default=None: event._extras.get(key, default)
+    event.set_extra = lambda key, value: event._extras.__setitem__(key, value)
+    return event
+
+
 @pytest.mark.parametrize(
     "message",
     ["tool config", "tool   config", "tool\tconfig", "tool\nconfig"],
@@ -42,7 +51,7 @@ def test_nested_group_matches_whole_words_only():
 def test_nested_group_without_subcommand_shows_help(message):
     parent = CommandGroupFilter("tool")
     group = CommandGroupFilter("config", parent_group=parent)
-    event = SimpleNamespace(is_at_or_wake_command=True, message_str=message)
+    event = make_event(message)
 
     with pytest.raises(ValueError, match="参数不足"):
         group.filter(event, {})
