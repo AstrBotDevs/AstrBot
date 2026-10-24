@@ -1,12 +1,17 @@
 import asyncio
+import os
 import re
 import sys
+import tempfile
+from pathlib import Path
 from typing import Any, cast
 
 import aiohttp
 import discord
 from discord.abc import GuildChannel, Messageable, PrivateChannel
 from discord.channel import DMChannel
+from PIL import Image as PillowImage
+from PIL import UnidentifiedImageError
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
@@ -24,10 +29,14 @@ from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import StarHandlerMetadata, star_handlers_registry
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import MediaResolver
 
 from .client import DiscordBotClient
 from .discord_platform_event import DiscordPlatformEvent
+
+_DISCORD_IMAGE_TOTAL_TIMEOUT = 15
+_DISCORD_IMAGE_MAX_BYTES = 64 * 1024 * 1024
 
 if sys.version_info >= (3, 12):
     from typing import override
@@ -294,6 +303,106 @@ class DiscordPlatformAdapter(Platform):
         # 由于 on_interaction 已被禁用，我们只处理普通消息
         abm = self._convert_message_to_abm(data)
         message = data["message"]
+
+        # The Discord API client's proxy is not inherited by MediaResolver.
+        # Cache image attachments on disk using the configured platform proxy.
+        proxy = self.config.get("discord_proxy") if message.attachments else None
+        if proxy:
+            images = (comp for comp in abm.message if isinstance(comp, Image))
+            pairs = []
+            mappings = getattr(self, "settings", {}).get("path_mapping", [])
+            for attachment in message.attachments:
+                if not (attachment.content_type or "").startswith("image/"):
+                    continue
+                component = next(images)
+                # Keep the original reference available for the preprocess stage
+                # when a platform path mapping applies; mapping takes precedence.
+                if any(
+                    attachment.url.startswith(mapping.partition(":")[0].rstrip("/\\"))
+                    for mapping in mappings
+                    if ":" in mapping
+                ):
+                    component.url = attachment.url
+                    continue
+                pairs.append((attachment, component))
+            if pairs:
+                temp_dir = Path(get_astrbot_temp_path())
+                temp_dir.mkdir(parents=True, exist_ok=True)
+                semaphore = asyncio.Semaphore(3)
+
+                async def fetch_image(attachment, component):
+                    async with semaphore:
+                        path = None
+                        try:
+                            if (
+                                attachment.size is not None
+                                and attachment.size > _DISCORD_IMAGE_MAX_BYTES
+                            ):
+                                raise ValueError("attachment exceeds image size limit")
+                            async with session.get(attachment.url, proxy=proxy) as resp:
+                                resp.raise_for_status()
+                                if (
+                                    resp.content_length is not None
+                                    and resp.content_length > _DISCORD_IMAGE_MAX_BYTES
+                                ):
+                                    raise ValueError(
+                                        "response exceeds image size limit"
+                                    )
+                                fd, filename = tempfile.mkstemp(
+                                    prefix="discord_image_", suffix=".bin", dir=temp_dir
+                                )
+                                path = Path(filename)
+                                size = 0
+                                with os.fdopen(fd, "wb") as f:
+                                    async for chunk in resp.content.iter_chunked(
+                                        64 * 1024
+                                    ):
+                                        size += len(chunk)
+                                        if size > _DISCORD_IMAGE_MAX_BYTES:
+                                            raise ValueError(
+                                                "download exceeds image size limit"
+                                            )
+                                        f.write(chunk)
+                            # HTTP 200 is insufficient: proxies may return HTML/error pages.
+                            with PillowImage.open(path) as image:
+                                image.verify()
+                            local = Image.fromFileSystem(path)
+                            component.file = local.file
+                            component.path = local.path
+                            path = None  # Preserve the file for downstream processing.
+                        except (
+                            aiohttp.ClientError,
+                            asyncio.TimeoutError,
+                            OSError,
+                            ValueError,
+                            UnidentifiedImageError,
+                            PillowImage.DecompressionBombError,
+                        ) as e:
+                            logger.warning(
+                                "[Discord] Unable to fetch image attachment %s "
+                                "through configured proxy (%s)",
+                                attachment.id,
+                                type(e).__name__,
+                            )
+                        finally:
+                            if path is not None:
+                                path.unlink(missing_ok=True)
+
+                async with aiohttp.ClientSession() as session:
+                    try:
+                        # One shared deadline prevents multiple slow attachments
+                        # from blocking message handling for N x timeout seconds.
+                        await asyncio.wait_for(
+                            asyncio.gather(
+                                *(fetch_image(att, image) for att, image in pairs)
+                            ),
+                            timeout=_DISCORD_IMAGE_TOTAL_TIMEOUT,
+                        )
+                    except asyncio.TimeoutError:
+                        logger.warning(
+                            "[Discord] Timed out downloading image attachments through proxy"
+                        )
+
         reference = getattr(message, "reference", None)
         if reference and message.type == discord.MessageType.reply:
             quoted = reference.resolved
