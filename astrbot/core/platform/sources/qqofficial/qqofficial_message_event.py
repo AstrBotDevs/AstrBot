@@ -4,6 +4,7 @@ import copy
 import logging
 import os
 import random
+import re
 from pathlib import Path
 from typing import cast
 
@@ -366,6 +367,117 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         ret_id = getattr(ret, "id", None)
         return str(ret_id) if ret_id is not None else None
 
+    # QQ rejects text exceeding this limit with error code 40054007.
+    QQ_MAX_LENGTH = 4000
+
+    _SPLIT_PATTERNS = {
+        "paragraph": re.compile(r"\n\n"),
+        "line": re.compile(r"\n"),
+        "sentence": re.compile(r"[.!?。！？]"),
+        "word": re.compile(r"\s"),
+    }
+
+    @classmethod
+    def _split_message(
+        cls, text: str, *, first_chunk_limit: int | None = None
+    ) -> list[str]:
+        """Split text at paragraph, line, sentence, or word boundaries.
+
+        Args:
+            text: Text to split without dropping whitespace.
+            first_chunk_limit: Space left in an existing chunk, including zero.
+                Later chunks use the full QQ message limit.
+
+        Returns:
+            Ordered text chunks. The first may be empty when no space remains.
+        """
+        limit = cls.QQ_MAX_LENGTH if first_chunk_limit is None else first_chunk_limit
+        if len(text) <= limit:
+            return [text]
+
+        chunks = []
+        remaining = text
+        while remaining:
+            if len(remaining) <= limit:
+                chunks.append(remaining)
+                break
+
+            split_point = limit
+            segment = remaining[:limit]
+            for _, pattern in cls._SPLIT_PATTERNS.items():
+                if matches := list(pattern.finditer(segment)):
+                    split_point = matches[-1].end()
+                    break
+
+            chunks.append(remaining[:split_point])
+            remaining = remaining[split_point:]
+            limit = cls.QQ_MAX_LENGTH
+
+        return chunks
+
+    @classmethod
+    def _split_message_chain_by_length(
+        cls, message_chains: list[MessageChain]
+    ) -> list[MessageChain]:
+        """Split serialized text while keeping mentions intact and ordered.
+
+        Args:
+            message_chains: Media-separated chains to fit within the QQ limit.
+
+        Returns:
+            Chains retaining media in the first chunk and the original send flags.
+
+        Raises:
+            ValueError: A single mention exceeds the entire message limit.
+        """
+        result: list[MessageChain] = []
+        for chain in message_chains:
+            text_components = []
+            for component in chain.chain:
+                if isinstance(component, Plain):
+                    text_components.append((component, component.text))
+                elif isinstance(component, At):
+                    mention_id = str(component.qq) if component.qq else ""
+                    # Match the mention serialization in _parse_to_qqofficial.
+                    text = (
+                        f'<qqbot-at-user id="{mention_id}" />'
+                        if mention_id and mention_id != "all"
+                        else ""
+                    )
+                    if len(text) > cls.QQ_MAX_LENGTH:
+                        raise ValueError("QQ mention exceeds the message length limit")
+                    text_components.append((component, text))
+            if sum(len(text) for _, text in text_components) <= cls.QQ_MAX_LENGTH:
+                result.append(chain)
+                continue
+
+            # Media stays in the first chunk; text and mentions keep their order.
+            current = [c for c in chain.chain if not isinstance(c, Plain | At)]
+            current_length = 0
+            for component, text in text_components:
+                if isinstance(component, At):
+                    if current_length + len(text) > cls.QQ_MAX_LENGTH:
+                        result.append(chain.derive(current))
+                        current = []
+                        current_length = 0
+                    current.append(component)
+                    current_length += len(text)
+                    continue
+                parts = cls._split_message(
+                    text, first_chunk_limit=cls.QQ_MAX_LENGTH - current_length
+                )
+                for index, part in enumerate(parts):
+                    if index:
+                        result.append(chain.derive(current))
+                        current = []
+                        current_length = 0
+                    if part:
+                        current.append(Plain(part))
+                        current_length += len(part)
+            if current:
+                result.append(chain.derive(current))
+        return result
+
     @staticmethod
     def _split_message_chain_by_media(message: MessageChain) -> list[MessageChain]:
         chunks: list[MessageChain] = []
@@ -392,11 +504,15 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             return None
 
         message_chains = self._split_message_chain_by_media(self.send_buffer)
-        stream_for_chain = stream if len(message_chains) == 1 else None
+        message_chains = self._split_message_chain_by_length(message_chains)
 
         ret = None
-        for message_chain in message_chains:
-            ret = await self._post_send_one(message_chain, stream_for_chain)
+        # C2C 流式一次调用是同一消息的连续分片；buffer 被拆成多段时，
+        # 只有最后一段携带 stream 载荷（保证流会话 id 连续、最终 state=10 正常结束），
+        # 其余段降级为非流式发送。
+        for index, message_chain in enumerate(message_chains):
+            chain_stream = stream if index == len(message_chains) - 1 else None
+            ret = await self._post_send_one(message_chain, chain_stream)
 
         self.send_buffer = None
 
