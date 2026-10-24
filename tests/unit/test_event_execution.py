@@ -309,7 +309,11 @@ async def test_cron_uses_event_scope(frames, monkeypatch, failure_at):
         assert _log_context.get().platform_type == "cron"
         if failure_at == "build":
             raise RuntimeError("build failed")
-        return None if failure_at == "empty" else SimpleNamespace(agent_runner=runner)
+        return (
+            None
+            if failure_at == "empty"
+            else SimpleNamespace(agent_runner=runner, conversation_events=None)
+        )
 
     async def persist(*args, **kwargs):
         assert frames[-1]["trace"]["state"] == "running"

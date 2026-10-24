@@ -435,6 +435,17 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
         {"role": "assistant", "content": "old answer"},
     ]
     captured: dict = {}
+    writer = SimpleNamespace(consume=AsyncMock(), finish_turn=AsyncMock())
+    from astrbot.core.agent.response import AgentResponse
+
+    started = AgentResponse("turn.started", {}, "turn")
+
+    class EventRunner(_DoneRunner):
+        run_context = SimpleNamespace(messages=[])
+
+        async def step_until_done(self, _max_step):
+            yield started
+
 
     async def _fake_get_session_conv(**_kwargs):
         if stop_phase == "history":
@@ -445,7 +456,7 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
         captured.update(kwargs)
         if stop_phase == "build":
             stop_signal.set()
-        return SimpleNamespace(agent_runner=_DoneRunner())
+        return SimpleNamespace(agent_runner=EventRunner(), conversation_events=writer)
 
     monkeypatch.setattr(
         "astrbot.core.astr_main_agent._get_session_conv",
@@ -509,6 +520,15 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
     assert "_background_stop_signal" not in request.system_prompt
     assert persist.await_count == (0 if stop_phase == "build" else 1)
 
+    if stop_phase == "build":
+        writer.consume.assert_not_awaited()
+        writer.finish_turn.assert_not_awaited()
+        return
+    writer.consume.assert_awaited_once_with(started)
+    writer.finish_turn.assert_awaited_once_with("completed")
+    assert writer.runtime_context is EventRunner.run_context
+    assert captured["event"].conversation_events is None
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
@@ -544,7 +564,7 @@ async def test_background_wakeup_applies_max_agent_step(
         return SimpleNamespace(history="[]")
 
     async def _fake_build_main_agent(**_kwargs):
-        return SimpleNamespace(agent_runner=runner)
+        return SimpleNamespace(agent_runner=runner, conversation_events=None)
 
     monkeypatch.setattr(
         "astrbot.core.astr_main_agent._get_session_conv",
@@ -639,7 +659,9 @@ async def test_background_wakeup_warns_when_result_is_not_sent_to_user(
         return SimpleNamespace(history="[]")
 
     async def _fake_build_main_agent(**kwargs):
-        return SimpleNamespace(agent_runner=_Runner(kwargs["event"]))
+        return SimpleNamespace(
+            agent_runner=_Runner(kwargs["event"]), conversation_events=None
+        )
 
     monkeypatch.setattr(
         "astrbot.core.astr_main_agent._get_session_conv",

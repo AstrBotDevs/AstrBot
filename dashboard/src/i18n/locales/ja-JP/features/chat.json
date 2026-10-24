@@ -152,6 +152,12 @@
     "toolUsed": "ツールを使用"
   },
   "history": {
+    "edit": "メッセージを編集",
+    "context_pruned": "過去のコンテキストは削除されました。この位置から続行できません。",
+    "context_unavailable": "この位置のコンテキストは利用できません。",
+    "inactive_message": "このメッセージは置き換えられた会話に属しています。",
+    "run_active": "先に現在の生成を停止してください。",
+    "unsupported_message": "このメッセージでは操作できません。",
     "loadFailed": "メッセージを読み込めませんでした",
     "loadEarlierFailed": "以前のメッセージを読み込めませんでした",
     "loading": "以前のメッセージを読み込み中"

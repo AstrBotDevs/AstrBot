@@ -145,7 +145,7 @@ async def test_wakeup_uses_same_compression_settings_as_chat(
         ),
         patch(
             "astrbot.core.astr_main_agent.build_main_agent",
-            AsyncMock(return_value=SimpleNamespace(agent_runner=runner)),
+            AsyncMock(return_value=SimpleNamespace(agent_runner=runner, conversation_events=None)),
         ) as build,
         patch("astrbot.core.cron.manager.persist_agent_history", AsyncMock()),
         patch("astrbot.core.astr_agent_tool_exec.persist_agent_history", AsyncMock()),

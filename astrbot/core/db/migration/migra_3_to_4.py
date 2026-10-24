@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from astrbot.api import logger, sp
 from astrbot.core.config import AstrBotConfig
 from astrbot.core.config.default import DB_PATH
-from astrbot.core.db.po import ConversationV2, PlatformMessageHistory
+from astrbot.core.db.po import PlatformMessageHistory
 from astrbot.core.platform.astr_message_event import MessageSesion
 
 from .. import BaseDatabase
@@ -53,48 +53,46 @@ async def migration_conversation_table(
     )
     logger.info(f"迁移 {total_cnt} 条旧的会话数据到新的表中...")
 
-    async with db_helper.get_db() as dbsession:
-        dbsession: AsyncSession
-        async with dbsession.begin():
-            for idx, conversation in enumerate(conversations):
-                if total_cnt > 0 and (idx + 1) % max(1, total_cnt // 10) == 0:
-                    progress = int((idx + 1) / total_cnt * 100)
-                    if progress % 10 == 0:
-                        logger.info(f"进度: {progress}% ({idx + 1}/{total_cnt})")
-                try:
-                    conv = db_helper_v3.get_conversation_by_user_id(
-                        user_id=conversation.get("user_id", "unknown"),
-                        cid=conversation.get("cid", "unknown"),
-                    )
-                    if not conv:
-                        logger.info(
-                            f"未找到该条旧会话对应的具体数据: {conversation}, 跳过。",
-                        )
-                        continue
-                    if ":" not in conv.user_id:
-                        continue
-                    session = MessageSesion.from_str(session_str=conv.user_id)
-                    platform_id = get_platform_id(
-                        platform_id_map,
-                        session.platform_name,
-                    )
-                    session.platform_id = platform_id  # 更新平台名称为新的 ID
-                    conv_v2 = ConversationV2(
-                        user_id=str(session),
-                        content=json.loads(conv.history) if conv.history else [],
-                        platform_id=platform_id,
-                        title=conv.title,
-                        persona_id=conv.persona_id,
-                        conversation_id=conv.cid,
-                        created_at=datetime.datetime.fromtimestamp(conv.created_at),
-                        updated_at=datetime.datetime.fromtimestamp(conv.updated_at),
-                    )
-                    dbsession.add(conv_v2)
-                except Exception as e:
-                    logger.error(
-                        f"迁移旧会话 {conversation.get('cid', 'unknown')} 失败: {e}",
-                        exc_info=True,
-                    )
+    for idx, conversation in enumerate(conversations):
+        if total_cnt > 0 and (idx + 1) % max(1, total_cnt // 10) == 0:
+            progress = int((idx + 1) / total_cnt * 100)
+            if progress % 10 == 0:
+                logger.info(f"进度: {progress}% ({idx + 1}/{total_cnt})")
+        try:
+            conv = db_helper_v3.get_conversation_by_user_id(
+                user_id=conversation.get("user_id", "unknown"),
+                cid=conversation.get("cid", "unknown"),
+            )
+            if not conv:
+                logger.info(
+                    f"未找到该条旧会话对应的具体数据: {conversation}, 跳过。",
+                )
+                continue
+            if ":" not in conv.user_id:
+                continue
+            session = MessageSesion.from_str(session_str=conv.user_id)
+            platform_id = get_platform_id(
+                platform_id_map,
+                session.platform_name,
+            )
+            session.platform_id = platform_id  # 更新平台名称为新的 ID
+            if await db_helper.get_conversation_by_id(conv.cid):
+                continue
+            await db_helper.create_conversation(
+                user_id=str(session),
+                content=json.loads(conv.history) if conv.history else [],
+                platform_id=platform_id,
+                title=conv.title,
+                persona_id=conv.persona_id,
+                cid=conv.cid,
+                created_at=datetime.datetime.fromtimestamp(conv.created_at),
+                updated_at=datetime.datetime.fromtimestamp(conv.updated_at),
+            )
+        except Exception as e:
+            logger.error(
+                f"迁移旧会话 {conversation.get('cid', 'unknown')} 失败: {e}",
+                exc_info=True,
+            )
     logger.info(f"成功迁移 {total_cnt} 条旧的会话数据到新表。")
 
 

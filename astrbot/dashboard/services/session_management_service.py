@@ -9,7 +9,7 @@ from sqlmodel import col, select
 from astrbot.core import logger, sp
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
-from astrbot.core.db.po import ConversationV2, Preference
+from astrbot.core.db.po import ConversationV3, Preference
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.umo_alias import build_umo_alias_map, parse_umo, serialize_umo_alias
 
@@ -57,7 +57,7 @@ class SessionManagementService:
     async def list_known_umos(self) -> list[str]:
         async with self.db_helper.get_db() as session:
             session: AsyncSession
-            result = await session.execute(select(ConversationV2.user_id).distinct())
+            result = await session.execute(select(ConversationV3.umo).distinct())
             umos = {str(row[0]) for row in result.fetchall() if row[0]}
 
         aliases = await self.db_helper.get_umo_aliases()

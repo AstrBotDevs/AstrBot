@@ -1034,6 +1034,8 @@ class TestModelMappings:
             and issubclass(model, SQLModel)
             and "__table__" in vars(model)
         }
+        # The V2 mapping is retained only for migration and legacy backup imports.
+        assert models.pop("conversations") is ConversationV2
         assert MAIN_DB_MODELS.keys().isdisjoint(EXCLUDED_MAIN_DB_MODELS)
         assert models == MAIN_DB_MODELS | EXCLUDED_MAIN_DB_MODELS
         assert EXCLUDED_MAIN_DB_MODELS == {
@@ -1044,7 +1046,8 @@ class TestModelMappings:
         """测试主数据库模型映射包含预期的表"""
         expected_tables = [
             "platform_stats",
-            "conversations",
+            "conversations_v3",
+            "conversation_events",
             "personas",
             "preferences",
             "chatui_projects",

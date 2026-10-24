@@ -3,6 +3,11 @@ import traceback
 import typing as T
 
 from astrbot import logger
+from astrbot.core.agent.conversation_events import (
+    active_conversation_writer,
+    active_plugin_id,
+)
+from astrbot.core.agent.message import dump_messages_with_checkpoints
 from astrbot.core.message.message_event_result import CommandResult, MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.star import star_map
@@ -92,50 +97,40 @@ async def call_event_hook(
         hook_type,
         plugins_name=event.plugins_name,
     )
-    for handler in handlers:
-        plugin = star_map.get(handler.handler_module_path)
-        plugin_name = plugin.name if plugin else handler.handler_module_path
-        plugin_display_name = plugin.display_name if plugin else None
-        handler_category = (
-            "llm_tool" if hook_type == EventType.OnCallingFuncToolEvent else "hook"
-        )
-        event.trace.record(
-            "handler_start",
-            kind="plugin_handler",
-            status="running",
-            plugin=plugin_name,
-            plugin_display_name=plugin_display_name or plugin_name,
-            handler=handler.handler_name,
-            handler_full_name=handler.handler_full_name,
-            handler_type=handler.event_type.name,
-            handler_category=handler_category,
-            hook=hook_type.name,
-        )
-        try:
-            assert inspect.iscoroutinefunction(handler.handler)
-            logger.debug(
-                f"hook({hook_type.name}) -> {plugin_name} - {handler.handler_name}",
-            )
-            await handler.handler(event, *args, **kwargs)
-        except BaseException:
-            logger.error(traceback.format_exc())
-            event.trace.record(
-                "handler_end",
-                kind="plugin_handler",
-                status="error",
-                plugin=plugin_name,
-                plugin_display_name=plugin_display_name or plugin_name,
-                handler=handler.handler_name,
-                handler_full_name=handler.handler_full_name,
-                handler_type=handler.event_type.name,
-                handler_category=handler_category,
-                hook=hook_type.name,
+    # Snapshot once around the hook group: only mutations during plugin execution
+    # get plugin retention. Earlier framework/custom-runner mutations stay unknown.
+    writer = event.conversation_events
+    if handlers and writer is not None and not writer.closed:
+        if writer.runtime_context is not None:
+            history = dump_messages_with_checkpoints(
+                [
+                    m
+                    for i, m in enumerate(writer.runtime_context.messages)
+                    if not (i == 0 and m.role == "system")
+                ],
+                include_temporary=True,
             )
         else:
+            history = (
+                writer.request.contexts
+                if writer.request is not None
+                and writer.request.conversation is not None
+                else None
+            )
+        if history is not None:
+            writer.stage_history(history, origin="unknown")
+    try:
+        for handler in handlers:
+            plugin = star_map.get(handler.handler_module_path)
+            plugin_name = plugin.name if plugin else handler.handler_module_path
+            plugin_display_name = plugin.display_name if plugin else None
+            handler_category = (
+                "llm_tool" if hook_type == EventType.OnCallingFuncToolEvent else "hook"
+            )
             event.trace.record(
-                "handler_end",
+                "handler_start",
                 kind="plugin_handler",
-                status="success",
+                status="running",
                 plugin=plugin_name,
                 plugin_display_name=plugin_display_name or plugin_name,
                 handler=handler.handler_name,
@@ -144,11 +139,71 @@ async def call_event_hook(
                 handler_category=handler_category,
                 hook=hook_type.name,
             )
+            try:
+                assert inspect.iscoroutinefunction(handler.handler)
+                logger.debug(
+                    f"hook({hook_type.name}) -> {plugin_name} - {handler.handler_name}",
+                )
+                writer_token = active_conversation_writer.set(event.conversation_events)
+                plugin_token = active_plugin_id.set(plugin_name)
+                try:
+                    await handler.handler(event, *args, **kwargs)
+                finally:
+                    active_plugin_id.reset(plugin_token)
+                    active_conversation_writer.reset(writer_token)
+            except BaseException:
+                logger.error(traceback.format_exc())
+                event.trace.record(
+                    "handler_end",
+                    kind="plugin_handler",
+                    status="error",
+                    plugin=plugin_name,
+                    plugin_display_name=plugin_display_name or plugin_name,
+                    handler=handler.handler_name,
+                    handler_full_name=handler.handler_full_name,
+                    handler_type=handler.event_type.name,
+                    handler_category=handler_category,
+                    hook=hook_type.name,
+                )
+            else:
+                event.trace.record(
+                    "handler_end",
+                    kind="plugin_handler",
+                    status="success",
+                    plugin=plugin_name,
+                    plugin_display_name=plugin_display_name or plugin_name,
+                    handler=handler.handler_name,
+                    handler_full_name=handler.handler_full_name,
+                    handler_type=handler.event_type.name,
+                    handler_category=handler_category,
+                    hook=hook_type.name,
+                )
 
-        if event.is_stopped():
-            logger.info(
-                f"{plugin_name} - {handler.handler_name} stopped event propagation.",
-            )
-            return True
+            if event.is_stopped():
+                logger.info(
+                    f"{plugin_name} - {handler.handler_name} stopped event propagation.",
+                )
+                return True
 
-    return event.is_stopped()
+        return event.is_stopped()
+
+    finally:
+        if handlers and writer is not None and not writer.closed:
+            if writer.runtime_context is not None:
+                history = dump_messages_with_checkpoints(
+                    [
+                        m
+                        for i, m in enumerate(writer.runtime_context.messages)
+                        if not (i == 0 and m.role == "system")
+                    ],
+                    include_temporary=True,
+                )
+            else:
+                history = (
+                    writer.request.contexts
+                    if writer.request is not None
+                    and writer.request.conversation is not None
+                    else None
+                )
+            if history is not None:
+                writer.stage_history(history, origin="plugin")
