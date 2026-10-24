@@ -920,9 +920,13 @@
                 "description": "Задержка перезапуска опроса",
                 "hint": "Задержка перед автоматическим перезапуском после неожиданного завершения опроса, в секундах. По умолчанию 5 секунд."
             },
+            "telegram_proxy": {
+                "description": "Proxy URL для Telegram",
+                "hint": "Формат: http://ip:port или socks5://ip:port"
+            },
             "telegram_token": {
                 "description": "Токен бота",
-                "hint": "Если вы находитесь в материковом Китае, установите прокси или измените api_base в разделе «Другие настройки»."
+                "hint": "Введите сюда токен вашего Telegram-бота."
             },
             "mattermost_url": {
                 "description": "URL Mattermost",

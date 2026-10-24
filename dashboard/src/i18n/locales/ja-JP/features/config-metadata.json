@@ -916,9 +916,13 @@
         "description": "ポーリング再起動待機時間",
         "hint": "ポーリングが予期せず終了し、自動再起動を試行するまでの待機時間（秒）です。デフォルトは 5s です。"
       },
+      "telegram_proxy": {
+        "description": "Telegram プロキシアドレス",
+        "hint": "任意のプロキシアドレス: http://ip:port または socks5://ip:port"
+      },
       "telegram_token": {
         "description": "Bot Token",
-        "hint": "中国本土のネットワーク環境を使用している場合は、`その他の設定` でプロキシを設定するか、api_base を変更してください。"
+        "hint": "ここに Telegram Bot Token を入力してください。"
       },
       "mattermost_url": {
         "description": "Mattermost URL",

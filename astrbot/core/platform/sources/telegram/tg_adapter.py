@@ -1,16 +1,16 @@
 import asyncio
-import os
 import re
 import sys
 import uuid
 from contextlib import suppress
+from pathlib import Path
 from typing import cast
 
 from apscheduler.events import EVENT_JOB_ERROR
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from telegram import BotCommand, Update
+from telegram import BotCommand, File, Update
 from telegram.constants import ChatType
-from telegram.error import Forbidden, InvalidToken, NetworkError
+from telegram.error import Forbidden, InvalidToken, NetworkError, TelegramError
 from telegram.ext import ApplicationBuilder, ContextTypes, ExtBot, filters
 from telegram.ext import MessageHandler as TelegramMessageHandler
 
@@ -119,6 +119,9 @@ class TelegramPlatformAdapter(Platform):
         self._polling_restart_delay = delay
         self._polling_recovery_threshold = 3
         self._polling_failure_window = 60.0
+        # PTB's default 5-second read timeout also applies to file downloads,
+        # which can pause longer and still complete.
+        self._media_download_read_timeout = 30.0
         self._application_started = False
         self._forum_topic_names: dict[tuple[str, int | None], str] = {}
         self._build_application()
@@ -134,13 +137,21 @@ class TelegramPlatformAdapter(Platform):
         )  # max seconds - hard cap to prevent indefinite delay
 
     def _build_application(self) -> None:
-        self.application = (
+        builder = (
             ApplicationBuilder()
             .token(self.config["telegram_token"])
             .base_url(self.base_url)
             .base_file_url(self.file_base_url)
-            .build()
         )
+        proxy = self.config.get("telegram_proxy")
+        if proxy:
+            if "://" not in proxy:
+                # httpx rejects a proxy URL without a scheme; read host:port as an
+                # HTTP proxy, as curl and requests do.
+                proxy = f"http://{proxy}"
+            # getUpdates has its own request object, which .proxy() does not cover.
+            builder = builder.proxy(proxy).get_updates_proxy(proxy)
+        self.application = builder.build()
         message_handler = TelegramMessageHandler(
             filters=filters.ALL,
             callback=self.message_handler,
@@ -447,6 +458,60 @@ class TelegramPlatformAdapter(Platform):
         if abm:
             await self.handle_msg(abm)
 
+    async def _download_to_temp(self, file: File) -> str:
+        """Download a Telegram file into the temp directory.
+
+        Args:
+            file: File returned by get_file().
+
+        Returns:
+            Path of the downloaded file.
+        """
+        file_path = cast(str, file.file_path)
+        temp_path = Path(get_astrbot_temp_path()) / Path(file_path).name
+        if self.config.get("telegram_proxy"):
+            # download_file() only uses the global proxy settings, while
+            # download_to_drive() goes through telegram_proxy.
+            await file.download_to_drive(
+                temp_path, read_timeout=self._media_download_read_timeout
+            )
+        else:
+            await download_file(file_path, path=str(temp_path))
+        return str(temp_path)
+
+    async def _get_media_ref(self, file: File) -> str:
+        """Return the file reference for a media component.
+
+        With telegram_proxy set, the file is downloaded through that proxy, since
+        the media pipeline fetches URLs with the global proxy settings.
+
+        Args:
+            file: File returned by get_file().
+
+        Returns:
+            Path of the downloaded file, or the file URL when telegram_proxy is
+            empty or the download fails.
+        """
+        file_path = cast(str, file.file_path)
+        if not self.config.get("telegram_proxy"):
+            return file_path
+        # The pipeline reads this path later, so each download writes its own file
+        # and never rewrites one that is still being read.
+        temp_path = (
+            Path(get_astrbot_temp_path()) / f"{uuid.uuid4().hex}_{Path(file_path).name}"
+        )
+        try:
+            await file.download_to_drive(
+                temp_path, read_timeout=self._media_download_read_timeout
+            )
+        except (TelegramError, OSError) as e:
+            logger.warning(
+                f"Failed to download Telegram file {file.file_unique_id}, "
+                f"falling back to its URL: {e}"
+            )
+            return file_path
+        return str(temp_path)
+
     async def convert_message(
         self,
         update: Update,
@@ -689,10 +754,7 @@ class TelegramPlatformAdapter(Platform):
         elif update.message.voice:
             file = await update.message.voice.get_file()
 
-            file_basename = os.path.basename(cast(str, file.file_path))
-            temp_dir = get_astrbot_temp_path()
-            temp_path = os.path.join(temp_dir, file_basename)
-            await download_file(cast(str, file.file_path), path=temp_path)
+            temp_path = await self._download_to_temp(file)
             path_wav = await MediaResolver(
                 temp_path,
                 media_type="audio",
@@ -707,10 +769,7 @@ class TelegramPlatformAdapter(Platform):
             # Audio files use their own Bot API field and do not fall back to document.
             file = await update.message.audio.get_file()
 
-            file_basename = os.path.basename(cast(str, file.file_path))
-            temp_dir = get_astrbot_temp_path()
-            temp_path = os.path.join(temp_dir, file_basename)
-            await download_file(cast(str, file.file_path), path=temp_path)
+            temp_path = await self._download_to_temp(file)
             path_wav = await MediaResolver(
                 temp_path,
                 media_type="audio",
@@ -725,7 +784,8 @@ class TelegramPlatformAdapter(Platform):
         elif update.message.photo:
             photo = update.message.photo[-1]  # get the largest photo
             file = await photo.get_file()
-            message.message.append(Comp.Image(file=file.file_path, url=file.file_path))
+            media_ref = await self._get_media_ref(file)
+            message.message.append(Comp.Image(file=media_ref, url=media_ref))
             _apply_caption()
 
         elif update.message.sticker:
@@ -737,9 +797,8 @@ class TelegramPlatformAdapter(Platform):
             else:
                 file = await sticker.get_file()
             if file:
-                message.message.append(
-                    Comp.Image(file=file.file_path, url=file.file_path)
-                )
+                media_ref = await self._get_media_ref(file)
+                message.message.append(Comp.Image(file=media_ref, url=media_ref))
             if sticker.emoji:
                 sticker_text = f"Sticker: {sticker.emoji}"
                 message.message_str = sticker_text
@@ -754,8 +813,9 @@ class TelegramPlatformAdapter(Platform):
                     f"Telegram document file_path is None, cannot save the file {file_name}.",
                 )
             else:
+                media_ref = await self._get_media_ref(file)
                 message.message.append(
-                    Comp.File(file=file_path, name=file_name, url=file_path)
+                    Comp.File(file=media_ref, name=file_name, url=media_ref)
                 )
                 _apply_caption()
 
@@ -768,7 +828,8 @@ class TelegramPlatformAdapter(Platform):
                     f"Telegram video file_path is None, cannot save the file {file_name}.",
                 )
             else:
-                message.message.append(Comp.Video(file=file_path, path=file.file_path))
+                media_ref = await self._get_media_ref(file)
+                message.message.append(Comp.Video(file=media_ref, path=media_ref))
                 _apply_caption()
 
         elif update.message.video_note:
@@ -780,7 +841,8 @@ class TelegramPlatformAdapter(Platform):
                     "Telegram video note file_path is None, cannot save the file.",
                 )
             else:
-                message.message.append(Comp.Video(file=file_path, path=file_path))
+                media_ref = await self._get_media_ref(file)
+                message.message.append(Comp.Video(file=media_ref, path=media_ref))
 
         return message
 
