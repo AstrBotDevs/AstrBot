@@ -267,9 +267,17 @@ const currentSession = ref<Session | null>(null);
 const draft = ref("");
 const initializing = ref(false);
 const settingsOpen = ref(false);
-const sendShortcut = ref<"enter" | "shift_enter">("enter");
-const enableStreaming = ref(true);
-const enableReasoning = ref(true);
+const sendShortcut = ref<"enter" | "shift_enter">(
+  localStorage.getItem("chat.sendShortcut") === "shift_enter"
+    ? "shift_enter"
+    : "enter",
+);
+const enableStreaming = ref(
+  localStorage.getItem("chat.enableStreaming") !== "false",
+);
+const enableReasoning = ref(
+  localStorage.getItem("chat.enableReasoning") !== "false",
+);
 const shouldStickToBottom = ref(true);
 const messagesContainer = ref<HTMLElement | null>(null);
 const inputRef = ref<InstanceType<typeof ChatInput> | null>(null);
@@ -319,6 +327,18 @@ const transportMode = ref<TransportMode>(
     ? "websocket"
     : "sse",
 );
+
+watch(enableStreaming, (enabled) => {
+  localStorage.setItem("chat.enableStreaming", String(enabled));
+});
+
+watch(enableReasoning, (enabled) => {
+  localStorage.setItem("chat.enableReasoning", String(enabled));
+});
+
+watch(sendShortcut, (shortcut) => {
+  localStorage.setItem("chat.sendShortcut", shortcut);
+});
 
 watch(transportMode, (mode) => {
   localStorage.setItem("chat.transportMode", mode);
