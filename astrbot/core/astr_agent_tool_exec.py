@@ -370,12 +370,14 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             if not isinstance(component, Record):
                 continue
             try:
-                path = await component.convert_to_file_path()
-                if path:
-                    audio_candidates.append(path)
+                # ProviderRequest resolves audio and cleans its temporary files.
+                # Keep source references here so explicit URLs deduplicate too.
+                source = await component._resolve_file_source()
+                if source:
+                    audio_candidates.append(source)
             except Exception:
                 logger.warning(
-                    "Failed to prepare handoff audio component at index %d.",
+                    "Failed to resolve handoff audio component at index %d.",
                     idx,
                     exc_info=True,
                 )
