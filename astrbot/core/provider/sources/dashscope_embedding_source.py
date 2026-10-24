@@ -6,6 +6,11 @@ from dashscope import MultiModalEmbedding, TextEmbedding
 
 from astrbot import logger
 
+from ..embedding_batch_limits import (
+    DASHSCOPE_DEFAULT_MAX_ITEMS,
+    combine_caps,
+    dashscope_max_batch_items,
+)
 from ..entities import ProviderType
 from ..provider import EmbeddingProvider
 from ..register import register_provider_adapter
@@ -140,3 +145,16 @@ class DashScopeEmbeddingProvider(EmbeddingProvider):
                     f"'{self.provider_config['embedding_dimensions']}', ignored."
                 )
         return 0
+
+    def get_max_batch_size(self) -> int | None:
+        """DashScope rejects a request carrying more inputs than the model allows.
+
+        The limit is per model generation (see ``embedding_batch_limits``);
+        everything this adapter serves is a DashScope embedding model, so an
+        unrecognised name falls back to the conservative default rather than to
+        "unknown". A user-declared limit can only lower the result.
+        """
+        return combine_caps(
+            dashscope_max_batch_items(self.model) or DASHSCOPE_DEFAULT_MAX_ITEMS,
+            super().get_max_batch_size(),
+        )
