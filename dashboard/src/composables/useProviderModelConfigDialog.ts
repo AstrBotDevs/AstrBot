@@ -34,12 +34,7 @@ export function useProviderModelConfigDialog(options: UseProviderModelConfigDial
     }
 
     const schema = JSON.parse(JSON.stringify(configSchema.value))
-    const sourceType = selectedProviderSource.value?.type
     const hiddenKeys = ['id', 'model']
-
-    if (sourceType === 'googlegenai_chat_completion') {
-      hiddenKeys.push('custom_extra_body')
-    }
 
     for (const key of hiddenKeys) {
       if (schema.provider.items[key]) {

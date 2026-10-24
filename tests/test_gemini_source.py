@@ -1,8 +1,11 @@
+import json
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
 from google.genai import types
+from google.genai.errors import APIError
 
 import astrbot.core.message.components as Comp
 import astrbot.core.provider.sources.gemini_source as gemini_source
@@ -49,6 +52,289 @@ async def test_gemini_37_minimal_thinking_level_falls_back_to_medium():
     assert config.thinking_config.model_dump(exclude_none=True) == {
         "thinking_level": types.ThinkingLevel.MEDIUM,
     }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("naming", ["openai", "snake", "camel", "default", "zero"])
+async def test_gemini_generation_parameters_reach_sdk(streaming, naming):
+    parameters = {
+        "temperature": 1.0,
+        "max_output_tokens": 2048,
+        "top_p": 0.9,
+        "top_k": 40,
+        "seed": 7,
+        "frequency_penalty": 0.5,
+        "presence_penalty": 0.5,
+        "stop_sequences": ["END"],
+        "logprobs": 3,
+        "response_logprobs": True,
+    }
+    extra_body = parameters.copy()
+    if naming == "openai":
+        extra_body["max_tokens"] = extra_body.pop("max_output_tokens")
+        extra_body["stop"] = extra_body.pop("stop_sequences")
+    elif naming == "camel":
+        extra_body = {
+            "temperature": 1.0,
+            "maxOutputTokens": 2048,
+            "topP": 0.9,
+            "topK": 40,
+            "seed": 7,
+            "frequencyPenalty": 0.5,
+            "presencePenalty": 0.5,
+            "stopSequences": ["END"],
+            "logprobs": 3,
+            "responseLogprobs": True,
+        }
+    elif naming == "default":
+        extra_body = {}
+        parameters = dict.fromkeys(parameters)
+    elif naming == "zero":
+        extra_body.update(
+            temperature=0,
+            top_p=0,
+            top_k=0,
+            seed=0,
+            frequency_penalty=0,
+            presence_penalty=0,
+            response_logprobs=False,
+        )
+        parameters = extra_body.copy()
+
+    provider = _gemini_stream_provider()
+    provider.api_keys = ["test-key"]
+    provider.provider_config = {"custom_extra_body": extra_body}
+    original_body = extra_body.copy()
+    response = types.GenerateContentResponse(
+        candidates=[
+            types.Candidate(
+                content=types.Content(parts=[types.Part(text="ok")]),
+                finish_reason=types.FinishReason.STOP,
+            )
+        ]
+    )
+
+    async def stream():
+        yield response
+
+    sdk_request = AsyncMock(return_value=stream() if streaming else response)
+    if streaming:
+        provider.client.models.generate_content_stream = sdk_request
+        results = [
+            result
+            async for result in provider.text_chat_stream(
+                prompt="hello", system_prompt="system", model="gemini-2.5-flash"
+            )
+        ]
+        result = results[-1]
+    else:
+        provider.client.models.generate_content = sdk_request
+        result = await provider.text_chat(
+            prompt="hello", system_prompt="system", model="gemini-2.5-flash"
+        )
+
+    assert result.completion_text == "ok"
+    sdk_request.assert_awaited_once()
+    request = sdk_request.call_args.kwargs
+    config = request["config"]
+    for field, value in parameters.items():
+        assert getattr(config, field) == value
+    assert config.system_instruction == "system"
+    assert request["model"] == "gemini-2.5-flash"
+    assert request["contents"][0].parts[0].text == "hello"
+    assert extra_body == original_body
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_gemini_generation_parameters_match_http_api(streaming):
+    provider = _gemini_stream_provider()
+    provider.api_keys = ["test-key"]
+    provider.provider_config = {
+        "custom_extra_body": {
+            "temperature": 0,
+            "max_tokens": 2048,
+            "top_p": 0,
+            "top_k": 40,
+            "seed": 0,
+            "frequency_penalty": 0,
+            "presence_penalty": 0,
+            "stop": ["END"],
+            "response_logprobs": False,
+            "logprobs": 3,
+        }
+    }
+    requests = []
+
+    def handle_request(request):
+        requests.append(request)
+        response = {
+            "candidates": [
+                {
+                    "content": {"role": "model", "parts": [{"text": "ok"}]},
+                    "finishReason": "STOP",
+                }
+            ]
+        }
+        if streaming:
+            return httpx.Response(
+                200,
+                headers={"content-type": "text/event-stream"},
+                text=f"data: {json.dumps(response)}\n\n",
+            )
+        return httpx.Response(200, json=response)
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handle_request)
+    ) as http_client:
+        sdk = gemini_source.genai.Client(
+            api_key="test-key",
+            http_options=types.HttpOptions(httpx_async_client=http_client),
+        )
+        async with sdk.aio as provider.client:
+            if streaming:
+                results = [
+                    result
+                    async for result in provider.text_chat_stream(
+                        prompt="hello", model="gemini-2.0-flash"
+                    )
+                ]
+                result = results[-1]
+            else:
+                result = await provider.text_chat(
+                    prompt="hello", model="gemini-2.0-flash"
+                )
+
+    assert result.completion_text == "ok"
+    assert len(requests) == 1
+    body = json.loads(requests[0].content)
+    assert body["generationConfig"] == {
+        "temperature": 0,
+        "maxOutputTokens": 2048,
+        "topP": 0,
+        "topK": 40,
+        "seed": 0,
+        "frequencyPenalty": 0,
+        "presencePenalty": 0,
+        "stopSequences": ["END"],
+        "responseLogprobs": False,
+        "logprobs": 3,
+        "responseModalities": ["TEXT"],
+    }
+    method = "streamGenerateContent" if streaming else "generateContent"
+    assert requests[0].url.path.endswith(f"/models/gemini-2.0-flash:{method}")
+
+
+@pytest.mark.asyncio
+async def test_gemini_generation_alias_precedence_preserves_false_and_zero():
+    provider = _gemini_stream_provider()
+    provider.provider_config = {
+        "custom_extra_body": {
+            "top_p": 0,
+            "topP": 0.9,
+            "frequency_penalty": 0,
+            "frequencyPenalty": 1,
+            "presence_penalty": 0,
+            "presencePenalty": 1,
+            "response_logprobs": False,
+            "responseLogprobs": True,
+            "max_output_tokens": 100,
+            "max_tokens": 200,
+            "maxOutputTokens": 300,
+            "stop_sequences": [],
+            "stop": ["OPENAI"],
+            "stopSequences": ["GEMINI"],
+        }
+    }
+    config = await provider._prepare_query_config({})
+    assert config.top_p == 0
+    assert config.frequency_penalty == 0
+    assert config.presence_penalty == 0
+    assert config.response_logprobs is False
+    assert config.max_output_tokens == 100
+    assert config.stop_sequences == []
+
+    config = await provider._prepare_query_config({"max_tokens": 400})
+    assert config.max_output_tokens == 400
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "extra_body, error",
+    [
+        ([], "must be a JSON object"),
+        ({"temperature": "invalid"}, "temperature"),
+        ({"unknown": 1}, "unknown"),
+        ({"messages": []}, "messages"),
+        ({"model": "another-model"}, "model"),
+        ({"tools": []}, "tools"),
+        ({"tool_choice": "required"}, "tool_choice"),
+    ],
+)
+async def test_gemini_rejects_invalid_custom_parameters(extra_body, error):
+    provider = _gemini_stream_provider()
+    provider.provider_config = {"custom_extra_body": extra_body}
+    with pytest.raises(ValueError, match=error):
+        await provider._prepare_query_config({})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("temperature", [None, 0, 1.0, 2.0])
+@pytest.mark.parametrize("recovers", [False, True])
+async def test_gemini_recitation_retries_are_bounded(temperature, recovers):
+    provider = _gemini_stream_provider()
+    provider.api_keys = ["test-key"]
+    if temperature is not None:
+        provider.provider_config = {"custom_extra_body": {"temperature": temperature}}
+    recitation = types.GenerateContentResponse(
+        candidates=[types.Candidate(finish_reason=types.FinishReason.RECITATION)]
+    )
+    success = types.GenerateContentResponse(
+        candidates=[
+            types.Candidate(
+                content=types.Content(parts=[types.Part(text="ok")]),
+                finish_reason=types.FinishReason.STOP,
+            )
+        ]
+    )
+    sdk_request = AsyncMock(
+        side_effect=[recitation, recitation, success if recovers else recitation]
+    )
+    provider.client.models.generate_content = sdk_request
+    if recovers:
+        result = await provider.text_chat(prompt="hello")
+        assert result.completion_text == "ok"
+    else:
+        with pytest.raises(
+            Exception, match="recitation still occurred after 2 retries"
+        ):
+            await provider.text_chat(prompt="hello")
+    assert sdk_request.await_count == 3
+    assert all(
+        call.kwargs["config"].temperature == temperature
+        for call in sdk_request.call_args_list
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_gemini_unsupported_generation_parameter_error_is_preserved(streaming):
+    provider = _gemini_stream_provider()
+    provider.api_keys = ["test-key"]
+    provider.provider_config = {"custom_extra_body": {"top_k": 40}}
+    error = APIError(400, {"error": {"message": "top_k is not supported"}})
+    sdk_request = AsyncMock(side_effect=error)
+    provider.client.models.generate_content = sdk_request
+    provider.client.models.generate_content_stream = sdk_request
+    with pytest.raises(APIError, match="top_k is not supported") as exc:
+        if streaming:
+            async for _ in provider.text_chat_stream(prompt="hello"):
+                pass
+        else:
+            await provider.text_chat(prompt="hello")
+    assert exc.value is error
+    sdk_request.assert_awaited_once()
 
 
 @pytest.mark.asyncio
