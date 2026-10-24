@@ -811,6 +811,23 @@ class TestBuiltinToolInjection:
         )
 
     @pytest.mark.asyncio
+    async def test_yuanbao_injects_search_tool(self, mock_event, mock_context):
+        req = ProviderRequest()
+        mock_context.get_config.return_value = {
+            "provider_settings": {"web_search": True, "websearch_provider": "yuanbao"}
+        }
+        search_tool = MagicMock(spec=FunctionTool)
+        search_tool.name = "web_search_yuanbao"
+        tool_mgr = MagicMock()
+        tool_mgr.get_builtin_tool.return_value = search_tool
+        mock_context.get_llm_tool_manager.return_value = tool_mgr
+
+        await ama._apply_web_search_tools(mock_event, req, mock_context)
+
+        tool_mgr.get_builtin_tool.assert_called_once_with(ama.YuanbaoWebSearchTool)
+        assert req.func_tool.get_tool("web_search_yuanbao") is search_tool
+
+    @pytest.mark.asyncio
     async def test_apply_web_search_tools_uses_builtin_tool_manager(
         self, mock_event, mock_context
     ):
@@ -1643,7 +1660,9 @@ class TestEnsurePersonaAndSkills:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("role", ["admin", "member"])
-    @pytest.mark.parametrize("isolation_status", ["detected", "missing", "unavailable", "unsupported"])
+    @pytest.mark.parametrize(
+        "isolation_status", ["detected", "missing", "unavailable", "unsupported"]
+    )
     @pytest.mark.parametrize(
         ("allow_execution", "allow_network"),
         [(True, False), (True, True), (False, False)],
@@ -1724,9 +1743,17 @@ class TestEnsurePersonaAndSkills:
             assert "yield_time_ms" in shell_tool.parameters["properties"]
             assert result.provider_request.system_prompt.count(
                 module.LOCAL_NETWORK_POLICY_NOTICE
-            ) == int(allow_execution and not allow_network and isolation_status == "detected")
-            assert "The Agent Computer Use runtime is the local environment" not in result.provider_request.system_prompt
-            assert "These restrictions require Local process isolation" not in result.provider_request.system_prompt
+            ) == int(
+                allow_execution and not allow_network and isolation_status == "detected"
+            )
+            assert (
+                "The Agent Computer Use runtime is the local environment"
+                not in result.provider_request.system_prompt
+            )
+            assert (
+                "These restrictions require Local process isolation"
+                not in result.provider_request.system_prompt
+            )
         finally:
             if result.reset_coro:
                 result.reset_coro.close()

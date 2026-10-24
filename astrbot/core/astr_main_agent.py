@@ -111,6 +111,7 @@ from astrbot.core.tools.web_search_tools import (
     SerpApiWebSearchTool,
     TavilyExtractWebPageTool,
     TavilyWebSearchTool,
+    YuanbaoWebSearchTool,
     normalize_legacy_web_search_config,
 )
 from astrbot.core.utils.astrbot_path import (
@@ -173,6 +174,7 @@ WEB_SEARCH_CITATION_TOOL_NAMES = frozenset(
         "image_search_serpapi",
         "finance_search_serpapi",
         "scholar_search_serpapi",
+        "web_search_yuanbao",
     }
 )
 WEB_SEARCH_CITATION_PROMPT = (
@@ -1310,6 +1312,8 @@ async def _apply_web_search_tools(
     elif provider == "deepseek":
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(DeepSeekWebSearchTool))
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(DeepSeekFetchWebPageTool))
+    elif provider == "yuanbao":
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(YuanbaoWebSearchTool))
     elif provider == "serpapi":
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(SerpApiWebSearchTool))
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(SerpApiImageSearchTool))
