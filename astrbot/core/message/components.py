@@ -394,6 +394,8 @@ class Video(BaseMessageComponent):
             payload_file = url_or_path
         elif callback_host := astrbot_config.get("callback_api_base"):
             callback_host = str(callback_host).removesuffix("/")
+            if url_or_path.startswith(("base64://", "data:")):
+                url_or_path = await self.convert_to_file_path()
             token = await file_token_service.register_file(url_or_path)
             payload_file = f"{callback_host}/api/file/{token}"
             logger.debug(f"Generated video file callback link: {payload_file}")
