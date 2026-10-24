@@ -143,7 +143,13 @@ class ProviderDashscopeTTSAPI(TTSProvider):
     ) -> tuple[bytes | None, str]:
         synthesizer = SpeechSynthesizer(
             headers={
-                name.lower(): value for name, value in self.request_headers.items()
+                **{
+                    name.lower(): value
+                    for name, value in self.request_headers.items()
+                    if name.lower() != "authorization"
+                },
+                # Override the SDK's global-key header for this provider only.
+                "Authorization": f"Bearer {self.chosen_api_key}",
             },
             model=model,
             voice=self.voice,
