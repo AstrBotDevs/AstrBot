@@ -98,6 +98,14 @@ class SQLiteDatabase(BaseDatabase):
             await self._ensure_platform_message_history_checkpoint_column(conn)
             await self._ensure_chatui_project_workspace_columns(conn)
             await self._ensure_conversation_indexes(conn)
+            result = await conn.execute(text("PRAGMA table_info(conversations)"))
+            if "history_epoch" not in {row[1] for row in result.fetchall()}:
+                await conn.execute(
+                    text(
+                        "ALTER TABLE conversations ADD COLUMN "
+                        "history_epoch INTEGER NOT NULL DEFAULT 0"
+                    )
+                )
             # The table-level unique constraint already provides an index for UMO
             # lookups. Older schemas also created this redundant explicit index.
             await conn.execute(text("DROP INDEX IF EXISTS ix_umo_aliases_umo"))
@@ -628,14 +636,34 @@ class SQLiteDatabase(BaseDatabase):
                 return new_conversation
 
     async def update_conversation(
-        self, cid, title=None, persona_id=None, content=None, token_usage=None
+        self,
+        cid,
+        title=None,
+        persona_id=None,
+        content=None,
+        token_usage=None,
+        expected_history_epoch=None,
     ):
+        """Update a conversation with an atomic history-epoch check.
+
+        Args:
+            expected_history_epoch: Epoch captured with the request's history.
+                None leaves the update unconditional. Clearing content advances
+                the epoch in the same transaction, invalidating older requests.
+
+        Returns:
+            The updated conversation, or None if the update was stale or empty.
+        """
         async with self.get_db() as session:
             session: AsyncSession
             async with session.begin():
                 query = update(ConversationV2).where(
                     col(ConversationV2.conversation_id) == cid,
                 )
+                if expected_history_epoch is not None:
+                    query = query.where(
+                        col(ConversationV2.history_epoch) == expected_history_epoch
+                    )
                 values = {}
                 if title is not None:
                     values["title"] = title
@@ -643,12 +671,16 @@ class SQLiteDatabase(BaseDatabase):
                     values["persona_id"] = persona_id
                 if content is not None:
                     values["content"] = content
+                    if not content:
+                        values["history_epoch"] = col(ConversationV2.history_epoch) + 1
                 if token_usage is not None:
                     values["token_usage"] = token_usage
                 if not values:
                     return None
                 query = query.values(**values)
-                await session.execute(query)
+                result = await session.execute(query)
+                if result.rowcount == 0:
+                    return None
         return await self.get_conversation_by_id(cid)
 
     async def delete_conversation(self, cid) -> None:
