@@ -513,9 +513,122 @@ async def test_serpapi_tool_limits_first_page_results(serpapi_http, limit, expec
 
 
 @pytest.mark.asyncio
+async def test_serpapi_news_maps_articles_and_metadata(
+    serpapi_http, serpapi_context, monkeypatch
+):
+    cache = {}
+    monkeypatch.setitem(tools.sp.temporary_cache, "_ws_favicon", cache)
+    serpapi_http.client.search.return_value = {
+        "news_results": [
+            {
+                "title": "AstrBot adds a news search tool",
+                "link": "https://example.com/astrbot-news",
+                "snippet": "The project added Google News support.",
+                "source": {
+                    "name": "Example News",
+                    "icon": "https://example.com/favicon.ico",
+                    "authors": ["A. Reporter"],
+                },
+                "iso_date": "2026-10-24T08:00:00Z",
+                "thumbnail": "https://example.com/news.jpg",
+            },
+            {"title": "Group without a direct article", "stories": []},
+        ]
+    }
+
+    result = json.loads(
+        await tools.SerpApiNewsSearchTool().call(
+            serpapi_context,
+            query="AstrBot",
+            country="us",
+            search_lang="en",
+        )
+    )["results"]
+
+    assert serpapi_http.client.search.call_args.args[0] == {
+        "engine": "google_news",
+        "q": "AstrBot",
+        "gl": "us",
+        "hl": "en",
+    }
+    assert result == [
+        {
+            "title": "AstrBot adds a news search tool",
+            "url": "https://example.com/astrbot-news",
+            "snippet": "The project added Google News support.",
+            "source": "Example News",
+            "authors": ["A. Reporter"],
+            "published_at": "2026-10-24T08:00:00Z",
+            "thumbnail_url": "https://example.com/news.jpg",
+            "index": result[0]["index"],
+        }
+    ]
+    assert result[0]["index"].endswith(".1")
+    assert cache == {
+        "https://example.com/astrbot-news": "https://example.com/favicon.ico"
+    }
+
+
+@pytest.mark.asyncio
+async def test_serpapi_news_flattens_groups_deduplicates_and_limits(
+    serpapi_http, serpapi_context
+):
+    serpapi_http.client.search.return_value = {
+        "news_results": [
+            {
+                "highlight": {
+                    "title": "Highlighted article",
+                    "link": "https://example.com/highlight",
+                },
+                "stories": [
+                    {
+                        "title": "Duplicate article",
+                        "link": "https://example.com/highlight",
+                    },
+                    {
+                        "title": "Related article",
+                        "link": "https://example.com/related",
+                        "date": "Oct 24, 2026",
+                    },
+                ],
+            }
+        ]
+    }
+
+    result = json.loads(
+        await tools.SerpApiNewsSearchTool().call(
+            serpapi_context, query="AstrBot", max_results=2
+        )
+    )["results"]
+
+    assert [item["url"] for item in result] == [
+        "https://example.com/highlight",
+        "https://example.com/related",
+    ]
+    assert result[1]["published_at"] == "Oct 24, 2026"
+
+
+@pytest.mark.asyncio
+async def test_serpapi_news_validates_query_before_request(
+    serpapi_http, serpapi_context
+):
+    result = await tools.SerpApiNewsSearchTool().call(serpapi_context, query="  ")
+
+    assert result == "Error: query must not be empty."
+    serpapi_http.factory.assert_not_called()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("status", [401, 403, 429])
 @pytest.mark.parametrize(
-    "engine", ["google", "google_images_light", "google_finance", "google_scholar"]
+    "engine",
+    [
+        "google",
+        "google_news",
+        "google_images_light",
+        "google_finance",
+        "google_scholar",
+    ],
 )
 async def test_serpapi_rotates_and_retries_key_errors(serpapi_http, status, engine):
     serpapi_http.client.search.side_effect = [
@@ -653,6 +766,7 @@ async def test_serpapi_transport_errors_do_not_expose_credentials(
     "tool_class",
     [
         tools.SerpApiWebSearchTool,
+        tools.SerpApiNewsSearchTool,
         tools.SerpApiImageSearchTool,
         tools.SerpApiFinanceSearchTool,
         tools.SerpApiScholarSearchTool,
@@ -683,6 +797,7 @@ async def test_serpapi_requires_credentials_before_request(serpapi_http, tool_cl
     "tool_class",
     [
         tools.SerpApiWebSearchTool,
+        tools.SerpApiNewsSearchTool,
         tools.SerpApiImageSearchTool,
         tools.SerpApiFinanceSearchTool,
         tools.SerpApiScholarSearchTool,

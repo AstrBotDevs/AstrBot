@@ -188,7 +188,7 @@
             "AnySearch"
           ],
           "subtitles": [
-            "Google web, image, scholar, and finance search",
+            "Google web, news, image, scholar, and finance search",
             "Official DeepSeek search API",
             "",
             "",
@@ -232,7 +232,7 @@
         },
         "websearch_serpapi_key": {
           "description": "SerpApi API Key",
-          "hint": "Supports Google web, image, scholar, and finance search. Multiple keys can be added for rotation. Get a key: [https://serpapi.com/manage-api-key](https://serpapi.com/manage-api-key)"
+          "hint": "Supports Google web, news, image, scholar, and finance search. Multiple keys can be added for rotation. Get a key: [https://serpapi.com/manage-api-key](https://serpapi.com/manage-api-key)"
         },
         "websearch_deepseek_key": {
           "description": "DeepSeek API Key",
