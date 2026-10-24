@@ -8,6 +8,9 @@ class KeywordsStrategy(ContentSafetyStrategy):
         self.keywords = []
         if extra_keywords is None:
             extra_keywords = []
+        # A bare string is one keyword, not a sequence of characters to match.
+        if isinstance(extra_keywords, str):
+            extra_keywords = [extra_keywords] if extra_keywords else []
         self.keywords.extend(extra_keywords)
         # keywords_path = os.path.join(os.path.dirname(__file__), "unfit_words")
         # internal keywords
