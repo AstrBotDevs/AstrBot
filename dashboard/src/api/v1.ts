@@ -1240,6 +1240,12 @@ export const logApi = {
   history() {
     return typed<{ logs?: OpenConfig[] }>(openApiV1.getLogHistory());
   },
+  exportArchive(redact = true, startTime?: number, endTime?: number) {
+    return openApiV1.exportLogs({
+      query: { redact, start_time: startTime, end_time: endTime },
+      responseType: 'blob',
+    }) as Promise<AxiosResponse<Blob>>;
+  },
   liveUrl() {
     return '/api/v1/logs/live';
   },

@@ -349,9 +349,10 @@ export default {
 .config-standard-section__groups :deep(.config-hint),
 :deep(.config-product-groups .config-hint) {
   margin-top: 5px;
-  color: rgba(var(--v-theme-on-surface), 0.64) !important;
+  color: rgba(var(--v-theme-on-surface), 0.76) !important;
   font-size: 0.78rem;
   line-height: 1.45;
+  opacity: 1 !important;
   white-space: normal;
 }
 
@@ -389,10 +390,25 @@ export default {
 .config-standard-section__groups :deep(.property-hint),
 :deep(.config-product-groups .property-hint) {
   margin-top: 4px;
-  color: rgba(var(--v-theme-on-surface), 0.7) !important;
+  color: rgba(var(--v-theme-on-surface), 0.76) !important;
   font-size: 0.78rem;
   line-height: 1.45;
+  opacity: 1 !important;
   white-space: normal;
+}
+
+.config-standard-section__groups :deep(.config-hint *),
+:deep(.config-product-groups .config-hint *),
+.config-standard-section__groups :deep(.property-hint *),
+:deep(.config-product-groups .property-hint *) {
+  opacity: 1 !important;
+}
+
+.config-standard-section__groups :deep(.config-hint a),
+:deep(.config-product-groups .config-hint a),
+.config-standard-section__groups :deep(.property-hint a),
+:deep(.config-product-groups .property-hint a) {
+  color: rgb(var(--v-theme-primary)) !important;
 }
 
 .config-standard-section__groups :deep(.config-input),

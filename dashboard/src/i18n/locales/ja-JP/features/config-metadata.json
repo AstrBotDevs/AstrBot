@@ -182,10 +182,11 @@
       "provider_settings": {
         "default_image_caption_provider_id": {
           "description": "デフォルト画像説明モデル",
-          "hint": "空欄の場合は使用しません。非マルチモーダルモデルで利用できます。"
+          "hint": "対話モデルが画像入力に対応していない場合、画像説明モデルで画像の説明を取得します。空欄の場合は使用しません。"
         },
         "image_caption_prompt": {
-          "description": "画像説明用プロンプト"
+          "description": "画像説明用プロンプト",
+          "hint": "画像説明モデルに使用するプロンプトです。"
         }
       },
       "provider_stt_settings": {
@@ -195,7 +196,7 @@
         },
         "provider_id": {
           "description": "デフォルト音声認識モデル",
-          "hint": "ユーザーは /provider コマンドを使用して、セッションごとに STT モデルを選択することもできます。"
+          "hint": "/provider コマンドで会話ごとのモデルを選択することもできます。"
         }
       },
       "provider_tts_settings": {
@@ -204,10 +205,12 @@
           "hint": "TTS のマスタースイッチ"
         },
         "provider_id": {
-          "description": "デフォルト音声合成モデル"
+          "description": "デフォルト音声合成モデル",
+          "hint": "/provider コマンドで会話ごとのモデルを選択することもできます。"
         },
         "trigger_probability": {
-          "description": "TTS の実行確率"
+          "description": "TTS の実行確率",
+          "hint": "ランダムな確率で音声返信を行います。"
         }
       }
     },
@@ -567,22 +570,24 @@
       },
       "provider_settings": {
         "display_reasoning_text": {
-          "description": "思考内容を表示"
+          "description": "思考内容を表示",
+          "hint": "モデルの思考過程を最終返信に表示します。"
         },
         "identifier": {
           "description": "ユーザー識別",
-          "hint": "有効にすると、プロンプトの先頭にユーザー ID 情報を含めます。"
+          "hint": "ユーザープロンプトの前にユーザー ID を付加します。"
         },
         "group_name_display": {
           "description": "グループ名を表示",
-          "hint": "有効にすると、対応プラットフォーム（OneBot v11）でプロンプトの先頭にグループ名情報を含めます。"
+          "hint": "対応するメッセージプラットフォームのグループチャットで、ユーザープロンプトの前にグループ名を付加します。"
         },
         "datetime_system_prompt": {
           "description": "現実世界の時刻認識",
-          "hint": "有効にすると、システムプロンプトに現在時刻の情報を追加します。"
+          "hint": "ユーザープロンプトに現在時刻を付加します。"
         },
         "show_tool_use_status": {
-          "description": "関数呼び出し状態を出力"
+          "description": "関数呼び出し状態を出力",
+          "hint": "ツール呼び出し時に、呼び出したツール名を含むメッセージも送信します。"
         },
         "show_tool_call_result": {
           "description": "関数呼び出し結果を出力",
@@ -615,7 +620,8 @@
           }
         },
         "streaming_response": {
-          "description": "ストリーミング出力"
+          "description": "ストリーミング出力",
+          "hint": "対応するチャットプラットフォームで、タイプライター形式で応答を表示します。"
         },
         "unsupported_streaming_strategy": {
           "description": "ストリーミング返信に未対応のプラットフォーム",
@@ -1081,26 +1087,33 @@
           "hint": "有効にすると、会話の分離に対応するプラットフォームでは、グループメンバーごとに独立したコンテキストを使用します。コマンドの権限はコマンド管理で設定してください。"
         },
         "friend_message_needs_wake_prefix": {
-          "description": "ダイレクトメッセージでウェイクワードを必須にする"
+          "description": "ダイレクトメッセージでウェイクワードを必須にする",
+          "hint": "プライベートメッセージでも、ボットを起動するには起動接頭辞が必要です。"
         },
         "reply_prefix": {
-          "description": "返信テキストのプレフィックス"
+          "description": "返信テキストのプレフィックス",
+          "hint": "返信に付加するテキスト接頭辞です。"
         },
         "reply_with_mention": {
-          "description": "返信時に送信者をメンション"
+          "description": "返信時に送信者をメンション",
+          "hint": "返信時に送信者をメンションします。"
         },
         "reply_with_quote": {
-          "description": "返信時に送信者のメッセージを引用"
+          "description": "返信時に送信者のメッセージを引用",
+          "hint": "返信時に送信者の該当メッセージを引用します。"
         },
         "forward_threshold": {
-          "description": "転送メッセージの文字数しきい値"
+          "description": "転送メッセージの文字数しきい値",
+          "hint": "対応するプラットフォームでは、返信が長すぎる場合にメッセージをまとめて転送します。"
         },
         "empty_mention_waiting": {
-          "description": "ボットへのメンションのみで待機を開始"
+          "description": "ボットへのメンションのみで待機を開始",
+          "hint": "ボットへのメンションのみのメッセージを受信した際、次の 1 分間は起動状態を維持してユーザーの次のメッセージを待つかどうかを設定します。"
         }
       },
       "wake_prefix": {
-        "description": "ウェイクワード"
+        "description": "ウェイクワード",
+        "hint": "ボットを起動するメッセージ接頭辞の一覧です。ボットへのメンションでも起動できます。"
       },
       "disable_builtin_commands": {
         "description": "組み込みコマンドを無効化",
@@ -1255,7 +1268,8 @@
       "platform_settings": {
         "segmented_reply": {
           "enable": {
-            "description": "分割返信を有効化"
+            "description": "分割返信を有効化",
+            "hint": "返信メッセージを分割して送信します。"
           },
           "only_llm_result": {
             "description": "LLM の結果のみ分割"
@@ -1303,14 +1317,16 @@
       "description": "グループチャットのコンテキスト認識",
       "provider_ltm_settings": {
         "group_icl_enable": {
-          "description": "グループチャット履歴をコンテキストへ注入"
+          "description": "グループチャット履歴をコンテキストへ注入",
+          "hint": "ボットを起動しないグループメッセージを記録し、ボット起動時にモデルへ渡すかどうかを設定します。"
         },
         "group_message_max_cnt": {
-          "description": "コンテキストへ注入する最大メッセージ数"
+          "description": "コンテキストへ注入する最大メッセージ数",
+          "hint": "モデルに渡すメッセージの最大数です。"
         },
         "image_caption": {
           "description": "画像を自動解析",
-          "hint": "グループチャット用の画像説明モデルを設定する必要があります。"
+          "hint": "ボットを起動しない画像メッセージを画像説明テキストに変換します。画像の多いグループチャットでは大きなコストが発生する可能性があるため、慎重に使用してください。"
         },
         "image_caption_provider_id": {
           "description": "グループチャット用画像説明モデル",
@@ -1318,14 +1334,16 @@
         },
         "group_message_history_enable": {
           "description": "グループチャット履歴を永続化",
-          "hint": "有効にするとグループメッセージを保存し、現在のグループチャット履歴を検索するツールをモデルへ提供します。現在、メディアメッセージの保存には対応しておらず、[Image] などのプレースホルダーテキストとして保存されます。"
+          "hint": "グループ内のすべてのメッセージを永続保存し、モデルがツールを使って検索できるようにします。"
         },
         "group_message_history_max_cnt": {
-          "description": "永続化する最大メッセージ数"
+          "description": "永続化する最大メッセージ数",
+          "hint": "永続保存するメッセージの最大数です。上限を超えると古いメッセージを破棄します。"
         },
         "active_reply": {
           "enable": {
-            "description": "プロアクティブ返信"
+            "description": "プロアクティブ返信",
+            "hint": "適切なタイミングで自発的にメッセージを送信するかどうかを設定します。"
           },
           "method": {
             "description": "プロアクティブ返信の方式"
@@ -1344,7 +1362,8 @@
     "t2i": {
       "description": "長文の画像化",
       "t2i": {
-        "description": "長文を画像として出力"
+        "description": "長文を画像として出力",
+        "hint": "チャットを埋め尽くさないよう、モデルの返信を画像に変換してから送信します。"
       },
       "t2i_word_threshold": {
         "description": "画像化する文字数のしきい値"

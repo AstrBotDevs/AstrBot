@@ -2,6 +2,7 @@
 import { reactive, ref, watch } from "vue";
 import { Minus, PackagePlus, Plus } from "@lucide/vue";
 import ConsoleDisplayer from "@/components/shared/ConsoleDisplayer.vue";
+import LogExportButton from "@/components/shared/LogExportButton.vue";
 import { useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
 import { updatesApi } from "@/api/v1";
@@ -64,6 +65,7 @@ async function pipInstall() {
     >
       <template #header-actions>
         <div class="console-header-actions">
+          <LogExportButton />
           <div
             class="console-font-controls"
             role="group"
@@ -95,7 +97,7 @@ async function pipInstall() {
               <Plus :size="15" aria-hidden="true" />
             </v-btn>
           </div>
-          <v-dialog v-model="pipDialog" width="440">
+          <v-dialog v-model="pipDialog" width="440" attach="#console-wrapper">
             <template #activator="{ props }">
               <v-btn
                 v-bind="props"
