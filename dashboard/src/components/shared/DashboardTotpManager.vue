@@ -48,7 +48,6 @@
   />
   <DashboardTotpManageDialog
     v-model="manageDialogVisible"
-    :config-root="configRoot"
     @rotate="onStartRotate"
     @rotate-recovery="onStartRotateRecovery"
   />
