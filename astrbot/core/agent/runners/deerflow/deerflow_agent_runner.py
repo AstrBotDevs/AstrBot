@@ -125,6 +125,13 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
     async def _notify_agent_done_hook(self) -> None:
         if not self.final_llm_resp:
             return
+        if self.final_llm_resp.role == "assistant":
+            try:
+                await self.agent_hooks.on_llm_response(
+                    self.run_context, self.final_llm_resp
+                )
+            except Exception as e:
+                logger.error(f"Error in on_llm_response hook: {e}", exc_info=True)
         try:
             await self.agent_hooks.on_agent_done(self.run_context, self.final_llm_resp)
         except Exception as e:

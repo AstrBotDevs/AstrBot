@@ -12,7 +12,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from astrbot.core import logger
-from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import TextPart
 from astrbot.core.agent.tool import ToolSet
@@ -239,7 +238,6 @@ class MainAgentBuildConfig:
     provider_settings: dict = field(default_factory=dict)
     fallback_provider_ids: list[str] = field(default_factory=list)
     request_max_retries: int = 5
-    subagent_orchestrator: dict = field(default_factory=dict)
     timezone: str | None = None
     max_quoted_fallback_images: int = 20
     """Maximum number of images injected from quoted-message fallback extraction."""
@@ -668,68 +666,6 @@ async def _ensure_persona_and_skills(
         req.func_tool = persona_toolset
     else:
         req.func_tool.merge(persona_toolset)
-
-    # sub agents integration
-    orch_cfg = plugin_context.get_config().get("subagent_orchestrator", {})
-    so = plugin_context.subagent_orchestrator
-    if orch_cfg.get("main_enable", False) and so:
-        remove_dup = bool(orch_cfg.get("remove_main_duplicate_tools", False))
-
-        assigned_tools: set[str] = set()
-        agents = orch_cfg.get("agents", [])
-        if isinstance(agents, list):
-            for a in agents:
-                if not isinstance(a, dict):
-                    continue
-                if a.get("enabled", True) is False:
-                    continue
-                persona_tools = None
-                pid = a.get("persona_id")
-                if pid:
-                    persona = plugin_context.persona_manager.get_persona_v3_by_id(pid)
-                    if persona is not None:
-                        persona_tools = persona.get("tools")
-                tools = a.get("tools", [])
-                if persona_tools is not None:
-                    tools = persona_tools
-                if tools is None:
-                    assigned_tools.update(
-                        [
-                            tool.name
-                            for tool in tmgr.func_list
-                            if not isinstance(tool, HandoffTool)
-                        ]
-                    )
-                    continue
-                if not isinstance(tools, list):
-                    continue
-                for t in tools:
-                    name = str(t).strip()
-                    if name:
-                        assigned_tools.add(name)
-
-        if req.func_tool is None:
-            req.func_tool = ToolSet()
-
-        # add subagent handoff tools
-        for tool in so.handoffs:
-            req.func_tool.add_tool(tool)
-
-        # check duplicates
-        if remove_dup:
-            handoff_names = {tool.name for tool in so.handoffs}
-            for tool_name in assigned_tools:
-                if tool_name in handoff_names:
-                    continue
-                req.func_tool.remove_tool(tool_name)
-
-        router_prompt = (
-            plugin_context.get_config()
-            .get("subagent_orchestrator", {})
-            .get("router_system_prompt", "")
-        ).strip()
-        if router_prompt:
-            req.system_prompt += f"\n{router_prompt}\n"
 
 
 async def _request_img_caption(

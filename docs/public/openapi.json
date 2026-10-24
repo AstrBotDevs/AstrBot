@@ -135,9 +135,6 @@
     },
     {
       "name": "T2I"
-    },
-    {
-      "name": "Subagents"
     }
   ],
   "paths": {
@@ -6804,62 +6801,6 @@
             "$ref": "#/components/parameters/Name"
           }
         ],
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Ok"
-          }
-        },
-        "description": "**Required scope:** `config`"
-      }
-    },
-    "/api/v1/subagents/config": {
-      "get": {
-        "tags": [
-          "Subagents"
-        ],
-        "summary": "Get subagent orchestrator configuration",
-        "operationId": "getSubagentConfig",
-        "x-astrbot-scope": "config",
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Ok"
-          }
-        },
-        "description": "**Required scope:** `config`"
-      },
-      "put": {
-        "tags": [
-          "Subagents"
-        ],
-        "summary": "Update subagent orchestrator configuration",
-        "operationId": "updateSubagentConfig",
-        "x-astrbot-scope": "config",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DynamicConfig"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Ok"
-          }
-        },
-        "description": "**Required scope:** `config`"
-      }
-    },
-    "/api/v1/subagents/available-tools": {
-      "get": {
-        "tags": [
-          "Subagents"
-        ],
-        "summary": "List tools available to subagents",
-        "operationId": "listSubagentAvailableTools",
-        "x-astrbot-scope": "config",
         "responses": {
           "200": {
             "$ref": "#/components/responses/Ok"

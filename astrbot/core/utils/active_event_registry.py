@@ -107,6 +107,15 @@ class ActiveEventRegistry:
 
         task.add_done_callback(remove_task)
         if self.get_background_stop_signal(event).is_set():
+            self.cancel_background_task(task)
+
+    def cancel_background_task(self, task: asyncio.Task) -> None:
+        """Cancel a task once, so repeated stops do not interrupt its cleanup.
+
+        Args:
+            task: Background task owned by an event in this registry.
+        """
+        if not task.done() and task not in self._background_cancel_requested:
             self._background_cancel_requested.add(task)
             task.cancel()
 
@@ -171,8 +180,7 @@ class ActiveEventRegistry:
                 and task not in self._background_cancel_requested
             ):
                 # 重复停止请求不能打断任务正在执行的取消清理。
-                self._background_cancel_requested.add(task)
-                task.cancel()
+                self.cancel_background_task(task)
         return count
 
 

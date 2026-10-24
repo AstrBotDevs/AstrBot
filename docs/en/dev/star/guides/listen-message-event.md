@@ -432,11 +432,30 @@ async def on_llm_tool_respond(
 
 > You cannot use yield to send messages here. If you need to send, please use the `event.send()` method directly.
 
+#### Before and After Each Agent Step
+
+The built-in tool-loop runner supports `on_agent_step_start` and `on_agent_step_end`. A step consists of one model decision and all requested tools. The end hook runs after the whole batch of assistant/tool messages and tool images has been assembled into `run_context.messages`. The final step without tools also triggers it. An interrupted step does not trigger the end hook; use `on_agent_done` for cleanup.
+
+```python
+@filter.on_agent_step_start()
+async def before_step(self, event: AstrMessageEvent, run_context: ContextWrapper[AstrAgentContext]):
+    # Inspect or update context before the next model decision.
+    pass
+
+
+@filter.on_agent_step_end()
+async def after_step(self, event: AstrMessageEvent, run_context: ContextWrapper[AstrAgentContext]):
+    # The complete step context is now available for checkpointing.
+    print(len(run_context.messages))
+```
+
+These hooks use the same event/context imports shown below. `on_llm_request` and `on_llm_response` do not run for every model request within the built-in tool loop. `on_llm_tool_respond` runs for individual tools, before the complete batch is added to the context.
+
 #### On Agent Done
 
-> Requires AstrBot version > v4.23.1
+The built-in tool-loop runner triggers `on_agent_done` once when a run exits, including normal completion, provider errors, unexpected exceptions, cancellation and step-budget exhaustion. It runs after the final completed step's end hook; it does not confirm that conversation history has been saved. Check `run_context.run_end_reason` (`completed`, `error`, `cancelled`, or `max_steps`) and `run_context.run_error` (an error description or `None`). Forced termination of the process cannot run cleanup hooks.
 
-After the Agent finishes running, the `on_agent_done` hook is triggered. This hook is triggered after `on_llm_response`.
+`resp` can be `None` if execution exits without a final response. Guard access to it. A user stop may supply a synthetic interruption response. `on_llm_response` is not dispatched for cleanup without a model reply or for a synthetic interruption; normal response handling precedes `on_agent_done`. To modify a reply before delivery, use `on_llm_response`.
 
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
@@ -450,12 +469,14 @@ async def on_agent_done(
     self,
     event: AstrMessageEvent,
     run_context: ContextWrapper[AstrAgentContext],
-    resp: LLMResponse,
-):  # Note there are four parameters
-    print(resp)
+    resp: LLMResponse | None,
+):
+    print(run_context.run_end_reason, run_context.run_error)
+    if resp is not None:
+        print(resp.completion_text)
 ```
 
-> You cannot use yield to send messages here. If you need to send, please use the `event.send()` method directly.
+> You cannot use yield to send messages here. If needed, use `event.send()` directly. Stopping an event does not prevent the remaining `on_agent_done` cleanup handlers from running. Session plugin selection and activation filters still apply.
 
 #### Before Sending Message
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from asyncio import Queue
+from asyncio import Queue, Task
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -9,6 +9,7 @@ from deprecated import deprecated
 
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.message import ContentPart, Message
+from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
@@ -256,6 +257,7 @@ class Context:
                 stream: bool - whether to stream the LLM response
                 agent_hooks: BaseAgentRunHooks[AstrAgentContext] - hooks to run during agent execution
                 agent_context: AstrAgentContext - context to use for the agent
+                run_context: ContextWrapper - reuse caller-owned state for this Context and event
 
                 other kwargs will be DIRECTLY passed to the runner.reset() method
 
@@ -306,10 +308,18 @@ class Context:
                 context=self,
                 event=event,
             )
-        run_context = AgentContextWrapper(
-            context=agent_context,
-            tool_call_timeout=tool_call_timeout,
-        )
+        run_context = kwargs.get("run_context")
+        if run_context is None:
+            run_context = AgentContextWrapper(
+                context=agent_context,
+                tool_call_timeout=tool_call_timeout,
+            )
+        elif (
+            not isinstance(run_context, ContextWrapper)
+            or run_context.context.context is not self
+            or run_context.context.event is not event
+        ):
+            raise ValueError("run_context must belong to this Context and event")
         if (
             tools
             and any(
@@ -337,7 +347,7 @@ class Context:
         other_kwargs = {
             k: v
             for k, v in kwargs.items()
-            if k not in ["stream", "agent_hooks", "agent_context"]
+            if k not in ["stream", "agent_hooks", "agent_context", "run_context"]
         }
         if request.func_tool and request.func_tool.get_tool("astrbot_file_read_tool"):
             other_kwargs.setdefault(
@@ -792,6 +802,17 @@ class Context:
     def get_event_queue(self) -> Queue:
         """获取事件队列。"""
         return self._event_queue
+
+    def register_background_task(self, event: AstrMessageEvent, task: Task) -> None:
+        """Retain a background task and cancel it when its session is stopped.
+
+        Args:
+            event: Original event owning the task and its session permissions.
+            task: Already scheduled task; its coroutine must clean up on cancellation.
+        """
+        from astrbot.core.utils.active_event_registry import active_event_registry
+
+        active_event_registry.register_background_task(event, task)
 
     @deprecated(version="4.0.0", reason="Use get_platform_inst instead")
     def get_platform(self, platform_type: PlatformAdapterType | str) -> Platform | None:

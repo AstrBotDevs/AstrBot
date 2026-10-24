@@ -3334,6 +3334,29 @@ async def test_v1_plugin_extension_supports_astrbot_web_api(
 
 
 @pytest.mark.asyncio
+async def test_plugin_extension_accepts_plugin_scoped_api_key(
+    asgi_client,
+    fake_core_lifecycle,
+    fake_db,
+):
+    from astrbot.api.web import json_response, request
+
+    async def inspect_request():
+        return json_response({"plugin_name": request.plugin_name})
+
+    fake_core_lifecycle.star_context.registered_web_apis = [
+        ("/extension-check", inspect_request, ["GET"], "Inspect plugin request")
+    ]
+    fake_db.add_api_key("plugin-test", ["plugin"])
+    response = await asgi_client.get(
+        "/api/v1/plugins/extensions/extension-check",
+        headers={"Authorization": "ApiKey plugin-test"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"plugin_name": "extension-check"}
+
+
+@pytest.mark.asyncio
 async def test_v1_plugin_extension_astrbot_web_api_reads_form_and_files(
     asgi_client: httpx.AsyncClient,
     fake_core_lifecycle,

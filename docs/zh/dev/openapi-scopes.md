@@ -118,9 +118,6 @@ outline: deep
 | `PUT` | `/api/v1/config-routes` | — |
 | `PUT` | `/api/v1/config-routes/{umo}` | — |
 | `DELETE` | `/api/v1/config-routes/{umo}` | — |
-| `GET` | `/api/v1/subagents/available-tools` | — |
-| `GET` | `/api/v1/subagents/config` | — |
-| `PUT` | `/api/v1/subagents/config` | — |
 | `GET` | `/api/v1/system-config` | — |
 | `PUT` | `/api/v1/system-config` | `config:edit_admin` |
 | `GET` | `/api/v1/system-config/runtime` | — |

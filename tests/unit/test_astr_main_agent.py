@@ -1643,7 +1643,9 @@ class TestEnsurePersonaAndSkills:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("role", ["admin", "member"])
-    @pytest.mark.parametrize("isolation_status", ["detected", "missing", "unavailable", "unsupported"])
+    @pytest.mark.parametrize(
+        "isolation_status", ["detected", "missing", "unavailable", "unsupported"]
+    )
     @pytest.mark.parametrize(
         ("allow_execution", "allow_network"),
         [(True, False), (True, True), (False, False)],
@@ -1724,18 +1726,26 @@ class TestEnsurePersonaAndSkills:
             assert "yield_time_ms" in shell_tool.parameters["properties"]
             assert result.provider_request.system_prompt.count(
                 module.LOCAL_NETWORK_POLICY_NOTICE
-            ) == int(allow_execution and not allow_network and isolation_status == "detected")
-            assert "The Agent Computer Use runtime is the local environment" not in result.provider_request.system_prompt
-            assert "These restrictions require Local process isolation" not in result.provider_request.system_prompt
+            ) == int(
+                allow_execution and not allow_network and isolation_status == "detected"
+            )
+            assert (
+                "The Agent Computer Use runtime is the local environment"
+                not in result.provider_request.system_prompt
+            )
+            assert (
+                "These restrictions require Local process isolation"
+                not in result.provider_request.system_prompt
+            )
         finally:
             if result.reset_coro:
                 result.reset_coro.close()
 
     @pytest.mark.asyncio
-    async def test_subagent_dedupe_uses_default_persona_tools(
+    async def test_legacy_plugin_experts_are_not_mounted_by_main(
         self, mock_event, mock_context
     ):
-        """Test dedupe uses resolved default persona tools in subagent mode."""
+        """The plugin compatibility entry does not activate native main routing."""
         module = ama
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
             return_value=(None, None, None, False)
@@ -1769,6 +1779,7 @@ class TestEnsurePersonaAndSkills:
             "subagent_orchestrator": {
                 "main_enable": True,
                 "remove_main_duplicate_tools": True,
+                "router_system_prompt": "Legacy expert routing.",
                 "agents": [
                     {
                         "name": "planner",
@@ -1785,9 +1796,11 @@ class TestEnsurePersonaAndSkills:
         await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
 
         assert req.func_tool is not None
-        assert "transfer_to_planner" in req.func_tool.names()
-        assert "tool_a" not in req.func_tool.names()
+        assert "transfer_to_planner" not in req.func_tool.names()
+        assert mock_context.subagent_orchestrator.handoffs == [handoff]
+        assert "tool_a" in req.func_tool.names()
         assert "tool_b" in req.func_tool.names()
+        assert "Legacy expert routing." not in req.system_prompt
 
 
 class TestDecorateLlmRequest:

@@ -398,6 +398,7 @@ class MockHooks(BaseAgentRunHooks):
     def __init__(self):
         self.agent_begin_called = False
         self.agent_done_called = False
+        self.llm_response_called = False
         self.tool_start_called = False
         self.tool_end_called = False
 
@@ -412,6 +413,9 @@ class MockHooks(BaseAgentRunHooks):
 
     async def on_agent_done(self, run_context, llm_response):
         self.agent_done_called = True
+
+    async def on_llm_response(self, run_context, llm_response):
+        self.llm_response_called = True
 
 
 class ClearingAgentBeginHooks(MockHooks):
@@ -1806,7 +1810,7 @@ async def test_skills_like_requery_reply_reaches_stream_bridge_once(
             chain = response.data["chain"]
             if chain.get_plain_text() in (final_text, reasoning):
                 final_events.append((response.type, chain.type))
-                hooks_at_emission.append(mock_hooks.agent_done_called)
+                hooks_at_emission.append(mock_hooks.llm_response_called)
             yield response
 
     runner.step = recorded_step
@@ -2398,3 +2402,334 @@ async def test_small_step_budgets_and_reset(
     )
     assert runner._step_budget_used == 0
     assert runner._step_budget_notified == set()
+
+
+@pytest.mark.asyncio
+async def test_lifecycle_step_end_sees_whole_tool_batch_and_final_context(
+    runner, mock_provider, provider_request, mock_tool_executor
+):
+    """Checkpoint only after every tool result has entered the context."""
+    hooks = AsyncMock(spec=BaseAgentRunHooks)
+    mock_provider.text_chat = AsyncMock(
+        side_effect=[
+            LLMResponse(
+                role="assistant",
+                tools_call_name=["test_tool", "test_tool"],
+                tools_call_args=[{"query": "first"}, {"query": "second"}],
+                tools_call_ids=["call_first", "call_second"],
+            ),
+            LLMResponse(role="assistant", completion_text="done"),
+        ]
+    )
+    checkpoints = []
+
+    async def checkpoint(context):
+        checkpoints.append(
+            [message.model_copy(deep=True) for message in context.messages]
+        )
+
+    hooks.on_agent_step_end.side_effect = checkpoint
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=hooks,
+    )
+    async for _ in runner.step_until_done(4):
+        pass
+
+    assert hooks.on_agent_begin.await_count == 1
+    assert hooks.on_agent_step_start.await_count == 2
+    assert hooks.on_agent_step_end.await_count == 2
+    assert [m.tool_call_id for m in checkpoints[0] if m.role == "tool"] == [
+        "call_first",
+        "call_second",
+    ]
+    assert checkpoints[-1][-1].role == "assistant"
+    assert checkpoints[-1][-1].content[-1].text == "done"
+    assert [call[0] for call in hooks.mock_calls][-3:] == [
+        "on_llm_response",
+        "on_agent_step_end",
+        "on_agent_done",
+    ]
+    hooks.on_agent_done.assert_awaited_once_with(
+        runner.run_context, runner.get_final_llm_resp()
+    )
+    assert runner.run_context.run_end_reason == "completed"
+    assert runner.run_context.run_error is None
+    # Polling a completed runner must not invoke completion hooks a second time.
+    async for _ in runner.step_until_done(4):
+        pass
+    hooks.on_agent_done.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("exit_kind", ["provider_error", "exception", "stop"])
+async def test_lifecycle_terminal_paths_notify_once(
+    runner, mock_provider, provider_request, mock_tool_executor, exit_kind
+):
+    """Errors and user stops notify completion without a fake response event."""
+    hooks = AsyncMock(spec=BaseAgentRunHooks)
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=hooks,
+    )
+    if exit_kind == "provider_error":
+        mock_provider.text_chat = AsyncMock(
+            return_value=LLMResponse(role="err", completion_text="provider unavailable")
+        )
+    elif exit_kind == "exception":
+        runner.request_context_manager.process = AsyncMock(
+            side_effect=RuntimeError("checkpoint failed")
+        )
+    else:
+        runner.request_stop()
+
+    if exit_kind == "exception":
+        with pytest.raises(RuntimeError, match="checkpoint failed"):
+            async for _ in runner.step_until_done(3):
+                pass
+        assert runner.run_context.run_error == "RuntimeError: checkpoint failed"
+        hooks.on_agent_done.assert_awaited_once_with(runner.run_context, None)
+        hooks.on_agent_step_end.assert_not_awaited()
+    else:
+        async for _ in runner.step_until_done(3):
+            pass
+        hooks.on_agent_done.assert_awaited_once_with(
+            runner.run_context, runner.get_final_llm_resp()
+        )
+        if exit_kind == "provider_error":
+            assert runner.run_context.run_error == "provider unavailable"
+        else:
+            hooks.on_agent_step_end.assert_not_awaited()
+    assert runner.run_context.run_end_reason == (
+        "cancelled" if exit_kind == "stop" else "error"
+    )
+    hooks.on_llm_response.assert_not_awaited()
+    assert runner.done()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("consumer", ["step", "turn", "main"])
+async def test_lifecycle_closing_response_consumer_finalizes_immediately(
+    runner, mock_provider, provider_request, mock_tool_executor, consumer
+):
+    """Closing a response stream releases ownership without GC or another loop tick."""
+    hooks = AsyncMock(spec=BaseAgentRunHooks)
+    event = MagicMock()
+    event.is_stopped.return_value = False
+    event.get_extra.return_value = None
+    event.get_platform_name.return_value = "test"
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=MockAgentContext(event)),
+        tool_executor=mock_tool_executor,
+        agent_hooks=hooks,
+    )
+    responses = (
+        runner.step()
+        if consumer == "step"
+        else runner.step_until_done(4)
+        if consumer == "turn"
+        else run_agent(runner, show_tool_use=False)
+    )
+    await anext(responses)
+    await responses.aclose()
+    hooks.on_agent_done.assert_awaited_once()
+    assert runner.run_context.run_end_reason == "cancelled"
+    hooks.on_agent_step_end.assert_not_awaited()
+    assert runner.done()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("blocking_hook", ["model", "step_start", "step_end"])
+async def test_lifecycle_cancellation_during_async_work(
+    runner, mock_provider, provider_request, mock_tool_executor, blocking_hook
+):
+    """Task cancellation propagates and still runs one awaited cleanup hook."""
+    hooks = AsyncMock(spec=BaseAgentRunHooks)
+    started = asyncio.Event()
+    cleanup = asyncio.Event()
+
+    async def block(*args, **kwargs):
+        started.set()
+        await asyncio.Future()
+
+    async def done(context, response):
+        await asyncio.sleep(0)
+        cleanup.set()
+
+    hooks.on_agent_done.side_effect = done
+    if blocking_hook == "model":
+        mock_provider.text_chat = block
+    else:
+        getattr(hooks, f"on_agent_{blocking_hook}").side_effect = block
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=hooks,
+    )
+
+    async def run():
+        async for _ in runner.step_until_done(4):
+            pass
+
+    task = asyncio.create_task(run())
+    await asyncio.wait_for(started.wait(), 2)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(task, 2)
+    assert cleanup.is_set()
+    hooks.on_agent_done.assert_awaited_once()
+    assert runner.run_context.run_end_reason == "cancelled"
+    assert runner.done()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("main_bridge", [False, True])
+async def test_lifecycle_main_error_does_not_emit_completion_twice(
+    runner, mock_provider, provider_request, mock_tool_executor, main_bridge
+):
+    """The main bridge must not synthesize another on_agent_done on errors."""
+    hooks = AsyncMock(spec=BaseAgentRunHooks)
+    event = MagicMock()
+    event.is_stopped.return_value = False
+    event.get_extra.return_value = None
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=MockAgentContext(event)),
+        tool_executor=mock_tool_executor,
+        agent_hooks=hooks,
+    )
+    runner.request_context_manager.process = AsyncMock(side_effect=ValueError("broken"))
+    if main_bridge:
+        async for _ in run_agent(runner):
+            pass
+    else:
+        with pytest.raises(ValueError, match="broken"):
+            async for _ in runner.step():
+                pass
+    hooks.on_agent_done.assert_awaited_once_with(runner.run_context, None)
+    assert runner.run_context.run_end_reason == "error"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("main_bridge", [False, True])
+@pytest.mark.parametrize("provider_error", [False, True])
+async def test_lifecycle_budget_exit_and_final_request_failure(
+    runner,
+    mock_provider,
+    provider_request,
+    mock_tool_executor,
+    main_bridge,
+    provider_error,
+):
+    """Record budget exhaustion, but prefer errors if the final request fails."""
+    hooks = AsyncMock(spec=BaseAgentRunHooks)
+    event = MagicMock()
+    event.is_stopped.return_value = False
+    event.get_extra.return_value = None
+    event.get_platform_name.return_value = "test"
+    if provider_error:
+        mock_provider.text_chat = AsyncMock(
+            return_value=LLMResponse(role="err", completion_text="summary failed")
+        )
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=MockAgentContext(event)),
+        tool_executor=mock_tool_executor,
+        agent_hooks=hooks,
+    )
+    responses = (
+        run_agent(runner, max_step=0) if main_bridge else runner.step_until_done(0)
+    )
+    async for _ in responses:
+        pass
+    hooks.on_agent_done.assert_awaited_once()
+    assert runner.run_context.run_end_reason == (
+        "error" if provider_error else "max_steps"
+    )
+    assert runner.run_context.run_error == (
+        "summary failed" if provider_error else None
+    )
+
+
+@pytest.mark.asyncio
+async def test_lifecycle_main_cancel_between_complete_steps(
+    runner, mock_provider, provider_request, mock_tool_executor, monkeypatch
+):
+    """Cancellation while joining a stop watcher must also release the run."""
+    hooks = AsyncMock(spec=BaseAgentRunHooks)
+    cleanup_started = asyncio.Event()
+
+    async def watcher(*args):
+        try:
+            await asyncio.Future()
+        finally:
+            cleanup_started.set()
+            await asyncio.Future()
+
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_run_util._watch_agent_stop_signal", watcher
+    )
+    event = MagicMock()
+    event.is_stopped.return_value = False
+    event.get_extra.return_value = None
+    event.get_platform_name.return_value = "test"
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=MockAgentContext(event)),
+        tool_executor=mock_tool_executor,
+        agent_hooks=hooks,
+    )
+
+    async def run():
+        async for _ in run_agent(runner, show_tool_use=False):
+            pass
+
+    task = asyncio.create_task(run())
+    await asyncio.wait_for(cleanup_started.wait(), 2)
+    assert hooks.on_agent_step_end.await_count == 1
+    assert not runner.done()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(task, 2)
+    hooks.on_agent_done.assert_awaited_once_with(runner.run_context, None)
+    assert runner.run_context.run_end_reason == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_lifecycle_checkpoint_contains_tool_images(
+    runner, mock_provider, provider_request
+):
+    """The step checkpoint includes image messages assembled after tool callbacks."""
+    hooks = AsyncMock(spec=BaseAgentRunHooks)
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=MockMixedContentToolExecutor(),
+        agent_hooks=hooks,
+    )
+    async for _ in runner.step():
+        pass
+    hooks.on_agent_step_end.assert_awaited_once()
+    assert runner.run_context.messages[-1].role == "user"
+    assert any(
+        isinstance(part, ImageURLPart)
+        for part in runner.run_context.messages[-1].content
+    )
+    # Finish this run explicitly, so the test does not leave a live turn behind.
+    runner.request_stop()
+    async for _ in runner.step():
+        pass

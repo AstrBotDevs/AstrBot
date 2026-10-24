@@ -206,19 +206,8 @@ DEFAULT_CONFIG = {
         "runner_type": "local",
         "config": get_agent_runner_config_default("local"),
     },
-    # SubAgent orchestrator mode:
-    # - main_enable = False: disabled; main LLM mounts tools normally (persona selection).
-    # - main_enable = True: enabled; main LLM keeps its own tools and includes handoff
-    #   tools (transfer_to_*). remove_main_duplicate_tools can remove tools that are
-    #   duplicated on subagents from the main LLM toolset.
+    # Preserve legacy expert definitions for plugins using the compatibility SDK.
     "subagent_orchestrator": {
-        "main_enable": False,
-        "remove_main_duplicate_tools": False,
-        "router_system_prompt": (
-            "You are a task router. Your job is to chat naturally, recognize user intent, "
-            "and delegate work to the most suitable subagent using transfer_to_* tools. "
-            "Do not try to use domain tools yourself. If no subagent fits, respond directly."
-        ),
         "agents": [],
     },
     "provider_stt_settings": {

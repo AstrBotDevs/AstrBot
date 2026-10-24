@@ -1,8 +1,13 @@
+import json
+from asyncio import Queue
 from copy import deepcopy
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from astrbot.core.config.astrbot_config import AstrBotConfig
+from astrbot.core.config.default import DEFAULT_CONFIG
+from astrbot.core.star.context import Context
 from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
 
 
@@ -17,6 +22,70 @@ def _build_cfg(agent_overrides: dict) -> dict:
     }
     agent.update(agent_overrides)
     return {"agents": [agent]}
+
+
+@pytest.mark.asyncio
+async def test_config_load_preserves_plugin_experts_without_native_settings(tmp_path):
+    """Configuration cleanup retains legacy plugin data without core routing."""
+    agents = _build_cfg({})["agents"]
+    config_path = tmp_path / "legacy.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "subagent_orchestrator": {
+                    "agents": agents,
+                    "main_enable": True,
+                    "router_system_prompt": "Legacy routing",
+                    "remove_main_duplicate_tools": True,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    config = AstrBotConfig(
+        str(config_path),
+        default_config={
+            "subagent_orchestrator": DEFAULT_CONFIG["subagent_orchestrator"]
+        },
+    )
+    assert config["subagent_orchestrator"] == {"agents": agents}
+    assert json.loads(config_path.read_text(encoding="utf-8-sig")) == dict(config)
+    persona_mgr = MagicMock()
+    persona_mgr.get_persona_v3_by_id.return_value = None
+    orchestrator = SubAgentOrchestrator(MagicMock(), persona_mgr)
+    await orchestrator.reload_from_config(config["subagent_orchestrator"])
+    assert orchestrator.handoffs[0].agent.name == "planner"
+
+
+@pytest.mark.asyncio
+async def test_context_retains_live_orchestrator_and_can_reload_experts():
+    """Plugins can still read and reload configuration-driven experts."""
+    persona_mgr = MagicMock()
+    persona_mgr.get_persona_v3_by_id.return_value = None
+    orchestrator = SubAgentOrchestrator(MagicMock(), persona_mgr)
+    context = Context(
+        Queue(),
+        {},
+        MagicMock(),
+        MagicMock(),
+        MagicMock(),
+        MagicMock(),
+        MagicMock(),
+        persona_mgr,
+        MagicMock(),
+        MagicMock(),
+        MagicMock(),
+        subagent_orchestrator=orchestrator,
+    )
+    assert context.subagent_orchestrator is orchestrator
+    await context.subagent_orchestrator.reload_from_config(_build_cfg({}))
+    assert context.subagent_orchestrator.handoffs[0].agent.name == "planner"
+    await context.subagent_orchestrator.reload_from_config(
+        _build_cfg({"name": "butler"})
+    )
+    assert [tool.agent.name for tool in context.subagent_orchestrator.handoffs] == [
+        "butler"
+    ]
 
 
 @pytest.mark.asyncio

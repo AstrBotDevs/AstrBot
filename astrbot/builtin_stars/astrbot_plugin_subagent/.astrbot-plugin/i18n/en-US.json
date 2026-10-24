@@ -1,0 +1,7 @@
+{
+  "metadata": {
+    "display_name": "Subagent",
+    "desc": "Manage expert templates, delegate tasks, send follow-ups, and inspect progress."
+  },
+  "views": { "runtime": { "title": "Subagent management" } }
+}

@@ -5,7 +5,7 @@ import time
 import traceback
 import typing as T
 import uuid
-from contextlib import suppress
+from contextlib import aclosing, suppress
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
@@ -201,10 +201,39 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.run_context.messages.append(Message(role="assistant", content=parts))
 
         try:
-            await self.agent_hooks.on_agent_done(self.run_context, llm_resp)
+            await self.agent_hooks.on_llm_response(self.run_context, llm_resp)
+        except Exception as e:
+            logger.error(f"Error in on_llm_response hook: {e}", exc_info=True)
+        self._resolve_unconsumed_follow_ups()
+
+    async def _finish_run(self) -> None:
+        """Notify execution exit once, including failure and cancellation paths."""
+        if self._done_hook_called:
+            return
+        self._done_hook_called = True
+        if self._aborted:
+            self.run_context.run_end_reason = "cancelled"
+        elif self.state == AgentState.ERROR:
+            self.run_context.run_end_reason = "error"
+            if self.final_llm_resp:
+                self.run_context.run_error = self.final_llm_resp.completion_text
+        elif self.run_context.run_end_reason is None:
+            if self.done():
+                self.run_context.run_end_reason = "completed"
+            else:
+                self.run_context.run_end_reason = "cancelled"
+        if not self.done():
+            self._transition_state(
+                AgentState.ERROR
+                if self.run_context.run_end_reason == "error"
+                else AgentState.DONE
+            )
+        self.stats.end_time = time.time()
+        self._resolve_unconsumed_follow_ups()
+        try:
+            await self.agent_hooks.on_agent_done(self.run_context, self.final_llm_resp)
         except Exception as e:
             logger.error(f"Error in on_agent_done hook: {e}", exc_info=True)
-        self._resolve_unconsumed_follow_ups()
 
     @override
     async def reset(
@@ -280,6 +309,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.tool_executor = tool_executor
         self.agent_hooks = agent_hooks
         self.run_context = run_context
+        self.run_context.runner = self
+        self.run_context.run_end_reason = None
+        self.run_context.run_error = None
+        self._done_hook_called = False
         self._aborted = False
         self._abort_signal = asyncio.Event()
         self._pending_follow_ups: list[FollowUpTicket] = []
@@ -805,6 +838,41 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
     @override
     async def step(self):
+        """Run one complete step and notify every execution exit."""
+        if self._done_hook_called:
+            return
+        completed = False
+        try:
+            try:
+                if self.state == AgentState.IDLE:
+                    await self.agent_hooks.on_agent_begin(self.run_context)
+            except Exception as e:
+                logger.error(f"Error in on_agent_begin hook: {e}", exc_info=True)
+            try:
+                await self.agent_hooks.on_agent_step_start(self.run_context)
+            except Exception as e:
+                logger.error(f"Error in on_agent_step_start hook: {e}", exc_info=True)
+            async with aclosing(self._step()) as responses:
+                async for response in responses:
+                    yield response
+            completed = True
+            try:
+                if not self._aborted:
+                    await self.agent_hooks.on_agent_step_end(self.run_context)
+            except Exception as e:
+                logger.error(f"Error in on_agent_step_end hook: {e}", exc_info=True)
+        except (asyncio.CancelledError, GeneratorExit):
+            self.run_context.run_end_reason = "cancelled"
+            raise
+        except Exception as e:
+            self.run_context.run_end_reason = "error"
+            self.run_context.run_error = f"{type(e).__name__}: {e}"
+            raise
+        finally:
+            if not completed or self.done():
+                await self._finish_run()
+
+    async def _step(self):
         """Process a single step of the agent.
         This method should return the result of the step.
         """
@@ -813,12 +881,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         if self._step_budget_max is not None:
             self._step_budget_used += 1
-
-        if self._state == AgentState.IDLE:
-            try:
-                await self.agent_hooks.on_agent_begin(self.run_context)
-            except Exception as e:
-                logger.error(f"Error in on_agent_begin hook: {e}", exc_info=True)
 
         # 开始处理，转换到运行状态
         self._transition_state(AgentState.RUNNING)
@@ -1146,6 +1208,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     async def step_until_done(
         self, max_step: int
     ) -> T.AsyncGenerator[AgentResponse, None]:
+        """Run a turn and finalize it even if its response consumer exits early."""
+        try:
+            async with aclosing(self._step_until_done(max_step)) as responses:
+                async for response in responses:
+                    yield response
+        finally:
+            await self._finish_run()
+
+    async def _step_until_done(
+        self, max_step: int
+    ) -> T.AsyncGenerator[AgentResponse, None]:
         """Process steps until the agent is done."""
         self._step_budget_max = max_step
         self._step_budget_used = 0
@@ -1153,11 +1226,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         step_count = 0
         while not self.done() and step_count < max_step:
             step_count += 1
-            async for resp in self.step():
-                yield resp
+            async with aclosing(self.step()) as responses:
+                async for resp in responses:
+                    yield resp
 
         #  如果循环结束了但是 agent 还没有完成，说明是达到了 max_step
         if not self.done():
+            self.run_context.run_end_reason = "max_steps"
             logger.warning(
                 f"Agent reached max steps ({max_step}), forcing a final response."
             )
@@ -1172,8 +1247,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 )
             )
             # 再执行最后一步
-            async for resp in self.step():
-                yield resp
+            async with aclosing(self.step()) as responses:
+                async for resp in responses:
+                    yield resp
 
     async def _handle_function_tools(
         self,
@@ -1589,11 +1665,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._aborted = True
         self._transition_state(AgentState.DONE)
         self.stats.end_time = time.time()
-
-        try:
-            await self.agent_hooks.on_agent_done(self.run_context, interrupted_resp)
-        except Exception as e:
-            logger.error(f"Error in on_agent_done hook: {e}", exc_info=True)
 
         self._resolve_unconsumed_follow_ups()
         return AgentResponse(

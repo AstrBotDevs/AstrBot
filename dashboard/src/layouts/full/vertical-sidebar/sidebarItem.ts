@@ -10,7 +10,6 @@ import {
   PencilRuler,
   Puzzle,
   SlidersHorizontal,
-  Workflow,
 } from '@lucide/vue';
 
 export interface menu {
@@ -103,11 +102,6 @@ const sidebarItem: menu[] = [
     title: 'core.navigation.cron',
     icon: markRaw(Clock3),
     to: '/cron'
-  },
-  {
-    title: 'core.navigation.subagent',
-    icon: markRaw(Workflow),
-    to: '/subagent'
   },
 ];
 
