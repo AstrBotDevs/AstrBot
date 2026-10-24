@@ -65,10 +65,11 @@ class CronService:
             provider_id = payload.get("provider_id")
             timezone_name = str(payload.get("timezone") or "").strip()
             if not timezone_name:
+                # Timezone is a system setting; profiles may retain a stale default.
                 timezone_name = str(
-                    self.core_lifecycle.astrbot_config_mgr.get_conf(
-                        session or None
-                    ).get("timezone")
+                    self.core_lifecycle.astrbot_config_mgr.get_conf(None).get(
+                        "timezone"
+                    )
                     or ""
                 ).strip()
             enabled = bool(payload.get("enabled", True))
