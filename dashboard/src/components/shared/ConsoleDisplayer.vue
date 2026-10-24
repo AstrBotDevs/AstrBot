@@ -174,7 +174,7 @@ const { tm } = useModuleI18n("features/console");
       </aside>
 
       <div
-        id="term"
+        ref="term"
         class="console-term"
         :style="{ '--console-log-font-size': `${fontSize}px` }"
       ></div>
@@ -225,6 +225,7 @@ export default {
       searchKeyword: "",
       searchTimer: null,
       eventSource: null,
+      isUnmounted: false,
       retryTimer: null,
       retryAttempts: 0,
       maxRetryAttempts: 10,
@@ -354,13 +355,17 @@ export default {
   },
   async mounted() {
     await this.fetchLogHistory();
+    if (this.isUnmounted) return;
     if (this.workspaceMode) {
       await this.fetchPluginDisplayNames();
+      if (this.isUnmounted) return;
     }
     this.connectSSE();
     document.addEventListener("fullscreenchange", this.handleFullscreenChange);
   },
   beforeUnmount() {
+    // Pending initialization and reconnect requests may finish after teardown.
+    this.isUnmounted = true;
     document.removeEventListener(
       "fullscreenchange",
       this.handleFullscreenChange,
@@ -381,6 +386,7 @@ export default {
   },
   methods: {
     connectSSE() {
+      if (this.isUnmounted) return;
       if (this.eventSource) {
         this.eventSource.close();
         this.eventSource = null;
@@ -467,7 +473,7 @@ export default {
       if (!newLogs || newLogs.length === 0) return;
 
       let hasUpdate = false;
-      const termElement = document.getElementById("term");
+      const termElement = this.$refs.term;
       const shouldStickToBottom =
         !termElement ||
         termElement.scrollHeight -
@@ -667,7 +673,7 @@ export default {
     },
 
     refreshDisplay() {
-      const termElement = document.getElementById("term");
+      const termElement = this.$refs.term;
       if (!termElement) return;
 
       const shouldStickToBottom =
