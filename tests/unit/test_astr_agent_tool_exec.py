@@ -9,6 +9,7 @@ import pytest
 from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.runners.base import AgentState
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
@@ -83,6 +84,8 @@ async def test_shell_session_wait_fits_inside_tool_timeout(
 
 
 class _DoneRunner:
+    state = AgentState.DONE
+
     async def step_until_done(self, _max_step):
         for item in ():
             yield item
@@ -527,6 +530,8 @@ async def test_background_wakeup_applies_max_agent_step(
     expected_max_step: int,
 ):
     class _StepCapturingRunner:
+        state = AgentState.DONE
+
         def __init__(self):
             self.captured_max_step = None
 
@@ -618,6 +623,8 @@ async def test_background_wakeup_warns_when_result_is_not_sent_to_user(
     )
 
     class _Runner:
+        state = AgentState.DONE
+
         def __init__(self, event):
             self.event = event
 
@@ -676,6 +683,78 @@ async def test_background_wakeup_warns_when_result_is_not_sent_to_user(
         for call in logger.warning.call_args_list
     )
     assert warned is not delivered
+
+
+@pytest.mark.asyncio
+async def test_background_wakeup_raises_when_runner_ends_in_error(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """An ERROR-state result run must surface instead of persisting "finished".
+
+    Sibling of the cron guard from #9980: the background wakeup path ran the
+    same step_until_done loop without checking runner.state, so a failed run
+    (e.g. malformed function call at max steps) was recorded as a normal
+    "finished" note and the error never surfaced anywhere.
+    """
+    from astrbot.core.tools.message_tools import SendMessageToUserTool
+
+    send_tool = SendMessageToUserTool()
+    context = SimpleNamespace(
+        get_config=lambda **_kwargs: {},
+        get_llm_tool_manager=lambda: SimpleNamespace(
+            get_builtin_tool=lambda _tool_cls: send_tool
+        ),
+        conversation_manager=SimpleNamespace(),
+        send_message=AsyncMock(return_value=True),
+    )
+
+    class _Runner:
+        state = AgentState.ERROR
+
+        async def step_until_done(self, _max_step):
+            if False:
+                yield
+
+        def get_final_llm_resp(self):
+            return SimpleNamespace(
+                role="assistant", completion_text="malformed function call"
+            )
+
+    async def _fake_get_session_conv(**_kwargs):
+        return SimpleNamespace(history="[]")
+
+    async def _fake_build_main_agent(**_kwargs):
+        return SimpleNamespace(agent_runner=_Runner())
+
+    monkeypatch.setattr(
+        "astrbot.core.astr_main_agent._get_session_conv",
+        _fake_get_session_conv,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.astr_main_agent.build_main_agent",
+        _fake_build_main_agent,
+    )
+    persist = AsyncMock()
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_tool_exec.persist_agent_history", persist
+    )
+    run_context = ContextWrapper(
+        context=SimpleNamespace(event=_DummyEvent([]), context=context),
+        tool_call_timeout=120,
+    )
+
+    with pytest.raises(RuntimeError, match="ERROR state"):
+        await FunctionToolExecutor._wake_main_agent_for_background_result(
+            run_context,
+            task_id="task-id",
+            tool_name="long_tool",
+            result_text="ok",
+            tool_args={},
+            note="task finished",
+            summary_name="BackgroundTask",
+        )
+
+    persist.assert_not_called()
 
 
 @pytest.mark.asyncio
