@@ -371,6 +371,9 @@ await conv_mgr.add_message_pair(
 )
 ```
 
+> [!WARNING]
+> 上面用 `unified_msg_origin` 作为会话历史的存储键。开启**隔离对话**（`platform_settings.unique_session`）后，群消息的 `unified_msg_origin` 会变化（仅限支持隔离的渠道），同一个群在不同开关状态下会解析到不同的会话。需要按群定位时请使用 `event.get_group_id()`，详见[处理消息事件](./listen-message-event)。
+
 ### 主要方法
 
 #### `new_conversation`
