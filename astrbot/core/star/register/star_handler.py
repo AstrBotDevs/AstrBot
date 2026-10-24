@@ -687,6 +687,24 @@ class RegisteringAgent:
     """用于 Agent 注册"""
 
     def llm_tool(self, *args, **kwargs):
+        """Register a method as an LLM tool (same as ``register_llm_tool``).
+
+        Return value semantics:
+
+        - Return a **string**: it is fed back to the model as the tool result and the
+          model continues the turn (usually one more request is made to check whether
+          any other tool should be called).
+        - Return ``None``: means "this tool already sent its result to the user, the
+          turn ends here". The agent state is set to ``DONE`` directly and the model
+          is **not** called again. Intended for side-effect tools that deliver their
+          own output (sending messages, images, ...), saving a full-context request.
+          Implemented by the ``elif resp is None:`` branch in
+          ``astrbot/core/agent/runners/tool_loop_agent_runner.py``.
+
+        Args:
+            *args: Forwarded to ``register_llm_tool``.
+            **kwargs: Forwarded to ``register_llm_tool`` (e.g. ``name``).
+        """
         kwargs["registering_agent"] = self
         return register_llm_tool(*args, **kwargs)
 
