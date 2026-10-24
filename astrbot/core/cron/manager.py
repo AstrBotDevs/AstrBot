@@ -160,16 +160,20 @@ class CronJobManager:
         enabled: bool = True,
         persistent: bool = False,
     ) -> CronJob:
-        job = await self.db.create_cron_job(
-            name=name,
-            job_type="basic",
-            cron_expression=cron_expression,
-            timezone=timezone,
-            payload=payload or {},
-            description=description,
-            enabled=enabled,
-            persistent=persistent,
-        )
+        job_data: dict[str, Any] = {
+            "name": name,
+            "job_type": "basic",
+            "cron_expression": cron_expression,
+            "timezone": timezone,
+            "payload": payload or {},
+            "description": description,
+            "enabled": enabled,
+            "persistent": persistent,
+        }
+        if enabled:
+            # Validate before persisting the job or registering its handler.
+            self._build_trigger(CronJob(**job_data))
+        job = await self.db.create_cron_job(**job_data)
         self._basic_handlers[job.job_id] = handler
         if enabled:
             self._schedule_job(job)

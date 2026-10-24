@@ -28,6 +28,29 @@ async def cron_store(tmp_path):
         await db.engine.dispose()
 
 
+@pytest.mark.parametrize("expression", ["not a cron", "60 8 * * *"])
+@pytest.mark.asyncio
+async def test_rejected_basic_creation_leaves_no_job_or_handler(cron_store, expression):
+    """Reject invalid basic schedules without persisting or registering them.
+
+    Args:
+        cron_store: Real database and paused scheduler.
+        expression: Cron expression with an invalid field count or minute.
+    """
+    db, manager = cron_store
+    with pytest.raises(CronJobSchedulingError):
+        await manager.add_basic_job(
+            name="Rejected basic job",
+            cron_expression=expression,
+            handler=AsyncMock(),
+            persistent=True,
+        )
+
+    assert await db.list_cron_jobs() == []
+    assert manager.scheduler.get_jobs() == []
+    assert manager._basic_handlers == {}
+
+
 @pytest.mark.parametrize("entrypoint", ["tool", "dashboard"])
 @pytest.mark.parametrize(
     "timing",
