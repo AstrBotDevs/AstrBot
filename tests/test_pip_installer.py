@@ -2,6 +2,7 @@ import asyncio
 import json
 import ntpath
 import threading
+import zipfile
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -92,6 +93,56 @@ def configure_run_pip_in_process_capture(monkeypatch):
         return _configure_run_pip_in_process_capture(monkeypatch, **kwargs)
 
     return _configure
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("bypass", [False, True])
+@pytest.mark.parametrize("lock_source", ["installed", "desktop"])
+async def test_core_upgrade_resolves_new_dependency_only_when_bypassing_locks(
+    monkeypatch, tmp_path, bypass, lock_source
+):
+    monkeypatch.setattr(
+        pip_installer_module, "is_packaged_desktop_runtime", lambda: False
+    )
+    monkeypatch.setattr(
+        core_constraints_module,
+        "_get_core_constraints",
+        lambda name: ("certifi==2026.6.17",) if lock_source == "installed" else (),
+    )
+    monkeypatch.setattr(
+        core_constraints_module,
+        "get_desktop_core_lock_constraints",
+        lambda: ("certifi==2026.6.17",) if lock_source == "desktop" else (),
+    )
+
+    # Exercise pip's resolver offline without changing the test environment.
+    wheel_path = tmp_path / "certifi-2026.10.19-py3-none-any.whl"
+    dist_info = "certifi-2026.10.19.dist-info"
+    with zipfile.ZipFile(wheel_path, "w") as wheel:
+        wheel.writestr(
+            f"{dist_info}/METADATA",
+            "Metadata-Version: 2.1\nName: certifi\nVersion: 2026.10.19\n",
+        )
+        wheel.writestr(
+            f"{dist_info}/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr(f"{dist_info}/RECORD", "")
+    requirements_path = tmp_path / "requirements.txt"
+    requirements_path.write_text("certifi>=2026.10.19\n", encoding="utf-8")
+    installer = PipInstaller(
+        "--dry-run --ignore-installed --no-index --disable-pip-version-check "
+        f'--find-links "{tmp_path}"'
+    )
+
+    if bypass:
+        await installer.install(
+            requirements_path=str(requirements_path), bypass_core_constraints=True
+        )
+    else:
+        with pytest.raises(pip_installer_module.DependencyConflictError) as exc_info:
+            await installer.install(requirements_path=str(requirements_path))
+        assert exc_info.value.is_core_conflict is True
 
 
 @pytest.mark.asyncio
