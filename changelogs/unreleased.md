@@ -1,5 +1,7 @@
 # Unreleased
 
+- Add MiniMax STT API provider with optional language hints.
+
 - Move session-waiter dispatch from the built-in plugin's `handle_session_control_agent` handler into the core pipeline. Admit matching follow-up input without a mention or wake prefix, and dispatch after access/safety checks and preprocessing but before ordinary plugin handlers or the Agent. Preserve the existing `@session_waiter` API.
 
 - Bound the trace writer queue by 128 MiB with a 2 MiB per-frame limit and no frame-count cap, while keeping the WAL threshold unchanged. Recover orphaned running records and enforce a minimum SQLite capacity budget of 32 MB.
