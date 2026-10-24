@@ -238,6 +238,8 @@ Only admins can use the `test` command.
 
 Multiple filters can be used simultaneously by adding multiple decorators to a function. Filters use `AND` logic, meaning the function will only execute if all filters pass.
 
+In addition to the built-in filters, [custom filters](#custom-filters) are also supported.
+
 ```python
 @filter.command("helloworld")
 @filter.event_message_type(filter.EventMessageType.PRIVATE_MESSAGE)
@@ -245,10 +247,111 @@ async def helloworld(self, event: AstrMessageEvent):
     yield event.plain_result("Hello!")
 ```
 
+### Custom Filters
+
+When the built-in filters are not enough, register your own filter with `filter.custom_filter`. Custom filters take part in the same `AND` check and can be attached to a single command, a command-group handler, or one sub-command.
+
+#### Writing a Filter
+
+Subclass `CustomFilter` and implement the synchronous `filter` method. Return `True` to allow the handler, or `False` to block it:
+
+```python
+from astrbot.api import AstrBotConfig
+from astrbot.api.event import AstrMessageEvent, filter
+
+
+class GroupWhitelist(filter.CustomFilter):
+    """Only take effect in the group chats listed in the config."""
+
+    def __init__(self, raise_error: bool = True, **kwargs):
+        super().__init__(raise_error, **kwargs)
+
+    def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
+        groups = (cfg.get("my_plugin") or {}).get("groups") or []
+        return event.get_group_id() in groups
+```
+
+> [!NOTE]
+> - `filter` is **synchronous**: the framework calls it synchronously, so you cannot `await` inside it.
+> - The decorator takes the filter **class**, not an instance (the framework instantiates it as `CustomFilter(raise_error)`).
+> - If a subclass overrides `__init__`, keep the `raise_error` parameter, otherwise instantiation fails.
+> - `cfg` is AstrBot's global config object; if you need your own plugin config, store the values on the filter instance beforehand.
+
+#### Attaching to a Command
+
+```python
+@filter.custom_filter(GroupWhitelist)
+@filter.command("test")
+async def test(self, event: AstrMessageEvent):
+    yield event.plain_result("Passed the check")
+```
+
+#### Attaching to a Command Group
+
+When decorated on a `command_group`, the filter constrains **the group handler only**; it does **not** cascade to the group's sub-commands:
+
+```python
+@filter.custom_filter(GroupWhitelist)
+@filter.command_group("math")
+def math(self):
+    pass
+```
+
+> [!WARNING]
+> A group-level filter does not constrain sub-commands. Each sub-command is evaluated by its own handler, and its `CommandFilter` never consults the parent group's filter, so sub-commands still run even when the group-level filter returns `False`. To restrict a whole group, attach the filter to every sub-command (wrap it in a small reusable decorator if there are many).
+
+To constrain a single sub-command, put `custom_filter` **above** `command`:
+
+```python
+@math.custom_filter(GroupWhitelist)
+@math.command("reset")
+async def math_reset(self, event: AstrMessageEvent):
+    pass
+```
+
+To constrain every sub-command in the group, declare it on each one:
+
+```python
+@math.custom_filter(GroupWhitelist)
+@math.command("add")
+async def math_add(self, event: AstrMessageEvent):
+    pass
+
+
+@math.custom_filter(GroupWhitelist)
+@math.command("sub")
+async def math_sub(self, event: AstrMessageEvent):
+    pass
+```
+
+#### Combining Filters
+
+Like the built-in filters, custom filters can be combined with `&` and `|` (`AdminOnly` below is another custom filter class):
+
+```python
+@filter.custom_filter(GroupWhitelist & AdminOnly)  # all of them must pass
+@filter.command("a")
+async def a(self, event: AstrMessageEvent):
+    pass
+
+
+@filter.custom_filter(GroupWhitelist() | AdminOnly())  # any of them may pass
+@filter.command("b")
+async def b(self, event: AstrMessageEvent):
+    pass
+```
+
+#### Behavior Notes
+
+- When a filter returns `False`, the handler is skipped silently and no message is sent to the user; send one yourself if you need to (`filter` is synchronous, so use `asyncio.create_task(event.send(...))`).
+- Exceptions raised inside a filter are caught by the framework, which sends `Plugin <plugin name>: <error message>` to the user and stops event propagation.
+- Multiple filters are combined with `AND`, exactly like the built-in filters.
+- Sub-command-level filters hide blocked sub-commands from the command tree returned when only the group name is sent; a group-level filter that returns `False` blocks the group handler itself, so the whole tree is not rendered.
+
 ### Event Hooks
 
 > [!TIP]
-> Event hooks do not support being used together with @filter.command, @filter.command_group, @filter.event_message_type, @filter.platform_adapter_type, or @filter.permission_type.
+> Event hooks do not support being used together with @filter.command, @filter.command_group, @filter.event_message_type, @filter.platform_adapter_type, @filter.permission_type, or @filter.custom_filter.
 
 #### On Bot Initialization Complete
 
