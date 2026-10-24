@@ -9,7 +9,7 @@ import zipfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from types import SimpleNamespace
+from types import MethodType, SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import httpx
@@ -23,6 +23,7 @@ from PIL import Image as PILImage
 import astrbot.dashboard.services.config_service as config_service
 import astrbot.dashboard.services.stat_service as stat_service
 from astrbot.core import file_token_service
+from astrbot.core.star.star_manager import PluginManager
 from astrbot.core.utils import llm_metadata
 from astrbot.dashboard.api.app import create_dashboard_asgi_app
 from astrbot.dashboard.api.backups import download_backup as download_backup_route
@@ -3241,6 +3242,52 @@ async def test_plugin_service_update_github_source_uses_plugin_repo(
     assert update_info["repo"] == "https://github.com/AstrBotDevs/astrbot-plugin-demo"
     assert update_info["download_url"] == ""
     assert update_info["record"]["install_method"] == "repository"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("batch", "reload_success"), [(False, False), (True, False), (False, True)]
+)
+async def test_v1_plugin_update_reports_reload_result(
+    asgi_app: FastAPI,
+    asgi_client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    batch: bool,
+    reload_success: bool,
+):
+    service = asgi_app.state.services.plugins
+    plugin = SimpleNamespace(reserved=False, root_dir_name=None)
+    manager = SimpleNamespace(
+        context=SimpleNamespace(get_registered_star=lambda name: plugin),
+        _updater=SimpleNamespace(update=AsyncMock()),
+        reload=AsyncMock(
+            return_value=(reload_success, None if reload_success else "initialize failed")
+        ),
+    )
+    manager.update_plugin = MethodType(PluginManager.update_plugin, manager)
+    monkeypatch.setattr(service, "plugin_manager", manager)
+    monkeypatch.setattr(service, "resolve_market_update_info", AsyncMock(return_value={}))
+    refresh = AsyncMock()
+    monkeypatch.setattr(service, "refresh_plugin_install_source_after_update", refresh)
+    monkeypatch.setattr(service, "sync_skills_after_plugin_change", AsyncMock())
+
+    response = await asgi_client.post(
+        "/api/v1/plugins/update",
+        json={"plugin_ids": ["demo"]} if batch else {"plugin_id": "demo"},
+        headers=_jwt_headers(),
+    )
+
+    body = response.json()
+    result = body["data"]["results"][0] if batch else body
+    assert result["status"] == ("ok" if reload_success else "error")
+    manager._updater.update.assert_awaited_once_with(
+        plugin, proxy="", download_url="", repo_url=""
+    )
+    manager.reload.assert_awaited_once_with("demo")
+    if reload_success:
+        refresh.assert_awaited_once_with("demo", {})
+    else:
+        refresh.assert_not_awaited()
 
 
 @pytest.mark.asyncio
