@@ -6,7 +6,7 @@ import pytest
 from mcp import ClientSession, types
 from mcp.shared.message import SessionMessage
 
-from astrbot.core.agent.mcp_client import MCPClient
+from astrbot.core.agent.mcp_client import MCPClient, MCPTool
 
 
 def make_tool(name: str, output_schema: dict | None = None) -> types.Tool:
@@ -116,6 +116,52 @@ async def test_list_tools_repeated_cursor_fails_without_changing_cache():
         await client.list_tools_and_save()
 
     assert [tool.name for tool in client.tools] == ["cached"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("split_pages", [False, True])
+async def test_list_tools_rejects_normalized_name_collisions_without_changing_cache(
+    split_pages,
+):
+    client = MCPClient()
+    cached = [make_tool("cached")]
+    client.tools = cached
+    conflicting = [make_tool("foo.bar"), make_tool("foo_bar")]
+    pages = (
+        [
+            types.ListToolsResult(nextCursor="next", tools=conflicting[:1]),
+            types.ListToolsResult(tools=conflicting[1:]),
+        ]
+        if split_pages
+        else [types.ListToolsResult(tools=conflicting)]
+    )
+    client.session = AsyncMock()
+    client.session.list_tools.side_effect = pages
+
+    with pytest.raises(ValueError) as exc_info:
+        await client.list_tools_and_save()
+
+    assert str(exc_info.value) == (
+        "MCP tool names 'foo.bar' and 'foo_bar' both normalize to 'foo_bar'"
+    )
+    assert client.tools is cached
+
+
+@pytest.mark.asyncio
+async def test_list_tools_preserves_distinct_original_names_after_normalization():
+    client = MCPClient()
+    client.session = AsyncMock()
+    client.session.list_tools.side_effect = [
+        types.ListToolsResult(nextCursor="next", tools=[make_tool("foo.bar")]),
+        types.ListToolsResult(tools=[make_tool("foo-baz")]),
+    ]
+
+    result = await client.list_tools_and_save()
+
+    wrapped = [MCPTool(tool, client, "server") for tool in result.tools]
+    assert [tool.name for tool in wrapped] == ["foo_bar", "foo-baz"]
+    assert [tool.mcp_tool.name for tool in wrapped] == ["foo.bar", "foo-baz"]
+    assert client.tools == result.tools
 
 
 @pytest.mark.asyncio
