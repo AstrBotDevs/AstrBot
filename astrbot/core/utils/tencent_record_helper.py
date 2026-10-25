@@ -32,8 +32,8 @@ async def tencent_silk_to_wav(silk_path: str, output_path: str) -> str:
 
     with open(silk_path, "rb") as f:
         input_data = f.read()
-        # QQ/Tencent voice payloads may include a leading 0x02 marker before SILK.
-        if input_data.startswith(b"\x02"):
+        # QQ/Tencent voice payloads may include a 0x02 or 0x03 marker before SILK.
+        if input_data.startswith((b"\x02#!SILK_V3", b"\x03#!SILK_V3")):
             input_data = input_data[1:]
         input_io = BytesIO(input_data)
         output_io = BytesIO()

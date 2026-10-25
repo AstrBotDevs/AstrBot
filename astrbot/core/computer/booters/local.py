@@ -13,6 +13,7 @@ import time
 import uuid
 from _thread import LockType
 from collections.abc import Callable
+from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, BinaryIO, cast
@@ -32,6 +33,7 @@ from astrbot.core.computer.process_sandbox import (
     SandboxTimeoutError,
     create_process_sandbox,
 )
+from astrbot.core.computer.windows_job import WindowsProcessJob
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_root,
     get_astrbot_system_tmp_path,
@@ -149,6 +151,7 @@ class _LocalShellSession:
     reader_task: asyncio.Task[None]
     wait_task: asyncio.Task[int]
     permission_check: Callable[[], bool] | None = None
+    windows_job: WindowsProcessJob | None = None
     timeout_task: asyncio.Task[None] | None = None
     cursor: int = 0
     timed_out: bool = False
@@ -329,6 +332,8 @@ class LocalShellComponent(ShellComponent):
             # output on an anonymous handle to prevent redirecting host I/O.
             output_file = tempfile.TemporaryFile(mode="w+b", dir=output_dir)
             output_lock = threading.Lock()
+            windows_job = None
+            process = None
             try:
                 if sandboxed:
                     process = await create_process_sandbox().spawn_shell(
@@ -365,6 +370,11 @@ class LocalShellComponent(ShellComponent):
                             "CREATE_NEW_PROCESS_GROUP",
                             0,
                         )
+                        if os.name == "nt":
+                            windows_job = WindowsProcessJob()
+                            process_kwargs["creationflags"] |= (
+                                0x00000004  # CREATE_SUSPENDED
+                            )
                     else:
                         process_factory = asyncio.create_subprocess_shell
                         process_args = (command,)
@@ -378,8 +388,21 @@ class LocalShellComponent(ShellComponent):
                         stderr=asyncio.subprocess.STDOUT,
                         **process_kwargs,
                     )
+                    if windows_job is not None:
+                        import psutil
+
+                        windows_job.attach(process.pid)
+                        psutil.Process(process.pid).resume()
             except BaseException:
-                output_file.close()
+                try:
+                    if windows_job is not None:
+                        windows_job.close()
+                        if process is not None:
+                            with suppress(ProcessLookupError):
+                                process.kill()
+                            await asyncio.wait_for(process.wait(), 5)
+                finally:
+                    output_file.close()
                 raise
 
             output_event = asyncio.Event()
@@ -431,16 +454,26 @@ class LocalShellComponent(ShellComponent):
                 reader_task=reader_task,
                 wait_task=wait_task,
                 permission_check=permission_check,
+                windows_job=windows_job,
             )
 
             if timeout is not None:
 
                 async def _enforce_timeout() -> None:
+                    deadline = time.monotonic() + timeout
                     try:
                         await asyncio.wait_for(
                             asyncio.shield(wait_task),
                             timeout=timeout,
                         )
+                        # The Shell may exit before descendants release stdout.
+                        # Keep the original deadline for the entire Windows job.
+                        if windows_job is not None:
+                            while windows_job.active_processes():
+                                remaining = deadline - time.monotonic()
+                                if remaining <= 0:
+                                    raise asyncio.TimeoutError
+                                await asyncio.sleep(min(0.05, remaining))
                     except asyncio.TimeoutError:
                         session.timed_out = True
                         logger.warning(
@@ -896,6 +929,18 @@ class LocalShellComponent(ShellComponent):
         Args:
             session: Managed shell session to terminate.
         """
+        if session.windows_job is not None:
+            try:
+                session.windows_job.terminate()
+                await asyncio.wait_for(asyncio.shield(session.wait_task), 5)
+                deadline = time.monotonic() + 5
+                while session.windows_job.active_processes():
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError("Windows shell descendants did not exit")
+                    await asyncio.sleep(0.01)
+            finally:
+                session.windows_job.close()
+            return
         if os.name == "nt" and session.process.returncode is not None:
             return
         if session.sandboxed:
@@ -962,6 +1007,8 @@ class LocalShellComponent(ShellComponent):
                 pass
         with session.output_lock:
             session.output_file.close()
+        if session.windows_job is not None:
+            session.windows_job.close()
 
 
 @dataclass
