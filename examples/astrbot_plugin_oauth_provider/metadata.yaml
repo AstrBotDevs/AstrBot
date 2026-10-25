@@ -1,0 +1,6 @@
+name: astrbot_plugin_oauth_provider
+display_name: Plugin OAuth Example
+desc: Developer example for an OAuth-enabled, OpenAI-compatible AI supplier.
+version: v1.0.0
+author: AstrBot contributors
+repo: https://github.com/AstrBotDevs/AstrBot
