@@ -3210,9 +3210,34 @@ export type ListSessionsResponse = (SuccessEnvelope);
 
 export type ListSessionsError = unknown;
 
+export type ListActiveUmosData = {
+    query?: {
+        /**
+         * Exact platform instance ID; omit to list all instances.
+         */
+        platform_id?: string;
+    };
+};
+
 export type ListActiveUmosResponse = (SuccessEnvelope);
 
 export type ListActiveUmosError = unknown;
+
+export type ListSessionSendersData = {
+    query?: {
+        limit?: number;
+        page?: number;
+        search?: string;
+        /**
+         * Resolve the latest record per exact sender ID instead of returning all source sessions.
+         */
+        sender_ids?: Array<(string)>;
+    };
+};
+
+export type ListSessionSendersResponse = (SuccessEnvelope);
+
+export type ListSessionSendersError = unknown;
 
 export type ListSessionRulesData = {
     query?: {

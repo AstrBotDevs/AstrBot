@@ -74,6 +74,8 @@ class LogService:
                     yield event
 
             queue = self.log_broker.register()
+            # Flush response headers through gzip before waiting for log events.
+            yield ": connected\n\n"
             while True:
                 message = await queue.get()
                 current_ts = message.get("time", time.time())

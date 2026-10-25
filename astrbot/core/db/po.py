@@ -443,6 +443,19 @@ class UmoAlias(TimestampMixin, SQLModel, table=True):
     )
 
 
+class UmoSender(TimestampMixin, SQLModel, table=True):
+    """Latest sender names observed within each unified message origin."""
+
+    __tablename__: str = "umo_senders"
+
+    id: int | None = Field(default=None, primary_key=True)
+    umo: str = Field(nullable=False, max_length=512)
+    sender_id: str = Field(nullable=False, max_length=255)
+    sender_name: str = Field(default="", nullable=False, max_length=255)
+
+    __table_args__ = (UniqueConstraint("umo", "sender_id", name="uix_umo_sender"),)
+
+
 class Attachment(TimestampMixin, SQLModel, table=True):
     """This class represents attachments for messages in AstrBot.
 
