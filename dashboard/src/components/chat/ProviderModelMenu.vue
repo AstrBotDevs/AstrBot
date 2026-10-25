@@ -5,7 +5,7 @@
     :fallback-model="selectedModelName"
     provider-type="chat_completion"
     :variant="variant"
-    :allow-empty="false"
+    :allow-empty="true"
     @update:model-value="updateSelection"
     @select="saveSelection"
   />
@@ -42,8 +42,7 @@ function updateSelection(value: string | string[]) {
 }
 
 function saveSelection(provider: ProviderSelection | null) {
-  if (!provider) return;
-  setSelection(provider.id, provider.model || "");
+  setSelection(provider?.id || "", provider?.model || "");
 }
 
 function getCurrentSelection() {

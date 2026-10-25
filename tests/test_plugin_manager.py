@@ -2035,7 +2035,6 @@ async def test_update_plugin_dependency_install_flow(
 async def test_install_plugin_skips_dependency_install_when_no_requirements_missing(
     plugin_manager_pm: PluginManager, monkeypatch
 ):
-    plugin_path = Path(plugin_manager_pm.plugin_store_path) / TEST_PLUGIN_DIR
     events = []
     _mock_missing_requirements(monkeypatch, set())
 

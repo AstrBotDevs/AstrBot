@@ -1,7 +1,13 @@
 import asyncio
 import copy
+import io
 import json
+import os
+import stat
+import time
+import zipfile
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
@@ -1060,17 +1066,21 @@ async def test_version_routes_return_startup_runtime_snapshot(
     platform = SimpleNamespace(
         system=Mock(return_value="Linux"), machine=Mock(return_value="aarch64")
     )
+    from astrbot.core.computer import process_sandbox
+
+    process_sandbox.get_process_sandbox_status.cache_clear()
+    monkeypatch.setattr(process_sandbox, "platform", platform)
     which = Mock(return_value=None if status == "missing" else "/usr/bin/bwrap")
     monkeypatch.setattr(stat_service, "platform", platform)
-    monkeypatch.setattr(stat_service, "shutil", SimpleNamespace(which=which))
+    monkeypatch.setattr(process_sandbox, "shutil", SimpleNamespace(which=which))
     error = "bwrap: setting up uid map: Permission denied"
     sandbox = Mock()
     sandbox.run.return_value = SimpleNamespace(
         returncode=1 if status == "unavailable" else 0, stderr=error.encode()
     )
     factory = Mock(return_value=sandbox)
-    monkeypatch.setattr(stat_service, "create_process_sandbox", factory)
-    monkeypatch.setattr(stat_service, "get_astrbot_temp_path", lambda: str(tmp_path))
+    monkeypatch.setattr(process_sandbox, "create_process_sandbox", factory)
+    monkeypatch.setattr(process_sandbox, "get_astrbot_temp_path", lambda: str(tmp_path))
     monkeypatch.setattr(
         stat_service, "is_desktop_session_auth_enabled", lambda: desktop_auth
     )
@@ -1123,9 +1133,10 @@ async def test_version_routes_return_startup_runtime_snapshot(
         assert "runtime" not in response.json()["data"]
 
     which.assert_called_once_with("bwrap")
-    platform.system.assert_called_once_with()
+    assert platform.system.call_count == 2
     platform.machine.assert_called_once_with()
     assert factory.call_count == (0 if status == "missing" else 1)
+    process_sandbox.get_process_sandbox_status.cache_clear()
 
 
 @pytest.mark.asyncio
@@ -1768,6 +1779,82 @@ async def test_v1_active_umos_uses_session_service(
 
 
 @pytest.mark.asyncio
+async def test_v1_active_umos_filters_by_exact_platform_instance(
+    asgi_client: httpx.AsyncClient, fake_db: FakeDb,
+):
+    """Return only the requested instance's sessions to platform editors."""
+    fake_db.umo_ids = ["qq:GroupMessage:1", "qq-2:GroupMessage:2"]
+    response = await asgi_client.get(
+        "/api/v1/sessions/active-umos", params={"platform_id": "qq"}, headers=_jwt_headers(),
+    )
+    assert response.status_code == 200
+    assert response.json()["data"]["umos"] == ["qq:GroupMessage:1"]
+
+
+@pytest.mark.asyncio
+async def test_v1_sender_lookup_requires_auth_and_returns_source(
+    asgi_client: httpx.AsyncClient, fake_db: FakeDb,
+):
+    """Expose source session names without allowing unauthenticated lookup."""
+    fake_db.get_umo_senders = AsyncMock(return_value=[(
+        SimpleNamespace(umo="qq:GroupMessage:1000", sender_id="123", sender_name="Alice"),
+        None,
+    )])
+    assert (await asgi_client.get("/api/v1/sessions/senders")).status_code == 401
+    response = await asgi_client.get(
+        "/api/v1/sessions/senders", params={"search": " Alice ", "limit": 10},
+        headers=_jwt_headers(),
+    )
+    assert response.status_code == 200
+    sender = response.json()["data"]["senders"][0]
+    assert sender["sender_id"] == "123"
+    assert sender["sender_name"] == "Alice"
+    assert sender["platform"] == "qq"
+    assert sender["display_name"] == "qq:GroupMessage:1000"
+    assert response.json()["data"]["page"] == 1
+    assert response.json()["data"]["has_more"] is False
+    fake_db.get_umo_senders.assert_awaited_once_with("Alice", 11, None, offset=0)
+    fake_db.get_umo_senders.reset_mock()
+    response = await asgi_client.get(
+        "/api/v1/sessions/senders",
+        params=[("sender_ids", "123"), ("sender_ids", "456"), ("limit", "100")],
+        headers=_jwt_headers(),
+    )
+    assert response.status_code == 200
+    fake_db.get_umo_senders.assert_awaited_once_with("", 101, ["123", "456"], offset=0)
+    for limit in (0, 101):
+        response = await asgi_client.get(
+            "/api/v1/sessions/senders", params={"limit": limit}, headers=_jwt_headers(),
+        )
+        assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_v1_sender_lookup_pages_results_and_validates_page(
+    asgi_client: httpx.AsyncClient, fake_db: FakeDb,
+):
+    """Pass page offsets through and hide the extra row used to detect the next page."""
+    fake_db.get_umo_senders = AsyncMock(return_value=[
+        (SimpleNamespace(umo="qq:GroupMessage:room", sender_id=str(index), sender_name=f"User {index}"), None)
+        for index in range(3)
+    ])
+    response = await asgi_client.get(
+        "/api/v1/sessions/senders", params={"page": 2, "limit": 2}, headers=_jwt_headers(),
+    )
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["page"] == 2
+    assert data["has_more"] is True
+    assert [sender["sender_id"] for sender in data["senders"]] == ["0", "1"]
+    fake_db.get_umo_senders.assert_awaited_once_with("", 3, None, offset=2)
+    for page in (0, -1):
+        response = await asgi_client.get(
+            "/api/v1/sessions/senders", params={"page": page}, headers=_jwt_headers(),
+        )
+        assert response.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_v1_system_config_update_preserves_independent_bot_provider_sections(
     asgi_client: httpx.AsyncClient,
     fake_core_lifecycle,
@@ -1929,7 +2016,7 @@ async def test_config_update_revokes_only_affected_shell_sessions(
         "/api/config/astrbot/update",
     ],
 )
-async def test_config_api_validates_local_permissions(
+async def test_config_api_saves_local_permissions_without_isolation(
     asgi_app,
     asgi_client,
     fake_core_lifecycle,
@@ -1967,26 +2054,45 @@ async def test_config_api_validates_local_permissions(
         json={"conf_id": "default", "config": payload} if legacy else payload,
     )
 
-    assert response.status_code == (400 if scope == "workspace" and not legacy else 200)
-    if scope == "workspace":
-        assert response.json()["status"] == "error"
-        assert "Local permission member:" in response.json()["message"]
-        assert reason in response.json()["message"]
-        if status == "unavailable":
-            assert "installed but cannot start" in response.json()["message"]
-            assert "Missing" not in response.json()["message"]
-        assert fake_core_lifecycle.astrbot_config == original
-        assert fake_core_lifecycle.reloaded_config_ids == []
-    else:
-        assert response.json()["status"] == "ok"
-        payload["provider_settings"]["computer_use_local_permissions"]["admin"].update(
-            allow_execution=False, allow_network=False
-        )
-        assert (
-            fake_core_lifecycle.astrbot_config["provider_settings"]
-            == payload["provider_settings"]
-        )
-        assert fake_core_lifecycle.reloaded_config_ids == ["default"]
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+    payload["provider_settings"]["computer_use_local_permissions"]["admin"].update(
+        allow_execution=False, allow_network=False
+    )
+    assert (
+        fake_core_lifecycle.astrbot_config["provider_settings"]
+        == payload["provider_settings"]
+    )
+    assert fake_core_lifecycle.reloaded_config_ids == ["default"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["missing", "unavailable", "unsupported"])
+async def test_welcome_page_can_enable_local_computer_access_without_isolation(
+    asgi_app, asgi_client, fake_core_lifecycle, status
+):
+    """Welcome setup only changes the runtime and retains default permissions."""
+    from astrbot.core.config.default import get_local_permission_defaults
+
+    runtime = asgi_app.state.services.stats.runtime
+    runtime.update({"os": "linux", "sandbox": {"status": status}})
+    config = fake_core_lifecycle.astrbot_config
+    config["agent_runner"] = {"runner_type": "local"}
+    config["provider_settings"] = {
+        "computer_use_runtime": "none",
+        "computer_use_local_permissions": get_local_permission_defaults("Linux"),
+    }
+    payload = copy.deepcopy(config)
+    payload["provider_settings"]["computer_use_runtime"] = "local"
+
+    response = await asgi_client.put(
+        "/api/v1/config-profiles/default", headers=_jwt_headers(), json=payload
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "ok"
+    assert config["provider_settings"] == payload["provider_settings"]
+    assert fake_core_lifecycle.reloaded_config_ids == ["default"]
 
 
 @pytest.mark.asyncio
@@ -4312,3 +4418,682 @@ async def test_v1_platform_webhook_preserves_tuple_response(
     assert response.status_code == 202
     assert response.headers["content-type"] == "text/plain"
     assert response.text == "accepted"
+
+
+@pytest.mark.asyncio
+async def test_v1_log_export_packs_log_files_and_memory_logs(
+    monkeypatch, tmp_path: Path, asgi_app, asgi_client: httpx.AsyncClient
+):
+    """The archive covers data/logs, configured log files elsewhere and memory logs."""
+    monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
+    logs_dir = tmp_path / "data" / "logs"
+    logs_dir.mkdir(parents=True)
+    (logs_dir / "event_loop_watchdog.log").write_text("watchdog", encoding="utf-8")
+    external_dir = tmp_path / "external"
+    external_dir.mkdir()
+    (external_dir / "custom.log").write_text("current", encoding="utf-8")
+    (external_dir / "custom.1.log").write_text("rotated", encoding="utf-8")
+    other_dir = tmp_path / "other"
+    other_dir.mkdir()
+    (other_dir / "custom.log").write_text("same name", encoding="utf-8")
+    service = asgi_app.state.services.logs
+    service.config["log_file_enable"] = True
+    service.config["log_file_path"] = str(external_dir / "custom.log")
+    service.config["trace_log_path"] = str(other_dir / "custom.log")
+    service.log_broker.publish(
+        {"level": "INFO", "time": 1.0, "data": "[INFO] hello", "category": "system"}
+    )
+    service.log_broker.publish(
+        {
+            "type": "trace",
+            "level": "TRACE",
+            "time": 2.0,
+            "span_id": "span-1",
+            "action": "start",
+            "fields": {},
+        }
+    )
+
+    response = await asgi_client.get("/api/v1/logs/export", headers=_jwt_headers())
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/zip"
+    assert "astrbot-diagnostics-" in response.headers["content-disposition"]
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        assert sorted(archive.namelist()) == [
+            "config.json",
+            "environment.json",
+            "external/2/custom.log",
+            "external/custom.1.log",
+            "external/custom.log",
+            "logs/astrbot.in-memory.log",
+            "logs/event_loop_watchdog.log",
+            "manifest.json",
+            "plugins.json",
+            "traces/history.in-memory.jsonl",
+            "traces/history.jsonl",
+        ]
+        assert archive.read("external/custom.log") == b"current"
+        assert archive.read("external/custom.1.log") == b"rotated"
+        assert archive.read("external/2/custom.log") == b"same name"
+        assert archive.read("logs/event_loop_watchdog.log") == b"watchdog"
+        assert archive.read("logs/astrbot.in-memory.log").decode() == "[INFO] hello\n"
+        traces = archive.read("traces/history.in-memory.jsonl").decode().splitlines()
+        # Current LogBroker only retains ordinary logs; traces are persisted.
+        assert traces == []
+        manifest = json.loads(archive.read("manifest.json"))
+    assert sorted(manifest["files"]) == [
+        "external/2/custom.log",
+        "external/custom.1.log",
+        "external/custom.log",
+        "logs/event_loop_watchdog.log",
+    ]
+    assert manifest["skipped"] == []
+    assert (manifest["memory_logs"], manifest["memory_traces"]) == (1, 0)
+    assert str(tmp_path) not in json.dumps(manifest)
+    assert not any((tmp_path / "data" / "temp" / "log_exports").iterdir())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("redact", [True, False])
+async def test_diagnostic_export_time_range_filters_logs_and_persisted_traces(
+    monkeypatch, tmp_path, asgi_app, asgi_client, redact
+):
+    from astrbot.core.utils.trace_store import TraceStore
+
+    monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
+    service = asgi_app.state.services.logs
+    base = int(time.time()) - 3600
+    logs_dir = tmp_path / "data" / "logs"
+    logs_dir.mkdir(parents=True)
+    selected = (
+        f"[{datetime.fromtimestamp(base + 1).isoformat(sep=' ')}] token=private-range-value\n"
+        "  selected traceback\n"
+        f"[{datetime.fromtimestamp(base + 2).isoformat(sep=' ')}] last selected log\n"
+    )
+    (logs_dir / "astrbot.log").write_text(
+        "undated preamble\n"
+        f"[{datetime.fromtimestamp(base).isoformat(sep=' ')}] outside-before\n"
+        + selected
+        + f"[{datetime.fromtimestamp(base + 3).isoformat(sep=' ')}] outside-after\n"
+        "  outside traceback\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    (logs_dir / "undated.log").write_text("unrelated undated log\n", encoding="utf-8")
+    service.log_broker.publish({"time": base, "data": "outside-before"})
+    service.log_broker.publish({"time": base + 1, "data": "selected memory log"})
+    service.log_broker.publish({"time": base + 3, "data": "outside-after"})
+    service.log_broker.log_cache.append({"type": "trace", "time": base, "data": "outside"})
+    service.log_broker.log_cache.append({"type": "trace", "time": base + 1, "data": "selected"})
+    path = logs_dir / "traces.db"
+    service.config["trace_db_path"] = str(path)
+    store = TraceStore(path, {"trace_db_max_mb": 8})
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.log_service.get_trace_store", lambda *_: store
+    )
+    try:
+        for index in range(60):
+            trace_id = f"{index + 1:032x}"
+            stamp = str((base + index) * 1_000_000_000)
+            summary = {
+                "trace_id": trace_id,
+                "root_span_id": "b" * 16,
+                "start_time_unix_nano": stamp,
+                "end_time_unix_nano": stamp,
+                "updated_time_unix_nano": stamp,
+                "state": "completed",
+                "has_errors": False,
+                "has_models": False,
+                "has_plugins": False,
+                "has_commands": False,
+                "span_count": 0,
+                "attributes": {},
+            }
+            assert store.append({"trace": summary, "time_unix_nano": stamp})
+        assert store.flush()
+        response = await asgi_client.get(
+            "/api/v1/logs/export",
+            headers=_jwt_headers(),
+            params={"redact": str(redact).lower(), "start_time": base + 1, "end_time": base + 2},
+        )
+        assert response.status_code == 200
+        with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+            disk_log = archive.read("logs/astrbot.log").decode()
+            assert disk_log == (
+                selected.replace("private-range-value", "[REDACTED]") if redact else selected
+            )
+            assert archive.read("logs/undated.log") == b""
+            assert archive.read("logs/astrbot.in-memory.log") == b"selected memory log\n"
+            assert json.loads(archive.read("traces/history.in-memory.jsonl"))["data"] == "selected"
+            history = [json.loads(line) for line in archive.read("traces/history.jsonl").splitlines()]
+            assert [item["trace"]["trace_id"] for item in history] == [f"{3:032x}", f"{2:032x}"]
+            assert "config.json" in archive.namelist()
+            assert "environment.json" in archive.namelist()
+            manifest = json.loads(archive.read("manifest.json"))
+            assert manifest["time_range"]["start_time"] == base + 1
+            assert manifest["time_range"]["end_time"] == base + 2
+            assert manifest["memory_logs"] == 1
+            assert manifest["memory_traces"] == 1
+            assert manifest["trace_history"]["count"] == 2
+            assert manifest["trace_history"]["truncated"] is False
+        assert store.list_traces(start_time=base + 58)["total"] == 2
+        assert store.list_traces(end_time=base + 2)["total"] == 3
+    finally:
+        store.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("params", "status"),
+    [
+        ({"start_time": 20, "end_time": 10}, 400),
+        ({"start_time": -1}, 422),
+        ({"end_time": "invalid"}, 422),
+    ],
+)
+async def test_diagnostic_export_rejects_invalid_time_ranges(asgi_client, params, status):
+    response = await asgi_client.get(
+        "/api/v1/logs/export", headers=_jwt_headers(), params=params
+    )
+    assert response.status_code == status
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("webui_version", ["v9.8.7", None])
+async def test_diagnostic_export_includes_active_webui_version(
+    monkeypatch, tmp_path, fake_core_lifecycle, fake_db, webui_version
+):
+    monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
+    static_folder = tmp_path / "custom-webui"
+    assets_folder = static_folder / "assets"
+    assets_folder.mkdir(parents=True)
+    if webui_version is not None:
+        (assets_folder / "version").write_text(webui_version, encoding="utf-8")
+    default_assets = tmp_path / "data" / "dist" / "assets"
+    default_assets.mkdir(parents=True)
+    (default_assets / "version").write_text("v0.0.1", encoding="utf-8")
+    app = create_dashboard_asgi_app(
+        core_lifecycle=fake_core_lifecycle,
+        db=fake_db,
+        jwt_secret=JWT_SECRET,
+        static_folder=str(static_folder),
+    )
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.get("/api/v1/logs/export", headers=_jwt_headers())
+    assert response.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        environment = json.loads(archive.read("environment.json"))
+    assert environment["webui_version"] == webui_version
+
+
+@pytest.mark.asyncio
+async def test_v1_log_export_skips_files_that_are_not_regular(
+    monkeypatch, tmp_path: Path, asgi_client: httpx.AsyncClient
+):
+    """A symlink in the log directory must not pull in a file from elsewhere."""
+    monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
+    logs_dir = tmp_path / "data" / "logs"
+    logs_dir.mkdir(parents=True)
+    (logs_dir / "astrbot.log").write_text("ok", encoding="utf-8")
+    outside = tmp_path / "outside.txt"
+    outside.write_text("not a log", encoding="utf-8")
+    link = logs_dir / "link.log"
+    try:
+        link.symlink_to(outside)
+    except OSError:
+        # No symlink privilege (e.g. Windows without developer mode): report a
+        # regular file as a symlink instead, which takes the same code path.
+        link.write_text("not a log", encoding="utf-8")
+        real_lstat = Path.lstat
+
+        def fake_lstat(self, *args, **kwargs):
+            if self.name == "link.log":
+                return os.stat_result((stat.S_IFLNK | 0o777, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+            return real_lstat(self, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "lstat", fake_lstat)
+
+    response = await asgi_client.get("/api/v1/logs/export", headers=_jwt_headers())
+
+    assert response.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        assert "logs/link.log" not in archive.namelist()
+        assert archive.read("logs/astrbot.log") == b"ok"
+        manifest = json.loads(archive.read("manifest.json"))
+    assert manifest["skipped"] == [
+        {"name": "logs/link.log", "reason": "not a regular file"}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_v1_log_export_keeps_archive_names_unique(
+    monkeypatch, tmp_path: Path, asgi_app, asgi_client: httpx.AsyncClient
+):
+    """Log files never take the names of the generated entries."""
+    monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
+    data_dir = tmp_path / "data"
+    (data_dir / "logs").mkdir(parents=True)
+    (data_dir / "logs" / "astrbot.in-memory.log").write_text("file log", encoding="utf-8")
+    (data_dir / "traces").mkdir()
+    (data_dir / "traces" / "history.in-memory.jsonl").write_text("file trace", encoding="utf-8")
+    (data_dir / "manifest.json").write_text("trace log", encoding="utf-8")
+    service = asgi_app.state.services.logs
+    service.config["log_file_path"] = "manifest.json"
+    service.config["trace_log_path"] = "traces/history.in-memory.jsonl"
+
+    response = await asgi_client.get("/api/v1/logs/export", headers=_jwt_headers())
+
+    assert response.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        names = archive.namelist()
+        assert len(names) == len(set(names))
+        assert archive.read("logs/2/astrbot.in-memory.log") == b"file log"
+        assert archive.read("traces/2/history.in-memory.jsonl") == b"file trace"
+        assert archive.read("2/manifest.json") == b"trace log"
+        manifest = json.loads(archive.read("manifest.json"))
+    assert sorted(manifest["files"]) == [
+        "2/manifest.json",
+        "logs/2/astrbot.in-memory.log",
+        "traces/2/history.in-memory.jsonl",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_v1_log_export_refuses_when_disk_space_is_short(
+    monkeypatch, tmp_path: Path, asgi_client: httpx.AsyncClient
+):
+    monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
+    logs_dir = tmp_path / "data" / "logs"
+    logs_dir.mkdir(parents=True)
+    (logs_dir / "astrbot.log").write_text("x" * 1024, encoding="utf-8")
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.log_service.shutil.disk_usage",
+        lambda _path: SimpleNamespace(total=2048, used=2048, free=0),
+    )
+
+    response = await asgi_client.get("/api/v1/logs/export", headers=_jwt_headers())
+
+    assert response.status_code == 400
+    assert "disk space" in response.json()["message"]
+    assert not any((tmp_path / "data" / "temp" / "log_exports").iterdir())
+
+
+@pytest.mark.asyncio
+async def test_v1_log_export_runs_one_export_at_a_time(
+    monkeypatch, tmp_path: Path, asgi_app, asgi_client: httpx.AsyncClient
+):
+    monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
+    lock = asgi_app.state.services.logs._export_lock
+    lock.acquire()
+    try:
+        response = await asgi_client.get("/api/v1/logs/export", headers=_jwt_headers())
+    finally:
+        lock.release()
+
+    assert response.status_code == 400
+    assert "already running" in response.json()["message"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("redact", [True, False])
+async def test_v1_log_export_requires_authentication(asgi_client, redact):
+    response = await asgi_client.get("/api/v1/logs/export", params={"redact": redact})
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("redact", [True, False])
+@pytest.mark.parametrize(
+    "method", ["developer_header", "developer_bearer", "query", "expired"]
+)
+async def test_diagnostic_export_rejects_non_admin_auth(
+    method, redact, fake_db, asgi_app, asgi_client
+):
+    from unittest.mock import Mock
+
+    fake_db.add_api_key("diagnostic-developer-key", ["system", "config", "*"])
+    export = Mock(
+        side_effect=AssertionError("Export must not run before authentication")
+    )
+    asgi_app.state.services.logs.export_logs = export
+    options = {
+        "developer_header": {"headers": {"X-API-Key": "diagnostic-developer-key"}},
+        "developer_bearer": {
+            "headers": {"Authorization": "Bearer diagnostic-developer-key"}
+        },
+        "query": {"params": {"api_key": "diagnostic-developer-key"}},
+        "expired": {
+            "headers": {
+                "Authorization": "Bearer "
+                + jwt.encode(
+                    {"username": "admin", "exp": 1}, JWT_SECRET, algorithm="HS256"
+                )
+            }
+        },
+    }
+    options[method].setdefault("params", {})["redact"] = redact
+    response = await asgi_client.get("/api/v1/logs/export", **options[method])
+    assert response.status_code == 401
+    export.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("redact", [True, False])
+async def test_diagnostic_export_respects_redaction_for_every_section(
+    monkeypatch, tmp_path, asgi_app, asgi_client, redact
+):
+    from urllib.parse import quote
+
+    monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
+    service = asgi_app.state.services.logs
+    config = service.config
+    config["trace_enable"] = False
+    secret = "private/configured+credential"
+    plugin_secret = "private-plugin-credential"
+    trace_secret = "previous-provider-credential"
+    aes_secret = "private-aes-credential"
+    config["platform"] = [{"encoding_aes_key": aes_secret}]
+    config["diagnostic_network"] = {
+        "public_endpoint": "http://8.8.8.8:8080/v1",
+        "public_ipv6": "https://[2606:4700:4700::1111]:443/v1",
+        "local_endpoint": "http://192.168.1.2:6185/health",
+    }
+    config["provider_sources"] = [
+        {"key": [secret], "api_base": "https://example.com/v1"}
+    ]
+    config.setdefault("dashboard", {}).update(
+        password="private-password",
+        jwt_secret="private-jwt-secret",
+        password_storage_upgraded=True,
+        password_change_required=False,
+    )
+    config["max_tokens"] = 4096
+    plugin = service.core.plugin_manager.context.get_all_stars()[0]
+    plugin.config = {"api_key": plugin_secret}
+    logs = tmp_path / "data/logs"
+    logs.mkdir(parents=True)
+    (logs / "astrbot.log").write_text(
+        f"{aes_secret}\n"
+        f"{secret}\n{quote(secret, safe='')}\n{plugin_secret}\n{trace_secret}\nhttp://8.8.8.8:8080/v1 https://[2606:4700:4700::1111]:443/v1 http://192.168.1.2:6185/health\nAuthorization: Bearer unknown-header-token\nCookie: session=unknown; second=secret\n-----BEGIN PRIVATE KEY-----\nprivate-key-body\n-----END PRIVATE KEY-----\n",
+        encoding="utf-8",
+    )
+    (logs / "astrbot.1.log").write_text(plugin_secret, encoding="utf-8")
+    (logs / "binary.log").write_bytes(b"\x00binary-private-data")
+    service.log_broker.publish({"time": 1, "level": "INFO", "data": f"{secret} peer=8.8.8.8"})
+    service.log_broker.publish(
+        {"type": "trace", "time": 2, "fields": {"api_key": secret, "enabled": True}}
+    )
+    (logs / "traces.db").touch()
+
+    class Store:
+        def list_traces(self, **_kwargs):
+            return {"traces": [{"trace_id": "a" * 32}], "total": 1}
+
+        def get_trace(self, _trace_id):
+            return {
+                "trace": {"trace_id": "a" * 32},
+                "spans": [
+                    {"attributes": {"api_key": trace_secret, "message": plugin_secret, "peer": "::ffff:8.8.8.8", "ipv6": "2606:4700:4700:0:0:0:0:1111"}}
+                ],
+            }
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.log_service.get_trace_store", lambda *_: Store()
+    )
+    response = await asgi_client.get(
+        "/api/v1/logs/export",
+        headers=_jwt_headers(),
+        params={} if redact else {"redact": "false"},
+    )
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    assert ("raw-" in response.headers["content-disposition"]) is (not redact)
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        all_text = "\n".join(archive.read(name).decode() for name in archive.namelist())
+        for private in (
+            secret,
+            quote(secret, safe=""),
+            plugin_secret,
+            trace_secret,
+            aes_secret,
+            "private-password",
+            "private-jwt-secret",
+            "unknown-header-token",
+            "session=unknown",
+            "second=secret",
+            "private-key-body",
+        ):
+            assert (private not in all_text) is redact
+        assert "binary-private-data" not in all_text
+        if not redact:
+            assert archive.read("logs/astrbot.log") == (logs / "astrbot.log").read_bytes()
+        exported = json.loads(archive.read("config.json"))["profiles"]["default"]
+        if redact:
+            assert exported["diagnostic_network"]["public_endpoint"] == "http://[PUBLIC_IP_1]:8080/v1"
+            assert exported["diagnostic_network"]["public_ipv6"] == "https://[PUBLIC_IP_2]:443/v1"
+            assert b"peer=[PUBLIC_IP_1]" in archive.read("logs/astrbot.in-memory.log")
+            trace = json.loads(archive.read("traces/history.jsonl"))["spans"][0]["attributes"]
+            assert trace["peer"] == "[PUBLIC_IP_1]"
+            assert trace["ipv6"] == "[PUBLIC_IP_2]"
+            assert "8.8.8.8" not in all_text
+            assert "2606:4700:4700" not in all_text
+        else:
+            assert exported["diagnostic_network"] == config["diagnostic_network"]
+            assert "::ffff:8.8.8.8" in all_text
+        assert exported["diagnostic_network"]["local_endpoint"] == "http://192.168.1.2:6185/health"
+        assert exported["dashboard"]["password_storage_upgraded"] is True
+        assert exported["dashboard"]["password_change_required"] is False
+        assert exported["max_tokens"] == 4096
+        assert exported["provider_sources"][0]["key"] == ["[REDACTED]" if redact else secret]
+        assert json.loads(archive.read("plugins.json"))["plugins"][0]["enabled"] is True
+        manifest = json.loads(archive.read("manifest.json"))
+        assert manifest["trace_history"]["count"] == 1
+        assert manifest["trace_enabled"] is False
+        assert manifest["redacted"] is redact
+        assert "logs/traces.db" not in archive.namelist()
+        assert "logs/binary.log" not in archive.namelist()
+        assert archive.read("traces/history.in-memory.jsonl") == b""
+
+
+@pytest.mark.asyncio
+async def test_diagnostic_export_without_trace_does_not_create_or_enable_it(
+    monkeypatch, tmp_path, asgi_app, asgi_client
+):
+    from unittest.mock import Mock
+
+    monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
+    asgi_app.state.services.logs.config["trace_enable"] = False
+    getter = Mock(side_effect=AssertionError("No database should be opened"))
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.log_service.get_trace_store", getter
+    )
+    response = await asgi_client.get("/api/v1/logs/export", headers=_jwt_headers())
+    assert response.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        manifest = json.loads(archive.read("manifest.json"))
+        assert manifest["trace_enabled"] is False
+        assert manifest["trace_history"]["status"] == "disabled_no_history"
+        assert archive.read("traces/history.jsonl") == b""
+    getter.assert_not_called()
+    assert not (tmp_path / "data/logs/traces.db").exists()
+    assert asgi_app.state.services.logs.config["trace_enable"] is False
+
+
+@pytest.mark.asyncio
+async def test_diagnostic_export_authenticates_dashboard_cookie(
+    monkeypatch, tmp_path, asgi_client
+):
+    monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
+    token = _jwt_headers()["Authorization"].removeprefix("Bearer ")
+    asgi_client.cookies.set(DASHBOARD_JWT_COOKIE_NAME, token)
+    response = await asgi_client.get("/api/v1/logs/export")
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_diagnostic_export_redaction_failure_is_closed_and_unlocks(
+    monkeypatch, tmp_path, asgi_app, asgi_client
+):
+    from unittest.mock import Mock
+
+    from astrbot.dashboard.services import log_service
+
+    monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
+    original = log_service.collect_diagnostics
+    monkeypatch.setattr(
+        log_service,
+        "collect_diagnostics",
+        Mock(side_effect=RuntimeError("private-value-in-error")),
+    )
+    response = await asgi_client.get("/api/v1/logs/export", headers=_jwt_headers())
+    assert response.status_code == 400
+    assert "private-value-in-error" not in response.text
+    assert not asgi_app.state.services.logs._export_lock.locked()
+    assert not list((tmp_path / "data/temp/log_exports").glob("*.zip"))
+    monkeypatch.setattr(log_service, "collect_diagnostics", original)
+    response = await asgi_client.get("/api/v1/logs/export", headers=_jwt_headers())
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_v1_persistent_trace_routes(asgi_client, asgi_app, monkeypatch, tmp_path):
+    """Verify durable history/detail validation and dashboard authentication."""
+    from astrbot.core.utils.trace_store import TraceStore
+    from astrbot.dashboard.services import log_service
+
+    store = TraceStore(tmp_path / "traces.db", {"trace_db_max_mb": 8})
+    monkeypatch.setattr(log_service, "get_trace_store", lambda *_: store)
+    stamp = str(time.time_ns())
+    trace_id = "a" * 32
+    span_id = "b" * 16
+    summary = {
+        "trace_id": trace_id,
+        "root_span_id": span_id,
+        "start_time_unix_nano": stamp,
+        "end_time_unix_nano": stamp,
+        "updated_time_unix_nano": stamp,
+        "state": "completed",
+        "has_errors": False,
+        "has_models": False,
+        "has_plugins": False,
+        "span_count": 1,
+        "attributes": {"astrbot.message_outline": "Hello"},
+    }
+    try:
+        assert store.append(
+            {
+                "trace": summary,
+                "time_unix_nano": stamp,
+                "span": {
+                    "trace_id": trace_id,
+                    "span_id": span_id,
+                    "parent_span_id": None,
+                    "name": "message",
+                    "start_time_unix_nano": stamp,
+                    "end_time_unix_nano": stamp,
+                    "attributes": {},
+                    "status": {"code": 1},
+                },
+            }
+        )
+        assert store.flush()
+        response = await asgi_client.get("/api/v1/trace/history")
+        assert response.status_code == 401
+        token = jwt.encode(
+            {"username": "astrbot", "exp": int(time.time()) + 600},
+            JWT_SECRET,
+            algorithm="HS256",
+        )
+        headers = {"Authorization": f"Bearer {token}"}
+        response = await asgi_client.get(
+            "/api/v1/trace/history",
+            params={"limit": 1, "query": "Hello"},
+            headers=headers,
+        )
+        assert response.status_code == 200
+        assert response.json()["data"]["total"] == 1
+        response = await asgi_client.get(
+            "/api/v1/trace/history", params={"limit": 1, "page": 999}, headers=headers
+        )
+        assert response.json()["data"]["page"] == 1
+        assert len(response.json()["data"]["traces"]) == 1
+        assert (
+            await asgi_client.get("/api/v1/trace/history?page=0", headers=headers)
+        ).status_code == 422
+        response = await asgi_client.get(f"/api/v1/trace/{trace_id}", headers=headers)
+        assert response.status_code == 200
+        assert response.json()["data"]["spans"][0]["span_id"] == span_id
+        assert (
+            await asgi_client.get("/api/v1/trace/history?limit=101", headers=headers)
+        ).status_code == 422
+        assert (
+            await asgi_client.get("/api/v1/trace/invalid", headers=headers)
+        ).status_code == 422
+        assert (
+            await asgi_client.get("/api/v1/trace/" + "c" * 32, headers=headers)
+        ).status_code == 404
+        assert (
+            await asgi_client.get("/api/v1/trace/settings", headers=headers)
+        ).status_code == 200
+        monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
+        asgi_app.state.services.logs.config.update(
+            trace_enable=False, trace_db_path=str(tmp_path / "traces.db")
+        )
+        response = await asgi_client.get("/api/v1/logs/export", headers=headers)
+        assert response.status_code == 200
+        with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+            manifest = json.loads(archive.read("manifest.json"))
+            assert manifest["trace_enabled"] is False
+            assert manifest["trace_history"]["count"] == 1
+            history = json.loads(archive.read("traces/history.jsonl"))
+            assert history["trace"]["trace_id"] == trace_id
+            assert history["spans"][0]["name"] == "message"
+    finally:
+        store.close()
+
+
+@pytest.mark.asyncio
+async def test_v1_trace_storage_cleanup_target(asgi_client, monkeypatch):
+    """Validate trace cleanup requests without touching application data."""
+    usage = {
+        "logs": {"size_bytes": 10},
+        "cache": {"size_bytes": 20},
+        "traces": {"size_bytes": 30},
+        "total_bytes": 60,
+    }
+    cleanup = AsyncMock(return_value={"removed_traces": 3, "status": usage})
+    monkeypatch.setattr(stat_service.StatService, "cleanup_storage", cleanup)
+    monkeypatch.setattr(
+        stat_service.StatService, "get_storage_status", AsyncMock(return_value=usage)
+    )
+    token = jwt.encode(
+        {"username": "astrbot", "exp": int(time.time()) + 600},
+        JWT_SECRET,
+        algorithm="HS256",
+    )
+    headers = {"Authorization": f"Bearer {token}"}
+    assert (
+        await asgi_client.post(
+            "/api/v1/stats/storage/cleanup", json={"target": "traces"}
+        )
+    ).status_code == 401
+    response = await asgi_client.post(
+        "/api/v1/stats/storage/cleanup",
+        json={"target": "traces"},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    assert response.json()["data"]["removed_traces"] == 3
+    cleanup.assert_awaited_once_with("traces")
+    response = await asgi_client.get("/api/v1/stats/storage", headers=headers)
+    assert response.json()["data"]["total_bytes"] == 60
+    assert response.json()["data"]["traces"]["size_bytes"] == 30
+    assert (
+        await asgi_client.post(
+            "/api/v1/stats/storage/cleanup", json={"target": "invalid"}, headers=headers
+        )
+    ).status_code == 422

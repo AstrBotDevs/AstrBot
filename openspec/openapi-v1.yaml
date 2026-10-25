@@ -78,7 +78,7 @@ tags:
   - name: Files
   - name: Plugins
   - name: Plugin Sources
-  - name: Plugin Pages
+  - name: Plugin Views
   - name: Commands
   - name: Tools
   - name: MCP
@@ -2159,69 +2159,6 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
-  /api/v1/plugins/pages:
-    get:
-      tags: [Plugin Pages]
-      summary: List plugin pages by query ID
-      operationId: listPluginPagesById
-      x-astrbot-scope: plugin
-      parameters:
-        - name: plugin_id
-          in: query
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          $ref: "#/components/responses/Ok"
-
-  /api/v1/plugins/page:
-    get:
-      tags: [Plugin Pages]
-      summary: Get plugin page entry HTML by query ID
-      operationId: getPluginPageById
-      x-astrbot-scope: plugin
-      parameters:
-        - name: plugin_id
-          in: query
-          required: true
-          schema:
-            type: string
-        - name: page_name
-          in: query
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          $ref: "#/components/responses/Html"
-
-  /api/v1/plugins/page/assets:
-    get:
-      tags: [Plugin Pages]
-      summary: Get a plugin page asset by query ID
-      operationId: getPluginPageAssetById
-      x-astrbot-scope: plugin
-      parameters:
-        - name: plugin_id
-          in: query
-          required: true
-          schema:
-            type: string
-        - name: page_name
-          in: query
-          required: true
-          schema:
-            type: string
-        - name: asset_path
-          in: query
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Plugin asset content
-
   /api/v1/plugins/{plugin_id}:
     get:
       tags: [Plugins]
@@ -2755,65 +2692,29 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
-  /api/v1/plugins/{plugin_id}/pages:
+  /api/v1/plugins/views:
     get:
-      tags: [Plugin Pages]
-      summary: List plugin pages
-      operationId: listPluginPages
+      tags: [Plugin Views]
+      summary: List plugin views by query ID
+      operationId: listPluginViewsById
       x-astrbot-scope: plugin
       parameters:
-        - $ref: "#/components/parameters/PluginId"
+        - name: plugin_id
+          in: query
+          required: true
+          schema:
+            type: string
       responses:
         "200":
           $ref: "#/components/responses/Ok"
 
-  /api/v1/plugins/{plugin_id}/pages/{page_name}:
+  /api/v1/plugins/pages:
     get:
-      tags: [Plugin Pages]
-      summary: Get plugin page entry HTML
-      operationId: getPluginPage
-      x-astrbot-scope: plugin
-      parameters:
-        - $ref: "#/components/parameters/PluginId"
-        - name: page_name
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          $ref: "#/components/responses/Html"
-
-  /api/v1/plugins/{plugin_id}/pages/{page_name}/assets/{asset_path}:
-    get:
-      tags: [Plugin Pages]
-      summary: Get a plugin page asset
-      operationId: getPluginPageAsset
-      x-astrbot-scope: plugin
-      parameters:
-        - $ref: "#/components/parameters/PluginId"
-        - name: page_name
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: asset_path
-          in: path
-          required: true
-          description: URL-encoded relative asset path.
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Plugin asset content
-
-  # Views aliases. "views" is the preferred naming; the /pages routes above
-  # stay valid as aliases.
-  /api/v1/plugins/views:
-    get:
-      tags: [Plugin Pages]
-      summary: List plugin views by query ID (alias of /plugins/pages)
-      operationId: listPluginViewsById
+      tags: [Plugin Views]
+      summary: List plugin views by query ID (alias of /plugins/views)
+      description: Deprecated compatibility alias kept for a transition period. New clients should use /plugins/views.
+      operationId: listPluginPagesById
+      deprecated: true
       x-astrbot-scope: plugin
       parameters:
         - name: plugin_id
@@ -2827,8 +2728,8 @@ paths:
 
   /api/v1/plugins/view:
     get:
-      tags: [Plugin Pages]
-      summary: Get plugin view entry HTML by query ID (alias of /plugins/page)
+      tags: [Plugin Views]
+      summary: Get plugin view entry HTML by query ID
       operationId: getPluginViewById
       x-astrbot-scope: plugin
       parameters:
@@ -2846,11 +2747,13 @@ paths:
         "200":
           $ref: "#/components/responses/Html"
 
-  /api/v1/plugins/view/assets:
+  /api/v1/plugins/page:
     get:
-      tags: [Plugin Pages]
-      summary: Get a plugin view asset by query ID (alias of /plugins/page/assets)
-      operationId: getPluginViewAssetById
+      tags: [Plugin Views]
+      summary: Get plugin view entry HTML by query ID (alias of /plugins/view)
+      description: Deprecated compatibility alias kept for a transition period. New clients should use /plugins/view.
+      operationId: getPluginPageById
+      deprecated: true
       x-astrbot-scope: plugin
       parameters:
         - name: plugin_id
@@ -2863,19 +2766,14 @@ paths:
           required: true
           schema:
             type: string
-        - name: asset_path
-          in: query
-          required: true
-          schema:
-            type: string
       responses:
         "200":
-          description: Plugin asset content
+          $ref: "#/components/responses/Html"
 
   /api/v1/plugins/{plugin_id}/views:
     get:
-      tags: [Plugin Pages]
-      summary: List plugin views (alias of /plugins/{plugin_id}/pages)
+      tags: [Plugin Views]
+      summary: List plugin views
       operationId: listPluginViews
       x-astrbot-scope: plugin
       parameters:
@@ -2884,15 +2782,29 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
-  /api/v1/plugins/{plugin_id}/views/{page_name}:
+  /api/v1/plugins/{plugin_id}/pages:
     get:
-      tags: [Plugin Pages]
-      summary: Get plugin view entry HTML (alias of /plugins/{plugin_id}/pages/{page_name})
+      tags: [Plugin Views]
+      summary: List plugin views (alias of /plugins/{plugin_id}/views)
+      description: Deprecated compatibility alias kept for a transition period. New clients should use /plugins/{plugin_id}/views.
+      operationId: listPluginPages
+      deprecated: true
+      x-astrbot-scope: plugin
+      parameters:
+        - $ref: "#/components/parameters/PluginId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugins/{plugin_id}/views/{view_name}:
+    get:
+      tags: [Plugin Views]
+      summary: Get plugin view entry HTML
       operationId: getPluginView
       x-astrbot-scope: plugin
       parameters:
         - $ref: "#/components/parameters/PluginId"
-        - name: page_name
+        - name: view_name
           in: path
           required: true
           schema:
@@ -2901,17 +2813,47 @@ paths:
         "200":
           $ref: "#/components/responses/Html"
 
-  /api/v1/plugins/{plugin_id}/views/{page_name}/assets/{asset_path}:
+  /api/v1/plugins/{plugin_id}/pages/{view_name}:
     get:
-      tags: [Plugin Pages]
-      summary: Get a plugin view asset (alias of /plugins/{plugin_id}/pages/{page_name}/assets/{asset_path})
-      operationId: getPluginViewAsset
+      tags: [Plugin Views]
+      summary: Get plugin view entry HTML (alias of /plugins/{plugin_id}/views/{view_name})
+      description: Deprecated compatibility alias kept for a transition period. New clients should use /plugins/{plugin_id}/views/{view_name}.
+      operationId: getPluginPage
+      deprecated: true
       x-astrbot-scope: plugin
       parameters:
         - $ref: "#/components/parameters/PluginId"
-        - name: page_name
+        - name: view_name
           in: path
           required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Html"
+
+  /api/v1/plugins/{plugin_id}/views/{view_name}/_t/{token}/{asset_path}:
+    get:
+      tags: [Plugin Views]
+      summary: Get a plugin view asset via a scoped path token
+      description: >-
+        Serves plugin view assets without URL rewriting. The token is a
+        plugin-page-scoped JWT issued by the view entry config endpoint and
+        travels in the path so relative URLs inherit it through normal path
+        resolution. Use an empty asset_path (trailing slash) for the entry
+        document.
+      operationId: getPluginViewTokenAsset
+      parameters:
+        - $ref: "#/components/parameters/PluginId"
+        - name: view_name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: token
+          in: path
+          required: true
+          description: Scoped plugin page asset token.
           schema:
             type: string
         - name: asset_path
@@ -2923,10 +2865,12 @@ paths:
       responses:
         "200":
           description: Plugin asset content
+        "401":
+          description: Missing, invalid, expired, or wrongly scoped token
 
   /api/v1/plugins/page-bridge-sdk.js:
     get:
-      tags: [Plugin Pages]
+      tags: [Plugin Views]
       summary: Get the plugin page bridge SDK
       operationId: getPluginPageBridgeSdk
       x-astrbot-scope: plugin
@@ -2940,7 +2884,7 @@ paths:
 
   /api/v1/plugins/extensions/{plugin_path}:
     get:
-      tags: [Plugin Pages]
+      tags: [Plugin Views]
       summary: Proxy a plugin extension GET route
       operationId: getPluginExtensionRoute
       x-astrbot-scope: plugin
@@ -2955,7 +2899,7 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
     post:
-      tags: [Plugin Pages]
+      tags: [Plugin Views]
       summary: Proxy a plugin extension POST route
       operationId: postPluginExtensionRoute
       x-astrbot-scope: plugin
@@ -2980,7 +2924,7 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
     put:
-      tags: [Plugin Pages]
+      tags: [Plugin Views]
       summary: Proxy a plugin extension PUT route
       operationId: putPluginExtensionRoute
       x-astrbot-scope: plugin
@@ -3000,7 +2944,7 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
     patch:
-      tags: [Plugin Pages]
+      tags: [Plugin Views]
       summary: Proxy a plugin extension PATCH route
       operationId: patchPluginExtensionRoute
       x-astrbot-scope: plugin
@@ -3020,7 +2964,7 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
     delete:
-      tags: [Plugin Pages]
+      tags: [Plugin Views]
       summary: Proxy a plugin extension DELETE route
       operationId: deletePluginExtensionRoute
       x-astrbot-scope: plugin
@@ -4240,6 +4184,48 @@ paths:
       summary: List active and known UMOs
       operationId: listActiveUmos
       x-astrbot-scope: data
+      parameters:
+        - name: platform_id
+          in: query
+          description: Exact platform instance ID; omit to list all instances.
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/sessions/senders:
+    get:
+      tags: [Sessions]
+      summary: Search known senders with source session names
+      description: >-
+        Search recorded senders, deduplicate by platform instance and sender ID,
+        then paginate in descending update order. Returns senders, page and
+        has_more in the data object. Historical messages are not backfilled.
+      operationId: listSessionSenders
+      x-astrbot-scope: data
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - name: sender_ids
+          in: query
+          description: Resolve the latest record per exact sender ID instead of returning all source sessions.
+          schema:
+            type: array
+            maxItems: 100
+            items:
+              type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+            maxLength: 512
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 100
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -4712,6 +4698,7 @@ paths:
       tags: [Stats]
       summary: Get storage status
       operationId: getStorageStatus
+      description: Returns log, cache, and trace database usage (including trace sidecars), plus total bytes.
       x-astrbot-scope: system
       responses:
         "200":
@@ -4722,13 +4709,14 @@ paths:
       tags: [Stats]
       summary: Clean storage
       operationId: cleanupStorage
+      description: Clears logs, cache, finished trace history, or all three. Running traces are retained.
       x-astrbot-scope: system
       requestBody:
         required: false
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/DynamicConfig"
+              $ref: "#/components/schemas/StorageCleanupRequest"
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -5140,6 +5128,87 @@ paths:
       responses:
         "200":
           $ref: "#/components/responses/Text"
+
+  /api/v1/logs/export:
+    get:
+      tags: [Logs]
+      summary: Export a diagnostic bundle
+      description: Requires a dashboard administrator session. Developer API keys are not accepted. Includes available disk and memory logs, trace history, configuration, plugin status and environment details. Credentials are masked by default; setting redact=false exports original sensitive values.
+      operationId: exportLogs
+      security:
+        - BearerAuth: []
+      x-astrbot-scope: system
+      parameters:
+        - name: redact
+          in: query
+          description: Mask recognized credentials. Disable only for private diagnosis.
+          schema: {type: boolean, default: true}
+        - name: start_time
+          in: query
+          description: Inclusive minimum log timestamp or trace start time, in Unix seconds. Omit for no lower bound. Undated standalone log content is excluded when a time bound is set.
+          schema: {type: integer, minimum: 0}
+        - name: end_time
+          in: query
+          description: Inclusive maximum log timestamp or trace start time, in Unix seconds. Omit for no upper bound. Must not be before start_time. Matching traces retain their complete details.
+          schema: {type: integer, minimum: 0}
+      responses:
+        "200":
+          description: Diagnostic ZIP. With redact=false it contains original sensitive values; personal data may remain in either mode.
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+
+  /api/v1/trace/history:
+    get:
+      tags: [Logs]
+      summary: List persisted trace summaries
+      operationId: listTraces
+      x-astrbot-scope: system
+      parameters:
+        - name: limit
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 100, default: 50}
+        - name: cursor
+          description: Legacy keyset cursor; use page for numbered pagination.
+          in: query
+          schema: {type: string, maxLength: 64}
+        - name: page
+          in: query
+          schema: {type: integer, minimum: 1, default: 1}
+        - name: query
+          in: query
+          schema: {type: string, maxLength: 256, default: ""}
+        - name: errors
+          in: query
+          schema: {type: boolean, default: false}
+        - name: models
+          in: query
+          schema: {type: boolean, default: false}
+        - name: plugins
+          in: query
+          schema: {type: boolean, default: false}
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/trace/{trace_id}:
+    get:
+      tags: [Logs]
+      summary: Get persisted trace spans and events
+      operationId: getTraceDetail
+      x-astrbot-scope: system
+      parameters:
+        - name: trace_id
+          in: path
+          required: true
+          schema: {type: string, pattern: "^[0-9a-f]{32}$"}
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+        "404":
+          description: Trace not found or already evicted.
 
   /api/v1/trace/settings:
     get:
@@ -5595,6 +5664,14 @@ components:
         data: {}
       additionalProperties: false
 
+    StorageCleanupRequest:
+      type: object
+      properties:
+        target:
+          type: string
+          enum: [logs, cache, traces, all]
+          default: all
+
     DynamicConfig:
       type: object
       additionalProperties: true
@@ -5832,6 +5909,9 @@ components:
       type: object
       required: [message]
       properties:
+        locale:
+          type: string
+          description: UI locale for built-in LLM error messages. Omitted or unsupported locales fall back to zh-CN.
         username:
           type: string
           description: Caller-declared WebChat sender/session owner. Configured AstrBot administrator IDs require the chat:admin API key sub-scope.
@@ -5904,6 +5984,9 @@ components:
     ChatMessageRegenerateRequest:
       type: object
       properties:
+        locale:
+          type: string
+          description: UI locale for built-in LLM error messages. Omitted or unsupported locales fall back to zh-CN.
         selected_provider:
           type: string
         selected_model:
@@ -5935,6 +6018,9 @@ components:
       type: object
       required: [message]
       properties:
+        locale:
+          type: string
+          description: UI locale for built-in LLM error messages. Omitted or unsupported locales fall back to zh-CN.
         message:
           oneOf:
             - type: string

@@ -60,7 +60,7 @@
                 </div>
               </div>
             </div>
-            <apexchart
+            <VueApexCharts
               type="area"
               height="320"
               :options="messageChartOptions"
@@ -110,7 +110,7 @@
                 <div class="section-title">{{ t('modelTrend.title') }}</div>
               </div>
             </div>
-            <apexchart
+            <VueApexCharts
               type="bar"
               height="420"
               :options="providerChartOptions"
@@ -252,6 +252,7 @@
 </template>
 
 <script setup lang="ts">
+import VueApexCharts from 'vue3-apexcharts'
 import type { ApexOptions } from 'apexcharts'
 import { Check, Copy, MessageCircle, MessageSquareText } from '@lucide/vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'

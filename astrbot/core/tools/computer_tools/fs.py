@@ -890,7 +890,11 @@ class GrepTool(FunctionTool):
             )
             contents: list[str] = []
             for search_path in search_paths:
-                sandboxed = restricted
+                sandboxed = (
+                    restricted
+                    and computer_util.get_process_sandbox_status()["status"]
+                    == "detected"
+                )
                 if sandboxed:
                     path_object = Path(search_path)
                     matching_roots = [

@@ -26,6 +26,10 @@ jobs:
           cache: "pnpm"
           cache-dependency-path: dashboard/pnpm-lock.yaml
 
+      - name: Check i18n keys
+        working-directory: dashboard
+        run: pnpm run i18n:check
+
       - name: Install and Build
         working-directory: dashboard
         run: |
