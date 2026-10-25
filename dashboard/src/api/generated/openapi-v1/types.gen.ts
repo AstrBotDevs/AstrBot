@@ -45,6 +45,8 @@ export type BatchSessionServiceRequest = UmoListRequest & {
     tts_enabled?: boolean;
 };
 
+export type BotCleanupTarget = 'custom_rules' | 'preferences' | 'routing' | 'cron_jobs' | 'conversations' | 'message_history' | 'traces' | 'stats';
+
 export type BotConfigRequest = {
     id?: string;
     name?: string;
@@ -102,6 +104,10 @@ export type ChatMessagePatchRequest = {
 };
 
 export type ChatMessageRegenerateRequest = {
+    /**
+     * UI locale for built-in LLM error messages. Omitted or unsupported locales fall back to zh-CN.
+     */
+    locale?: string;
     selected_provider?: string;
     selected_model?: string;
     /**
@@ -132,6 +138,10 @@ export type ChatProjectRequest = {
 export type workspace_type = 'session' | 'project' | 'custom';
 
 export type ChatRequest = {
+    /**
+     * UI locale for built-in LLM error messages. Omitted or unsupported locales fall back to zh-CN.
+     */
+    locale?: string;
     /**
      * Caller-declared WebChat sender/session owner. Configured AstrBot administrator IDs require the chat:admin API key sub-scope.
      */
@@ -185,6 +195,10 @@ export type ChatThreadCreateRequest = {
 };
 
 export type ChatThreadMessageRequest = {
+    /**
+     * UI locale for built-in LLM error messages. Omitted or unsupported locales fall back to zh-CN.
+     */
+    locale?: string;
     message: (string | Array<MessagePart>);
     selected_provider?: string;
     selected_model?: string;
@@ -419,6 +433,11 @@ export type NeoReleaseActionRequest = {
 export type ParameterAttachmentId = string;
 
 export type ParameterAttachmentIdQuery = string;
+
+/**
+ * Data categories to permanently remove for this adapter. Omit to retain all associated data. Shared resources and cross-platform routing rules are preserved.
+ */
+export type ParameterBotCleanup = Array<BotCleanupTarget>;
 
 export type ParameterBotId = string;
 
@@ -677,6 +696,12 @@ export type SkillUploadRequest = {
     file: (Blob | File);
     overwrite?: boolean;
 };
+
+export type StorageCleanupRequest = {
+    target?: 'logs' | 'cache' | 'traces' | 'all';
+};
+
+export type target = 'logs' | 'cache' | 'traces' | 'all';
 
 export type SuccessEnvelope = {
     status: "ok";
@@ -991,6 +1016,10 @@ export type UpdateBotByIdError = unknown;
 export type DeleteBotByIdData = {
     query: {
         bot_id: string;
+        /**
+         * Data categories to permanently remove for this adapter. Omit to retain all associated data. Shared resources and cross-platform routing rules are preserved.
+         */
+        cleanup?: Array<BotCleanupTarget>;
     };
 };
 
@@ -1043,6 +1072,12 @@ export type UpdateBotError = unknown;
 export type DeleteBotData = {
     path: {
         bot_id: string;
+    };
+    query?: {
+        /**
+         * Data categories to permanently remove for this adapter. Omit to retain all associated data. Shared resources and cross-platform routing rules are preserved.
+         */
+        cleanup?: Array<BotCleanupTarget>;
     };
 };
 
@@ -1976,39 +2011,6 @@ export type SetPluginEnabledByIdResponse = (SuccessEnvelope);
 
 export type SetPluginEnabledByIdError = unknown;
 
-export type ListPluginPagesByIdData = {
-    query: {
-        plugin_id: string;
-    };
-};
-
-export type ListPluginPagesByIdResponse = (SuccessEnvelope);
-
-export type ListPluginPagesByIdError = unknown;
-
-export type GetPluginPageByIdData = {
-    query: {
-        page_name: string;
-        plugin_id: string;
-    };
-};
-
-export type GetPluginPageByIdResponse = (string);
-
-export type GetPluginPageByIdError = unknown;
-
-export type GetPluginPageAssetByIdData = {
-    query: {
-        asset_path: string;
-        page_name: string;
-        plugin_id: string;
-    };
-};
-
-export type GetPluginPageAssetByIdResponse = (unknown);
-
-export type GetPluginPageAssetByIdError = unknown;
-
 export type GetPluginData = {
     body?: {
         delete_config?: boolean;
@@ -2339,42 +2341,6 @@ export type DeletePluginSourceByIdResponse = (SuccessEnvelope);
 
 export type DeletePluginSourceByIdError = unknown;
 
-export type ListPluginPagesData = {
-    path: {
-        plugin_id: string;
-    };
-};
-
-export type ListPluginPagesResponse = (SuccessEnvelope);
-
-export type ListPluginPagesError = unknown;
-
-export type GetPluginPageData = {
-    path: {
-        page_name: string;
-        plugin_id: string;
-    };
-};
-
-export type GetPluginPageResponse = (string);
-
-export type GetPluginPageError = unknown;
-
-export type GetPluginPageAssetData = {
-    path: {
-        /**
-         * URL-encoded relative asset path.
-         */
-        asset_path: string;
-        page_name: string;
-        plugin_id: string;
-    };
-};
-
-export type GetPluginPageAssetResponse = (unknown);
-
-export type GetPluginPageAssetError = unknown;
-
 export type ListPluginViewsByIdData = {
     query: {
         plugin_id: string;
@@ -2384,6 +2350,16 @@ export type ListPluginViewsByIdData = {
 export type ListPluginViewsByIdResponse = (SuccessEnvelope);
 
 export type ListPluginViewsByIdError = unknown;
+
+export type ListPluginPagesByIdData = {
+    query: {
+        plugin_id: string;
+    };
+};
+
+export type ListPluginPagesByIdResponse = (SuccessEnvelope);
+
+export type ListPluginPagesByIdError = unknown;
 
 export type GetPluginViewByIdData = {
     query: {
@@ -2396,17 +2372,16 @@ export type GetPluginViewByIdResponse = (string);
 
 export type GetPluginViewByIdError = unknown;
 
-export type GetPluginViewAssetByIdData = {
+export type GetPluginPageByIdData = {
     query: {
-        asset_path: string;
         page_name: string;
         plugin_id: string;
     };
 };
 
-export type GetPluginViewAssetByIdResponse = (unknown);
+export type GetPluginPageByIdResponse = (string);
 
-export type GetPluginViewAssetByIdError = unknown;
+export type GetPluginPageByIdError = unknown;
 
 export type ListPluginViewsData = {
     path: {
@@ -2418,10 +2393,20 @@ export type ListPluginViewsResponse = (SuccessEnvelope);
 
 export type ListPluginViewsError = unknown;
 
+export type ListPluginPagesData = {
+    path: {
+        plugin_id: string;
+    };
+};
+
+export type ListPluginPagesResponse = (SuccessEnvelope);
+
+export type ListPluginPagesError = unknown;
+
 export type GetPluginViewData = {
     path: {
-        page_name: string;
         plugin_id: string;
+        view_name: string;
     };
 };
 
@@ -2429,20 +2414,35 @@ export type GetPluginViewResponse = (string);
 
 export type GetPluginViewError = unknown;
 
-export type GetPluginViewAssetData = {
+export type GetPluginPageData = {
+    path: {
+        plugin_id: string;
+        view_name: string;
+    };
+};
+
+export type GetPluginPageResponse = (string);
+
+export type GetPluginPageError = unknown;
+
+export type GetPluginViewTokenAssetData = {
     path: {
         /**
          * URL-encoded relative asset path.
          */
         asset_path: string;
-        page_name: string;
         plugin_id: string;
+        /**
+         * Scoped plugin page asset token.
+         */
+        token: string;
+        view_name: string;
     };
 };
 
-export type GetPluginViewAssetResponse = (unknown);
+export type GetPluginViewTokenAssetResponse = (unknown);
 
-export type GetPluginViewAssetError = unknown;
+export type GetPluginViewTokenAssetError = (unknown);
 
 export type GetPluginPageBridgeSdkResponse = (string);
 
@@ -3269,9 +3269,34 @@ export type ListSessionsResponse = (SuccessEnvelope);
 
 export type ListSessionsError = unknown;
 
+export type ListActiveUmosData = {
+    query?: {
+        /**
+         * Exact platform instance ID; omit to list all instances.
+         */
+        platform_id?: string;
+    };
+};
+
 export type ListActiveUmosResponse = (SuccessEnvelope);
 
 export type ListActiveUmosError = unknown;
+
+export type ListSessionSendersData = {
+    query?: {
+        limit?: number;
+        page?: number;
+        search?: string;
+        /**
+         * Resolve the latest record per exact sender ID instead of returning all source sessions.
+         */
+        sender_ids?: Array<(string)>;
+    };
+};
+
+export type ListSessionSendersResponse = (SuccessEnvelope);
+
+export type ListSessionSendersError = unknown;
 
 export type ListSessionRulesData = {
     query?: {
@@ -3545,7 +3570,7 @@ export type GetStorageStatusResponse = (SuccessEnvelope);
 export type GetStorageStatusError = unknown;
 
 export type CleanupStorageData = {
-    body?: DynamicConfig;
+    body?: StorageCleanupRequest;
 };
 
 export type CleanupStorageResponse = (SuccessEnvelope);
@@ -3789,6 +3814,56 @@ export type StreamLiveLogsError = unknown;
 export type GetLogHistoryResponse = (string);
 
 export type GetLogHistoryError = unknown;
+
+export type ExportLogsData = {
+    query?: {
+        /**
+         * Inclusive maximum log timestamp or trace start time, in Unix seconds. Omit for no upper bound. Must not be before start_time. Matching traces retain their complete details.
+         */
+        end_time?: number;
+        /**
+         * Mask recognized credentials. Disable only for private diagnosis.
+         */
+        redact?: boolean;
+        /**
+         * Inclusive minimum log timestamp or trace start time, in Unix seconds. Omit for no lower bound. Undated standalone log content is excluded when a time bound is set.
+         */
+        start_time?: number;
+    };
+};
+
+export type ExportLogsResponse = ((Blob | File));
+
+export type ExportLogsError = unknown;
+
+export type ListTracesData = {
+    query?: {
+        /**
+         * Legacy keyset cursor; use page for numbered pagination.
+         */
+        cursor?: string;
+        errors?: boolean;
+        limit?: number;
+        models?: boolean;
+        page?: number;
+        plugins?: boolean;
+        query?: string;
+    };
+};
+
+export type ListTracesResponse = (SuccessEnvelope);
+
+export type ListTracesError = unknown;
+
+export type GetTraceDetailData = {
+    path: {
+        trace_id: string;
+    };
+};
+
+export type GetTraceDetailResponse = (SuccessEnvelope);
+
+export type GetTraceDetailError = (unknown);
 
 export type GetTraceSettingsResponse = (SuccessEnvelope);
 

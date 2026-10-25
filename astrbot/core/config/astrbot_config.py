@@ -97,7 +97,7 @@ class AstrBotConfig(dict):
             and "computer_use_local_permissions" in default_provider_settings
             and "computer_use_local_permissions" not in provider_settings
         ):
-            # Preserve legacy POSIX access; Windows uses its supported defaults.
+            # Preserve legacy execution grants when migrating to role policies.
             permissions = copy.deepcopy(
                 default_provider_settings["computer_use_local_permissions"]
             )

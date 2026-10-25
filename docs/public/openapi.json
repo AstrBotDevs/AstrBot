@@ -116,7 +116,7 @@
       "name": "Plugin Sources"
     },
     {
-      "name": "Plugin Pages"
+      "name": "Plugin Views"
     },
     {
       "name": "MCP"
@@ -667,6 +667,9 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/BotCleanup"
           }
         ],
         "responses": {
@@ -810,6 +813,9 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/BotId"
+          },
+          {
+            "$ref": "#/components/parameters/BotCleanup"
           }
         ],
         "responses": {
@@ -3441,108 +3447,6 @@
         "description": "**Required scope:** `plugin`"
       }
     },
-    "/api/v1/plugins/pages": {
-      "get": {
-        "tags": [
-          "Plugin Pages"
-        ],
-        "summary": "List plugin pages by query ID",
-        "operationId": "listPluginPagesById",
-        "x-astrbot-scope": "plugin",
-        "parameters": [
-          {
-            "name": "plugin_id",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Ok"
-          }
-        },
-        "description": "**Required scope:** `plugin`"
-      }
-    },
-    "/api/v1/plugins/page": {
-      "get": {
-        "tags": [
-          "Plugin Pages"
-        ],
-        "summary": "Get plugin page entry HTML by query ID",
-        "operationId": "getPluginPageById",
-        "x-astrbot-scope": "plugin",
-        "parameters": [
-          {
-            "name": "plugin_id",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "page_name",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Html"
-          }
-        },
-        "description": "**Required scope:** `plugin`"
-      }
-    },
-    "/api/v1/plugins/page/assets": {
-      "get": {
-        "tags": [
-          "Plugin Pages"
-        ],
-        "summary": "Get a plugin page asset by query ID",
-        "operationId": "getPluginPageAssetById",
-        "x-astrbot-scope": "plugin",
-        "parameters": [
-          {
-            "name": "plugin_id",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "page_name",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "asset_path",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Plugin asset content"
-          }
-        },
-        "description": "**Required scope:** `plugin`"
-      }
-    },
     "/api/v1/plugins/{plugin_id}": {
       "get": {
         "tags": [
@@ -4457,100 +4361,12 @@
         "description": "**Required scope:** `plugin`"
       }
     },
-    "/api/v1/plugins/{plugin_id}/pages": {
-      "get": {
-        "tags": [
-          "Plugin Pages"
-        ],
-        "summary": "List plugin pages",
-        "operationId": "listPluginPages",
-        "x-astrbot-scope": "plugin",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/PluginId"
-          }
-        ],
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Ok"
-          }
-        },
-        "description": "**Required scope:** `plugin`"
-      }
-    },
-    "/api/v1/plugins/{plugin_id}/pages/{page_name}": {
-      "get": {
-        "tags": [
-          "Plugin Pages"
-        ],
-        "summary": "Get plugin page entry HTML",
-        "operationId": "getPluginPage",
-        "x-astrbot-scope": "plugin",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/PluginId"
-          },
-          {
-            "name": "page_name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Html"
-          }
-        },
-        "description": "**Required scope:** `plugin`"
-      }
-    },
-    "/api/v1/plugins/{plugin_id}/pages/{page_name}/assets/{asset_path}": {
-      "get": {
-        "tags": [
-          "Plugin Pages"
-        ],
-        "summary": "Get a plugin page asset",
-        "operationId": "getPluginPageAsset",
-        "x-astrbot-scope": "plugin",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/PluginId"
-          },
-          {
-            "name": "page_name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "asset_path",
-            "in": "path",
-            "required": true,
-            "description": "URL-encoded relative asset path.",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Plugin asset content"
-          }
-        },
-        "description": "**Required scope:** `plugin`"
-      }
-    },
     "/api/v1/plugins/views": {
       "get": {
         "tags": [
-          "Plugin Pages"
+          "Plugin Views"
         ],
-        "summary": "List plugin views by query ID (alias of /plugins/pages)",
+        "summary": "List plugin views by query ID",
         "operationId": "listPluginViewsById",
         "x-astrbot-scope": "plugin",
         "parameters": [
@@ -4571,12 +4387,39 @@
         "description": "**Required scope:** `plugin`"
       }
     },
+    "/api/v1/plugins/pages": {
+      "get": {
+        "tags": [
+          "Plugin Views"
+        ],
+        "summary": "List plugin views by query ID (alias of /plugins/views)",
+        "description": "Deprecated compatibility alias kept for a transition period. New clients should use /plugins/views.\n\n**Required scope:** `plugin`",
+        "operationId": "listPluginPagesById",
+        "deprecated": true,
+        "x-astrbot-scope": "plugin",
+        "parameters": [
+          {
+            "name": "plugin_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
     "/api/v1/plugins/view": {
       "get": {
         "tags": [
-          "Plugin Pages"
+          "Plugin Views"
         ],
-        "summary": "Get plugin view entry HTML by query ID (alias of /plugins/page)",
+        "summary": "Get plugin view entry HTML by query ID",
         "operationId": "getPluginViewById",
         "x-astrbot-scope": "plugin",
         "parameters": [
@@ -4605,13 +4448,15 @@
         "description": "**Required scope:** `plugin`"
       }
     },
-    "/api/v1/plugins/view/assets": {
+    "/api/v1/plugins/page": {
       "get": {
         "tags": [
-          "Plugin Pages"
+          "Plugin Views"
         ],
-        "summary": "Get a plugin view asset by query ID (alias of /plugins/page/assets)",
-        "operationId": "getPluginViewAssetById",
+        "summary": "Get plugin view entry HTML by query ID (alias of /plugins/view)",
+        "description": "Deprecated compatibility alias kept for a transition period. New clients should use /plugins/view.\n\n**Required scope:** `plugin`",
+        "operationId": "getPluginPageById",
+        "deprecated": true,
         "x-astrbot-scope": "plugin",
         "parameters": [
           {
@@ -4629,30 +4474,21 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "asset_path",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "responses": {
           "200": {
-            "description": "Plugin asset content"
+            "$ref": "#/components/responses/Html"
           }
-        },
-        "description": "**Required scope:** `plugin`"
+        }
       }
     },
     "/api/v1/plugins/{plugin_id}/views": {
       "get": {
         "tags": [
-          "Plugin Pages"
+          "Plugin Views"
         ],
-        "summary": "List plugin views (alias of /plugins/{plugin_id}/pages)",
+        "summary": "List plugin views",
         "operationId": "listPluginViews",
         "x-astrbot-scope": "plugin",
         "parameters": [
@@ -4668,12 +4504,34 @@
         "description": "**Required scope:** `plugin`"
       }
     },
-    "/api/v1/plugins/{plugin_id}/views/{page_name}": {
+    "/api/v1/plugins/{plugin_id}/pages": {
       "get": {
         "tags": [
-          "Plugin Pages"
+          "Plugin Views"
         ],
-        "summary": "Get plugin view entry HTML (alias of /plugins/{plugin_id}/pages/{page_name})",
+        "summary": "List plugin views (alias of /plugins/{plugin_id}/views)",
+        "description": "Deprecated compatibility alias kept for a transition period. New clients should use /plugins/{plugin_id}/views.\n\n**Required scope:** `plugin`",
+        "operationId": "listPluginPages",
+        "deprecated": true,
+        "x-astrbot-scope": "plugin",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PluginId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/plugins/{plugin_id}/views/{view_name}": {
+      "get": {
+        "tags": [
+          "Plugin Views"
+        ],
+        "summary": "Get plugin view entry HTML",
         "operationId": "getPluginView",
         "x-astrbot-scope": "plugin",
         "parameters": [
@@ -4681,7 +4539,7 @@
             "$ref": "#/components/parameters/PluginId"
           },
           {
-            "name": "page_name",
+            "name": "view_name",
             "in": "path",
             "required": true,
             "schema": {
@@ -4697,31 +4555,24 @@
         "description": "**Required scope:** `plugin`"
       }
     },
-    "/api/v1/plugins/{plugin_id}/views/{page_name}/assets/{asset_path}": {
+    "/api/v1/plugins/{plugin_id}/pages/{view_name}": {
       "get": {
         "tags": [
-          "Plugin Pages"
+          "Plugin Views"
         ],
-        "summary": "Get a plugin view asset (alias of /plugins/{plugin_id}/pages/{page_name}/assets/{asset_path})",
-        "operationId": "getPluginViewAsset",
+        "summary": "Get plugin view entry HTML (alias of /plugins/{plugin_id}/views/{view_name})",
+        "description": "Deprecated compatibility alias kept for a transition period. New clients should use /plugins/{plugin_id}/views/{view_name}.\n\n**Required scope:** `plugin`",
+        "operationId": "getPluginPage",
+        "deprecated": true,
         "x-astrbot-scope": "plugin",
         "parameters": [
           {
             "$ref": "#/components/parameters/PluginId"
           },
           {
-            "name": "page_name",
+            "name": "view_name",
             "in": "path",
             "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "asset_path",
-            "in": "path",
-            "required": true,
-            "description": "URL-encoded relative asset path.",
             "schema": {
               "type": "string"
             }
@@ -4729,16 +4580,15 @@
         ],
         "responses": {
           "200": {
-            "description": "Plugin asset content"
+            "$ref": "#/components/responses/Html"
           }
-        },
-        "description": "**Required scope:** `plugin`"
+        }
       }
     },
     "/api/v1/plugins/page-bridge-sdk.js": {
       "get": {
         "tags": [
-          "Plugin Pages"
+          "Plugin Views"
         ],
         "summary": "Get the plugin page bridge SDK",
         "operationId": "getPluginPageBridgeSdk",
@@ -4761,7 +4611,7 @@
     "/api/v1/plugins/extensions/{plugin_path}": {
       "get": {
         "tags": [
-          "Plugin Pages"
+          "Plugin Views"
         ],
         "summary": "Proxy a plugin extension GET route",
         "operationId": "getPluginExtensionRoute",
@@ -4786,7 +4636,7 @@
       },
       "post": {
         "tags": [
-          "Plugin Pages"
+          "Plugin Views"
         ],
         "summary": "Proxy a plugin extension POST route",
         "operationId": "postPluginExtensionRoute",
@@ -4827,7 +4677,7 @@
       },
       "put": {
         "tags": [
-          "Plugin Pages"
+          "Plugin Views"
         ],
         "summary": "Proxy a plugin extension PUT route",
         "operationId": "putPluginExtensionRoute",
@@ -4861,7 +4711,7 @@
       },
       "patch": {
         "tags": [
-          "Plugin Pages"
+          "Plugin Views"
         ],
         "summary": "Proxy a plugin extension PATCH route",
         "operationId": "patchPluginExtensionRoute",
@@ -4895,7 +4745,7 @@
       },
       "delete": {
         "tags": [
-          "Plugin Pages"
+          "Plugin Views"
         ],
         "summary": "Proxy a plugin extension DELETE route",
         "operationId": "deletePluginExtensionRoute",
@@ -6384,12 +6234,73 @@
         "summary": "List active and known UMOs",
         "operationId": "listActiveUmos",
         "x-astrbot-scope": "data",
+        "parameters": [
+          {
+            "name": "platform_id",
+            "in": "query",
+            "description": "Exact platform instance ID; omit to list all instances.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "$ref": "#/components/responses/Ok"
           }
         },
         "description": "**Required scope:** `data`"
+      }
+    },
+    "/api/v1/sessions/senders": {
+      "get": {
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "Search known senders with source session names",
+        "description": "Search recorded senders, deduplicate by platform instance and sender ID, then paginate in descending update order. Returns senders, page and has_more in the data object. Historical messages are not backfilled.\n\n**Required scope:** `data`",
+        "operationId": "listSessionSenders",
+        "x-astrbot-scope": "data",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "name": "sender_ids",
+            "in": "query",
+            "description": "Resolve the latest record per exact sender ID instead of returning all source sessions.",
+            "schema": {
+              "type": "array",
+              "maxItems": 100,
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 512
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
       }
     },
     "/api/v1/sessions/rules": {
@@ -7223,6 +7134,20 @@
       }
     },
     "parameters": {
+      "BotCleanup": {
+        "name": "cleanup",
+        "in": "query",
+        "description": "Data categories to permanently remove for this adapter. Omit to retain all associated data. Shared resources and cross-platform routing rules are preserved.",
+        "required": false,
+        "style": "form",
+        "explode": true,
+        "schema": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/BotCleanupTarget"
+          }
+        }
+      },
       "AttachmentId": {
         "name": "attachment_id",
         "in": "path",
@@ -7382,6 +7307,19 @@
       }
     },
     "schemas": {
+      "BotCleanupTarget": {
+        "type": "string",
+        "enum": [
+          "custom_rules",
+          "preferences",
+          "routing",
+          "cron_jobs",
+          "conversations",
+          "message_history",
+          "traces",
+          "stats"
+        ]
+      },
       "SuccessEnvelope": {
         "type": "object",
         "required": [
@@ -7619,6 +7557,10 @@
           "message"
         ],
         "properties": {
+          "locale": {
+            "type": "string",
+            "description": "UI locale for built-in LLM error messages. Omitted or unsupported locales fall back to zh-CN."
+          },
           "username": {
             "type": "string",
             "description": "Caller-declared WebChat sender/session owner. Configured AstrBot administrator IDs require the chat:admin API key sub-scope."
@@ -7723,6 +7665,10 @@
       "ChatMessageRegenerateRequest": {
         "type": "object",
         "properties": {
+          "locale": {
+            "type": "string",
+            "description": "UI locale for built-in LLM error messages. Omitted or unsupported locales fall back to zh-CN."
+          },
           "selected_provider": {
             "type": "string"
           },
@@ -7774,6 +7720,10 @@
           "message"
         ],
         "properties": {
+          "locale": {
+            "type": "string",
+            "description": "UI locale for built-in LLM error messages. Omitted or unsupported locales fall back to zh-CN."
+          },
           "message": {
             "oneOf": [
               {

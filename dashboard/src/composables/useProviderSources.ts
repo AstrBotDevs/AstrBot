@@ -365,7 +365,9 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
   function getModelMetadata(modelName?: string) {
     if (!modelName) return null
-    return modelMetadata.value?.[modelName] || null
+    // Schema refreshes only include configured models; retain fetched candidate metadata.
+    const availableModel = availableModels.value.find((item) => item?.name === modelName)
+    return availableModel?.metadata || modelMetadata.value?.[modelName] || null
   }
 
   function supportsImageInput(meta: any) {

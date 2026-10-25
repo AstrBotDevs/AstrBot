@@ -1,4 +1,4 @@
-# CLI Commands
+# AstrBot CLI {#cli-commands}
 
 The AstrBot CLI initializes instances, starts AstrBot, updates common config values, and manages plugins.
 

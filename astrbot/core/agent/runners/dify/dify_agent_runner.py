@@ -235,6 +235,15 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
                 ):
                     logger.debug(f"dify workflow resp chunk: {chunk}")
                     match chunk["event"]:
+                        case "error":
+                            logger.error(
+                                f"Dify workflow error (status: {chunk.get('status')}, "
+                                f"code: {chunk.get('code')}): "
+                                f"{chunk.get('message') or 'No error details provided.'}"
+                            )
+                            raise Exception(
+                                "Dify workflow execution failed. Please contact the administrator."
+                            )
                         case "workflow_started":
                             logger.info(
                                 f"Dify 工作流(ID: {chunk['workflow_run_id']})开始运行。"
@@ -258,18 +267,27 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
                                 f"Dify 工作流(ID: {chunk['workflow_run_id']})运行结束"
                             )
                             logger.debug(f"Dify 工作流结果：{chunk}")
-                            if chunk["data"]["error"]:
+                            status = chunk["data"].get("status")
+                            if chunk["data"].get("error") or status not in (
+                                "succeeded",
+                                "partial-succeeded",
+                            ):
                                 logger.error(
-                                    f"Dify 工作流出现错误：{chunk['data']['error']}"
+                                    f"Dify workflow failed (status: {status}): "
+                                    f"{chunk['data'].get('error') or 'No error details provided.'}"
                                 )
                                 raise Exception(
-                                    f"Dify 工作流出现错误：{chunk['data']['error']}"
+                                    "Dify workflow execution failed. Please contact the administrator."
                                 )
                             if self.workflow_output_key not in chunk["data"]["outputs"]:
                                 raise Exception(
                                     f"Dify 工作流的输出不包含指定的键名：{self.workflow_output_key}"
                                 )
                             result = chunk
+                if not result:
+                    raise Exception(
+                        "Dify workflow stream ended without a successful workflow_finished event."
+                    )
             case _:
                 raise Exception(f"未知的 Dify API 类型：{self.api_type}")
 

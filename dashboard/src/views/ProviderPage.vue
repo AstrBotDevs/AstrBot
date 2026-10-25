@@ -93,7 +93,7 @@
               <v-divider></v-divider>
 
               <div class="provider-config-body">
-                <section class="provider-section">
+                <section class="provider-section config-form">
                   <div class="provider-section-head">
                     <div class="provider-section-title">{{ tm('providers.settings') }}</div>
                   </div>
@@ -219,17 +219,24 @@
 
                 <v-divider v-if="advancedSourceConfig"></v-divider>
 
-                <section v-if="advancedSourceConfig" class="provider-section">
-                  <div class="provider-section-head">
-                    <div class="provider-section-title">{{ tm('providerSources.advancedConfig') }}</div>
+                <details
+                  v-if="advancedSourceConfig"
+                  :key="selectedProviderSource.id"
+                  class="provider-section provider-section--advanced config-form"
+                >
+                  <summary class="provider-section-head provider-section-title">
+                    {{ tm('providerSources.advancedConfig') }}
+                    <v-icon class="provider-section-chevron" size="20">mdi-chevron-right</v-icon>
+                  </summary>
+                  <div class="provider-section-content">
+                    <AstrBotConfig
+                      :iterable="advancedSourceConfig"
+                      :metadata="providerSourceSchema"
+                      metadataKey="provider"
+                      :is-editing="true"
+                    />
                   </div>
-                  <AstrBotConfig
-                    :iterable="advancedSourceConfig"
-                    :metadata="providerSourceSchema"
-                    metadataKey="provider"
-                    :is-editing="true"
-                  />
-                </section>
+                </details>
 
                 <v-divider></v-divider>
 
@@ -313,7 +320,7 @@
               <v-divider></v-divider>
 
               <div class="provider-config-body">
-                <section class="provider-section">
+                <section class="provider-section config-form">
                   <div class="provider-section-head">
                     <div class="provider-section-title">{{ tm('providers.settings') }}</div>
                   </div>
@@ -373,7 +380,7 @@
         <v-card-title class="text-h3 pa-4 pb-0 pl-6">
           {{ providerEditDialogTitle }}
         </v-card-title>
-        <v-card-text class="py-4">
+        <v-card-text class="py-4 config-form">
           <AstrBotConfig
             v-if="providerEditData"
             :iterable="providerEditData"
@@ -1119,6 +1126,31 @@ async function testSingleProvider(provider) {
   line-height: 1.4;
 }
 
+.provider-section--advanced > summary {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.provider-section--advanced > summary::-webkit-details-marker {
+  display: none;
+}
+
+.provider-section--advanced:not([open]) > summary {
+  margin-bottom: 0;
+}
+
+.provider-section--advanced[open] .provider-section-chevron {
+  transform: rotate(90deg);
+}
+
+.provider-section-content {
+  /* Restore Vuetify's inherited box sizing across the native details content boundary. */
+  box-sizing: border-box;
+}
+
 .provider-empty-state {
   flex: 1;
   min-height: 420px;
@@ -1183,3 +1215,5 @@ async function testSingleProvider(provider) {
   }
 }
 </style>
+
+<style scoped src="@/styles/config-form.css"></style>

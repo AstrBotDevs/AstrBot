@@ -21,7 +21,6 @@ from lark_oapi.api.im.v1 import (
     CreateMessageReactionRequestBody,
     Emoji,
     GetChatMembersRequest,
-    GetChatRequest,
     ReplyMessageRequest,
     ReplyMessageRequestBody,
 )
@@ -38,6 +37,8 @@ from astrbot.core.utils.media_utils import (
     get_media_duration,
 )
 from astrbot.core.utils.metrics import Metric
+
+from .lark_group_info import get_lark_group
 
 
 class LarkMessageEvent(AstrMessageEvent):
@@ -57,7 +58,7 @@ class LarkMessageEvent(AstrMessageEvent):
         group_id: str | None = None,
         **kwargs,
     ) -> Group | None:
-        """Get Lark chat details and members.
+        """Get cached Lark chat details and fetch its current members.
 
         Args:
             group_id: Chat ID to query. Defaults to the current chat ID.
@@ -78,56 +79,11 @@ class LarkMessageEvent(AstrMessageEvent):
         ):
             basic_group = self.message_obj.group
 
-        if self.bot.im is None:
-            logger.warning("[Lark] IM API is unavailable while getting chat details")
+        group = await get_lark_group(self.bot, basic_group)
+        if group is None:
             return basic_group
 
-        try:
-            request = (
-                GetChatRequest.builder()
-                .chat_id(resolved_group_id)
-                .user_id_type("open_id")
-                .build()
-            )
-            response = await self.bot.im.v1.chat.aget(request)
-        except Exception as exc:
-            logger.warning(
-                "[Lark] Failed to get chat details for %s: %s",
-                resolved_group_id,
-                exc,
-            )
-            return basic_group
-
-        if not response.success() or response.data is None:
-            logger.warning(
-                "[Lark] Failed to get chat details for %s (%s): %s",
-                resolved_group_id,
-                response.code,
-                response.msg,
-            )
-            return basic_group
-
-        chat_data = response.data
-        member_count = None
-        if chat_data.user_count is not None:
-            try:
-                member_count = int(chat_data.user_count)
-            except (TypeError, ValueError):
-                logger.warning(
-                    "[Lark] Chat %s returned an invalid user count: %r",
-                    resolved_group_id,
-                    chat_data.user_count,
-                )
-
-        group = Group(
-            group_id=resolved_group_id,
-            group_name=chat_data.name or basic_group.group_name,
-            group_avatar=chat_data.avatar or basic_group.group_avatar,
-            group_owner=chat_data.owner_id or basic_group.group_owner,
-            group_admins=list(chat_data.user_manager_id_list or []),
-            member_count=member_count,
-        )
-
+        group.members = None
         members: list[MessageMember] = []
         members_complete = False
         page_token: str | None = None

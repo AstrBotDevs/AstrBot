@@ -2,11 +2,20 @@
 
 import asyncio
 from contextlib import suppress
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from astrbot.core.event_bus import EventBus
+from astrbot.core.message.components import Plain
+from astrbot.core.pipeline.scheduler import PipelineScheduler
+from astrbot.core.pipeline.waking_check.stage import WakingCheckStage
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
+from astrbot.core.platform.message_type import MessageType
+from astrbot.core.platform.platform_metadata import PlatformMetadata
+from astrbot.core.utils.active_event_registry import ActiveEventRegistry
 
 
 @pytest.fixture
@@ -20,6 +29,7 @@ def mock_pipeline_scheduler():
     """Create a mock pipeline scheduler."""
     scheduler = MagicMock()
     scheduler.execute = AsyncMock()
+    scheduler.ctx.astrbot_config = {"platform_settings": {}}
     return scheduler
 
 
@@ -57,6 +67,50 @@ class TestEventBusInit:
         assert bus.event_queue == event_queue
         assert bus.pipeline_scheduler_mapping == {"test": mock_pipeline_scheduler}
         assert bus.astrbot_config_mgr == mock_config_manager
+
+
+@pytest.mark.asyncio
+async def test_stop_platform_drains_only_owned_messages(event_bus, monkeypatch):
+    """Drop queued messages and finish cancellation before database cleanup."""
+    registry = ActiveEventRegistry()
+    monkeypatch.setattr("astrbot.core.event_bus.active_event_registry", registry)
+    owned, other = MagicMock(), MagicMock()
+    owned.get_platform_id.return_value = "bot"
+    owned.unified_msg_origin = "bot:GroupMessage:1"
+    owned.get_extra.return_value = None
+    other.get_platform_id.return_value = "bot-other"
+    cleaned = asyncio.Event()
+    started = asyncio.Event()
+
+    async def run():
+        try:
+            started.set()
+            await asyncio.Event().wait()
+        finally:
+            await asyncio.sleep(0)
+            cleaned.set()
+
+    foreground = asyncio.create_task(run())
+    background = asyncio.create_task(asyncio.Event().wait())
+    unrelated = asyncio.create_task(asyncio.Event().wait())
+    registry.register_background_task(owned, background)
+    event_bus._pending_tasks = {foreground: owned, unrelated: other}
+    event_bus.event_queue.put_nowait(owned)
+    event_bus.event_queue.put_nowait(other)
+    await asyncio.wait_for(started.wait(), 1)
+    try:
+        await asyncio.wait_for(event_bus.stop_platform("bot"), 1)
+        assert foreground.cancelled() and background.cancelled()
+        assert cleaned.is_set()
+        assert not unrelated.done()
+        assert event_bus.event_queue.get_nowait() is other
+        assert event_bus.event_queue.empty()
+        owned.trace.record.assert_called_once_with("pipeline_end", status="cancelled")
+        assert event_bus.stopped_platforms == {"bot"}
+    finally:
+        for task in (foreground, background, unrelated):
+            task.cancel()
+        await asyncio.gather(foreground, background, unrelated, return_exceptions=True)
 
 
 class TestEventBusDispatch:
@@ -224,6 +278,146 @@ class TestEventBusDispatch:
 
         mock_print_event.assert_called_once_with(mock_event, "test-conf-id")
         mock_pipeline_scheduler.execute.assert_called_once_with(mock_event)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("platform", "message_type", "enabled", "group_id", "expected_sid"),
+    [
+        ("aiocqhttp", MessageType.GROUP_MESSAGE, True, "group", "alice_group"),
+        ("slack", MessageType.GROUP_MESSAGE, True, "group", "alice_group"),
+        ("dingtalk", MessageType.GROUP_MESSAGE, True, "group", "alice"),
+        ("qq_official", MessageType.GROUP_MESSAGE, True, "group", "alice_group"),
+        ("qq_official_webhook", MessageType.GROUP_MESSAGE, True, "group", "alice_group"),
+        ("lark", MessageType.GROUP_MESSAGE, True, "group", "alice%group"),
+        ("misskey", MessageType.GROUP_MESSAGE, True, "group", "group_alice"),
+        ("matrix", MessageType.GROUP_MESSAGE, True, "group", "alice_group"),
+        ("matrix", MessageType.GROUP_MESSAGE, True, "", "alice_group"),
+        ("telegram", MessageType.GROUP_MESSAGE, True, "group", "group"),
+        ("aiocqhttp", MessageType.FRIEND_MESSAGE, True, "", "group"),
+        ("aiocqhttp", MessageType.GROUP_MESSAGE, False, "group", "group"),
+        ("aiocqhttp", MessageType.GROUP_MESSAGE, None, "group", "group"),
+    ],
+)
+@pytest.mark.parametrize("completion", ["success", "error", "cancel"])
+async def test_session_isolation_precedes_registration(
+    event_queue,
+    mock_config_manager,
+    monkeypatch,
+    platform,
+    message_type,
+    enabled,
+    group_id,
+    expected_sid,
+    completion,
+):
+    """Use one final UMO for waking, active stop lookup, and pipeline cleanup.
+
+    Args:
+        event_queue: Queue used to deliver the event through the real event bus.
+        mock_config_manager: Configuration router for the original UMO.
+        monkeypatch: Fixture used to isolate registries and plugin handlers.
+        platform: Platform type whose existing session format must be preserved.
+        message_type: Group or private message type.
+        enabled: Selected profile's isolation setting, or None when absent.
+        group_id: Group ID, including the Matrix fallback case.
+        expected_sid: Session ID expected before pipeline registration.
+        completion: Whether the pipeline completes, raises, or is cancelled.
+    """
+    config = {
+        "platform_settings": {} if enabled is None else {"unique_session": enabled},
+        "admins_id": [],
+        "wake_prefix": ["/"],
+        "plugin_set": ["*"],
+    }
+    ctx = SimpleNamespace(
+        astrbot_config=config,
+        astrbot_config_id="test-conf-id",
+        db_helper=None,
+    )
+    scheduler = PipelineScheduler(ctx)
+    waking = WakingCheckStage()
+    await waking.initialize(ctx)
+    waking._umo_auto_name_recorder = MagicMock()
+    monkeypatch.setattr(
+        "astrbot.core.pipeline.waking_check.stage.star_handlers_registry.get_handlers_by_event_type",
+        lambda *_args, **_kwargs: [],
+    )
+    registry = ActiveEventRegistry()
+    monkeypatch.setattr("astrbot.core.platform.astr_message_event.active_event_registry", registry)
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def hold_event(event):
+        """Keep the real pipeline active while testing stop lookup.
+
+        Args:
+            event: Event that has passed the real waking stage.
+        """
+        started.set()
+        await release.wait()
+        if completion == "error":
+            raise RuntimeError("pipeline failure")
+
+    scheduler.stages = [waking, SimpleNamespace(process=hold_event)]
+    bus = EventBus(event_queue, {"test-conf-id": scheduler}, mock_config_manager)
+    message = AstrBotMessage()
+    message.type = message_type
+    message.group_id = group_id
+    message.self_id = "bot"
+    message.sender = MessageMember(user_id="alice")
+    message.message = [Plain("/hello")]
+    message.raw_message = SimpleNamespace(message_type="text")
+    event = AstrMessageEvent(
+        "/hello", message, PlatformMetadata(platform, "test", "platform"), "group"
+    )
+    event.set_extra("_session_isolated", True)
+    original_umo = event.unified_msg_origin
+
+    def select_config(umo):
+        """Route using the original session before it can be isolated.
+
+        Args:
+            umo: Origin presented to the configuration router.
+
+        Returns:
+            The selected configuration profile metadata.
+        """
+        assert umo == original_umo == event.unified_msg_origin
+        return {"id": "test-conf-id"}
+
+    mock_config_manager.get_conf_info.side_effect = select_config
+    await event_queue.put(event)
+    dispatch = asyncio.create_task(bus.dispatch())
+    try:
+        await asyncio.wait_for(started.wait(), timeout=2)
+        pipeline_task = next(iter(bus._pending_tasks))
+        assert event.session_id == expected_sid
+        assert event.get_extra("_session_isolated") is (expected_sid != "group")
+        assert registry.request_agent_stop_all(event.unified_msg_origin) == 1
+        assert event.get_extra("agent_stop_requested") is True
+        if expected_sid != "group":
+            assert registry.request_agent_stop_all(original_umo) == 0
+        if completion == "cancel":
+            pipeline_task.cancel()
+        release.set()
+        result = await asyncio.wait_for(
+            asyncio.gather(pipeline_task, return_exceptions=True), timeout=2
+        )
+        if completion == "error":
+            assert isinstance(result[0], RuntimeError)
+        elif completion == "cancel":
+            assert isinstance(result[0], asyncio.CancelledError)
+        else:
+            assert result == [None]
+        assert registry._events == {}
+        mock_config_manager.get_conf_info.assert_called_once_with(original_umo)
+    finally:
+        release.set()
+        dispatch.cancel()
+        with suppress(asyncio.CancelledError):
+            await dispatch
+        await asyncio.gather(*bus._pending_tasks, return_exceptions=True)
 
 
 class TestPrintEvent:

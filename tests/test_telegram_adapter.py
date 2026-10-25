@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from telegram import Message, MessageEntity, TextQuote
 
 import astrbot.api.message_components as Comp
 from astrbot.api.platform import Group
@@ -496,6 +497,273 @@ async def test_telegram_reply_without_quote_text_uses_full_message(quote_text):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("in_caption", [False, True], ids=["text", "caption"])
+async def test_telegram_hidden_links_survive_conversion_and_reply(in_caption):
+    """Preserve linked text and URLs in messages and full replies.
+
+    Args:
+        in_caption: Whether the linked text is a photo caption.
+    """
+    adapter = _load_telegram_adapter()(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    text = "😀 查看文档 和 示例"
+    entities = [
+        MessageEntity("bold", 3, 4),
+        MessageEntity("text_link", 3, 4, url="https://example.com/docs"),
+        MessageEntity("text_link", 10, 2, url="https://example.com/demo"),
+    ]
+    update = create_mock_update(
+        message_text=None if in_caption else text,
+        entities=None if in_caption else entities,
+        caption=text if in_caption else None,
+        caption_entities=entities if in_caption else None,
+        photo=[create_mock_file()] if in_caption else None,
+    )
+    expected = (
+        "😀 查看文档 (https://example.com/docs) 和 示例 (https://example.com/demo)"
+    )
+
+    result = await adapter.convert_message(update, _build_context())
+    assert result.message_str == expected
+    assert [part.text for part in result.message if isinstance(part, Comp.Plain)] == [
+        expected
+    ]
+
+    reply_update = create_mock_update(
+        message_text="Which link?", reply_to_message=update.message
+    )
+    result = await adapter.convert_message(reply_update, _build_context())
+    reply = result.message[0]
+    assert reply.message_str == reply.text == expected
+    assert [part.text for part in reply.chain if isinstance(part, Comp.Plain)] == [
+        expected
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("position", [5, 0], ids=["matched", "stale"])
+async def test_telegram_partial_quote_preserves_only_overlapping_links(position):
+    """Recover a quoted link without including links outside the selected text.
+
+    Args:
+        position: UTF-16 quote offset, either matching the source or stale.
+    """
+    adapter = _load_telegram_adapter()(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    original = create_mock_update(
+        message_text="😀 查看文档 和 示例",
+        entities=[
+            MessageEntity("text_link", 3, 4, url="https://example.com/docs"),
+            MessageEntity("text_link", 10, 2, url="https://example.com/demo"),
+        ],
+    )
+    update = create_mock_update(
+        reply_to_message=original.message,
+        quote=TextQuote(text="文档", position=position),
+    )
+
+    result = await adapter.convert_message(update, _build_context())
+
+    expected = "文档 (https://example.com/docs)" if position == 5 else "文档"
+    reply = result.message[0]
+    assert reply.message_str == reply.text == expected
+    assert reply.chain == [Comp.Plain(expected)]
+
+
+@pytest.mark.asyncio
+async def test_telegram_hidden_links_and_mentions_use_original_offsets():
+    """Keep link positions intact when self mentions are removed."""
+    adapter = _load_telegram_adapter()(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    text = "😀 @test_bot 文档 @test_bot https://example.com"
+    sdk_message = Message.de_json(
+        {
+            "message_id": 1,
+            "date": 0,
+            "chat": {"id": 123, "type": "private"},
+            "text": text,
+            "entities": [
+                {"type": "mention", "offset": 3, "length": 9},
+                MessageEntity(
+                    "text_link", 13, 2, url="https://example.com/docs"
+                ).to_dict(),
+                {"type": "mention", "offset": 16, "length": 9},
+                {"type": "url", "offset": 26, "length": 19},
+            ],
+        },
+        bot=None,
+    )
+    update = create_mock_update(message_text=text, entities=sdk_message.entities)
+    update.message.parse_entity = sdk_message.parse_entity
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert (
+        result.message_str == "😀  文档 (https://example.com/docs)  https://example.com"
+    )
+    assert [part.qq for part in result.message if isinstance(part, Comp.At)] == [
+        "test_bot",
+        "test_bot",
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("text", "entities", "expected", "names"),
+    [
+        ("😀 @test_bot hello", [(3, 9)], "😀  hello", ["test_bot"]),
+        ("😀😀 @test_bot hello", [(5, 9)], "😀😀  hello", ["test_bot"]),
+        ("文字 @test_bot hello", [(3, 9)], "文字  hello", ["test_bot"]),
+        ("@test_bot 😀 hello", [(0, 9)], " 😀 hello", ["test_bot"]),
+        (
+            "😀 @test_bot @alice @test_bot hello",
+            [(3, 9), (13, 6), (20, 9)],
+            "😀  @alice  hello",
+            ["test_bot", "alice", "test_bot"],
+        ),
+        (
+            "/help@test_bot 😀 @test_bot hello",
+            [(18, 9)],
+            "/help 😀  hello",
+            ["test_bot"],
+        ),
+    ],
+)
+async def test_telegram_mentions_use_original_utf16_offsets(
+    text, entities, expected, names
+):
+    adapter = _load_telegram_adapter()(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    adapter.client.username = "test_bot"
+    sdk_message = Message.de_json(
+        {
+            "message_id": 1,
+            "date": 0,
+            "chat": {"id": -100123, "type": "supergroup"},
+            "text": text,
+            "entities": [
+                {"type": "mention", "offset": offset, "length": length}
+                for offset, length in entities
+            ],
+        },
+        bot=None,
+    )
+    update = create_mock_update(
+        message_text=text, chat_type="supergroup", entities=sdk_message.entities
+    )
+    update.message.parse_entity = sdk_message.parse_entity
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    assert result.message_str == expected
+    assert [part.qq for part in result.message if isinstance(part, Comp.At)] == names
+    assert any(
+        isinstance(part, Comp.At) and part.qq == result.self_id
+        for part in result.message
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("in_caption", [False, True], ids=["text", "photo-caption"])
+@pytest.mark.parametrize(
+    "name", ["ExampleBot", "examplebot", "EXAMPLEBOT", "eXaMpLeBoT", "OtherBot"]
+)
+async def test_telegram_self_mention_is_case_insensitive(in_caption, name):
+    """Normalize self-mention IDs while preserving the original display name.
+
+    Args:
+        in_caption: Whether the mention appears in a photo caption.
+        name: Username spelling used in the incoming mention.
+    """
+    adapter = _load_telegram_adapter()(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    context = _build_context()
+    context.bot.username = "ExampleBot"
+    text = f"😀 @{name} hello"
+    sdk_message = Message.de_json(
+        {
+            "message_id": 1,
+            "date": 0,
+            "chat": {"id": -100123, "type": "supergroup"},
+            "caption" if in_caption else "text": text,
+            "caption_entities" if in_caption else "entities": [
+                {"type": "mention", "offset": 3, "length": len(name) + 1}
+            ],
+        },
+        bot=None,
+    )
+    if in_caption:
+        update = create_mock_update(
+            message_text=None,
+            chat_type="supergroup",
+            photo=[create_mock_file()],
+            caption=text,
+            caption_entities=sdk_message.caption_entities,
+        )
+        update.message.parse_caption_entity = sdk_message.parse_caption_entity
+    else:
+        update = create_mock_update(
+            message_text=text, chat_type="supergroup", entities=sdk_message.entities
+        )
+        update.message.parse_entity = sdk_message.parse_entity
+
+    result = await adapter.convert_message(update, context)
+
+    assert result is not None
+    mentions = [part for part in result.message if isinstance(part, Comp.At)]
+    assert len(mentions) == 1
+    is_self = name != "OtherBot"
+    assert mentions[0].qq == ("ExampleBot" if is_self else name)
+    assert mentions[0].name == name
+    assert (mentions[0].qq == result.self_id) is is_self
+    assert result.message_str == (text if in_caption or not is_self else "😀  hello")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("media_type", ["photo", "document", "video"])
+async def test_telegram_media_caption_mention_uses_utf16_offsets(media_type):
+    adapter = _load_telegram_adapter()(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    caption = "😀 @test_bot hello"
+    sdk_message = Message.de_json(
+        {
+            "message_id": 1,
+            "date": 0,
+            "chat": {"id": -100123, "type": "supergroup"},
+            "caption": caption,
+            "caption_entities": [{"type": "mention", "offset": 3, "length": 9}],
+        },
+        bot=None,
+    )
+    media = create_mock_file()
+    media.file_name = "example"
+    update = create_mock_update(
+        message_text=None,
+        chat_type="supergroup",
+        caption=caption,
+        caption_entities=sdk_message.caption_entities,
+        **{media_type: [media] if media_type == "photo" else media},
+    )
+    update.message.parse_caption_entity = sdk_message.parse_caption_entity
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    assert result.message_str == caption
+    assert any(
+        isinstance(part, Comp.At) and part.qq == result.self_id
+        for part in result.message
+    )
+
+
+@pytest.mark.asyncio
 async def test_telegram_document_caption_populates_message_text_and_plain():
     TelegramPlatformAdapter = _load_telegram_adapter()
     adapter = TelegramPlatformAdapter(
@@ -512,6 +780,7 @@ async def test_telegram_document_caption_populates_message_text_and_plain():
         caption="@alice 请总结这份文档",
         caption_entities=[mention],
     )
+    update.message.parse_caption_entity.return_value = "@alice"
 
     result = await adapter.convert_message(update, _build_context())
 
