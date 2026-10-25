@@ -2194,6 +2194,12 @@ class TestBackupExportDoesNotBlockEventLoop:
             "astrbot.core.backup.exporter.get_backup_directories",
             lambda: {"plugins": str(plugin_dir)},
         )
+        # 导出器还会归档数据目录下的 mcp_server.json；把它指向临时目录，
+        # 成员清单断言才不会取决于检出目录里是否存在该文件。
+        monkeypatch.setattr(
+            "astrbot.core.backup.exporter.get_astrbot_data_path",
+            lambda: str(data_dir),
+        )
 
         first_dir = tmp_path / "backups-a"
         second_dir = tmp_path / "backups-b"
