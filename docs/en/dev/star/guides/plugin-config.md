@@ -147,6 +147,8 @@ Introduced in v4.13.0, this allows plugins to define file-upload configuration i
 
 Used to visualize editing a Python `dict` type configuration. For example, AstrBot Core's custom extra body parameter configuration:
 
+The checkbox beside each preset controls whether that field is included in the configuration. Previously, editing the displayed default activated a field; now, check the box first, then edit the value or keep its default. Unchecked fields display Disabled and their input values are previews only. Unchecking removes the field; enabling it again restores the schema default. Confirm the dialog, then save the outer configuration. For example, enable `reasoning_effort` to save `high` directly without changing the text first.
+
 ```py
 "custom_extra_body": {
   "description": "Custom request body parameters",
