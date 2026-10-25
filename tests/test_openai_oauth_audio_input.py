@@ -417,10 +417,55 @@ def test_converter_address_space_budget_is_enforced_or_rejected():
     _converter_budget_supported()
 
 
+@pytest.mark.skipif(audio_input.os.name != "posix", reason="POSIX resource limits")
+@pytest.mark.parametrize(
+    ("soft_limit", "hard_limit", "expected_limit"),
+    [
+        (16 * 1024 * 1024, 16 * 1024 * 1024, 8 * 1024 * 1024),
+        (2 * 1024 * 1024, 2 * 1024 * 1024, 2 * 1024 * 1024),
+        (2 * 1024 * 1024, 4 * 1024 * 1024, 2 * 1024 * 1024),
+    ],
+)
+def test_converter_bounds_inherited_stack_without_raising_limits(
+    soft_limit, hard_limit, expected_limit
+):
+    import resource
+
+    outer_script = (
+        "import resource,sys;"
+        f"resource.setrlimit(resource.RLIMIT_STACK,({soft_limit},{hard_limit}));"
+        "sys.argv=sys.argv[1:];exec(sys.argv[0])"
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            outer_script,
+            audio_input._LIMITED_EXEC_SCRIPT,
+            str(2 * 1024 * 1024),
+            str(resource.getrlimit(resource.RLIMIT_AS)[0]),
+            sys.executable,
+            "-c",
+            "import resource;print(resource.getrlimit(resource.RLIMIT_STACK))",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=5,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == f"({expected_limit}, {expected_limit})"
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("reported_cpu_count", [None, 128])
+@pytest.mark.parametrize(
+    "inherited_stack_bytes",
+    [None, 16 * 1024 * 1024] if audio_input.os.name == "posix" else [None],
+)
 async def test_real_ffmpeg_ogg_conversion_produces_bounded_wav(
-    tmp_path, monkeypatch, reported_cpu_count
+    tmp_path, monkeypatch, reported_cpu_count, inherited_stack_bytes
 ):
     monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
     ffmpeg = shutil.which("ffmpeg")
@@ -441,18 +486,33 @@ async def test_real_ffmpeg_ogg_conversion_produces_bounded_wav(
     )
     _stdout, stderr = await process.communicate()
     assert process.returncode == 0, stderr.decode("utf-8", errors="replace")
-    if reported_cpu_count is not None:
+    if reported_cpu_count is not None or inherited_stack_bytes is not None:
         # Exercise the real native converter as if FFmpeg detects a many-core
         # host, without changing the process affinity or resource budget.
         create_process = asyncio.create_subprocess_exec
 
         async def create_many_core_converter(*args, **kwargs):
             command = list(args)
-            executable_index = command.index("ffmpeg")
-            command[executable_index + 1 : executable_index + 1] = [
-                "-cpucount",
-                str(reported_cpu_count),
-            ]
+            if reported_cpu_count is not None:
+                executable_index = command.index("ffmpeg")
+                command[executable_index + 1 : executable_index + 1] = [
+                    "-cpucount",
+                    str(reported_cpu_count),
+                ]
+            if inherited_stack_bytes is not None:
+                # Model the hosted runner's inherited stack in an owned child,
+                # leaving the test process and production budgets unchanged.
+                command = [
+                    sys.executable,
+                    "-c",
+                    "import os,resource,sys;"
+                    "soft,hard=resource.getrlimit(resource.RLIMIT_STACK);"
+                    f"target=min({inherited_stack_bytes},hard) if hard!=-1 "
+                    f"else {inherited_stack_bytes};"
+                    "resource.setrlimit(resource.RLIMIT_STACK,(target,hard));"
+                    "os.execv(sys.argv[1],sys.argv[1:])",
+                    *command,
+                ]
             return await create_process(*command, **kwargs)
 
         monkeypatch.setattr(

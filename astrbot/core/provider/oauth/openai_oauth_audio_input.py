@@ -17,10 +17,13 @@ from urllib.parse import unquote, urlparse
 
 import httpx
 
+# Native workers inherit this stack size after exec. Bound it independently of
+# the host so FFmpeg's scheduler threads fit inside the address-space budget.
 _LIMITED_EXEC_SCRIPT = (
     "import os,resource,sys\n"
     'for name,kind,requested in (("RLIMIT_FSIZE",resource.RLIMIT_FSIZE,int(sys.argv[1])),'
-    '("RLIMIT_AS",resource.RLIMIT_AS,int(sys.argv[2]))):\n'
+    '("RLIMIT_AS",resource.RLIMIT_AS,int(sys.argv[2])),'
+    '("RLIMIT_STACK",resource.RLIMIT_STACK,8*1024*1024)):\n'
     " soft,hard=resource.getrlimit(kind)\n"
     " target=min([requested]+[limit for limit in (soft,hard) if limit!=resource.RLIM_INFINITY])\n"
     " try:\n"
