@@ -94,6 +94,7 @@ class ConversationV2(TimestampMixin, SQLModel, table=True):
     token_usage is the total token value of the messages.
     when 0, will use estimated token counter.
     """
+    history_epoch: int = Field(default=0, nullable=False)
 
     __table_args__ = (
         Index(
@@ -600,6 +601,7 @@ class Conversation:
     updated_at: int = 0
     token_usage: int = 0
     """对话的总 token 数量。AstrBot 会保留最近一次 LLM 请求返回的总 token 数，方便统计。token_usage 可能为 0，表示未知。"""
+    history_epoch: int = 0
 
 
 class Personality(TypedDict):
