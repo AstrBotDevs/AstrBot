@@ -72,7 +72,7 @@ Save it as `weekly-report/SKILL.md`, archive it as `weekly-report.zip`, and uplo
 
 ### Give the Agent Access to Skill Files
 
-Open `Config → AI → Capabilities → Agent Computer Use`, choose a runtime, and save:
+Open `Config → AI → Computer Use`, choose a runtime, and save:
 
 - **Local:** the Agent uses file tools in AstrBot's runtime environment. Members and administrators follow separate local permission policies. Reading instructions can use workspace file access without code execution. Running Skill scripts additionally requires execution permission and their dependencies.
 - **Sandbox:** the Agent reads files and runs scripts in a separate environment. Configure the sandbox connection first. AstrBot attempts to synchronize local and plugin Skills to active sandboxes.

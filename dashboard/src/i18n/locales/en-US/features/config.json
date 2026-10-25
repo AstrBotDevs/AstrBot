@@ -55,7 +55,11 @@
     "tabs": {
       "model": "Model",
       "persona": "Persona",
-      "capabilities": "Capabilities",
+      "computerUse": "Computer Use",
+      "webSearch": "Web Search",
+      "proactivity": "Proactivity",
+      "knowledgeBase": "Knowledge Base",
+      "context": "Context",
       "advanced": "Advanced"
     },
     "groups": {

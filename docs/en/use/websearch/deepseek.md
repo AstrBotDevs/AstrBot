@@ -15,7 +15,7 @@ This page covers DeepSeek Search API setup and usage. See [Web Search](../websea
 Your conversation must use AstrBot Built-in AI, and both the chat model and its API must support tool calling. The server or container running AstrBot must be able to reach `https://api.deepseek.com`.
 
 1. Open `Config` in the sidebar and select the profile your conversation actually uses.
-2. Open `AI → Capabilities → Web Search` and turn on `Enable Web Search`.
+2. Open `AI → Web Search` and turn on `Enable Web Search`.
 3. Set `Web Search Provider` to `DeepSeek Search API` (`deepseek`).
 4. Add your key to the `DeepSeek API Key` list. One key enables both web search and page extraction; you can also add multiple keys for rotation.
 5. Click `Save Configuration` at the bottom right.
@@ -69,7 +69,7 @@ Fetch reads one HTTP or HTTPS URL at a time. Login requirements, paywalls, site 
 
 ### Search reports a missing key even though the DeepSeek chat model is configured
 
-Enter the `DeepSeek API Key` separately under `AI → Capabilities → Web Search` for the active profile and save. The chat model key is not automatically used for search.
+Enter the `DeepSeek API Key` separately under `AI → Web Search` for the active profile and save. The chat model key is not automatically used for search.
 
 ### Insufficient balance or rate limits
 

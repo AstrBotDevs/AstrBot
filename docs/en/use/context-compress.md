@@ -10,12 +10,12 @@ Context compression reduces older material so a conversation can continue. AstrB
 ## Quick Setup
 
 1. Open **Config** in the WebUI sidebar and select the profile your bot uses.
-2. Go to **AI → Advanced → Context Management Strategy**. If this section is missing, confirm that you are using AstrBot Built-in AI and that **Enable AI** is on. See [Agent Execution Mode](./agent-runner.md) for switching modes.
+2. Go to **AI → Context**. If this section is missing, confirm that you are using AstrBot Built-in AI and that **Enable AI** is on. See [Agent Execution Mode](./agent-runner.md) for switching modes.
 3. Choose a strategy under **Handling for History Limits or Context Window Pressure**. New profiles default to **Compress by LLM**.
 4. To get started, keep the recent context ratio at `0.15` and leave the compression model empty to use the current chat model. Keep **Max Turns Before Compression** at `-1` to avoid an additional turn-based history limit.
 5. Click **Save Configuration** at the bottom right.
 
-![Context management settings](./images/context-compress-settings-en.png)
+The previous `AI → Advanced → Context Management Strategy` entry is now `AI → Context`. Configuration keys and stored values are unchanged; no data migration is required.
 
 These settings belong to the selected profile. Check each profile separately if your bots use different ones.
 

@@ -116,7 +116,7 @@ After restart, AstrBot will reload or download WebUI files that match the curren
 
 ### How to Let AstrBot Control My Mac / Windows / Linux Computer?
 
-1. In the AstrBot WebUI, open `Config`, select the profile used by your bot, and go to `AI → Capabilities → Agent Computer Use`. Set `Computer Use Runtime` to `local`. This section requires the built-in AstrBot AI runner.
+1. In the AstrBot WebUI, open `Config`, select the profile used by your bot, and go to `AI → Computer Use`. Set `Computer Use Runtime` to `local`. This section requires the built-in AstrBot AI runner.
 2. In the same profile, go to `Access Control → Administrators → Administrator IDs` and add your user ID (available through the `/sid` command).
 3. Click `Save Configuration` in the bottom-right corner.
 

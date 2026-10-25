@@ -15,7 +15,7 @@ This page covers SerpApi setup and usage. See [Web Search](../websearch.md) for 
 Your conversation must use AstrBot Built-in AI, and both the chat model and its API must support tool calling. The server or container running AstrBot must be able to reach `https://serpapi.com`.
 
 1. Open `Config` in the sidebar and select the profile your conversation actually uses.
-2. Open `AI → Capabilities → Web Search` and turn on `Enable Web Search`.
+2. Open `AI → Web Search` and turn on `Enable Web Search`.
 3. Set `Web Search Provider` to `serpapi`.
 4. Add your key to the `SerpApi API Key` list. One key enables all four capabilities below; you can also add multiple keys for rotation.
 5. Click `Save Configuration` at the bottom right.

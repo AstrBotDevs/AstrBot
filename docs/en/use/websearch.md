@@ -16,12 +16,10 @@ Search uses built-in tools. You do not need a search plugin or Computer Use. The
 ## Enable Web Search
 
 1. Open `Config` in the sidebar and choose the profile your conversation actually uses.
-2. Open `AI → Capabilities` and locate `Web Search`.
+2. Open `AI → Web Search`.
 3. Turn on `Enable Web Search` and choose a `Web Search Provider`.
 4. Enter the provider's API key. Baidu AI Search uses a single key; other providers accept a list. One key is enough to start, and multiple keys can be rotated.
 5. Click `Save Configuration` at the bottom right.
-
-![Web Search settings in the current WebUI](./images/websearch-settings-en.png)
 
 These settings belong to the selected profile. Changing `default` does not enable search for bots using another profile. See the [WebUI guide](./webui.md) for profile assignment.
 
