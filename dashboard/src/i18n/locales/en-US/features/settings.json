@@ -86,6 +86,11 @@
       "custom": "Custom",
       "customPlaceholder": "https://example.com/pypi/simple",
       "testConnection": "Test Connectivity",
+      "testTip": {
+        "serial": "Click: test one source at a time, starting from the selected one",
+        "single": "Ctrl / ⌘ + Click: test only the selected source",
+        "parallel": "Shift + Click: test all sources in parallel"
+      },
       "unavailable": "Unavailable",
       "presets": {
         "official": "Official",
@@ -99,6 +104,11 @@
       "title": "Select GitHub Mirror",
       "noProxy": "Don't use GitHub Mirror",
       "testConnection": "Test Connectivity",
+      "testTip": {
+        "serial": "Click: test one source at a time, starting from the selected one",
+        "single": "Ctrl / ⌘ + Click: test only the selected source",
+        "parallel": "Shift + Click: test all sources in parallel"
+      },
       "unavailable": "Unavailable",
       "custom": "Custom",
       "customPlaceholder": "https://example.com"

@@ -86,6 +86,11 @@
             "custom": "Свой вариант",
             "customPlaceholder": "https://example.com/pypi/simple",
             "testConnection": "Проверить соединение",
+            "testTip": {
+                "serial": "Нажатие: проверять источники по одному, начиная с выбранного",
+                "single": "Ctrl / ⌘ + нажатие: проверить только выбранный источник",
+                "parallel": "Shift + нажатие: проверить все параллельно"
+            },
             "unavailable": "Недоступен",
             "presets": {
                 "official": "Официальный",
@@ -99,6 +104,11 @@
             "title": "Выбрать зеркало GitHub",
             "noProxy": "Не использовать зеркало GitHub",
             "testConnection": "Проверить соединение",
+            "testTip": {
+                "serial": "Нажатие: проверять источники по одному, начиная с выбранного",
+                "single": "Ctrl / ⌘ + нажатие: проверить только выбранный источник",
+                "parallel": "Shift + нажатие: проверить все параллельно"
+            },
             "unavailable": "Недоступен",
             "custom": "Свой вариант",
       "customPlaceholder": "https://example.com"

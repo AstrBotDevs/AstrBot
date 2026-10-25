@@ -9,6 +9,11 @@
                 :loading="testing"
                 @click="onTestClick">
                 {{ tm('network.proxySelector.testConnection') }}
+                <v-tooltip activator="parent" location="top" max-width="360">
+                    <div>{{ tm('network.proxySelector.testTip.serial') }}</div>
+                    <div>{{ tm('network.proxySelector.testTip.single') }}</div>
+                    <div>{{ tm('network.proxySelector.testTip.parallel') }}</div>
+                </v-tooltip>
             </v-btn>
         </div>
         <v-radio-group class="proxy-selector__options mt-2" v-model="selection" hide-details="true">
@@ -199,31 +204,55 @@ export default {
             return targets;
         },
 
-        // One route: latency, then throughput.
-        async testTarget(target) {
+        // One route, latency then throughput. A stage argument lets the caller
+        // run the two stages as separate sweeps across all routes.
+        async testTarget(target, stage = "both") {
             this.testingProxies[target.key] = true;
 
             try {
-                await this.testProxy(target.url, target.key);
-                await this.measureProxy(target.url, target.key);
+                if (stage !== "speed") {
+                    await this.testProxy(target.url, target.key);
+                }
+                if (stage !== "latency") {
+                    await this.measureProxy(target.url, target.key);
+                }
             } finally {
                 this.testingProxies[target.key] = false;
             }
         },
 
-        // Click tests every route one after another so results appear route by
-        // route, starting from the selected route.
-        async onTestClick() {
+        // Plain click tests every route one after another so results appear
+        // route by route, Ctrl/Cmd+click re-tests only the selected route, and
+        // Shift+click runs every route at once.
+        async onTestClick(event) {
             if (this.testing) {
                 return;
             }
 
+            const mode = event.shiftKey
+                ? "parallel"
+                : event.ctrlKey || event.metaKey
+                    ? "single"
+                    : "serial";
+
             this.testing = true;
 
             try {
+                if (mode === "single") {
+                    // The radio uses "none" for the direct route while the test
+                    // keys it as "direct", so the two names are mapped here.
+                    const selectedKey = this.selection === "none" ? "direct" : this.selection;
+                    const target = this.collectTargets().find((item) => item.key === selectedKey);
+                    if (target) {
+                        // Keep the other results: this only refreshes one route.
+                        await this.testTarget(target);
+                    }
+                    return;
+                }
+
                 const targets = this.collectTargets();
                 // The radio names the direct route "none" while the test keys
-                // it as "direct", so the two names are mapped here.
+                // it as "direct", so the two names are mapped here as well.
                 const startIndex = targets.findIndex(
                     (target) =>
                         target.key ===
@@ -237,6 +266,19 @@ export default {
                         : targets;
                 this.proxyStatus = {};
                 this.proxySpeed = {};
+
+                if (mode === "parallel") {
+                    // Every latency probe finishes before any download starts,
+                    // so a saturating speed sample cannot skew a sibling's
+                    // latency.
+                    await Promise.all(
+                        ordered.map((target) => this.testTarget(target, "latency"))
+                    );
+                    await Promise.all(
+                        ordered.map((target) => this.testTarget(target, "speed"))
+                    );
+                    return;
+                }
 
                 for (const target of ordered) {
                     await this.testTarget(target);

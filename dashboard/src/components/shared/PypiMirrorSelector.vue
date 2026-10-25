@@ -5,6 +5,11 @@
             <v-btn class="pypi-mirror__test-button" size="x-small" variant="tonal"
                 :loading="testing" @click="onTestClick">
                 {{ tm('network.pypiMirror.testConnection') }}
+                <v-tooltip activator="parent" location="top" max-width="360">
+                    <div>{{ tm('network.pypiMirror.testTip.serial') }}</div>
+                    <div>{{ tm('network.pypiMirror.testTip.single') }}</div>
+                    <div>{{ tm('network.pypiMirror.testTip.parallel') }}</div>
+                </v-tooltip>
             </v-btn>
         </div>
         <v-radio-group class="mt-2" :model-value="activeKey" hide-details="true"
@@ -187,27 +192,50 @@ export default {
 
             return targets;
         },
-        // One source: latency, then throughput.
-        async testTarget(target) {
+        // One source, latency then throughput. A stage argument lets the caller
+        // run the two stages as separate sweeps across all sources.
+        async testTarget(target, stage = "both") {
             this.testingKeys[target.key] = true;
 
             try {
-                await this.testMirror(target.url, target.key);
-                await this.measureMirror(target.url, target.key);
+                if (stage !== "speed") {
+                    await this.testMirror(target.url, target.key);
+                }
+                if (stage !== "latency") {
+                    await this.measureMirror(target.url, target.key);
+                }
             } finally {
                 this.testingKeys[target.key] = false;
             }
         },
-        // Click tests every source one after another so results appear source
-        // by source, starting from the selected source.
-        async onTestClick() {
+        // Plain click tests every source one after another so results appear
+        // source by source, Ctrl/Cmd+click re-tests only the selected source,
+        // and Shift+click runs every source at once.
+        async onTestClick(event) {
             if (this.testing) {
                 return;
             }
 
+            const mode = event.shiftKey
+                ? "parallel"
+                : event.ctrlKey || event.metaKey
+                    ? "single"
+                    : "serial";
+
             this.testing = true;
 
             try {
+                if (mode === "single") {
+                    // Keep the other results: this only refreshes one source.
+                    const target = this.collectTargets().find(
+                        (item) => item.key === this.activeKey
+                    );
+                    if (target) {
+                        await this.testTarget(target);
+                    }
+                    return;
+                }
+
                 const targets = this.collectTargets();
                 const startIndex = targets.findIndex(
                     (item) => item.key === this.activeKey
@@ -220,6 +248,19 @@ export default {
                         : targets;
                 this.status = {};
                 this.speed = {};
+
+                if (mode === "parallel") {
+                    // Every latency probe finishes before any download starts,
+                    // so a saturating speed sample cannot skew a sibling's
+                    // latency.
+                    await Promise.all(
+                        ordered.map((target) => this.testTarget(target, "latency"))
+                    );
+                    await Promise.all(
+                        ordered.map((target) => this.testTarget(target, "speed"))
+                    );
+                    return;
+                }
 
                 for (const target of ordered) {
                     await this.testTarget(target);

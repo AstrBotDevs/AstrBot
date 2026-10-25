@@ -86,6 +86,11 @@
       "custom": "自定义",
       "customPlaceholder": "https://example.com/pypi/simple",
       "testConnection": "测试连通性",
+      "testTip": {
+        "serial": "点击：从选中项开始逐个串行测试",
+        "single": "Ctrl / ⌘ + 点击：只测试当前选中项",
+        "parallel": "Shift + 点击：并行测试全部"
+      },
       "unavailable": "不可用",
       "presets": {
         "official": "官方",
@@ -99,6 +104,11 @@
       "title": "选择 GitHub 镜像源",
       "noProxy": "不使用 GitHub 镜像",
       "testConnection": "测试连通性",
+      "testTip": {
+        "serial": "点击：从选中项开始逐个串行测试",
+        "single": "Ctrl / ⌘ + 点击：只测试当前选中项",
+        "parallel": "Shift + 点击：并行测试全部"
+      },
       "unavailable": "不可用",
       "custom": "自定义",
       "customPlaceholder": "https://example.com"
