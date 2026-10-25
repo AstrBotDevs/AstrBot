@@ -54,7 +54,8 @@
     "storageWarning": "Some traces could not be persisted. Check database errors or capacity limits.",
     "loadMore": "Load more",
     "limitHint": "Showing up to {count} traces. Refine your search.",
-    "truncated": "This trace exceeded content or node limits; some data was truncated."
+    "truncated": "This trace exceeded content or node limits; some data was truncated.",
+    "connectionLost": "The live trace connection was lost. Please retry."
   },
   "controls": {
     "start": "Start",
@@ -62,7 +63,8 @@
     "pause": "Pause trace recording",
     "resume": "Start trace recording",
     "loadFailed": "Failed to load trace settings. Refresh to retry.",
-    "updateFailed": "Failed to change trace recording. Please retry."
+    "updateFailed": "Failed to change trace recording. Please retry.",
+    "connectionLost": "Disconnected"
   },
   "tokens": {
     "title": "Tokens",
@@ -109,7 +111,20 @@
     "errors": "Has errors",
     "models": "Has model calls",
     "plugins": "Has plugin calls",
-    "hint": "Select multiple conditions to require all of them. No selection shows all traces."
+    "commands": "Has command calls",
+    "status": "Status",
+    "anyStatus": "Any status",
+    "messageTypes": "Message types",
+    "umo": "Session UMO",
+    "execution": "Execution",
+    "timeRange": "Time range",
+    "anyTime": "Any time",
+    "lastHour": "Last hour",
+    "lastDay": "Last 24 hours",
+    "lastWeek": "Last 7 days",
+    "lastMonth": "Last 30 days",
+    "noPlatforms": "No platforms available",
+    "hint": "Options within a group use OR. Different groups and selected execution conditions must all match."
   },
   "status": {
     "error": "Error",

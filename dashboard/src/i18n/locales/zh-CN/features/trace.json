@@ -54,7 +54,8 @@
     "storageWarning": "部分追踪未能持久化，请检查数据库写入错误或容量限制。",
     "loadMore": "加载更多",
     "limitHint": "当前最多展示 {count} 条，请缩小搜索范围。",
-    "truncated": "此追踪内容或节点数量超过限制，部分数据已截断。"
+    "truncated": "此追踪内容或节点数量超过限制，部分数据已截断。",
+    "connectionLost": "实时追踪连接已断开，请重试。"
   },
   "controls": {
     "start": "启动",
@@ -62,7 +63,8 @@
     "pause": "暂停追踪记录",
     "resume": "开始追踪记录",
     "loadFailed": "读取追踪设置失败，请刷新页面重试",
-    "updateFailed": "切换追踪记录失败，请重试"
+    "updateFailed": "切换追踪记录失败，请重试",
+    "connectionLost": "连接已断开"
   },
   "tokens": {
     "title": "Tokens",
@@ -109,7 +111,20 @@
     "errors": "有错误",
     "models": "有模型调用",
     "plugins": "有插件调用",
-    "hint": "可勾选多个条件，结果需同时满足；不勾选则显示全部。"
+    "commands": "有指令调用",
+    "status": "运行状态",
+    "anyStatus": "全部状态",
+    "messageTypes": "消息类型",
+    "umo": "会话 UMO",
+    "execution": "执行内容",
+    "timeRange": "时间范围",
+    "anyTime": "全部时间",
+    "lastHour": "最近 1 小时",
+    "lastDay": "最近 24 小时",
+    "lastWeek": "最近 7 天",
+    "lastMonth": "最近 30 天",
+    "noPlatforms": "暂无可用平台",
+    "hint": "同一分组内的多个选项为“或”关系；不同分组和已勾选的执行条件需要同时满足。"
   },
   "status": {
     "error": "错误",
