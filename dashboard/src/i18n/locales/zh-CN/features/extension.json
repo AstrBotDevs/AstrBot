@@ -111,6 +111,8 @@
     "notFound": "未找到该插件",
     "docsTitle": "文档",
     "docsEmpty": "暂无文档",
+    "readmeLanguage": "文档语言",
+    "readmeLanguageAuto": "跟随界面语言",
     "changelogTitle": "更新日志",
     "changelogEmpty": "暂无更新日志",
     "subCommandsCount": "{count} 个子指令",

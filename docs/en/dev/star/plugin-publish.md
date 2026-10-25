@@ -26,9 +26,16 @@ repo: https://github.com/your-name/repo      # Plugin repository URL
 # social_link: https://github.com/your-web   # (Optional) Your personal website, GitHub profile, etc.
 # tags:                                      # (Optional) Tag list for marketplace categorization and search
   # - example
+# readmes:                                   # (Optional) Per-locale README variants, follows the WebUI language
+#   default: README.md                       # Default variant (falls back to README.md when omitted)
+#   zh-CN: README_zh.md
+#   en-US: README_en.md
 ```
 
 [Supported platform adapters](plugin-new.md#declare-supported-platforms-optional)
+
+`readmes` serves the plugin documentation in multiple languages. The dashboard resolves the exact UI locale first, then the base language (for example `zh-TW` falls back to `zh`), and finally `default`. Declared paths must be relative Markdown files inside the plugin directory; `..`, absolute paths and symlinks that escape the plugin directory are rejected. Plugins without `readmes` keep reading `README.md` from the repository root.
+
 
 ::: warning Size Limit
 The plugin zip package submitted to the marketplace **must not exceed 16MB**.
