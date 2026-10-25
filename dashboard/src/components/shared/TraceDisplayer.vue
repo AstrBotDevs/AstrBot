@@ -55,7 +55,6 @@ let metadataLoaded = false;
 let historyRequest = 0;
 let detailRequest = 0;
 let queryTimer = null;
-let historyRefreshTimer = null;
 const clockNow = ref(Date.now() / 1000);
 const durationTimer = ref(null);
 const connected = ref(false);
@@ -66,6 +65,7 @@ const retryAttempts = ref(0);
 const lastEventId = ref(null);
 const maxRetryAttempts = 10;
 const baseRetryDelay = 1000;
+let hasOpenedStream = false;
 const eventIndex = new Map();
 const umoNames = ref({});
 const plugins = ref({});
@@ -75,6 +75,12 @@ const handlerDetails = reactive({});
 const expandedGroups = reactive(new Set());
 const expandedAgents = reactive(new Set());
 const expandedDetails = reactive(new Set());
+const enteringTraceIds = reactive(new Set());
+const traceEnterTimers = new Map();
+const traceListElement = ref(null);
+const pendingTraceEntryIds = new Set();
+let traceEntryFrame = null;
+let traceListAnimation = null;
 
 const actionLabels = {
   event_received: "eventReceived",
@@ -519,8 +525,9 @@ function processNewTraces(newTraces) {
   }
 }
 
-async function fetchTraceHistory(reset = true, reloadMetadata = false) {
+async function fetchTraceHistory(reset = true, reloadMetadata = false, animateNew = false) {
   const request = ++historyRequest;
+  const knownTraceIds = new Set(eventIndex.keys());
   historyBusy.value = true;
   historyError.value = "";
   if (!metadataLoaded || reloadMetadata) {
@@ -555,12 +562,39 @@ async function fetchTraceHistory(reset = true, reloadMetadata = false) {
     if (request !== historyRequest) return;
     if (response.data?.status !== "ok") throw new Error("Trace history request failed");
     const data = response.data.data;
-    const keep = new Set((data.traces || []).map((trace) => trace.trace_id));
-    events.value = events.value.filter((event) => keep.has(event.span_id));
-    if (selectedSpanId.value) keep.add(selectedSpanId.value);
-    for (const id of eventIndex.keys()) if (!keep.has(id)) eventIndex.delete(id);
+    const serverTraceIds = new Set((data.traces || []).map((trace) => trace.trace_id));
+    const liveTraceIds = new Set(
+      [...eventIndex.keys()].filter((traceId) => !knownTraceIds.has(traceId)),
+    );
+    const keep = new Set([...serverTraceIds, ...liveTraceIds]);
+    const newTraceIds = (data.traces || [])
+      .map((trace) => trace.trace_id)
+      .filter((traceId) => traceId && !eventIndex.has(traceId));
+    const isDefaultFirstPage = historyPage.value === 1
+      && !normalizedSearch.value
+      && selectedFilters.value.length === 0;
     processNewTraces((data.traces || []).map((trace) => ({ trace })));
-    totalRecords.value = data.total || 0;
+    events.value = events.value.filter((event) => keep.has(event.span_id));
+    if (isDefaultFirstPage) events.value = events.value.slice(0, pageSize.value);
+    const indexedIds = new Set(keep);
+    if (selectedSpanId.value) indexedIds.add(selectedSpanId.value);
+    for (const id of eventIndex.keys()) if (!indexedIds.has(id)) eventIndex.delete(id);
+    if (animateNew && isDefaultFirstPage) {
+      const animatedTraceIds = [];
+      for (const traceId of newTraceIds) {
+        if (!eventIndex.has(traceId)) continue;
+        animatedTraceIds.push(traceId);
+        enteringTraceIds.add(traceId);
+        const timer = setTimeout(() => {
+          enteringTraceIds.delete(traceId);
+          traceEnterTimers.delete(traceId);
+        }, 300);
+        traceEnterTimers.set(traceId, timer);
+      }
+      animateTraceListInsertion(animatedTraceIds);
+    }
+    totalRecords.value = (data.total || 0)
+      + [...liveTraceIds].filter((traceId) => !serverTraceIds.has(traceId)).length;
     historyPage.value = data.page || historyPage.value;
     storageWarning.value = Boolean(data.storage?.error || data.storage?.dropped);
     if (reset && selectedSpanId.value) loadTraceDetail(selectedSpanId.value);
@@ -608,23 +642,38 @@ function connectSSE() {
   });
   eventSource.value = source;
   source.onopen = () => {
+    const shouldReconcile = hasOpenedStream
+      || retryAttempts.value > 0
+      || Boolean(historyError.value);
     connected.value = true;
     retryAttempts.value = 0;
-    fetchTraceHistory();
+    hasOpenedStream = true;
+    if (shouldReconcile) fetchTraceHistory();
   };
   source.onmessage = (event) => {
     if (event.lastEventId) lastEventId.value = event.lastEventId;
     try {
       const payload = JSON.parse(event.data);
       if (payload?.type === "trace") {
-        if (eventIndex.has(payload.trace?.trace_id || payload.span_id)) processNewTraces([payload]);
-        if (payload.storage_accepted === false) storageWarning.value = true;
-        if (historyPage.value === 1 && payload.span && (!payload.span.parent_span_id || selectedFilters.value.length) && !historyRefreshTimer) {
-          historyRefreshTimer = setTimeout(() => {
-            historyRefreshTimer = null;
-            fetchTraceHistory();
-          }, 1000);
+        const traceId = payload.trace?.trace_id || payload.span?.trace_id || payload.span_id;
+        const wasKnown = eventIndex.has(traceId);
+        const canInsertLive = historyPage.value === 1
+          && !normalizedSearch.value
+          && selectedFilters.value.length === 0;
+        if (wasKnown || canInsertLive) {
+          processNewTraces([payload]);
+          if (!wasKnown && eventIndex.has(traceId)) {
+            enteringTraceIds.add(traceId);
+            const timer = setTimeout(() => {
+              enteringTraceIds.delete(traceId);
+              traceEnterTimers.delete(traceId);
+            }, 300);
+            traceEnterTimers.set(traceId, timer);
+            totalRecords.value += 1;
+            animateTraceListInsertion([traceId]);
+          }
         }
+        if (payload.storage_accepted === false) storageWarning.value = true;
       }
     } catch (error) {
       console.error("Failed to parse trace payload:", error);
@@ -781,20 +830,82 @@ function formatFields(fields) {
   }
 }
 
+/**
+ * Slides the current row group down before revealing newly inserted rows.
+ *
+ * Args:
+ *   insertedIds: Trace IDs inserted by the current list update.
+ *
+ * Returns:
+ *   Nothing.
+ */
+function animateTraceListInsertion(insertedIds) {
+  for (const traceId of insertedIds) pendingTraceEntryIds.add(traceId);
+  if (traceEntryFrame !== null) return;
+  traceEntryFrame = requestAnimationFrame(async () => {
+    traceEntryFrame = null;
+    const currentIds = [...pendingTraceEntryIds];
+    pendingTraceEntryIds.clear();
+    const tbody = traceListElement.value?.querySelector(".trace-list-table tbody");
+    if (
+      !tbody
+      || !currentIds.length
+      || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+    ) return;
+    const currentTransform = getComputedStyle(tbody).transform;
+    const currentY = currentTransform === "none"
+      ? 0
+      : new DOMMatrixReadOnly(currentTransform).m42;
+    await nextTick();
+    const insertedHeight = currentIds.reduce((height, traceId) => {
+      const row = traceListElement.value?.querySelector(`[data-trace-id="${traceId}"]`);
+      return height + (row?.getBoundingClientRect().height || 0);
+    }, 0);
+    if (!insertedHeight) return;
+    traceListAnimation?.cancel();
+    tbody.style.transform = `translateY(${currentY - insertedHeight}px)`;
+    void tbody.offsetHeight;
+    const animation = tbody.animate(
+      [
+        { transform: `translateY(${currentY - insertedHeight}px)` },
+        { transform: "translateY(0)" },
+      ],
+      {
+        duration: 240,
+        easing: "cubic-bezier(0.2, 0, 0, 1)",
+        fill: "forwards",
+      },
+    );
+    traceListAnimation = animation;
+    animation.onfinish = () => {
+      if (traceListAnimation !== animation) return;
+      tbody.style.removeProperty("transform");
+      animation.cancel();
+      traceListAnimation = null;
+    };
+  });
+}
+
 onMounted(async () => {
   durationTimer.value = setInterval(() => { clockNow.value = Date.now() / 1000; }, 1000);
-  await fetchTraceHistory();
+  const initialHistory = fetchTraceHistory();
   connectSSE();
+  await initialHistory;
 });
 
 onBeforeUnmount(() => {
   historyRequest++;
   detailRequest++;
   if (queryTimer) clearTimeout(queryTimer);
-  if (historyRefreshTimer) clearTimeout(historyRefreshTimer);
   if (durationTimer.value) clearInterval(durationTimer.value);
   eventSource.value?.close();
   if (retryTimer.value) clearTimeout(retryTimer.value);
+  for (const timer of traceEnterTimers.values()) clearTimeout(timer);
+  traceEnterTimers.clear();
+  pendingTraceEntryIds.clear();
+  if (traceEntryFrame !== null) cancelAnimationFrame(traceEntryFrame);
+  traceListAnimation?.cancel();
+  traceListElement.value?.querySelector("tbody")?.style.removeProperty("transform");
 });
 </script>
 
@@ -835,7 +946,16 @@ onBeforeUnmount(() => {
         <component :is="!recordingEnabled ? Play : connected ? Pause : LoaderCircle" :size="16" :class="{ 'trace-connecting-icon': recordingEnabled && !connected }" aria-hidden="true" />
         {{ recordingLabel }}
       </v-btn>
-      <v-btn class="refresh-button" size="small" variant="tonal" :aria-label="tm('refresh')" :title="tm('refresh')" @click="fetchTraceHistory(true, true)">
+      <v-btn
+        class="refresh-button"
+        size="small"
+        variant="tonal"
+        :loading="historyBusy"
+        :disabled="historyBusy"
+        :aria-label="tm('refresh')"
+        :title="tm('refresh')"
+        @click="fetchTraceHistory(true, true, true)"
+      >
         <RefreshCw :size="16" aria-hidden="true" />
         <span>{{ tm("refresh") }}</span>
       </v-btn>
@@ -860,7 +980,7 @@ onBeforeUnmount(() => {
         <p class="trace-filter-hint">{{ tm("filters.hint") }}</p>
       </aside>
     <div class="trace-explorer-body" :class="{ 'has-detail': selectedEvent }">
-      <section class="trace-list" :aria-label="tm('traceList')">
+      <section ref="traceListElement" class="trace-list" :aria-label="tm('traceList')">
         <div v-if="loading" class="trace-empty-state">{{ tm("loading") }}</div>
         <v-data-table-server
           v-else
@@ -874,7 +994,6 @@ onBeforeUnmount(() => {
           :items-per-page-options="[25, 50, 100]"
           :items-per-page-text="tm('pagination.perPage')"
           :page-text="tm('pagination.range')"
-          :loading="historyBusy"
           :no-data-text="tm('empty')"
           @update:options="({ page, itemsPerPage }) => {
             if (page === historyPage && itemsPerPage === pageSize) return;
@@ -886,10 +1005,21 @@ onBeforeUnmount(() => {
           :mobile="false"
           hover
           :row-props="({ item }) => ({
-            class: { 'trace-list-row': true, selected: item.event.span_id === selectedSpanId },
+            class: {
+              'trace-list-row': true,
+              selected: item.event.span_id === selectedSpanId,
+              'trace-list-row--entering': enteringTraceIds.has(item.event.span_id),
+            },
             'data-trace-id': item.event.span_id,
             'aria-selected': item.event.span_id === selectedSpanId,
             tabindex: 0,
+            onAnimationend: (event) => {
+              if (event.target !== event.currentTarget) return;
+              const timer = traceEnterTimers.get(item.event.span_id);
+              if (timer) clearTimeout(timer);
+              traceEnterTimers.delete(item.event.span_id);
+              enteringTraceIds.delete(item.event.span_id);
+            },
             onKeydown: (event) => {
               if (event.key === 'Enter' || event.key === ' ') {
                 event.preventDefault();
@@ -1169,7 +1299,10 @@ onBeforeUnmount(() => {
 .trace-list { display: flex; flex-direction: column; flex: 1; isolation: isolate; min-height: 0; min-width: 0; overflow: hidden; }
 .has-detail .trace-list { border-right: 1px solid var(--trace-border); }
 .trace-list-table { --v-table-header-height: 40px; background: transparent; border-radius: 0; flex: 1; min-height: 0; height: 100%; }
+.trace-list-table :deep(.v-table__wrapper) { overflow-anchor: none; scrollbar-gutter: stable; }
 .trace-list-table :deep(th), .trace-list-table :deep(td) { font-size: 13px; }
+.trace-list-table :deep(.trace-list-row--entering) { animation: trace-row-enter 240ms cubic-bezier(0.2, 0, 0, 1) both; }
+@keyframes trace-row-enter { from { opacity: 0; } to { opacity: 1; } }
 .trace-list-table :deep(.trace-list-row.selected) { background: rgba(var(--v-theme-primary), 0.1); }
 .trace-list-table :deep(.trace-list-row:focus-visible) { outline: 2px solid rgb(var(--v-theme-primary)); outline-offset: -2px; }
 .trace-cell-text { display: block; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1192,7 +1325,10 @@ onBeforeUnmount(() => {
 .timeline-line { background: var(--trace-border); flex: 1; width: 1px; } .timeline-content { min-width: 0; padding-bottom: 10px; } .timeline-heading { align-items: center; display: flex; gap: 10px; justify-content: space-between; } .timeline-heading strong { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; } .timeline-heading time { color: var(--trace-muted); font-family: inherit; font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; } .timeline-subtitle { color: var(--trace-muted); font-size: 11px; line-height: 1.5; margin-top: 5px; overflow-wrap: anywhere; }
 .timeline-fields { margin-top: 7px; } .timeline-fields summary { color: var(--trace-muted); cursor: pointer; font-size: 11px; } .timeline-fields pre { background: rgba(var(--v-theme-on-surface), 0.035); border-radius: 6px; color: var(--trace-muted); font-size: 11px; line-height: 1.5; margin: 6px 0 0; max-height: 280px; overflow: auto; padding: 10px; white-space: pre-wrap; word-break: break-word; }
 @media (pointer: coarse) { .timeline-row-toggle { min-height: 44px; } }
-@media (prefers-reduced-motion: reduce) { .timeline-expansion-icon { transition: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .timeline-expansion-icon { transition: none; }
+  .trace-list-table :deep(.trace-list-row--entering) { animation: none; }
+}
 .trace-empty-state { align-items: center; color: var(--trace-muted); display: flex; flex-direction: column; font-size: 12px; gap: 8px; justify-content: center; min-height: 180px; }
 @media (max-width: 1100px) { .trace-detail { border-left: 1px solid var(--trace-border); bottom: 0; box-shadow: -8px 0 24px rgba(0, 0, 0, 0.12); max-width: none; min-width: 0; position: absolute; right: 0; top: 0; width: min(760px, 90%); z-index: 1; } }
 @media (max-width: 900px) { .trace-filter-panel { bottom: 0; box-shadow: 8px 0 24px rgba(0, 0, 0, 0.18); left: 0; max-width: 85%; position: absolute; top: 0; width: 220px; z-index: 3; } .trace-filter-backdrop { background: rgba(var(--v-theme-on-surface), 0.12); border: 0; display: block; inset: 0; position: absolute; z-index: 2; } .trace-detail { padding: 15px; } .trace-stat-grid, .trace-stat-grid.has-tokens { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
