@@ -23,7 +23,11 @@ from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider.entites import ProviderRequest
 from astrbot.core.utils.config_number import coerce_int_config
-from astrbot.core.utils.history_saver import persist_agent_history
+from astrbot.core.utils.history_saver import (
+    PROACTIVE_CONVERSATION_ID_KEY,
+    PROACTIVE_SAVED_TEXTS_KEY,
+    persist_agent_history,
+)
 from astrbot.core.utils.trace import trace_execution
 
 if TYPE_CHECKING:
@@ -549,6 +553,7 @@ class CronJobManager:
             req = ProviderRequest()
             conv = await _get_session_conv(event=cron_event, plugin_context=self.ctx)
             req.conversation = conv
+            cron_event.set_extra(PROACTIVE_CONVERSATION_ID_KEY, conv.cid)
             req.contexts = json.loads(conv.history)
             cron_job_str = json.dumps(extras.get("cron_job", {}), ensure_ascii=False)
             req.system_prompt += PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT
@@ -592,7 +597,12 @@ class CronJobManager:
                 f"[CronJob] {cron_meta.get('name') or cron_meta.get('id', 'unknown')}: {cron_meta.get('description', '')} "
                 f" triggered at {cron_meta.get('run_started_at', 'unknown time')}, "
             )
-            if llm_resp and llm_resp.role == "assistant":
+            if (
+                llm_resp
+                and llm_resp.role == "assistant"
+                and llm_resp.completion_text.strip()
+                not in cron_event.get_extra(PROACTIVE_SAVED_TEXTS_KEY, [])
+            ):
                 summary_note += f"I finished this job, here is the result: {llm_resp.completion_text}"
 
             await persist_agent_history(

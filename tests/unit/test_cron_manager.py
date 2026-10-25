@@ -623,7 +623,9 @@ class TestRunActiveAgentJob:
         with (
             patch(
                 "astrbot.core.astr_main_agent._get_session_conv",
-                AsyncMock(return_value=SimpleNamespace(history="[]")),
+                AsyncMock(
+                    return_value=SimpleNamespace(cid="test-conversation", history="[]")
+                ),
             ),
             patch(
                 "astrbot.core.astr_main_agent.build_main_agent",
@@ -874,7 +876,9 @@ class TestRunActiveAgentJob:
             ),
             patch(
                 "astrbot.core.astr_main_agent._get_session_conv",
-                new=AsyncMock(return_value=SimpleNamespace(history="[]")),
+                new=AsyncMock(
+                    return_value=SimpleNamespace(cid="test-conversation", history="[]")
+                ),
             ),
         ):
             await cron_manager._run_job("active-job")
@@ -906,7 +910,9 @@ class TestRunActiveAgentJob:
             ),
             patch(
                 "astrbot.core.astr_main_agent._get_session_conv",
-                new=AsyncMock(return_value=SimpleNamespace(history="[]")),
+                new=AsyncMock(
+                    return_value=SimpleNamespace(cid="test-conversation", history="[]")
+                ),
             ),
         ):
             await cron_manager._run_job("active-job")

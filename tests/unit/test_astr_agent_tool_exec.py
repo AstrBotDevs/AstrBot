@@ -439,7 +439,7 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
     async def _fake_get_session_conv(**_kwargs):
         if stop_phase == "history":
             stop_signal.set()
-        return SimpleNamespace(history=json.dumps(history))
+        return SimpleNamespace(cid="test-conversation", history=json.dumps(history))
 
     async def _fake_build_main_agent(**kwargs):
         captured.update(kwargs)
@@ -541,7 +541,7 @@ async def test_background_wakeup_applies_max_agent_step(
     runner = _StepCapturingRunner()
 
     async def _fake_get_session_conv(**_kwargs):
-        return SimpleNamespace(history="[]")
+        return SimpleNamespace(cid="test-conversation", history="[]")
 
     async def _fake_build_main_agent(**_kwargs):
         return SimpleNamespace(agent_runner=runner)
@@ -636,7 +636,7 @@ async def test_background_wakeup_warns_when_result_is_not_sent_to_user(
             return SimpleNamespace(role="assistant", completion_text="done")
 
     async def _fake_get_session_conv(**_kwargs):
-        return SimpleNamespace(history="[]")
+        return SimpleNamespace(cid="test-conversation", history="[]")
 
     async def _fake_build_main_agent(**kwargs):
         return SimpleNamespace(agent_runner=_Runner(kwargs["event"]))

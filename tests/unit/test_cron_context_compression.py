@@ -134,7 +134,7 @@ async def test_wakeup_uses_same_compression_settings_as_chat(
         {"role": "user", "content": "An earlier request"},
         {"role": "assistant", "content": "An earlier answer"},
     ]
-    conv = SimpleNamespace(history=json.dumps(history))
+    conv = SimpleNamespace(cid="test-conversation", history=json.dumps(history))
     manager = CronJobManager(MagicMock())
     manager.ctx = ctx
     ctx.get_config.reset_mock()

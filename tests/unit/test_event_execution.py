@@ -284,7 +284,7 @@ async def test_cron_uses_event_scope(frames, monkeypatch, failure_at):
         )
         if failure_at == "conversation":
             raise RuntimeError("conversation failed")
-        return SimpleNamespace(history="[]")
+        return SimpleNamespace(cid="test-conversation", history="[]")
 
     async def steps(max_steps):
         assert frames[-1]["trace"]["state"] == "running"
