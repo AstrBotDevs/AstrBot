@@ -24,7 +24,8 @@ AVAILABLE_SESSION_RULE_KEYS = [
     f"provider_perf_{ProviderType.TEXT_TO_SPEECH.value}",
 ]
 
-# 平台适配器会话枚举结果的缓存时长（秒），避免每次打开页面都打 OneBot API
+# Cache TTL (seconds) for platform session enumeration, so opening the page
+# does not hit the OneBot API every time.
 _ENUM_CACHE_TTL = 60.0
 
 
@@ -43,11 +44,14 @@ class SessionManagementService:
         self._enum_cache: tuple[float, dict[str, dict]] | None = None
 
     async def _enumerate_platform_sessions(self) -> dict[str, dict]:
-        """枚举运行中平台适配器支持的群/好友列表，带短缓存与失败降级。
+        """Enumerate groups/friends supported by running platform adapters.
+
+        Results are short-cached and failures degrade gracefully.
 
         Returns:
-            形如 {platform_id: {"groups": [...], "friends": [...], "error": str}}。
-            不支持枚举或枚举失败的平台要么缺失该 key，要么 error 非空。
+            ``{platform_id: {"groups": [...], "friends": [...], "error": str}}``.
+            Platforms that do not support enumeration are omitted; platforms whose
+            enumeration failed carry a non-empty ``error``.
         """
         now = time.monotonic()
         if self._enum_cache and now - self._enum_cache[0] < _ENUM_CACHE_TTL:
@@ -72,7 +76,9 @@ class SessionManagementService:
                     "error": result.error,
                 }
             except Exception as exc:
-                logger.warning(f"枚举平台 {platform_id} 的会话列表失败: {exc!s}")
+                logger.warning(
+                    f"Failed to enumerate sessions for platform {platform_id}: {exc!s}"
+                )
                 enumerated[str(platform_id)] = {
                     "groups": [],
                     "friends": [],
@@ -130,9 +136,10 @@ class SessionManagementService:
         }
 
     async def _enumerated_entries(self) -> tuple[dict[str, dict], dict[str, str]]:
-        """返回 (枚举出的会话条目, 各平台枚举错误)。
+        """Return ``(enumerated entries, per-platform enumeration errors)``.
 
-        会话条目形如 {umo: {"name": str, "message_type": "group"|"private"}}。
+        Entries have the shape
+        ``{umo: {"name": str, "message_type": "group"|"private"}}``.
         """
         enumerated = await self._enumerate_platform_sessions()
         errors = {pid: d["error"] for pid, d in enumerated.items() if d["error"]}
@@ -167,7 +174,8 @@ class SessionManagementService:
 
         all_umos = await self.list_known_umos()
         if scope in ("group", "private", "all"):
-            # 枚举出的会话也纳入批量操作范围（即使从未产生消息/配置）
+            # Enumerated sessions also participate in batch scopes, even if they
+            # never produced messages or rules.
             entries, _errors = await self._enumerated_entries()
             known = set(all_umos)
             for umo, entry in entries.items():
@@ -246,11 +254,11 @@ class SessionManagementService:
         umo_rules: dict,
         search: str,
     ) -> tuple[dict[str, dict], dict[str, str]]:
-        """把平台枚举出但未配置过的会话并入规则映射。
+        """Merge enumerated but unconfigured sessions into the rule mapping.
 
         Returns:
-            (merged, errors)。merged 形如
-            {umo: {"rules": dict, "enumerated": bool, "enum_name": str}}。
+            ``(merged, errors)`` where ``merged`` maps
+            ``{umo: {"rules": dict, "enumerated": bool, "enum_name": str}}``.
         """
         entries, errors = await self._enumerated_entries()
         merged: dict[str, dict] = {
@@ -286,7 +294,8 @@ class SessionManagementService:
         enumeration_errors: dict[str, str] = {}
 
         if include_unconfigured:
-            # 先取全部已配置规则（不分页），与枚举出的未配置会话合并后统一分页
+            # Load all configured rules without pagination first, merge them with
+            # enumerated unconfigured sessions, then paginate the merged result.
             all_rules, _ = await self.get_umo_rules(
                 page=1, page_size=99999, search=search
             )
@@ -554,7 +563,8 @@ class SessionManagementService:
                 }
             )
 
-        # 合并平台枚举出的、从未产生消息/配置的会话（状态跟随默认配置）
+        # Merge platform-enumerated sessions that never produced messages or rules
+        # (their status follows the default configuration).
         entries, enumeration_errors = await self._enumerated_entries()
         known = set(all_umos)
         for umo, entry in entries.items():

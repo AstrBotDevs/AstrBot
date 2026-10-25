@@ -8,29 +8,30 @@ class SessionServiceManager:
     """管理会话级别的服务启停状态，包括LLM和TTS"""
 
     @staticmethod
-    def _group_fallback_umos(session_id: str) -> list[str]:
-        """unique_session 开启时，成员级 UMO（形如 ``sender_group``）的群级兜底 UMO。
+    async def _get_service_flag(
+        session_id: str,
+        field: str,
+        isolated: bool = False,
+    ) -> bool:
+        """Read a session service toggle: member-level first, group-level fallback.
 
-        未开启 unique_session 时 session_id 不含 ``_`` 分隔，返回空列表，
-        行为与之前完全一致。
+        The group-level fallback is only applied when ``isolated`` is true, i.e. the
+        pipeline confirmed this is a member-isolated group session built by
+        ``unique_session`` (session ID ``{sender_id}_{group_id}``). Without that flag
+        an ordinary group ID that happens to contain ``_`` must not be reinterpreted.
         """
-        parts = session_id.split(":", 2)
-        if len(parts) != 3:
-            return []
-        platform, msg_type, sess = parts
-        if msg_type.lower() not in ("groupmessage", "group"):
-            return []
-        if "_" not in sess:
-            return []
-        group_id = sess.rsplit("_", 1)[-1]
-        if not group_id or group_id == sess:
-            return []
-        return [f"{platform}:{msg_type}:{group_id}"]
+        umos = [session_id]
+        if isolated:
+            parts = session_id.split(":", 2)
+            if (
+                len(parts) == 3
+                and parts[1].lower() in ("groupmessage", "group")
+                and "_" in parts[2]
+            ):
+                group_id = parts[2].rsplit("_", 1)[-1]
+                if group_id and group_id != parts[2]:
+                    umos.append(f"{parts[0]}:{parts[1]}:{group_id}")
 
-    @staticmethod
-    async def _get_service_flag(session_id: str, field: str) -> bool:
-        """读取会话服务开关，成员级优先、群级兜底，未配置默认启用。"""
-        umos = [session_id, *SessionServiceManager._group_fallback_umos(session_id)]
         for umo in umos:
             session_services = await sp.get_async(
                 scope="umo",
@@ -48,17 +49,20 @@ class SessionServiceManager:
     # =============================================================================
 
     @staticmethod
-    async def is_llm_enabled_for_session(session_id: str) -> bool:
+    async def is_llm_enabled_for_session(session_id: str, isolated: bool = False) -> bool:
         """检查LLM是否在指定会话中启用
 
         Args:
             session_id: 会话ID (unified_msg_origin)
+            isolated: Whether this is a member-isolated unique_session session
 
         Returns:
             bool: True表示启用，False表示禁用
 
         """
-        return await SessionServiceManager._get_service_flag(session_id, "llm_enabled")
+        return await SessionServiceManager._get_service_flag(
+            session_id, "llm_enabled", isolated
+        )
 
     @staticmethod
     async def set_llm_status_for_session(session_id: str, enabled: bool) -> None:
@@ -98,24 +102,30 @@ class SessionServiceManager:
 
         """
         session_id = event.unified_msg_origin
-        return await SessionServiceManager.is_llm_enabled_for_session(session_id)
+        isolated = bool(event.get_extra("_session_isolated", False))
+        return await SessionServiceManager.is_llm_enabled_for_session(
+            session_id, isolated
+        )
 
     # =============================================================================
     # TTS 相关方法
     # =============================================================================
 
     @staticmethod
-    async def is_tts_enabled_for_session(session_id: str) -> bool:
+    async def is_tts_enabled_for_session(session_id: str, isolated: bool = False) -> bool:
         """检查TTS是否在指定会话中启用
 
         Args:
             session_id: 会话ID (unified_msg_origin)
+            isolated: Whether this is a member-isolated unique_session session
 
         Returns:
             bool: True表示启用，False表示禁用
 
         """
-        return await SessionServiceManager._get_service_flag(session_id, "tts_enabled")
+        return await SessionServiceManager._get_service_flag(
+            session_id, "tts_enabled", isolated
+        )
 
     @staticmethod
     async def set_tts_status_for_session(session_id: str, enabled: bool) -> None:
@@ -160,23 +170,27 @@ class SessionServiceManager:
 
         """
         session_id = event.unified_msg_origin
-        return await SessionServiceManager.is_tts_enabled_for_session(session_id)
+        isolated = bool(event.get_extra("_session_isolated", False))
+        return await SessionServiceManager.is_tts_enabled_for_session(
+            session_id, isolated
+        )
 
     # =============================================================================
     # 会话整体启停相关方法
     # =============================================================================
 
     @staticmethod
-    async def is_session_enabled(session_id: str) -> bool:
+    async def is_session_enabled(session_id: str, isolated: bool = False) -> bool:
         """检查会话是否整体启用
 
         Args:
             session_id: 会话ID (unified_msg_origin)
+            isolated: Whether this is a member-isolated unique_session session
 
         Returns:
             bool: True表示启用，False表示禁用
 
         """
         return await SessionServiceManager._get_service_flag(
-            session_id, "session_enabled"
+            session_id, "session_enabled", isolated
         )

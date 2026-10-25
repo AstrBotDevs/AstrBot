@@ -1,4 +1,4 @@
-﻿<template>
+﻿﻿<template>
   <div class="session-management-page">
     <v-container fluid class="pa-0">
       <v-card flat>

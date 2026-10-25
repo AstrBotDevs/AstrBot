@@ -514,9 +514,10 @@ class AiocqhttpAdapter(Platform, SessionEnumerator):
         return self.bot
 
     async def enumerate_sessions(self) -> SessionEnumResult:
-        """通过 OneBot v11 API 枚举当前账号加入的群聊和好友列表。
+        """Enumerate the groups and friends this account has joined via OneBot v11.
 
-        任一接口失败时返回部分结果并在 error 中说明，调用方据此降级。
+        If either API call fails, partial results are returned and ``error``
+        describes the failure so callers can degrade gracefully.
         """
         result = SessionEnumResult()
         try:
@@ -530,7 +531,7 @@ class AiocqhttpAdapter(Platform, SessionEnumerator):
                         {"id": str(gid), "name": g.get("group_name") or str(gid)}
                     )
         except Exception as exc:
-            result.error = f"获取群列表失败: {exc!s}"
+            result.error = f"Failed to get group list: {exc!s}"
 
         try:
             friends = await asyncio.wait_for(
@@ -546,7 +547,7 @@ class AiocqhttpAdapter(Platform, SessionEnumerator):
                         }
                     )
         except Exception as exc:
-            err = f"获取好友列表失败: {exc!s}"
+            err = f"Failed to get friend list: {exc!s}"
             result.error = f"{result.error}; {err}" if result.error else err
 
         return result
