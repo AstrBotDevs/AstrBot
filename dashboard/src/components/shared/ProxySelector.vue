@@ -7,7 +7,7 @@
                 size="x-small"
                 variant="tonal"
                 :loading="testing"
-                @click="runTests">
+                @click="onTestClick">
                 {{ tm('network.proxySelector.testConnection') }}
             </v-btn>
         </div>
@@ -17,6 +17,8 @@
                     <div class="proxy-selector__option-label">
                         <span>{{ tm('network.proxySelector.noProxy') }}</span>
                         <div class="proxy-selector__status">
+                            <v-progress-circular v-if="testingProxies.direct" indeterminate size="14"
+                                width="2" color="primary" />
                             <v-chip v-if="proxyStatus.direct"
                                 :color="proxyStatus.direct.available ? 'success' : 'error'"
                                 size="x-small">
@@ -34,6 +36,8 @@
                     <div class="proxy-selector__option-label">
                         <span class="proxy-selector__url">{{ proxy }}</span>
                         <div class="proxy-selector__status">
+                            <v-progress-circular v-if="testingProxies[idx]" indeterminate size="14"
+                                width="2" color="primary" />
                             <v-chip v-if="proxyStatus[idx]"
                                 :color="proxyStatus[idx].available ? 'success' : 'error'"
                                 size="x-small">
@@ -56,6 +60,8 @@
                             @update:model-value="onCustomInput">
                         </v-text-field>
                         <div class="proxy-selector__status">
+                            <v-progress-circular v-if="testingProxies.custom" indeterminate size="14"
+                                width="2" color="primary" />
                             <v-chip v-if="proxyStatus.custom"
                                 :color="proxyStatus.custom.available ? 'success' : 'error'"
                                 size="x-small">
@@ -149,8 +155,6 @@ export default {
         // statusKey groups one probe result: an index of githubProxies, "direct"
         // for the no-acceleration route, or "custom" for a user supplied URL.
         async testProxy(proxyUrl, statusKey) {
-            this.testingProxies[statusKey] = true;
-
             try {
                 const response = await statsApi.testGhproxy({
                     proxy_url: proxyUrl || ""
@@ -171,42 +175,72 @@ export default {
                     available: false,
                     latency: 0
                 };
-            } finally {
-                this.testingProxies[statusKey] = false;
             }
         },
 
-        // One button runs both stages: latency for every route first, then
-        // throughput, so the speed test only ever starts after all latency
-        // results are in.
-        async runTests() {
+        // Every route this selector can probe: each preset mirror, the direct
+        // route, and a valid custom URL.
+        collectTargets() {
+            const targets = this.githubProxies.map((proxy, idx) => ({
+                url: proxy,
+                key: String(idx),
+            }));
+            // An empty proxy_url tests the direct route, so "no proxy" is
+            // measured on the same footing as the mirrors.
+            targets.push({ url: "", key: "direct" });
+
+            const customProxy = (this.customProxyValue || "")
+                .trim()
+                .replace(/\/+$/, "");
+            if (/^https?:\/\//i.test(customProxy)) {
+                targets.push({ url: customProxy, key: "custom" });
+            }
+
+            return targets;
+        },
+
+        // One route: latency, then throughput.
+        async testTarget(target) {
+            this.testingProxies[target.key] = true;
+
+            try {
+                await this.testProxy(target.url, target.key);
+                await this.measureProxy(target.url, target.key);
+            } finally {
+                this.testingProxies[target.key] = false;
+            }
+        },
+
+        // Click tests every route one after another so results appear route by
+        // route, starting from the selected route.
+        async onTestClick() {
+            if (this.testing) {
+                return;
+            }
+
             this.testing = true;
 
             try {
-                const targets = this.githubProxies.map((proxy, idx) => ({
-                    url: proxy,
-                    key: String(idx),
-                }));
-                // An empty proxy_url tests the direct route, so "no proxy" is
-                // measured on the same footing as the mirrors.
-                targets.push({ url: "", key: "direct" });
-
-                const customProxy = (this.customProxyValue || "")
-                    .trim()
-                    .replace(/\/+$/, "");
-                if (/^https?:\/\//i.test(customProxy)) {
-                    targets.push({ url: customProxy, key: "custom" });
-                }
-
+                const targets = this.collectTargets();
+                // The radio names the direct route "none" while the test keys
+                // it as "direct", so the two names are mapped here.
+                const startIndex = targets.findIndex(
+                    (target) =>
+                        target.key ===
+                        (this.selection === "none" ? "direct" : this.selection)
+                );
+                // Start the sweep at the selected route so its result lands
+                // first, then keep the listed order of the remaining routes.
+                const ordered =
+                    startIndex > 0
+                        ? [...targets.slice(startIndex), ...targets.slice(0, startIndex)]
+                        : targets;
                 this.proxyStatus = {};
                 this.proxySpeed = {};
 
-                await Promise.all(
-                    targets.map((target) => this.testProxy(target.url, target.key))
-                );
-                await Promise.all(
-                    targets.map((target) => this.measureProxy(target.url, target.key))
-                );
+                for (const target of ordered) {
+                    await this.testTarget(target);
+                }
             } finally {
                 this.testing = false;
             }

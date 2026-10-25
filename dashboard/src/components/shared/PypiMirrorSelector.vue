@@ -3,7 +3,7 @@
         <div class="pypi-mirror__header">
             <h5 class="pypi-mirror__title">{{ tm('network.pypiMirror.label') }}</h5>
             <v-btn class="pypi-mirror__test-button" size="x-small" variant="tonal"
-                :loading="testing" @click="runTests">
+                :loading="testing" @click="onTestClick">
                 {{ tm('network.pypiMirror.testConnection') }}
             </v-btn>
         </div>
@@ -14,6 +14,8 @@
                     <div class="pypi-mirror__option-label">
                         <span class="pypi-mirror__name">{{ tm(`network.pypiMirror.presets.${mirror.key}`) }}</span>
                         <span class="pypi-mirror__url">{{ mirror.url }}</span>
+                        <v-progress-circular v-if="testingKeys[mirror.key]" indeterminate size="14" width="2"
+                            color="primary" />
                         <v-chip v-if="status[mirror.key]"
                             :color="status[mirror.key].available ? 'success' : 'error'" size="x-small">
                             {{ status[mirror.key].available ? status[mirror.key].latency + 'ms' : tm('network.pypiMirror.unavailable') }}
@@ -32,6 +34,8 @@
                             variant="outlined" :placeholder="tm('network.pypiMirror.customPlaceholder')"
                             hide-details="true" @update:model-value="onCustomInput">
                         </v-text-field>
+                        <v-progress-circular v-if="testingKeys.custom" indeterminate size="14" width="2"
+                            color="primary" />
                         <v-chip v-if="status.custom"
                             :color="status.custom.available ? 'success' : 'error'" size="x-small">
                             {{ status.custom.available ? status.custom.latency + 'ms' : tm('network.pypiMirror.unavailable') }}
@@ -83,6 +87,7 @@ export default {
             status: {},
             speed: {},
             testing: false,
+            testingKeys: {},
         }
     },
     watch: {
@@ -167,32 +172,58 @@ export default {
                 };
             }
         },
-        // One button runs both stages: latency for every source first, then
-        // throughput, so the speed test only ever starts after all latency
-        // results are in.
-        async runTests() {
+        // Every source this selector can probe: each preset mirror plus a
+        // valid custom index URL.
+        collectTargets() {
+            const targets = this.mirrors.map((mirror) => ({
+                url: mirror.url,
+                key: mirror.key,
+            }));
+
+            const customIndex = this.normalizeUrl(this.customUrl);
+            if (/^https?:\/\//i.test(customIndex)) {
+                targets.push({ url: customIndex, key: "custom" });
+            }
+
+            return targets;
+        },
+        // One source: latency, then throughput.
+        async testTarget(target) {
+            this.testingKeys[target.key] = true;
+
+            try {
+                await this.testMirror(target.url, target.key);
+                await this.measureMirror(target.url, target.key);
+            } finally {
+                this.testingKeys[target.key] = false;
+            }
+        },
+        // Click tests every source one after another so results appear source
+        // by source, starting from the selected source.
+        async onTestClick() {
+            if (this.testing) {
+                return;
+            }
+
             this.testing = true;
 
             try {
-                const targets = this.mirrors.map((mirror) => ({
-                    url: mirror.url,
-                    key: mirror.key,
-                }));
-
-                const customIndex = this.normalizeUrl(this.customUrl);
-                if (/^https?:\/\//i.test(customIndex)) {
-                    targets.push({ url: customIndex, key: "custom" });
-                }
-
+                const targets = this.collectTargets();
+                const startIndex = targets.findIndex(
+                    (item) => item.key === this.activeKey
+                );
+                // Start the sweep at the selected source so its result lands
+                // first, then keep the listed order of the remaining sources.
+                const ordered =
+                    startIndex > 0
+                        ? [...targets.slice(startIndex), ...targets.slice(0, startIndex)]
+                        : targets;
                 this.status = {};
                 this.speed = {};
 
-                await Promise.all(
-                    targets.map((target) => this.testMirror(target.url, target.key))
-                );
-                await Promise.all(
-                    targets.map((target) => this.measureMirror(target.url, target.key))
-                );
+                for (const target of ordered) {
+                    await this.testTarget(target);
+                }
             } finally {
                 this.testing = false;
             }
