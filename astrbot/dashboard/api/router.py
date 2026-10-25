@@ -26,7 +26,6 @@ from .providers import router as providers_router
 from .sessions import router as sessions_router
 from .skills import router as skills_router
 from .stats import router as stats_router
-from .subagents import router as subagents_router
 from .t2i import router as t2i_router
 from .tools import router as tools_router
 from .updates import router as updates_router
@@ -53,7 +52,6 @@ def build_api_router() -> APIRouter:
         extensions_router,
         skills_router,
         sessions_router,
-        subagents_router,
         logs_router,
         stats_router,
         tools_router,

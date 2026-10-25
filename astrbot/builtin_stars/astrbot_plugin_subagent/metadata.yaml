@@ -1,0 +1,7 @@
+name: astrbot_plugin_subagent
+display_name: Subagent
+desc: Expert templates, asynchronous workers, follow-up instructions, and progress tracking.
+version: v0.1.0
+author: advent259141
+repo: https://github.com/advent259141/astrbot_plugin_subagent
+astrbot_version: '>=4.0.0'

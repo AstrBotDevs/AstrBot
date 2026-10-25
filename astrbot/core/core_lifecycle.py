@@ -97,11 +97,7 @@ class AstrBotCoreLifecycle:
             logger.debug("HTTP proxy cleared, no_proxy set to localhost")
 
     async def _init_or_reload_subagent_orchestrator(self) -> None:
-        """Create (if needed) and reload the subagent orchestrator from config.
-
-        This keeps lifecycle wiring in one place while allowing the orchestrator
-        to manage enable/disable and tool registration details.
-        """
+        """Load legacy expert definitions for plugin SDK compatibility."""
         try:
             if self.subagent_orchestrator is None:
                 self.subagent_orchestrator = SubAgentOrchestrator(
@@ -233,7 +229,7 @@ class AstrBotCoreLifecycle:
         # 初始化 CronJob 管理器
         self.cron_manager = CronJobManager(self.db)
 
-        # Dynamic subagents (handoff tools) from config.
+        # Keep legacy expert discovery available to plugins without main routing.
         await self._init_or_reload_subagent_orchestrator()
 
         # 初始化提供给插件的上下文

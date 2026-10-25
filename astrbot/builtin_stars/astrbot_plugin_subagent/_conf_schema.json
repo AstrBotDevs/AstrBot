@@ -1,0 +1,70 @@
+{
+  "enabled": {
+    "description": "启用子代理",
+    "type": "bool",
+    "default": true
+  },
+  "max_concurrent_agents": {
+    "description": "每个会话同时运行的子代理数量",
+    "type": "int",
+    "default": 3
+  },
+  "task_timeout": {
+    "description": "子代理超时（秒，包含排队时间）",
+    "type": "int",
+    "default": 600
+  },
+  "max_steps": {
+    "description": "每轮最大步数（不超过主 Agent 上限）",
+    "type": "int",
+    "default": 30
+  },
+  "agents": {
+    "description": "专家模板",
+    "type": "template_list",
+    "default": [],
+    "templates": {
+      "expert": {
+        "name": "专家",
+        "display_item": "name",
+        "items": {
+          "name": {
+            "description": "名称",
+            "type": "string",
+            "default": ""
+          },
+          "enabled": {
+            "description": "启用",
+            "type": "bool",
+            "default": true
+          },
+          "public_description": {
+            "description": "供主 Agent 选择模板的简短介绍",
+            "type": "string",
+            "default": ""
+          },
+          "persona_id": {
+            "description": "人格 ID（留空使用下面的提示词）",
+            "type": "string",
+            "default": ""
+          },
+          "system_prompt": {
+            "description": "系统提示词",
+            "type": "text",
+            "default": "Complete the delegated task and report your findings."
+          },
+          "provider_id": {
+            "description": "模型提供商 ID（留空跟随主 Agent）",
+            "type": "string",
+            "default": ""
+          },
+          "tools": {
+            "description": "工具名称（空列表表示不使用工具）",
+            "type": "list",
+            "default": []
+          }
+        }
+      }
+    }
+  }
+}

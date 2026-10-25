@@ -236,6 +236,7 @@ class _PermissionGuardedTool(FunctionTool):
             name=tool.name,
             description=tool.description,
             parameters=getattr(tool, "parameters", {}),
+            execution_timeout=tool.execution_timeout,
         )
         self._wrapped = tool
         self._mgr = manager

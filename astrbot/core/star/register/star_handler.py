@@ -505,7 +505,10 @@ def register_on_agent_begin(**kwargs):
 
 
 def register_on_agent_done(**kwargs):
-    """当 Agent 运行完成后的事件
+    """Register an Agent exit handler, including errors and cancellation.
+
+    The response can be None when execution exits without a final response.
+    Inspect run_context.run_end_reason and run_context.run_error for details.
 
     Examples:
     ```py
@@ -518,7 +521,7 @@ def register_on_agent_done(**kwargs):
         self,
         event: AstrMessageEvent,
         run_context: ContextWrapper[AstrAgentContext],
-        response: LLMResponse,
+        response: LLMResponse | None,
     ) -> None:
         ...
     ```
@@ -529,6 +532,42 @@ def register_on_agent_done(**kwargs):
 
     def decorator(awaitable):
         _ = get_handler_or_create(awaitable, EventType.OnAgentDoneEvent, **kwargs)
+        return awaitable
+
+    return decorator
+
+
+def register_on_agent_step_start(**kwargs):
+    """Register a handler before each complete Agent step.
+
+    Args:
+        **kwargs: Handler registration options, including priority.
+
+    Returns:
+        A decorator for async handlers accepting event and run_context.
+    """
+
+    def decorator(awaitable):
+        _ = get_handler_or_create(awaitable, EventType.OnAgentStepStartEvent, **kwargs)
+        return awaitable
+
+    return decorator
+
+
+def register_on_agent_step_end(**kwargs):
+    """Register a handler after a step's tool results and images are assembled.
+
+    Interrupted steps do not trigger this event; on_agent_done handles their exit.
+
+    Args:
+        **kwargs: Handler registration options, including priority.
+
+    Returns:
+        A decorator for async handlers accepting event and run_context.
+    """
+
+    def decorator(awaitable):
+        _ = get_handler_or_create(awaitable, EventType.OnAgentStepEndEvent, **kwargs)
         return awaitable
 
     return decorator

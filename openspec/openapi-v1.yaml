@@ -93,7 +93,6 @@ tags:
   - name: Cron
   - name: Logs
   - name: T2I
-  - name: Subagents
   - name: Webhooks
 
 paths:
@@ -5284,40 +5283,6 @@ paths:
       x-astrbot-scope: config
       parameters:
         - $ref: "#/components/parameters/Name"
-      responses:
-        "200":
-          $ref: "#/components/responses/Ok"
-
-  /api/v1/subagents/config:
-    get:
-      tags: [Subagents]
-      summary: Get subagent orchestrator configuration
-      operationId: getSubagentConfig
-      x-astrbot-scope: config
-      responses:
-        "200":
-          $ref: "#/components/responses/Ok"
-    put:
-      tags: [Subagents]
-      summary: Update subagent orchestrator configuration
-      operationId: updateSubagentConfig
-      x-astrbot-scope: config
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/DynamicConfig"
-      responses:
-        "200":
-          $ref: "#/components/responses/Ok"
-
-  /api/v1/subagents/available-tools:
-    get:
-      tags: [Subagents]
-      summary: List tools available to subagents
-      operationId: listSubagentAvailableTools
-      x-astrbot-scope: config
       responses:
         "200":
           $ref: "#/components/responses/Ok"

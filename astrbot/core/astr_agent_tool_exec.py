@@ -718,7 +718,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         if awaitable is None:
             raise ValueError("Tool must have a valid handler or override 'run' method.")
 
-        effective_timeout = tool_call_timeout or run_context.tool_call_timeout
+        effective_timeout = (
+            tool_call_timeout or tool.execution_timeout or run_context.tool_call_timeout
+        )
         if isinstance(tool, ShellSessionTool) and tool_args.get("action") in {
             "poll",
             "write",

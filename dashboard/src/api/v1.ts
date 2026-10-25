@@ -1096,20 +1096,6 @@ export const cronApi = {
   },
 };
 
-export const subagentApi = {
-  getConfig() {
-    return typed<OpenConfig>(openApiV1.getSubagentConfig());
-  },
-  updateConfig(config: OpenConfig) {
-    return typed<OpenConfig>(
-      openApiV1.updateSubagentConfig({ body: config }),
-    );
-  },
-  availableTools() {
-    return typed<any>(openApiV1.listSubagentAvailableTools());
-  },
-};
-
 export const commandApi = {
   list(configId?: string) {
     return typed<CommandListData>(

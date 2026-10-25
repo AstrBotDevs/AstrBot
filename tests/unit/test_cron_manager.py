@@ -642,10 +642,10 @@ class TestRunActiveAgentJob:
         req = build_agent.call_args.kwargs["req"]
         req.func_tool = tools
         _plugin_tool_fix(event, req)
-        await MAIN_AGENT_HOOKS.on_agent_done(
-            SimpleNamespace(context=SimpleNamespace(event=event)),
-            SimpleNamespace(reasoning_content=""),
-        )
+        run_context = SimpleNamespace(context=SimpleNamespace(event=event))
+        response = SimpleNamespace(reasoning_content="")
+        await MAIN_AGENT_HOOKS.on_llm_response(run_context, response)
+        await MAIN_AGENT_HOOKS.on_agent_done(run_context, response)
 
         assert set(req.func_tool.names()) == expected_plugins
         for (name, _), hook in hooks.items():
