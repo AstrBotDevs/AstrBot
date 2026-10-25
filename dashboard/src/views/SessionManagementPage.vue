@@ -251,103 +251,18 @@
       </v-card>
 
       <!-- 分组编辑对话框 -->
-      <v-dialog v-model="groupDialog" max-width="800" @after-enter="loadAvailableUmos">
+      <v-dialog v-model="groupDialog" max-width="800">
         <v-card>
           <v-card-title class="text-h3 pa-4 pb-0 pl-6">
             {{ groupDialogMode === 'create' ? tm('groups.create') : tm('groups.edit') }}
           </v-card-title>
           <v-card-text>
             <v-text-field v-model="editingGroup.name" :label="tm('groups.name')" variant="outlined" hide-details class="mb-4"></v-text-field>
-            <v-row dense>
-              <!-- 左侧：可选会话 -->
-              <v-col cols="5">
-                <div class="text-subtitle-2 mb-2">
-                  {{
-                    tm('groups.availableSessions', {
-                      count: unselectedUmos.length,
-                    })
-                  }}
-                </div>
-                <v-text-field
-                  v-model="groupMemberSearch"
-                  :placeholder="tm('groups.searchPlaceholder')"
-                  variant="outlined"
-                  density="compact"
-                  hide-details
-                  class="mb-2"
-                  clearable
-                  prepend-inner-icon="mdi-magnify"
-                ></v-text-field>
-                <v-list density="compact" class="transfer-list">
-                  <v-list-item v-for="umo in filteredUnselectedUmos" :key="umo" @click="addToGroup(umo)" class="transfer-item">
-                    <template v-slot:prepend>
-                      <v-icon size="small" color="grey">mdi-plus</v-icon>
-                    </template>
-                    <v-list-item-title>
-                      <UmoDisplay v-bind="getAvailableUmoDisplayProps(umo)" compact :show-info="false" :show-platform="false" />
-                    </v-list-item-title>
-                    <template v-slot:append>
-                      <v-chip v-if="getAvailableUmoInfo(umo).platform" size="x-small" :color="getPlatformColor(getAvailableUmoInfo(umo).platform)" class="umo-list-platform">
-                        {{ getAvailableUmoInfo(umo).platform }}
-                      </v-chip>
-                    </template>
-                  </v-list-item>
-                  <v-list-item v-if="filteredUnselectedUmos.length === 0 && !loadingUmos">
-                    <v-list-item-title class="text-caption text-grey text-center">{{ tm('groups.noMatch') }}</v-list-item-title>
-                  </v-list-item>
-                  <v-list-item v-if="loadingUmos">
-                    <v-list-item-title class="text-center"><v-progress-circular indeterminate size="20"></v-progress-circular></v-list-item-title>
-                  </v-list-item>
-                </v-list>
-              </v-col>
-              <!-- 中间：操作按钮 -->
-              <v-col cols="2" class="d-flex flex-column align-center justify-center">
-                <v-btn icon size="small" variant="tonal" color="primary" class="mb-2" @click="addAllToGroup" :disabled="unselectedUmos.length === 0">
-                  <v-icon>mdi-chevron-double-right</v-icon>
-                </v-btn>
-                <v-btn icon size="small" variant="tonal" color="error" @click="removeAllFromGroup" :disabled="editingGroup.umos.length === 0">
-                  <v-icon>mdi-chevron-double-left</v-icon>
-                </v-btn>
-              </v-col>
-              <!-- 右侧：已选会话 -->
-              <v-col cols="5">
-                <div class="text-subtitle-2 mb-2">
-                  {{
-                    tm('groups.selectedSessions', {
-                      count: editingGroup.umos.length,
-                    })
-                  }}
-                </div>
-                <v-text-field
-                  v-model="groupSelectedSearch"
-                  :placeholder="tm('groups.searchPlaceholder')"
-                  variant="outlined"
-                  density="compact"
-                  hide-details
-                  class="mb-2"
-                  clearable
-                  prepend-inner-icon="mdi-magnify"
-                ></v-text-field>
-                <v-list density="compact" class="transfer-list">
-                  <v-list-item v-for="umo in filteredSelectedUmos" :key="umo" @click="removeFromGroup(umo)" class="transfer-item">
-                    <template v-slot:prepend>
-                      <v-icon size="small" color="error">mdi-minus</v-icon>
-                    </template>
-                    <v-list-item-title>
-                      <UmoDisplay v-bind="getAvailableUmoDisplayProps(umo)" compact :show-info="false" :show-platform="false" />
-                    </v-list-item-title>
-                    <template v-slot:append>
-                      <v-chip v-if="getAvailableUmoInfo(umo).platform" size="x-small" :color="getPlatformColor(getAvailableUmoInfo(umo).platform)" class="umo-list-platform">
-                        {{ getAvailableUmoInfo(umo).platform }}
-                      </v-chip>
-                    </template>
-                  </v-list-item>
-                  <v-list-item v-if="editingGroup.umos.length === 0">
-                    <v-list-item-title class="text-caption text-grey text-center">{{ tm('groups.noMembers') }}</v-list-item-title>
-                  </v-list-item>
-                </v-list>
-              </v-col>
-            </v-row>
+            <UmoSelector
+              v-model="editingGroup.umos"
+              multiple
+              :label="tm('groups.selectedSessions', { count: editingGroup.umos.length })"
+            />
           </v-card-text>
           <v-card-actions class="px-4 pb-4">
             <v-spacer></v-spacer>
@@ -357,52 +272,16 @@
         </v-card>
       </v-dialog>
 
-      <!-- 添加规则对话框 - 选择 UMO -->
-      <v-dialog v-model="addRuleDialog" max-width="600">
-        <v-card>
-          <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
-            <span>{{ tm('addRule.title') }}</span>
-            <v-spacer></v-spacer>
-            <v-btn icon variant="text" @click="addRuleDialog = false">
-              <v-icon>mdi-close</v-icon>
-            </v-btn>
-          </v-card-title>
-
-          <v-card-text class="pa-4">
-            <v-alert type="info" variant="tonal" class="mb-4">
-              {{ tm('addRule.description') }}
-            </v-alert>
-
-            <v-autocomplete v-model="selectedNewUmo" :items="availableUmos" :loading="loadingUmos" :label="tm('addRule.selectUmo')" variant="outlined" clearable :no-data-text="tm('addRule.noUmos')">
-              <template v-slot:item="{ props, item }">
-                <v-list-item v-bind="props">
-                  <template v-slot:title>
-                    <UmoDisplay v-bind="getAvailableUmoDisplayProps(item.raw)" compact :show-info="false" :show-platform="false" />
-                  </template>
-                  <template v-slot:append>
-                    <v-chip v-if="getAvailableUmoInfo(item.raw).platform" size="x-small" :color="getPlatformColor(getAvailableUmoInfo(item.raw).platform)" class="umo-list-platform">
-                      {{ getAvailableUmoInfo(item.raw).platform }}
-                    </v-chip>
-                  </template>
-                </v-list-item>
-              </template>
-              <template v-slot:selection="{ item }">
-                <v-chip v-if="item && getUmoSelectionText(item.raw)" size="small" variant="tonal" color="primary" class="umo-selection-chip">
-                  {{ getUmoSelectionText(item.raw) }}
-                </v-chip>
-              </template>
-            </v-autocomplete>
-          </v-card-text>
-
-          <v-card-actions class="px-4 pb-4">
-            <v-spacer></v-spacer>
-            <v-btn variant="text" @click="addRuleDialog = false">{{ tm('buttons.cancel') }}</v-btn>
-            <v-btn color="primary" variant="tonal" @click="createNewRule" :disabled="!selectedNewUmo">
-              {{ tm('buttons.next') }}
-            </v-btn>
-          </v-card-actions>
-        </v-card>
-      </v-dialog>
+      <UmoSelector
+        ref="newRuleSelector"
+        v-model="selectedNewUmo"
+        :excluded-umos="rulesList.map(rule => rule.umo)"
+        :label="tm('addRule.selectUmo')"
+        @loaded="mergeUmoInfos"
+        @update:model-value="createNewRule"
+      >
+        <template #activator />
+      </UmoSelector>
 
       <!-- 规则编辑对话框 -->
       <v-dialog v-model="ruleDialog" max-width="550" scrollable>
@@ -676,6 +555,7 @@
 
 <script>
 import { sessionApi } from '@/api/v1'
+import UmoSelector from '@/components/shared/UmoSelector.vue'
 import UmoDisplay from '@/components/shared/UmoDisplay.vue'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
 import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from '@/utils/confirmDialog'
@@ -685,6 +565,7 @@ const FOLLOW_CONFIG_VALUE = '__astrbot_follow_config__'
 export default {
   name: 'SessionManagementPage',
   components: {
+    UmoSelector,
     UmoDisplay,
   },
   setup() {
@@ -703,7 +584,6 @@ export default {
       loading: false,
       saving: false,
       deleting: false,
-      loadingUmos: false,
       rulesList: [],
       searchQuery: '',
 
@@ -722,8 +602,6 @@ export default {
       availableKbs: [],
 
       // 添加规则
-      addRuleDialog: false,
-      availableUmos: [],
       availableUmoInfoMap: {},
       selectedNewUmo: null,
 
@@ -794,8 +672,6 @@ export default {
       },
       groupMemberDialog: false,
       groupMemberTarget: null,
-      groupMemberSearch: '',
-      groupSelectedSearch: '',
 
       // 提示信息
       snackbar: false,
@@ -958,25 +834,6 @@ export default {
       return hasChanges
     },
 
-    // 穿梭框：未选中的UMO列表
-    unselectedUmos() {
-      const selected = new Set(this.editingGroup.umos || [])
-      return this.availableUmos.filter((u) => !selected.has(u))
-    },
-
-    // 穿梭框：过滤后的未选中列表
-    filteredUnselectedUmos() {
-      if (!this.groupMemberSearch) return this.unselectedUmos
-      const search = this.groupMemberSearch.toLowerCase()
-      return this.unselectedUmos.filter((u) => u.toLowerCase().includes(search))
-    },
-
-    // 穿梭框：过滤后的已选中列表
-    filteredSelectedUmos() {
-      if (!this.groupSelectedSearch) return this.editingGroup.umos || []
-      const search = this.groupSelectedSearch.toLowerCase()
-      return (this.editingGroup.umos || []).filter((u) => u.toLowerCase().includes(search))
-    },
   },
 
   watch: {
@@ -1046,22 +903,6 @@ export default {
       this.loadData()
     },
 
-    async loadUmos() {
-      this.loadingUmos = true
-      try {
-        const response = await sessionApi.activeUmos()
-        if (response.data.status === 'ok') {
-          this.mergeUmoInfos(response.data.data.umo_infos || [])
-          // 过滤掉已有规则的 umo
-          const existingUmos = new Set(this.rulesList.map((r) => r.umo))
-          this.availableUmos = response.data.data.umos.filter((umo) => !existingUmos.has(umo))
-        }
-      } catch (error) {
-        this.showError(error.response?.data?.message || this.tm('messages.loadError'))
-      }
-      this.loadingUmos = false
-    },
-
     async refreshData() {
       await this.loadData()
       this.showSuccess(this.tm('messages.refreshSuccess'))
@@ -1098,29 +939,6 @@ export default {
       return this.availableUmoInfoMap[umo] || this.parseUmoInfo(umo)
     },
 
-    getAvailableUmoDisplayProps(umo) {
-      const info = this.getAvailableUmoInfo(umo)
-      return {
-        umo,
-        platform: info.platform,
-        messageType: info.message_type,
-        sessionId: info.session_id,
-        autoName: info.auto_name,
-        userAlias: info.user_alias,
-      }
-    },
-
-    getPlatformColor(platform) {
-      const colors = {
-        aiocqhttp: 'blue',
-        qq_official: 'purple',
-        telegram: 'light-blue',
-        discord: 'indigo',
-        webchat: 'orange',
-      }
-      return colors[platform] || 'grey'
-    },
-
     getUmoDisplayText(value) {
       const item = typeof value === 'string' ? this.getAvailableUmoInfo(value) : value
       if (!item) return ''
@@ -1139,18 +957,6 @@ export default {
       return displayName || (umo ? `UMO: ${umo}` : item.display_name || '')
     },
 
-    getUmoSelectionText(value) {
-      const item = typeof value === 'string' ? this.getAvailableUmoInfo(value) : value
-      if (!item) return ''
-      const umo = item.umo || (typeof value === 'string' ? value : '')
-      const aliasName = item.user_alias || item.rules?.session_service_config?.custom_name || ''
-      const autoName = item.auto_name || ''
-      if (aliasName && autoName && aliasName !== autoName) {
-        return `${aliasName}（${autoName}）`
-      }
-      return aliasName || autoName || umo || item.display_name || ''
-    },
-
     buildUmoItem(umo, rules = {}) {
       return {
         ...this.getAvailableUmoInfo(umo),
@@ -1159,10 +965,9 @@ export default {
       }
     },
 
-    async openAddRuleDialog() {
-      this.addRuleDialog = true
+    openAddRuleDialog() {
       this.selectedNewUmo = null
-      await this.loadUmos()
+      this.$refs.newRuleSelector.openDialog()
     },
 
     createNewRule() {
@@ -1171,7 +976,6 @@ export default {
       // 创建一个新的规则项并打开编辑器
       const newItem = this.buildUmoItem(this.selectedNewUmo)
 
-      this.addRuleDialog = false
       this.openRuleEditor(newItem)
     },
 
@@ -1690,61 +1494,16 @@ export default {
       this.groupsLoading = false
     },
 
-    async loadAvailableUmos() {
-      if (this.availableUmos.length > 0) return
-      this.loadingUmos = true
-      try {
-        const response = await sessionApi.activeUmos()
-        if (response.data.status === 'ok') {
-          this.mergeUmoInfos(response.data.data.umo_infos || [])
-          this.availableUmos = response.data.data.umos || []
-        }
-      } catch (error) {
-        console.error('加载会话列表失败:', error)
-      }
-      this.loadingUmos = false
-    },
-
     openCreateGroupDialog() {
       this.groupDialogMode = 'create'
       this.editingGroup = { id: null, name: '', umos: [] }
-      this.groupMemberSearch = ''
-      this.groupSelectedSearch = ''
       this.groupDialog = true
     },
 
     openEditGroupDialog(group) {
       this.groupDialogMode = 'edit'
       this.editingGroup = { ...group, umos: [...(group.umos || [])] }
-      this.groupMemberSearch = ''
-      this.groupSelectedSearch = ''
       this.groupDialog = true
-    },
-
-    // 穿梭框操作方法
-    addToGroup(umo) {
-      if (!this.editingGroup.umos.includes(umo)) {
-        this.editingGroup.umos.push(umo)
-      }
-    },
-
-    removeFromGroup(umo) {
-      const idx = this.editingGroup.umos.indexOf(umo)
-      if (idx > -1) {
-        this.editingGroup.umos.splice(idx, 1)
-      }
-    },
-
-    addAllToGroup() {
-      this.unselectedUmos.forEach((umo) => {
-        if (!this.editingGroup.umos.includes(umo)) {
-          this.editingGroup.umos.push(umo)
-        }
-      })
-    },
-
-    removeAllFromGroup() {
-      this.editingGroup.umos = []
     },
 
     async saveGroup() {
@@ -1842,57 +1601,4 @@ code {
   font-size: 12px;
 }
 
-.transfer-list {
-  max-height: 280px;
-  overflow-y: auto;
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  border-radius: 4px;
-}
-
-.transfer-item {
-  cursor: pointer;
-  transition: background-color 0.15s;
-  min-height: 44px !important;
-  padding-top: 3px !important;
-  padding-bottom: 3px !important;
-}
-
-.transfer-item:hover {
-  background-color: rgba(0, 0, 0, 0.04);
-}
-
-.transfer-item :deep(.v-list-item__append) {
-  align-self: center;
-  margin-inline-start: auto;
-  padding-inline-start: 12px;
-}
-
-.transfer-item :deep(.v-list-item__prepend) {
-  align-self: center;
-}
-
-.transfer-item :deep(.v-list-item__content) {
-  min-width: 0;
-  padding-inline-end: 12px;
-}
-
-.transfer-item :deep(.v-list-item-title) {
-  line-height: 1.2;
-}
-
-.umo-list-platform {
-  max-width: 92px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.umo-selection-chip {
-  max-width: 100%;
-}
-
-.umo-selection-chip :deep(.v-chip__content) {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 </style>

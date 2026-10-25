@@ -99,15 +99,42 @@ async def list_sessions(
 
 @router.get("/sessions/active-umos")
 async def list_active_umos(
+    platform_id: str = Query(""),
     _auth: AuthContext = Depends(require_data_scope),
     service: SessionManagementService = Depends(get_service),
 ):
     try:
-        return ok(await service.list_active_umos())
+        return ok(await service.list_active_umos(platform_id=platform_id))
     except SessionManagementServiceError as exc:
         return _service_error(exc)
     except Exception as exc:
         return _unexpected_error("获取 UMO 列表失败", exc)
+
+
+@router.get("/sessions/senders")
+async def list_session_senders(
+    search: str = Query("", max_length=512),
+    limit: int = Query(50, ge=1, le=100),
+    sender_ids: list[str] | None = Query(None, max_length=100),
+    _auth: AuthContext = Depends(require_data_scope),
+    service: SessionManagementService = Depends(get_service),
+):
+    """Search known senders for ID selection.
+
+    Args:
+        search: Substring matched against sender and session metadata.
+        limit: Maximum number of suggestions to return.
+        sender_ids: Resolve the latest record for each exact sender ID.
+        _auth: Authenticated caller with the data scope.
+        service: Session management service.
+
+    Returns:
+        Response envelope containing sender suggestions.
+    """
+    return await _run(
+        lambda: service.list_senders(search, limit, sender_ids),
+        label="Failed to list session senders",
+    )
 
 
 @router.get("/sessions/rules")

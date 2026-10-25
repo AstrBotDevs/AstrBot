@@ -34,6 +34,7 @@ from astrbot.core.db.po import (
     SessionProjectRelation,
     SQLModel,
     UmoAlias,
+    UmoSender,
     WebChatThread,
 )
 from astrbot.core.db.po import (
@@ -2330,6 +2331,103 @@ class SQLiteDatabase(BaseDatabase):
                 query = query.where(col(UmoAlias.umo).in_(umos))
             result = await session.execute(query)
             return list(result.scalars().all())
+
+    # ====
+    # UMO Sender Management
+    # ====
+
+    async def upsert_umo_sender(
+        self, umo: str, sender_id: str, sender_name: str
+    ) -> None:
+        """Insert a sender or update a changed, nonempty name.
+
+        Args:
+            umo: Unified message origin containing the sender.
+            sender_id: Sender identifier reported by the platform.
+            sender_name: Latest display name, or an empty string if unavailable.
+        """
+        if not sender_id:
+            return
+        now = datetime.now(timezone.utc)
+        statement = sqlite_insert(UmoSender).values(
+            umo=umo,
+            sender_id=sender_id,
+            sender_name=sender_name,
+            created_at=now,
+            updated_at=now,
+        )
+        statement = statement.on_conflict_do_update(
+            index_elements=[UmoSender.umo, UmoSender.sender_id],
+            set_={"sender_name": statement.excluded.sender_name, "updated_at": now},
+            where=(statement.excluded.sender_name != "")
+            & col(UmoSender.sender_name).is_distinct_from(
+                statement.excluded.sender_name
+            ),
+        )
+        async with self.get_db() as session:
+            async with session.begin():
+                await session.execute(statement)
+
+    async def get_umo_senders(
+        self, search: str = "", limit: int = 50, sender_ids: list[str] | None = None
+    ) -> list[tuple[UmoSender, UmoAlias | None]]:
+        """Search sender metadata joined to session aliases.
+
+        Args:
+            search: Literal substring matched against sender and session metadata.
+            limit: Maximum number of results to return.
+            sender_ids: Resolve the latest record per exact sender ID when provided.
+
+        Returns:
+            Sender and optional UMO alias pairs, most recently updated first.
+        """
+        query = select(UmoSender, UmoAlias).outerjoin(
+            UmoAlias, col(UmoSender.umo) == col(UmoAlias.umo)
+        )
+        if sender_ids is not None:
+            if not sender_ids:
+                return []
+            # Resolve every selected ID once, even if it occurs in many sessions.
+            ranked = (
+                select(
+                    UmoSender.id,
+                    func.row_number()
+                    .over(
+                        partition_by=UmoSender.sender_id,
+                        order_by=(
+                            col(UmoSender.updated_at).desc(),
+                            col(UmoSender.id).desc(),
+                        ),
+                    )
+                    .label("rank"),
+                )
+                .where(col(UmoSender.sender_id).in_(sender_ids))
+                .subquery()
+            )
+            query = query.where(
+                col(UmoSender.id).in_(select(ranked.c.id).where(ranked.c.rank == 1))
+            )
+        if search:
+            query = query.where(
+                or_(
+                    *(
+                        column.icontains(search, autoescape=True)
+                        for column in (
+                            col(UmoSender.sender_id),
+                            col(UmoSender.sender_name),
+                            col(UmoSender.umo),
+                            col(UmoAlias.auto_name),
+                            col(UmoAlias.user_alias),
+                        )
+                    )
+                )
+            )
+        query = query.order_by(
+            col(UmoSender.updated_at).desc(), col(UmoSender.id).desc()
+        ).limit(limit)
+        async with self.get_db() as session:
+            result = await session.execute(query)
+            return [(sender, alias) for sender, alias in result.all()]
 
     # ====
     # ChatUI Project Management

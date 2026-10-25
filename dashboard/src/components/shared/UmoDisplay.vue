@@ -12,9 +12,12 @@
       </div>
     </div>
 
-    <v-chip v-if="showPlatform && resolvedPlatform" size="x-small" :color="platformColor" class="umo-display__platform">
-      {{ resolvedPlatform }}
-    </v-chip>
+    <div v-if="showPlatform && resolvedPlatform" class="umo-display__platform-label">
+      <PlatformLogo :platform-type="platformType || resolvedPlatform" />
+      <v-chip size="x-small" :color="platformColor" class="umo-display__platform">
+        {{ resolvedPlatform }}
+      </v-chip>
+    </div>
 
     <div v-if="editable || showInfo" class="umo-display__actions">
       <v-btn v-if="editable" icon size="x-small" variant="text" class="umo-display__edit" @click.stop="$emit('edit')">
@@ -36,14 +39,21 @@
 </template>
 
 <script>
+import PlatformLogo from './PlatformLogo.vue'
+
 export default {
   name: 'UmoDisplay',
+  components: { PlatformLogo },
   props: {
     umo: {
       type: String,
       required: true,
     },
     platform: {
+      type: String,
+      default: '',
+    },
+    platformType: {
       type: String,
       default: '',
     },
@@ -161,6 +171,13 @@ export default {
   align-items: center;
   min-width: 0;
   gap: 6px;
+}
+
+.umo-display__platform-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
 }
 
 .umo-display__platform {

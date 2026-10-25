@@ -97,6 +97,29 @@ API Key、访问令牌和密码等敏感字符串应设置 `"secret": true`。�
 
 - `select_provider`、`select_provider_tts`、`select_provider_stt`、`select_persona` 的结果为字符串。
 - `select_knowledgebase` 的结果为 `list` 类型，支持多选，建议将对应配置项的 `type` 设为 `list`，默认值设为 `[]`。
+- `sender_id` 打开“选择用户”弹窗，按昵称、ID 或来源会话搜索，结果仅保存用户 ID 列表。配置项应使用 `type: list`，默认值为 `[]`。
+- `umo` 打开“选择会话来源”弹窗，按群名、昵称、别名或 UMO 搜索。使用 `type: string`、默认值 `""` 时单选并保存完整 UMO 字符串；使用 `type: list`、默认值 `[]` 时多选并保存 UMO 列表。
+
+例如，在 `_conf_schema.json` 中添加：
+
+```json
+{
+  "users": {
+    "description": "指定用户",
+    "type": "list",
+    "default": [],
+    "_special": "sender_id"
+  },
+  "sources": {
+    "description": "会话来源",
+    "type": "list",
+    "default": [],
+    "_special": "umo"
+  }
+}
+```
+
+用户候选项在消息唤醒机器人时记录，尚未记录的 ID 可在搜索无结果时直接添加。会话来源支持手动输入尚未记录的 UMO。这两个选择器都支持 `readonly`。机器人页通过组件 `platformId` 属性限制平台实例；插件配置 schema 暂不提供这一过滤参数。
 
 > [!NOTE]
 > 此外，AstrBot Core 内部还使用了 `select_providers`、`provider_pool`、`persona_pool`、`select_plugin_set`、`t2i_template`、`get_embedding_dim`、`select_agent_runner_provider:*`（`*` 为运行器类型占位符）等 `_special` 值。这些属于内部实现，随时可能变动，请勿在插件中使用。

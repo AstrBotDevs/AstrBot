@@ -114,6 +114,27 @@ Under `Ext. → Segmented Reply`, turn on `Enable Segmented Reply` to configure 
 
 ![Access Control](./images/config-access-control-en.jpg)
 
+In `Access Control → Administrators → Administrator IDs`, click `Select users` to open the dedicated `Select users` dialog. Selected senders appear on the left with their names, IDs and platform instances. IDs appear in gray parentheses after each name. The subtitle shows only the platform instance, with its logo on the left when available, without the source session name or UMO. Unmatched logos and images that fail to load are hidden. Search and select users on the right. The refresh icon at the right of the search field reloads the current query, shows a loading state and preserves selected users. The former Known users / Enter IDs tabs are removed. When no results match, click `Add ID "…"` to add the search text as a user ID. Blank and already selected IDs cannot be added again; direct addition also remains available if lookup fails. Different session nicknames remain visible, while selections are deduplicated by sender ID. Saved IDs resolve to nicknames when available and remain usable otherwise. Confirm to update the form, then click `Save Configuration` to apply it. Cancel leaves the configuration unchanged.
+
+Sender suggestions are collected asynchronously from messages that wake the bot. Names are stored separately for each sender and UMO, so different group nicknames remain distinct. New installations start with no suggestions; existing message history is not backfilled. An unavailable nickname does not overwrite a previously recorded name. Session whitelists continue to use UMOs rather than sender IDs.
+
+![User selector (preview data)](./images/config-sender-picker-en.jpg)
+
+Session UMO fields share the `Select session sources` dialog. A hint below the title explains that a session source (UMO) uniquely identifies the bot and group or private chat a message comes from. Click a session field to search recorded session sources by group name, nickname, alias or raw UMO. Each result shows its readable name, raw identifier and platform instance, with a logo to the left of the platform chip when available. Unmatched logos and images that fail to load are hidden. Multiple selection supports selecting individual checkboxes; manual entry supports unknown sessions where enabled. Confirm stages the selection in the parent form, while Cancel preserves the previous selection. The parent page still handles saving or applying rules.
+
+| Entry point | Selection behavior |
+| --- | --- |
+| Bots → Session configuration | Single selection restricted to the bot's exact platform instance, excluding already bound sessions |
+| Access Control → Whitelist | Multiple selection, preserving existing legacy group IDs and unknown values |
+| Data & Logs → Conversations → Filters → UMO | Single selection with manual entry; clearing also removes the URL's UMO condition |
+| Custom Rules → Add rule | Single selection; confirmation opens the rule editor directly |
+| Custom Rules → Groups → Session members | Multiple selection, replacing the separate transfer list |
+| Future Tasks → Delivery session and session filter | Single selection; the filter's No delivery target option is a separate checkbox |
+
+Previous-to-current mapping: administrator IDs move from `Add More → Edit List Items` to `Select users` (button and dialog). Session dropdowns, the generic whitelist editor and the group transfer list at the entries above are replaced by clicking a session field to open `Select session sources`. The former `Select sessions / Known sessions` labels are now `Select session sources / Recorded session sources`. Advanced wildcard rules in bot session configuration retain their existing editor.
+
+![Shared session selector (preview data)](./images/config-umo-selector-en.jpg)
+
 After selecting an explicit model, click the gear beside the selector to open its settings dialog. Gears are also available in model and fallback-model menus. Clicking a gear does not change the selection or fallback order. Saving model settings immediately affects every profile using that model; the current profile's model selection still requires `Save Configuration`. Automatic selection has no gear beside the selector.
 
 ![Model settings shortcut](./images/config-model-settings-en.jpg)

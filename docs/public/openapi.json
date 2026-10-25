@@ -6081,6 +6081,64 @@
         "summary": "List active and known UMOs",
         "operationId": "listActiveUmos",
         "x-astrbot-scope": "data",
+        "parameters": [
+          {
+            "name": "platform_id",
+            "in": "query",
+            "description": "Exact platform instance ID; omit to list all instances.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `data`"
+      }
+    },
+    "/api/v1/sessions/senders": {
+      "get": {
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "Search known senders with source session names",
+        "operationId": "listSessionSenders",
+        "x-astrbot-scope": "data",
+        "parameters": [
+          {
+            "name": "sender_ids",
+            "in": "query",
+            "description": "Resolve the latest record per exact sender ID instead of returning all source sessions.",
+            "schema": {
+              "type": "array",
+              "maxItems": 100,
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 512
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
         "responses": {
           "200": {
             "$ref": "#/components/responses/Ok"

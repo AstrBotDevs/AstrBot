@@ -38,3 +38,16 @@ async def test_save_groups_preserves_legacy_preference_scope(monkeypatch):
         "session_groups",
         groups,
     )
+
+
+@pytest.mark.asyncio
+async def test_known_umos_include_senders_and_filter_exact_platform(temp_db):
+    """Keep sender-only sessions and filter by instance rather than a prefix."""
+    for umo in ("qq:GroupMessage:1", "qq-2:GroupMessage:2", "QQ:FriendMessage:3"):
+        await temp_db.upsert_umo_sender(umo, "sender", "Alice")
+    await temp_db.upsert_umo_auto_name("qq:GroupMessage:4", "sender", "Team")
+    service = SessionManagementService(MagicMock(), temp_db)
+    result = await service.list_active_umos(platform_id="qq")
+    assert result["umos"] == ["qq:GroupMessage:1", "qq:GroupMessage:4"]
+    assert {info["platform"] for info in result["umo_infos"]} == {"qq"}
+    assert len((await service.list_active_umos())["umos"]) == 4

@@ -9,7 +9,7 @@ from sqlmodel import col, select
 from astrbot.core import logger, sp
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
-from astrbot.core.db.po import ConversationV2, Preference
+from astrbot.core.db.po import ConversationV2, Preference, UmoSender
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.umo_alias import build_umo_alias_map, parse_umo, serialize_umo_alias
 
@@ -57,7 +57,9 @@ class SessionManagementService:
     async def list_known_umos(self) -> list[str]:
         async with self.db_helper.get_db() as session:
             session: AsyncSession
-            result = await session.execute(select(ConversationV2.user_id).distinct())
+            result = await session.execute(
+                select(ConversationV2.user_id).union(select(UmoSender.umo))
+            )
             umos = {str(row[0]) for row in result.fetchall() if row[0]}
 
         aliases = await self.db_helper.get_umo_aliases()
@@ -75,12 +77,51 @@ class SessionManagementService:
             **serialize_umo_alias(alias_map.get(umo_str), umo_str),
         }
 
-    async def list_active_umos(self) -> dict:
+    async def list_active_umos(self, platform_id: str = "") -> dict:
+        """List known sessions, optionally restricted to one platform instance.
+
+        Args:
+            platform_id: Exact platform instance ID, or empty for all instances.
+
+        Returns:
+            Raw UMOs and their display metadata.
+        """
         umos = await self.list_known_umos()
+        if platform_id:
+            umos = [umo for umo in umos if umo.partition(":")[0] == platform_id]
         alias_map = await self.get_umo_alias_map(umos)
         return {
             "umos": umos,
             "umo_infos": [self.build_umo_info(umo, alias_map) for umo in umos],
+        }
+
+    async def list_senders(
+        self, search: str = "", limit: int = 50, sender_ids: list[str] | None = None
+    ) -> dict:
+        """Find sender IDs with names and source session metadata.
+
+        Args:
+            search: Substring matched against sender and session names or IDs.
+            limit: Maximum number of results to return.
+            sender_ids: Resolve the latest record for each exact sender ID.
+
+        Returns:
+            Sender suggestions containing the raw ID and resolved session name.
+        """
+        records = await self.db_helper.get_umo_senders(
+            search.strip(), limit, sender_ids
+        )
+        return {
+            "senders": [
+                {
+                    "sender_id": sender.sender_id,
+                    "sender_name": sender.sender_name,
+                    **self.build_umo_info(
+                        sender.umo, {sender.umo: alias} if alias else {}
+                    ),
+                }
+                for sender, alias in records
+            ]
         }
 
     async def get_umos_by_scope(

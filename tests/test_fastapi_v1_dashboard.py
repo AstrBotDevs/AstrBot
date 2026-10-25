@@ -1779,6 +1779,55 @@ async def test_v1_active_umos_uses_session_service(
 
 
 @pytest.mark.asyncio
+async def test_v1_active_umos_filters_by_exact_platform_instance(
+    asgi_client: httpx.AsyncClient, fake_db: FakeDb,
+):
+    """Return only the requested instance's sessions to platform editors."""
+    fake_db.umo_ids = ["qq:GroupMessage:1", "qq-2:GroupMessage:2"]
+    response = await asgi_client.get(
+        "/api/v1/sessions/active-umos", params={"platform_id": "qq"}, headers=_jwt_headers(),
+    )
+    assert response.status_code == 200
+    assert response.json()["data"]["umos"] == ["qq:GroupMessage:1"]
+
+
+@pytest.mark.asyncio
+async def test_v1_sender_lookup_requires_auth_and_returns_source(
+    asgi_client: httpx.AsyncClient, fake_db: FakeDb,
+):
+    """Expose source session names without allowing unauthenticated lookup."""
+    fake_db.get_umo_senders = AsyncMock(return_value=[(
+        SimpleNamespace(umo="qq:GroupMessage:1000", sender_id="123", sender_name="Alice"),
+        None,
+    )])
+    assert (await asgi_client.get("/api/v1/sessions/senders")).status_code == 401
+    response = await asgi_client.get(
+        "/api/v1/sessions/senders", params={"search": " Alice ", "limit": 10},
+        headers=_jwt_headers(),
+    )
+    assert response.status_code == 200
+    sender = response.json()["data"]["senders"][0]
+    assert sender["sender_id"] == "123"
+    assert sender["sender_name"] == "Alice"
+    assert sender["platform"] == "qq"
+    assert sender["display_name"] == "qq:GroupMessage:1000"
+    fake_db.get_umo_senders.assert_awaited_once_with("Alice", 10, None)
+    fake_db.get_umo_senders.reset_mock()
+    response = await asgi_client.get(
+        "/api/v1/sessions/senders",
+        params=[("sender_ids", "123"), ("sender_ids", "456"), ("limit", "100")],
+        headers=_jwt_headers(),
+    )
+    assert response.status_code == 200
+    fake_db.get_umo_senders.assert_awaited_once_with("", 100, ["123", "456"])
+    for limit in (0, 101):
+        response = await asgi_client.get(
+            "/api/v1/sessions/senders", params={"limit": limit}, headers=_jwt_headers(),
+        )
+        assert response.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_v1_system_config_update_preserves_independent_bot_provider_sections(
     asgi_client: httpx.AsyncClient,
     fake_core_lifecycle,

@@ -1239,6 +1239,7 @@ CONFIG_METADATA_2 = {
                     },
                     "id_whitelist": {
                         "type": "list",
+                        "_special": "umo",
                         "items": {"type": "string"},
                         "hint": "只处理填写的 ID 发来的消息事件，为空时不启用。可使用 /sid 指令获取在平台上的会话 ID(类似 abc:GroupMessage:123)。管理员可在 WebUI 的配置文件 -> 访问控制 -> 白名单中管理白名单。",
                     },
@@ -3189,6 +3190,7 @@ CONFIG_METADATA_2 = {
             },
             "admins_id": {
                 "type": "list",
+                "_special": "sender_id",
                 "items": {"type": "string"},
             },
             "http_proxy": {
@@ -4517,6 +4519,7 @@ CONFIG_METADATA_3 = {
                     "admins_id": {
                         "description": "管理员 ID",
                         "type": "list",
+                        "_special": "sender_id",
                         "items": {"type": "string"},
                         "hint": "给机器人发送 /sid 指令以获取 ID。",
                     },
@@ -4534,6 +4537,7 @@ CONFIG_METADATA_3 = {
                     "platform_settings.id_whitelist": {
                         "description": "白名单 ID 列表",
                         "type": "list",
+                        "_special": "umo",
                         "items": {"type": "string"},
                         "hint": "给机器人发送 /sid 指令以获取 ID。为空时代表不启用白名单功能。",
                     },
