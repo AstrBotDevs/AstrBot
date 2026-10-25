@@ -34,6 +34,7 @@ from astrbot.core.utils.webhook_utils import log_webhook_info
 from ...register import register_platform_adapter
 from .bot_info import request_lark_bot_info
 from .lark_event import LarkMessageEvent
+from .lark_group_info import get_lark_group
 from .server import LarkWebhookServer
 
 USER_NAME_CACHE_TTL_SECONDS = 1800
@@ -769,6 +770,8 @@ class LarkPlatformAdapter(Platform):
             abm: Parsed message, including its reply component.
             quoted_post_id: Quoted message ID, only when its source type is post.
         """
+        if abm.type == MessageType.GROUP_MESSAGE and abm.group:
+            await get_lark_group(self.lark_api, abm.group)
         event = self.create_event(abm)
         if quoted_post_id is not None:
             event.set_extra("lark_quoted_post_id", quoted_post_id)

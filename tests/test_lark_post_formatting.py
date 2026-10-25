@@ -40,6 +40,12 @@ def lark_message():
         ],
     )
     adapter.lark_api = MagicMock()
+    adapter.lark_api._astrbot_group_info_cache = None
+    adapter.lark_api.im.v1.chat.aget = AsyncMock(
+        return_value=SimpleNamespace(
+            success=lambda: False, data=None, code=403, msg="permission denied"
+        )
+    )
     adapter.lark_api.im.v1.message.aget = AsyncMock(
         return_value=SimpleNamespace(
             success=lambda: True, data=SimpleNamespace(items=[parent])
