@@ -2318,6 +2318,16 @@ class SQLiteDatabase(BaseDatabase):
             )
             return result.scalar_one_or_none()
 
+    async def delete_umo_alias(self, umo: str) -> bool:
+        """Delete alias metadata for one UMO."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                result = await session.execute(
+                    delete(UmoAlias).where(col(UmoAlias.umo) == umo)
+                )
+                return result.rowcount > 0
+
     async def get_umo_aliases(self, umos: list[str] | None = None) -> list[UmoAlias]:
         """Get alias metadata, optionally restricted to a UMO list."""
         if umos is not None and not umos:
