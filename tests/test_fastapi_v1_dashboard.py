@@ -1779,6 +1779,82 @@ async def test_v1_active_umos_uses_session_service(
 
 
 @pytest.mark.asyncio
+async def test_v1_active_umos_filters_by_exact_platform_instance(
+    asgi_client: httpx.AsyncClient, fake_db: FakeDb,
+):
+    """Return only the requested instance's sessions to platform editors."""
+    fake_db.umo_ids = ["qq:GroupMessage:1", "qq-2:GroupMessage:2"]
+    response = await asgi_client.get(
+        "/api/v1/sessions/active-umos", params={"platform_id": "qq"}, headers=_jwt_headers(),
+    )
+    assert response.status_code == 200
+    assert response.json()["data"]["umos"] == ["qq:GroupMessage:1"]
+
+
+@pytest.mark.asyncio
+async def test_v1_sender_lookup_requires_auth_and_returns_source(
+    asgi_client: httpx.AsyncClient, fake_db: FakeDb,
+):
+    """Expose source session names without allowing unauthenticated lookup."""
+    fake_db.get_umo_senders = AsyncMock(return_value=[(
+        SimpleNamespace(umo="qq:GroupMessage:1000", sender_id="123", sender_name="Alice"),
+        None,
+    )])
+    assert (await asgi_client.get("/api/v1/sessions/senders")).status_code == 401
+    response = await asgi_client.get(
+        "/api/v1/sessions/senders", params={"search": " Alice ", "limit": 10},
+        headers=_jwt_headers(),
+    )
+    assert response.status_code == 200
+    sender = response.json()["data"]["senders"][0]
+    assert sender["sender_id"] == "123"
+    assert sender["sender_name"] == "Alice"
+    assert sender["platform"] == "qq"
+    assert sender["display_name"] == "qq:GroupMessage:1000"
+    assert response.json()["data"]["page"] == 1
+    assert response.json()["data"]["has_more"] is False
+    fake_db.get_umo_senders.assert_awaited_once_with("Alice", 11, None, offset=0)
+    fake_db.get_umo_senders.reset_mock()
+    response = await asgi_client.get(
+        "/api/v1/sessions/senders",
+        params=[("sender_ids", "123"), ("sender_ids", "456"), ("limit", "100")],
+        headers=_jwt_headers(),
+    )
+    assert response.status_code == 200
+    fake_db.get_umo_senders.assert_awaited_once_with("", 101, ["123", "456"], offset=0)
+    for limit in (0, 101):
+        response = await asgi_client.get(
+            "/api/v1/sessions/senders", params={"limit": limit}, headers=_jwt_headers(),
+        )
+        assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_v1_sender_lookup_pages_results_and_validates_page(
+    asgi_client: httpx.AsyncClient, fake_db: FakeDb,
+):
+    """Pass page offsets through and hide the extra row used to detect the next page."""
+    fake_db.get_umo_senders = AsyncMock(return_value=[
+        (SimpleNamespace(umo="qq:GroupMessage:room", sender_id=str(index), sender_name=f"User {index}"), None)
+        for index in range(3)
+    ])
+    response = await asgi_client.get(
+        "/api/v1/sessions/senders", params={"page": 2, "limit": 2}, headers=_jwt_headers(),
+    )
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["page"] == 2
+    assert data["has_more"] is True
+    assert [sender["sender_id"] for sender in data["senders"]] == ["0", "1"]
+    fake_db.get_umo_senders.assert_awaited_once_with("", 3, None, offset=2)
+    for page in (0, -1):
+        response = await asgi_client.get(
+            "/api/v1/sessions/senders", params={"page": page}, headers=_jwt_headers(),
+        )
+        assert response.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_v1_system_config_update_preserves_independent_bot_provider_sections(
     asgi_client: httpx.AsyncClient,
     fake_core_lifecycle,
@@ -5021,3 +5097,18 @@ async def test_v1_trace_storage_cleanup_target(asgi_client, monkeypatch):
             "/api/v1/stats/storage/cleanup", json={"target": "invalid"}, headers=headers
         )
     ).status_code == 422
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("route", ["/api/v1/bots/by-id", "/api/v1/bots/bot"])
+async def test_bot_delete_cleanup_query_is_validated(asgi_app, asgi_client, route):
+    """Forward repeated cleanup categories and reject unknown destructive options."""
+    delete_bot = AsyncMock()
+    asgi_app.state.services.bots.delete_bot = delete_bot
+    params = [("bot_id", "bot"), ("cleanup", "custom_rules"), ("cleanup", "traces")]
+    response = await asgi_client.delete(route, params=params, headers=_jwt_headers())
+    assert response.status_code == 200
+    delete_bot.assert_awaited_once_with("bot", cleanup=["custom_rules", "traces"])
+    invalid = await asgi_client.delete(route, params={"bot_id": "bot", "cleanup": "unknown"}, headers=_jwt_headers())
+    assert invalid.status_code == 422
+    assert delete_bot.await_count == 1

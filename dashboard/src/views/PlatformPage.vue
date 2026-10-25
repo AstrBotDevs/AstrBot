@@ -75,7 +75,7 @@
                   variant="text"
                   :aria-label="tm('workspace.delete')"
                   :title="tm('workspace.delete')"
-                  @click="deletePlatform(selectedPlatform)"
+                  @click="platformToDelete = selectedPlatform"
                 />
               </div>
 
@@ -117,7 +117,7 @@
                       variant="text"
                       :aria-label="tm('workspace.delete')"
                       :title="tm('workspace.delete')"
-                      @click="deletePlatform(platform)"
+                      @click="platformToDelete = platform"
                     />
                   </div>
                 </div>
@@ -176,6 +176,11 @@
       :updating-mode="false"
       @show-toast="showToast"
       @refresh-config="handlePlatformCreated"
+    />
+
+    <DeletePlatformDialog
+      v-model:platform="platformToDelete"
+      @deleted="handlePlatformDeleted"
     />
 
     <v-dialog v-model="showWebhookDialog" max-width="600">
@@ -320,24 +325,21 @@
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { botApi, fileApi, systemConfigApi } from "@/api/v1";
 import AddNewPlatform from "@/components/platform/AddNewPlatform.vue";
+import DeletePlatformDialog from "@/components/platform/DeletePlatformDialog.vue";
 import PlatformEditor from "@/components/platform/PlatformEditor.vue";
 import QrCodeViewer from "@/components/shared/QrCodeViewer.vue";
 import { mergeDynamicTranslations, useModuleI18n } from "@/i18n/composables";
 import { copyToClipboard } from "@/utils/clipboard";
-import {
-  askForConfirmation as askForConfirmationDialog,
-  useConfirmDialog,
-} from "@/utils/confirmDialog";
 import { getPlatformIcon } from "@/utils/platformUtils";
 
 const { tm } = useModuleI18n("features/platform");
-const confirmDialog = useConfirmDialog();
 
 const configData = ref({});
 const metadata = ref({});
 const loadingPlatforms = ref(true);
 const selectedPlatformId = ref(null);
 const showAddPlatformDialog = ref(false);
+const platformToDelete = ref(null);
 const platformStats = ref({});
 const showWebhookDialog = ref(false);
 const currentWebhookUuid = ref("");
@@ -462,20 +464,12 @@ function getPlatformStatusClass(platform) {
   return "bot-list-item__status-dot--disabled";
 }
 
-async function deletePlatform(platform) {
-  const message = `${tm("messages.deleteConfirm")} ${platform.id}?`;
-  if (!(await askForConfirmationDialog(message, confirmDialog))) return;
-
-  try {
-    const response = await botApi.delete(platform.id);
-    if (selectedPlatformId.value === platform.id) {
-      selectedPlatformId.value = null;
-    }
-    await getConfig();
-    showSuccess(response.data.message || tm("messages.deleteSuccess"));
-  } catch (error) {
-    showError(error);
+async function handlePlatformDeleted(platformId) {
+  if (selectedPlatformId.value === platformId) {
+    selectedPlatformId.value = null;
   }
+  await getConfig();
+  showSuccess(tm("messages.deleteSuccess"));
 }
 
 function handlePlatformCreated(platformId) {

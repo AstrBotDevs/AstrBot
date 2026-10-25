@@ -10,6 +10,7 @@ import {
   type BackupUploadRequest,
   type BackupUploadSessionRequest,
   type BotConfigRequest,
+  type BotCleanupTarget,
   type BotRegistrationRequest,
   type ChatChunkUploadRequest,
   type ChatMessagePatchRequest,
@@ -490,9 +491,12 @@ export const botApi = {
       }),
     );
   },
-  delete(botId: string) {
+  delete(botId: string, cleanup: BotCleanupTarget[] = []) {
     return typed<OpenConfig>(
-      openApiV1.deleteBotById({ query: { bot_id: botId } }),
+      openApiV1.deleteBotById({
+        query: { bot_id: botId, cleanup },
+        paramsSerializer: { indexes: null },
+      }),
     );
   },
 };
@@ -1029,11 +1033,20 @@ export const fileApi = {
 };
 
 export const sessionApi = {
+  senders(params?: { search?: string; limit?: number; page?: number; sender_ids?: string[] }) {
+    return typed<{ page: number; has_more: boolean; senders: Array<{
+      umo: string;
+      sender_id: string;
+      sender_name: string;
+      platform: string;
+      display_name: string;
+    }> }>(openApiV1.listSessionSenders({ query: params }));
+  },
   list(params?: SessionListParams) {
     return typed<any>(openApiV1.listSessions({ query: generatedQuery(params) }));
   },
-  activeUmos() {
-    return typed<any>(openApiV1.listActiveUmos());
+  activeUmos(params?: { platform_id?: string }) {
+    return typed<any>(openApiV1.listActiveUmos({ query: params }));
   },
   listRules(params?: SessionRuleListParams) {
     return typed<any>(

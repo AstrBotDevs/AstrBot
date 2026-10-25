@@ -45,6 +45,8 @@ export type BatchSessionServiceRequest = UmoListRequest & {
     tts_enabled?: boolean;
 };
 
+export type BotCleanupTarget = 'custom_rules' | 'preferences' | 'routing' | 'cron_jobs' | 'conversations' | 'message_history' | 'traces' | 'stats';
+
 export type BotConfigRequest = {
     id?: string;
     name?: string;
@@ -431,6 +433,11 @@ export type NeoReleaseActionRequest = {
 export type ParameterAttachmentId = string;
 
 export type ParameterAttachmentIdQuery = string;
+
+/**
+ * Data categories to permanently remove for this adapter. Omit to retain all associated data. Shared resources and cross-platform routing rules are preserved.
+ */
+export type ParameterBotCleanup = Array<BotCleanupTarget>;
 
 export type ParameterBotId = string;
 
@@ -1013,6 +1020,10 @@ export type UpdateBotByIdError = unknown;
 export type DeleteBotByIdData = {
     query: {
         bot_id: string;
+        /**
+         * Data categories to permanently remove for this adapter. Omit to retain all associated data. Shared resources and cross-platform routing rules are preserved.
+         */
+        cleanup?: Array<BotCleanupTarget>;
     };
 };
 
@@ -1065,6 +1076,12 @@ export type UpdateBotError = unknown;
 export type DeleteBotData = {
     path: {
         bot_id: string;
+    };
+    query?: {
+        /**
+         * Data categories to permanently remove for this adapter. Omit to retain all associated data. Shared resources and cross-platform routing rules are preserved.
+         */
+        cleanup?: Array<BotCleanupTarget>;
     };
 };
 
@@ -3214,9 +3231,34 @@ export type ListSessionsResponse = (SuccessEnvelope);
 
 export type ListSessionsError = unknown;
 
+export type ListActiveUmosData = {
+    query?: {
+        /**
+         * Exact platform instance ID; omit to list all instances.
+         */
+        platform_id?: string;
+    };
+};
+
 export type ListActiveUmosResponse = (SuccessEnvelope);
 
 export type ListActiveUmosError = unknown;
+
+export type ListSessionSendersData = {
+    query?: {
+        limit?: number;
+        page?: number;
+        search?: string;
+        /**
+         * Resolve the latest record per exact sender ID instead of returning all source sessions.
+         */
+        sender_ids?: Array<(string)>;
+    };
+};
+
+export type ListSessionSendersResponse = (SuccessEnvelope);
+
+export type ListSessionSendersError = unknown;
 
 export type ListSessionRulesData = {
     query?: {
