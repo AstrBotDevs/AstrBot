@@ -97,7 +97,7 @@
   },
   "umoSelector": {
     "title": "选择会话来源",
-    "hint": "会话来源（UMO）用于唯一标识消息来自哪个机器人的哪个群聊或私聊。你可以按群名、昵称、别名或 UMO 搜索和选择。",
+    "hint": "会话来源（UMO）用于唯一标识消息来自哪个机器人的哪个群聊或私聊。你可以按群名、昵称、别名或 UMO 搜索和选择。可以对机器人使用 /sid 指令获取当前会话的 UMO。",
     "selected": "已选择（{count}）",
     "clear": "清空选择",
     "remove": "移除 {umo}",
@@ -115,7 +115,7 @@
   "list": {
     "senderSearch": "搜索昵称或发送者 ID",
     "senderRefresh": "刷新",
-    "senderHint": "按昵称、ID 或来源会话搜索和选择指定用户。",
+    "senderHint": "按昵称、ID 或来源会话搜索和选择指定用户。可以对机器人使用 /sid 指令获取自己在某个消息平台的用户 ID。",
     "senderManage": "选择用户",
     "senderTitle": "选择用户",
     "senderSelected": "已选择（{count}）",
