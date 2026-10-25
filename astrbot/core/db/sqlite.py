@@ -2319,7 +2319,14 @@ class SQLiteDatabase(BaseDatabase):
             return result.scalar_one_or_none()
 
     async def delete_umo_alias(self, umo: str) -> bool:
-        """Delete alias metadata for one UMO."""
+        """Delete alias metadata for one UMO.
+
+        Args:
+            umo: Unified message origin whose alias metadata should be deleted.
+
+        Returns:
+            True when an alias was deleted, False when none matched.
+        """
         async with self.get_db() as session:
             session: AsyncSession
             async with session.begin():

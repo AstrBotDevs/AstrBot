@@ -892,6 +892,9 @@ class BaseDatabase(abc.ABC):
     async def delete_umo_alias(self, umo: str) -> bool:
         """Delete alias metadata for one UMO.
 
+        Args:
+            umo: Unified message origin whose alias metadata should be deleted.
+
         Returns:
             True when an alias was deleted, False when none matched.
         """
