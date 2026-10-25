@@ -34,19 +34,35 @@ class ContextTruncator:
         truncated: list[Message],
         original_messages: list[Message],
     ) -> list[Message]:
-        """Ensure the result always contains the first user message right after
-        system messages. This is required by many LLM APIs (e.g. Zhipu) that
-        mandate a ``user`` message immediately following the ``system`` message.
+        """Ensure a user message follows the system messages after truncation.
+
+        Many LLM APIs (e.g. Zhipu) require a ``user`` message immediately after
+        the ``system`` message. When the cut removed it, restore the user message
+        that started the kept turn, so the model still sees the question the
+        remaining tool calls are answering.
+
+        Args:
+            system_messages: Leading system messages of the original list.
+            truncated: Kept non-system messages, always a suffix of
+                ``original_messages``.
+            original_messages: The full message list before truncation.
+
+        Returns:
+            The system messages, an optional restored user message, and the
+            truncated messages.
         """
         if truncated and truncated[0].role == "user":
             return system_messages + truncated
 
-        # Locate the first user message from the *original* list.
-        first_user = next((m for m in original_messages if m.role == "user"), None)
-        if first_user is None:
+        # The nearest user message before the cut is the one the kept turn answers.
+        cut = len(original_messages) - len(truncated)
+        last_user = next(
+            (m for m in reversed(original_messages[:cut]) if m.role == "user"), None
+        )
+        if last_user is None:
             return system_messages + truncated
 
-        return system_messages + [first_user] + truncated
+        return system_messages + [last_user] + truncated
 
     def fix_messages(self, messages: list[Message]) -> list[Message]:
         """Fix the message list to ensure the validity of tool call and tool response pairing.
