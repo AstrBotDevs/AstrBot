@@ -7,6 +7,7 @@ import wave
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from urllib.parse import quote
 
 import pytest
@@ -1081,6 +1082,49 @@ def _make_wav(path, rate, channels=1, secs=0.2, freq=440):
             sample = int(0.2 * 32767 * math.sin(2 * math.pi * freq * i / rate))
             for _ in range(channels):
                 wav.writeframesraw(struct.pack("<h", sample))
+
+
+@pytest.mark.parametrize("prefix", [b"", b"\x02", b"\x03"], ids=["plain", "02", "03"])
+def test_audio_magic_detects_silk_with_wav_extension(tmp_path, prefix):
+    """Detect SILK from its header even when the file is named as WAV."""
+    source_path = tmp_path / "voice.wav"
+    source_path.write_bytes(prefix + b"#!SILK_V3" + b"\x00" * 16)
+
+    assert media_utils._get_audio_magic_type(str(source_path)) == "silk"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("prefix", [b"", b"\x02", b"\x03"], ids=["plain", "02", "03"])
+async def test_ensure_wav_decodes_silk_with_wav_extension(
+    tmp_path, monkeypatch, prefix
+):
+    """Decode real SILK payloads with each supported prefix through ensure_wav."""
+    wav_path = tmp_path / "tone.wav"
+    _make_wav(wav_path, 24000)
+    silk_path = tmp_path / "tone.silk"
+    await wav_to_tencent_silk(str(wav_path), str(silk_path))
+    silk_bytes = silk_path.read_bytes()
+    assert silk_bytes.startswith(b"\x02#!SILK_V3")
+    source_bytes = prefix + silk_bytes[1:]
+    source_path = tmp_path / "voice.wav"
+    source_path.write_bytes(source_bytes)
+    output_path = tmp_path / "decoded.wav"
+
+    # A valid SILK stream must reach pysilk without falling back to ffmpeg.
+    ffmpeg = AsyncMock(side_effect=AssertionError("SILK must not reach ffmpeg"))
+    monkeypatch.setattr(media_utils, "convert_audio_to_wav", ffmpeg)
+
+    result = await media_utils.ensure_wav(str(source_path), str(output_path))
+
+    assert result == str(output_path)
+    ffmpeg.assert_not_called()
+    assert source_path.read_bytes() == source_bytes
+    with wave.open(result, "rb") as wav:
+        assert wav.getnchannels() == 1
+        assert wav.getsampwidth() == 2
+        assert wav.getframerate() == 24000
+        assert wav.getnframes() > 0
+        assert any(wav.readframes(wav.getnframes()))
 
 
 class _FakePysilk:
