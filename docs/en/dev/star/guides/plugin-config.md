@@ -119,7 +119,7 @@ For example, add the following to `_conf_schema.json`:
 }
 ```
 
-User suggestions are recorded when a message wakes the bot; an unrecorded ID can be added directly when no search results match. Session sources also support entering unrecorded UMOs manually. Both selectors support `readonly`. The bot page restricts platform instances through the component's `platformId` prop; plugin configuration schemas do not currently expose this filter.
+User suggestions are deduplicated by platform instance and sender ID, retaining the newest matching record; identical IDs on different platforms remain separate. Session sources are sorted by the latest existing conversation, alias or sender `updated_at`, descending. User suggestions are recorded when a message wakes the bot; an unrecorded ID can be added directly when no search results match. Session sources also support entering unrecorded UMOs manually. Both selectors support `readonly`. The bot page restricts platform instances through the component's `platformId` prop; plugin configuration schemas do not currently expose this filter.
 
 > [!NOTE]
 > For reference, AstrBot Core also uses other internal `_special` values, such as `select_providers`, `provider_pool`, `persona_pool`, `select_plugin_set`, `t2i_template`, `get_embedding_dim`, and `select_agent_runner_provider:*` (where `*` is a placeholder for the runner type). These are internal implementations and may change at any time — please avoid using them in plugins.

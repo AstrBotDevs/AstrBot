@@ -318,8 +318,10 @@ const selectionText = computed(() =>
 const filteredUmos = computed(() => {
   const query = (search.value || "").toLowerCase().trim();
   const excluded = new Set(props.excludedUmos);
-  return [...new Set(props.items ?? umos.value)].filter((umo) => {
+  const allowed = new Set(props.items ?? umos.value);
+  return [...new Set([...umos.value, ...allowed])].filter((umo) => {
     if (
+      !allowed.has(umo) ||
       excluded.has(umo) ||
       (props.platformId && umo.split(":")[0] !== props.platformId)
     )

@@ -923,7 +923,9 @@ class BaseDatabase(abc.ABC):
             sender_ids: Resolve the latest record per exact sender ID when provided.
 
         Returns:
-            Sender and optional UMO alias pairs, most recently updated first.
+            Latest matching sender and optional alias pairs per platform and
+            sender ID, most recently updated first. Exact ID resolution returns
+            one record per ID instead.
         """
         ...
 

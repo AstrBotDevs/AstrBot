@@ -4,8 +4,12 @@ import asyncio
 from unittest.mock import MagicMock
 
 import pytest
+from sqlmodel import select
 
-from astrbot.dashboard.services.session_management_service import SessionManagementService
+from astrbot.core.db.po import UmoSender
+from astrbot.dashboard.services.session_management_service import (
+    SessionManagementService,
+)
 
 
 @pytest.mark.asyncio
@@ -30,9 +34,12 @@ async def test_sender_upsert_preserves_names_and_session_identity(temp_db):
     await temp_db.upsert_umo_sender("qq:GroupMessage:2000", "123", "Other card")
     await temp_db.upsert_umo_sender(umo, "456", "")
     await temp_db.upsert_umo_sender(umo, "", "Invalid")
-    records = await temp_db.get_umo_senders()
+    async with temp_db.get_db() as session:
+        records = (await session.execute(select(UmoSender))).scalars().all()
     assert len(records) == 3
-    assert {(sender.umo, sender.sender_id, sender.sender_name) for sender, _ in records} == {
+    assert {
+        (sender.umo, sender.sender_id, sender.sender_name) for sender in records
+    } == {
         (umo, "123", "Alicia"),
         ("qq:GroupMessage:2000", "123", "Other card"),
         (umo, "456", ""),
@@ -44,7 +51,10 @@ async def test_concurrent_sender_upserts_use_one_record(temp_db):
     """Cope with simultaneous messages for the same sender and session."""
     await temp_db.get_umo_senders()
     await asyncio.gather(
-        *(temp_db.upsert_umo_sender("qq:GroupMessage:1000", "123", "Alice") for _ in range(3))
+        *(
+            temp_db.upsert_umo_sender("qq:GroupMessage:1000", "123", "Alice")
+            for _ in range(3)
+        )
     )
     assert len(await temp_db.get_umo_senders()) == 1
 
@@ -88,6 +98,36 @@ async def test_sender_id_resolution_returns_latest_card_for_every_id(temp_db):
     await temp_db.upsert_umo_sender("qq:GroupMessage:1", "123", "Alicia")
     records = await temp_db.get_umo_senders(sender_ids=["123", "456", "unknown"])
     assert {(sender.sender_id, sender.sender_name) for sender, _ in records} == {
-        ("123", "Alicia"), ("456", "Bob"),
+        ("123", "Alicia"),
+        ("456", "Bob"),
     }
     assert await temp_db.get_umo_senders(sender_ids=[]) == []
+
+
+@pytest.mark.asyncio
+async def test_sender_candidates_deduplicate_platform_and_id_before_limiting(temp_db):
+    """Keep latest matching cards per instance without losing source-specific records."""
+    await temp_db.upsert_umo_sender("qq:GroupMessage:bob", "456", "Bob")
+    for index in range(5):
+        await temp_db.upsert_umo_sender(
+            f"qq:GroupMessage:{index}", "123", f"Alice {index}"
+        )
+    await temp_db.upsert_umo_auto_name("qq:GroupMessage:0", "123", "Engineering")
+    await temp_db.upsert_umo_sender("qq-2:FriendMessage:123", "123", "Other platform")
+
+    records = await temp_db.get_umo_senders(limit=3)
+    assert [(sender.umo, sender.sender_id) for sender, _ in records] == [
+        ("qq-2:FriendMessage:123", "123"),
+        ("qq:GroupMessage:4", "123"),
+        ("qq:GroupMessage:bob", "456"),
+    ]
+    matches = await temp_db.get_umo_senders("Alice")
+    assert len(matches) == 1
+    assert matches[0][0].sender_name == "Alice 4"
+    matches = await temp_db.get_umo_senders("Engineering")
+    assert len(matches) == 1
+    assert matches[0][0].umo == "qq:GroupMessage:0"
+
+    resolved = await temp_db.get_umo_senders(sender_ids=["123"])
+    assert len(resolved) == 1
+    assert resolved[0][0].umo == "qq-2:FriendMessage:123"

@@ -1,8 +1,10 @@
+from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from astrbot.core import sp
+from astrbot.core.db.po import ConversationV2, UmoAlias, UmoSender
 from astrbot.dashboard.services.session_management_service import (
     SessionManagementService,
 )
@@ -48,6 +50,76 @@ async def test_known_umos_include_senders_and_filter_exact_platform(temp_db):
     await temp_db.upsert_umo_auto_name("qq:GroupMessage:4", "sender", "Team")
     service = SessionManagementService(MagicMock(), temp_db)
     result = await service.list_active_umos(platform_id="qq")
-    assert result["umos"] == ["qq:GroupMessage:1", "qq:GroupMessage:4"]
+    assert result["umos"] == ["qq:GroupMessage:4", "qq:GroupMessage:1"]
     assert {info["platform"] for info in result["umo_infos"]} == {"qq"}
     assert len((await service.list_active_umos())["umos"]) == 4
+
+
+@pytest.mark.asyncio
+async def test_known_umos_sort_by_latest_update_across_all_sources(temp_db):
+    """Aggregate duplicates, preserve source-only UMOs and break equal timestamps stably."""
+    start = datetime(2026, 1, 1)
+    records = [
+        ConversationV2(
+            platform_id="qq",
+            user_id="qq:GroupMessage:combined",
+            updated_at=start + timedelta(seconds=4),
+        ),
+        ConversationV2(
+            platform_id="qq", user_id="qq:GroupMessage:old", updated_at=start
+        ),
+        ConversationV2(
+            platform_id="qq", user_id="", updated_at=start + timedelta(seconds=99)
+        ),
+        UmoAlias(
+            umo="qq:GroupMessage:combined",
+            creator_sender_id="123",
+            updated_at=start + timedelta(seconds=1),
+        ),
+        UmoAlias(
+            umo="qq:GroupMessage:a",
+            creator_sender_id="123",
+            updated_at=start + timedelta(seconds=5),
+        ),
+        UmoAlias(
+            umo="legacy",
+            creator_sender_id="123",
+            updated_at=start + timedelta(seconds=2),
+        ),
+        UmoSender(
+            umo="qq:GroupMessage:b",
+            sender_id="123",
+            updated_at=start + timedelta(seconds=5),
+        ),
+        UmoSender(
+            umo="qq:GroupMessage:combined",
+            sender_id="123",
+            updated_at=start + timedelta(seconds=3),
+        ),
+        UmoSender(
+            umo="qq:GroupMessage:new",
+            sender_id="123",
+            updated_at=start + timedelta(seconds=1),
+        ),
+        UmoSender(
+            umo="qq:GroupMessage:new",
+            sender_id="456",
+            updated_at=start + timedelta(seconds=6),
+        ),
+    ]
+    async with temp_db.get_db() as session:
+        async with session.begin():
+            session.add_all(records)
+    service = SessionManagementService(MagicMock(), temp_db)
+    expected = [
+        "qq:GroupMessage:new",
+        "qq:GroupMessage:a",
+        "qq:GroupMessage:b",
+        "qq:GroupMessage:combined",
+        "legacy",
+        "qq:GroupMessage:old",
+    ]
+    assert await service.list_known_umos() == expected
+    result = await service.list_active_umos(platform_id="qq")
+    assert result["umos"] == [umo for umo in expected if umo.startswith("qq:")]
+    assert [info["umo"] for info in result["umo_infos"]] == result["umos"]

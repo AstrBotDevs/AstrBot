@@ -119,7 +119,7 @@ API Key、访问令牌和密码等敏感字符串应设置 `"secret": true`。�
 }
 ```
 
-用户候选项在消息唤醒机器人时记录，尚未记录的 ID 可在搜索无结果时直接添加。会话来源支持手动输入尚未记录的 UMO。这两个选择器都支持 `readonly`。机器人页通过组件 `platformId` 属性限制平台实例；插件配置 schema 暂不提供这一过滤参数。
+用户候选按平台实例 ID 和用户 ID 去重，保留更新时间最新的匹配记录；不同平台的同名 ID 分别展示。会话来源按已有会话、别名和发送人记录中最新的 `updated_at` 倒序排列。用户候选项在消息唤醒机器人时记录，尚未记录的 ID 可在搜索无结果时直接添加。会话来源支持手动输入尚未记录的 UMO。这两个选择器都支持 `readonly`。机器人页通过组件 `platformId` 属性限制平台实例；插件配置 schema 暂不提供这一过滤参数。
 
 > [!NOTE]
 > 此外，AstrBot Core 内部还使用了 `select_providers`、`provider_pool`、`persona_pool`、`select_plugin_set`、`t2i_template`、`get_embedding_dim`、`select_agent_runner_provider:*`（`*` 为运行器类型占位符）等 `_special` 值。这些属于内部实现，随时可能变动，请勿在插件中使用。

@@ -4,12 +4,12 @@ import uuid
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import col, select
+from sqlmodel import col, func, select
 
 from astrbot.core import logger, sp
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
-from astrbot.core.db.po import ConversationV2, Preference, UmoSender
+from astrbot.core.db.po import ConversationV2, Preference, UmoAlias, UmoSender
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.umo_alias import build_umo_alias_map, parse_umo, serialize_umo_alias
 
@@ -55,16 +55,32 @@ class SessionManagementService:
         )
 
     async def list_known_umos(self) -> list[str]:
+        """List distinct UMOs by their latest existing record update.
+
+        Returns:
+            UMOs ordered by the newest conversation, alias or sender update,
+            with the raw UMO ascending as a stable tie breaker.
+        """
+        sources = (
+            select(
+                col(ConversationV2.user_id).label("umo"),
+                col(ConversationV2.updated_at).label("updated_at"),
+            )
+            .union_all(
+                select(UmoSender.umo, UmoSender.updated_at),
+                select(UmoAlias.umo, UmoAlias.updated_at),
+            )
+            .subquery()
+        )
         async with self.db_helper.get_db() as session:
             session: AsyncSession
             result = await session.execute(
-                select(ConversationV2.user_id).union(select(UmoSender.umo))
+                select(sources.c.umo)
+                .where(sources.c.umo.is_not(None), sources.c.umo != "")
+                .group_by(sources.c.umo)
+                .order_by(func.max(sources.c.updated_at).desc(), sources.c.umo.asc())
             )
-            umos = {str(row[0]) for row in result.fetchall() if row[0]}
-
-        aliases = await self.db_helper.get_umo_aliases()
-        umos.update(str(alias.umo) for alias in aliases if alias.umo)
-        return sorted(umos)
+            return [str(row[0]) for row in result.fetchall()]
 
     async def get_umo_alias_map(self, umos: list[str]) -> dict:
         return build_umo_alias_map(await self.db_helper.get_umo_aliases(umos))

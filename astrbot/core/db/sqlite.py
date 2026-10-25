@@ -2379,7 +2379,9 @@ class SQLiteDatabase(BaseDatabase):
             sender_ids: Resolve the latest record per exact sender ID when provided.
 
         Returns:
-            Sender and optional UMO alias pairs, most recently updated first.
+            The latest matching sender and optional alias per platform and sender
+            ID, most recently updated first. Exact ID resolution returns one
+            record per ID instead.
         """
         query = select(UmoSender, UmoAlias).outerjoin(
             UmoAlias, col(UmoSender.umo) == col(UmoAlias.umo)
@@ -2387,26 +2389,7 @@ class SQLiteDatabase(BaseDatabase):
         if sender_ids is not None:
             if not sender_ids:
                 return []
-            # Resolve every selected ID once, even if it occurs in many sessions.
-            ranked = (
-                select(
-                    UmoSender.id,
-                    func.row_number()
-                    .over(
-                        partition_by=UmoSender.sender_id,
-                        order_by=(
-                            col(UmoSender.updated_at).desc(),
-                            col(UmoSender.id).desc(),
-                        ),
-                    )
-                    .label("rank"),
-                )
-                .where(col(UmoSender.sender_id).in_(sender_ids))
-                .subquery()
-            )
-            query = query.where(
-                col(UmoSender.id).in_(select(ranked.c.id).where(ranked.c.rank == 1))
-            )
+            query = query.where(col(UmoSender.sender_id).in_(sender_ids))
         if search:
             query = query.where(
                 or_(
@@ -2422,6 +2405,26 @@ class SQLiteDatabase(BaseDatabase):
                     )
                 )
             )
+        # Derive the instance ID from UMO; deduplicate before limiting results.
+        platform_id = func.substr(
+            UmoSender.umo, 1, func.instr(col(UmoSender.umo) + ":", ":") - 1
+        )
+        ranked = query.with_only_columns(
+            col(UmoSender.id),
+            func.row_number()
+            .over(
+                partition_by=(
+                    [UmoSender.sender_id]
+                    if sender_ids is not None
+                    else [platform_id, UmoSender.sender_id]
+                ),
+                order_by=(col(UmoSender.updated_at).desc(), col(UmoSender.id).desc()),
+            )
+            .label("rank"),
+        ).subquery()
+        query = query.where(
+            col(UmoSender.id).in_(select(ranked.c.id).where(ranked.c.rank == 1))
+        )
         query = query.order_by(
             col(UmoSender.updated_at).desc(), col(UmoSender.id).desc()
         ).limit(limit)
