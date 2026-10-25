@@ -258,7 +258,7 @@
   "deleteDialog": {
     "title": "Delete bot",
     "message": "Delete platform adapter {id}?",
-    "cleanup": "Also remove associated data",
+    "cleanup": "Also remove associated data for ID {id}",
     "confirm": "Delete",
     "hint": "Selected data for this bot will be permanently removed.",
     "failed": "Deletion did not finish. Some selected data may already be removed. Retry or check the logs.",

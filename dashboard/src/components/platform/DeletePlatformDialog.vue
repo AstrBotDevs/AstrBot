@@ -13,8 +13,8 @@
         <p class="text-body-1 mb-3 delete-message">
           {{ tm("deleteDialog.message", { id: platform?.id || "" }) }}
         </p>
-        <div class="text-caption text-medium-emphasis">
-          {{ tm("deleteDialog.cleanup") }}
+        <div class="text-caption text-medium-emphasis delete-message">
+          {{ tm("deleteDialog.cleanup", { id: platform?.id || "" }) }}
         </div>
         <div class="cleanup-grid">
           <template v-for="target in cleanupTargets" :key="target">
