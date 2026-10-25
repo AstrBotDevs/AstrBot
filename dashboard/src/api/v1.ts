@@ -45,6 +45,7 @@ import {
   type PluginVersionSupportRequest,
   type PluginValidateRepoRequest,
   type PluginConfigFileDeleteRequest,
+  type PluginReadmeData,
   type ProviderConfigRequest,
   type RuntimeInfo,
   type BatchSessionProviderRequest,
@@ -1354,7 +1355,7 @@ export const pluginApi = {
     );
   },
   readme(pluginId: string, locale?: string) {
-    return typed<OpenConfig>(
+    return typed<PluginReadmeData>(
       openApiV1.getPluginReadmeById({
         query: { plugin_id: pluginId, locale },
       }),

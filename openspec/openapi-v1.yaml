@@ -2102,7 +2102,7 @@ paths:
             type: string
       responses:
         "200":
-          $ref: "#/components/responses/Text"
+          $ref: "#/components/responses/PluginReadme"
 
   /api/v1/plugins/changelog:
     get:
@@ -2350,7 +2350,7 @@ paths:
             type: string
       responses:
         "200":
-          $ref: "#/components/responses/Text"
+          $ref: "#/components/responses/PluginReadme"
 
   /api/v1/plugins/{plugin_id}/changelog:
     get:
@@ -5314,6 +5314,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/SuccessEnvelope"
+    PluginReadme:
+      description: Plugin README content with the resolved and available locales
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/PluginReadmeEnvelope"
     Html:
       description: HTML response
       content:
@@ -5547,6 +5553,36 @@ components:
         message:
           type: string
         data: {}
+      additionalProperties: false
+
+    PluginReadmeData:
+      type: object
+      required: [content, available_locales]
+      properties:
+        content:
+          type: string
+          description: Markdown content of the resolved README variant
+        resolved_locale:
+          type: [string, "null"]
+          description: Locale that was actually served, or null for the default README
+        available_locales:
+          type: array
+          description: Locales the plugin declares a README for
+          items:
+            type: string
+      additionalProperties: false
+
+    PluginReadmeEnvelope:
+      type: object
+      required: [status, data]
+      properties:
+        status:
+          type: string
+          const: ok
+        message:
+          type: string
+        data:
+          $ref: "#/components/schemas/PluginReadmeData"
       additionalProperties: false
 
     DynamicConfig:

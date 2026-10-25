@@ -537,6 +537,21 @@ export type PluginConfigFileDeleteRequest = {
     path: string;
 };
 
+export type PluginReadmeData = {
+    content: string;
+    /**
+     * Locale that was actually served, or null when no locale variant matched.
+     */
+    resolved_locale?: (string) | null;
+    available_locales: Array<(string)>;
+};
+
+export type PluginReadmeEnvelope = {
+    status: "ok";
+    message?: string;
+    data: PluginReadmeData;
+};
+
 export type PluginRepositoryInstallRequest = {
     /**
      * GitHub shorthand, HTTP(S), SSH, or SCP-style Git repository locator.
@@ -1915,7 +1930,7 @@ export type GetPluginReadmeByIdData = {
     };
 };
 
-export type GetPluginReadmeByIdResponse = (string);
+export type GetPluginReadmeByIdResponse = (PluginReadmeEnvelope);
 
 export type GetPluginReadmeByIdError = unknown;
 
@@ -2082,7 +2097,7 @@ export type GetPluginReadmeData = {
     };
 };
 
-export type GetPluginReadmeResponse = (string);
+export type GetPluginReadmeResponse = (PluginReadmeEnvelope);
 
 export type GetPluginReadmeError = unknown;
 

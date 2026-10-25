@@ -1219,6 +1219,7 @@ class PluginManager:
                             metadata.astrbot_version = metadata_yaml.astrbot_version
                             metadata.views = metadata_yaml.views
                             metadata.i18n = metadata_yaml.i18n
+                            metadata.readmes = metadata_yaml.readmes
                     except Exception as e:
                         logger.warning(
                             f"Failed to load metadata for plugin {root_dir_name}: "

@@ -110,6 +110,7 @@ const logoLoadFailed = ref(false);
 const detailPageRef = ref(null);
 const isHeaderStuck = ref(false);
 const pluginDetail = ref(null);
+let detailRequestId = 0;
 
 const pluginData = computed(() => pluginDetail.value || props.plugin);
 const displayName = computed(() => pluginName(pluginData.value));
@@ -672,12 +673,18 @@ const scrollToHashTarget = async () => {
   });
 };
 
-const fetchPluginDetail = async () => {
+const fetchPluginDetail = async (pluginName) => {
+  const requestId = ++detailRequestId;
+  const expectedName = pluginName || props.plugin?.name;
   pluginDetail.value = null;
-  if (isMarketDetail.value || !props.plugin?.name) return;
+  if (isMarketDetail.value || !expectedName) return;
 
   try {
-    const res = await pluginApi.get(props.plugin.name);
+    const res = await pluginApi.get(expectedName);
+    // Drop responses for a plugin the user has already navigated away from.
+    if (requestId !== detailRequestId || props.plugin?.name !== expectedName) {
+      return;
+    }
     if (res.data.status === "ok" && res.data.data) {
       pluginDetail.value = res.data.data;
       await scrollToHashTarget();
@@ -854,9 +861,14 @@ watch(
     props.marketPlugin?.changelog_url,
   ],
   async () => {
+    const pluginName = props.plugin?.name;
     logoLoadFailed.value = false;
     readmeLocale.value = "";
-    await fetchPluginDetail();
+    await fetchPluginDetail(pluginName);
+    // The user may have switched plugins while the detail request was pending;
+    // in that case neither the README nor the changelog of the old plugin may
+    // start, otherwise their responses can win the request-id race.
+    if (props.plugin?.name !== pluginName) return;
     fetchReadme();
     fetchChangelog();
     scrollToHashTarget();
