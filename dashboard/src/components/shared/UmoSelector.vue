@@ -69,6 +69,7 @@
                     :user-alias="infos[umo]?.user_alias || ''"
                     :show-platform="umo.includes(':')"
                     compact
+                    two-line-title
                     :show-info="false"
                   />
                   <template #append>

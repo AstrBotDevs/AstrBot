@@ -1,5 +1,11 @@
 <template>
-  <div class="umo-display" :class="{ 'umo-display--compact': compact }">
+  <div
+    class="umo-display"
+    :class="{
+      'umo-display--compact': compact,
+      'umo-display--two-line': twoLineTitle,
+    }"
+  >
     <div class="umo-display__main">
       <div
         class="umo-display__line"
@@ -121,6 +127,10 @@ export default {
       type: Boolean,
       default: false,
     },
+    twoLineTitle: {
+      type: Boolean,
+      default: false,
+    },
     showPlatform: {
       type: Boolean,
       default: true,
@@ -203,6 +213,14 @@ export default {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.umo-display--two-line .umo-display__line {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .umo-display__platform {

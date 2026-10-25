@@ -51,6 +51,7 @@ onBeforeUnmount(() => clearTimeout(resetTimer));
 
 <style scoped>
 .hover-copy-button {
+  position: absolute;
   opacity: 0;
   pointer-events: none;
 }
@@ -58,12 +59,14 @@ onBeforeUnmount(() => clearTimeout(resetTimer));
 .v-list-item:hover .hover-copy-button,
 .v-list-item:focus-within .hover-copy-button,
 .hover-copy-button:focus-visible {
+  position: relative;
   opacity: 1;
   pointer-events: auto;
 }
 
 @media (hover: none) {
   .hover-copy-button {
+    position: relative;
     opacity: 1;
     pointer-events: auto;
   }
