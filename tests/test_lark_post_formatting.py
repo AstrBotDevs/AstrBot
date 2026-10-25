@@ -26,6 +26,7 @@ def lark_message():
     adapter = LarkPlatformAdapter.__new__(LarkPlatformAdapter)
     adapter.config = {"id": "lark-test"}
     adapter.bot_open_id, adapter.bot_name = "ou_bot", "AstrBot"
+    adapter._user_name_cache = {}
     adapter.commit_event = MagicMock()
     parent = SimpleNamespace(
         message_id="parent-1",
@@ -40,6 +41,18 @@ def lark_message():
         ],
     )
     adapter.lark_api = MagicMock()
+    adapter.lark_api._astrbot_group_info_cache = None
+    adapter.lark_api.contact.v3.user.aget = AsyncMock(
+        return_value=SimpleNamespace(
+            success=lambda: True,
+            data=SimpleNamespace(user=SimpleNamespace(name="Sender")),
+        )
+    )
+    adapter.lark_api.im.v1.chat.aget = AsyncMock(
+        return_value=SimpleNamespace(
+            success=lambda: False, data=None, code=403, msg="permission denied"
+        )
+    )
     adapter.lark_api.im.v1.message.aget = AsyncMock(
         return_value=SimpleNamespace(
             success=lambda: True, data=SimpleNamespace(items=[parent])
@@ -47,6 +60,7 @@ def lark_message():
     )
     event = MagicMock()
     event.event.sender.sender_id.open_id = "ou_sender"
+    event.event.sender.sender_type = "user"
     event.event.message = SimpleNamespace(
         create_time="1700000000000",
         chat_type="group",

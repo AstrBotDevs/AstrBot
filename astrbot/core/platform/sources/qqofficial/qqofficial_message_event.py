@@ -35,6 +35,8 @@ from astrbot.core.platform.sources.qqofficial.qqofficial_chunked_upload import (
 )
 from astrbot.core.utils.media_utils import MediaResolver, file_uri_to_path, is_file_uri
 
+from .qqofficial_group_info import get_qq_group
+
 
 class APIReturnNoneError(Exception):
     pass
@@ -111,7 +113,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
     async def get_group(self, group_id: str | None = None, **kwargs) -> Group | None:
         """Get QQ group or guild-channel information for this event.
 
-        QQ group metadata is restricted to allowlisted bots. When the API is
+        QQ group lookups share the inbound adapter's per-client cache. Metadata
+        is restricted to allowlisted bots. When the API is
         unavailable, the basic group object attached to the incoming message is
         returned so callers can still rely on the group identifier.
 
@@ -138,40 +141,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         source = self.message_obj.raw_message
 
         if isinstance(source, botpy.message.GroupMessage):
-            try:
-                route = Route(
-                    "GET",
-                    "/v2/groups/{group_openid}/info",
-                    group_openid=target_id,
-                )
-                payload = await self.bot.api._http.request(route)
-                if not isinstance(payload, dict):
-                    logger.warning(
-                        "[QQOfficial] Group info API returned an invalid response for %s",
-                        target_id,
-                    )
-                    return group
-
-                group.group_name = payload.get("group_name") or group.group_name
-                member_count = payload.get(
-                    "group_member_num",
-                    payload.get("member_count"),
-                )
-                if member_count is not None:
-                    try:
-                        group.member_count = int(member_count)
-                    except (TypeError, ValueError):
-                        logger.warning(
-                            "[QQOfficial] Group info API returned an invalid member_count for %s",
-                            target_id,
-                        )
-            except Exception as exc:
-                logger.warning(
-                    "[QQOfficial] Failed to get group info for %s: %s",
-                    target_id,
-                    exc,
-                )
-            return group
+            return await get_qq_group(self.bot, group)
 
         if isinstance(source, botpy.message.Message):
             try:
