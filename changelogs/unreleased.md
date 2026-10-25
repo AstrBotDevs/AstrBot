@@ -4,8 +4,6 @@
 
 - Add compact data-cleanup checkboxes to the existing bot deletion dialog. Custom rules, preferences, configuration routes and scheduled tasks are selected by default; AI conversations, message history, local traces and usage statistics are retained unless selected. Preserve shared resources and match adapter IDs exactly.
 
-- Reject databases using the newer conversation event schema before legacy initialization or bot-data cleanup, preventing an older checkout from silently showing empty history after a branch switch.
-
 - Resolve Lark group-message sender names through the existing user-info lookup, sharing the same per-user cache with private chats (30 minutes for successful names and one minute for failures). Application senders skip user-directory lookups.
 
 - Sort session-source candidates by the latest existing conversation, alias or sender `updated_at`, descending. Deduplicate user suggestions by platform instance and sender ID before applying the result limit, retaining the newest matching record while preserving per-session metadata in storage.

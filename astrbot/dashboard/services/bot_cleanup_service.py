@@ -2,7 +2,7 @@
 
 import asyncio
 
-from sqlmodel import col, delete, func, select, text
+from sqlmodel import col, delete, func, select
 
 from astrbot.core import sp
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -40,21 +40,6 @@ async def delete_bot_data(
             the adapter configuration so cleanup can be retried.
     """
     prefix = f"{bot_id}:"
-    # An already-running process may have opened a database migrated by another
-    # checkout. Refuse cleanup before changing any preferences or task records.
-    async with core.db.get_db() as session:
-        if (
-            await session.execute(
-                text(
-                    "SELECT 1 FROM sqlite_master "
-                    "WHERE type = 'table' AND name = 'conversations_v3'"
-                )
-            )
-        ).first():
-            raise ValueError(
-                "Cannot clean up a database using conversations_v3 with this "
-                "AstrBot version. Use the version that owns this schema."
-            )
     await sp.flush()
 
     if "cron_jobs" in targets:
