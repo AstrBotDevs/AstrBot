@@ -27,6 +27,7 @@ from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider import Provider
 from astrbot.core.provider import manager as provider_manager_module
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, ProviderType
+from astrbot.core.provider.func_tool_manager import FunctionToolManager
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.skills.skill_manager import SkillInfo
 from astrbot.core.star.context import Context
@@ -812,20 +813,20 @@ class TestBuiltinToolInjection:
 
     @pytest.mark.asyncio
     async def test_yuanbao_injects_search_tool(self, mock_event, mock_context):
+        """Verify the registered Yuanbao tool reaches the model request."""
         req = ProviderRequest()
         mock_context.get_config.return_value = {
             "provider_settings": {"web_search": True, "websearch_provider": "yuanbao"}
         }
-        search_tool = MagicMock(spec=FunctionTool)
-        search_tool.name = "web_search_yuanbao"
-        tool_mgr = MagicMock()
-        tool_mgr.get_builtin_tool.return_value = search_tool
+        tool_mgr = FunctionToolManager()
         mock_context.get_llm_tool_manager.return_value = tool_mgr
 
         await ama._apply_web_search_tools(mock_event, req, mock_context)
 
-        tool_mgr.get_builtin_tool.assert_called_once_with(ama.YuanbaoWebSearchTool)
-        assert req.func_tool.get_tool("web_search_yuanbao") is search_tool
+        assert req.func_tool.names() == ["web_search_yuanbao"]
+        assert isinstance(
+            req.func_tool.get_tool("web_search_yuanbao"), ama.YuanbaoWebSearchTool
+        )
 
     @pytest.mark.asyncio
     async def test_apply_web_search_tools_uses_builtin_tool_manager(
@@ -918,6 +919,7 @@ class TestBuiltinToolInjection:
             "image_search_serpapi",
             "finance_search_serpapi",
             "scholar_search_serpapi",
+            "web_search_yuanbao",
         ],
     )
     def test_apply_web_search_citation_prompt_for_webchat(self, mock_event, tool_name):

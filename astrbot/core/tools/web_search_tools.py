@@ -334,7 +334,20 @@ async def _yuanbao_search(
     provider_settings: dict,
     payload: dict,
 ) -> list[SearchResult]:
-    """Call Tencent Yuanbao SearchPro and normalize its JSON-string pages."""
+    """Call Tencent Yuanbao SearchPro and normalize its JSON-string pages.
+
+    Args:
+        provider_settings: Provider settings containing Yuanbao API keys.
+        payload: Request payload for the Yuanbao SearchPro endpoint.
+
+    Returns:
+        Normalized search results.
+
+    Raises:
+        ValueError: If Yuanbao API keys are not configured.
+        RuntimeError: If the request fails after all retryable keys are exhausted,
+            or if a non-retryable HTTP or business error is returned.
+    """
     keys = provider_settings.get("websearch_yuanbao_key", [])
     if not keys:
         raise ValueError("Error: Yuanbao API key is not configured in AstrBot.")

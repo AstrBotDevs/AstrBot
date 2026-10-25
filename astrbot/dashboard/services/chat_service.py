@@ -281,6 +281,7 @@ def extract_web_search_refs(accumulated_text: str, accumulated_parts: list) -> d
         "image_search_serpapi",
         "finance_search_serpapi",
         "scholar_search_serpapi",
+        "web_search_yuanbao",
     ]
     web_search_results = {}
     tool_call_parts = [

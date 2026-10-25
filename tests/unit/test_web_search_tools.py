@@ -1964,7 +1964,10 @@ async def test_yuanbao_search_retries_business_quota_errors(monkeypatch):
     )
 
     assert results[0].url == "https://example.com"
-    assert len(session.calls) == 2
+    assert [call["headers"]["Authorization"] for call in session.calls] == [
+        "Bearer first-key",
+        "Bearer second-key",
+    ]
 
 
 def test_yuanbao_tool_is_exported_and_listed():

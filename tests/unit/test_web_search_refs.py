@@ -22,6 +22,7 @@ from astrbot.dashboard.services.live_chat_service import LiveChatService
         "image_search_serpapi",
         "finance_search_serpapi",
         "scholar_search_serpapi",
+        "web_search_yuanbao",
     ],
 )
 def test_search_refs_include_only_cited_sources(
