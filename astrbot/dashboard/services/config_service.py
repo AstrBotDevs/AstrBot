@@ -7,7 +7,7 @@ import os
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from astrbot.core import file_token_service, logger
@@ -40,6 +40,8 @@ from astrbot.core.utils.upload import UploadTooLargeError
 from astrbot.core.utils.webhook_utils import ensure_platform_webhook_config
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import ApiError
+from astrbot.dashboard.schemas import BotCleanupTarget
+from astrbot.dashboard.services.bot_cleanup_service import delete_bot_data
 
 PROTECTED_2FA_CONFIG_PATHS = (
     ("dashboard", "totp", "enable"),
@@ -1393,6 +1395,8 @@ class BotConfigService:
         ensure_platform_webhook_config(config)
         self.config["platform"].append(config)
         save_config(self.config, self.config, is_core=True)
+        if event_bus := getattr(self.core_lifecycle, "event_bus", None):
+            event_bus.stopped_platforms.discard(bot_id)
         await self.core_lifecycle.platform_manager.load_platform(config)
 
     async def update_bot(self, bot_id: str, config: dict) -> None:
@@ -1415,14 +1419,45 @@ class BotConfigService:
         new_config["enable"] = enabled
         await self.update_bot(bot_id, new_config)
 
-    async def delete_bot(self, bot_id: str) -> None:
-        for idx, bot in enumerate(self.config.get("platform", [])):
-            if bot.get("id") == bot_id:
-                del self.config["platform"][idx]
+    async def delete_bot(
+        self, bot_id: str, *, cleanup: list[BotCleanupTarget] | None = None
+    ) -> None:
+        """Stop an adapter and delete only explicitly selected associated data.
+
+        Args:
+            bot_id: Exact platform instance ID.
+            cleanup: Data categories to remove; omitted categories are retained.
+
+        Raises:
+            ValueError: The bot or a cleanup category is invalid.
+            Exception: Cleanup or configuration persistence fails.
+        """
+        bot = self._find_bot(bot_id)
+        if bot is None:
+            raise ValueError(f"Bot {bot_id} not found")
+        targets = set(cleanup or [])
+        if targets - set(get_args(BotCleanupTarget)):
+            raise ValueError("Invalid bot cleanup category")
+        event_bus = getattr(self.core_lifecycle, "event_bus", None)
+        await self.core_lifecycle.platform_manager.terminate_platform(bot_id)
+        try:
+            if event_bus:
+                await event_bus.stop_platform(bot_id)
+            if targets:
+                await delete_bot_data(self.core_lifecycle, bot_id, targets)
+            self.config["platform"].remove(bot)
+            try:
                 save_config(self.config, self.config, is_core=True)
-                await self.core_lifecycle.platform_manager.terminate_platform(bot_id)
-                return
-        raise ValueError(f"Bot {bot_id} not found")
+            except Exception:
+                self.config["platform"].append(bot)
+                raise
+        except Exception:
+            # Keep the adapter available for inspection or retry after a failure.
+            if event_bus:
+                event_bus.stopped_platforms.discard(bot_id)
+            if bot.get("enable"):
+                await self.core_lifecycle.platform_manager.load_platform(bot)
+            raise
 
     def list_platforms_for_dashboard(self) -> dict:
         return {"platforms": self.list_bots()["bots"]}

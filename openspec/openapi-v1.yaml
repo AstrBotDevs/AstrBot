@@ -542,6 +542,7 @@ paths:
           required: true
           schema:
             type: string
+        - $ref: "#/components/parameters/BotCleanup"
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -624,6 +625,7 @@ paths:
       x-astrbot-scope: bot
       parameters:
         - $ref: "#/components/parameters/BotId"
+        - $ref: "#/components/parameters/BotCleanup"
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -5437,6 +5439,17 @@ components:
             type: string
 
   parameters:
+    BotCleanup:
+      name: cleanup
+      in: query
+      description: Data categories to permanently remove for this adapter. Omit to retain all associated data. Shared resources and cross-platform routing rules are preserved.
+      required: false
+      style: form
+      explode: true
+      schema:
+        type: array
+        items:
+          $ref: "#/components/schemas/BotCleanupTarget"
     AttachmentId:
       name: attachment_id
       in: path
@@ -5613,6 +5626,9 @@ components:
         type: string
 
   schemas:
+    BotCleanupTarget:
+      type: string
+      enum: [custom_rules, preferences, routing, cron_jobs, conversations, message_history, traces, stats]
     RuntimeInfo:
       type: object
       description: The AstrBot backend runtime, including when running inside a container. Values are captured at application startup.
