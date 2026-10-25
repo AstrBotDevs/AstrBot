@@ -74,7 +74,9 @@ def event_usage_scope(
     trace = getattr(event, "trace", None)
     return usage_scope(
         session_umo=getattr(event, "unified_msg_origin", None) or current.session_umo,
-        trace_id=getattr(trace, "span_id", None) or current.trace_id,
+        trace_id=getattr(trace, "trace_id", None)
+        or getattr(trace, "span_id", None)
+        or current.trace_id,
         plugin_id=plugin_id or current.plugin_id,
         origin_type=origin_type
         if event is not None

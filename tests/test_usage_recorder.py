@@ -74,6 +74,34 @@ async def test_two_direct_calls_have_distinct_ids_and_real_session_attribution()
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("trace", "expected_trace_id"),
+    [
+        (SimpleNamespace(trace_id="trace-message", span_id="span-child"), "trace-message"),
+        (SimpleNamespace(span_id="span-legacy"), "span-legacy"),
+        (SimpleNamespace(trace_id="", span_id="span-legacy"), "span-legacy"),
+        (SimpleNamespace(), "trace-outer"),
+    ],
+)
+async def test_event_usage_prefers_message_trace_id_with_legacy_fallback(
+    trace, expected_trace_id
+):
+    db = SimpleNamespace(insert_provider_stat=AsyncMock())
+    provider = _provider()
+    instrument_provider(provider, db)
+    event = SimpleNamespace(unified_msg_origin="qq:GroupMessage:42", trace=trace)
+
+    with usage_scope(trace_id="trace-outer"):
+        with event_usage_scope(event):
+            await provider.text_chat()
+        await provider.text_chat()
+
+    first, second = (call.kwargs for call in db.insert_provider_stat.await_args_list)
+    assert first["stats"]["trace_id"] == expected_trace_id
+    assert second["stats"]["trace_id"] == "trace-outer"
+
+
+@pytest.mark.asyncio
 async def test_missing_usage_and_explicit_zero_are_distinct():
     db = SimpleNamespace(insert_provider_stat=AsyncMock())
     provider = _provider(response=LLMResponse(role="assistant", usage=None))
