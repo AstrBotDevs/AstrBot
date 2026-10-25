@@ -118,6 +118,8 @@ class ProviderRequest:
     """附加的上次请求后工具调用的结果。参考: https://platform.openai.com/docs/guides/function-calling#handling-function-calls"""
     model: str | None = None
     """模型名称，为 None 时使用提供商的默认模型"""
+    usage_plugin_id: str | None = None
+    """Registered plugin that produced this request; never sent to the model."""
 
     def __repr__(self) -> str:
         return (
@@ -327,6 +329,8 @@ class TokenUsage:
     """The number of input cached tokens."""
     output: int = 0
     """The number of output tokens."""
+    is_partial: bool = False
+    """Whether the backend omitted part of the token counters."""
 
     @property
     def total(self) -> int:
@@ -341,6 +345,7 @@ class TokenUsage:
             input_other=self.input_other + other.input_other,
             input_cached=self.input_cached + other.input_cached,
             output=self.output + other.output,
+            is_partial=self.is_partial or other.is_partial,
         )
 
     def __sub__(self, other: TokenUsage) -> TokenUsage:
@@ -348,6 +353,7 @@ class TokenUsage:
             input_other=self.input_other - other.input_other,
             input_cached=self.input_cached - other.input_cached,
             output=self.output - other.output,
+            is_partial=self.is_partial or other.is_partial,
         )
 
 

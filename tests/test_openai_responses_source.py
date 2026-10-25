@@ -50,6 +50,26 @@ def _make_response(output: list[dict], **overrides) -> Response:
     return Response.model_validate(payload)
 
 
+@pytest.mark.asyncio
+async def test_partial_response_usage_keeps_cached_input_lower_bound():
+    provider = _make_provider()
+    response = {
+        "id": "partial",
+        "status": "completed",
+        "output": [
+            {"type": "message", "content": [{"type": "output_text", "text": "ok"}]}
+        ],
+        "usage": {"input_tokens_details": {"cached_tokens": 30}, "output_tokens": 5},
+    }
+    try:
+        result = await provider._parse_response(response, tools=None)
+        assert result.usage.input_other == 0
+        assert result.usage.total == 35
+        assert result.usage.is_partial
+    finally:
+        await provider.terminate()
+
+
 def test_responses_provider_templates_are_independent_and_stateless():
     templates = CONFIG_METADATA_2["provider_group"]["metadata"]["provider"][
         "config_template"

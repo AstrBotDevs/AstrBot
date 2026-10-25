@@ -1421,7 +1421,16 @@ class PluginManager:
 
                 # 执行 initialize() 方法
                 if hasattr(metadata.star_cls, "initialize") and metadata.star_cls:
-                    await metadata.star_cls.initialize()
+                    from astrbot.core.provider.usage_recorder import usage_scope
+
+                    with usage_scope(
+                        plugin_id=metadata.name,
+                        session_umo=None,
+                        conversation_id=None,
+                        trace_id=None,
+                        origin_type="background",
+                    ):
+                        await metadata.star_cls.initialize()
 
                 # 触发插件加载事件
                 handlers = star_handlers_registry.get_handlers_by_event_type(

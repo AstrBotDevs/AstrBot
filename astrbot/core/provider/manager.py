@@ -23,6 +23,7 @@ from .provider import (
     TTSProvider,
 )
 from .register import llm_tools, provider_cls_map
+from .usage_recorder import instrument_provider
 
 
 @runtime_checkable
@@ -775,6 +776,7 @@ class ProviderManager:
                     if isinstance(inst, HasInitialize):
                         await inst.initialize()
 
+                    instrument_provider(inst, self.db_helper)
                     self.provider_insts.append(inst)
                     if self.default_chat_provider_id == provider_config["id"]:
                         self.curr_provider_inst = inst

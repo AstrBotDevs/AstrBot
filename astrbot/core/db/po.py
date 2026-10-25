@@ -67,6 +67,17 @@ class ProviderStat(TimestampMixin, SQLModel, table=True):
     start_time: float = Field(default=0.0, nullable=False)
     end_time: float = Field(default=0.0, nullable=False)
     time_to_first_token: float = Field(default=0.0, nullable=False)
+    request_id: str | None = Field(default=None, unique=True)
+    trace_id: str | None = Field(default=None)
+    session_umo: str | None = Field(default=None)
+    source_id: str | None = Field(default=None)
+    plugin_id: str | None = Field(default=None)
+    request_kind: str | None = Field(default=None)
+    usage_status: str | None = Field(default=None)
+    origin_type: str | None = Field(default=None)
+    stat_version: int = Field(
+        default=0, nullable=False, sa_column_kwargs={"server_default": "0"}
+    )
 
 
 class ConversationV2(TimestampMixin, SQLModel, table=True):

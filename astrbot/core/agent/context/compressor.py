@@ -275,10 +275,13 @@ class LLMSummaryCompressor:
         # falls back to truncation, so retrying (e.g. on an exhausted quota)
         # would only hold up the reply.
         try:
-            response = await self.provider.text_chat(
-                contexts=sanitized_summary_contexts,
-                request_max_retries=1,
-            )
+            from astrbot.core.provider.usage_recorder import usage_scope
+
+            with usage_scope(request_kind="compression"):
+                response = await self.provider.text_chat(
+                    contexts=sanitized_summary_contexts,
+                    request_max_retries=1,
+                )
             summary_content = (response.completion_text or "").strip()
         except Exception as e:
             logger.error(f"Failed to generate summary: {e}")

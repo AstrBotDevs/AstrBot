@@ -60,6 +60,13 @@
   "modelTotal": {
     "title": "{range}模型调用总量",
     "callCount": "共 {count} 次调用",
+    "callBreakdown": "代理 {agent} · 直接调用 {provider} · 检查 {test} · 其他 {other}",
+    "tokenBreakdown": "非缓存输入 {input} · 缓存输入 {cached} · 输出 {output}",
+    "usageCoverage": "新调用用量覆盖率 {coverage} · 部分上报 {partial} 次 · 未上报 {missing} 次",
+    "recordedHistory": "新调用已报告 {newTokens} · 历史记录 {legacyTokens}",
+    "quotaNote": "Token 记录不等于 OAuth 订阅额度；历史漏计无法回填。",
+    "scopeLabel": "统计口径说明",
+    "scopeNote": "调用次数按公开 Provider 的逻辑调用统计，无法显示 SDK 内部重试。Token 来自响应的 usage；独立工具计费和共享账号其他客户端的消耗无法从本地记录还原。",
     "avgTtft": "平均首字延迟（TTFT）",
     "avgDuration": "平均响应时间",
     "avgTpm": "平均每分钟输出（TPM）",
@@ -69,8 +76,19 @@
     "title": "模型用量排名"
   },
   "sessionRanking": {
-    "title": "{range}会话模型用量 Top 10",
+    "title": "{range}{dimension}模型用量 Top 10",
     "openConversation": "查看对话"
+  },
+  "usageDimensions": {
+    "session": "会话",
+    "source": "来源",
+    "provider": "Provider",
+    "model": "模型",
+    "plugin": "插件",
+    "kind": "调用类型",
+    "unknownSession": "未关联会话",
+    "unknownOther": "未知",
+    "sameCallsNote": "各维度展示同一批调用的不同分组，不能相加。"
   },
   "empty": {
     "platformStats": "当前没有平台消息统计数据。",

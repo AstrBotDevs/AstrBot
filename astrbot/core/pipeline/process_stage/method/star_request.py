@@ -71,7 +71,9 @@ class StarRequestSubStage(Stage):
                 priority=handler.extras_configs.get("priority", 0),
             )
             try:
-                wrapper = call_handler(event, handler.handler, **params)
+                wrapper = call_handler(
+                    event, handler.handler, _usage_plugin_id=md.name, **params
+                )
                 async for ret in wrapper:
                     yield ret
                 event.trace.record(

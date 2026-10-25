@@ -22,6 +22,7 @@ from astrbot.core.platform.astr_message_event import event_context
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider.entites import ProviderRequest
+from astrbot.core.provider.stats import record_agent_runner_stats
 from astrbot.core.utils.config_number import coerce_int_config
 from astrbot.core.utils.history_saver import persist_agent_history
 from astrbot.core.utils.trace import trace_execution
@@ -572,21 +573,27 @@ class CronJobManager:
                 raise RuntimeError("Failed to build main agent for cron job.")
 
             runner = result.agent_runner
-            async for _ in runner.step_until_done(agent_max_step):
-                # agent will send message to user via using tools
-                pass
-            llm_resp = runner.get_final_llm_resp()
-            if runner.state == AgentState.ERROR:
-                # The run failed (e.g. malformed function call at max steps) but
-                # no exception escapes the runner; without this the job was
-                # recorded as completed with last_error=NULL and the user saw
-                # only intermediate messages (#9980).
-                detail = (
-                    f": {llm_resp.completion_text}"
-                    if llm_resp and llm_resp.completion_text
-                    else ""
+            llm_resp = None
+            try:
+                async for _ in runner.step_until_done(agent_max_step):
+                    # The agent delivers the scheduled message through its tools.
+                    pass
+                llm_resp = runner.get_final_llm_resp()
+                if getattr(runner, "state", None) == AgentState.ERROR:
+                    detail = (
+                        f": {llm_resp.completion_text}"
+                        if llm_resp and llm_resp.completion_text
+                        else ""
+                    )
+                    raise RuntimeError(f"Cron agent run ended in ERROR state{detail}")
+            finally:
+                await record_agent_runner_stats(
+                    self.db,
+                    umo=cron_event.unified_msg_origin,
+                    request=req,
+                    agent_runner=runner,
+                    final_response=llm_resp,
                 )
-                raise RuntimeError(f"Cron agent run ended in ERROR state{detail}")
             cron_meta = extras.get("cron_job", {}) if extras else {}
             summary_note = (
                 f"[CronJob] {cron_meta.get('name') or cron_meta.get('id', 'unknown')}: {cron_meta.get('description', '')} "
