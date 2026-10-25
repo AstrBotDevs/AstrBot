@@ -141,6 +141,7 @@
     }
   },
   "market": {
+    "itemsPerPage": "1ページあたりの件数",
     "recommended": "🥳 おすすめ",
     "allPlugins": "📦 すべてのプラグイン",
     "category": "カテゴリ",
