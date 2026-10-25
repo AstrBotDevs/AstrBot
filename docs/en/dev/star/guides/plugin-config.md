@@ -98,7 +98,7 @@ The **_special** field is only available after v4.0.0. Common values include `se
 - `select_provider`, `select_provider_tts`, `select_provider_stt`, and `select_persona` return strings.
 - `select_knowledgebase` returns a `list` and supports multiple selection, so the corresponding config item should use `type: list` with a default value of `[]`.
 - `sender_id` opens the Select users dialog with search by nickname, ID or source session, saving only user IDs. Use `type: list` with a default value of `[]`. The list shows 50 results per page, supports previous/next navigation and selections across pages, and returns to the first page when searching or refreshing. Only recorded users are searched; historical messages are not backfilled.
-- `umo` opens the Select session sources dialog with search by group name, nickname, alias or UMO. Use `type: string` with a default of `""` for a single UMO string, or `type: list` with a default of `[]` for multiple UMOs.
+- `umo` opens the Select session sources dialog with search by group name, nickname, alias or UMO. Use `type: string` with a default of `""` for a single UMO string, or `type: list` with a default of `[]` for multiple UMOs. Each entry shows the full UMO in gray parentheses after its name, with the bot ID below; group-chat badges are blue and private-chat badges are green.
 
 For example, add the following to `_conf_schema.json`:
 

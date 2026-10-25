@@ -96,6 +96,8 @@
     "unknownTemplate": "Template not specified"
   },
   "umoSelector": {
+    "group": "Group chat",
+    "private": "Private chat",
     "title": "Select session sources",
     "hint": "A session source (UMO) uniquely identifies the bot and group or private chat a message comes from. Search and select by group name, nickname, alias or UMO. Use the /sid command with the bot to get the current session’s UMO.",
     "selected": "Selected ({count})",

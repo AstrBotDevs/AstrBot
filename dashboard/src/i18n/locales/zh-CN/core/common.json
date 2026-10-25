@@ -96,6 +96,8 @@
     "unknownTemplate": "未指定模板"
   },
   "umoSelector": {
+    "group": "群聊",
+    "private": "私聊",
     "title": "选择会话来源",
     "hint": "会话来源（UMO）用于唯一标识消息来自哪个机器人的哪个群聊或私聊。你可以按群名、昵称、别名或 UMO 搜索和选择。可以对机器人使用 /sid 指令获取当前会话的 UMO。",
     "selected": "已选择（{count}）",
