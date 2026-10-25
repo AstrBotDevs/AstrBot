@@ -8,7 +8,7 @@ from collections.abc import AsyncGenerator, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from time import time
-from typing import Any
+from typing import Any, Literal
 
 from deprecated import deprecated
 
@@ -484,6 +484,9 @@ class AstrMessageEvent(abc.ABC):
         contexts: list | None = None,
         system_prompt: str = "",
         conversation: Conversation | None = None,
+        oauth_web_search: Literal["inherit", "disabled", "cached", "live"] = "inherit",
+        retry_rate_limits: bool = True,
+        fallback_on_rate_limit: bool = True,
     ) -> ProviderRequest:
         """创建一个 LLM 请求。
 
@@ -527,6 +530,9 @@ class AstrMessageEvent(abc.ABC):
             contexts=contexts,
             system_prompt=system_prompt,
             conversation=conversation,
+            oauth_web_search=oauth_web_search,
+            retry_rate_limits=retry_rate_limits,
+            fallback_on_rate_limit=fallback_on_rate_limit,
         )
 
     """平台适配器"""

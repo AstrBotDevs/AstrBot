@@ -584,6 +584,7 @@ class TestEventSubscription:
         """Test that exceptions in subscriber execution don't crash the event bus."""
         exception_raised = asyncio.Event()
         second_event_processed = asyncio.Event()
+        subscriber_error = RuntimeError("Subscriber error")
         mock_config_manager.get_conf_info.return_value = {
             "id": "conf-id-1",
             "name": "Test Config",
@@ -592,14 +593,17 @@ class TestEventSubscription:
         scheduler1 = MagicMock()
         scheduler1.execute = AsyncMock()
 
+        scheduler1.ctx.astrbot_config = {"platform_settings": {}}
+
         async def execute_with_exception(event):  # noqa: ARG001
             exception_raised.set()
-            raise RuntimeError("Subscriber error")
+            raise subscriber_error
 
         scheduler1.execute.side_effect = execute_with_exception
 
         scheduler2 = MagicMock()
         scheduler2.execute = AsyncMock()
+        scheduler2.ctx.astrbot_config = {"platform_settings": {}}
 
         async def execute_normal(event):  # noqa: ARG001
             second_event_processed.set()
@@ -627,16 +631,45 @@ class TestEventSubscription:
 
         await event_queue.put(mock_event1)
 
-        task = asyncio.create_task(event_bus.dispatch())
-        try:
-            await asyncio.wait_for(exception_raised.wait(), timeout=1.0)
-        finally:
-            task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
+        # Synchronous log sinks are outside this dispatch test's timing contract.
+        # Wait for the task failure callback and prove a later event still runs.
+        failure_recorded = asyncio.Event()
+        with patch("astrbot.core.event_bus.logger") as mock_logger:
+            mock_logger.error.side_effect = lambda *args, **kwargs: (
+                failure_recorded.set()
+            )
+            task = asyncio.create_task(event_bus.dispatch())
+            try:
+                await asyncio.wait_for(failure_recorded.wait(), timeout=1.0)
+                assert exception_raised.is_set()
+                mock_logger.error.assert_called_once_with(
+                    "Pipeline task failed.", exc_info=subscriber_error
+                )
+                assert not task.done()
 
-        # Verify the scheduler was called (exception occurred but didn't crash)
-        scheduler1.execute.assert_called_once()
+                mock_config_manager.get_conf_info.return_value = {
+                    "id": "conf-id-2",
+                    "name": "Test Config 2",
+                }
+                mock_event2 = MagicMock()
+                mock_event2.unified_msg_origin = "platform:group:2"
+                mock_event2.get_platform_id.return_value = "platform"
+                await event_queue.put(mock_event2)
+                await asyncio.wait_for(second_event_processed.wait(), timeout=1.0)
+                assert not task.done()
+            finally:
+                task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await task
+                await asyncio.gather(
+                    *list(event_bus._pending_tasks), return_exceptions=True
+                )
+
+            scheduler1.execute.assert_awaited_once_with(mock_event1)
+            scheduler2.execute.assert_awaited_once_with(mock_event2)
+            mock_logger.error.assert_called_once_with(
+                "Pipeline task failed.", exc_info=subscriber_error
+            )
 
 
 class TestEventFiltering:

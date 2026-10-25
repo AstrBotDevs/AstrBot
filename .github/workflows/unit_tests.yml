@@ -46,11 +46,21 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install uv
 
-      - name: Install Linux sandbox dependency
+      - name: Install Linux sandbox and audio test dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y bubblewrap
+          sudo apt-get install -y bubblewrap ffmpeg
+
+      - name: Install FFmpeg for audio tests
+        if: runner.os == 'Windows' || runner.os == 'macOS'
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            choco install ffmpeg -y --no-progress
+          else
+            brew install ffmpeg
+          fi
+          ffmpeg -version
 
       - name: Enable and verify Linux sandbox execution
         if: runner.os == 'Linux'
@@ -65,6 +75,47 @@ jobs:
       - name: Verify macOS sandbox dependency
         if: runner.os == 'macOS'
         run: test -x /usr/bin/sandbox-exec
+
+      - name: Diagnose macOS converter address space
+        if: runner.os == 'macOS'
+        run: |
+          for mode in default nano-off; do
+            if [ "$mode" = nano-off ]; then
+              export MallocNanoZone=0
+            fi
+            DIAG_MODE="$mode" python - <<'PY'
+          import os
+          import resource
+          import subprocess
+
+          requested = 512 * 1024 * 1024
+          soft, hard = resource.getrlimit(resource.RLIMIT_AS)
+          target = min(
+              [requested]
+              + [limit for limit in (soft, hard) if limit != resource.RLIM_INFINITY]
+          )
+          try:
+              vsize_kib = subprocess.run(
+                  ("ps", "-o", "vsz=", "-p", str(os.getpid())),
+                  capture_output=True,
+                  text=True,
+                  timeout=1,
+                  check=False,
+              ).stdout.strip() or "unavailable"
+          except Exception:
+              vsize_kib = "unavailable"
+          try:
+              resource.setrlimit(resource.RLIMIT_AS, (target, target))
+              result = "accepted"
+          except (OSError, ValueError) as exc:
+              result = f"{type(exc).__name__}: {exc}"
+          print(
+              f"{os.environ['DIAG_MODE']} RLIMIT_AS soft={soft} hard={hard} "
+              f"requested={requested} target={target} vsize_kib={vsize_kib} "
+              f"result={result}"
+          )
+          PY
+          done
 
       - name: Run tests
         run: |
