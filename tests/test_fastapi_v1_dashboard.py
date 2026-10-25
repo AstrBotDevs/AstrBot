@@ -5097,3 +5097,18 @@ async def test_v1_trace_storage_cleanup_target(asgi_client, monkeypatch):
             "/api/v1/stats/storage/cleanup", json={"target": "invalid"}, headers=headers
         )
     ).status_code == 422
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("route", ["/api/v1/bots/by-id", "/api/v1/bots/bot"])
+async def test_bot_delete_cleanup_query_is_validated(asgi_app, asgi_client, route):
+    """Forward repeated cleanup categories and reject unknown destructive options."""
+    delete_bot = AsyncMock()
+    asgi_app.state.services.bots.delete_bot = delete_bot
+    params = [("bot_id", "bot"), ("cleanup", "custom_rules"), ("cleanup", "traces")]
+    response = await asgi_client.delete(route, params=params, headers=_jwt_headers())
+    assert response.status_code == 200
+    delete_bot.assert_awaited_once_with("bot", cleanup=["custom_rules", "traces"])
+    invalid = await asgi_client.delete(route, params={"bot_id": "bot", "cleanup": "unknown"}, headers=_jwt_headers())
+    assert invalid.status_code == 422
+    assert delete_bot.await_count == 1

@@ -254,5 +254,36 @@
     "occurredAt": "发生时间",
     "traceback": "错误堆栈",
     "close": "关闭"
+  },
+  "deleteDialog": {
+    "title": "删除机器人",
+    "message": "确定要删除平台适配器 {id}？",
+    "cleanup": "同时清理关联数据",
+    "confirm": "删除",
+    "hint": "仅清理此机器人的数据，所选数据不可恢复。",
+    "failed": "删除未完成，部分所选数据可能已清理。请重试或查看日志。",
+    "options": {
+      "custom_rules": "自定义规则",
+      "preferences": "偏好设置",
+      "routing": "配置路由",
+      "cron_jobs": "未来任务",
+      "conversations": "AI 对话数据",
+      "message_history": "消息历史记录",
+      "traces": "追踪日志",
+      "stats": "使用统计"
+    },
+    "descriptions": {
+      "custom_rules": "此机器人各会话的服务开关、人格、模型、插件和知识库规则。",
+      "preferences": "机器人各会话保存的所选模型提供商等偏好信息。",
+      "routing": "此机器人的配置文件绑定与专属路由规则。",
+      "cron_jobs": "发送到此机器人会话的未来任务，包含正在执行的任务。",
+      "conversations": "AI 使用的对话上下文、标题、人格绑定和对话 token 记录。",
+      "message_history": "平台收发消息，以及会话名称、别名和发送者名称。",
+      "traces": "本地保存的消息处理链路、模型和插件执行详情及错误记录。",
+      "stats": "此机器人的模型调用、token 用量和响应耗时等统计。按平台类型汇总的消息量保留。"
+    },
+    "history": "历史数据 · 默认保留",
+    "selectAll": "全选",
+    "deselectAll": "取消全选"
   }
 }
