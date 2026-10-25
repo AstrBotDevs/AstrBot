@@ -75,7 +75,11 @@
     "tabs": {
       "model": "モデル",
       "persona": "ペルソナ",
-      "capabilities": "機能",
+      "computerUse": "コンピューター操作",
+      "webSearch": "ウェブ検索",
+      "proactivity": "自発性",
+      "knowledgeBase": "ナレッジベース",
+      "context": "コンテキスト",
       "advanced": "詳細設定"
     },
     "groups": {

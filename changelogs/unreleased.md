@@ -1,5 +1,7 @@
 # Unreleased
 
+- Flatten the built-in AI Capabilities tab into four tabs alongside Model and Persona: `AI → Capabilities → Agent Computer Use` → `AI → Computer Use`, `AI → Capabilities → Web Search` → `AI → Web Search`, `AI → Capabilities → Proactive Agent` → `AI → Proactivity`, and `AI → Capabilities → Knowledge Base` → `AI → Knowledge Base`. Move `AI → Advanced → Context Management Strategy` to a separate `AI → Context` tab, leaving execution settings under Advanced. Existing configuration keys, stored values, and APIs are unchanged; no data migration is required.
+
 - Resolve Lark group-message sender names through the existing user-info lookup, sharing the same per-user cache with private chats (30 minutes for successful names and one minute for failures). Application senders skip user-directory lookups.
 
 - Sort session-source candidates by the latest existing conversation, alias or sender `updated_at`, descending. Deduplicate user suggestions by platform instance and sender ID before applying the result limit, retaining the newest matching record while preserving per-session metadata in storage.

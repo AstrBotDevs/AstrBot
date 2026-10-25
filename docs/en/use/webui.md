@@ -14,6 +14,11 @@ These paths use the current default sidebar with a fixed menu order. Extension i
 | Logs / Console | Data & Logs → Logs |
 | Trace | Data & Logs → Trace |
 | Config → Normal Config | Config → Select a profile |
+| AI → Capabilities → Agent Computer Use | AI → Computer Use |
+| AI → Capabilities → Web Search | AI → Web Search |
+| AI → Capabilities → Proactive Agent | AI → Proactivity |
+| AI → Capabilities → Knowledge Base | AI → Knowledge Base |
+| AI → Advanced → Context Management Strategy | AI → Context |
 | Config → System Config | System Settings → General, Appearance, Network, or Security, depending on the setting |
 | Commands / Command Management | Extensions → Handlers → Command |
 | Standalone MCP / Skills entries | Extensions → MCP Servers / Skills |
@@ -98,7 +103,7 @@ To return to the model configured in the selected profile, open the model select
 
 Select `Config` in the sidebar, then choose the profile to edit from the selector at the top. Sections appear in this order: `AI`, `Platforms & Messages`, `Access Control`, `Plugin`, and `Ext.`. Use the search control at the top to find a setting. The profile selector, search button, and section navigation stay fixed while only the configuration pane on the right scrolls.
 
-- In `AI`, built-in AI settings have `Model`, `Persona`, `Capabilities`, and `Advanced` tabs. Use `… → Change execution mode` beside the AI heading to connect a third-party agent.
+- In `AI`, built-in AI settings have `Model`, `Persona`, `Computer Use`, `Web Search`, `Proactivity`, `Knowledge Base`, `Context`, and `Advanced` tabs. Use `… → Change execution mode` beside the AI heading to connect a third-party agent.
 - `Access Control` contains administrator IDs and the session whitelist, including whitelist logs and administrator exemptions.
 - `Platforms & Messages` contains message-trigger, session-isolation, and delivery settings.
 - `Plugin` selects the plugins enabled for this profile. To edit an individual plugin's parameters, open `Extensions` and click that plugin's gear icon (`Extension Config`).
@@ -115,8 +120,6 @@ Under `Ext. → Segmented Reply`, turn on `Enable Segmented Reply` to configure 
 ![Access Control](./images/config-access-control-en.jpg)
 
 After selecting an explicit model, click the gear beside the selector to open its settings dialog. Gears are also available in model and fallback-model menus. Clicking a gear does not change the selection or fallback order. Saving model settings immediately affects every profile using that model; the current profile's model selection still requires `Save Configuration`. Automatic selection has no gear beside the selector.
-
-![Model settings shortcut](./images/config-model-settings-en.jpg)
 
 After editing, click the disk icon labeled `Save Configuration` in the lower-right corner and check for a successful save message.
 

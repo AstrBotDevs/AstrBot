@@ -55,7 +55,11 @@
         "tabs": {
             "model": "Модель",
             "persona": "Персона",
-            "capabilities": "Возможности",
+            "computerUse": "Работа с компьютером",
+            "webSearch": "Поиск в интернете",
+            "proactivity": "Проактивность",
+            "knowledgeBase": "База знаний",
+            "context": "Контекст",
             "advanced": "Расширенные"
         },
         "groups": {

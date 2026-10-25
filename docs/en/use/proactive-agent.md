@@ -10,10 +10,8 @@ This is not continuous autonomous monitoring. Create a task first and keep AstrB
 
 1. In **Config**, choose the profile used by the target conversation. Open **AI**, enable AI, and select **AstrBot Built-in AI**.
 2. Confirm that the chat model works and supports tool calling.
-3. Open **AI → Capabilities → Proactive Agent**, enable it, and click **Save Configuration**. This provides the `future_task` tool for managing tasks through chat.
+3. Open **AI → Proactivity**, enable it, and click **Save Configuration**. This provides the `future_task` tool for managing tasks through chat.
 4. Under **Extensions → Future Tasks**, click **Supported platforms** to check that the receiving platform is configured and supports proactive messaging.
-
-![Proactive Agent configuration](./images/proactive-agent-settings-en.png)
 
 Each profile can control whether its chat Agent receives the scheduling tool. **Turning this setting off does not delete or pause existing tasks.** Disable or delete those tasks on the Future Tasks page.
 

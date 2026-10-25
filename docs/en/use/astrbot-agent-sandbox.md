@@ -9,7 +9,7 @@ Agent Computer Use currently supports two runtime environments:
 - **Local environment**: AstrBot Agent executes code and file operations **directly in the environment running AstrBot**, accessing its files and commands. Using `Seatbelt` on macOS or `bubblewrap (bwrap)` on Linux, AstrBot can provide **restricted file access and code execution**, limiting file access scope and network permissions for different bot users to improve the security of the local environment.
 - **Third-party sandbox environment**: AstrBot Agent executes code and file operations in a **separate environment**, avoiding direct access to files and commands on the host or inside the AstrBot container. This separation can provide stronger isolation, with file access, networking, and isolation between users depending on the sandbox's capabilities and configuration. Third-party sandboxes usually require additional deployment and configuration, as well as more computing resources.
 
-Open **Config → AI → Capabilities → Agent Computer Use** and set **Computer Use Runtime** to **Local machine** or **Third-party sandbox**.
+Open **Config → AI → Computer Use** and set **Computer Use Runtime** to **Local machine** or **Third-party sandbox**.
 
 For Local machine, AstrBot attempts to enable isolation in its runtime environment. Availability depends on the operating system, kernel, account permissions, and system security policies. See [Local environment](#local-environment) below.
 
@@ -17,7 +17,7 @@ For Third-party sandbox, also select a **Sandbox Driver** and configure its endp
 
 ## Local environment {#local-environment}
 
-Open **Config → AI → Capabilities → Agent Computer Use** and set **Computer Use Runtime** to **Local machine** (`local`).
+Open **Config → AI → Computer Use** and set **Computer Use Runtime** to **Local machine** (`local`).
 
 AstrBot gives the Agent a set of tools, including Shell, Python, and filesystem tools, to access the local environment.
 
@@ -174,7 +174,7 @@ Third-party sandboxes are an optional AstrBot capability. They let the Agent exe
 
 ### Enabling the Sandbox Environment {#enabling-the-sandbox-environment}
 
-1. Open **Config → AI → Capabilities → Agent Computer Use** and set **Computer Use Runtime** to **Third-party sandbox** (`sandbox`).
+1. Open **Config → AI → Computer Use** and set **Computer Use Runtime** to **Third-party sandbox** (`sandbox`).
 2. Choose **Shipyard Neo**, **Shipyard**, or **CUA** as the sandbox driver.
 3. **Deploy the service using the corresponding instructions below**, then configure its endpoint, token, or image settings.
 4. Click **Save** in the bottom-right corner of the page, then test whether the environment works.
@@ -528,7 +528,7 @@ See the [CUA documentation](https://cua.ai/docs) for host requirements, supporte
 
 #### Configure CUA in AstrBot
 
-Open **Config → AI → Capabilities → Agent Computer Use**, then set:
+Open **Config → AI → Computer Use**, then set:
 
 - **Computer Use Runtime**: `sandbox` (Third-party sandbox).
 - **Sandbox Driver**: `CUA`.

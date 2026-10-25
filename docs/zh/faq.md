@@ -117,7 +117,7 @@ astrbot password
 
 ### 如何让 AstrBot 控制我的 Mac / Windows / Linux 电脑？
 
-1. 在 AstrBot WebUI 的 `配置文件` 中选择机器人使用的配置文件，进入 `AI → 能力 → 使用电脑能力`，将 `运行环境` 设为 `local`。此处需要使用 AstrBot 内置 AI。
+1. 在 AstrBot WebUI 的 `配置文件` 中选择机器人使用的配置文件，进入 `AI → 电脑使用`，将 `运行环境` 设为 `local`。此处需要使用 AstrBot 内置 AI。
 2. 在同一配置文件的 `访问控制 → 管理员 → 管理员 ID` 中添加你的用户 ID（可以通过 `/sid` 指令获取）。
 3. 点击右下角的 `保存配置` 按钮。
 

@@ -274,7 +274,11 @@ const runnerSettingsTitle = computed(() => (
 const localTabs = computed(() => [
   { value: 'model', label: tm('aiSettings.tabs.model') },
   { value: 'persona', label: tm('aiSettings.tabs.persona') },
-  { value: 'capabilities', label: tm('aiSettings.tabs.capabilities') },
+  { value: 'agent_computer_use', label: tm('aiSettings.tabs.computerUse') },
+  { value: 'websearch', label: tm('aiSettings.tabs.webSearch') },
+  { value: 'proactive_capability', label: tm('aiSettings.tabs.proactivity') },
+  { value: 'knowledgebase', label: tm('aiSettings.tabs.knowledgeBase') },
+  { value: 'truncate_and_compress', label: tm('aiSettings.tabs.context') },
   { value: 'advanced', label: tm('aiSettings.tabs.advanced') }
 ]);
 
@@ -320,21 +324,17 @@ const localTabGroups = computed(() => {
     persona: props.metadata?.persona
       ? [{ key: 'persona', metadata: props.metadata.persona }]
       : [],
-    capabilities: [
-      'knowledgebase',
-      'websearch',
+    ...Object.fromEntries([
       'agent_computer_use',
-      'proactive_capability'
-    ].filter((key) => props.metadata?.[key]).map((key) => ({
+      'websearch',
+      'proactive_capability',
+      'knowledgebase',
+      'truncate_and_compress'
+    ].map((key) => [
       key,
-      metadata: props.metadata[key]
-    })),
-    advanced: [
-      props.metadata?.truncate_and_compress
-        ? { key: 'truncate_and_compress', metadata: props.metadata.truncate_and_compress }
-        : null,
-      executionGroup
-    ].filter(Boolean)
+      props.metadata?.[key] ? [{ key, metadata: props.metadata[key] }] : []
+    ])),
+    advanced: [executionGroup].filter(Boolean)
   };
 });
 

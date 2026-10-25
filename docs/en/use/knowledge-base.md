@@ -104,7 +104,7 @@ This page tests retrieval, not a chat model's generated answer. If no relevant p
 ## Step 5: Use it in a conversation {#using-the-knowledge-base}
 
 1. Open `Config` and choose the profile your bot or ChatUI actually uses.
-2. Under `AI → Capabilities → Knowledge Base`, select one or more entries in `Knowledge Base List`.
+2. Under `AI → Knowledge Base`, select one or more entries in `Knowledge Base List`.
 3. Keep the default retrieval counts for your first attempt.
 4. Click `Save Configuration` at the bottom right.
 5. Ask about the uploaded material in the corresponding conversation.

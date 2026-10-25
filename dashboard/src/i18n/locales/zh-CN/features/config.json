@@ -55,7 +55,11 @@
     "tabs": {
       "model": "模型",
       "persona": "人格",
-      "capabilities": "能力",
+      "computerUse": "电脑使用",
+      "webSearch": "网页搜索",
+      "proactivity": "主动性",
+      "knowledgeBase": "知识库",
+      "context": "上下文",
       "advanced": "高级"
     },
     "groups": {
