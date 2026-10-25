@@ -4,10 +4,64 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from astrbot.core import sp
-from astrbot.core.db.po import ConversationV2, UmoAlias, UmoSender
+from astrbot.core.db.po import ConversationV2, Preference, UmoAlias, UmoSender
 from astrbot.dashboard.services.session_management_service import (
     SessionManagementService,
 )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("page", "page_size", "search", "expected_page", "expected_size", "total", "count"),
+    [
+        (1, -1, "", 1, -1, 125, 125),
+        (7, -1, "", 1, -1, 125, 125),
+        (1, -1, "team", 1, -1, 110, 110),
+        (1, -1, "missing", 1, -1, 0, 0),
+        (2, 10, "", 2, 10, 125, 10),
+        (1, 200, "", 1, 100, 125, 100),
+        (0, 0, "", 1, 10, 125, 10),
+        (1, -2, "", 1, 10, 125, 10),
+    ],
+)
+async def test_list_session_rules_pagination(
+    temp_db, page, page_size, search, expected_page, expected_size, total, count
+):
+    """Return every matching rule for All while preserving normal pagination.
+
+    Args:
+        temp_db: Isolated SQLite database.
+        page: Requested page number.
+        page_size: Requested page size, including the All sentinel.
+        search: Search filter for custom rule names.
+        expected_page: Normalized response page.
+        expected_size: Normalized response page size.
+        total: Expected number of matching rules.
+        count: Expected number of returned rules.
+    """
+    async with temp_db.get_db() as session:
+        async with session.begin():
+            session.add_all(
+                Preference(
+                    scope="umo",
+                    scope_id=f"qq:GroupMessage:{index:03d}",
+                    key="session_service_config",
+                    value={"val": {"custom_name": "Team" if index < 110 else "Other"}},
+                )
+                for index in range(125)
+            )
+    service = SessionManagementService(MagicMock(spec=["provider_manager"]), temp_db)
+
+    result = await service.list_session_rules(page=page, page_size=page_size, search=search)
+
+    assert result["page"] == expected_page
+    assert result["page_size"] == expected_size
+    assert result["total"] == total
+    assert len(result["rules"]) == count
+    start = (expected_page - 1) * expected_size if expected_size != -1 else 0
+    assert {rule["umo"] for rule in result["rules"]} == {
+        f"qq:GroupMessage:{index:03d}" for index in range(start, start + count)
+    }
 
 
 @pytest.mark.asyncio

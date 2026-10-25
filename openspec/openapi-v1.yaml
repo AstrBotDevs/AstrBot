@@ -4238,7 +4238,17 @@ paths:
       x-astrbot-scope: data
       parameters:
         - $ref: "#/components/parameters/Page"
-        - $ref: "#/components/parameters/PageSize"
+        - name: page_size
+          in: query
+          description: Number of rules per page, or -1 to return all matching rules and ignore page.
+          schema:
+            default: 10
+            anyOf:
+              - type: integer
+                enum: [-1]
+              - type: integer
+                minimum: 1
+                maximum: 100
         - name: search
           in: query
           schema:

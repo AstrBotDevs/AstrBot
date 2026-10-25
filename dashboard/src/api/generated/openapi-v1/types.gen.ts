@@ -3242,7 +3242,10 @@ export type ListSessionSendersError = unknown;
 export type ListSessionRulesData = {
     query?: {
         page?: number;
-        page_size?: number;
+        /**
+         * Number of rules per page, or -1 to return all matching rules and ignore page.
+         */
+        page_size?: (-1 | number);
         search?: string;
     };
 };

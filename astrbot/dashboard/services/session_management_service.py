@@ -175,6 +175,16 @@ class SessionManagementService:
         page_size: int = 10,
         search: str = "",
     ) -> tuple[dict, int]:
+        """Load matching custom rules and apply the requested pagination.
+
+        Args:
+            page: One-based page number, ignored when page_size is -1.
+            page_size: Rules per page, or -1 to return all matching rules.
+            search: Case-insensitive filter for session IDs and names.
+
+        Returns:
+            Rules keyed by UMO and the total number of matching sessions.
+        """
         umo_rules = {}
         async with self.db_helper.get_db() as session:
             session: AsyncSession
@@ -219,6 +229,9 @@ class SessionManagementService:
             umo_rules = filtered_rules
 
         total = len(umo_rules)
+        if page_size == -1:
+            return umo_rules, total
+
         all_umo_ids = list(umo_rules.keys())
         start_idx = (page - 1) * page_size
         end_idx = start_idx + page_size
@@ -233,7 +246,12 @@ class SessionManagementService:
         page_size: int,
         search: str,
     ) -> dict:
-        page, page_size = self._normalize_page(page, page_size, default_page_size=10)
+        if page_size == -1:
+            page = 1
+        else:
+            page, page_size = self._normalize_page(
+                page, page_size, default_page_size=10
+            )
         umo_rules, total = await self.get_umo_rules(
             page=page,
             page_size=page_size,
