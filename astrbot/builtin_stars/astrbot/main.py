@@ -70,7 +70,6 @@ class Main(star.Star):
         """
         return json.dumps(await self.oauth_usage_service.run(event), ensure_ascii=False)
 
-
     @filter.event_message_type(filter.EventMessageType.ALL, priority=maxsize - 1)
     async def handle_empty_mention(self, event: AstrMessageEvent):
         """处理只有一个 @ 或仅有唤醒前缀的消息，并等待用户下一条内容。"""
