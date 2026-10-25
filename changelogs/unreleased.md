@@ -8,7 +8,7 @@
 
 - Fetch QQ Official group names before creating inbound events in both WebSocket and Webhook adapters. Share a bounded per-bot cache with `event.get_group()`, caching successful names for one hour and failed or empty lookups for five minutes, coalescing concurrent requests and limiting each lookup to three seconds.
 
-- Display full UMOs in gray parentheses beside session names, with platform logos and plain bot IDs below. Add blue group-chat and green private-chat badges using the same colors as Agent/Command badges on the trace page.
+- Display full UMOs in gray parentheses beside session names, with platform logos and plain bot IDs below. Use the interface font throughout the list. Keep titles on one line, ellipsizing long values while exposing the full name and UMO on hover. Add blue group-chat and green private-chat badges using the same colors as Agent/Command badges on the trace page.
 
 - Paginate user suggestions after platform-aware deduplication, with 50 results per page, previous/next controls and selections preserved across pages. Searching and refreshing return to the first page.
 

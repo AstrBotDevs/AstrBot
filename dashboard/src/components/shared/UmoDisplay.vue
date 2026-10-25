@@ -1,7 +1,10 @@
 <template>
   <div class="umo-display" :class="{ 'umo-display--compact': compact }">
     <div class="umo-display__main">
-      <div class="umo-display__line">
+      <div
+        class="umo-display__line"
+        :title="showRawTitle ? displayNameTitle : displayName"
+      >
         <span
           class="umo-display__name"
           :class="{ 'umo-display__name--umo': !hasReadableName }"
@@ -197,7 +200,9 @@ export default {
 
 .umo-display__line {
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .umo-display__platform {
@@ -213,8 +218,6 @@ export default {
 
 .umo-display__name--umo {
   color: rgba(var(--v-theme-on-surface), 0.78);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-    "Liberation Mono", monospace;
   font-size: 12px;
 }
 
