@@ -52,6 +52,7 @@ onBeforeUnmount(() => clearTimeout(resetTimer));
 <style scoped>
 .hover-copy-button {
   position: absolute;
+  transition: none;
   opacity: 0;
   pointer-events: none;
 }
