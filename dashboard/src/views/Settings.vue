@@ -617,6 +617,18 @@ const availableScopes = [
         ]
     },
     { value: 'data', label: 'data', descriptionKey: 'apiKey.scopeDescriptions.data' },
+    {
+        value: 'backup',
+        label: 'backup',
+        descriptionKey: 'apiKey.scopeDescriptions.backup',
+        children: [
+            {
+                value: 'backup:import',
+                label: 'import',
+                descriptionKey: 'apiKey.scopeDescriptions.importBackup'
+            }
+        ]
+    },
     { value: 'file', label: 'file', descriptionKey: 'apiKey.scopeDescriptions.file' },
     { value: 'plugin', label: 'plugin', descriptionKey: 'apiKey.scopeDescriptions.plugin' },
     { value: 'mcp', label: 'mcp', descriptionKey: 'apiKey.scopeDescriptions.mcp' },

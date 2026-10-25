@@ -1,7 +1,10 @@
 import asyncio
 import copy
 import io
+import json
 import uuid
+import zipfile
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
@@ -908,8 +911,27 @@ async def test_open_api_key_scope_normalization(
     )
     orphan_chat_admin_data = await orphan_chat_admin_res.get_json()
     assert orphan_chat_admin_data["status"] == "error"
-    assert orphan_chat_admin_data["message"] == (
-        "chat:admin requires the chat scope"
+    assert orphan_chat_admin_data["message"] == ("chat:admin requires the chat scope")
+
+    backup_import_res = await test_client.post(
+        "/api/apikey/create",
+        json={"name": "backup-import-key", "scopes": ["backup", "backup:import"]},
+        headers=authenticated_header,
+    )
+    backup_import_data = await backup_import_res.get_json()
+    assert backup_import_res.status_code == 200
+    assert backup_import_data["status"] == "ok"
+    assert set(backup_import_data["data"]["scopes"]) == {"backup", "backup:import"}
+
+    orphan_backup_import_res = await test_client.post(
+        "/api/apikey/create",
+        json={"name": "orphan-backup-import-key", "scopes": ["backup:import"]},
+        headers=authenticated_header,
+    )
+    orphan_backup_import_data = await orphan_backup_import_res.get_json()
+    assert orphan_backup_import_data["status"] == "error"
+    assert orphan_backup_import_data["message"] == (
+        "backup:import requires the backup scope"
     )
 
 
@@ -1007,3 +1029,92 @@ async def test_file_scope_is_available_for_developer_api_key(
     assert upload_data["data"]["filename"] == "api-key-upload.txt"
     assert upload_data["data"]["type"] == "file"
     assert upload_data["data"]["attachment_id"]
+
+
+@pytest.mark.asyncio
+async def test_backup_scope_api_key(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """A backup-scoped key can list and download backups without a JWT token."""
+    test_client = app.test_client()
+    backup_service = app._app.state.services.backups
+    backup_dir = tmp_path / "backups"
+    backup_dir.mkdir()
+    monkeypatch.setattr(backup_service, "backup_dir", str(backup_dir))
+
+    zip_path = backup_dir / "openapi-scope-backup.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr("manifest.json", json.dumps({"origin": "exported"}))
+
+    raw_key, _ = await _create_api_key(
+        app,
+        authenticated_header,
+        scopes=["backup"],
+        name_prefix="backup-scope-key",
+    )
+
+    list_res = await test_client.get(
+        "/api/v1/backups",
+        headers={"X-API-Key": raw_key},
+    )
+    assert list_res.status_code == 200
+    list_data = await list_res.get_json()
+    assert list_data["status"] == "ok"
+    filenames = [item["filename"] for item in list_data["data"]["items"]]
+    assert "openapi-scope-backup.zip" in filenames
+
+    download_res = await test_client.get(
+        "/api/v1/backups/openapi-scope-backup.zip",
+        headers={"X-API-Key": raw_key},
+    )
+    assert download_res.status_code == 200
+    assert download_res.headers["content-type"].startswith("application/zip")
+    assert download_res.content == zip_path.read_bytes()
+
+    import_res = await test_client.post(
+        "/api/v1/backups/openapi-scope-backup.zip/import",
+        json={"confirmed": True},
+        headers={"X-API-Key": raw_key},
+    )
+    assert import_res.status_code == 403
+    import_data = await import_res.get_json()
+    assert import_data["message"] == "backup:import scope is required to import backups"
+
+    import_key, _ = await _create_api_key(
+        app,
+        authenticated_header,
+        scopes=["backup", "backup:import"],
+        name_prefix="backup-import-scope-key",
+    )
+    # confirmed=False stops the request in the service layer, proving the
+    # sub-scope check passed without starting a real import task.
+    allowed_import_res = await test_client.post(
+        "/api/v1/backups/openapi-scope-backup.zip/import",
+        json={"confirmed": False},
+        headers={"X-API-Key": import_key},
+    )
+    assert allowed_import_res.status_code == 200
+    allowed_import_data = await allowed_import_res.get_json()
+    assert allowed_import_data["status"] == "error"
+    assert "请先确认导入" in allowed_import_data["message"]
+
+    denied_key, _ = await _create_api_key(
+        app,
+        authenticated_header,
+        scopes=["im"],
+        name_prefix="backup-denied-key",
+    )
+    denied_list_res = await test_client.get(
+        "/api/v1/backups",
+        headers={"X-API-Key": denied_key},
+    )
+    assert denied_list_res.status_code == 403
+
+    denied_download_res = await test_client.get(
+        "/api/v1/backups/openapi-scope-backup.zip",
+        headers={"X-API-Key": denied_key},
+    )
+    assert denied_download_res.status_code == 403

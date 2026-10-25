@@ -3,7 +3,7 @@
   "info": {
     "title": "AstrBot OpenAPI v1",
     "version": "0.1.0",
-    "description": "Target REST contract for migrating AstrBot HTTP APIs to /api/v1. Dynamic AstrBot configuration payloads are intentionally modeled as open JSON objects because their schemas are provided at runtime by template endpoints. Developer API keys currently support these scopes only: bot, provider, persona, im, config, chat, data, file, plugin, mcp, skill, plus the sensitive config:edit_admin and chat:admin sub-scopes. The config scope also grants bot and provider access, but no parent scope grants a sensitive sub-scope.\n"
+    "description": "Target REST contract for migrating AstrBot HTTP APIs to /api/v1. Dynamic AstrBot configuration payloads are intentionally modeled as open JSON objects because their schemas are provided at runtime by template endpoints. Developer API keys currently support these scopes only: bot, provider, persona, im, config, chat, data, backup, file, plugin, mcp, skill, plus the sensitive config:edit_admin, chat:admin, and backup:import sub-scopes. The config scope also grants bot and provider access, but no parent scope grants a sensitive sub-scope.\n"
   },
   "x-astrbot-scope-definitions": {
     "bot": {
@@ -49,6 +49,16 @@
     "data": {
       "description": "Manage conversations and platform-session data.",
       "description_zh": "管理对话记录和平台会话数据。"
+    },
+    "backup": {
+      "description": "List, create, download, upload, and manage data backups.",
+      "description_zh": "查看、创建、下载、上传和管理数据备份。"
+    },
+    "backup:import": {
+      "description": "Allow a `backup`-scoped key to import (restore) backups, which overwrites the live data directory. This sub-scope must be granted explicitly.",
+      "description_zh": "允许具有 `backup` 权限的 Key 导入（恢复）备份。该操作会覆盖当前数据目录，该子权限必须显式授予。",
+      "parent": "backup",
+      "sensitive": true
     },
     "file": {
       "description": "Upload and download chat attachments.",
@@ -132,6 +142,9 @@
     },
     {
       "name": "Conversations"
+    },
+    {
+      "name": "Backups"
     },
     {
       "name": "T2I"
@@ -6714,6 +6727,360 @@
         "description": "**Required scope:** `data`"
       }
     },
+    "/api/v1/backups": {
+      "get": {
+        "tags": [
+          "Backups"
+        ],
+        "summary": "List backups",
+        "operationId": "listBackups",
+        "x-astrbot-scope": "backup",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `backup`"
+      },
+      "post": {
+        "tags": [
+          "Backups"
+        ],
+        "summary": "Export a backup",
+        "operationId": "createBackup",
+        "x-astrbot-scope": "backup",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupExportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `backup`"
+      }
+    },
+    "/api/v1/backups/upload": {
+      "post": {
+        "tags": [
+          "Backups"
+        ],
+        "summary": "Upload a backup file",
+        "operationId": "uploadBackup",
+        "x-astrbot-scope": "backup",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupUploadRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `backup`"
+      }
+    },
+    "/api/v1/backups/upload/init": {
+      "post": {
+        "tags": [
+          "Backups"
+        ],
+        "summary": "Initialize chunked backup upload",
+        "operationId": "initBackupUpload",
+        "x-astrbot-scope": "backup",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupUploadInitRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `backup`"
+      }
+    },
+    "/api/v1/backups/upload/chunk": {
+      "post": {
+        "tags": [
+          "Backups"
+        ],
+        "summary": "Upload a backup chunk",
+        "operationId": "uploadBackupChunk",
+        "x-astrbot-scope": "backup",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupChunkUploadRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `backup`"
+      }
+    },
+    "/api/v1/backups/upload/complete": {
+      "post": {
+        "tags": [
+          "Backups"
+        ],
+        "summary": "Complete chunked backup upload",
+        "operationId": "completeBackupUpload",
+        "x-astrbot-scope": "backup",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupUploadSessionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `backup`"
+      }
+    },
+    "/api/v1/backups/upload/abort": {
+      "post": {
+        "tags": [
+          "Backups"
+        ],
+        "summary": "Abort chunked backup upload",
+        "operationId": "abortBackupUpload",
+        "x-astrbot-scope": "backup",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupUploadSessionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `backup`"
+      }
+    },
+    "/api/v1/backups/upload/status": {
+      "post": {
+        "tags": [
+          "Backups"
+        ],
+        "summary": "Query chunked backup upload status",
+        "operationId": "statusBackupUpload",
+        "x-astrbot-scope": "backup",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupUploadSessionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `backup`"
+      }
+    },
+    "/api/v1/backups/tasks/{task_id}": {
+      "get": {
+        "tags": [
+          "Backups"
+        ],
+        "summary": "Get backup task progress",
+        "operationId": "getBackupProgress",
+        "x-astrbot-scope": "backup",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `backup`"
+      }
+    },
+    "/api/v1/backups/{filename}": {
+      "get": {
+        "tags": [
+          "Backups"
+        ],
+        "summary": "Download a backup",
+        "operationId": "downloadBackup",
+        "x-astrbot-scope": "backup",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Filename"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Backup archive"
+          }
+        },
+        "description": "**Required scope:** `backup`"
+      },
+      "patch": {
+        "tags": [
+          "Backups"
+        ],
+        "summary": "Rename a backup",
+        "operationId": "renameBackup",
+        "x-astrbot-scope": "backup",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Filename"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupRenameRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `backup`"
+      },
+      "delete": {
+        "tags": [
+          "Backups"
+        ],
+        "summary": "Delete a backup",
+        "operationId": "deleteBackup",
+        "x-astrbot-scope": "backup",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Filename"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `backup`"
+      }
+    },
+    "/api/v1/backups/{filename}/check": {
+      "post": {
+        "tags": [
+          "Backups"
+        ],
+        "summary": "Check a backup before import",
+        "operationId": "checkBackup",
+        "x-astrbot-scope": "backup",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Filename"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `backup`"
+      }
+    },
+    "/api/v1/backups/{filename}/import": {
+      "post": {
+        "tags": [
+          "Backups"
+        ],
+        "summary": "Import a backup",
+        "operationId": "importBackup",
+        "x-astrbot-scope": "backup",
+        "x-astrbot-sensitive-scopes": [
+          "backup:import"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Filename"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupImportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `backup`\n\n**Conditional sensitive scope:** `backup:import`"
+      }
+    },
     "/api/v1/t2i/templates": {
       "get": {
         "tags": [
@@ -7046,6 +7413,14 @@
         "in": "path",
         "required": true,
         "description": "URL-encoded relative file path.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "Filename": {
+        "name": "filename",
+        "in": "path",
+        "required": true,
         "schema": {
           "type": "string"
         }
@@ -8331,6 +8706,86 @@
         },
         "additionalProperties": false
       },
+      "BackupExportRequest": {
+        "type": "object",
+        "properties": {
+          "include": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "exclude": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "BackupUploadRequest": {
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary"
+          }
+        }
+      },
+      "BackupUploadInitRequest": {
+        "type": "object",
+        "required": [
+          "filename",
+          "total_size"
+        ],
+        "properties": {
+          "filename": {
+            "type": "string"
+          },
+          "total_size": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "BackupUploadSessionRequest": {
+        "type": "object",
+        "required": [
+          "upload_id"
+        ],
+        "properties": {
+          "upload_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "BackupChunkUploadRequest": {
+        "type": "object",
+        "required": [
+          "upload_id",
+          "chunk_index",
+          "chunk"
+        ],
+        "properties": {
+          "upload_id": {
+            "type": "string"
+          },
+          "chunk_index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "chunk": {
+            "type": "string",
+            "format": "binary"
+          }
+        }
+      },
       "ChatUploadInitRequest": {
         "type": "object",
         "required": [
@@ -8383,6 +8838,28 @@
             "format": "binary"
           }
         }
+      },
+      "BackupRenameRequest": {
+        "type": "object",
+        "required": [
+          "new_name"
+        ],
+        "properties": {
+          "new_name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "BackupImportRequest": {
+        "type": "object",
+        "properties": {
+          "confirmed": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "additionalProperties": false
       },
       "T2iTemplateRequest": {
         "type": "object",

@@ -8,9 +8,10 @@ info:
     JSON objects because their schemas are provided at runtime by template
     endpoints.
     Developer API keys currently support these scopes only: bot, provider,
-    persona, im, config, chat, data, file, plugin, mcp, skill, plus the sensitive
-    config:edit_admin and chat:admin sub-scopes. The config scope also grants bot
-    and provider access, but no parent scope grants a sensitive sub-scope.
+    persona, im, config, chat, data, backup, file, plugin, mcp, skill, plus the
+    sensitive config:edit_admin, chat:admin, and backup:import sub-scopes. The
+    config scope also grants bot and provider access, but no parent scope grants
+    a sensitive sub-scope.
 x-astrbot-scope-definitions:
   bot:
     description: Manage bot and platform configurations.
@@ -44,6 +45,14 @@ x-astrbot-scope-definitions:
   data:
     description: Manage conversations and platform-session data.
     description_zh: 管理对话记录和平台会话数据。
+  backup:
+    description: List, create, download, upload, and manage data backups.
+    description_zh: 查看、创建、下载、上传和管理数据备份。
+  "backup:import":
+    description: Allow a `backup`-scoped key to import (restore) backups, which overwrites the live data directory. This sub-scope must be granted explicitly.
+    description_zh: 允许具有 `backup` 权限的 Key 导入（恢复）备份。该操作会覆盖当前数据目录，该子权限必须显式授予。
+    parent: backup
+    sensitive: true
   file:
     description: Upload and download chat attachments.
     description_zh: 上传和下载对话附件。
@@ -4738,7 +4747,7 @@ paths:
       tags: [Backups]
       summary: List backups
       operationId: listBackups
-      x-astrbot-scope: system
+      x-astrbot-scope: backup
       parameters:
         - $ref: "#/components/parameters/Page"
         - $ref: "#/components/parameters/PageSize"
@@ -4749,7 +4758,7 @@ paths:
       tags: [Backups]
       summary: Export a backup
       operationId: createBackup
-      x-astrbot-scope: system
+      x-astrbot-scope: backup
       requestBody:
         required: false
         content:
@@ -4765,7 +4774,7 @@ paths:
       tags: [Backups]
       summary: Upload a backup file
       operationId: uploadBackup
-      x-astrbot-scope: system
+      x-astrbot-scope: backup
       requestBody:
         required: true
         content:
@@ -4781,7 +4790,7 @@ paths:
       tags: [Backups]
       summary: Initialize chunked backup upload
       operationId: initBackupUpload
-      x-astrbot-scope: system
+      x-astrbot-scope: backup
       requestBody:
         required: true
         content:
@@ -4797,7 +4806,7 @@ paths:
       tags: [Backups]
       summary: Upload a backup chunk
       operationId: uploadBackupChunk
-      x-astrbot-scope: system
+      x-astrbot-scope: backup
       requestBody:
         required: true
         content:
@@ -4813,7 +4822,7 @@ paths:
       tags: [Backups]
       summary: Complete chunked backup upload
       operationId: completeBackupUpload
-      x-astrbot-scope: system
+      x-astrbot-scope: backup
       requestBody:
         required: true
         content:
@@ -4829,7 +4838,7 @@ paths:
       tags: [Backups]
       summary: Abort chunked backup upload
       operationId: abortBackupUpload
-      x-astrbot-scope: system
+      x-astrbot-scope: backup
       requestBody:
         required: true
         content:
@@ -4845,7 +4854,7 @@ paths:
       tags: [Backups]
       summary: Query chunked backup upload status
       operationId: statusBackupUpload
-      x-astrbot-scope: system
+      x-astrbot-scope: backup
       requestBody:
         required: true
         content:
@@ -4861,7 +4870,7 @@ paths:
       tags: [Backups]
       summary: Get backup task progress
       operationId: getBackupProgress
-      x-astrbot-scope: system
+      x-astrbot-scope: backup
       parameters:
         - name: task_id
           in: path
@@ -4877,7 +4886,7 @@ paths:
       tags: [Backups]
       summary: Download a backup
       operationId: downloadBackup
-      x-astrbot-scope: system
+      x-astrbot-scope: backup
       parameters:
         - $ref: "#/components/parameters/Filename"
       responses:
@@ -4887,7 +4896,7 @@ paths:
       tags: [Backups]
       summary: Rename a backup
       operationId: renameBackup
-      x-astrbot-scope: system
+      x-astrbot-scope: backup
       parameters:
         - $ref: "#/components/parameters/Filename"
       requestBody:
@@ -4903,7 +4912,7 @@ paths:
       tags: [Backups]
       summary: Delete a backup
       operationId: deleteBackup
-      x-astrbot-scope: system
+      x-astrbot-scope: backup
       parameters:
         - $ref: "#/components/parameters/Filename"
       responses:
@@ -4915,7 +4924,7 @@ paths:
       tags: [Backups]
       summary: Check a backup before import
       operationId: checkBackup
-      x-astrbot-scope: system
+      x-astrbot-scope: backup
       parameters:
         - $ref: "#/components/parameters/Filename"
       responses:
@@ -4927,7 +4936,8 @@ paths:
       tags: [Backups]
       summary: Import a backup
       operationId: importBackup
-      x-astrbot-scope: system
+      x-astrbot-scope: backup
+      x-astrbot-sensitive-scopes: [backup:import]
       parameters:
         - $ref: "#/components/parameters/Filename"
       requestBody:
