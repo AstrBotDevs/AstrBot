@@ -1960,6 +1960,11 @@ async def test_query_converts_empty_content_to_none_with_tool_calls(monkeypatch)
                         }
                     ],
                 },
+                {
+                    "role": "tool",
+                    "tool_call_id": "call-123",
+                    "content": "test result",
+                },
                 {"role": "user", "content": "world"},
             ],
         }
@@ -1968,7 +1973,7 @@ async def test_query_converts_empty_content_to_none_with_tool_calls(monkeypatch)
 
         # The assistant message with tool_calls should be kept but content set to None
         messages = captured_kwargs["messages"]
-        assert len(messages) == 3
+        assert len(messages) == 4
         assert messages[1]["role"] == "assistant"
         assert messages[1]["content"] is None
         assert messages[1]["tool_calls"] is not None
@@ -2082,6 +2087,11 @@ async def test_query_keeps_assistant_message_with_tool_calls_and_none_content(
                         }
                     ],
                 },
+                {
+                    "role": "tool",
+                    "tool_call_id": "call-123",
+                    "content": "test result",
+                },
                 {"role": "user", "content": "world"},
             ],
         }
@@ -2090,7 +2100,7 @@ async def test_query_keeps_assistant_message_with_tool_calls_and_none_content(
 
         # The assistant message with tool_calls should be kept
         messages = captured_kwargs["messages"]
-        assert len(messages) == 3
+        assert len(messages) == 4
         assert messages[1]["role"] == "assistant"
         assert messages[1]["content"] is None
         assert messages[1]["tool_calls"] is not None
