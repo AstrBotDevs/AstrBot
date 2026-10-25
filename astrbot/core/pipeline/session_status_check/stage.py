@@ -21,7 +21,10 @@ class SessionStatusCheckStage(Stage):
         event: AstrMessageEvent,
     ) -> None | AsyncGenerator[None, None]:
         # 检查会话是否整体启用
-        if not await SessionServiceManager.is_session_enabled(event.unified_msg_origin):
+        if not await SessionServiceManager.is_session_enabled(
+            event.unified_msg_origin,
+            bool(event.get_extra("_session_isolated", False)),
+        ):
             logger.debug(
                 f"Session {event.unified_msg_origin} is disabled; event propagation "
                 "was stopped."

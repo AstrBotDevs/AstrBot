@@ -3219,6 +3219,7 @@ export type ListSessionRulesData = {
         page?: number;
         page_size?: number;
         search?: string;
+        include_unconfigured?: boolean;
     };
 };
 

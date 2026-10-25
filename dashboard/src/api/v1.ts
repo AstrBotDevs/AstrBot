@@ -188,6 +188,7 @@ export interface SessionRuleListParams {
   page?: number;
   page_size?: number;
   search?: string;
+  include_unconfigured?: boolean;
 }
 
 export interface ChatSessionListParams {

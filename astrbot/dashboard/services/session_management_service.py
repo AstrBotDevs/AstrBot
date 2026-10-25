@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 import uuid
 from typing import Any
 
@@ -10,6 +11,7 @@ from astrbot.core import logger, sp
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import ConversationV2, Preference
+from astrbot.core.platform.session_enumerator import SessionEnumerator
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.umo_alias import build_umo_alias_map, parse_umo, serialize_umo_alias
 
@@ -21,6 +23,10 @@ AVAILABLE_SESSION_RULE_KEYS = [
     f"provider_perf_{ProviderType.SPEECH_TO_TEXT.value}",
     f"provider_perf_{ProviderType.TEXT_TO_SPEECH.value}",
 ]
+
+# Cache TTL (seconds) for platform session enumeration, so opening the page
+# does not hit the OneBot API every time.
+_ENUM_CACHE_TTL = 60.0
 
 
 class SessionManagementServiceError(Exception):
@@ -35,6 +41,52 @@ class SessionManagementService:
     ) -> None:
         self.core_lifecycle = core_lifecycle
         self.db_helper = db_helper
+        self._enum_cache: tuple[float, dict[str, dict]] | None = None
+
+    async def _enumerate_platform_sessions(self) -> dict[str, dict]:
+        """Enumerate groups/friends supported by running platform adapters.
+
+        Results are short-cached and failures degrade gracefully.
+
+        Returns:
+            ``{platform_id: {"groups": [...], "friends": [...], "error": str}}``.
+            Platforms that do not support enumeration are omitted; platforms whose
+            enumeration failed carry a non-empty ``error``.
+        """
+        now = time.monotonic()
+        if self._enum_cache and now - self._enum_cache[0] < _ENUM_CACHE_TTL:
+            return self._enum_cache[1]
+
+        enumerated: dict[str, dict] = {}
+        platform_manager = getattr(self.core_lifecycle, "platform_manager", None)
+        insts = platform_manager.get_insts() if platform_manager else []
+        for inst in insts:
+            if not isinstance(inst, SessionEnumerator):
+                continue
+            platform_id = getattr(getattr(inst, "metadata", None), "id", None) or (
+                getattr(inst, "config", {}) or {}
+            ).get("id")
+            if not platform_id:
+                continue
+            try:
+                result = await inst.enumerate_sessions()
+                enumerated[str(platform_id)] = {
+                    "groups": result.groups,
+                    "friends": result.friends,
+                    "error": result.error,
+                }
+            except Exception as exc:
+                logger.warning(
+                    f"Failed to enumerate sessions for platform {platform_id}: {exc!s}"
+                )
+                enumerated[str(platform_id)] = {
+                    "groups": [],
+                    "friends": [],
+                    "error": str(exc),
+                }
+
+        self._enum_cache = (now, enumerated)
+        return enumerated
 
     @staticmethod
     def _payload(data: object) -> dict[str, Any]:
@@ -83,6 +135,30 @@ class SessionManagementService:
             "umo_infos": [self.build_umo_info(umo, alias_map) for umo in umos],
         }
 
+    async def _enumerated_entries(self) -> tuple[dict[str, dict], dict[str, str]]:
+        """Return ``(enumerated entries, per-platform enumeration errors)``.
+
+        Entries have the shape
+        ``{umo: {"name": str, "message_type": "group"|"private"}}``.
+        """
+        enumerated = await self._enumerate_platform_sessions()
+        errors = {pid: d["error"] for pid, d in enumerated.items() if d["error"]}
+        entries: dict[str, dict] = {}
+        for platform_id, data in enumerated.items():
+            for sess in data["groups"]:
+                if sess["id"]:
+                    entries[f"{platform_id}:GroupMessage:{sess['id']}"] = {
+                        "name": sess["name"],
+                        "message_type": "group",
+                    }
+            for sess in data["friends"]:
+                if sess["id"]:
+                    entries[f"{platform_id}:FriendMessage:{sess['id']}"] = {
+                        "name": sess["name"],
+                        "message_type": "private",
+                    }
+        return entries, errors
+
     async def get_umos_by_scope(
         self,
         scope: str,
@@ -97,6 +173,17 @@ class SessionManagementService:
             return groups[group_id].get("umos", [])
 
         all_umos = await self.list_known_umos()
+        if scope in ("group", "private", "all"):
+            # Enumerated sessions also participate in batch scopes, even if they
+            # never produced messages or rules.
+            entries, _errors = await self._enumerated_entries()
+            known = set(all_umos)
+            for umo, entry in entries.items():
+                if umo in known:
+                    continue
+                if scope == "all" or entry["message_type"] == scope:
+                    all_umos.append(umo)
+                    known.add(umo)
         if scope == "group":
             return [umo for umo in all_umos if self._is_group_umo(umo)]
         if scope == "private":
@@ -162,28 +249,92 @@ class SessionManagementService:
 
         return {umo_id: umo_rules[umo_id] for umo_id in paginated_umo_ids}, total
 
+    async def _list_rules_including_unconfigured(
+        self,
+        umo_rules: dict,
+        search: str,
+    ) -> tuple[dict[str, dict], dict[str, str]]:
+        """Merge enumerated but unconfigured sessions into the rule mapping.
+
+        Returns:
+            ``(merged, errors)`` where ``merged`` maps
+            ``{umo: {"rules": dict, "enumerated": bool, "enum_name": str}}``.
+        """
+        entries, errors = await self._enumerated_entries()
+        merged: dict[str, dict] = {
+            umo: {"rules": rules, "enumerated": False, "enum_name": ""}
+            for umo, rules in umo_rules.items()
+        }
+        search_lower = search.lower()
+        for umo, entry in entries.items():
+            if umo in merged:
+                continue
+            if (
+                search
+                and search_lower not in umo.lower()
+                and search_lower not in entry["name"].lower()
+            ):
+                continue
+            merged[umo] = {
+                "rules": {},
+                "enumerated": True,
+                "enum_name": entry["name"],
+            }
+        return merged, errors
+
     async def list_session_rules(
         self,
         *,
         page: int,
         page_size: int,
         search: str,
+        include_unconfigured: bool = False,
     ) -> dict:
         page, page_size = self._normalize_page(page, page_size, default_page_size=10)
-        umo_rules, total = await self.get_umo_rules(
-            page=page,
-            page_size=page_size,
-            search=search,
-        )
+        enumeration_errors: dict[str, str] = {}
 
-        alias_map = await self.get_umo_alias_map(list(umo_rules.keys()))
-        rules_list = [
-            {
-                "rules": rules,
-                **self.build_umo_info(umo, alias_map),
-            }
-            for umo, rules in umo_rules.items()
-        ]
+        if include_unconfigured:
+            # Load all configured rules without pagination first, merge them with
+            # enumerated unconfigured sessions, then paginate the merged result.
+            all_rules, _ = await self.get_umo_rules(
+                page=1, page_size=99999, search=search
+            )
+            merged, enumeration_errors = await self._list_rules_including_unconfigured(
+                all_rules, search
+            )
+            total = len(merged)
+            start_idx = (page - 1) * page_size
+            page_items = list(merged.items())[start_idx : start_idx + page_size]
+
+            alias_map = await self.get_umo_alias_map([umo for umo, _ in page_items])
+            rules_list = []
+            for umo, item in page_items:
+                info = self.build_umo_info(umo, alias_map)
+                if item["enumerated"] and item["enum_name"]:
+                    info["display_name"] = item["enum_name"]
+                rules_list.append(
+                    {
+                        "rules": item["rules"],
+                        "enumerated": item["enumerated"],
+                        **info,
+                    }
+                )
+        else:
+            umo_rules, total = await self.get_umo_rules(
+                page=page,
+                page_size=page_size,
+                search=search,
+            )
+
+            alias_map = await self.get_umo_alias_map(list(umo_rules.keys()))
+            rules_list = [
+                {
+                    "rules": rules,
+                    "enumerated": False,
+                    **self.build_umo_info(umo, alias_map),
+                }
+                for umo, rules in umo_rules.items()
+            ]
 
         provider_manager = self.core_lifecycle.provider_manager
         persona_mgr = getattr(self.core_lifecycle, "persona_mgr", None)
@@ -239,6 +390,7 @@ class SessionManagementService:
             "available_plugins": available_plugins,
             "available_kbs": available_kbs,
             "available_rule_keys": AVAILABLE_SESSION_RULE_KEYS,
+            "enumeration_errors": enumeration_errors,
         }
 
     async def update_session_rule(self, data: object) -> dict:
@@ -404,9 +556,47 @@ class SessionManagementService:
                     "llm_enabled": llm_enabled,
                     "tts_enabled": tts_enabled,
                     "has_rules": umo in umo_rules,
+                    "enumerated": False,
                     "chat_provider": rules.get(chat_provider_key),
                     "tts_provider": rules.get(tts_provider_key),
                     "stt_provider": rules.get(stt_provider_key),
+                }
+            )
+
+        # Merge platform-enumerated sessions that never produced messages or rules
+        # (their status follows the default configuration).
+        entries, enumeration_errors = await self._enumerated_entries()
+        known = set(all_umos)
+        for umo, entry in entries.items():
+            if umo in known:
+                continue
+            if message_type != "all" and entry["message_type"] != message_type:
+                continue
+            umo_info = self.build_umo_info(umo, alias_map)
+            if platform and umo_info["platform"] != platform:
+                continue
+            if entry["name"]:
+                umo_info["display_name"] = entry["name"]
+            if search:
+                search_lower = search.lower()
+                if not any(
+                    search_lower in target.lower()
+                    for target in (umo, entry["name"])
+                    if target
+                ):
+                    continue
+            umos_with_status.append(
+                {
+                    **umo_info,
+                    "custom_name": "",
+                    "session_enabled": True,
+                    "llm_enabled": True,
+                    "tts_enabled": True,
+                    "has_rules": False,
+                    "enumerated": True,
+                    "chat_provider": None,
+                    "tts_provider": None,
+                    "stt_provider": None,
                 }
             )
 
@@ -423,6 +613,7 @@ class SessionManagementService:
             "page": page,
             "page_size": page_size,
             "platforms": platforms,
+            "enumeration_errors": enumeration_errors,
             "available_chat_providers": self._serialize_provider_insts(
                 getattr(provider_manager, "provider_insts", [])
             ),
