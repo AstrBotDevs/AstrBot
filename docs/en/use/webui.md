@@ -147,6 +147,10 @@ On either plugin list, you can also click `Install Plugin` (+) in the bottom rig
 
 > Due to the plugin update mechanism, the AstrBot Team cannot fully guarantee the security of plugins in the plugin market. Please carefully verify them. The AstrBot Team is not responsible for any losses caused by plugins.
 
+### Plugin Logs
+
+Under `Installed`, click a plugin card to open its detail page. The `Plugin logs` section shows only the logs that plugin writes through `astrbot.api.logger` or `self.logger`, with level filters, search, and fullscreen. It reads the same in-memory cache as `Data & Logs → Logs`, so it only holds recent logs from the current run and is cleared on restart. Plugin market detail pages do not show this section.
+
 ### Handling Plugin Load Failures
 
 If a plugin fails to load, the admin panel will display the error message and provide a **"Reload"** button in the failed plugins list. This allows you to quickly reload the plugin after fixing the environment (e.g., installing missing dependencies) or modifying the code, without having to restart the entire application.

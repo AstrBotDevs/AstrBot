@@ -296,6 +296,11 @@ export default {
       type: String,
       default: "-1",
     },
+    // Restricts the console to one plugin's logs, on top of the other filters.
+    pluginName: {
+      type: String,
+      default: "",
+    },
     showLevelBtns: {
       type: Boolean,
       default: true,
@@ -334,6 +339,9 @@ export default {
       this.refreshDisplay();
     },
     selectedPlugin() {
+      this.refreshDisplay();
+    },
+    pluginName() {
       this.refreshDisplay();
     },
     selectedPlatform() {
@@ -535,6 +543,8 @@ export default {
     async fetchLogHistory() {
       try {
         const res = await logApi.history();
+        // Requests started by onopen or a reconnect may finish after teardown.
+        if (this.isUnmounted) return;
         if (res.data.data.logs && res.data.data.logs.length > 0) {
           this.processNewLogs(res.data.data.logs);
         }
@@ -605,6 +615,9 @@ export default {
     },
 
     matchesPlugin(log) {
+      if (this.pluginName && log.plugin_name !== this.pluginName) {
+        return false;
+      }
       return !this.selectedPlugin || log.plugin_name === this.selectedPlugin;
     },
 

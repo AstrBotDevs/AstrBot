@@ -14,6 +14,7 @@ import defaultPluginIcon from "/favicon.svg";
 import { pluginApi } from "@/api/v1";
 import { useI18n } from "@/i18n/composables";
 import { usePluginI18n } from "@/utils/pluginI18n";
+import ConsoleDisplayer from "@/components/shared/ConsoleDisplayer.vue";
 import PluginPlatformChip from "@/components/shared/PluginPlatformChip.vue";
 
 const props = defineProps({
@@ -32,6 +33,11 @@ const props = defineProps({
   state: {
     type: Object,
     required: true,
+  },
+  // Empty unless the plugin is installed; only installed plugins emit logs.
+  installedPluginName: {
+    type: String,
+    default: "",
   },
 });
 
@@ -108,6 +114,9 @@ const detailSourceTab = computed(() =>
   props.sourceTab === "market" ? "market" : "installed",
 );
 const isMarketDetail = computed(() => detailSourceTab.value === "market");
+const showLogsSection = computed(
+  () => !isMarketDetail.value && Boolean(props.installedPluginName),
+);
 const detailParentTitle = computed(() =>
   isMarketDetail.value
     ? tm("tabs.market")
@@ -1084,6 +1093,15 @@ onBeforeUnmount(() => {
       </v-card>
     </section>
 
+    <section v-if="showLogsSection" class="detail-section">
+      <h3 class="detail-section__title">{{ tm("detail.logsTitle") }}</h3>
+      <ConsoleDisplayer
+        class="plugin-log-console"
+        show-search
+        :plugin-name="installedPluginName"
+      />
+    </section>
+
     <section v-if="showDocsSection" class="detail-section">
       <h3 class="detail-section__title">{{ tm("detail.docsTitle") }}</h3>
       <v-card class="rounded-lg docs-card" variant="outlined">
@@ -1233,6 +1251,10 @@ onBeforeUnmount(() => {
 
 .detail-section {
   margin-top: 28px;
+}
+
+.plugin-log-console {
+  height: 640px;
 }
 
 .detail-section__title {
