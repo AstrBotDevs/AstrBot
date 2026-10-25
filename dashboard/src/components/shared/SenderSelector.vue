@@ -75,6 +75,7 @@
                   </span>
                 </div>
                 <template #append>
+                  <HoverCopyButton :text="id" />
                   <v-btn
                     icon="mdi-close"
                     variant="text"
@@ -178,6 +179,9 @@
                     />
                     <span>{{ sender.platform }}</span>
                   </div>
+                  <template #append>
+                    <HoverCopyButton :text="sender.sender_id" />
+                  </template>
                 </v-list-item>
               </v-list>
               <div v-else-if="!loading" class="py-6 text-center">
@@ -247,6 +251,7 @@ import { computed, ref, watch } from "vue";
 import { conversationApi, sessionApi } from "@/api/v1";
 import { useI18n } from "@/i18n/composables";
 import PlatformLogo from "./PlatformLogo.vue";
+import HoverCopyButton from "./HoverCopyButton.vue";
 
 const props = defineProps({
   modelValue: { type: Array, default: () => [] },

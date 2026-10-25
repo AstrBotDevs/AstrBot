@@ -72,6 +72,7 @@
                     :show-info="false"
                   />
                   <template #append>
+                    <HoverCopyButton :text="umo" />
                     <v-btn
                       icon="mdi-close"
                       variant="text"
@@ -186,6 +187,9 @@
                       compact
                       :show-info="false"
                     />
+                    <template #append>
+                      <HoverCopyButton :text="umo" />
+                    </template>
                   </v-list-item>
                   <v-btn
                     v-if="filteredUmos.length > visibleLimit"
@@ -250,6 +254,7 @@ import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { conversationApi, sessionApi } from "@/api/v1";
 import { useI18n } from "@/i18n/composables";
 import UmoDisplay from "./UmoDisplay.vue";
+import HoverCopyButton from "./HoverCopyButton.vue";
 
 const props = defineProps({
   modelValue: { type: [String, Array], default: "" },
