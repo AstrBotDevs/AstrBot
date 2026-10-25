@@ -27,12 +27,14 @@ These settings belong to the selected profile. Changing `default` does not enabl
 
 ## Choose a search provider
 
-AstrBot supports seven providers. Configure one to start; you do not need an account with every service.
+AstrBot supports nine providers. Configure one to start; you do not need an account with every service.
 
 | Provider | Get a key | Capabilities available in AstrBot |
 | --- | --- | --- |
+| <span id="serpapi">[SerpApi](./websearch/serpapi.md)</span> | [SerpApi API key](https://serpapi.com/manage-api-key) | Google web search, Images Light, Finance, and Scholar |
+| <span id="deepseek">[DeepSeek Search API](./websearch/deepseek.md)</span> | [DeepSeek Platform](https://platform.deepseek.com/api_keys) / [Search Docs](https://api-docs.deepseek.com/guides/search) | Web search and page content extraction from a URL |
 | <span id="tavily">Tavily</span> | [Tavily dashboard](https://app.tavily.com/home) | Web search and page content extraction from a URL |
-| <span id="bocha">BoCha</span> | [BoCha](https://bochaai.com/) | Web search |
+| <span id="bocha">Bocha</span> | [BoCha](https://bochaai.com/) | Web search |
 | <span id="baidu-ai-search">Baidu AI Search</span> | [Baidu Cloud API key management](https://console.bce.baidu.com/iam/#/iam/apikey/list) | Baidu AI Search; requires access to the corresponding service |
 | <span id="brave">Brave</span> | [Brave Search API](https://brave.com/search/api/) | Web search |
 | <span id="firecrawl">Firecrawl</span> | [Firecrawl](https://firecrawl.dev/) | Web search and page content extraction from a URL |
@@ -41,9 +43,13 @@ AstrBot supports seven providers. Configure one to start; you do not need an acc
 
 AnySearch uses anonymous mode with a daily free quota when its key list is empty. Other providers require their own keys. Check each service's website for current quotas, pricing, regional availability, and authorization requirements.
 
+See [Web Search → DeepSeek Search API](./websearch/deepseek.md) for API keys, setup, search filters, page extraction, account rate limits, and examples.
+
+The detailed SerpApi instructions and examples have moved to [Web Search → SerpApi](./websearch/serpapi.md), covering API keys, setup, and web, image, finance, and academic search.
+
 ### Searching versus reading a link
 
-Searching a topic returns results from a search service. Summarizing a specific link requires extracting that page's contents. Tavily, Firecrawl, and Exa currently provide dedicated page extraction tools; choose one of them if reading links is a common task.
+Searching a topic returns results from a search service. Summarizing a specific link requires extracting that page's contents. Tavily, Firecrawl, Exa, and DeepSeek currently provide dedicated page extraction tools; choose one of them if reading links is a common task.
 
 Extraction cannot read every website. Pages behind a login or paywall, sites with anti-bot restrictions, and some pages rendered through scripts may fail.
 

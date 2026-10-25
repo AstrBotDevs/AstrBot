@@ -170,7 +170,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         ):
             if self.only_use_webhook_url_to_send and self.webhook_client and message:
                 await self.webhook_client.send_message_chain(message)
-                await super().send(MessageChain([]))
+                await super().send(message)
                 return
 
             if self.webhook_client and message:
@@ -191,13 +191,13 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                     },
                 },
             )
-            await super().send(MessageChain([]))
+            await super().send(message)
             return
 
         if self.only_use_webhook_url_to_send and self.webhook_client and message:
             await self.webhook_client.send_message_chain(message)
             await self._mark_stream_complete(stream_id)
-            await super().send(MessageChain([]))
+            await super().send(message)
             return
 
         if self.webhook_client and message:
@@ -212,7 +212,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
             self.queue_mgr,
             suppress_unsupported_log=self.webhook_client is not None,
         )
-        await super().send(MessageChain([]))
+        await super().send(message)
 
     async def send_streaming(self, generator, use_fallback=False) -> None:
         """流式发送消息，参考webchat的send_streaming设计"""

@@ -113,7 +113,7 @@
       "button": "备份管理"
     },
     "cleanup": {
-      "title": "日志与缓存清理",
+      "title": "日志、缓存与追踪清理",
       "subtitle": "查看当前日志和缓存占用，并一键清理。",
       "refresh": "刷新占用",
       "clean": "清理",
@@ -127,7 +127,8 @@
       "targetNames": {
         "cache": "缓存",
         "logs": "日志",
-        "all": "日志和缓存"
+        "all": "日志、缓存和追踪数据",
+        "traces": "追踪数据"
       },
       "targets": {
         "cache": {
@@ -139,13 +140,25 @@
           "title": "日志",
           "subtitle": "清理历史日志，并清空当前正在写入的日志文件内容。",
           "button": "清理日志"
+        },
+        "traces": {
+          "title": "追踪",
+          "subtitle": "清除历史追踪数据，保留运行中的追踪。",
+          "button": "清理追踪数据"
         }
       },
       "messages": {
         "statusFailed": "加载存储占用失败",
         "cleanupSuccess": "已清理 {count} 个文件，释放 {size}",
-        "cleanupFailed": "清理失败"
-      }
+        "cleanupFailed": "清理失败",
+        "cleanupTracesSuccess": "已清理 {count} 条追踪，释放 {size}",
+        "cleanupWithTracesSuccess": "已清理 {count} 个文件和 {traces} 条追踪，释放 {size}"
+      },
+      "confirmWithTraces": "确定要清理 {target} 吗？历史追踪数据将无法恢复，运行中的追踪会保留。"
+    },
+    "diagnostics": {
+      "title": "诊断",
+      "subtitle": "导出诊断包，帮助排查 AstrBot 运行问题。"
     }
   },
   "backup": {

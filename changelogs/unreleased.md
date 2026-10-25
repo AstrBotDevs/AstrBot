@@ -1,20 +1,23 @@
 # Unreleased
 
-- WebUI: Add model settings shortcuts beside selected models and inside model/fallback menus. Model edits save immediately for all profiles using that model.
-- WebUI: Move **Platform → General → Administrator IDs** to **Access Control → Administrators**, and **Platform → Whitelist** to **Access Control → Whitelist**. Rename Platform to Platforms & Messages. Order sections as AI, Platforms & Messages, Access Control, Plugin, and Extensions; remove the “configuration” suffix from section labels.
-- WebUI：模型选择器旁及模型、回退模型菜单内新增设置齿轮，模型设置保存后立即影响引用它的所有配置文件。
-- WebUI：**平台配置 → 基本 → 管理员 ID** 移至 **访问控制 → 管理员**，**平台配置 → 白名单** 移至 **访问控制 → 白名单**；平台分区改名为平台与消息；分区顺序调整为 AI、平台与消息、访问控制、插件、扩展功能，分区名称去掉“配置”后缀。
+- Simplify Context Management Strategy settings: Handling for History Limits or Context Window Pressure → Compression Strategy; Model Provider ID for Context Compression → Compression Model. Move maximum turns, discarded turns, compression instruction, recent-context ratio and fallback context window size under the collapsed More Settings section. Preserve existing configuration keys, defaults and runtime behavior.
 
-- Generate numbered original-path notices in the image preparation stage during main-agent construction, including quoted images. After request hooks, apply the same size and format policy only to newly introduced image references and refresh their notices. Skipped and captioned attachments retain explicit status without taking a visual index; animation labels identify frame montages.
-- Raise the model image input cap from 32 MiB to 64 MiB. Larger originals are skipped before reading image bytes, with a model notice retaining their paths and suggesting the file-reading tool or a smaller upload; accepted inputs still produce images strictly below 512 KiB.
-- Local Agent input images are always prepared as JPEG/PNG files strictly below 512 KiB. Compliant local images are reused without copying. Transparent previews retain PNG alpha; animations become 3×3 montages. Original attachment paths remain available to tools, and event-owned previews are deleted after use without a shared conversion cache.
-- Configuration mapping: **Enable image compression** (`provider_settings.image_compress_enabled`) is replaced by always-on preparation; **JPEG quality** (`provider_settings.image_compress_options.quality`) is replaced by automatic size control; **Maximum edge length** is renamed to **Input image maximum edge length** (`provider_settings.image_compress_options.max_size`). User attachments in CUA sessions follow the same limits.
+- Add compact data-cleanup checkboxes to the existing bot deletion dialog. Custom rules, preferences, configuration routes and scheduled tasks are selected by default; AI conversations, message history, local traces and usage statistics are retained unless selected. Preserve shared resources and match adapter IDs exactly.
 
-- WebUI: Keep content corners and borders fixed while pages scroll inside the card. Add 6px right and bottom gaps on desktop; mobile keeps a full-width, flat layout. (#10479)
-- WebUI: Restore the content card's right and bottom borders and use the primary theme color for the active sidebar Settings button.
-- WebUI: Pin configuration and settings headers and section navigation while only the right content pane scrolls, including embedded configuration drawers.
-- WebUI: **System Settings → Appearance → Customize Sidebar → removed**; the sidebar uses the default menu layout. Theme colors and extension collapsing, pinning, and grouping remain available.
-- WebUI：页面在内容卡片内部滚动，圆角和边线保持固定。桌面端右侧和底部各保留 6px 间隔，移动端保持全宽平面布局。 (#10479)
-- WebUI：补齐内容卡片右侧和底部边框，侧边栏设置按钮选中时使用主题主色背景及文字。
-- WebUI：配置页和设置页固定顶部及分区导航，仅滚动右侧内容；嵌入式配置抽屉也采用相同行为。
-- WebUI：**系统设置 → 外观 → 自定义侧边栏 → 已移除**；侧边栏使用默认菜单布局。仍可调整主题颜色，以及折叠、置顶和按插件分组扩展功能。
+- Resolve Lark group-message sender names through the existing user-info lookup, sharing the same per-user cache with private chats (30 minutes for successful names and one minute for failures). Application senders skip user-directory lookups.
+
+- Sort session-source candidates by the latest existing conversation, alias or sender `updated_at`, descending. Deduplicate user suggestions by platform instance and sender ID before applying the result limit, retaining the newest matching record while preserving per-session metadata in storage.
+
+- Fetch Lark group metadata before creating inbound events, using the same one-hour success cache, five-minute failure cache, bounded size and lookup timeout as QQ Official. Automatic enrichment requests only group details; explicit `event.get_group()` continues to fetch member lists while sharing the metadata cache.
+
+- Fetch QQ Official group names before creating inbound events in both WebSocket and Webhook adapters. Share a bounded per-bot cache with `event.get_group()`, caching successful names for one hour and failed or empty lookups for five minutes, coalescing concurrent requests and limiting each lookup to three seconds.
+
+- Add hover copy icon buttons to both user and session-source entries, including selected entries. Hidden copy buttons take no layout space, matching the ChatUI session-list behavior. Copy raw sender IDs or full UMOs without changing selections; support keyboard focus and touch devices.
+
+- Display full UMOs in gray parentheses beside session names, with platform logos and plain bot IDs below. Use the interface font throughout the list. Keep candidate titles on one line and selected titles on at most two lines, ellipsizing long values while exposing the full name and UMO on hover. Add blue group-chat and green private-chat badges using the same colors as Agent/Command badges on the trace page.
+
+- Paginate user suggestions after platform-aware deduplication, with 50 results per page, previous/next controls and selections preserved across pages. Searching and refreshing return to the first page.
+
+- Record sender IDs and names per UMO on awakened messages and include them in backups. Administrator IDs now use the dedicated `_special: sender_id` selector with nickname search, platform labels and direct ID addition when no search results match; values remain raw sender IDs. Old entry: Add More → Edit List Items. New entry: Select users (button and dialog).
+
+- Unify bot session bindings, whitelist settings (`_special: umo`), conversation filters, custom rules/groups and future-task session choices in a shared session-selection dialog. Replace scattered dropdowns, generic list editors and group transfer lists with Select session sources (previously Select sessions); rename Known sessions to Recorded session sources and explain UMO below the dialog title; retain parent-page saving and advanced wildcard-rule editing. Bot bindings restrict results to the exact platform instance via the `platformId` prop and API filter. Future-task No delivery target filtering is a separate checkbox.

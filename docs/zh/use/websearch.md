@@ -27,13 +27,15 @@
 
 ## 选择搜索提供商
 
-当前支持以下七种接入方式。先选一个完成配置即可，无需同时申请所有服务。
+当前支持以下九种接入方式。先选一个完成配置即可，无需同时申请所有服务。
 
 | 提供商 | Key 申请入口 | AstrBot 提供的能力 |
 | --- | --- | --- |
+| <span id="serpapi">[SerpApi](./websearch/serpapi.md)</span> | [SerpApi API Key](https://serpapi.com/manage-api-key) | Google 网页搜索、Images Light 图片搜索、Finance 金融查询、Scholar 学术搜索 |
+| <span id="deepseek">[DeepSeek Search API](./websearch/deepseek.md)</span> | [DeepSeek 开放平台](https://platform.deepseek.com/api_keys) / [搜索文档](https://api-docs.deepseek.com/zh-cn/guides/search) | 网页搜索、按 URL 提取网页正文 |
 | <span id="tavily">Tavily</span> | [Tavily 控制台](https://app.tavily.com/home) | 网页搜索、按 URL 提取网页正文 |
-| <span id="bocha">BoCha</span> | [博查](https://bochaai.com/) | 网页搜索 |
-| <span id="百度-ai-搜索">百度 AI 搜索</span> | [百度智能云 API Key 管理](https://console.bce.baidu.com/iam/#/iam/apikey/list) | 百度 AI 搜索；需要开通相应服务 |
+| <span id="bocha">Bocha</span> | [博查](https://bochaai.com/) | 网页搜索 |
+| <span id="百度-ai-搜索">Baidu AI Search</span> | [百度智能云 API Key 管理](https://console.bce.baidu.com/iam/#/iam/apikey/list) | 百度 AI 搜索；需要开通相应服务 |
 | <span id="brave">Brave</span> | [Brave Search API](https://brave.com/search/api/) | 网页搜索 |
 | <span id="firecrawl">Firecrawl</span> | [Firecrawl](https://firecrawl.dev/) | 网页搜索、按 URL 提取网页正文 |
 | <span id="exa">Exa</span> | [Exa 控制台](https://dashboard.exa.ai/) | 关键词或语义搜索、按 URL 获取正文，支持域名、日期等筛选 |
@@ -41,9 +43,13 @@
 
 AnySearch 的 Key 留空时会使用匿名模式，服务提供每日免费额度。其他提供商需要填写相应的 Key。服务的额度、收费、可用地区和授权方式以各自官网为准。
 
+DeepSeek Search API 的配置与专属示例见 [网页搜索 → DeepSeek Search API](./websearch/deepseek.md)，包含 Key 获取、搜索筛选、网页正文提取和账号限速说明。
+
+SerpApi 的详细说明与专属示例已移至 [网页搜索 → SerpApi](./websearch/serpapi.md)，包含 Key 获取、配置步骤，以及网页、图片、金融和学术搜索的使用方法。
+
 ### 搜索与读取链接的区别
 
-“搜索某个话题”会从搜索服务获取结果；“总结这个链接”需要提取指定网页的正文。当前 Tavily、Firecrawl 和 Exa 都提供独立的网页正文提取工具。若经常需要阅读具体链接，优先选择其中一种。
+“搜索某个话题”会从搜索服务获取结果；“总结这个链接”需要提取指定网页的正文。当前 Tavily、Firecrawl、Exa 和 DeepSeek 都提供独立的网页正文提取工具。若经常需要阅读具体链接，优先选择其中一种。
 
 网页提取不保证能读取所有网站。登录后才能访问的页面、反爬限制、付费内容，以及某些依赖脚本加载的页面，都可能导致提取失败。
 

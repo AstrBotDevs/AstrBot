@@ -538,9 +538,24 @@ window.addEventListener("beforeunload", () => {
 });
 ```
 
-##视图国际化
+## 视图元数据与国际化
 
-插件可视化视图复用插件 i18n 资源文件。给 `.astrbot-plugin/i18n/<locale>.json` 增加 `views.<view_name>`：
+视图的标题、描述等元数据写在插件目录的 `.astrbot-plugin/i18n/<locale>.json` 中，并按 `views.<view_name>` 组织。`views` 是 locale JSON 的顶层字段，与 `metadata`、`config` 并列；`<view_name>` 必须与 `views/` 下的目录名完全一致。
+
+例如 `bridge-demo` 视图的中文元数据位于：
+
+```text
+astrbot_plugin_view_demo/
+├─ views/
+│  └─ bridge-demo/
+│     └─ index.html
+└─ .astrbot-plugin/
+   └─ i18n/
+      ├─ zh-CN.json
+      └─ en-US.json
+```
+
+`.astrbot-plugin/i18n/zh-CN.json`：
 
 ```json
 {
@@ -555,7 +570,17 @@ window.addEventListener("beforeunload", () => {
 }
 ```
 
-`title` 用于 WebUI 外壳标题和插件详情页的视图组件名称；`description` 用于插件详情页的视图组件描述。视图内部使用 `bridge.t()` 渲染文案，并通过 `onContext()` 响应语言切换。
+字段说明：
+
+| 字段 | 是否必填 | 用途 |
+| --- | --- | --- |
+| `title` | 否 | 侧边栏、WebUI 外壳标题和插件详情页中的视图名称。 |
+| `description` | 否 | 插件详情页中的视图描述。 |
+| 其他字段 | 否 | 视图自己的翻译文案，例如示例中的 `heading`、`refresh`；通过 `bridge.t()` 读取。 |
+
+每种语言分别写入对应的 locale 文件，例如英文写入 `.astrbot-plugin/i18n/en-US.json`。推荐使用 `views`；旧的 `pages` 键仅作为兼容别名保留。修改 locale 文件后需要重载插件，才能确保 WebUI 获取到最新元数据。
+
+当前语言未提供 `title` 时，未分组的侧边栏显示插件名称；按插件分组后显示视图目录名，因为分组标题已经显示了插件名称。视图内部使用 `bridge.t()` 渲染其他文案，并通过 `onContext()` 响应语言切换：
 
 ```js
 function render() {

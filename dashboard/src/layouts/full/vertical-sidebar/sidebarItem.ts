@@ -15,6 +15,7 @@ import {
 
 export interface menu {
   header?: string;
+  value?: string;
   title?: string;
   icon?: string | Component;
   to?: string;

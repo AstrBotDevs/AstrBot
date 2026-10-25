@@ -167,10 +167,18 @@
               @click="clearSelection"
             >
               <v-list-item-title class="provider-item-title">
-                {{ sharedTm("providerSelector.clearSelection") }}
+                {{
+                  variant === "config"
+                    ? sharedTm("providerSelector.clearSelection")
+                    : sharedTm("providerSelector.defaultModel")
+                }}
               </v-list-item-title>
               <v-list-item-subtitle class="provider-subtitle">
-                {{ sharedTm("providerSelector.clearSelectionSubtitle") }}
+                {{
+                  variant === "config"
+                    ? sharedTm("providerSelector.clearSelectionSubtitle")
+                    : sharedTm("providerSelector.defaultModelSubtitle")
+                }}
               </v-list-item-subtitle>
               <template #append>
                 <v-icon
@@ -417,7 +425,7 @@
       <v-card-title class="text-h3 pa-4 pb-0 pl-6">
         {{ providerEditDialogTitle }}
       </v-card-title>
-      <v-card-text class="py-4">
+      <v-card-text class="py-4 config-form">
         <AstrBotConfig
           v-if="providerEditData"
           :iterable="providerEditData"
@@ -1308,3 +1316,5 @@ defineExpose({ getCurrentSelection });
   }
 }
 </style>
+
+<style scoped src="@/styles/config-form.css"></style>

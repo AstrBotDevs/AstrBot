@@ -538,9 +538,24 @@ window.addEventListener("beforeunload", () => {
 });
 ```
 
-## View Internationalization
+## View Metadata and Internationalization
 
-Plugin Views reuse plugin i18n resource files. Add `views.<view_name>` to `.astrbot-plugin/i18n/<locale>.json`:
+Put View metadata such as the title and description in `.astrbot-plugin/i18n/<locale>.json` inside the plugin directory, nested under `views.<view_name>`. `views` is a top-level locale JSON field alongside `metadata` and `config`; `<view_name>` must exactly match the directory name under `views/`.
+
+For example, localized metadata for the `bridge-demo` View is stored as follows:
+
+```text
+astrbot_plugin_view_demo/
+├─ views/
+│  └─ bridge-demo/
+│     └─ index.html
+└─ .astrbot-plugin/
+   └─ i18n/
+      ├─ zh-CN.json
+      └─ en-US.json
+```
+
+`.astrbot-plugin/i18n/en-US.json`:
 
 ```json
 {
@@ -555,7 +570,17 @@ Plugin Views reuse plugin i18n resource files. Add `views.<view_name>` to `.astr
 }
 ```
 
-`title` is used by the WebUI shell title and the view component name on the plugin detail page. `description` is used by the view component description. Inside the view, render text with `bridge.t()` and react to locale changes with `onContext()`.
+Field reference:
+
+| Field | Required | Purpose |
+| --- | --- | --- |
+| `title` | No | The View name in the sidebar, WebUI shell, and plugin detail page. |
+| `description` | No | The View description on the plugin detail page. |
+| Other fields | No | View-specific translations, such as `heading` and `refresh` in this example; read them with `bridge.t()`. |
+
+Add each language to its matching locale file, such as `.astrbot-plugin/i18n/zh-CN.json` for Chinese. Use `views` for new plugins; the older `pages` key remains only as a compatibility alias. Reload the plugin after editing locale files so the WebUI receives the latest metadata.
+
+If the current locale has no `title`, the ungrouped sidebar displays the plugin name. In grouped mode it displays the View directory name because the group already shows the plugin name. Render other text inside the View with `bridge.t()` and react to locale changes with `onContext()`:
 
 ```js
 function render() {

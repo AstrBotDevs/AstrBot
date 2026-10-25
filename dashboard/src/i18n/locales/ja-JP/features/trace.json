@@ -4,7 +4,7 @@
     "enabled": "自動スクロール：オン",
     "disabled": "自動スクロール：オフ"
   },
-  "hint": "現在は AstrBot のメインエージェントによる一部のモデル呼び出し経路のみ記録しています。今後、記録範囲を拡充します。",
+  "hint": "メッセージごとのプラグイン Handler、Agent、ツール、レスポンスの実行チェーンをメモリ上で確認できます。",
   "toggleLabel": "トレースを記録",
   "recording": "記録中",
   "paused": "一時停止中",
@@ -17,5 +17,128 @@
   "expand": "展開",
   "collapse": "折りたたむ",
   "showMore": "さらに表示",
-  "empty": "トレースデータはありません"
+  "empty": "トレースデータはありません",
+  "search": "{count} 件の記録からメッセージ、セッション、プラグインを検索",
+  "clearSearch": "検索をクリア",
+  "live": "ライブ",
+  "connecting": "接続中",
+  "refresh": "更新",
+  "records": "レコード",
+  "traceList": "トレース一覧",
+  "loading": "トレースを読み込み中…",
+  "untitled": "名前のないメッセージ",
+  "steps": "ステップ",
+  "duration": "所要時間",
+  "handlers": "プラグインハンドラー",
+  "responses": "レスポンス",
+  "details": "詳細を表示",
+  "selectTrace": "トレースを選択すると実行チェーンを確認できます",
+  "closeDetails": "詳細を閉じる",
+  "pagination": {
+    "perPage": "ページあたりの件数",
+    "range": "{2} 件中 {0}–{1} 件"
+  },
+  "messagePreview": {
+    "expand": "全文を表示",
+    "collapse": "折りたたむ"
+  },
+  "compact": {
+    "pluginHandler": "プラグイン呼び出し",
+    "agentExecution": "Agent 実行",
+    "rawData": "元データ",
+    "toggleAgent": "Agent の実行チェーンを{action}"
+  },
+  "history": {
+    "loadFailed": "トレース履歴を読み込めません。再試行してください。",
+    "detailFailed": "詳細を読み込めません。削除済みの可能性があります。再試行してください。",
+    "storageWarning": "一部のトレースを保存できませんでした。DB エラーまたは容量を確認してください。",
+    "loadMore": "もっと読み込む",
+    "limitHint": "最大 {count} 件表示。検索条件を絞ってください。",
+    "truncated": "内容またはノード数が上限を超え、一部が省略されました。"
+  },
+  "controls": {
+    "start": "開始",
+    "pauseButton": "一時停止",
+    "pause": "トレース記録を一時停止",
+    "resume": "トレース記録を開始",
+    "loadFailed": "トレース設定の取得に失敗しました。ページを更新してください。",
+    "updateFailed": "トレース記録の切り替えに失敗しました。再試行してください。"
+  },
+  "tokens": {
+    "title": "Tokens",
+    "breakdown": "入力: {input} (キャッシュ読込: {cached})\n出力: {output}",
+    "unavailable": "報告されたトークン使用量はありません"
+  },
+  "classification": {
+    "agent": "Agent",
+    "command": "コマンド",
+    "group": "グループチャット",
+    "private": "個人チャット"
+  },
+  "columns": {
+    "category": "種類",
+    "duration": "実行時間",
+    "status": "状態",
+    "platform": "プラットフォーム",
+    "timestamp": "タイムスタンプ",
+    "message": "メッセージ",
+    "sender": "送信者",
+    "spansHint": "メッセージのルートを含む実際の Span 数。イベントは含まず、折りたたんでも変わりません。"
+  },
+  "chips": {
+    "provider": "プロバイダー: {id}",
+    "persona": "ペルソナ: {id}",
+    "toolCalls": "ツール呼び出し {count} 回"
+  },
+  "groups": {
+    "handlerStart": "複数のプラグインハンドラーを実行",
+    "agentStart": "複数の Agent を開始",
+    "agentToolCall": "複数のツールを呼び出し",
+    "agentToolResult": "複数のツール結果",
+    "responseReady": "複数の応答を準備",
+    "responseSent": "複数の応答を送信",
+    "repeated": "繰り返し: {label}",
+    "count": "{count} 件",
+    "errors": "エラー {count} 件"
+  },
+  "filters": {
+    "button": "フィルター",
+    "title": "フィルター",
+    "reset": "リセット",
+    "close": "フィルターを閉じる",
+    "errors": "エラーあり",
+    "models": "モデル呼び出しあり",
+    "plugins": "プラグイン呼び出しあり",
+    "hint": "複数選択するとすべての条件を満たす追跡を表示します。未選択ではすべて表示します。"
+  },
+  "status": { "error": "エラー", "complete": "完了", "live": "実行中" },
+  "handlerDescription": {
+    "loading": "ハンドラーの説明を読み込み中…",
+    "loadFailed": "読み込みに失敗しました。再度ホバーしてお試しください。",
+    "empty": "ハンドラーの説明はありません"
+  },
+  "handlerCategories": {
+    "command": "コマンド/コマンドグループ",
+    "listener": "イベントリスナー",
+    "hook": "イベントフック",
+    "llm_tool": "LLM ツール"
+  },
+  "actions": {
+    "selectPersona": "人格を選択",
+    "eventReceived": "メッセージ受信",
+    "pipelineStart": "パイプライン開始",
+    "pipelineEnd": "処理完了",
+    "stageStart": "ステージ開始",
+    "stageEnd": "ステージ完了",
+    "handlerStart": "Handler 呼び出し",
+    "handlerEnd": "Handler 完了",
+    "agentStart": "Agent 開始",
+    "agentEnd": "Agent 完了",
+    "agentPrepare": "Agent リクエスト準備",
+    "agentComplete": "モデルリクエスト完了",
+    "agentToolCall": "ツール呼び出し",
+    "agentToolResult": "ツール応答",
+    "responseReady": "レスポンス準備完了",
+    "responseSent": "レスポンス送信"
+  }
 }
