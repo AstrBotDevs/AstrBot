@@ -82,8 +82,25 @@ class SQLiteDatabase(BaseDatabase):
         super().__init__()
 
     async def initialize(self) -> None:
-        """Initialize the database by creating tables if they do not exist."""
+        """Initialize a compatible database without masking a newer schema.
+
+        Raises:
+            RuntimeError: The database uses a newer conversation storage format.
+        """
         async with self.engine.begin() as conn:
+            if (
+                await conn.execute(
+                    text(
+                        "SELECT 1 FROM sqlite_master "
+                        "WHERE type = 'table' AND name = 'conversations_v3'"
+                    )
+                )
+            ).first():
+                raise RuntimeError(
+                    "This database uses the newer conversations_v3 schema, which "
+                    "this AstrBot version cannot read. Use a compatible version; "
+                    "switching to older code does not migrate conversations back."
+                )
             await conn.run_sync(SQLModel.metadata.create_all)
             await conn.execute(text("PRAGMA journal_mode=WAL"))
             await conn.execute(text("PRAGMA busy_timeout=30000"))

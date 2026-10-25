@@ -1,12 +1,13 @@
 """Adapter cleanup must respect selections and exact ownership boundaries."""
 
 import asyncio
+import sqlite3
 from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from sqlmodel import select
+from sqlmodel import select, text
 
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.cron.manager import CronJobManager
@@ -23,6 +24,71 @@ from astrbot.core.umop_config_router import UmopConfigRouter
 from astrbot.core.utils.shared_preferences import SharedPreferences
 from astrbot.dashboard.services import bot_cleanup_service, config_service
 from astrbot.dashboard.services.bot_cleanup_service import delete_bot_data
+
+
+@pytest.mark.asyncio
+async def test_older_database_code_rejects_newer_conversation_schema(temp_db):
+    """Reject a downgrade before creating an empty legacy conversation table.
+
+    Args:
+        temp_db: Isolated database that has not been initialized yet.
+    """
+    with sqlite3.connect(temp_db.db_path) as connection:
+        connection.execute(
+            "CREATE TABLE conversations_v3 (id INTEGER PRIMARY KEY, umo TEXT)"
+        )
+        connection.executemany(
+            "INSERT INTO conversations_v3 (umo) VALUES (?)",
+            [("onebotv11:GroupMessage:1",), ("Telegram:FriendMessage:2",)],
+        )
+    with pytest.raises(RuntimeError, match="newer conversations_v3 schema"):
+        await temp_db.initialize()
+    with sqlite3.connect(temp_db.db_path) as connection:
+        assert (
+            connection.execute("SELECT COUNT(*) FROM conversations_v3").fetchone()[0]
+            == 2
+        )
+        assert (
+            connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='conversations'"
+            ).fetchone()
+            is None
+        )
+
+
+@pytest.mark.asyncio
+async def test_cleanup_rejects_newer_schema_before_any_data_mutation(
+    temp_db, monkeypatch
+):
+    """Detect a schema change even after an older process initialized its DB.
+
+    Args:
+        temp_db: Isolated legacy database.
+        monkeypatch: Pytest patch manager.
+    """
+    async with temp_db.get_db() as session:
+        await session.execute(
+            text("CREATE TABLE conversations_v3 (id INTEGER PRIMARY KEY, umo TEXT)")
+        )
+        await session.execute(
+            text(
+                "INSERT INTO conversations_v3 (umo) VALUES ('Telegram:FriendMessage:2')"
+            )
+        )
+        await session.commit()
+    preferences = SimpleNamespace(flush=AsyncMock())
+    monkeypatch.setattr(bot_cleanup_service, "sp", preferences)
+    with pytest.raises(ValueError, match="conversations_v3"):
+        await delete_bot_data(
+            SimpleNamespace(db=temp_db),
+            "onebotv11",
+            {"conversations", "preferences", "cron_jobs"},
+        )
+    preferences.flush.assert_not_awaited()
+    async with temp_db.get_db() as session:
+        assert (
+            await session.execute(text("SELECT COUNT(*) FROM conversations_v3"))
+        ).scalar_one() == 1
 
 
 @pytest.mark.asyncio
