@@ -425,12 +425,12 @@
           "hint": "When history exceeds 'Max Turns Before Compression' and LLM compression is unavailable, discard this many oldest turns at once. Request-time truncation also reuses this value."
         },
         "overflow_strategy": {
-          "description": "Handling for History Limits or Context Window Pressure",
+          "description": "Compression Strategy",
           "labels": [
             "Truncate by Turns",
             "Compress by LLM"
           ],
-          "hint": "Persistent conversation history uses this strategy only after exceeding 'Max Turns Before Compression'. Before each request, the same strategy may also protect the in-flight context when tokens approach the model window."
+          "hint": "Strategy for handling model context limits."
         },
         "instruction": {
           "description": "Context Compression Instruction",
@@ -441,8 +441,8 @@
           "hint": "Keep recent exact context by current context token ratio, from 0-0.3. 0.15 means keeping 15%; values above 0 keep at least the latest round."
         },
         "provider_id": {
-          "description": "Model Provider ID for Context Compression",
-          "hint": "When left empty, the current chat model will be used for compression. If the model is unavailable or compression fails, AstrBot falls back to the 'Truncate by Turns' strategy."
+          "description": "Compression Model",
+          "hint": "The model used for context compression. Defaults to the current chat model."
         },
         "fallback_max_tokens": {
           "description": "Fallback context window size",
