@@ -112,7 +112,20 @@
                   density="compact"
                   hide-details
                   clearable
-                />
+                >
+                  <template #append-inner>
+                    <v-btn
+                      icon="mdi-refresh"
+                      variant="text"
+                      size="x-small"
+                      :loading="loading"
+                      :disabled="loading"
+                      :aria-label="t('core.common.umoSelector.refresh')"
+                      :title="t('core.common.umoSelector.refresh')"
+                      @click.stop="loadUmos"
+                    />
+                  </template>
+                </v-text-field>
                 <v-progress-linear
                   v-if="loading"
                   indeterminate

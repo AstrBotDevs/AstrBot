@@ -102,6 +102,7 @@
     "clear": "清空选择",
     "remove": "移除 {umo}",
     "known": "已记录的会话来源",
+    "refresh": "刷新",
     "manual": "手动输入",
     "search": "搜索群名、昵称、别名或 UMO",
     "loadError": "无法加载会话，请重试。",

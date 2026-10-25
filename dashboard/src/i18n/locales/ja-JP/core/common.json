@@ -102,6 +102,7 @@
     "clear": "選択をクリア",
     "remove": "{umo} を削除",
     "known": "記録済みの会話の送信元",
+    "refresh": "更新",
     "manual": "UMO を入力",
     "search": "名前、別名、UMO で検索",
     "loadError": "会話を読み込めませんでした。再試行するか UMO を入力してください。",

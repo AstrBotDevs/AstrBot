@@ -102,6 +102,7 @@
     "clear": "Clear selection",
     "remove": "Remove {umo}",
     "known": "Recorded session sources",
+    "refresh": "Refresh",
     "manual": "Enter UMO",
     "search": "Search names, aliases or UMO",
     "loadError": "Could not load sessions. Please retry.",
