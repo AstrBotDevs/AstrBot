@@ -2554,6 +2554,7 @@ export const listActiveUmos = <ThrowOnError extends boolean = false>(options?: O
 
 /**
  * Search known senders with source session names
+ * Search recorded senders, deduplicate by platform instance and sender ID, then paginate in descending update order. Returns senders, page and has_more in the data object. Historical messages are not backfilled.
  */
 export const listSessionSenders = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<ListSessionSendersData, ThrowOnError>) => {
     return (options?.client ?? client).get<ListSessionSendersResponse, ListSessionSendersError, ThrowOnError>({

@@ -1,6 +1,7 @@
 """Persistence and lookup behavior for sender suggestions."""
 
 import asyncio
+from datetime import datetime
 from unittest.mock import MagicMock
 
 import pytest
@@ -131,3 +132,60 @@ async def test_sender_candidates_deduplicate_platform_and_id_before_limiting(tem
     resolved = await temp_db.get_umo_senders(sender_ids=["123"])
     assert len(resolved) == 1
     assert resolved[0][0].umo == "qq-2:FriendMessage:123"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("search", ["", "Alice"])
+async def test_sender_pages_deduplicate_before_offset_and_preserve_tie_order(
+    temp_db, search
+):
+    """Page matching identities once each, with stable ordering for equal timestamps."""
+    for index in range(6):
+        await temp_db.upsert_umo_sender(
+            "qq:GroupMessage:room", str(index), f"Alice {index}"
+        )
+    await temp_db.upsert_umo_sender("qq:GroupMessage:other", "5", "Alice newer")
+    await temp_db.upsert_umo_sender("qq-2:GroupMessage:room", "5", "Alice another bot")
+    async with temp_db.get_db() as session:
+        async with session.begin():
+            records = (await session.execute(select(UmoSender))).scalars().all()
+            for sender in records:
+                sender.updated_at = datetime(2026, 10, 25)
+    service = SessionManagementService(MagicMock(), temp_db)
+    results = []
+    for page in range(1, 5):
+        response = await service.list_senders(search, limit=2, page=page)
+        assert response["page"] == page
+        assert response["has_more"] == (page < 4)
+        results.extend(
+            (sender["platform"], sender["sender_id"]) for sender in response["senders"]
+        )
+    assert results == [("qq-2", "5")] + [
+        ("qq", str(index)) for index in range(5, -1, -1)
+    ]
+    assert (await service.list_senders(search, limit=2, page=5)) == {
+        "page": 5,
+        "has_more": False,
+        "senders": [],
+    }
+    if search:
+        assert (await service.list_senders("missing", limit=2))["senders"] == []
+
+
+@pytest.mark.asyncio
+async def test_exact_sender_resolution_supports_paging(temp_db):
+    """Keep exact-ID hydration deduplicated and expose a correct final page."""
+    for index in range(3):
+        await temp_db.upsert_umo_sender(
+            "qq:GroupMessage:room", str(index), f"User {index}"
+        )
+    await temp_db.upsert_umo_sender("qq:GroupMessage:other", "2", "Latest")
+    service = SessionManagementService(MagicMock(), temp_db)
+    first = await service.list_senders(limit=2, sender_ids=["0", "1", "2"])
+    second = await service.list_senders(limit=2, sender_ids=["0", "1", "2"], page=2)
+    assert [sender["sender_id"] for sender in first["senders"]] == ["2", "1"]
+    assert first["has_more"] is True
+    assert [sender["sender_id"] for sender in second["senders"]] == ["0"]
+    assert second["has_more"] is False
+    empty = await service.list_senders(sender_ids=[])
+    assert empty == {"page": 1, "has_more": False, "senders": []}

@@ -1028,8 +1028,8 @@ export const fileApi = {
 };
 
 export const sessionApi = {
-  senders(params?: { search?: string; limit?: number; sender_ids?: string[] }) {
-    return typed<{ senders: Array<{
+  senders(params?: { search?: string; limit?: number; page?: number; sender_ids?: string[] }) {
+    return typed<{ page: number; has_more: boolean; senders: Array<{
       umo: string;
       sender_id: string;
       sender_name: string;

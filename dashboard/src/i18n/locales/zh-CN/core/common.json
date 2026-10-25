@@ -115,6 +115,9 @@
   "list": {
     "senderSearch": "搜索昵称或发送者 ID",
     "senderRefresh": "刷新",
+    "senderPreviousPage": "上一页",
+    "senderNextPage": "下一页",
+    "senderPage": "第 {page} 页",
     "senderHint": "按昵称、ID 或来源会话搜索和选择指定用户。可以对机器人使用 /sid 指令获取自己在某个消息平台的用户 ID。",
     "senderManage": "选择用户",
     "senderTitle": "选择用户",

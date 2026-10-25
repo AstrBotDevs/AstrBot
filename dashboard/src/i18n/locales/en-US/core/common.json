@@ -115,6 +115,9 @@
   "list": {
     "senderSearch": "Search by nickname or sender ID",
     "senderRefresh": "Refresh",
+    "senderPreviousPage": "Previous page",
+    "senderNextPage": "Next page",
+    "senderPage": "Page {page}",
     "senderHint": "Search by nickname, ID or source session to select users. Use the /sid command with the bot to get your user ID on a messaging platform.",
     "senderManage": "Select users",
     "senderTitle": "Select users",

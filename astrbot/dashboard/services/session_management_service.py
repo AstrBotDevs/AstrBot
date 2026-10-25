@@ -112,22 +112,29 @@ class SessionManagementService:
         }
 
     async def list_senders(
-        self, search: str = "", limit: int = 50, sender_ids: list[str] | None = None
+        self,
+        search: str = "",
+        limit: int = 50,
+        sender_ids: list[str] | None = None,
+        page: int = 1,
     ) -> dict:
         """Find sender IDs with names and source session metadata.
 
         Args:
             search: Substring matched against sender and session names or IDs.
-            limit: Maximum number of results to return.
+            limit: Maximum number of results per page.
             sender_ids: Resolve the latest record for each exact sender ID.
+            page: One-based page of deduplicated results.
 
         Returns:
-            Sender suggestions containing the raw ID and resolved session name.
+            Sender suggestions, current page, and whether another page exists.
         """
         records = await self.db_helper.get_umo_senders(
-            search.strip(), limit, sender_ids
+            search.strip(), limit + 1, sender_ids, offset=(page - 1) * limit
         )
         return {
+            "page": page,
+            "has_more": len(records) > limit,
             "senders": [
                 {
                     "sender_id": sender.sender_id,
@@ -136,8 +143,8 @@ class SessionManagementService:
                         sender.umo, {sender.umo: alias} if alias else {}
                     ),
                 }
-                for sender, alias in records
-            ]
+                for sender, alias in records[:limit]
+            ],
         }
 
     async def get_umos_by_scope(

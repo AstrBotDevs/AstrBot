@@ -2369,7 +2369,11 @@ class SQLiteDatabase(BaseDatabase):
                 await session.execute(statement)
 
     async def get_umo_senders(
-        self, search: str = "", limit: int = 50, sender_ids: list[str] | None = None
+        self,
+        search: str = "",
+        limit: int = 50,
+        sender_ids: list[str] | None = None,
+        offset: int = 0,
     ) -> list[tuple[UmoSender, UmoAlias | None]]:
         """Search sender metadata joined to session aliases.
 
@@ -2377,6 +2381,7 @@ class SQLiteDatabase(BaseDatabase):
             search: Literal substring matched against sender and session metadata.
             limit: Maximum number of results to return.
             sender_ids: Resolve the latest record per exact sender ID when provided.
+            offset: Number of deduplicated results to skip.
 
         Returns:
             The latest matching sender and optional alias per platform and sender
@@ -2425,9 +2430,11 @@ class SQLiteDatabase(BaseDatabase):
         query = query.where(
             col(UmoSender.id).in_(select(ranked.c.id).where(ranked.c.rank == 1))
         )
-        query = query.order_by(
-            col(UmoSender.updated_at).desc(), col(UmoSender.id).desc()
-        ).limit(limit)
+        query = (
+            query.order_by(col(UmoSender.updated_at).desc(), col(UmoSender.id).desc())
+            .offset(offset)
+            .limit(limit)
+        )
         async with self.get_db() as session:
             result = await session.execute(query)
             return [(sender, alias) for sender, alias in result.all()]

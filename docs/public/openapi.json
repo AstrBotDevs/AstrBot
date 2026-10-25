@@ -6105,9 +6105,13 @@
           "Sessions"
         ],
         "summary": "Search known senders with source session names",
+        "description": "Search recorded senders, deduplicate by platform instance and sender ID, then paginate in descending update order. Returns senders, page and has_more in the data object. Historical messages are not backfilled.\n\n**Required scope:** `data`",
         "operationId": "listSessionSenders",
         "x-astrbot-scope": "data",
         "parameters": [
+          {
+            "$ref": "#/components/parameters/Page"
+          },
           {
             "name": "sender_ids",
             "in": "query",
@@ -6143,8 +6147,7 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        },
-        "description": "**Required scope:** `data`"
+        }
       }
     },
     "/api/v1/sessions/rules": {

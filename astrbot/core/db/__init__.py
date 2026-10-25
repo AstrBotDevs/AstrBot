@@ -913,7 +913,11 @@ class BaseDatabase(abc.ABC):
 
     @abc.abstractmethod
     async def get_umo_senders(
-        self, search: str = "", limit: int = 50, sender_ids: list[str] | None = None
+        self,
+        search: str = "",
+        limit: int = 50,
+        sender_ids: list[str] | None = None,
+        offset: int = 0,
     ) -> list[tuple[UmoSender, UmoAlias | None]]:
         """Search senders with optional session alias metadata.
 
@@ -921,6 +925,7 @@ class BaseDatabase(abc.ABC):
             search: Substring matched against sender and session names or IDs.
             limit: Maximum number of results to return.
             sender_ids: Resolve the latest record per exact sender ID when provided.
+            offset: Number of deduplicated results to skip.
 
         Returns:
             Latest matching sender and optional alias pairs per platform and

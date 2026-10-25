@@ -97,7 +97,7 @@ API Key、访问令牌和密码等敏感字符串应设置 `"secret": true`。�
 
 - `select_provider`、`select_provider_tts`、`select_provider_stt`、`select_persona` 的结果为字符串。
 - `select_knowledgebase` 的结果为 `list` 类型，支持多选，建议将对应配置项的 `type` 设为 `list`，默认值设为 `[]`。
-- `sender_id` 打开“选择用户”弹窗，按昵称、ID 或来源会话搜索，结果仅保存用户 ID 列表。配置项应使用 `type: list`，默认值为 `[]`。
+- `sender_id` 打开“选择用户”弹窗，按昵称、ID 或来源会话搜索，结果仅保存用户 ID 列表。配置项应使用 `type: list`，默认值为 `[]`。 列表每页显示 50 条，支持上一页、下一页和跨页选择；搜索或刷新会回到第一页。只搜索已记录的用户，不回填历史消息。
 - `umo` 打开“选择会话来源”弹窗，按群名、昵称、别名或 UMO 搜索。使用 `type: string`、默认值 `""` 时单选并保存完整 UMO 字符串；使用 `type: list`、默认值 `[]` 时多选并保存 UMO 列表。
 
 例如，在 `_conf_schema.json` 中添加：

@@ -194,6 +194,32 @@
                   {{ t("core.common.list.senderAddId", { id: search.trim() }) }}
                 </v-btn>
               </div>
+              <div
+                v-if="page > 1 || hasMore"
+                class="d-flex align-center justify-center ga-2 mt-2"
+              >
+                <v-btn
+                  icon="mdi-chevron-left"
+                  variant="text"
+                  size="small"
+                  :disabled="loading || page === 1"
+                  :aria-label="t('core.common.list.senderPreviousPage')"
+                  :title="t('core.common.list.senderPreviousPage')"
+                  @click="page--"
+                />
+                <span class="text-body-2 text-medium-emphasis">
+                  {{ t("core.common.list.senderPage", { page }) }}
+                </span>
+                <v-btn
+                  icon="mdi-chevron-right"
+                  variant="text"
+                  size="small"
+                  :disabled="loading || failed || !hasMore"
+                  :aria-label="t('core.common.list.senderNextPage')"
+                  :title="t('core.common.list.senderNextPage')"
+                  @click="page++"
+                />
+              </div>
             </div>
           </v-col>
         </v-row>
@@ -237,6 +263,16 @@ const loading = ref(false);
 const failed = ref(false);
 const refreshVersion = ref(0);
 const botTypes = ref({});
+const page = ref(1);
+const hasMore = ref(false);
+
+watch(
+  [search, refreshVersion],
+  () => {
+    page.value = 1;
+  },
+  { flush: "sync" },
+);
 
 watch(dialog, async (opened, _previous, onCleanup) => {
   if (!opened) return;
@@ -261,6 +297,7 @@ const canAddSearch = computed(
     dialog.value &&
     !props.readonly &&
     !loading.value &&
+    page.value === 1 &&
     !suggestions.value.length &&
     Boolean((search.value || "").trim()) &&
     !draft.value.includes(search.value.trim()),
@@ -293,8 +330,8 @@ watch(
 );
 
 watch(
-  [dialog, search, refreshVersion],
-  ([opened, value, version], previous, onCleanup) => {
+  [dialog, search, refreshVersion, page],
+  ([opened, value, version, currentPage], previous, onCleanup) => {
     if (!opened) return;
     let active = true;
     loading.value = true;
@@ -306,18 +343,23 @@ watch(
           const response = await sessionApi.senders({
             search: value || "",
             limit: 50,
+            page: currentPage,
           });
           if (!active) return;
           if (response.data.status !== "ok")
             throw new Error(response.data.message);
           suggestions.value = response.data.data.senders;
+          hasMore.value = response.data.data.has_more;
         } catch {
-          if (active) failed.value = true;
+          if (active) {
+            failed.value = true;
+            hasMore.value = false;
+          }
         } finally {
           if (active) loading.value = false;
         }
       },
-      value && version === previous[2] ? 250 : 0,
+      value && value !== previous[1] && version === previous[2] ? 250 : 0,
     );
     onCleanup(() => {
       active = false;
@@ -334,6 +376,7 @@ function openDialog() {
     ),
   ];
   search.value = "";
+  page.value = 1;
   dialog.value = true;
 }
 

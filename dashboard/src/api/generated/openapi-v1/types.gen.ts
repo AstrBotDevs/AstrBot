@@ -3226,6 +3226,7 @@ export type ListActiveUmosError = unknown;
 export type ListSessionSendersData = {
     query?: {
         limit?: number;
+        page?: number;
         search?: string;
         /**
          * Resolve the latest record per exact sender ID instead of returning all source sessions.

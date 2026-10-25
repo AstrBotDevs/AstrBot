@@ -115,6 +115,7 @@ async def list_active_umos(
 async def list_session_senders(
     search: str = Query("", max_length=512),
     limit: int = Query(50, ge=1, le=100),
+    page: int = Query(1, ge=1),
     sender_ids: list[str] | None = Query(None, max_length=100),
     _auth: AuthContext = Depends(require_data_scope),
     service: SessionManagementService = Depends(get_service),
@@ -123,7 +124,8 @@ async def list_session_senders(
 
     Args:
         search: Substring matched against sender and session metadata.
-        limit: Maximum number of suggestions to return.
+        limit: Maximum number of suggestions per page.
+        page: One-based page of deduplicated suggestions.
         sender_ids: Resolve the latest record for each exact sender ID.
         _auth: Authenticated caller with the data scope.
         service: Session management service.
@@ -132,7 +134,7 @@ async def list_session_senders(
         Response envelope containing sender suggestions.
     """
     return await _run(
-        lambda: service.list_senders(search, limit, sender_ids),
+        lambda: service.list_senders(search, limit, sender_ids, page),
         label="Failed to list session senders",
     )
 

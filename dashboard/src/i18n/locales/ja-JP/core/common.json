@@ -115,6 +115,9 @@
   "list": {
     "senderSearch": "ニックネームまたは送信者 ID で検索",
     "senderRefresh": "更新",
+    "senderPreviousPage": "前のページ",
+    "senderNextPage": "次のページ",
+    "senderPage": "{page} ページ",
     "senderHint": "ニックネーム、ID、会話で検索してユーザーを選択してください。ボットに /sid コマンドを送信すると、そのメッセージプラットフォームでの自分のユーザー ID を確認できます。",
     "senderManage": "ユーザーを選択",
     "senderTitle": "ユーザーを選択",

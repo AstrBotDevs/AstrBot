@@ -4198,9 +4198,14 @@ paths:
     get:
       tags: [Sessions]
       summary: Search known senders with source session names
+      description: >-
+        Search recorded senders, deduplicate by platform instance and sender ID,
+        then paginate in descending update order. Returns senders, page and
+        has_more in the data object. Historical messages are not backfilled.
       operationId: listSessionSenders
       x-astrbot-scope: data
       parameters:
+        - $ref: "#/components/parameters/Page"
         - name: sender_ids
           in: query
           description: Resolve the latest record per exact sender ID instead of returning all source sessions.
