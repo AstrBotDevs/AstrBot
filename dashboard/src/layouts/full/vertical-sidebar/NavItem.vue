@@ -1,13 +1,16 @@
 <script setup>
 import { useI18n } from '@/i18n/composables';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useRoute } from 'vue-router';
-import { AppWindow, Pin, PinOff, Puzzle, User } from '@lucide/vue';
+import { AppWindow, CircleHelp, Pin, PinOff, Puzzle, User, X } from '@lucide/vue';
+import { useDisplay } from 'vuetify';
 
 const props = defineProps({ item: Object, level: Number, rail: Boolean, pinnable: Boolean, pinnedTos: Array });
 const emit = defineEmits(['togglePin']);
 const { t } = useI18n();
 const route = useRoute();
+const { smAndDown: isMobile } = useDisplay();
+const pluginInfoMenuOpen = ref(false);
 
 const itemStyle = computed(() => {
   const lvl = props.level ?? 0;
@@ -51,7 +54,11 @@ const isVuetifyIcon = computed(() => typeof props.item?.icon === 'string');
 </script>
 
 <template>
-  <v-list-group v-if="item.children" :value="item.title" :class="{ 'rail-group': rail }">
+  <v-list-group
+    v-if="item.children"
+    :value="item.value || item.title"
+    :class="{ 'rail-group': rail }"
+  >
     <template v-slot:activator="{ props: groupProps }">
       <v-tooltip
         v-if="rail"
@@ -86,7 +93,10 @@ const isVuetifyIcon = computed(() => typeof props.item?.icon === 'string');
     </template>
 
     <!-- children -->
-    <template v-for="(child, index) in item.children" :key="child.title || child.to || `child-${index}`">
+    <template
+      v-for="(child, index) in item.children"
+      :key="child.to || child.value || child.title || `child-${index}`"
+    >
       <NavItem
         :item="child"
         :level="(level || 0) + 1"
@@ -130,7 +140,7 @@ const isVuetifyIcon = computed(() => typeof props.item?.icon === 'string');
 
   <v-tooltip
     v-else
-    :disabled="!item.pluginInfo"
+    :disabled="!item.pluginInfo || isMobile"
     location="right"
     :open-delay="0"
     content-class="plugin-page-hover-card"
@@ -147,7 +157,54 @@ const isVuetifyIcon = computed(() => typeof props.item?.icon === 'string');
         <v-list-item-subtitle v-if="item.subCaption" class="text-caption mt-n1 hide-menu">
           {{ item.subCaption }}
         </v-list-item-subtitle>
-        <template v-slot:append v-if="item.chip || (pinnable && !rail)">
+        <template v-slot:append v-if="item.chip || (pinnable && !rail) || (item.pluginInfo && isMobile)">
+          <v-menu
+            v-if="item.pluginInfo && isMobile"
+            v-model="pluginInfoMenuOpen"
+            location="bottom"
+            :offset="6"
+            :close-on-content-click="false"
+            content-class="plugin-page-mobile-menu"
+          >
+            <template #activator="{ props: menuProps }">
+              <button
+                v-bind="menuProps"
+                type="button"
+                class="nav-item-plugin-info"
+                :aria-label="t('core.navigation.pluginViewType')"
+                @click.stop.prevent
+              >
+                <CircleHelp :size="18" />
+              </button>
+            </template>
+            <div class="plugin-hover-card plugin-hover-card--mobile">
+              <button
+                type="button"
+                class="plugin-hover-card__close"
+                :aria-label="t('core.actions.close')"
+                @click="pluginInfoMenuOpen = false"
+              >
+                <X :size="18" />
+              </button>
+              <div class="plugin-hover-card__title">{{ itemTitle }}</div>
+              <div class="plugin-hover-card__row">
+                <Puzzle :size="13" class="plugin-hover-card__icon" />
+                <template v-if="pluginDisplayName">
+                  <span class="plugin-hover-card__name">{{ pluginDisplayName }}</span>
+                  <span class="plugin-hover-card__id">({{ item.pluginInfo.id }})</span>
+                </template>
+                <span v-else class="plugin-hover-card__id">{{ item.pluginInfo.id }}</span>
+              </div>
+              <div v-if="item.pluginInfo.author" class="plugin-hover-card__row">
+                <User :size="13" class="plugin-hover-card__icon" />
+                <span>{{ item.pluginInfo.author }}</span>
+              </div>
+              <div class="plugin-hover-card__row">
+                <AppWindow :size="13" class="plugin-hover-card__icon" />
+                <span>{{ t('core.navigation.pluginViewType') }}</span>
+              </div>
+            </div>
+          </v-menu>
           <v-chip :color="item.chipColor" class="sidebarchip hide-menu" :size="item.chipIcon ? 'small' : 'default'"
             :variant="item.chipVariant" :prepend-icon="item.chipIcon" v-if="item.chip">
             {{ item.chip }}
@@ -182,7 +239,7 @@ const isVuetifyIcon = computed(() => typeof props.item?.icon === 'string');
       </div>
       <div class="plugin-hover-card__row">
         <AppWindow :size="13" class="plugin-hover-card__icon" />
-        <span>{{ t('core.navigation.pluginPageType') }}</span>
+        <span>{{ t('core.navigation.pluginViewType') }}</span>
       </div>
     </div>
   </v-tooltip>
@@ -221,6 +278,56 @@ const isVuetifyIcon = computed(() => typeof props.item?.icon === 'string');
   line-height: 20px;
 }
 
+.plugin-hover-card--mobile {
+  position: relative;
+  width: min(360px, calc(100vw - 32px));
+  padding: 12px 38px 12px 14px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  border-radius: 12px;
+  background: rgb(var(--v-theme-surface));
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.12),
+    0 2px 6px rgba(0, 0, 0, 0.08);
+  color: rgb(var(--v-theme-on-surface));
+  white-space: normal;
+}
+
+.v-overlay__content.plugin-page-mobile-menu {
+  max-width: calc(100vw - 32px);
+}
+
+.plugin-hover-card__close {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: rgba(var(--v-theme-on-surface), 0.55);
+  cursor: pointer;
+}
+
+.plugin-hover-card__close:hover {
+  background: rgba(var(--v-theme-on-surface), 0.08);
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.nav-item-plugin-info {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: rgba(var(--v-theme-on-surface), 0.55);
+  cursor: pointer;
+}
+
 .plugin-hover-card__row {
   display: flex;
   align-items: center;
@@ -244,6 +351,7 @@ const isVuetifyIcon = computed(() => typeof props.item?.icon === 'string');
 .plugin-hover-card__id {
   color: rgba(var(--v-theme-on-surface), 0.55);
   font-family: monospace;
+  overflow-wrap: anywhere;
 }
 
 .nav-item-pin {

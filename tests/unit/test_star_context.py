@@ -22,9 +22,8 @@ from astrbot.core.tools.computer_tools.util import LOCAL_NETWORK_POLICY_NOTICE
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "tool_class", [LocalExecuteShellTool, LocalPythonTool, ShellSessionTool]
-)
+@pytest.mark.parametrize("tool_class", [LocalExecuteShellTool, LocalPythonTool, ShellSessionTool])
+@pytest.mark.parametrize("isolation_status", ["detected", "unavailable"])
 @pytest.mark.parametrize(
     ("runtime", "allow_network", "tool_state", "existing_notice", "expected_count"),
     [
@@ -46,7 +45,13 @@ async def test_tool_loop_agent_adds_network_policy_to_system_prompt(
     existing_notice,
     expected_count,
     tool_class,
+    isolation_status,
 ):
+    monkeypatch.setattr(
+        "astrbot.core.tools.computer_tools.util.get_process_sandbox_status",
+        lambda: {"status": isolation_status},
+    )
+
     async def finished_steps(_max_steps):
         for response in ():
             yield response
@@ -100,7 +105,11 @@ async def test_tool_loop_agent_adds_network_policy_to_system_prompt(
 
     request = runner.reset.await_args.kwargs["request"]
     assert request.system_prompt.startswith("Agent instructions.")
+    if isolation_status != "detected" and not existing_notice:
+        expected_count = 0
     assert request.system_prompt.count(LOCAL_NETWORK_POLICY_NOTICE) == expected_count
+    assert "The Agent Computer Use runtime is the local environment" not in request.system_prompt
+    assert "These restrictions require Local process isolation" not in request.system_prompt
     context.get_config.assert_not_called()
     if tool_state == "active":
         agent_config.get_config.assert_called_with(umo="agent-test")

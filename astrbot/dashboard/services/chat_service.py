@@ -63,6 +63,18 @@ def sanitize_upload_filename(filename: str | None) -> str:
     return name
 
 
+def unique_attachment_filename(filename: str) -> str:
+    # Pasted screenshots are all named "image.png", so prefix the stored name
+    # to keep uploads apart, and stay within the 255-byte filename limit.
+    prefix = f"{generate_timestamp_id()}_"
+    budget = 255 - len(prefix.encode())
+    stem, suffix = os.path.splitext(filename)
+    if len(suffix.encode()) >= budget:
+        stem, suffix = filename, ""
+    stem = stem.encode()[: budget - len(suffix.encode())].decode(errors="ignore")
+    return f"{prefix}{stem}{suffix}"
+
+
 class LocalUploadFile:
     """Adapt a merged local file to the upload contract save_uploaded_file() consumes.
 
@@ -264,6 +276,11 @@ def extract_web_search_refs(accumulated_text: str, accumulated_parts: list) -> d
         "web_search_tavily",
         "web_search_bocha",
         "web_search_brave",
+        "web_search_deepseek",
+        "web_search_serpapi",
+        "image_search_serpapi",
+        "finance_search_serpapi",
+        "scholar_search_serpapi",
     ]
     web_search_results = {}
     tool_call_parts = [
@@ -649,7 +666,9 @@ class ChatService:
             attach_type = "file"
 
         attachments_dir = Path(self.attachments_dir).resolve(strict=False)
-        file_path = (attachments_dir / filename).resolve(strict=False)
+        file_path = (attachments_dir / unique_attachment_filename(filename)).resolve(
+            strict=False
+        )
         if not file_path.is_relative_to(attachments_dir):
             raise ChatServiceError("Invalid filename")
 
@@ -676,6 +695,7 @@ class ChatService:
                         )
                     await asyncio.to_thread(file_path.rename, target_path)
                     file_path = target_path
+                    filename = os.path.splitext(filename)[0] + detected_suffix
         attachment = await self.db.insert_attachment(
             path=str(file_path),
             type=attach_type,
@@ -687,7 +707,8 @@ class ChatService:
 
         return {
             "attachment_id": attachment.attachment_id,
-            "filename": os.path.basename(attachment.path),
+            "filename": filename,
+            "stored_filename": os.path.basename(attachment.path),
             "type": attach_type,
         }
 
@@ -1273,23 +1294,23 @@ class ChatService:
             )
 
         if platform_history_id == "webchat":
-            try:
-                platform_session = await self.db.get_platform_session_by_id(
-                    webchat_conv_id
-                )
-                if platform_session is None:
+            platform_session = await self.db.get_platform_session_by_id(webchat_conv_id)
+            if platform_session is not None and platform_session.creator != username:
+                raise ChatServiceError("Permission denied")
+            if platform_session is None:
+                try:
                     await self.db.create_platform_session(
                         creator=username,
                         platform_id="webchat",
                         session_id=webchat_conv_id,
                         is_group=0,
                     )
-            except Exception as exc:
-                logger.warning(
-                    "Failed to ensure WebChat platform session %s: %s",
-                    webchat_conv_id,
-                    exc,
-                )
+                except Exception as exc:
+                    logger.warning(
+                        "Failed to create WebChat platform session %s: %s",
+                        webchat_conv_id,
+                        exc,
+                    )
 
         message_id = str(uuid.uuid4())
         llm_checkpoint_id = post_data.get("_llm_checkpoint_id") or str(uuid.uuid4())
@@ -1342,6 +1363,7 @@ class ChatService:
                         "selected_provider": selected_provider,
                         "selected_model": selected_model,
                         "flags": flags,
+                        "locale": post_data.get("locale"),
                         "message_id": message_id,
                         "llm_checkpoint_id": llm_checkpoint_id,
                         "thread_selected_text": thread_selected_text,
@@ -1778,6 +1800,7 @@ class ChatService:
             "session_id": thread.thread_id,
             "message": data.get("message", []),
             "flags": resolve_webchat_request_flags(data),
+            "locale": data.get("locale"),
             "selected_provider": data.get("selected_provider"),
             "selected_model": data.get("selected_model"),
             "_platform_history_id": "webchat_thread",
@@ -2016,6 +2039,7 @@ class ChatService:
             "session_id": session_id,
             "message": source_user_record.content.get("message", []),
             "flags": resolve_webchat_request_flags(data),
+            "locale": data.get("locale"),
             "selected_provider": data.get("selected_provider"),
             "selected_model": data.get("selected_model"),
             "_skip_user_history": True,
