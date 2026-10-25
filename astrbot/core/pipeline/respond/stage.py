@@ -12,6 +12,7 @@ from astrbot.core.platform.astr_message_event import (
     streaming_response_event,
 )
 from astrbot.core.star.star_handler import EventType
+from astrbot.core.utils.error_redaction import sanitize_control_chars
 from astrbot.core.utils.path_util import path_Mapping
 from astrbot.core.utils.telemetry import bounded_text
 
@@ -235,7 +236,8 @@ class RespondStage(Stage):
             return
 
         logger.info(
-            f"Prepare to send - {event.get_sender_name()}/{event.get_sender_id()}: {event._outline_chain(result.chain)}",
+            f"Prepare to send - {sanitize_control_chars(event.get_sender_name())}/{sanitize_control_chars(event.get_sender_id())}: "
+            f"{sanitize_control_chars(event._outline_chain(result.chain))}",
             extra={"category": "user_chat"},
         )
         if result.result_content_type == ResultContentType.STREAMING_RESULT:

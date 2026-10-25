@@ -23,6 +23,17 @@ _BEARER_PATTERN = re.compile(r"(?i)(?P<prefix>\bbearer\s+)(?P<token>[A-Za-z0-9._
 _SK_PATTERN = re.compile(r"\bsk-[A-Za-z0-9]{16,}\b")
 
 
+def sanitize_control_chars(text: str | None) -> str:
+    """Escape terminal control characters before user-controlled text is logged."""
+    if text is None:
+        return ""
+    text = str(text)
+    return "".join(
+        f"\\x{ord(char):02x}" if ord(char) < 0x20 or 0x7F <= ord(char) <= 0x9F else char
+        for char in text
+    )
+
+
 def _redact_json_field(match: re.Match[str]) -> str:
     quote = match.group("vq")
     return f"{match.group('prefix')}{quote}[REDACTED]{quote}"
