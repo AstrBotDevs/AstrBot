@@ -24,7 +24,14 @@ _SK_PATTERN = re.compile(r"\bsk-[A-Za-z0-9]{16,}\b")
 
 
 def sanitize_control_chars(text: str | None) -> str:
-    """Escape terminal control characters before user-controlled text is logged."""
+    """Escape terminal control characters before user-controlled text is logged.
+
+    Args:
+        text: Text that may contain terminal control characters.
+
+    Returns:
+        The text with terminal control characters escaped as hexadecimal values.
+    """
     if text is None:
         return ""
     text = str(text)
