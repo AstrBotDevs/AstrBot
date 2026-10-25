@@ -122,6 +122,12 @@ After editing, click the disk icon labeled `Save Configuration` in the lower-rig
 
 Use the `{}` icon labeled `Edit Configuration File` to edit the current profile as JSON. Select `Apply This Configuration` to stage the changes in the visual editor, close the editor, and then select `Save Configuration`.
 
+### Advanced Provider Configuration
+
+Providers, model settings dialogs, and plugin configuration use the same form rows as Settings and Config: labels and descriptions appear on the left with controls on the right on desktop, and stack on narrow screens. Input styling, switch alignment, description text, and row spacing are shared.
+
+Open `Providers → Chat Completion` and select a provider on the left. Click `Advanced Configuration...` or the `>` arrow beside it to reveal settings such as timeout, proxy address, and custom request headers (available fields depend on the provider). This section is collapsed by default. The arrow points down when expanded; click the heading again to collapse it. Collapsing keeps unsaved edits; click the provider's `Save` button to save your changes.
+
 ### System Settings
 
 Global settings are under `System Settings` at the bottom of the sidebar:
@@ -144,6 +150,8 @@ Backups under `Maintenance` include session aliases, model usage statistics, Ope
 Select `Extensions` in the sidebar. The top tabs are `Plugins`, `Skills`, `MCP Servers`, and `Handlers`. Within `Plugins`, switch between `Installed` and `AstrBot Plugin Market` to view local and market plugins.
 
 On either plugin list, you can also click `Install Plugin` (+) in the bottom right corner to manually install plugins via URL or file upload.
+
+Click an installed plugin's gear button (`Extension Config`) to edit its parameters. The log level and plugin parameters use the shared form rows, with nested configuration and default-value reset controls preserved. Select `Save and Close` after editing parameters; the plugin log level saves automatically and takes effect immediately.
 
 > Due to the plugin update mechanism, the AstrBot Team cannot fully guarantee the security of plugins in the plugin market. Please carefully verify them. The AstrBot Team is not responsible for any losses caused by plugins.
 
