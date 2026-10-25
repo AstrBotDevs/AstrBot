@@ -115,6 +115,7 @@ async def list_session_rules(
     page: int = Query(1),
     page_size: int = Query(10),
     search: str = Query(""),
+    include_unconfigured: bool = Query(False),
     _auth: AuthContext = Depends(require_data_scope),
     service: SessionManagementService = Depends(get_service),
 ):
@@ -124,6 +125,7 @@ async def list_session_rules(
                 page=page,
                 page_size=page_size,
                 search=search.strip(),
+                include_unconfigured=include_unconfigured,
             )
         )
     except SessionManagementServiceError as exc:

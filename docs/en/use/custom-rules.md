@@ -31,6 +31,14 @@ Send `/sid` in the group or private chat you want to configure, then compare its
 
 Saved rules take effect without restarting AstrBot. The older **Session Management** and **More Features → Custom Rules** entry points now correspond to **Custom Rules** directly in the sidebar.
 
+## Sessions that have never messaged the bot
+
+By default, the rules list only contains sessions that have produced messages or already have rules. Turn on the **Show unconfigured sessions** switch above the list, and platforms that support enumeration (currently aiocqhttp / OneBot v11) will also list the groups and friends the current account has joined, marked as **Follow default**. You can add rules or run batch operations on them directly, without waiting for a first message.
+
+Enumeration results are cached for about 1 minute. If a platform does not support enumeration or the API call fails, the list gracefully falls back to known sessions only, and the per-platform failure reasons are returned in the `enumeration_errors` field.
+
+When per-member conversation isolation (unique_session) is enabled, a group member's UMO looks like `platform:GroupMessage:memberID_groupID`. Service toggles set on the **group-level UMO** (without the member ID suffix) act as a fallback for all members of that group: member-level rules take priority, unconfigured members follow the group-level setting, and if neither exists the default (enabled) applies.
+
 ## Available Settings
 
 | Section | Setting | Purpose |

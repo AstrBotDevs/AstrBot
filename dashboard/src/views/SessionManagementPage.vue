@@ -18,6 +18,15 @@
               class="me-4"
               density="compact"
             ></v-text-field>
+            <v-switch
+              v-model="showUnconfigured"
+              :label="tm('customRules.showUnconfigured')"
+              hide-details
+              density="compact"
+              color="primary"
+              class="ms-2 flex-grow-0"
+              @update:model-value="onToggleUnconfigured"
+            ></v-switch>
           </v-row>
           <v-btn v-if="selectedItems.length > 0" color="error" prepend-icon="mdi-delete" variant="tonal" @click="confirmBatchDelete" class="mr-2" size="small">
             {{ tm('buttons.batchDelete') }} ({{ selectedItems.length }})
@@ -78,6 +87,9 @@
                 </v-chip>
                 <v-chip v-if="hasProviderConfig(item.rules)" size="x-small" color="warning" variant="outlined">
                   {{ tm('customRules.providerConfig') }}
+                </v-chip>
+                <v-chip v-if="item.enumerated" size="x-small" color="grey" variant="outlined">
+                  {{ tm('customRules.followDefault') }}
                 </v-chip>
               </div>
             </template>
@@ -706,6 +718,7 @@ export default {
       loadingUmos: false,
       rulesList: [],
       searchQuery: '',
+      showUnconfigured: false,
 
       // 分页
       currentPage: 1,
@@ -1012,6 +1025,7 @@ export default {
           page: this.currentPage,
           page_size: this.itemsPerPage,
           search: this.searchQuery || '',
+          include_unconfigured: this.showUnconfigured,
         })
         if (response.data.status === 'ok') {
           const data = response.data.data
@@ -1042,6 +1056,12 @@ export default {
 
     onSearchChange() {
       // 搜索时重置到第一页
+      this.currentPage = 1
+      this.loadData()
+    },
+
+    onToggleUnconfigured() {
+      // 切换"显示未配置会话"时重置到第一页
       this.currentPage = 1
       this.loadData()
     },

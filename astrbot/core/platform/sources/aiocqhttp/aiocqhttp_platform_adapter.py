@@ -23,6 +23,7 @@ from astrbot.api.platform import (
 from astrbot.core.platform.astr_message_event import MessageSesion
 
 from ...register import register_platform_adapter
+from ...session_enumerator import SessionEnumerator, SessionEnumResult
 from .aiocqhttp_message_event import *
 from .aiocqhttp_message_event import AiocqhttpMessageEvent
 
@@ -32,7 +33,7 @@ from .aiocqhttp_message_event import AiocqhttpMessageEvent
     "适用于 OneBot V11 标准的消息平台适配器，支持反向 WebSockets。",
     support_streaming_message=False,
 )
-class AiocqhttpAdapter(Platform):
+class AiocqhttpAdapter(Platform, SessionEnumerator):
     def __init__(
         self,
         platform_config: dict,
@@ -511,3 +512,41 @@ class AiocqhttpAdapter(Platform):
 
     def get_client(self) -> CQHttp:
         return self.bot
+
+    async def enumerate_sessions(self) -> SessionEnumResult:
+        """通过 OneBot v11 API 枚举当前账号加入的群聊和好友列表。
+
+        任一接口失败时返回部分结果并在 error 中说明，调用方据此降级。
+        """
+        result = SessionEnumResult()
+        try:
+            groups = await asyncio.wait_for(
+                self.bot.call_action("get_group_list"), timeout=10.0
+            )
+            for g in groups or []:
+                gid = g.get("group_id")
+                if gid:
+                    result.groups.append(
+                        {"id": str(gid), "name": g.get("group_name") or str(gid)}
+                    )
+        except Exception as exc:
+            result.error = f"获取群列表失败: {exc!s}"
+
+        try:
+            friends = await asyncio.wait_for(
+                self.bot.call_action("get_friend_list"), timeout=10.0
+            )
+            for f in friends or []:
+                uid = f.get("user_id")
+                if uid:
+                    result.friends.append(
+                        {
+                            "id": str(uid),
+                            "name": f.get("remark") or f.get("nickname") or str(uid),
+                        }
+                    )
+        except Exception as exc:
+            err = f"获取好友列表失败: {exc!s}"
+            result.error = f"{result.error}; {err}" if result.error else err
+
+        return result

@@ -3219,6 +3219,7 @@ export type ListSessionRulesData = {
         page?: number;
         page_size?: number;
         search?: string;
+        include_unconfigured?: boolean;
     };
 };
 
@@ -3730,6 +3731,27 @@ export type StreamLiveLogsError = unknown;
 export type GetLogHistoryResponse = (string);
 
 export type GetLogHistoryError = unknown;
+
+export type ExportLogsData = {
+    query?: {
+        /**
+         * Inclusive maximum log timestamp or trace start time, in Unix seconds. Omit for no upper bound. Must not be before start_time. Matching traces retain their complete details.
+         */
+        end_time?: number;
+        /**
+         * Mask recognized credentials. Disable only for private diagnosis.
+         */
+        redact?: boolean;
+        /**
+         * Inclusive minimum log timestamp or trace start time, in Unix seconds. Omit for no lower bound. Undated standalone log content is excluded when a time bound is set.
+         */
+        start_time?: number;
+    };
+};
+
+export type ExportLogsResponse = ((Blob | File));
+
+export type ExportLogsError = unknown;
 
 export type ListTracesData = {
     query?: {

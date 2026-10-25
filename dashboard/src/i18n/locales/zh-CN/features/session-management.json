@@ -25,6 +25,8 @@
     "pluginConfig": "插件配置",
     "kbConfig": "知识库配置",
     "providerConfig": "模型配置",
+    "followDefault": "跟随默认配置",
+    "showUnconfigured": "显示未配置的会话",
     "configured": "已配置",
     "noCustomName": "未设置备注"
   },

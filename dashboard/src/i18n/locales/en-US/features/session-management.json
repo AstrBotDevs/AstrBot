@@ -25,6 +25,8 @@
     "pluginConfig": "Plugin Config",
     "kbConfig": "Knowledge Base",
     "providerConfig": "Provider Config",
+    "followDefault": "Follow default",
+    "showUnconfigured": "Show unconfigured sessions",
     "configured": "Configured",
     "noCustomName": "No note set"
   },

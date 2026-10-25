@@ -7,6 +7,42 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 class SessionServiceManager:
     """管理会话级别的服务启停状态，包括LLM和TTS"""
 
+    @staticmethod
+    def _group_fallback_umos(session_id: str) -> list[str]:
+        """unique_session 开启时，成员级 UMO（形如 ``sender_group``）的群级兜底 UMO。
+
+        未开启 unique_session 时 session_id 不含 ``_`` 分隔，返回空列表，
+        行为与之前完全一致。
+        """
+        parts = session_id.split(":", 2)
+        if len(parts) != 3:
+            return []
+        platform, msg_type, sess = parts
+        if msg_type.lower() not in ("groupmessage", "group"):
+            return []
+        if "_" not in sess:
+            return []
+        group_id = sess.rsplit("_", 1)[-1]
+        if not group_id or group_id == sess:
+            return []
+        return [f"{platform}:{msg_type}:{group_id}"]
+
+    @staticmethod
+    async def _get_service_flag(session_id: str, field: str) -> bool:
+        """读取会话服务开关，成员级优先、群级兜底，未配置默认启用。"""
+        umos = [session_id, *SessionServiceManager._group_fallback_umos(session_id)]
+        for umo in umos:
+            session_services = await sp.get_async(
+                scope="umo",
+                scope_id=umo,
+                key="session_service_config",
+                default={},
+            )
+            value = session_services.get(field)
+            if value is not None:
+                return value
+        return True
+
     # =============================================================================
     # LLM 相关方法
     # =============================================================================
@@ -22,21 +58,7 @@ class SessionServiceManager:
             bool: True表示启用，False表示禁用
 
         """
-        # 获取会话服务配置
-        session_services = await sp.get_async(
-            scope="umo",
-            scope_id=session_id,
-            key="session_service_config",
-            default={},
-        )
-
-        # 如果配置了该会话的LLM状态，返回该状态
-        llm_enabled = session_services.get("llm_enabled")
-        if llm_enabled is not None:
-            return llm_enabled
-
-        # 如果没有配置，默认为启用（兼容性考虑）
-        return True
+        return await SessionServiceManager._get_service_flag(session_id, "llm_enabled")
 
     @staticmethod
     async def set_llm_status_for_session(session_id: str, enabled: bool) -> None:
@@ -93,21 +115,7 @@ class SessionServiceManager:
             bool: True表示启用，False表示禁用
 
         """
-        # 获取会话服务配置
-        session_services = await sp.get_async(
-            scope="umo",
-            scope_id=session_id,
-            key="session_service_config",
-            default={},
-        )
-
-        # 如果配置了该会话的TTS状态，返回该状态
-        tts_enabled = session_services.get("tts_enabled")
-        if tts_enabled is not None:
-            return tts_enabled
-
-        # 如果没有配置，默认为启用（兼容性考虑）
-        return True
+        return await SessionServiceManager._get_service_flag(session_id, "tts_enabled")
 
     @staticmethod
     async def set_tts_status_for_session(session_id: str, enabled: bool) -> None:
@@ -169,18 +177,6 @@ class SessionServiceManager:
             bool: True表示启用，False表示禁用
 
         """
-        # 获取会话服务配置
-        session_services = await sp.get_async(
-            scope="umo",
-            scope_id=session_id,
-            key="session_service_config",
-            default={},
+        return await SessionServiceManager._get_service_flag(
+            session_id, "session_enabled"
         )
-
-        # 如果配置了该会话的整体状态，返回该状态
-        session_enabled = session_services.get("session_enabled")
-        if session_enabled is not None:
-            return session_enabled
-
-        # 如果没有配置，默认为启用（兼容性考虑）
-        return True
