@@ -10,6 +10,7 @@ import {
   type BackupUploadRequest,
   type BackupUploadSessionRequest,
   type BotConfigRequest,
+  type BotCleanupTarget,
   type BotRegistrationRequest,
   type ChatChunkUploadRequest,
   type ChatMessagePatchRequest,
@@ -489,9 +490,12 @@ export const botApi = {
       }),
     );
   },
-  delete(botId: string) {
+  delete(botId: string, cleanup: BotCleanupTarget[] = []) {
     return typed<OpenConfig>(
-      openApiV1.deleteBotById({ query: { bot_id: botId } }),
+      openApiV1.deleteBotById({
+        query: { bot_id: botId, cleanup },
+        paramsSerializer: { indexes: null },
+      }),
     );
   },
 };
