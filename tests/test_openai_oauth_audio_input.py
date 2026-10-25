@@ -417,7 +417,7 @@ def test_converter_address_space_budget_is_enforced_or_rejected():
     _converter_budget_supported()
 
 
-@pytest.mark.skipif(audio_input.os.name != "posix", reason="POSIX resource limits")
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="Linux stack policy")
 @pytest.mark.parametrize(
     ("soft_limit", "hard_limit", "expected_limit"),
     [
@@ -458,11 +458,51 @@ def test_converter_bounds_inherited_stack_without_raising_limits(
     assert result.stdout.strip() == f"({expected_limit}, {expected_limit})"
 
 
+@pytest.mark.skipif(audio_input.os.name != "posix", reason="POSIX resource limits")
+def test_converter_preserves_darwin_stack_policy():
+    import resource
+
+    outer_script = (
+        "import resource,sys\n"
+        "original_setrlimit=resource.setrlimit\n"
+        "def preserve_stack(kind,limits):\n"
+        " if kind==resource.RLIMIT_STACK: raise AssertionError('Darwin stack changed')\n"
+        " return original_setrlimit(kind,limits)\n"
+        "resource.setrlimit=preserve_stack\n"
+        "sys.platform='darwin'\n"
+        "sys.argv=sys.argv[1:];exec(sys.argv[0])\n"
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            outer_script,
+            audio_input._LIMITED_EXEC_SCRIPT,
+            str(2 * 1024 * 1024),
+            str(resource.getrlimit(resource.RLIMIT_AS)[0]),
+            sys.executable,
+            "-c",
+            "import json,resource;print(json.dumps({'stack':"
+            "resource.getrlimit(resource.RLIMIT_STACK),'file':"
+            "resource.getrlimit(resource.RLIMIT_FSIZE)}))",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=5,
+    )
+
+    assert result.returncode == 0, result.stderr
+    limits = json.loads(result.stdout)
+    assert limits["stack"] == list(resource.getrlimit(resource.RLIMIT_STACK))
+    assert limits["file"] == [2 * 1024 * 1024, 2 * 1024 * 1024]
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("reported_cpu_count", [None, 128])
 @pytest.mark.parametrize(
     "inherited_stack_bytes",
-    [None, 16 * 1024 * 1024] if audio_input.os.name == "posix" else [None],
+    [None, 16 * 1024 * 1024] if sys.platform.startswith("linux") else [None],
 )
 async def test_real_ffmpeg_ogg_conversion_produces_bounded_wav(
     tmp_path, monkeypatch, reported_cpu_count, inherited_stack_bytes
