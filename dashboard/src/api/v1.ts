@@ -40,6 +40,7 @@ import {
   type KnowledgeBaseRequest,
   type LoginRequest,
   type ListConversationsData,
+  type ListTracesData,
   type McpServerConfig,
   type ModelScopeSyncRequest,
   type PipInstallRequest,
@@ -692,7 +693,7 @@ export const apiKeyApi = {
 };
 
 export const traceApi = {
-  history(query?: { limit?: number; page?: number; cursor?: string; query?: string; errors?: boolean; models?: boolean; plugins?: boolean }) {
+  history(query?: ListTracesData["query"]) {
     return typed<OpenConfig>(openApiV1.listTraces({ query }));
   },
   detail(traceId: string) {

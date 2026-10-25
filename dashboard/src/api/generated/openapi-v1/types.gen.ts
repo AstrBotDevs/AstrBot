@@ -3796,16 +3796,38 @@ export type ExportLogsError = unknown;
 
 export type ListTracesData = {
     query?: {
+        commands?: boolean;
         /**
          * Legacy keyset cursor; use page for numbered pagination.
          */
         cursor?: string;
+        /**
+         * Inclusive maximum trace start time, in Unix seconds. Must not be before start_time.
+         */
+        end_time?: number;
         errors?: boolean;
         limit?: number;
+        /**
+         * Comma-separated message type names.
+         */
+        message_types?: string;
         models?: boolean;
         page?: number;
+        /**
+         * Comma-separated platform IDs.
+         */
+        platforms?: string;
         plugins?: boolean;
         query?: string;
+        /**
+         * Inclusive minimum trace start time, in Unix seconds.
+         */
+        start_time?: number;
+        status?: 'running' | 'completed' | 'error';
+        /**
+         * Exact unified message origin.
+         */
+        umo?: string;
     };
 };
 

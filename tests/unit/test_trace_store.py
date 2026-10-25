@@ -384,6 +384,7 @@ def test_database_pages_filters_details_and_restart(persisted, capture):
                 plugin="test",
                 plugin_display_name="Display Test",
                 handler_full_name="test.handler",
+                handler_category="command" if index == 0 else "listener",
             )
             trace.record(
                 "handler_end",
@@ -420,6 +421,15 @@ def test_database_pages_filters_details_and_restart(persisted, capture):
     assert persisted.list_traces(errors=True)["total"] == 1
     assert persisted.list_traces(plugins=True, query="Display Test")["total"] == 4
     assert persisted.list_traces(models=True)["total"] == 0
+    assert persisted.list_traces(commands=True)["total"] == 1
+    assert persisted.list_traces(status="running")["total"] == 1
+    assert persisted.list_traces(status="completed")["total"] == 2
+    assert persisted.list_traces(status="error")["total"] == 1
+    assert persisted.list_traces(platforms=["qq"])["total"] == 4
+    assert persisted.list_traces(platforms=["telegram"])["total"] == 0
+    assert persisted.list_traces(message_types=["Group"])["total"] == 4
+    assert persisted.list_traces(message_types=["FriendMessage"])["total"] == 0
+    assert persisted.list_traces(umo="qq:Group:123")["total"] == 4
     detail = persisted.get_trace(traces[0].trace_id)
     assert len(detail["spans"]) == 2
     assert any(
