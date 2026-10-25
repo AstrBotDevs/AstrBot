@@ -256,12 +256,17 @@ class BoundedOAuthAudioResolver:
             )
 
     async def _convert_to_wav(self, source: Path, destination: Path) -> None:
+        # Bound each thread pool independently of the host CPU count.
         await self._run_converter(
             "ffmpeg",
             "-nostdin",
             "-v",
             "error",
             "-y",
+            "-threads",
+            "1",
+            "-filter_threads",
+            "1",
             "-i",
             str(source),
             "-vn",
@@ -271,6 +276,8 @@ class BoundedOAuthAudioResolver:
             "16000",
             "-c:a",
             "pcm_s16le",
+            "-threads",
+            "1",
             "-fs",
             str(self.max_bytes),
             str(destination),

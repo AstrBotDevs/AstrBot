@@ -418,7 +418,10 @@ def test_converter_address_space_budget_is_enforced_or_rejected():
 
 
 @pytest.mark.asyncio
-async def test_real_ffmpeg_ogg_conversion_produces_bounded_wav(tmp_path, monkeypatch):
+@pytest.mark.parametrize("reported_cpu_count", [None, 128])
+async def test_real_ffmpeg_ogg_conversion_produces_bounded_wav(
+    tmp_path, monkeypatch, reported_cpu_count
+):
     monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
     ffmpeg = shutil.which("ffmpeg")
     assert ffmpeg is not None
@@ -438,6 +441,23 @@ async def test_real_ffmpeg_ogg_conversion_produces_bounded_wav(tmp_path, monkeyp
     )
     _stdout, stderr = await process.communicate()
     assert process.returncode == 0, stderr.decode("utf-8", errors="replace")
+    if reported_cpu_count is not None:
+        # Exercise the real native converter as if FFmpeg detects a many-core
+        # host, without changing the process affinity or resource budget.
+        create_process = asyncio.create_subprocess_exec
+
+        async def create_many_core_converter(*args, **kwargs):
+            command = list(args)
+            executable_index = command.index("ffmpeg")
+            command[executable_index + 1 : executable_index + 1] = [
+                "-cpucount",
+                str(reported_cpu_count),
+            ]
+            return await create_process(*command, **kwargs)
+
+        monkeypatch.setattr(
+            asyncio, "create_subprocess_exec", create_many_core_converter
+        )
     resolver = BoundedOAuthAudioResolver(
         str(source_ogg),
         max_bytes=512 * 1024,
