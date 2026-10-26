@@ -401,6 +401,27 @@ def test_build_skills_prompt_progressive_disclosure_rules():
     assert "SKILL.md" in prompt
 
 
+def test_build_skills_prompt_uses_permitted_skill_read_tools():
+    """Prompt grounding should respect the tools permitted in this session."""
+    skills = [
+        SkillInfo(
+            name="test",
+            description="test skill",
+            path="/skills/test/SKILL.md",
+            active=True,
+        )
+    ]
+
+    prompt = build_skills_prompt(skills)
+
+    assert "file-reading tool that is available in this session" in prompt
+    assert "permitted to access the path" in prompt
+    assert "If no permitted file-reading tool is available" in prompt
+    assert "permitted by the current user's policy" in prompt
+    assert "If neither option is available" in prompt
+    assert "do not execute it" in prompt
+
+
 def test_build_skills_prompt_no_custom_fields():
     """Prompt should NOT contain triggers/capabilities/output labels."""
     skills = [
