@@ -5,6 +5,7 @@ import os
 import shutil
 import socket
 import ssl
+import tempfile
 import time
 import uuid
 from pathlib import Path
@@ -280,7 +281,10 @@ async def download_file(
     progress_callback=None,
     allow_insecure_ssl_fallback: bool = True,
 ) -> None:
-    """Download a remote file to a local path.
+    """Download a remote file and replace the destination on success.
+
+    Keep the destination intact until the response and progress callbacks have
+    completed. Failed or cancelled downloads leave no partial file behind.
 
     Args:
         url: Remote URL to download.
@@ -294,54 +298,67 @@ async def download_file(
         None.
     """
 
-    try:
-        ssl_context = ssl.create_default_context(
-            cafile=certifi.where(),
-        )  # 使用 certifi 提供的 CA 证书
-        connector = aiohttp.TCPConnector(ssl=ssl_context)
-        async with aiohttp.ClientSession(
-            trust_env=True,
-            connector=connector,
-        ) as session:
-            async with session.get(url, timeout=1800) as resp:
-                _raise_for_download_status(resp, url)
-                with open(path, "wb") as f:
-                    await _download_response_to_file(
-                        resp,
-                        f,
-                        url,
-                        show_progress,
-                        progress_callback,
-                    )
-    except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
-        if not allow_insecure_ssl_fallback:
-            raise
-        # 关闭SSL验证（仅在证书验证失败时作为fallback）
-        logger.warning(
-            f"SSL certificate verification failed for {_safe_url_for_log(url)}. "
-            "Falling back to unverified connection (CERT_NONE). "
-        )
-        logger.warning(
-            f"SSL certificate verification failed for {_safe_url_for_log(url)}. "
-            "Falling back to unverified connection (CERT_NONE). "
-            "This is insecure and exposes the application to man-in-the-middle attacks. "
-            "Please investigate certificate issues with the remote server."
-        )
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, ssl=ssl_context, timeout=120) as resp:
-                _raise_for_download_status(resp, url)
-                with open(path, "wb") as f:
-                    await _download_response_to_file(
-                        resp,
-                        f,
-                        url,
-                        show_progress,
-                        progress_callback,
-                        show_downloading_label=False,
-                    )
+    # Resolve symlinks as open(path, "wb") does, and stage on the same filesystem
+    # so replacement is atomic. Each call owns its own temporary directory.
+    target_path = Path(path).resolve()
+    with tempfile.TemporaryDirectory(
+        prefix=".astrbot-download-", dir=target_path.parent
+    ) as staging_dir:
+        staging_path = Path(staging_dir) / "download.part"
+        try:
+            ssl_context = ssl.create_default_context(
+                cafile=certifi.where(),
+            )  # Use certifi's CA certificates.
+            connector = aiohttp.TCPConnector(ssl=ssl_context)
+            async with aiohttp.ClientSession(
+                trust_env=True,
+                connector=connector,
+            ) as session:
+                async with session.get(url, timeout=1800) as resp:
+                    _raise_for_download_status(resp, url)
+                    with staging_path.open("wb") as f:
+                        await _download_response_to_file(
+                            resp,
+                            f,
+                            url,
+                            show_progress,
+                            progress_callback,
+                        )
+        except (
+            aiohttp.ClientConnectorSSLError,
+            aiohttp.ClientConnectorCertificateError,
+        ):
+            if not allow_insecure_ssl_fallback:
+                raise
+            # Retry without verification only after certificate failures.
+            logger.warning(
+                f"SSL certificate verification failed for {_safe_url_for_log(url)}. "
+                "Falling back to unverified connection (CERT_NONE). "
+            )
+            logger.warning(
+                f"SSL certificate verification failed for {_safe_url_for_log(url)}. "
+                "Falling back to unverified connection (CERT_NONE). "
+                "This is insecure and exposes the application to man-in-the-middle attacks. "
+                "Please investigate certificate issues with the remote server."
+            )
+            ssl_context = ssl.create_default_context()
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, ssl=ssl_context, timeout=120) as resp:
+                    _raise_for_download_status(resp, url)
+                    with staging_path.open("wb") as f:
+                        await _download_response_to_file(
+                            resp,
+                            f,
+                            url,
+                            show_progress,
+                            progress_callback,
+                            show_downloading_label=False,
+                        )
+        if target_path.exists():
+            shutil.copymode(target_path, staging_path)
+        staging_path.replace(target_path)
     if show_progress:
         print()
 

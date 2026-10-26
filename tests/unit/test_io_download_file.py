@@ -1,22 +1,32 @@
+import asyncio
+import stat
+
 import pytest
 
 from astrbot.core.utils import io
 
 
 class _FakeContent:
-    def __init__(self, chunks: list[bytes]):
+    def __init__(self, chunks: list[bytes | BaseException]):
         self._chunks = chunks
 
     async def read(self, _size: int) -> bytes:
         if self._chunks:
-            return self._chunks.pop(0)
+            chunk = self._chunks.pop(0)
+            if isinstance(chunk, BaseException):
+                raise chunk
+            return chunk
         return b""
 
 
 class _FakeResponse:
-    def __init__(self, *, status: int, chunks: list[bytes]):
+    def __init__(self, *, status: int, chunks: list[bytes | BaseException]):
         self.status = status
-        self.headers = {"content-length": str(sum(len(chunk) for chunk in chunks))}
+        self.headers = {
+            "content-length": str(
+                sum(len(chunk) for chunk in chunks if isinstance(chunk, bytes))
+            )
+        }
         self.content = _FakeContent(chunks)
 
     async def __aenter__(self):
@@ -105,3 +115,216 @@ async def test_download_file_writes_successful_response(monkeypatch, tmp_path):
     await io.download_file("https://example.test/ok.bin", str(target_path))
 
     assert target_path.read_bytes() == b"hello world"
+
+
+@pytest.fixture(params=[False, True], ids=["verified", "ssl-fallback"])
+def patch_response(request, monkeypatch):
+    """Install a response on either of the downloader's TLS paths.
+
+    Args:
+        request: Pytest request selecting the TLS path.
+        monkeypatch: Pytest monkeypatch fixture.
+
+    Returns:
+        A callable that installs a fake response for a download.
+    """
+
+    class FakeSSLError(Exception):
+        pass
+
+    monkeypatch.setattr(io.aiohttp, "ClientConnectorSSLError", FakeSSLError)
+    monkeypatch.setattr(io.aiohttp, "ClientConnectorCertificateError", FakeSSLError)
+
+    def install(response):
+        responses = [FakeSSLError(), response] if request.param else [response]
+        _patch_download_sessions(monkeypatch, responses)
+
+    return install
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("existing", [False, True], ids=["new", "overwrite"])
+@pytest.mark.parametrize(
+    "error_type",
+    [io.aiohttp.ClientPayloadError, TimeoutError, asyncio.CancelledError],
+)
+async def test_failed_download_preserves_destination_and_cleans_staging(
+    patch_response, tmp_path, existing, error_type
+):
+    target = tmp_path / "download.bin"
+    if existing:
+        target.write_bytes(b"previous complete download")
+    patch_response(
+        _FakeResponse(status=200, chunks=[b"partial", error_type("interrupted")])
+    )
+
+    with pytest.raises(error_type, match="interrupted"):
+        await io.download_file("https://example.test/file", str(target))
+
+    if existing:
+        assert target.read_bytes() == b"previous complete download"
+    else:
+        assert not target.exists()
+    assert list(tmp_path.iterdir()) == ([target] if existing else [])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("existing", [False, True], ids=["new", "overwrite"])
+async def test_download_publishes_only_after_all_chunks_are_received(
+    patch_response, tmp_path, existing
+):
+    target = tmp_path / "download.bin"
+    if existing:
+        target.write_bytes(b"old")
+    patch_response(_FakeResponse(status=200, chunks=[b"hello", b" world"]))
+    progress = []
+
+    async def on_progress(payload):
+        progress.append(payload)
+        if existing:
+            assert target.read_bytes() == b"old"
+        else:
+            assert not target.exists()
+
+    await io.download_file(
+        "https://example.test/file", str(target), progress_callback=on_progress
+    )
+
+    assert target.read_bytes() == b"hello world"
+    assert list(tmp_path.iterdir()) == [target]
+    assert progress[0]["downloaded"] == 0
+    assert progress[-1]["downloaded"] == 11
+    assert progress[-1]["percent"] == 1
+
+
+@pytest.mark.asyncio
+async def test_download_preserves_existing_permissions(patch_response, tmp_path):
+    target = tmp_path / "download.bin"
+    target.write_bytes(b"old")
+    target.chmod(0o600)
+    original_mode = stat.S_IMODE(target.stat().st_mode)
+    patch_response(_FakeResponse(status=200, chunks=[b"new"]))
+
+    await io.download_file("https://example.test/file", str(target))
+
+    assert target.read_bytes() == b"new"
+    assert stat.S_IMODE(target.stat().st_mode) == original_mode
+
+
+@pytest.mark.asyncio
+async def test_download_preserves_destination_symlink(patch_response, require_symlink):
+    target = require_symlink / "target.bin"
+    target.write_bytes(b"old")
+    link = require_symlink / "download.bin"
+    link.symlink_to(target)
+    patch_response(_FakeResponse(status=200, chunks=[b"new"]))
+
+    await io.download_file("https://example.test/file", str(link))
+
+    assert link.is_symlink()
+    assert target.read_bytes() == b"new"
+    assert set(require_symlink.iterdir()) == {target, link}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cancelled", [False, True], ids=["disconnect", "cancel"])
+async def test_interrupted_http_download_cannot_clobber_concurrent_success(
+    tmp_path, monkeypatch, cancelled
+):
+    monkeypatch.setenv("NO_PROXY", "127.0.0.1")
+    target = tmp_path / "download.bin"
+    target.write_bytes(b"old")
+    partial_received = asyncio.Event()
+    release_connection = asyncio.Event()
+    handlers = []
+
+    async def handle_connection(reader, writer):
+        handlers.append(asyncio.current_task())
+        try:
+            request = await reader.readuntil(b"\r\n\r\n")
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Length: 9\r\n\r\n")
+            if request.startswith(b"GET /interrupted "):
+                writer.write(b"part")
+                await writer.drain()
+                await release_connection.wait()
+            else:
+                writer.write(b"complete!")
+                await writer.drain()
+        finally:
+            writer.close()
+            await writer.wait_closed()
+
+    def on_progress(payload):
+        if payload["downloaded"]:
+            partial_received.set()
+
+    server = await asyncio.start_server(handle_connection, "127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+    async with server:
+        pending = asyncio.create_task(
+            io.download_file(
+                f"http://127.0.0.1:{port}/interrupted",
+                str(target),
+                progress_callback=on_progress,
+            )
+        )
+        try:
+            await asyncio.wait_for(partial_received.wait(), timeout=10)
+            assert target.read_bytes() == b"old"
+            await io.download_file(f"http://127.0.0.1:{port}/complete", str(target))
+            assert target.read_bytes() == b"complete!"
+            if cancelled:
+                pending.cancel()
+            else:
+                release_connection.set()
+            error_type = (
+                asyncio.CancelledError if cancelled else io.aiohttp.ClientPayloadError
+            )
+            with pytest.raises(error_type):
+                await asyncio.wait_for(pending, timeout=10)
+        finally:
+            release_connection.set()
+            pending.cancel()
+            await asyncio.gather(pending, return_exceptions=True)
+            await asyncio.gather(*handlers)
+
+    assert target.read_bytes() == b"complete!"
+    assert list(tmp_path.iterdir()) == [target]
+
+
+@pytest.mark.asyncio
+async def test_callback_failure_does_not_publish_download(patch_response, tmp_path):
+    target = tmp_path / "download.bin"
+    target.write_bytes(b"old")
+    patch_response(_FakeResponse(status=200, chunks=[b"new"]))
+
+    def on_progress(payload):
+        if payload["downloaded"]:
+            raise RuntimeError("progress callback failed")
+
+    with pytest.raises(RuntimeError, match="progress callback failed"):
+        await io.download_file(
+            "https://example.test/file", str(target), progress_callback=on_progress
+        )
+
+    assert target.read_bytes() == b"old"
+    assert list(tmp_path.iterdir()) == [target]
+
+
+@pytest.mark.asyncio
+async def test_failed_publication_preserves_destination(
+    patch_response, tmp_path, monkeypatch
+):
+    target = tmp_path / "download.bin"
+    target.write_bytes(b"old")
+    patch_response(_FakeResponse(status=200, chunks=[b"new"]))
+
+    def fail_replace(self, destination):
+        raise PermissionError("destination is busy")
+
+    monkeypatch.setattr(io.Path, "replace", fail_replace)
+    with pytest.raises(PermissionError, match="destination is busy"):
+        await io.download_file("https://example.test/file", str(target))
+
+    assert target.read_bytes() == b"old"
+    assert list(tmp_path.iterdir()) == [target]
