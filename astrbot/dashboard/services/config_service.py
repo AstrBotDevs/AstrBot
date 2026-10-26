@@ -1134,7 +1134,21 @@ class ConfigFileService:
         if errors:
             raise ValueError(f"格式校验未通过: {errors}")
         metadata.config.save_config(post_configs)
-        await self.core_lifecycle.plugin_manager.reload(plugin_name)
+        try:
+            success, error_message = await self.core_lifecycle.plugin_manager.reload(
+                plugin_name
+            )
+        except Exception as exc:
+            logger.exception(
+                f"Failed to reload plugin {plugin_name} after saving its configuration."
+            )
+            raise ValueError(
+                f"插件 {plugin_name} 配置已保存，但重载失败: {str(exc) or '未知错误，请查看日志'}"
+            ) from exc
+        if not success:
+            raise ValueError(
+                f"插件 {plugin_name} 配置已保存，但重载失败: {error_message or '未知错误，请查看日志'}"
+            )
 
     async def save_plugin_configs_from_dashboard_payload(
         self,
