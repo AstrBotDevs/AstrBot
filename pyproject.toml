@@ -74,7 +74,6 @@ dependencies = [
   "xlrd>=2.0.2",
   "opentelemetry-api>=1.45.1,<2",
   "opentelemetry-sdk>=1.45.1,<2",
-  "serpapi>=1.1.2",
 ]
 
 [dependency-groups]

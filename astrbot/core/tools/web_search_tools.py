@@ -6,7 +6,6 @@ from dataclasses import field
 from urllib.parse import quote, urlsplit
 
 import aiohttp
-import serpapi
 from pydantic import Field
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
@@ -477,41 +476,35 @@ async def _serpapi_request(
     for _ in range(len(keys)):
         api_key = await _SERPAPI_KEY_ROTATOR.get(provider_settings)
         try:
-            client = serpapi.Client(api_key=api_key, timeout=60)
-            try:
-                data = await asyncio.to_thread(
-                    client.search,
-                    {**payload, "engine": engine},
-                )
-            finally:
-                client.session.close()
-        except serpapi.HTTPConnectionError:
+            async with aiohttp.ClientSession(trust_env=True) as session:
+                async with session.get(
+                    "https://serpapi.com/search.json",
+                    params={**payload, "engine": engine, "api_key": api_key},
+                    timeout=aiohttp.ClientTimeout(total=60),
+                ) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        status = data.get("search_metadata", {}).get("status")
+                        # SerpApi also returns an error message for successful
+                        # searches with no results; these should remain empty.
+                        if status == "Error" or (
+                            data.get("error") and status != "Success"
+                        ):
+                            reason = str(data.get("error") or "Unknown API error.")
+                            raise RuntimeError(
+                                f"SerpApi search failed: {reason.replace(api_key, '[redacted]')}"
+                            )
+                        return data
+                    reason = (await response.text()).replace(api_key, "[redacted]")
+                    last_error = RuntimeError(
+                        f"SerpApi search failed: {reason}, status: {response.status}"
+                    )
+                    if response.status in {401, 403, 429}:
+                        continue
+                    raise last_error
+        except (aiohttp.ClientError, asyncio.TimeoutError):
             # Transport errors can include the request URL with its API key.
             raise RuntimeError("SerpApi search request failed or timed out.") from None
-        except serpapi.TimeoutError:
-            raise RuntimeError("SerpApi search request failed or timed out.") from None
-        except serpapi.HTTPError as exc:
-            reason = str(exc.error or exc).replace(api_key, "[redacted]")
-            last_error = RuntimeError(
-                f"SerpApi search failed: {reason}, status: {exc.status_code}"
-            )
-            if exc.status_code in {401, 403, 429}:
-                continue
-            raise last_error from None
-
-        if isinstance(data, serpapi.SerpResults):
-            data = data.as_dict()
-        elif not isinstance(data, dict):
-            raise RuntimeError("SerpApi search returned an unexpected response.")
-        status = data.get("search_metadata", {}).get("status")
-        # SerpApi also returns an error message for successful searches with no
-        # results; these should remain empty.
-        if status == "Error" or (data.get("error") and status != "Success"):
-            reason = str(data.get("error") or "Unknown API error.")
-            raise RuntimeError(
-                f"SerpApi search failed: {reason.replace(api_key, '[redacted]')}"
-            )
-        return data
 
     if last_error is not None:
         raise last_error
