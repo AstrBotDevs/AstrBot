@@ -98,9 +98,19 @@ class AstrMessageEvent(abc.ABC):
         self.is_wake = False
         """是否唤醒(是否通过 WakingStage)"""
         self.matched_handlers: list[StarHandlerMetadata] = []
-        """通过消息过滤器的插件处理器，不代表事件已唤醒机器人。"""
+        """Plugin handlers that passed message filters.
+
+        Passing these filters does not mean the bot was woken.
+        """
         self.is_at_or_wake_command = False
-        """是否是 At 机器人或者带有唤醒词或者是私聊"""
+        """True for a bot @mention, a wake prefix, or an allowed private chat.
+
+        Private chats set this only when prefix requirements allow it, not
+        for every private message. When friend_message_needs_wake_prefix is
+        enabled, non-webchat private messages do not set it automatically.
+        WakingCheckStage leaves it false unless the wake prefix condition is
+        met.
+        """
         self._extras: dict[str, Any] = {}
         self._force_stopped: bool = False
         """独立的停止标志，不依赖 _result，不会被 clear_result() 重置"""
