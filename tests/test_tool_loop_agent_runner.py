@@ -1,4 +1,6 @@
 import asyncio
+import base64
+import io
 import os
 import sys
 from pathlib import Path
@@ -7,6 +9,7 @@ from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from PIL import Image
 
 # 将项目根目录添加到 sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -140,6 +143,35 @@ class MockMixedContentToolExecutor:
                 ]
             )
             yield result
+
+        return generator()
+
+
+class OversizedImageToolExecutor:
+    """模拟返回一张超大图片的工具执行器"""
+
+    def __init__(self, base64_data: str):
+        self.base64_data = base64_data
+
+    @classmethod
+    def from_size(cls, width: int, height: int) -> "OversizedImageToolExecutor":
+        buffer = io.BytesIO()
+        Image.new("RGB", (width, height), color=(12, 34, 56)).save(buffer, format="PNG")
+        return cls(base64.b64encode(buffer.getvalue()).decode("utf-8"))
+
+    def execute(self, tool, run_context, **tool_args):
+        async def generator():
+            from mcp.types import CallToolResult, ImageContent
+
+            yield CallToolResult(
+                content=[
+                    ImageContent(
+                        type="image",
+                        data=self.base64_data,
+                        mimeType="image/png",
+                    )
+                ]
+            )
 
         return generator()
 
@@ -972,6 +1004,237 @@ async def test_tool_result_includes_all_calltoolresult_content(
             "mime_type": "image/png",
         }
     ]
+
+
+class FileReadToolProvider(MockProvider):
+    """Call the built-in file read tool exactly once."""
+
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        func_tool = kwargs.get("func_tool")
+        if func_tool is None or self.call_count > 1:
+            return LLMResponse(
+                role="assistant",
+                completion_text="final",
+                usage=TokenUsage(input_other=10, output=5),
+            )
+        return LLMResponse(
+            role="assistant",
+            completion_text="",
+            tools_call_name=["astrbot_file_read_tool"],
+            tools_call_args=[{"query": "sample.png"}],
+            tools_call_ids=["call_file_read"],
+            usage=TokenUsage(input_other=10, output=5),
+        )
+
+
+def _make_caption_run_context(
+    *,
+    caption_provider_id: str = "",
+    caption_provider: Any = None,
+    umo: str = "qq:friend:user-1",
+):
+    """Build a run context exposing the image caption provider configuration."""
+    provider_settings = {"default_image_caption_provider_id": caption_provider_id}
+    star_context = SimpleNamespace(
+        get_config=lambda umo=None: {"provider_settings": provider_settings},
+        provider_manager=SimpleNamespace(
+            get_provider_by_id=AsyncMock(return_value=caption_provider)
+        ),
+    )
+    agent_context = SimpleNamespace(
+        context=star_context,
+        event=SimpleNamespace(unified_msg_origin=umo),
+    )
+    return ContextWrapper(context=agent_context)
+
+
+def _make_caption_provider(text: str = "a red rectangle") -> Any:
+    provider = MagicMock(spec=Provider)
+    provider.text_chat = AsyncMock(return_value=SimpleNamespace(completion_text=text))
+    return provider
+
+
+def _make_file_read_request() -> ProviderRequest:
+    """A request whose only tool is the built-in file read tool."""
+    tool = FunctionTool(
+        name="astrbot_file_read_tool",
+        description="read file content",
+        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+        handler=AsyncMock(),
+    )
+    return ProviderRequest(
+        prompt="读一下这张图",
+        func_tool=ToolSet(tools=[tool]),
+        contexts=[],
+    )
+
+
+def _make_file_read_provider() -> FileReadToolProvider:
+    """A text-only provider that calls the built-in file read tool once."""
+    provider = FileReadToolProvider()
+    provider.provider_config["modalities"] = ["text", "tool_use"]
+    return provider
+
+
+@pytest.mark.asyncio
+async def test_text_only_provider_receives_caption_for_tool_image(runner, mock_hooks):
+    """A text-only model still gets the content of an image read from a file."""
+    provider = _make_file_read_provider()
+    caption_provider = _make_caption_provider("直播间标题：新游首发：零~红蝶~")
+    run_context = _make_caption_run_context(
+        caption_provider_id="vision-1",
+        caption_provider=caption_provider,
+    )
+
+    await runner.reset(
+        provider=provider,
+        request=_make_file_read_request(),
+        run_context=run_context,
+        tool_executor=MockMixedContentToolExecutor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(3):
+        pass
+
+    caption_provider.text_chat.assert_awaited_once()
+    captioned = caption_provider.text_chat.await_args.kwargs["image_urls"]
+    assert len(captioned) == 1
+    assert captioned[0].endswith(".png")
+    tool_messages = [
+        m for m in run_context.messages if getattr(m, "role", None) == "tool"
+    ]
+    assert len(tool_messages) == 1
+    tool_text = str(tool_messages[0].content)
+    # The caption travels inside the tool result, next to the cached image path.
+    assert "Image returned and cached at path=" in tool_text
+    assert "[Image caption]: 直播间标题：新游首发：零~红蝶~" in tool_text
+
+
+@pytest.mark.asyncio
+async def test_images_from_other_tools_are_not_captioned(
+    runner, mock_provider, provider_request, mock_hooks
+):
+    """Only the built-in file read tool gets a text fallback."""
+    mock_provider.should_call_tools = True
+    mock_provider.max_calls_before_normal_response = 1
+    mock_provider.provider_config["modalities"] = ["text", "tool_use"]
+
+    caption_provider = _make_caption_provider("should never be used")
+    run_context = _make_caption_run_context(
+        caption_provider_id="vision-1",
+        caption_provider=caption_provider,
+    )
+
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=run_context,
+        tool_executor=MockMixedContentToolExecutor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(3):
+        pass
+
+    caption_provider.text_chat.assert_not_awaited()
+    joined = "\n".join(str(m.content) for m in run_context.messages)
+    assert "Image returned and cached at path=" in joined
+    assert "[Image caption]" not in joined
+
+
+@pytest.mark.asyncio
+async def test_text_only_provider_without_caption_provider_keeps_raw_result(
+    runner, mock_hooks
+):
+    """Without a caption provider nothing is invented and the cached path stays."""
+    provider = _make_file_read_provider()
+    run_context = _make_caption_run_context(caption_provider_id="")
+
+    await runner.reset(
+        provider=provider,
+        request=_make_file_read_request(),
+        run_context=run_context,
+        tool_executor=MockMixedContentToolExecutor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(3):
+        pass
+
+    joined = "\n".join(str(m.content) for m in run_context.messages)
+    assert "Image returned and cached at path=" in joined
+    assert "[Image caption]" not in joined
+
+
+@pytest.mark.asyncio
+async def test_text_only_provider_skips_caption_when_provider_unavailable(
+    runner, mock_hooks
+):
+    """A configured but missing caption provider must not fabricate a caption."""
+    provider = _make_file_read_provider()
+    run_context = _make_caption_run_context(
+        caption_provider_id="vision-1",
+        caption_provider=None,
+    )
+
+    await runner.reset(
+        provider=provider,
+        request=_make_file_read_request(),
+        run_context=run_context,
+        tool_executor=MockMixedContentToolExecutor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(3):
+        pass
+
+    joined = "\n".join(str(m.content) for m in run_context.messages)
+    assert "Image returned and cached at path=" in joined
+    assert "[Image caption]" not in joined
+
+
+@pytest.mark.asyncio
+async def test_tool_image_is_compressed_before_captioning(runner, mock_hooks):
+    """An oversized tool image must be downscaled before leaving the host."""
+    provider = _make_file_read_provider()
+    captured: list[tuple[str, tuple[int, int]]] = []
+
+    async def _capture_sent_image(prompt, image_urls):
+        path = image_urls[0]
+        with Image.open(path) as sent_image:
+            captured.append((path, sent_image.size))
+        return SimpleNamespace(completion_text="a dark blue rectangle")
+
+    caption_provider = MagicMock(spec=Provider)
+    caption_provider.text_chat = AsyncMock(side_effect=_capture_sent_image)
+    run_context = _make_caption_run_context(
+        caption_provider_id="vision-1",
+        caption_provider=caption_provider,
+    )
+
+    await runner.reset(
+        provider=provider,
+        request=_make_file_read_request(),
+        run_context=run_context,
+        tool_executor=OversizedImageToolExecutor.from_size(3000, 2000),
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(3):
+        pass
+
+    assert len(captured) == 1
+    sent_path, sent_size = captured[0]
+    assert max(sent_size) <= 1280
+    # The compressed temp file must not be left behind.
+    assert not Path(sent_path).exists()
 
 
 @pytest.mark.asyncio
