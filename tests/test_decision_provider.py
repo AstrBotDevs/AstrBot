@@ -6,7 +6,7 @@ import httpx
 import pytest
 
 from astrbot.core.config.default import CONFIG_METADATA_2
-from astrbot.core.provider.decision import DecisionService
+from astrbot.core.provider.decision import MAX_DECISION_STATE_CHARS, DecisionService
 from astrbot.core.provider.entities import (
     DecisionAnswer,
     DecisionBooleanQuestion,
@@ -476,6 +476,49 @@ async def test_decision_service_maps_choice_ids_and_applies_threshold():
     assert choice.probabilities == {"wait": 0.25, "reply": 0.75}
     assert result is True
     assert manager.get_using_provider_async.await_args.args == (ProviderType.DECISION,)
+
+
+@pytest.mark.asyncio
+async def test_decision_service_rejects_oversized_state(caplog):
+    caplog.set_level(logging.WARNING, logger="astrbot")
+    provider = MagicMock(spec=DecisionProvider)
+    provider.ask = AsyncMock()
+    manager = MagicMock()
+    manager.get_using_provider_async = AsyncMock(return_value=provider)
+
+    with pytest.raises(ValueError, match="state exceeds the maximum size"):
+        await DecisionService(manager).ask(
+            {"answer": DecisionBooleanQuestion("Continue?")},
+            "x" * (MAX_DECISION_STATE_CHARS + 1),
+        )
+
+    provider.ask.assert_not_awaited()
+    assert "Refusing state" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_decision_service_yes_no_uses_default_on_provider_failure(caplog):
+    caplog.set_level(logging.WARNING, logger="astrbot")
+    provider = MagicMock(spec=DecisionProvider)
+    provider.ask = AsyncMock(side_effect=DecisionError("upstream failed"))
+    manager = MagicMock()
+    manager.get_using_provider_async = AsyncMock(return_value=provider)
+
+    result = await DecisionService(manager).yes_no("Continue?", default=True)
+
+    assert result is True
+    assert "upstream failed" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_decision_service_yes_no_reraises_without_default():
+    provider = MagicMock(spec=DecisionProvider)
+    provider.ask = AsyncMock(side_effect=DecisionError("upstream failed"))
+    manager = MagicMock()
+    manager.get_using_provider_async = AsyncMock(return_value=provider)
+
+    with pytest.raises(DecisionError, match="upstream failed"):
+        await DecisionService(manager).yes_no("Continue?")
 
 
 @pytest.mark.asyncio

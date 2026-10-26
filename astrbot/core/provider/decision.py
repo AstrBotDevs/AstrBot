@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
+
+from astrbot import logger
 
 from .entities import (
     DecisionAnswer,
@@ -15,6 +18,8 @@ from .provider import DecisionProvider
 
 if TYPE_CHECKING:
     from .manager import ProviderManager
+
+MAX_DECISION_STATE_CHARS = 20_000
 
 
 class DecisionService:
@@ -55,6 +60,17 @@ class DecisionService:
         if not isinstance(provider, DecisionProvider):
             target = f" {provider_id}" if provider_id else ""
             raise DecisionError(f"Decision provider{target} is not configured")
+        if state is not None:
+            state_chars = len(json.dumps(state, ensure_ascii=False, default=str))
+            if state_chars > MAX_DECISION_STATE_CHARS:
+                logger.warning(
+                    f"[Decision] Refusing state with {state_chars} characters; "
+                    f"limit is {MAX_DECISION_STATE_CHARS}"
+                )
+                raise ValueError(
+                    "state exceeds the maximum size of "
+                    f"{MAX_DECISION_STATE_CHARS} characters"
+                )
         return await provider.ask(questions, state)
 
     async def choose(
@@ -131,6 +147,7 @@ class DecisionService:
         state: Any = None,
         threshold: float = 0.5,
         provider_id: str | None = None,
+        default: bool | None = None,
     ) -> bool:
         """Return whether a statement is true at the given probability threshold.
 
@@ -139,21 +156,30 @@ class DecisionService:
             state: Context forwarded to the provider.
             threshold: Probability at or above which the result is true.
             provider_id: Provider instance ID, or None to use the default decision provider.
+            default: Value returned when the decision provider fails. When None,
+                the provider error is re-raised.
 
         Returns:
             True when the model probability meets ``threshold``.
 
         Raises:
             ValueError: The question or threshold is unusable.
+            DecisionError: The provider fails and no ``default`` is provided.
         """
         question = question.strip()
         if not question:
             raise ValueError("question must not be empty")
         if not 0 <= threshold <= 1:
             raise ValueError("threshold must be between 0 and 1")
-        answers = await self.ask(
-            {"answer": DecisionBooleanQuestion(question)},
-            state,
-            provider_id=provider_id,
-        )
+        try:
+            answers = await self.ask(
+                {"answer": DecisionBooleanQuestion(question)},
+                state,
+                provider_id=provider_id,
+            )
+        except DecisionError as exc:
+            if default is None:
+                raise
+            logger.warning(f"[Decision] yes_no failed; using default {default}: {exc}")
+            return default
         return answers["answer"].probability >= threshold
