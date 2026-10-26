@@ -41,7 +41,7 @@ Enabling **Allow network during execution** permits network access during Shell/
 - **Workspace**: Filesystem tools are limited to the current user session's workspace (identified by UMO) and the following directories:
   - Workspace directory, under `data/workspaces/<normalized_umo>/`: **read/write**. ChatUI projects can also use a shared project workspace or a custom workspace.
   - AstrBot temporary directory, `data/temp/`: **read/write**.
-  - Tool temporary directory, `<system temporary directory>/.astrbot/`: **read/write**.
+  - Tool temporary directory, `<system temporary directory>/.astrbot-tmp/`: **read/write**.
   - Installed Agent skills, `data/skills/`: **read-only for members; read/write for administrators**.
   - Plugin-provided skills, `data/plugins/<plugin_name>/skills/`: **read-only**.
   - Built-in plugin skills, `<AstrBot source or installation directory>/astrbot/builtin_stars/<plugin_name>/skills/`: **read-only**.

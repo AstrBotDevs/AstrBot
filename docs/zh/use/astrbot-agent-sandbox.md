@@ -41,7 +41,7 @@ AstrBot 内置 AI 支持让 Agent 通过执行代码、读写文件等方式访�
 - **工作区**：Agent 只能访问对应用户会话（按 UMO 来划分）的以下目录：
   - 工作区目录（在 `data/workspaces/<umo>/` 下）【**读写**】
   - AstrBot 的临时目录（`data/temp/`）【**读写**】
-  - 系统临时目录（`<系统临时目录>/.astrbot/`）【**读写**】
+  - 系统临时目录（`<系统临时目录>/.astrbot-tmp/`）【**读写**】
   - AstrBot 提供给 Agent 的的技能（Skills）目录 (`data/skills/`) 【普通成员**只读**，管理员**读写**】
   - AstrBot 插件提供的技能（Skills）目录 (`data/plugins/<插件名>/skills/`) 【**只读**】
   - AstrBot 内置插件提供的技能（Skills）目录 (`<AstrBot 运行安装目录>/builtin_stars/<插件名>/skills/`) 【**只读**】
