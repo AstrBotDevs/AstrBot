@@ -139,7 +139,7 @@ class SystemOneDecisionProvider(DecisionProvider):
         except httpx.HTTPStatusError as exc:
             logger.error(
                 f"[System One Decision] HTTP {exc.response.status_code} from "
-                f"{self.base_url}: {exc.response.text[:1024]}"
+                f"{self.base_url}"
             )
             raise DecisionError(
                 f"System One endpoint returned HTTP {exc.response.status_code}"

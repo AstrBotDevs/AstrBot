@@ -1,4 +1,5 @@
 import json
+import logging
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
@@ -177,8 +178,14 @@ async def test_system_one_rejects_invalid_choice_answers(choice_answer):
 
 
 @pytest.mark.asyncio
-async def test_system_one_normalizes_http_errors_and_closes_client():
-    provider = _provider(lambda request: httpx.Response(400, json={"error": "bad"}))
+async def test_system_one_normalizes_http_errors_and_closes_client(caplog):
+    caplog.set_level(logging.ERROR, logger="astrbot")
+    provider = _provider(
+        lambda request: httpx.Response(
+            400,
+            json={"state": "private-conversation"},
+        )
+    )
     try:
         with pytest.raises(DecisionError, match="HTTP 400"):
             await provider.ask(
@@ -188,6 +195,8 @@ async def test_system_one_normalizes_http_errors_and_closes_client():
         await provider.terminate()
 
     assert provider.client.is_closed
+    assert "HTTP 400" in caplog.text
+    assert "private-conversation" not in caplog.text
 
 
 @pytest.mark.asyncio
