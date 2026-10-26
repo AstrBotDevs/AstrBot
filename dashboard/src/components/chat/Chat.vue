@@ -1736,7 +1736,6 @@ async function handleRegenerateMessage(
   selection?: RegenerateModelSelection,
 ) {
   if (!currSessionId.value || isUserMessage(message)) return;
-  message.threads = [];
   const effectiveSelection = selection ?? getSelectedProviderSelection();
   writeSessionProviderSelection(currSessionId.value, effectiveSelection);
   await regenerateMessage(
