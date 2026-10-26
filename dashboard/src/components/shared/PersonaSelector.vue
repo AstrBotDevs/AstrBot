@@ -68,6 +68,7 @@ const itemsLoading = ref(false);
 const showPersonaDialog = ref(false);
 const editingPersona = ref<Persona | null>(null);
 const currentFolderId = ref<string | null>(null);
+let personaRequestId = 0;
 
 // 默认人格：映射显示名，并在根目录保持置顶（与旧版选择器行为一致）
 const selectablePersonas = computed(() => {
@@ -160,17 +161,26 @@ async function loadFolderTree() {
 
 // 加载指定文件夹的人格
 async function loadPersonasInFolder(folderId: string | null) {
+  const requestId = ++personaRequestId;
   itemsLoading.value = true;
   try {
     const response = await personaApi.list(folderId);
+    if (requestId !== personaRequestId) {
+      return;
+    }
     if (response.data.status === "ok") {
       currentPersonas.value = response.data.data || [];
     }
   } catch (error) {
+    if (requestId !== personaRequestId) {
+      return;
+    }
     console.error("加载人格列表失败:", error);
     currentPersonas.value = [];
   } finally {
-    itemsLoading.value = false;
+    if (requestId === personaRequestId) {
+      itemsLoading.value = false;
+    }
   }
 }
 

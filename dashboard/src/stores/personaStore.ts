@@ -53,6 +53,7 @@ export const usePersonaStore = defineStore("persona", {
     expandedFolderIds: [] as string[], // Store expanded folder IDs
     loading: false,
     treeLoading: false,
+    folderNavigationRequestId: 0,
   }),
 
   getters: {
@@ -111,6 +112,7 @@ export const usePersonaStore = defineStore("persona", {
      * 导航到指定文件夹
      */
     async navigateToFolder(folderId: string | null): Promise<void> {
+      const requestId = ++this.folderNavigationRequestId;
       this.loading = true;
       try {
         this.currentFolderId = folderId;
@@ -120,6 +122,10 @@ export const usePersonaStore = defineStore("persona", {
           personaApi.folders(folderId),
           personaApi.list(folderId),
         ]);
+
+        if (requestId !== this.folderNavigationRequestId) {
+          return;
+        }
 
         if (foldersRes.data.status === 'ok') {
           this.currentFolders = foldersRes.data.data || [];
@@ -131,8 +137,14 @@ export const usePersonaStore = defineStore("persona", {
 
         // 更新面包屑
         this.updateBreadcrumb(folderId);
+      } catch (error) {
+        if (requestId === this.folderNavigationRequestId) {
+          throw error;
+        }
       } finally {
-        this.loading = false;
+        if (requestId === this.folderNavigationRequestId) {
+          this.loading = false;
+        }
       }
     },
 
