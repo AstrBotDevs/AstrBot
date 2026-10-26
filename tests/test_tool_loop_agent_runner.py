@@ -12,13 +12,13 @@ import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from astrbot.core.agent.agent import Agent
-from astrbot.core.astr_agent_hooks import MainAgentHooks
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.message import ImageURLPart, Message, TextPart
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool, ToolSet
+from astrbot.core.astr_agent_hooks import MainAgentHooks
 from astrbot.core.astr_agent_run_util import run_agent
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.exceptions import EmptyModelOutputError
@@ -402,8 +402,14 @@ class MockHooks(BaseAgentRunHooks):
         self.agent_done_called = False
         self.agent_responses = []
         self.event_order = []
+        self.events = []
+        self.buffer_streaming_response = False
+        self.rewrite_response = False
         self.tool_start_called = False
         self.tool_end_called = False
+
+    def should_buffer_streaming_response(self, run_context):
+        return self.buffer_streaming_response
 
     async def on_agent_begin(self, run_context):
         self.agent_begin_called = True
@@ -418,6 +424,9 @@ class MockHooks(BaseAgentRunHooks):
         self.agent_done_called = True
 
     async def on_agent_response(self, run_context, llm_response):
+        self.events.append("response_hook")
+        if self.rewrite_response:
+            llm_response.completion_text = f"hooked: {llm_response.completion_text}"
         self.agent_responses.append(llm_response)
         self.event_order.append("hook")
 
@@ -926,6 +935,8 @@ async def test_tool_call_response_invokes_response_hook(
 ):
     mock_provider.should_call_tools = True
     mock_provider.max_calls_before_normal_response = 100
+    mock_hooks.buffer_streaming_response = True
+    mock_hooks.rewrite_response = True
 
     await runner.reset(
         provider=mock_provider,
@@ -933,7 +944,7 @@ async def test_tool_call_response_invokes_response_hook(
         run_context=ContextWrapper(context=None),
         tool_executor=mock_tool_executor,
         agent_hooks=mock_hooks,
-        streaming=False,
+        streaming=True,
     )
 
     responses = []
@@ -941,19 +952,33 @@ async def test_tool_call_response_invokes_response_hook(
         responses.append(response)
         if (
             response.type == "llm_result"
-            and response.data["chain"].get_plain_text() == "我需要使用工具来帮助您"
+            and response.data["chain"].get_plain_text()
+            == "hooked: 我需要使用工具来帮助您"
         ):
             mock_hooks.event_order.append("text")
+        if response.type == "streaming_delta":
+            mock_hooks.events.append("streaming_delta")
 
     assert len(mock_hooks.agent_responses) == 1
-    assert mock_hooks.agent_responses[0].completion_text == "我需要使用工具来帮助您"
+    assert (
+        mock_hooks.agent_responses[0].completion_text
+        == "hooked: 我需要使用工具来帮助您"
+    )
     assert mock_hooks.agent_responses[0].tools_call_name == ["test_tool"]
     assert not mock_hooks.agent_done_called
     assert mock_hooks.event_order == ["hook", "text"]
     assert any(
         response.type == "llm_result"
-        and response.data["chain"].get_plain_text() == "我需要使用工具来帮助您"
+        and response.data["chain"].get_plain_text() == "hooked: 我需要使用工具来帮助您"
         for response in responses
+    )
+    assert any(
+        response.type == "streaming_delta"
+        and response.data["chain"].get_plain_text() == "hooked: 我需要使用工具来帮助您"
+        for response in responses
+    )
+    assert mock_hooks.events.index("response_hook") < mock_hooks.events.index(
+        "streaming_delta"
     )
 
 
