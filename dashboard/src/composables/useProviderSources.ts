@@ -194,10 +194,17 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const mergedModelEntries = computed(() => {
     const configuredEntries = (sourceProviders.value || []).map((provider: any) => {
       const metadata = getModelMetadata(provider.model)
+      let displayMetadata = metadata || buildMetadataFromProvider(provider)
+      if (provider.max_context_tokens > 0) {
+        displayMetadata = {
+          ...displayMetadata,
+          limit: { ...displayMetadata?.limit, context: provider.max_context_tokens }
+        }
+      }
       return {
         type: 'configured',
         provider,
-        metadata: metadata || buildMetadataFromProvider(provider),
+        metadata: displayMetadata,
         hasModelMetadata: Boolean(metadata)
       }
     })
@@ -426,7 +433,6 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       suppressSourceWatch = false
     })
     availableModels.value = []
-    modelMetadata.value = {}
     isSourceModified.value = false
   }
 
@@ -610,7 +616,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       const response = await providerApi.sourceModels(sourceId)
       if (response.data.status === 'ok') {
         const metadataMap = (response.data.data.model_metadata || {}) as Record<string, any>
-        modelMetadata.value = metadataMap
+        modelMetadata.value = { ...modelMetadata.value, ...metadataMap }
         availableModels.value = (response.data.data.models || []).map((model: string) => ({
           name: model,
           metadata: metadataMap?.[model] || null
@@ -622,7 +628,6 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
         throw new Error(response.data.message || tm('models.fetchError'))
       }
     } catch (error: any) {
-      modelMetadata.value = {}
       showMessage(error.response?.data?.message || error.message || tm('models.fetchError'), 'error')
     } finally {
       loadingModels.value = false
