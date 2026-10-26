@@ -60,7 +60,9 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
         "Use action='edit' to update an existing task. "
         "Use action='list' to inspect existing tasks. "
         "Use action='delete' to remove a task by job_id. "
-        "AstrBot admins in a group chat can list and delete tasks created by other members of that group."
+        "Group members can list all tasks in the current group, including their creators. "
+        "Only task creators can edit tasks. Group members can delete only their own tasks, "
+        "while AstrBot admins can also delete other members' tasks in the current group."
     )
     parameters: dict = Field(
         default_factory=lambda: {
@@ -333,21 +335,17 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
 
         if action == "list":
             all_jobs = await cron_mgr.list_jobs()
-            is_group_admin = (
-                event.get_message_type() == MessageType.GROUP_MESSAGE
-                and event.is_admin()
-            )
+            is_group = event.get_message_type() == MessageType.GROUP_MESSAGE
             jobs = [
                 job
                 for job in all_jobs
                 if _job_belongs_to_current_sender(job, current_umo, current_sender_id)
-                or (is_group_admin and _extract_job_session(job) == current_umo)
+                or (is_group and _extract_job_session(job) == current_umo)
             ]
-            # Tasks in this session that were created by somebody else stay
-            # out of the result for regular members. Saying so stops an agent
-            # from reading "No cron jobs found." as "the task no longer exists".
+            # Private chats retain sender isolation. Explain hidden tasks so
+            # the agent does not mistake a filtered list for a missing task.
             hidden_note = ""
-            if not is_group_admin:
+            if not is_group:
                 for job in all_jobs:
                     if _extract_job_session(job) != current_umo:
                         continue
@@ -357,8 +355,7 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
                         continue
                     hidden_note = (
                         "\n\nNote: tasks in this chat that were not created by you "
-                        "are not listed here. Only their creators can edit or delete "
-                        "them; in group chats, AstrBot admins can also delete them."
+                        "are not listed here. Only their creators can edit or delete them."
                     )
                     break
             if not jobs:
@@ -395,7 +392,7 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
                     f"run_once={getattr(j, 'run_once', False)} | enabled={j.enabled} | "
                     f"next={next_run}"
                 )
-                if is_group_admin:
+                if is_group:
                     line += f" | creator={_extract_job_sender(j) or 'unknown'}"
                 lines.append(line)
             return "\n".join(lines) + hidden_note

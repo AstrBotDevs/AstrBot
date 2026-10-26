@@ -41,7 +41,7 @@ You can also ask it to:
 - “Move my break reminder to 3 PM tomorrow.”
 - “Delete the news task I just created.”
 
-Chat-based listing, editing, and deletion default to tasks created by **the current sender in the current conversation**, and regular group members cannot manage each other's tasks. AstrBot admins in a group chat are the exception: they can list every task in the current group (including its creator) and delete tasks created by other members; editing remains limited to the creator. Admins can also delete same-group tasks created in the WebUI that have no recorded chat creator.
+All group members can list **every task in the current group conversation**, including its creator. Regular members can only edit and delete tasks they created in that group. AstrBot admins can also delete other members' tasks in the current group, but editing remains limited to the creator. Tasks created in the WebUI without a recorded chat creator also appear in the corresponding group's list and can be deleted by AstrBot admins. These permissions stay within the current conversation and do not allow access across groups. In private chats, listing, editing, and deletion remain limited to tasks created by the current sender in the current conversation.
 
 ## Create and manage tasks in the WebUI
 
@@ -119,4 +119,4 @@ Create a one-off task a few minutes ahead that sends a short test reminder. Conf
 | Task ran but no message arrived | Check the delivery target, platform support, connection, and send permissions. No target means no automatic delivery. |
 | Search or file operations fail | Test those tools' configuration, dependencies, and permissions separately. Scheduling only wakes the Agent. |
 | A one-off task disappeared | Scheduled execution deletes it even on failure. Inspect logs for the outcome. |
-| Chat cannot find an existing task | Query as the original sender in the original conversation. AstrBot admins can list all tasks in the current group and delete tasks created by other members; otherwise use the WebUI. |
+| Chat cannot find an existing task | Query in the task's original conversation. All group members can list every task in their current group; private chats require the original sender. Otherwise use the WebUI. |

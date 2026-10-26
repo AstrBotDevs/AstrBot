@@ -322,8 +322,13 @@ async def test_future_task_group_admin_override_requires_a_group_message():
 
 
 @pytest.mark.asyncio
-async def test_future_task_list_admin_sees_group_tasks_with_creator():
-    """Admins should list every task in the current group and see its creator."""
+@pytest.mark.parametrize("is_admin", [False, True])
+async def test_future_task_list_group_members_see_tasks_with_creator(is_admin):
+    """All group members can see this group's tasks and their creators.
+
+    Args:
+        is_admin: Whether the caller is an AstrBot administrator.
+    """
     tool = FutureTaskTool()
     admin_job = _job("admin-job", sender_id="admin-user")
     member_job = _job("member-job", sender_id="user-2")
@@ -337,7 +342,7 @@ async def test_future_task_list_admin_sees_group_tasks_with_creator():
     )
 
     result = await tool.call(
-        _context(cron_mgr, sender_id="admin-user", is_admin=True),
+        _context(cron_mgr, sender_id="admin-user", is_admin=is_admin),
         action="list",
     )
 
@@ -349,11 +354,18 @@ async def test_future_task_list_admin_sees_group_tasks_with_creator():
 
 
 @pytest.mark.asyncio
-async def test_future_task_list_filters_by_umo_and_sender():
-    """List mode should show only tasks owned by the current sender."""
+@pytest.mark.parametrize("is_admin", [False, True])
+async def test_future_task_list_private_chat_filters_by_umo_and_sender(is_admin):
+    """Private chats retain both session and sender isolation.
+
+    Args:
+        is_admin: Whether the caller is an AstrBot administrator.
+    """
     tool = FutureTaskTool()
-    own_job = _job("own-job", sender_id="user-1")
-    same_umo_other_sender = _job("other-sender-job", sender_id="user-2")
+    own_job = _job("own-job", umo="test:private:shared", sender_id="user-1")
+    same_umo_other_sender = _job(
+        "other-sender-job", umo="test:private:shared", sender_id="user-2"
+    )
     different_umo_same_sender = _job(
         "other-umo-job",
         umo="test:group:other",
@@ -366,13 +378,21 @@ async def test_future_task_list_filters_by_umo_and_sender():
     )
 
     result = await tool.call(
-        _context(cron_mgr, sender_id="user-1"),
+        _context(
+            cron_mgr,
+            umo="test:private:shared",
+            sender_id="user-1",
+            message_type=MessageType.FRIEND_MESSAGE,
+            is_admin=is_admin,
+        ),
         action="list",
     )
 
     assert "own-job" in result
     assert "other-sender-job" not in result
     assert "other-umo-job" not in result
+    assert "Note: tasks in this chat that were not created by you" in result
+    assert "creator=" not in result
 
 
 @pytest.mark.asyncio
@@ -554,8 +574,8 @@ async def test_future_task_edit_reports_foreign_job_from_another_session():
 
 
 @pytest.mark.asyncio
-async def test_future_task_list_notes_hidden_same_session_group_tasks():
-    """List mode must say that other members' tasks exist but are filtered out."""
+async def test_future_task_list_includes_other_members_group_tasks():
+    """Regular members see everyone's tasks in the current group."""
     tool = FutureTaskTool()
     own_job = _job("own-job", sender_id="user-1")
     other_member_job = _job("other-member-job", sender_id="user-2")
@@ -566,25 +586,25 @@ async def test_future_task_list_notes_hidden_same_session_group_tasks():
     result = await tool.call(_context(cron_mgr, sender_id="user-1"), action="list")
 
     assert "own-job" in result
-    assert "other-member-job" not in result
-    assert (
-        "Note: tasks in this chat that were not created by you are not listed here. "
-        "Only their creators can edit or delete them; in group chats, AstrBot admins "
-        "can also delete them."
-    ) in result
+    assert "other-member-job" in result
+    assert "creator=user-1" in result
+    assert "creator=user-2" in result
+    assert "Note:" not in result
 
 
 @pytest.mark.asyncio
-async def test_future_task_list_explains_hidden_tasks_when_none_are_owned():
-    """The "no jobs" answer must not read as "your task disappeared"."""
+async def test_future_task_list_shows_group_tasks_when_none_are_owned():
+    """A member without tasks can still list other members' group tasks."""
     tool = FutureTaskTool()
     other_member_job = _job("other-member-job", sender_id="user-2")
     cron_mgr = SimpleNamespace(list_jobs=AsyncMock(return_value=[other_member_job]))
 
     result = await tool.call(_context(cron_mgr, sender_id="user-1"), action="list")
 
-    assert result.startswith("No cron jobs found.")
-    assert "Note: tasks in this chat that were not created by you" in result
+    assert "other-member-job" in result
+    assert "creator=user-2" in result
+    assert "No cron jobs found." not in result
+    assert "Note:" not in result
 
 
 @pytest.mark.asyncio
@@ -599,10 +619,17 @@ async def test_future_task_list_has_no_note_when_nothing_is_hidden():
 
 
 @pytest.mark.asyncio
-async def test_future_task_list_ignores_other_sessions_for_the_hidden_note():
-    """Jobs from other sessions must not leak into the count."""
+@pytest.mark.parametrize(
+    "payload", [{}, {"session": "test:group:other"}, {"session": "test:private:shared"}]
+)
+async def test_future_task_list_excludes_jobs_outside_current_group(payload):
+    """Only jobs explicitly assigned to the current group are visible.
+
+    Args:
+        payload: A job payload without the current group's session.
+    """
     tool = FutureTaskTool()
-    other_session_job = _job("other-session-job", umo="test:group:other")
+    other_session_job = _raw_job("other-session-job", payload=payload)
     cron_mgr = SimpleNamespace(list_jobs=AsyncMock(return_value=[other_session_job]))
 
     result = await tool.call(_context(cron_mgr, sender_id="user-1"), action="list")
@@ -611,8 +638,8 @@ async def test_future_task_list_ignores_other_sessions_for_the_hidden_note():
 
 
 @pytest.mark.asyncio
-async def test_future_task_list_notes_hidden_basic_job_in_the_session():
-    """A basic job in this session is still not a task of the caller."""
+async def test_future_task_list_includes_basic_job_in_the_group():
+    """A basic job assigned to the current group is visible to members."""
     tool = FutureTaskTool()
     basic_job = _raw_job(
         "basic-job",
@@ -623,13 +650,14 @@ async def test_future_task_list_notes_hidden_basic_job_in_the_session():
 
     result = await tool.call(_context(cron_mgr, sender_id="user-1"), action="list")
 
-    assert result.startswith("No cron jobs found.")
-    assert "not created by you are not listed here" in result
+    assert "basic-job" in result
+    assert "creator=unknown" in result
+    assert "Note:" not in result
 
 
 @pytest.mark.asyncio
-async def test_future_task_list_notes_hidden_jobs_without_a_creator():
-    """Dashboard/legacy rows have a session but no member as their creator."""
+async def test_future_task_list_includes_group_jobs_without_a_creator():
+    """Dashboard or legacy jobs assigned to the group remain visible."""
     tool = FutureTaskTool()
     orphan_job = _raw_job(
         "orphan-job",
@@ -639,8 +667,9 @@ async def test_future_task_list_notes_hidden_jobs_without_a_creator():
 
     result = await tool.call(_context(cron_mgr, sender_id="user-1"), action="list")
 
-    assert result.startswith("No cron jobs found.")
-    assert "not created by you are not listed here" in result
+    assert "orphan-job" in result
+    assert "creator=unknown" in result
+    assert "Note:" not in result
 
 
 @pytest.mark.asyncio
