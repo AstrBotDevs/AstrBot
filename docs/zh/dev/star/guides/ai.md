@@ -29,6 +29,62 @@ llm_resp = await self.context.llm_generate(
 # print(llm_resp.completion_text) # 获取返回的文本
 ```
 
+## 结构化判断
+
+判断提供商（Decision Provider）用于低延迟的结构化选择，例如是否回复、回复哪条消息或选择执行分支。先在 WebUI 的「模型提供商」→「判断」中配置提供商，插件通过 `self.context.decision` 调用，它与聊天模型互不影响。
+
+一次请求可以同时回答多个问题。`state` 会原样传给判断模型，可传入消息列表、会话摘要等任意 JSON 数据：
+
+```py
+from astrbot.api.provider import (
+    DecisionBooleanQuestion,
+    DecisionChoiceQuestion,
+)
+
+
+answers = await self.context.decision.ask(
+    {
+        "should_reply": DecisionChoiceQuestion(
+            "Should the assistant reply to this message?",
+            {"reply": "Reply now", "ignore": "Stay silent"},
+        ),
+        "target": DecisionChoiceQuestion(
+            "Which message should the reply focus on?",
+            {"latest": "Latest message", "previous": "Previous message"},
+        ),
+        "needs_tool": DecisionBooleanQuestion(
+            "Does this request require a tool call?"
+        ),
+    },
+    state={"messages": recent_messages},
+)
+
+should_reply = answers["should_reply"]
+if should_reply.choice == "reply" and should_reply.probability >= 0.7:
+    target = answers["target"]
+    # 使用 target.choice 和 answers["needs_tool"].probability 执行后续业务逻辑
+```
+
+选择类结果的 `choice` 是选项 ID，`probabilities` 包含完整概率分布，`confidence` 是模型置信度；布尔类结果使用 `probability` 表示陈述为真的概率。主动回复阈值等业务规则由调用方决定。
+
+对于单个问题，可以使用以下快捷方法：
+
+```py
+choice = await self.context.decision.choose(
+    "Which reply strategy should be used?",
+    {"short": "A brief reply", "detailed": "A detailed reply"},
+    state=recent_messages,
+)
+
+should_reply = await self.context.decision.yes_no(
+    "Should the assistant reply now?",
+    state=recent_messages,
+    threshold=0.7,
+)
+```
+
+如需指定已配置的判断提供商，传入 `provider_id="provider_id"`；省略时使用默认判断提供商。提供商未配置、请求超时、连接失败、HTTP 错误、响应不是合法 JSON，或返回的选项与概率不符合请求契约时，统一抛出 `DecisionError`；底层异常详情会写入 AstrBot 日志。插件应捕获该异常并决定跳过本次判断或降级处理。
+
 ## 定义 Tool
 
 Tool 是大语言模型调用外部工具的能力。

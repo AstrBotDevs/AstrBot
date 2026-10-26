@@ -30,6 +30,62 @@ llm_resp = await self.context.llm_generate(
 # print(llm_resp.completion_text) # Get the returned text
 ```
 
+## Structured Decisions
+
+A Decision Provider handles low-latency structured choices, such as whether to reply, which message to answer, or which branch to execute. Configure one under **Providers → Decision** in the WebUI, then call it from a plugin through `self.context.decision`. It is independent of the chat model.
+
+One request can answer multiple questions. `state` is passed to the decision model as-is, so callers can provide a message list, conversation summary, or any other JSON data:
+
+```py
+from astrbot.api.provider import (
+    DecisionBooleanQuestion,
+    DecisionChoiceQuestion,
+)
+
+
+answers = await self.context.decision.ask(
+    {
+        "should_reply": DecisionChoiceQuestion(
+            "Should the assistant reply to this message?",
+            {"reply": "Reply now", "ignore": "Stay silent"},
+        ),
+        "target": DecisionChoiceQuestion(
+            "Which message should the reply focus on?",
+            {"latest": "Latest message", "previous": "Previous message"},
+        ),
+        "needs_tool": DecisionBooleanQuestion(
+            "Does this request require a tool call?"
+        ),
+    },
+    state={"messages": recent_messages},
+)
+
+should_reply = answers["should_reply"]
+if should_reply.choice == "reply" and should_reply.probability >= 0.7:
+    target = answers["target"]
+    # Use target.choice and answers["needs_tool"].probability in later logic
+```
+
+For choice questions, `choice` is the selected option ID, `probabilities` contains the full distribution, and `confidence` is the model confidence. For boolean questions, `probability` is the probability that the statement is true. Business rules such as proactive-reply thresholds remain the caller's responsibility.
+
+Use the convenience methods for a single question:
+
+```py
+choice = await self.context.decision.choose(
+    "Which reply strategy should be used?",
+    {"short": "A brief reply", "detailed": "A detailed reply"},
+    state=recent_messages,
+)
+
+should_reply = await self.context.decision.yes_no(
+    "Should the assistant reply now?",
+    state=recent_messages,
+    threshold=0.7,
+)
+```
+
+Pass `provider_id="provider_id"` to use a specific configured decision provider; otherwise the default one is used. `DecisionError` is raised for an unconfigured provider, timeout, connection failure, HTTP error, invalid JSON, or an answer outside the requested contract. Underlying details are written to the AstrBot log, so plugins can catch the exception and decide whether to skip or degrade this decision.
+
 ## Defining Tools
 
 Tools enable large language models to invoke external capabilities.

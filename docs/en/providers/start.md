@@ -22,6 +22,16 @@ For example, you may choose to connect model services provided by (but not limit
 - Google's Gemini model services via Google Cloud ([Google Cloud](https://cloud.google.com/))
 - OpenRouter model services ([OpenRouter](https://openrouter.ai/))
 
+## Connecting Decision Providers
+
+AstrBot's **Decision** provider performs low-latency structured decisions, such as whether to reply, which message to answer, or which simple branch to take. It is separate from chat model selection and is available to plugins through `self.context.decision`.
+
+1. Open **Providers → Decision** and click **Add**.
+2. Select `TypeSafe System One`, `OpenRouter System One`, or `Vercel System One`. For another System One-compatible service, select `Custom System One`.
+3. Enter the `API Key`, `API Base URL`, and model ID. Custom service base URLs get `/systemone` appended by default, so `https://api.example.com/v1` requests `https://api.example.com/v1/systemone`; end the URL with `/` to use it as the complete endpoint. Save, then click **Test** to verify connectivity.
+
+One request can answer multiple decision questions. Reply gating and proactive-reply thresholds remain in the caller; AstrBot only handles the model request, response validation, and normalized results.
+
 ## Integration Steps Using DeepSeek as an Example
 
 Using DeepSeek as an example, assuming you have registered and logged in to a DeepSeek account, the steps to connect are:
