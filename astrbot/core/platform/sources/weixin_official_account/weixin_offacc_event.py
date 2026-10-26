@@ -97,7 +97,12 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                     logger.debug(
                         f"split plain into {len(plain_chunks)} chunks for passive reply. Message not sent."
                     )
-                    self.message_out["cached_xml"] = plain_chunks
+                    # Accumulate instead of overwrite: a chain may contain several
+                    # Plain components (e.g. .message("Hello ").message("world!")).
+                    # Overwriting kept only the last segment, so earlier text was
+                    # silently dropped from the passive reply.
+                    self.message_out.setdefault("cached_xml", [])
+                    self.message_out["cached_xml"].extend(plain_chunks)
             elif isinstance(comp, Image):
                 img_path = await comp.convert_to_file_path()
 
@@ -172,6 +177,16 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
 
             else:
                 logger.warning(f"还没实现这个消息类型的发送逻辑: {comp.type}。")
+
+        # Passive reply: the adapter callback awaits this future and only reads
+        # message_out["cached_xml"] after it resolves. Resolve it once all
+        # components are collected, otherwise a multi-component chain would be
+        # consumed while later segments are still being written. Image and Voice
+        # branches above already resolve it with the rendered XML, so skip here.
+        if not active_send_mode:
+            future = cast(dict, message_obj.raw_message).get("future")
+            if isinstance(future, asyncio.Future) and not future.done():
+                future.set_result(None)
 
         await super().send(message)
 
