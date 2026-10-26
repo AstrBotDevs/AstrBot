@@ -669,9 +669,14 @@ async def test_normal_completion_without_max_step(
 
 @pytest.mark.asyncio
 async def test_skills_like_mode_without_tools_still_initializes_run(
-    runner, mock_provider, mock_tool_executor, mock_hooks
+    runner, mock_provider, mock_tool_executor, mock_hooks, monkeypatch
 ):
     """skills_like mode with no tools must still build messages and stats."""
+    clock = {"now": 1000.0}
+    monkeypatch.setattr(
+        "astrbot.core.agent.runners.tool_loop_agent_runner.time",
+        SimpleNamespace(time=lambda: clock["now"]),
+    )
     request = ProviderRequest(
         prompt="hello", system_prompt="sys", func_tool=None, contexts=[]
     )
@@ -687,13 +692,15 @@ async def test_skills_like_mode_without_tools_still_initializes_run(
     )
 
     assert [m.role for m in runner.run_context.messages] == ["system", "user"]
-    assert runner.stats.start_time > 0
+    assert [m.content for m in runner.run_context.messages] == ["sys", "hello"]
+    assert runner.stats.start_time == 1000.0
 
+    clock["now"] = 1005.0
     async for _ in runner.step_until_done(3):
         pass
 
     assert runner.done()
-    assert runner.stats.end_time >= runner.stats.start_time
+    assert runner.stats.end_time == 1005.0
 
 
 @pytest.mark.asyncio
