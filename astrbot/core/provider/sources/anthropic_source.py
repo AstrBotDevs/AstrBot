@@ -1,4 +1,5 @@
 import base64
+import builtins
 import json
 from collections.abc import AsyncGenerator
 from typing import Any, Literal
@@ -524,7 +525,25 @@ class ProviderAnthropic(Provider):
                     payloads.get("tool_choice", "auto")
                 )
 
-        extra_body = self.provider_config.get("custom_extra_body", {})
+        extra_body = self.provider_config.get("custom_extra_body") or {}
+        if not isinstance(extra_body, dict):
+            # An explicit null or malformed custom body carries nothing to merge.
+            extra_body = {}
+        # Server-side tools declared in the custom body (e.g. web search on
+        # Anthropic-compatible endpoints) must coexist with the registered
+        # function tools: extra_body replaces same-named top-level keys,
+        # which would silently drop them. Tool definitions get the same
+        # override semantics: a custom tool replaces a registered tool of
+        # the same name instead of duplicating it (the API rejects duplicate
+        # tool names).
+        custom_tools = extra_body.get("tools")
+        if isinstance(custom_tools, list) and isinstance(payloads.get("tools"), list):
+            merged = {}
+            for tool in [*payloads["tools"], *custom_tools]:
+                key = tool.get("name") if isinstance(tool, dict) else None
+                merged[key if key else ("_", id(tool))] = tool
+            payloads["tools"] = list(merged.values())
+            extra_body = {k: v for k, v in extra_body.items() if k != "tools"}
 
         if "max_tokens" not in payloads:
             payloads["max_tokens"] = 65536
@@ -628,7 +647,20 @@ class ProviderAnthropic(Provider):
         final_tool_calls = []
         id = None
         usage = TokenUsage()
-        extra_body = self.provider_config.get("custom_extra_body", {})
+        extra_body = self.provider_config.get("custom_extra_body") or {}
+        if not isinstance(extra_body, dict):
+            extra_body = {}
+        # See _query: custom server-side tools must not replace the
+        # registered function tools, and a name collision overrides
+        # instead of duplicating.
+        custom_tools = extra_body.get("tools")
+        if isinstance(custom_tools, list) and isinstance(payloads.get("tools"), list):
+            merged = {}
+            for tool in [*payloads["tools"], *custom_tools]:
+                key = tool.get("name") if isinstance(tool, dict) else None
+                merged[key if key else ("_", builtins.id(tool))] = tool
+            payloads["tools"] = list(merged.values())
+            extra_body = {k: v for k, v in extra_body.items() if k != "tools"}
         reasoning_content = ""
         reasoning_signature = ""
 
@@ -665,10 +697,15 @@ class ProviderAnthropic(Provider):
                         )
                     elif event.content_block.type == "tool_use":
                         # 工具使用块开始，初始化缓冲区
+                        # Keep the input from the start event; streamed deltas
+                        # replace it only when they carry JSON.
+                        start_input = event.content_block.input
                         tool_use_buffer[event.index] = {
                             "id": event.content_block.id,
                             "name": event.content_block.name,
-                            "input": {},
+                            "input": start_input
+                            if isinstance(start_input, dict)
+                            else {},
                         }
 
                 elif event.type == "content_block_delta":
@@ -713,7 +750,8 @@ class ProviderAnthropic(Provider):
                         # 解析完整的工具调用
                         tool_info = tool_use_buffer[event.index]
                         try:
-                            if "input_json" in tool_info:
+                            # 无参数的工具只会收到一个空的 partial_json
+                            if tool_info.get("input_json"):
                                 tool_info["input"] = json.loads(tool_info["input_json"])
 
                             # 添加到最终结果

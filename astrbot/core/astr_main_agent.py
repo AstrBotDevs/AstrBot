@@ -32,6 +32,7 @@ from astrbot.core.astr_main_agent_resources import (
 from astrbot.core.computer.booters.local import resolve_windows_shell
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.db import BaseDatabase
+from astrbot.core.llm_error_messages import LLM_ERROR_MESSAGES
 from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_persona,
@@ -98,10 +99,16 @@ from astrbot.core.tools.web_search_tools import (
     BaiduWebSearchTool,
     BochaWebSearchTool,
     BraveWebSearchTool,
+    DeepSeekFetchWebPageTool,
+    DeepSeekWebSearchTool,
     ExaGetContentsTool,
     ExaWebSearchTool,
     FirecrawlExtractWebPageTool,
     FirecrawlWebSearchTool,
+    SerpApiFinanceSearchTool,
+    SerpApiImageSearchTool,
+    SerpApiScholarSearchTool,
+    SerpApiWebSearchTool,
     TavilyExtractWebPageTool,
     TavilyWebSearchTool,
     normalize_legacy_web_search_config,
@@ -114,6 +121,7 @@ from astrbot.core.utils.file_extract import extract_file_moonshotai
 from astrbot.core.utils.image_input import prepare_request_images
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
 from astrbot.core.utils.media_utils import (
+    describe_media_ref,
     is_file_uri,
     is_recoverable_image_error,
     normalize_model_image_max_size,
@@ -160,6 +168,11 @@ WEB_SEARCH_CITATION_TOOL_NAMES = frozenset(
         "web_search_brave",
         "web_search_exa",
         "web_search_anysearch",
+        "web_search_deepseek",
+        "web_search_serpapi",
+        "image_search_serpapi",
+        "finance_search_serpapi",
+        "scholar_search_serpapi",
     }
 )
 WEB_SEARCH_CITATION_PROMPT = (
@@ -240,8 +253,19 @@ class MainAgentBuildResult:
     reset_coro: Coroutine | None = None
 
 
-def _set_llm_error_message(event: AstrMessageEvent, message: str) -> None:
-    event.set_extra(LLM_ERROR_MESSAGE_EXTRA_KEY, message)
+def _set_llm_error_message(event: AstrMessageEvent, key: str, **params: str) -> None:
+    """Format an internal LLM error in the requesting client's language.
+
+    Args:
+        event: Message event carrying the optional UI locale.
+        key: Built-in error translation key.
+        **params: Values interpolated into the message.
+    """
+    locale = event.get_extra("locale")
+    if not isinstance(locale, str):
+        locale = "zh-CN"
+    messages = LLM_ERROR_MESSAGES.get(locale, LLM_ERROR_MESSAGES["zh-CN"])
+    event.set_extra(LLM_ERROR_MESSAGE_EXTRA_KEY, messages[key].format(**params))
 
 
 async def _select_provider(
@@ -263,7 +287,8 @@ async def _select_provider(
             logger.error("未找到指定的提供商: %s。", sel_provider)
             _set_llm_error_message(
                 event,
-                f"LLM 请求失败：未找到指定的提供商 `{sel_provider}`。请检查提供商配置或重新选择可用模型。",
+                "providerNotFound",
+                provider=sel_provider,
             )
             return None
         if not isinstance(provider, Provider):
@@ -272,17 +297,20 @@ async def _select_provider(
             )
             _set_llm_error_message(
                 event,
-                f"LLM 请求失败：选择的提供商类型无效（{type(provider).__name__}），已跳过本次请求。",
+                "invalidProviderType",
+                provider_type=type(provider).__name__,
             )
             return None
         return provider
     try:
+        locale = event.get_extra("locale")
+        locale_kwargs = {"locale": locale} if isinstance(locale, str) else {}
         return await plugin_context.get_using_provider_async(
-            umo=event.unified_msg_origin
+            umo=event.unified_msg_origin, **locale_kwargs
         )
     except ValueError as exc:
         logger.error("Error occurred while selecting provider: %s", exc)
-        _set_llm_error_message(event, f"LLM 请求失败：{exc}")
+        _set_llm_error_message(event, "requestFailed", detail=str(exc))
         return None
 
 
@@ -492,7 +520,7 @@ def _build_local_mode_prompt() -> str:
             "PowerShell 7-only syntax or assume Unix commands like cat/ls/grep are available."
         )
     return (
-        "You have access to the host local environment and can execute shell commands and Python code. "
+        "Local computer tools are available subject to your role's file and execution permissions. "
         f"Current operating system: {system_name}. "
         f"{shell_hint} "
         "Local shell commands automatically return a managed session when they "
@@ -543,6 +571,7 @@ async def _ensure_persona_and_skills(
     event: AstrMessageEvent,
 ) -> None:
     """Ensure persona and skills are applied to the request's system prompt or user prompt."""
+    event.set_extra("_trace_persona_id", None)
     if req.system_prompt is None:
         req.system_prompt = ""
 
@@ -564,6 +593,8 @@ async def _ensure_persona_and_skills(
         provider_settings=cfg,
     )
 
+    event.set_extra("_trace_persona_id", persona_id)
+
     set_persona_custom_error_message_on_event(
         event, extract_persona_custom_error_message_from_persona(persona)
     )
@@ -582,11 +613,16 @@ async def _ensure_persona_and_skills(
 
     # Inject skills prompt
     runtime = cfg.get("computer_use_runtime", "none")
-    skill_manager = SkillManager()
-    skills = skill_manager.list_skills(active_only=True, runtime=runtime)
-    skills = _filter_skills_for_current_config(skills, cfg)
+    skills: list[SkillInfo] = []
+    skill_manager = None
+    try:
+        skill_manager = SkillManager()
+        skills = skill_manager.list_skills(active_only=True, runtime=runtime)
+        skills = _filter_skills_for_current_config(skills, cfg)
+    except Exception:
+        logger.exception("Failed to list skills while preparing LLM request.")
     workspace_skills: list[SkillInfo] = []
-    if runtime == "local":
+    if runtime == "local" and skill_manager:
         workspace_root = await _get_workspace_path_for_umo(
             event.unified_msg_origin,
             plugin_context,
@@ -694,14 +730,6 @@ async def _ensure_persona_and_skills(
         ).strip()
         if router_prompt:
             req.system_prompt += f"\n{router_prompt}\n"
-    try:
-        event.trace.record(
-            "sel_persona",
-            persona_id=persona_id,
-            persona_toolset=persona_toolset.names(),
-        )
-    except Exception:
-        pass
 
 
 async def _request_img_caption(
@@ -1279,6 +1307,14 @@ async def _apply_web_search_tools(
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExaGetContentsTool))
     elif provider == "anysearch":
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(AnySearchWebSearchTool))
+    elif provider == "deepseek":
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(DeepSeekWebSearchTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(DeepSeekFetchWebPageTool))
+    elif provider == "serpapi":
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(SerpApiWebSearchTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(SerpApiImageSearchTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(SerpApiFinanceSearchTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(SerpApiScholarSearchTool))
 
 
 def _apply_web_search_citation_prompt(
@@ -1416,10 +1452,13 @@ def _matches_provider_wake_prefix(
         True when no prefix is configured, WebChat is exempt, or the message
         starts with the configured prefix.
     """
+    message_str = event.message_str or ""
+    if event.get_platform_name() == "lark":
+        message_str = message_str.lstrip()
     return (
         not provider_wake_prefix
         or event.get_platform_name() == "webchat"
-        or (event.message_str or "").startswith(provider_wake_prefix)
+        or message_str.startswith(provider_wake_prefix)
     )
 
 
@@ -1470,8 +1509,8 @@ async def collect_initial_request(
                     )
                 )
                 if conversation is None:
-                    _set_llm_error_message(
-                        event,
+                    event.set_extra(
+                        LLM_ERROR_MESSAGE_EXTRA_KEY,
                         "The requested conversation no longer exists. Please send a new message.",
                     )
                     return None, None
@@ -1489,10 +1528,11 @@ async def collect_initial_request(
                 return None, None
 
             req.prompt = event.message_str
-            if provider_wake_prefix and event.message_str.startswith(
-                provider_wake_prefix
-            ):
-                req.prompt = event.message_str[len(provider_wake_prefix) :]
+            prefix_text = event.message_str
+            if event.get_platform_name() == "lark":
+                prefix_text = prefix_text.lstrip()
+            if provider_wake_prefix and prefix_text.startswith(provider_wake_prefix):
+                req.prompt = prefix_text[len(provider_wake_prefix) :]
 
             # media files attachments
             for comp in event.message_obj.message:
@@ -1503,7 +1543,9 @@ async def collect_initial_request(
                         if not is_recoverable_image_error(exc):
                             raise
                         logger.warning(
-                            "Image attachment is unavailable (%s).", type(exc).__name__
+                            "Image attachment is unavailable (%s): %s",
+                            type(exc).__name__,
+                            describe_media_ref(comp.url or comp.file),
                         )
                         req.extra_user_content_parts.append(
                             TextPart(text="[Image unavailable]")
@@ -1567,8 +1609,11 @@ async def collect_initial_request(
                                 if not is_recoverable_image_error(exc):
                                     raise
                                 logger.warning(
-                                    "Quoted image is unavailable (%s).",
+                                    "Quoted image is unavailable (%s): %s",
                                     type(exc).__name__,
+                                    describe_media_ref(
+                                        reply_comp.url or reply_comp.file
+                                    ),
                                 )
                                 req.extra_user_content_parts.append(
                                     TextPart(text="[Image unavailable]")
@@ -1714,7 +1759,7 @@ async def build_main_agent(
         if not event.get_extra(LLM_ERROR_MESSAGE_EXTRA_KEY):
             _set_llm_error_message(
                 event,
-                "LLM 请求失败：未找到任何可用的对话模型（提供商）。请先在 WebUI 中配置并启用可用模型。",
+                "noProvider",
             )
         return None
 

@@ -864,6 +864,10 @@ class PluginService:
                 fallback_desc,
             ),
         }
+        handler_md = getattr(command_filter, "handler_md", None)
+        if handler_md:
+            component["handler_full_name"] = handler_md.handler_full_name
+            component["handler_name"] = handler_md.handler_name
         return self._wrap_command_component(parts[:-1], component)
 
     def _build_command_group_component(
@@ -907,10 +911,15 @@ class PluginService:
                 component["subcommands"] = subcommands
             return component
 
-        return {
+        component = {
             "name": command_filter.command_name,
             "description": self._get_command_description(command_filter),
         }
+        handler_md = getattr(command_filter, "handler_md", None)
+        if handler_md:
+            component["handler_full_name"] = handler_md.handler_full_name
+            component["handler_name"] = handler_md.handler_name
+        return component
 
     @staticmethod
     def _wrap_command_component(parent_names: list[str], component: dict) -> dict:

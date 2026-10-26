@@ -165,6 +165,11 @@ class AstrBotExporter:
                         config_content = f.read()
                     zf.writestr("config/cmd_config.json", config_content)
                     self._add_checksum("config/cmd_config.json", config_content)
+                mcp_config_path = Path(get_astrbot_data_path()) / "mcp_server.json"
+                if mcp_config_path.is_file():
+                    mcp_content = mcp_config_path.read_bytes()
+                    zf.writestr("config/mcp_server.json", mcp_content)
+                    self._add_checksum("config/mcp_server.json", mcp_content)
                 if progress_callback:
                     await progress_callback("config", 100, 100, "配置文件导出完成")
 

@@ -41,9 +41,10 @@ const tabs = computed(() => [
 
 const activeTab = computed(() => String(route.meta.dataTab || "statistics"));
 
-// Remember the last opened tab so the sidebar entry can reopen it.
+// Watch the route metadata directly so leaving this workspace does not save
+// the Statistics fallback as the last opened tab.
 watch(
-  activeTab,
+  () => route.meta.dataTab,
   (value) => {
     const tab = tabs.value.find((item) => item.value === value);
     if (tab) localStorage.setItem("data_last_tab", tab.routeName);

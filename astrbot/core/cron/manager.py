@@ -17,11 +17,14 @@ from astrbot.core.config.agent_runner import resolve_context_compression_config
 from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import CronJob
+from astrbot.core.log import log_context
+from astrbot.core.platform.astr_message_event import event_context
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider.entites import ProviderRequest
 from astrbot.core.utils.config_number import coerce_int_config
 from astrbot.core.utils.history_saver import persist_agent_history
+from astrbot.core.utils.trace import trace_execution
 
 if TYPE_CHECKING:
     from astrbot.core.star.context import Context
@@ -108,6 +111,7 @@ class CronJobManager:
         self._started = False
         # The scheduler may start early via _schedule_job; track DB sync separately.
         self._db_synced = False
+        self._running_tasks: dict[str, set[asyncio.Task]] = {}
 
     async def start(self, ctx: "Context") -> None:
         self.ctx: Context = ctx  # star context
@@ -221,8 +225,21 @@ class CronJobManager:
         return job
 
     async def delete_job(self, job_id: str) -> None:
+        """Remove a schedule and drain its active runs before deleting its row.
+
+        Args:
+            job_id: Job to delete, including any currently executing run.
+        """
         self._remove_scheduled(job_id)
         self._basic_handlers.pop(job_id, None)
+        tasks = [
+            task
+            for task in self._running_tasks.get(job_id, set())
+            if task is not asyncio.current_task() and not task.done()
+        ]
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
         await self.db.delete_cron_job(job_id)
 
     async def list_jobs(self, job_type: str | None = None) -> list[CronJob]:
@@ -347,35 +364,45 @@ class CronJobManager:
         job = await self.db.get_cron_job(job_id)
         if not job or (not job.enabled and not ignore_enabled):
             return
-        start_time = datetime.now(timezone.utc)
-        await self.db.update_cron_job(
-            job_id, status="running", last_run_at=start_time, last_error=None
-        )
-        status = "completed"
-        last_error = None
+        task = asyncio.current_task()
+        self._running_tasks.setdefault(job_id, set()).add(task)
         try:
-            if job.job_type == "basic":
-                await self._run_basic_job(job)
-            elif job.job_type == "active_agent":
-                await self._run_active_agent_job(job, start_time=start_time)
-            else:
-                raise ValueError(f"Unknown cron job type: {job.job_type}")
-        except Exception as e:  # noqa: BLE001
-            status = "failed"
-            last_error = str(e)
-            logger.error(f"Cron job {job_id} failed: {e!s}", exc_info=True)
-        finally:
-            next_run = self._get_next_run_time(job_id)
+            start_time = datetime.now(timezone.utc)
             await self.db.update_cron_job(
-                job_id,
-                status=status,
-                last_run_at=start_time,
-                last_error=last_error,
-                next_run_time=next_run,
+                job_id, status="running", last_run_at=start_time, last_error=None
             )
-            if job.run_once and delete_run_once:
-                # one-shot: remove after execution regardless of success
-                await self.delete_job(job_id)
+            status = "completed"
+            last_error = None
+            try:
+                if job.job_type == "basic":
+                    await self._run_basic_job(job)
+                elif job.job_type == "active_agent":
+                    await self._run_active_agent_job(job, start_time=start_time)
+                else:
+                    raise ValueError(f"Unknown cron job type: {job.job_type}")
+            except asyncio.CancelledError:
+                status = "cancelled"
+                raise
+            except Exception as e:  # noqa: BLE001
+                status = "failed"
+                last_error = str(e)
+                logger.error(f"Cron job {job_id} failed: {e!s}", exc_info=True)
+            finally:
+                next_run = self._get_next_run_time(job_id)
+                await self.db.update_cron_job(
+                    job_id,
+                    status=status,
+                    last_run_at=start_time,
+                    last_error=last_error,
+                    next_run_time=next_run,
+                )
+                if job.run_once and delete_run_once and status != "cancelled":
+                    # One-shot runs remove themselves, excluding their own task.
+                    await self.delete_job(job_id)
+        finally:
+            self._running_tasks[job_id].discard(task)
+            if not self._running_tasks[job_id]:
+                del self._running_tasks[job_id]
 
     async def _run_basic_job(self, job: CronJob) -> None:
         handler = self._basic_handlers.get(job.job_id)
@@ -438,6 +465,7 @@ class CronJobManager:
         )
         from astrbot.core.astr_main_agent_resources import (
             PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT,
+            PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT,
         )
         from astrbot.core.tools.message_tools import SendMessageToUserTool
 
@@ -459,120 +487,123 @@ class CronJobManager:
             message_type=session.message_type,
         )
 
-        # judge user's role
-        umo = cron_event.unified_msg_origin
-        cfg = self.ctx.get_config(umo=umo)
-        enabled_plugins_name = cfg.get("plugin_set", ["*"])
-        cron_event.plugins_name = (
-            None if enabled_plugins_name == ["*"] else enabled_plugins_name
-        )
-        cron_payload = extras.get("cron_payload", {}) if extras else {}
-        sender_id = cron_payload.get("sender_id")
-        admin_ids = cfg.get("admins_id", [])
-        if admin_ids:
-            cron_event.role = "admin" if sender_id in admin_ids else "member"
-        if cron_payload.get("origin", "tool") == "api":
-            cron_event.role = "admin"
-
-        provider_settings = cfg.get("provider_settings", {}) or {}
-        persona_config = (
-            cfg.get("agent_runner", {}).get("config", {}).get("persona", {})
-        )
-        tool_call_timeout = (
-            cfg.get("agent_runner", {})
-            .get("config", {})
-            .get("misc", {})
-            .get("tool_call_timeout", 120)
-        )
-        agent_max_step = coerce_int_config(
-            cfg.get("agent_runner", {})
-            .get("config", {})
-            .get("misc", {})
-            .get("max_steps", 128),
-            default=128,
-            min_value=1,
-            field_name="agent_runner.config.misc.max_steps",
-        )
-        config = MainAgentBuildConfig(
-            tool_call_timeout=tool_call_timeout,
-            fallback_provider_ids=cfg.get("agent_runner", {})
-            .get("config", {})
-            .get("model", {})
-            .get("fallback_provider_ids", []),
-            **resolve_context_compression_config(
-                cfg.get("agent_runner", {}).get("config", {}).get("compression", {})
-            ),
-            llm_safety_mode=persona_config.get("safety_mode", True),
-            safety_mode_strategy=persona_config.get(
-                "safety_mode_strategy", "system_prompt"
-            ),
-            streaming_response=False,
-            computer_use_runtime=provider_settings.get("computer_use_runtime", "none"),
-            sandbox_cfg=provider_settings.get("sandbox", {}),
-            provider_settings=provider_settings,
-        )
-        req = ProviderRequest()
-        conv = await _get_session_conv(event=cron_event, plugin_context=self.ctx)
-        req.conversation = conv
-        req.contexts = json.loads(conv.history)
-        cron_job_str = json.dumps(extras.get("cron_job", {}), ensure_ascii=False)
-        req.system_prompt += PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT.format(
-            cron_job=cron_job_str
-        )
-        req.prompt = (
-            "You are now responding to a scheduled task. "
-            "Proceed according to your system instructions. "
-            "Output using same language as previous conversation. "
-            "After completing your task, summarize and output your actions and results."
-        )
-        if delivery_session_str:
-            if not req.func_tool:
-                req.func_tool = ToolSet()
-            req.func_tool.add_tool(
-                self.ctx.get_llm_tool_manager().get_builtin_tool(SendMessageToUserTool)
+        with (
+            log_context(cron_event.get_platform_id(), cron_event.get_platform_name()),
+            event_context(cron_event),
+            trace_execution(cron_event.trace),
+        ):
+            # judge user's role
+            umo = cron_event.unified_msg_origin
+            cfg = self.ctx.get_config(umo=umo)
+            enabled_plugins_name = cfg.get("plugin_set", ["*"])
+            cron_event.plugins_name = (
+                None if enabled_plugins_name == ["*"] else enabled_plugins_name
             )
+            cron_payload = extras.get("cron_payload", {}) if extras else {}
+            sender_id = cron_payload.get("sender_id")
+            admin_ids = cfg.get("admins_id", [])
+            if admin_ids:
+                cron_event.role = "admin" if sender_id in admin_ids else "member"
+            if cron_payload.get("origin", "tool") == "api":
+                cron_event.role = "admin"
 
-        result = await build_main_agent(
-            event=cron_event, plugin_context=self.ctx, config=config, req=req
-        )
-        if not result:
-            raise RuntimeError("Failed to build main agent for cron job.")
-
-        runner = result.agent_runner
-        async for _ in runner.step_until_done(agent_max_step):
-            # agent will send message to user via using tools
-            pass
-        llm_resp = runner.get_final_llm_resp()
-        if runner.state == AgentState.ERROR:
-            # The run failed (e.g. malformed function call at max steps) but
-            # no exception escapes the runner; without this the job was
-            # recorded as completed with last_error=NULL and the user saw
-            # only intermediate messages (#9980).
-            detail = (
-                f": {llm_resp.completion_text}"
-                if llm_resp and llm_resp.completion_text
-                else ""
+            provider_settings = cfg.get("provider_settings", {}) or {}
+            persona_config = (
+                cfg.get("agent_runner", {}).get("config", {}).get("persona", {})
             )
-            raise RuntimeError(f"Cron agent run ended in ERROR state{detail}")
-        cron_meta = extras.get("cron_job", {}) if extras else {}
-        summary_note = (
-            f"[CronJob] {cron_meta.get('name') or cron_meta.get('id', 'unknown')}: {cron_meta.get('description', '')} "
-            f" triggered at {cron_meta.get('run_started_at', 'unknown time')}, "
-        )
-        if llm_resp and llm_resp.role == "assistant":
-            summary_note += (
-                f"I finished this job, here is the result: {llm_resp.completion_text}"
+            tool_call_timeout = (
+                cfg.get("agent_runner", {})
+                .get("config", {})
+                .get("misc", {})
+                .get("tool_call_timeout", 120)
             )
+            agent_max_step = coerce_int_config(
+                cfg.get("agent_runner", {})
+                .get("config", {})
+                .get("misc", {})
+                .get("max_steps", 128),
+                default=128,
+                min_value=1,
+                field_name="agent_runner.config.misc.max_steps",
+            )
+            config = MainAgentBuildConfig(
+                tool_call_timeout=tool_call_timeout,
+                fallback_provider_ids=cfg.get("agent_runner", {})
+                .get("config", {})
+                .get("model", {})
+                .get("fallback_provider_ids", []),
+                **resolve_context_compression_config(
+                    cfg.get("agent_runner", {}).get("config", {}).get("compression", {})
+                ),
+                llm_safety_mode=persona_config.get("safety_mode", True),
+                safety_mode_strategy=persona_config.get(
+                    "safety_mode_strategy", "system_prompt"
+                ),
+                streaming_response=False,
+                computer_use_runtime=provider_settings.get(
+                    "computer_use_runtime", "none"
+                ),
+                sandbox_cfg=provider_settings.get("sandbox", {}),
+                provider_settings=provider_settings,
+            )
+            req = ProviderRequest()
+            conv = await _get_session_conv(event=cron_event, plugin_context=self.ctx)
+            req.conversation = conv
+            req.contexts = json.loads(conv.history)
+            cron_job_str = json.dumps(extras.get("cron_job", {}), ensure_ascii=False)
+            req.system_prompt += PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT
+            # Keep per-run metadata after history so it does not invalidate its cache.
+            req.prompt = PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
+                cron_job=cron_job_str
+            )
+            if delivery_session_str:
+                if not req.func_tool:
+                    req.func_tool = ToolSet()
+                req.func_tool.add_tool(
+                    self.ctx.get_llm_tool_manager().get_builtin_tool(
+                        SendMessageToUserTool
+                    )
+                )
 
-        await persist_agent_history(
-            self.ctx.conversation_manager,
-            event=cron_event,
-            req=req,
-            summary_note=summary_note,
-        )
-        if not llm_resp:
-            logger.warning("Cron job agent got no response")
-            return
+            result = await build_main_agent(
+                event=cron_event, plugin_context=self.ctx, config=config, req=req
+            )
+            if not result:
+                raise RuntimeError("Failed to build main agent for cron job.")
+
+            runner = result.agent_runner
+            async for _ in runner.step_until_done(agent_max_step):
+                # agent will send message to user via using tools
+                pass
+            llm_resp = runner.get_final_llm_resp()
+            if runner.state == AgentState.ERROR:
+                # The run failed (e.g. malformed function call at max steps) but
+                # no exception escapes the runner; without this the job was
+                # recorded as completed with last_error=NULL and the user saw
+                # only intermediate messages (#9980).
+                detail = (
+                    f": {llm_resp.completion_text}"
+                    if llm_resp and llm_resp.completion_text
+                    else ""
+                )
+                raise RuntimeError(f"Cron agent run ended in ERROR state{detail}")
+            cron_meta = extras.get("cron_job", {}) if extras else {}
+            summary_note = (
+                f"[CronJob] {cron_meta.get('name') or cron_meta.get('id', 'unknown')}: {cron_meta.get('description', '')} "
+                f" triggered at {cron_meta.get('run_started_at', 'unknown time')}, "
+            )
+            if llm_resp and llm_resp.role == "assistant":
+                summary_note += f"I finished this job, here is the result: {llm_resp.completion_text}"
+
+            await persist_agent_history(
+                self.ctx.conversation_manager,
+                event=cron_event,
+                req=req,
+                summary_note=summary_note,
+            )
+            if not llm_resp:
+                logger.warning("Cron job agent got no response")
+                return
 
 
 __all__ = ["CronJobManager"]

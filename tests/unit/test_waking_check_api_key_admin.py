@@ -33,7 +33,6 @@ async def test_waking_check_enforces_api_key_admin_authorization(
             "plugin_set": ["*"],
         }
     )
-    stage.unique_session = False
     stage.ignore_bot_self_message = False
     stage.friend_message_needs_wake_prefix = False
     stage.ignore_at_all = False

@@ -542,6 +542,7 @@ paths:
           required: true
           schema:
             type: string
+        - $ref: "#/components/parameters/BotCleanup"
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -624,6 +625,7 @@ paths:
       x-astrbot-scope: bot
       parameters:
         - $ref: "#/components/parameters/BotId"
+        - $ref: "#/components/parameters/BotCleanup"
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -4184,6 +4186,48 @@ paths:
       summary: List active and known UMOs
       operationId: listActiveUmos
       x-astrbot-scope: data
+      parameters:
+        - name: platform_id
+          in: query
+          description: Exact platform instance ID; omit to list all instances.
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/sessions/senders:
+    get:
+      tags: [Sessions]
+      summary: Search known senders with source session names
+      description: >-
+        Search recorded senders, deduplicate by platform instance and sender ID,
+        then paginate in descending update order. Returns senders, page and
+        has_more in the data object. Historical messages are not backfilled.
+      operationId: listSessionSenders
+      x-astrbot-scope: data
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - name: sender_ids
+          in: query
+          description: Resolve the latest record per exact sender ID instead of returning all source sessions.
+          schema:
+            type: array
+            maxItems: 100
+            items:
+              type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+            maxLength: 512
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 100
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -4656,6 +4700,7 @@ paths:
       tags: [Stats]
       summary: Get storage status
       operationId: getStorageStatus
+      description: Returns log, cache, and trace database usage (including trace sidecars), plus total bytes.
       x-astrbot-scope: system
       responses:
         "200":
@@ -4666,13 +4711,14 @@ paths:
       tags: [Stats]
       summary: Clean storage
       operationId: cleanupStorage
+      description: Clears logs, cache, finished trace history, or all three. Running traces are retained.
       x-astrbot-scope: system
       requestBody:
         required: false
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/DynamicConfig"
+              $ref: "#/components/schemas/StorageCleanupRequest"
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -5085,6 +5131,87 @@ paths:
         "200":
           $ref: "#/components/responses/Text"
 
+  /api/v1/logs/export:
+    get:
+      tags: [Logs]
+      summary: Export a diagnostic bundle
+      description: Requires a dashboard administrator session. Developer API keys are not accepted. Includes available disk and memory logs, trace history, configuration, plugin status and environment details. Credentials are masked by default; setting redact=false exports original sensitive values.
+      operationId: exportLogs
+      security:
+        - BearerAuth: []
+      x-astrbot-scope: system
+      parameters:
+        - name: redact
+          in: query
+          description: Mask recognized credentials. Disable only for private diagnosis.
+          schema: {type: boolean, default: true}
+        - name: start_time
+          in: query
+          description: Inclusive minimum log timestamp or trace start time, in Unix seconds. Omit for no lower bound. Undated standalone log content is excluded when a time bound is set.
+          schema: {type: integer, minimum: 0}
+        - name: end_time
+          in: query
+          description: Inclusive maximum log timestamp or trace start time, in Unix seconds. Omit for no upper bound. Must not be before start_time. Matching traces retain their complete details.
+          schema: {type: integer, minimum: 0}
+      responses:
+        "200":
+          description: Diagnostic ZIP. With redact=false it contains original sensitive values; personal data may remain in either mode.
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+
+  /api/v1/trace/history:
+    get:
+      tags: [Logs]
+      summary: List persisted trace summaries
+      operationId: listTraces
+      x-astrbot-scope: system
+      parameters:
+        - name: limit
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 100, default: 50}
+        - name: cursor
+          description: Legacy keyset cursor; use page for numbered pagination.
+          in: query
+          schema: {type: string, maxLength: 64}
+        - name: page
+          in: query
+          schema: {type: integer, minimum: 1, default: 1}
+        - name: query
+          in: query
+          schema: {type: string, maxLength: 256, default: ""}
+        - name: errors
+          in: query
+          schema: {type: boolean, default: false}
+        - name: models
+          in: query
+          schema: {type: boolean, default: false}
+        - name: plugins
+          in: query
+          schema: {type: boolean, default: false}
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/trace/{trace_id}:
+    get:
+      tags: [Logs]
+      summary: Get persisted trace spans and events
+      operationId: getTraceDetail
+      x-astrbot-scope: system
+      parameters:
+        - name: trace_id
+          in: path
+          required: true
+          schema: {type: string, pattern: "^[0-9a-f]{32}$"}
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+        "404":
+          description: Trace not found or already evicted.
+
   /api/v1/trace/settings:
     get:
       tags: [Logs]
@@ -5312,6 +5439,17 @@ components:
             type: string
 
   parameters:
+    BotCleanup:
+      name: cleanup
+      in: query
+      description: Data categories to permanently remove for this adapter. Omit to retain all associated data. Shared resources and cross-platform routing rules are preserved.
+      required: false
+      style: form
+      explode: true
+      schema:
+        type: array
+        items:
+          $ref: "#/components/schemas/BotCleanupTarget"
     AttachmentId:
       name: attachment_id
       in: path
@@ -5488,6 +5626,9 @@ components:
         type: string
 
   schemas:
+    BotCleanupTarget:
+      type: string
+      enum: [custom_rules, preferences, routing, cron_jobs, conversations, message_history, traces, stats]
     RuntimeInfo:
       type: object
       description: The AstrBot backend runtime, including when running inside a container. Values are captured at application startup.
@@ -5538,6 +5679,14 @@ components:
           type: string
         data: {}
       additionalProperties: false
+
+    StorageCleanupRequest:
+      type: object
+      properties:
+        target:
+          type: string
+          enum: [logs, cache, traces, all]
+          default: all
 
     DynamicConfig:
       type: object
@@ -5776,6 +5925,9 @@ components:
       type: object
       required: [message]
       properties:
+        locale:
+          type: string
+          description: UI locale for built-in LLM error messages. Omitted or unsupported locales fall back to zh-CN.
         username:
           type: string
           description: Caller-declared WebChat sender/session owner. Configured AstrBot administrator IDs require the chat:admin API key sub-scope.
@@ -5848,6 +6000,9 @@ components:
     ChatMessageRegenerateRequest:
       type: object
       properties:
+        locale:
+          type: string
+          description: UI locale for built-in LLM error messages. Omitted or unsupported locales fall back to zh-CN.
         selected_provider:
           type: string
         selected_model:
@@ -5879,6 +6034,9 @@ components:
       type: object
       required: [message]
       properties:
+        locale:
+          type: string
+          description: UI locale for built-in LLM error messages. Omitted or unsupported locales fall back to zh-CN.
         message:
           oneOf:
             - type: string

@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.computer import process_sandbox
 from astrbot.core.computer.booters import local
 from astrbot.core.computer.process_sandbox import (
     SandboxSpec,
@@ -87,12 +88,14 @@ print("original process output")
 @requires_local_sandbox
 def test_runtime_probe_launches_native_sandbox(monkeypatch, tmp_path):
     """Verify the dashboard startup check against each platform's real backend."""
-    monkeypatch.setattr(stat_service, "get_astrbot_temp_path", lambda: str(tmp_path))
+    process_sandbox.get_process_sandbox_status.cache_clear()
+    monkeypatch.setattr(process_sandbox, "get_astrbot_temp_path", lambda: str(tmp_path))
 
     service = stat_service.StatService(MagicMock(), MagicMock(), {})
 
     assert service.runtime["sandbox"]["status"] == "detected", service.runtime
     assert not list(tmp_path.iterdir())
+    process_sandbox.get_process_sandbox_status.cache_clear()
 
 
 @requires_local_sandbox
