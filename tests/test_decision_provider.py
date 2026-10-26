@@ -297,6 +297,34 @@ async def test_decision_service_maps_choice_ids_and_applies_threshold():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "answer",
+    [
+        DecisionAnswer(
+            choice="o3",
+            probability=0.6,
+            probabilities={"o1": 0.4, "o2": 0.6},
+            confidence=0.8,
+        ),
+        DecisionAnswer(
+            choice="o2",
+            probability=0.6,
+            probabilities={"o1": 0.4, "o3": 0.6},
+            confidence=0.8,
+        ),
+    ],
+)
+async def test_decision_service_rejects_unknown_provider_option_keys(answer):
+    provider = MagicMock(spec=DecisionProvider)
+    provider.ask = AsyncMock(return_value={"answer": answer})
+    manager = MagicMock()
+    manager.get_using_provider_async = AsyncMock(return_value=provider)
+
+    with pytest.raises(DecisionError, match="invalid choice"):
+        await DecisionService(manager).choose("Pick one", ["wait", "reply"])
+
+
+@pytest.mark.asyncio
 async def test_decision_service_rejects_non_decision_provider():
     manager = MagicMock()
     manager.get_using_provider_async = AsyncMock(return_value=MagicMock(spec=Provider))

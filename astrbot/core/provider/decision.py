@@ -114,6 +114,10 @@ class DecisionService:
         answer = answers["answer"]
         if answer.choice is None:
             raise DecisionError("Decision provider returned no choice")
+        if answer.choice not in option_ids or set(answer.probabilities) != set(
+            option_ids
+        ):
+            raise DecisionError("Decision provider returned an invalid choice")
         return DecisionAnswer(
             choice=option_ids[answer.choice],
             probability=answer.probability,
