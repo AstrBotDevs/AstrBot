@@ -1882,6 +1882,7 @@ async def test_yuanbao_search_parses_json_string_pages(monkeypatch):
             favicon="https://example.com/favicon.ico",
         )
     ]
+    assert session.calls[0]["url"] == "https://api.wsa.cloud.tencent.com/v1/SearchPro"
     assert session.calls[0]["json"] == {"Query": "AstrBot"}
     assert session.calls[0]["headers"]["Authorization"] == "Bearer yuanbao-key"
     assert session.calls[0]["json"] == {"Query": "AstrBot"}

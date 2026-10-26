@@ -361,7 +361,7 @@ async def _yuanbao_search(
         }
         async with aiohttp.ClientSession(trust_env=True) as session:
             async with session.post(
-                "https://api.wsa.cloud.tencent.com/SearchPro",
+                "https://api.wsa.cloud.tencent.com/v1/SearchPro",
                 json=payload,
                 headers=headers,
                 timeout=aiohttp.ClientTimeout(total=60),
