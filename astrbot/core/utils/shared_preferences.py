@@ -51,6 +51,9 @@ class SharedPreferences:
         # See https://github.com/AstrBotDevs/AstrBot/pull/9649 for the original
         # deadlock scenario and design rationale.
         self._cache: dict[tuple[str, str, str], Any] = {}
+        # Mask old database rows until their queued deletion has committed.
+        self._pending_removals: dict[tuple[str, str, str], _WriteOperation] = {}
+        self._pending_clears: dict[tuple[str, str], _WriteOperation] = {}
         self._cache_lock = threading.RLock()
         self._cache_initialized = False
         self._initializing = False
@@ -81,8 +84,10 @@ class SharedPreferences:
         with self._cache_lock:
             if action == "put" and key is not None:
                 self._cache[(scope, scope_id, key)] = deepcopy(value)
+                self._pending_removals.pop((scope, scope_id, key), None)
             elif action == "remove" and key is not None:
                 self._cache.pop((scope, scope_id, key), None)
+                self._pending_removals[(scope, scope_id, key)] = operation
             elif action == "clear":
                 keys = [
                     cache_key
@@ -91,6 +96,10 @@ class SharedPreferences:
                 ]
                 for cache_key in keys:
                     self._cache.pop(cache_key, None)
+                for cache_key in list(self._pending_removals):
+                    if cache_key[:2] == (scope, scope_id):
+                        self._pending_removals.pop(cache_key)
+                self._pending_clears[(scope, scope_id)] = operation
 
     def _schedule_write(self, operation: _WriteOperation) -> None:
         """Schedule a preference write on the owning event loop.
@@ -174,6 +183,20 @@ class SharedPreferences:
                 if completion is not None and not completion.done():
                     completion.set_exception(exc)
             else:
+                # An older completed deletion must not unmask a newer queued one.
+                # Retire successful masks so future misses still query the database.
+                with self._cache_lock:
+                    cache_key = (scope, scope_id, key)
+                    if (
+                        action == "remove"
+                        and self._pending_removals.get(cache_key) is operation
+                    ):
+                        self._pending_removals.pop(cache_key)
+                    elif (
+                        action == "clear"
+                        and self._pending_clears.get((scope, scope_id)) is operation
+                    ):
+                        self._pending_clears.pop((scope, scope_id))
                 if completion is not None and not completion.done():
                     completion.set_result(None)
             finally:
@@ -275,10 +298,16 @@ class SharedPreferences:
         await self.initialize()
         if scope_id is None or key is None:
             return default
+        cache_key = (scope, scope_id, key)
         with self._cache_lock:
-            value = self._cache.get((scope, scope_id, key), _MISSING)
+            value = self._cache.get(cache_key, _MISSING)
             if value is not _MISSING:
                 return deepcopy(value)
+            if (
+                cache_key in self._pending_removals
+                or cache_key[:2] in self._pending_clears
+            ):
+                return default
         preference = await self.db_helper.get_preference(scope, scope_id, key)
         if preference is None:
             return default
@@ -296,7 +325,7 @@ class SharedPreferences:
         await self.initialize()
         await self.flush()
         ret = await self.db_helper.get_preferences(scope, scope_id, key)
-        return ret
+        return self._merge_cached_preferences(ret, scope, scope_id, key)
 
     @overload
     async def session_get(
@@ -446,10 +475,16 @@ class SharedPreferences:
             )
         resolved_scope = scope or "unknown"
         resolved_scope_id = scope_id or "unknown"
+        cache_key = (resolved_scope, resolved_scope_id, key)
         with self._cache_lock:
-            value = self._cache.get((resolved_scope, resolved_scope_id, key), _MISSING)
+            value = self._cache.get(cache_key, _MISSING)
             if value is not _MISSING:
                 return default if value is None else deepcopy(value)
+            if (
+                cache_key in self._pending_removals
+                or cache_key[:2] in self._pending_clears
+            ):
+                return default
         # Overlay miss: fall back to a point query through a dedicated
         # synchronous database connection. This briefly blocks the calling
         # thread (unavoidable for a synchronous API), but never touches the
@@ -525,23 +560,53 @@ class SharedPreferences:
                 )
                 persisted = []
 
+        return self._merge_cached_preferences(persisted, scope, scope_id, key)
+
+    def _merge_cached_preferences(
+        self,
+        persisted: list[Preference],
+        scope: str,
+        scope_id: str | None,
+        key: str | None,
+    ) -> list[Preference]:
+        """Apply process-local mutations to an on-demand range query.
+
+        Args:
+            persisted: Preferences returned by the database query.
+            scope: Preference scope to query.
+            scope_id: Optional identifier within the scope.
+            key: Optional preference key.
+
+        Returns:
+            Preferences with pending deletions hidden and later puts overlaid.
+        """
         values = {
             (preference.scope, preference.scope_id, preference.key): preference
             for preference in persisted
         }
         with self._cache_lock:
+            for cache_key in list(values):
+                if cache_key not in self._cache and (
+                    cache_key in self._pending_removals
+                    or cache_key[:2] in self._pending_clears
+                ):
+                    values.pop(cache_key)
             for (cache_scope, cache_scope_id, cache_key), value in self._cache.items():
                 if (
                     cache_scope == scope
                     and (scope_id is None or cache_scope_id == scope_id)
                     and (key is None or cache_key == key)
                 ):
-                    values[(cache_scope, cache_scope_id, cache_key)] = Preference(
-                        scope=cache_scope,
-                        scope_id=cache_scope_id,
-                        key=cache_key,
-                        value={"val": deepcopy(value)},
-                    )
+                    identity = (cache_scope, cache_scope_id, cache_key)
+                    if identity in values:
+                        values[identity].value = {"val": deepcopy(value)}
+                    else:
+                        values[identity] = Preference(
+                            scope=cache_scope,
+                            scope_id=cache_scope_id,
+                            key=cache_key,
+                            value={"val": deepcopy(value)},
+                        )
         return list(values.values())
 
     @deprecated(
