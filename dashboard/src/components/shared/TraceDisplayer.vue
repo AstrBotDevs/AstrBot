@@ -1350,40 +1350,47 @@ onBeforeUnmount(() => {
         <div v-if="loading" class="trace-empty-state">{{ tm("loading") }}</div>
         <div v-else-if="compactLayout" class="trace-mobile-list">
           <div v-if="!traceRows.length" class="trace-empty-state">{{ tm("empty") }}</div>
-          <button
-            v-for="item in traceRows"
-            :key="item.event.span_id"
-            type="button"
-            class="trace-mobile-card"
-            :class="{ selected: item.event.span_id === selectedSpanId }"
-            :data-trace-id="item.event.span_id"
-            :aria-pressed="item.event.span_id === selectedSpanId"
-            @click="selectEvent(item.event.span_id)"
+          <TransitionGroup
+            v-else
+            name="trace-mobile-card"
+            tag="div"
+            class="trace-mobile-cards"
           >
-            <span class="trace-mobile-card-top">
-              <span class="trace-status-badge" :class="statusClass(item.event)">{{ statusLabel(item.event) }}</span>
-              <span class="trace-mobile-platform" :title="item.event.platform_id || item.event.platform_name">
-                <img v-if="item.event.platform_icon && !failedPlatformLogos.has(item.event.platform_icon)" :src="item.event.platform_icon" :alt="item.event.platform_name" @error="failedPlatformLogos.add(item.event.platform_icon)" />
-                <Activity v-else :size="14" aria-hidden="true" />
+            <button
+              v-for="item in traceRows"
+              :key="item.event.span_id"
+              type="button"
+              class="trace-mobile-card"
+              :class="{ selected: item.event.span_id === selectedSpanId }"
+              :data-trace-id="item.event.span_id"
+              :aria-pressed="item.event.span_id === selectedSpanId"
+              @click="selectEvent(item.event.span_id)"
+            >
+              <span class="trace-mobile-card-top">
+                <span class="trace-status-badge" :class="statusClass(item.event)">{{ statusLabel(item.event) }}</span>
+                <span class="trace-mobile-platform" :title="item.event.platform_id || item.event.platform_name">
+                  <img v-if="item.event.platform_icon && !failedPlatformLogos.has(item.event.platform_icon)" :src="item.event.platform_icon" :alt="item.event.platform_name" @error="failedPlatformLogos.add(item.event.platform_icon)" />
+                  <Activity v-else :size="14" aria-hidden="true" />
+                </span>
+                <time class="trace-mobile-time trace-numeric">{{ formatTime(item.event.first_time) }}</time>
               </span>
-              <time class="trace-mobile-time trace-numeric">{{ formatTime(item.event.first_time) }}</time>
-            </span>
-            <span class="trace-mobile-message">{{ item.event.message_outline || tm("untitled") }}</span>
-            <span class="trace-mobile-categories">
-              <v-chip v-if="matchesFilter(item.event, 'models')" size="x-small" variant="tonal" color="primary">{{ tm("classification.agent") }}</v-chip>
-              <v-chip v-if="item.event.has_commands ?? item.event.records.some((record) => record.kind === 'plugin_handler' && record.fields.handler_category === 'command')" size="x-small" variant="tonal" color="success">{{ tm("classification.command") }}</v-chip>
-              <v-chip v-if="item.event.message_type === 'GroupMessage'" size="x-small" variant="tonal">{{ tm("classification.group") }}</v-chip>
-              <v-chip v-else-if="item.event.message_type === 'FriendMessage'" size="x-small" variant="tonal">{{ tm("classification.private") }}</v-chip>
-            </span>
-            <span class="trace-mobile-context">
-              <span class="trace-mobile-umo" :title="item.event.umo">{{ umoNames[item.event.umo] || item.event.umo || "-" }}</span>
-              <span class="trace-mobile-sender" :title="item.event.sender_name">{{ item.event.sender_name || "-" }}</span>
-            </span>
-            <span class="trace-mobile-card-footer trace-numeric">
-              <span>{{ item.duration }}</span>
-              <span>Spans {{ item.spans }}</span>
-            </span>
-          </button>
+              <span class="trace-mobile-message">{{ item.event.message_outline || tm("untitled") }}</span>
+              <span class="trace-mobile-categories">
+                <v-chip v-if="matchesFilter(item.event, 'models')" size="x-small" variant="tonal" color="primary">{{ tm("classification.agent") }}</v-chip>
+                <v-chip v-if="item.event.has_commands ?? item.event.records.some((record) => record.kind === 'plugin_handler' && record.fields.handler_category === 'command')" size="x-small" variant="tonal" color="success">{{ tm("classification.command") }}</v-chip>
+                <v-chip v-if="item.event.message_type === 'GroupMessage'" size="x-small" variant="tonal">{{ tm("classification.group") }}</v-chip>
+                <v-chip v-else-if="item.event.message_type === 'FriendMessage'" size="x-small" variant="tonal">{{ tm("classification.private") }}</v-chip>
+              </span>
+              <span class="trace-mobile-context">
+                <span class="trace-mobile-umo" :title="item.event.umo">{{ umoNames[item.event.umo] || item.event.umo || "-" }}</span>
+                <span class="trace-mobile-sender" :title="item.event.sender_name">{{ item.event.sender_name || "-" }}</span>
+              </span>
+              <span class="trace-mobile-card-footer trace-numeric">
+                <span>{{ item.duration }}</span>
+                <span>Spans {{ item.spans }}</span>
+              </span>
+            </button>
+          </TransitionGroup>
         </div>
         <v-data-table-server
           v-else
@@ -2328,10 +2335,15 @@ onBeforeUnmount(() => {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 10px;
   min-height: 0;
   overflow-y: auto;
   padding: 10px;
+}
+
+.trace-mobile-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .trace-mobile-card {
@@ -2357,6 +2369,21 @@ onBeforeUnmount(() => {
 .trace-mobile-card.selected {
   background: rgba(var(--v-theme-primary), 0.08);
   border-color: rgba(var(--v-theme-primary), 0.36);
+}
+
+.trace-mobile-card-enter-active {
+  transition:
+    opacity 240ms cubic-bezier(0.2, 0, 0, 1),
+    transform 240ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.trace-mobile-card-enter-from {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+.trace-mobile-card-move {
+  transition: transform 240ms cubic-bezier(0.2, 0, 0, 1);
 }
 
 .trace-mobile-card:focus-visible {
@@ -2777,6 +2804,16 @@ onBeforeUnmount(() => {
 
   .trace-list-table :deep(.trace-list-row--entering) {
     animation: none;
+  }
+
+  .trace-mobile-card-enter-active,
+  .trace-mobile-card-move {
+    transition: none;
+  }
+
+  .trace-mobile-card-enter-from {
+    opacity: 1;
+    transform: none;
   }
 }
 
