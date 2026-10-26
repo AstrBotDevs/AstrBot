@@ -2641,7 +2641,7 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 8px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin: 18px 0 22px;
+  margin: 24px 0 22px;
 }
 
 .trace-stat-grid.has-tokens {
