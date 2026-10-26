@@ -4,7 +4,9 @@
 """
 
 import io
+from pathlib import Path
 
+from PIL import Image
 from pypdf import PdfReader
 
 from astrbot.core.knowledge_base.parsers.base import (
@@ -47,54 +49,31 @@ class PDFParser(BaseParser):
         image_counter = 0
         for page_num, page in enumerate(reader.pages):
             try:
-                # 安全检查 Resources
-                if "/Resources" not in page:
-                    continue
-
-                resources = page["/Resources"]
-                if not resources or "/XObject" not in resources:  # type: ignore
-                    continue
-
-                xobjects = resources["/XObject"].get_object()  # type: ignore
-                if not xobjects:
-                    continue
-
-                for obj_name in xobjects:
+                images = page.images
+                for image_name in images.keys():
                     try:
-                        obj = xobjects[obj_name]
-
-                        if obj.get("/Subtype") != "/Image":
+                        # pypdf encodes pixel streams and applies color spaces
+                        # and soft masks; raw get_data() bytes are not PNG files.
+                        image = images[image_name]
+                        if image.image is None:
                             continue
-
-                        # 提取图片数据
-                        image_data = obj.get_data()
-
-                        # 确定格式
-                        filter_type = obj.get("/Filter", "")
-                        if filter_type == "/DCTDecode":
-                            ext = "jpg"
-                            mime_type = "image/jpeg"
-                        elif filter_type == "/FlateDecode":
-                            ext = "png"
-                            mime_type = "image/png"
-                        else:
-                            ext = "png"
-                            mime_type = "image/png"
+                        ext = Path(image.name).suffix
+                        mime_type = Image.MIME[image.image.format]
 
                         image_counter += 1
                         media_items.append(
                             MediaItem(
                                 media_type="image",
-                                file_name=f"page_{page_num}_img_{image_counter}.{ext}",
-                                content=image_data,
+                                file_name=f"page_{page_num}_img_{image_counter}{ext}",
+                                content=image.data,
                                 mime_type=mime_type,
                             ),
                         )
                     except Exception:
-                        # 单个图片提取失败不影响整体
+                        # A broken image must not hide other images on the page.
                         continue
             except Exception:
-                # 页面处理失败不影响其他页面
+                # A page-level image error must not discard other pages or text.
                 continue
 
         full_text = "\n\n".join(text_parts)
