@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Sample photo picker</title>
+<style>
+body { font: 15px system-ui; margin: 20px; color: #20292b; }
+#photos { display: flex; gap: 12px; flex-wrap: wrap; }
+label { cursor: pointer; padding: 8px; border: 1px solid #ccd6d3; border-radius: 12px; }
+.thumbnail { width: 120px; height: 90px; border-radius: 8px; display: grid; place-items: center; color: white; font-size: 40px; }
+button { background: #245e50; color: white; padding: 10px 18px; border: 0; border-radius: 8px; margin-top: 16px; cursor: pointer; }
+button:disabled { opacity: .5; cursor: default; }
+</style></head><body>
+<h3>Choose your cover</h3><p>Sample illustrations · select one or more</p>
+<div id="photos"></div><button id="choose" disabled>Use selection</button><p id="status" role="status"></p>
+<script>
+let requestId = 2;
+const button = document.querySelector('#choose');
+const status = document.querySelector('#status');
+window.addEventListener('message', event => {
+  if (event.source !== parent || event.data?.jsonrpc !== '2.0') return;
+  const data = event.data;
+  if (data.id === 1 && data.result) {
+    parent.postMessage({jsonrpc:'2.0',method:'ui/notifications/initialized'}, '*');
+  }
+  if (data.method === 'ui/notifications/tool-result') {
+    const root = document.querySelector('#photos');
+    root.replaceChildren();
+    for (const photo of data.params.structuredContent?.photos || []) {
+      const label = document.createElement('label');
+      const image = document.createElement('div');
+      image.className = 'thumbnail'; image.style.backgroundColor = photo.color;
+      image.textContent = ({'1':'♣','2':'☀','3':'≈'})[photo.id] || '◈';
+      const input = document.createElement('input'); input.type = 'checkbox'; input.value = photo.id;
+      input.addEventListener('change', () => { button.disabled = !document.querySelector('input:checked'); });
+      label.append(image, input, document.createTextNode(`${photo.id} ${photo.label}`)); root.append(label);
+    }
+    parent.postMessage({jsonrpc:'2.0',method:'ui/notifications/size-changed',params:{height:document.body.scrollHeight+40}}, '*');
+  }
+  if (data.id > 1) {
+    status.textContent = data.error ? 'Selection dismissed. You can try again.' : 'Added to your message draft. Review and send it to continue.';
+    button.disabled = !document.querySelector('input:checked');
+  }
+});
+button.addEventListener('click', () => {
+  const ids = [...document.querySelectorAll('input:checked')].map(input => input.value);
+  parent.postMessage({jsonrpc:'2.0',id:requestId++,method:'ui/message',params:{role:'user',content:[{type:'text',text:`I selected illustrations ${ids.join(', ')}. Please recommend how to use them for the cover.`}]}}, '*');
+  button.disabled = true; status.textContent = 'Review the proposed message below the app.';
+});
+parent.postMessage({jsonrpc:'2.0',id:1,method:'ui/initialize',params:{protocolVersion:'2026-01-26',appInfo:{name:'Sample photo picker',version:'1.0.0'},appCapabilities:{}}}, '*');
+</script></body></html>

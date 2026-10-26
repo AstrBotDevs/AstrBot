@@ -158,3 +158,22 @@ Hide real tokens before sharing configuration, screenshots, or logs. Keep field 
 - [Official MCP server examples](https://github.com/modelcontextprotocol/servers)
 - [awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers)
 - [ModelScope MCP directory](https://www.modelscope.cn/mcp)
+
+
+## Interactive MCP Apps in WebChat
+
+WebChat can open a bundled MCP Apps view from a completed tool call. This initial host supports inline display, tool input/result notifications, resizing, and text-only `ui/message` requests (protocol `2026-01-26`). It does not expose direct tool calls, resource reads, model-context changes, external links, or device permissions to the embedded app. Ordinary textual tool results remain available, including on IM platforms.
+
+1. Add an MCP server whose tool declares `_meta.ui.resourceUri` with a `ui://` URI and serves bundled HTML with MIME type `text/html;profile=mcp-app`.
+2. Ask the assistant to use that tool in WebChat and wait for the response to finish. If needed, reload the conversation so the assistant message is persisted.
+3. Click **Open interactive app** below the tool call. The current user must own the conversation, and the original tool and server must still be active.
+4. Make a selection in the app. Review its proposed text, then click **Add to message**. Existing draft text is preserved. Send the message with the normal chat composer to continue.
+5. **Dismiss** rejects a proposed message; **Close** removes the embedded view.
+
+Views run with an opaque origin (`sandbox="allow-scripts"`) and a restrictive CSP. Inline scripts/styles and data images are supported; network connections, external scripts, nested frames and forms are blocked by CSP. Bundle assets into the HTML. Resource size is limited to 1 MiB. App code cannot read dashboard storage or DOM. Only the tool's recorded arguments/result are passed into its view; no dashboard credentials are supplied.
+
+### Local picker example
+
+Run `uv run examples/mcp_apps/photo_picker.py` through an MCP stdio configuration. Use the absolute path to this checkout's Python executable as `command` and the absolute path to `examples/mcp_apps/photo_picker.py` in `args`. Ask the assistant to call `show_photo_picker`. The three colored sample illustrations are local demo data and require no external account or image service. On IM platforms, reply with the numbered choices.
+
+Development checks: `node --test dashboard/tests/mcpAppHost.test.mjs` and `uv run pytest tests/unit/test_mcp_apps.py`. With the dashboard dev server running and Playwright/Chromium installed, run `python scripts/check_mcp_app_ui.py`. The browser check mounts the production tool card and uses a real stdio MCP server; it mocks the authenticated history endpoint and does not call a paid LLM.

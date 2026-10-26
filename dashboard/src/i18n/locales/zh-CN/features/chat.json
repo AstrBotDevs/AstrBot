@@ -251,5 +251,14 @@
     "exit": "退出",
     "partialFailure": "{total} 个对话中有 {failed} 个删除失败",
     "requestFailed": "删除对话失败，请重试。"
+  },
+  "mcpApp": {
+    "open": "打开交互应用",
+    "title": "交互工具",
+    "close": "关闭",
+    "review": "请检查内容，再添加到消息草稿。",
+    "use": "添加到消息",
+    "decline": "忽略",
+    "error": "无法打开应用。请等待回复结束后重新加载对话，并检查对应 MCP 服务器是否已连接。"
   }
 }

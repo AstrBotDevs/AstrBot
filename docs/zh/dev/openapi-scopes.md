@@ -163,6 +163,7 @@ outline: deep
 | `PATCH` | `/api/v1/chat/sessions/{session_id}` | — |
 | `DELETE` | `/api/v1/chat/sessions/{session_id}` | — |
 | `PATCH` | `/api/v1/chat/sessions/{session_id}/messages/{message_id}` | — |
+| `GET` | `/api/v1/chat/sessions/{session_id}/messages/{message_id}/mcp-app/{tool_call_id}` | — |
 | `POST` | `/api/v1/chat/sessions/{session_id}/messages/{message_id}/regenerate` | — |
 | `POST` | `/api/v1/chat/sessions/{session_id}/stop` | — |
 | `POST` | `/api/v1/chat/threads` | — |

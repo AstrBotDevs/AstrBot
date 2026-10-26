@@ -25,6 +25,7 @@ from tenacity import (
 )
 
 from astrbot import logger
+from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import ImageURLPart, TextPart, ThinkPart
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_image_cache import tool_image_cache
@@ -1200,6 +1201,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             llm_response.tools_call_ids,
         ):
             tool_result_blocks_start = len(tool_call_result_blocks)
+            mcp_app = None
             tool_call_streak = self._track_tool_call_streak(
                 func_tool_name,
                 func_tool_args,
@@ -1296,6 +1298,14 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     if isinstance(resp, CallToolResult):
                         res = resp
                         _final_resp = resp
+                        if isinstance(func_tool, MCPTool) and func_tool.ui_resource_uri:
+                            mcp_app = {
+                                "server": func_tool.mcp_server_name,
+                                "uri": func_tool.ui_resource_uri,
+                                "result": resp.model_dump(
+                                    by_alias=True, exclude_none=True
+                                ),
+                            }
                         if not res.content:
                             _append_tool_call_result(
                                 func_tool_id,
@@ -1430,6 +1440,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                     "id": func_tool_id,
                                     "ts": time.time(),
                                     "result": tool_result_content,
+                                    **({"mcp_app": mcp_app} if mcp_app else {}),
                                 }
                             )
                         ],

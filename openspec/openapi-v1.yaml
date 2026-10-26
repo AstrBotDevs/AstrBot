@@ -97,6 +97,33 @@ tags:
   - name: Webhooks
 
 paths:
+  /api/v1/chat/sessions/{session_id}/messages/{message_id}/mcp-app/{tool_call_id}:
+    get:
+      tags: [Chat]
+      summary: Read a completed tool call's interactive MCP App
+      operationId: getChatMcpApp
+      x-astrbot-scope: chat
+      parameters:
+        - {name: session_id, in: path, required: true, schema: {type: string}}
+        - {name: message_id, in: path, required: true, schema: {type: string}}
+        - {name: tool_call_id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Bundled HTML and recorded tool arguments/result; standard envelope
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: {type: string}
+                  message: {type: string}
+                  data:
+                    type: object
+                    properties:
+                      html: {type: string}
+                      arguments: {type: object, additionalProperties: true}
+                      result: {type: object, additionalProperties: true}
+
   /api/v1/auth/login:
     post:
       tags: [Auth]

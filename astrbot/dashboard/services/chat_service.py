@@ -259,6 +259,8 @@ class BotMessageAccumulator:
         }
         tool_call["result"] = tool_result.get("result")
         tool_call["finished_ts"] = tool_result.get("ts")
+        if isinstance(tool_result.get("mcp_app"), dict):
+            tool_call["mcp_app"] = tool_result["mcp_app"]
         self.parts.append({"type": "tool_call", "tool_calls": [tool_call]})
 
     @staticmethod
