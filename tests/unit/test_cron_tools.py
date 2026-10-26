@@ -17,6 +17,7 @@ def _context(
     sender_id: str = "user-1",
     tz_name: str | None = "Asia/Shanghai",
     message_type: MessageType = MessageType.GROUP_MESSAGE,
+    is_admin: bool = False,
 ):
     return SimpleNamespace(
         context=SimpleNamespace(
@@ -28,6 +29,7 @@ def _context(
                 unified_msg_origin=umo,
                 get_sender_id=lambda: sender_id,
                 get_message_type=lambda: message_type,
+                is_admin=lambda: is_admin,
             ),
         )
     )
@@ -212,10 +214,138 @@ async def test_future_task_delete_rejects_same_umo_different_sender():
 
     assert result == (
         "error: cron job job-1 was created by another member of this group chat, "
-        "so you cannot delete it. Only the member who created it can delete it; "
-        "tell the user to ask that member."
+        "so you cannot delete it. Only the member who created it or an AstrBot "
+        "admin can delete it; tell the user to ask that member."
     )
     cron_mgr.delete_job.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_future_task_admin_can_delete_other_members_group_job():
+    """AstrBot admins should be able to delete another member's task in the group."""
+    tool = FutureTaskTool()
+    existing_job = _job("job-1", sender_id="user-2")
+    cron_mgr = SimpleNamespace(
+        db=SimpleNamespace(get_cron_job=AsyncMock(return_value=existing_job)),
+        delete_job=AsyncMock(),
+    )
+
+    result = await tool.call(
+        _context(cron_mgr, sender_id="admin-user", is_admin=True),
+        action="delete",
+        job_id="job-1",
+    )
+
+    assert result == "Deleted cron job job-1."
+    cron_mgr.delete_job.assert_awaited_once_with("job-1")
+
+
+@pytest.mark.asyncio
+async def test_future_task_admin_cannot_delete_job_from_another_session():
+    """Admin overrides stay scoped to the current group session."""
+    tool = FutureTaskTool()
+    existing_job = _job("job-1", umo="test:group:other", sender_id="user-2")
+    cron_mgr = SimpleNamespace(
+        db=SimpleNamespace(get_cron_job=AsyncMock(return_value=existing_job)),
+        delete_job=AsyncMock(),
+    )
+
+    result = await tool.call(
+        _context(cron_mgr, sender_id="admin-user", is_admin=True),
+        action="delete",
+        job_id="job-1",
+    )
+
+    assert result == (
+        "error: cron job job-1 was not created by you, so you cannot delete it. "
+        "Only whoever created it can delete it."
+    )
+    cron_mgr.delete_job.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_future_task_admin_cannot_edit_other_members_group_job():
+    """Admin overrides only cover listing and deleting, not editing."""
+    tool = FutureTaskTool()
+    existing_job = _job("job-1", sender_id="user-2")
+    cron_mgr = SimpleNamespace(
+        db=SimpleNamespace(get_cron_job=AsyncMock(return_value=existing_job)),
+        update_job=AsyncMock(),
+    )
+
+    result = await tool.call(
+        _context(cron_mgr, sender_id="admin-user", is_admin=True),
+        action="edit",
+        job_id="job-1",
+        note="admin note",
+    )
+
+    assert result == (
+        "error: cron job job-1 was created by another member of this group chat, "
+        "so you cannot edit it. Only the member who created it can edit it; tell "
+        "the user to ask that member."
+    )
+    cron_mgr.update_job.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_future_task_group_admin_override_requires_a_group_message():
+    """Admin overrides must not apply outside group chats."""
+    tool = FutureTaskTool()
+    existing_job = _job(
+        "job-1",
+        umo="test:private:shared",
+        sender_id="user-2",
+    )
+    cron_mgr = SimpleNamespace(
+        db=SimpleNamespace(get_cron_job=AsyncMock(return_value=existing_job)),
+        delete_job=AsyncMock(),
+    )
+
+    result = await tool.call(
+        _context(
+            cron_mgr,
+            umo="test:private:shared",
+            sender_id="admin-user",
+            message_type=MessageType.FRIEND_MESSAGE,
+            is_admin=True,
+        ),
+        action="delete",
+        job_id="job-1",
+    )
+
+    assert result == (
+        "error: cron job job-1 was not created by you, so you cannot delete it. "
+        "Only whoever created it can delete it."
+    )
+    cron_mgr.delete_job.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_future_task_list_admin_sees_group_tasks_with_creator():
+    """Admins should list every task in the current group and see its creator."""
+    tool = FutureTaskTool()
+    admin_job = _job("admin-job", sender_id="admin-user")
+    member_job = _job("member-job", sender_id="user-2")
+    other_session_job = _job(
+        "other-session-job",
+        umo="test:group:other",
+        sender_id="user-2",
+    )
+    cron_mgr = SimpleNamespace(
+        list_jobs=AsyncMock(return_value=[admin_job, member_job, other_session_job])
+    )
+
+    result = await tool.call(
+        _context(cron_mgr, sender_id="admin-user", is_admin=True),
+        action="list",
+    )
+
+    assert "admin-job" in result
+    assert "member-job" in result
+    assert "creator=user-2" in result
+    assert "other-session-job" not in result
+    assert "Note:" not in result
 
 
 @pytest.mark.asyncio
@@ -438,8 +568,9 @@ async def test_future_task_list_notes_hidden_same_session_group_tasks():
     assert "own-job" in result
     assert "other-member-job" not in result
     assert (
-        "Note: tasks in this chat that were not created by you are not listed here, "
-        "and can only be edited or deleted by whoever created them."
+        "Note: tasks in this chat that were not created by you are not listed here. "
+        "Only their creators can edit or delete them; in group chats, AstrBot admins "
+        "can also delete them."
     ) in result
 
 
