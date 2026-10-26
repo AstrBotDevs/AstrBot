@@ -1107,9 +1107,15 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             # append a user message with images so LLM can see them
             if cached_images:
                 modalities = self.provider.provider_config.get("modalities", [])
-                supports_image = (
-                    not modalities or "image" in modalities
-                )  # Empty list is treated as unconfigured for backward compatibility
+                # Unlike the request-assembly path above, tool-result images
+                # are new multimodal content the provider never asked for.
+                # Be conservative: only append them when the provider config
+                # explicitly declares image support. An empty or missing
+                # modalities list means capabilities are unknown, and sending
+                # images to a text-only model produces a 400 that aborts the
+                # entire turn. The text description in result_parts already
+                # tells the LLM the image exists and where it is cached.
+                supports_image = "image" in modalities
                 if supports_image:
                     # Build user message with images for LLM to review
                     image_parts = []
