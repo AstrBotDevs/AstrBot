@@ -374,3 +374,40 @@ async def test_provider_manager_uses_selected_decision_provider():
 
     await manager.terminate_provider("decision_0")
     await manager.terminate_provider("decision_1")
+
+
+@pytest.mark.asyncio
+async def test_create_provider_rolls_back_when_loading_fails():
+    config = MagicMock()
+    providers = []
+    config.__getitem__.side_effect = lambda key: {
+        "provider": providers,
+        "provider_settings": {},
+    }[key]
+    acm = MagicMock()
+    acm.default_conf = config
+    acm.confs = {
+        "default": {
+            "provider": [],
+            "provider_sources": [],
+            "provider_settings": {},
+        }
+    }
+    persona_manager = MagicMock()
+    persona_manager.default_persona = ""
+    manager = ProviderManager(acm, MagicMock(), persona_manager)
+    manager.load_provider = AsyncMock(side_effect=ValueError("api_base is required"))
+
+    with pytest.raises(ValueError, match="api_base is required"):
+        await manager.create_provider(
+            {
+                "id": "invalid_decision",
+                "type": "system_one_decision",
+                "provider_type": "decision",
+                "api_base": "",
+                "enable": True,
+            }
+        )
+
+    assert providers == []
+    config.save_config.assert_not_called()

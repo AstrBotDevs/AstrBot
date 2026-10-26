@@ -1034,7 +1034,7 @@ class ProviderManager:
             await self.reload(new_config)
 
     async def create_provider(self, new_config: dict) -> None:
-        """Add new provider config and load the instance. Config will be saved after addition."""
+        """Add and load a provider, saving config only after it loads successfully."""
         async with self.resource_lock:
             npid = new_config.get("id", None)
             if not npid:
@@ -1045,9 +1045,13 @@ class ProviderManager:
                     raise ValueError(f"Provider ID {npid} already exists")
             # add to config
             config["provider"].append(new_config)
-            config.save_config()
             # load instance
-            await self.load_provider(new_config)
+            try:
+                await self.load_provider(new_config)
+            except Exception:
+                config["provider"].remove(new_config)
+                raise
+            config.save_config()
             # sync in-memory config for API queries (e.g., embedding provider list)
             self.providers_config = astrbot_config["provider"]
 
