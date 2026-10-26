@@ -12,6 +12,7 @@ import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from astrbot.core.agent.agent import Agent
+from astrbot.core.astr_agent_hooks import MainAgentHooks
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.message import ImageURLPart, Message, TextPart
@@ -24,6 +25,7 @@ from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
 from astrbot.core.provider.provider import Provider
+from astrbot.core.star.star_handler import EventType
 
 
 class MockProvider(Provider):
@@ -399,6 +401,7 @@ class MockHooks(BaseAgentRunHooks):
         self.agent_begin_called = False
         self.agent_done_called = False
         self.agent_responses = []
+        self.event_order = []
         self.tool_start_called = False
         self.tool_end_called = False
 
@@ -416,6 +419,7 @@ class MockHooks(BaseAgentRunHooks):
 
     async def on_agent_response(self, run_context, llm_response):
         self.agent_responses.append(llm_response)
+        self.event_order.append("hook")
 
 
 class ClearingAgentBeginHooks(MockHooks):
@@ -932,16 +936,48 @@ async def test_tool_call_response_invokes_response_hook(
         streaming=False,
     )
 
-    responses = [response async for response in runner.step()]
+    responses = []
+    async for response in runner.step():
+        responses.append(response)
+        if (
+            response.type == "llm_result"
+            and response.data["chain"].get_plain_text() == "我需要使用工具来帮助您"
+        ):
+            mock_hooks.event_order.append("text")
 
     assert len(mock_hooks.agent_responses) == 1
     assert mock_hooks.agent_responses[0].completion_text == "我需要使用工具来帮助您"
     assert mock_hooks.agent_responses[0].tools_call_name == ["test_tool"]
     assert not mock_hooks.agent_done_called
+    assert mock_hooks.event_order == ["hook", "text"]
     assert any(
         response.type == "llm_result"
         and response.data["chain"].get_plain_text() == "我需要使用工具来帮助您"
         for response in responses
+    )
+
+
+@pytest.mark.asyncio
+async def test_main_agent_response_hook_dispatches_llm_response_event(monkeypatch):
+    event = MagicMock()
+    llm_response = LLMResponse(
+        role="assistant",
+        completion_text="intermediate response",
+        tools_call_name=["test_tool"],
+        tools_call_args=[{"query": "test"}],
+        tools_call_ids=["call_123"],
+    )
+    call_event_hook = AsyncMock()
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_hooks.call_event_hook", call_event_hook
+    )
+
+    await MainAgentHooks().on_agent_response(
+        ContextWrapper(context=MockAgentContext(event)), llm_response
+    )
+
+    call_event_hook.assert_awaited_once_with(
+        event, EventType.OnLLMResponseEvent, llm_response
     )
 
 

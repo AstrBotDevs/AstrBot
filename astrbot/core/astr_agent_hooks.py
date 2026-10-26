@@ -41,11 +41,6 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
         )
 
     async def on_agent_response(self, run_context, llm_response) -> None:
-        if llm_response and llm_response.reasoning_content:
-            run_context.context.event.set_extra(
-                "_llm_reasoning_content", llm_response.reasoning_content
-            )
-
         await call_event_hook(
             run_context.context.event,
             EventType.OnLLMResponseEvent,
