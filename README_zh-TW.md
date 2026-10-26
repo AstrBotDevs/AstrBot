@@ -210,7 +210,7 @@ pre-commit install
 特別感謝所有 Contributors 和外掛開發者對 AstrBot 的貢獻 ❤️
 
 <a href="https://github.com/AstrBotDevs/AstrBot/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=AstrBotDevs/AstrBot&max=300&columns=15" />
+  <img src="https://contrib.rocks/image?repo=AstrBotDevs/AstrBot&max=500&columns=17" />
 </a>
 
 開源夥伴 ❤️
