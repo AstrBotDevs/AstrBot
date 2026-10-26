@@ -147,12 +147,21 @@ async def test_lark_post_preserves_formatting(
             [{"tag": "text", "text": "    "}, {"tag": "text", "text": "1.item  "}],
             [{"tag": "text", "text": "\tsecond\n    third"}],
             [{"tag": "a", "text": " docs ", "href": "https://example.com"}],
+            [{"tag": "md", "text": "**MD_SENTINEL_731**\n- item"}],
+            [
+                {
+                    "tag": "code_block",
+                    "language": "PYTHON",
+                    "text": "if True:\n    print('CODE_SENTINEL_842')\n",
+                }
+            ],
             [],
         ],
     }
     expected = (
         (f"{title}\n" if title else "")
         + "    ABC123,42\n\n    1.item  \n\tsecond\n    third\n docs (https://example.com)\n"
+        + "**MD_SENTINEL_731**\n- item\nif True:\n    print('CODE_SENTINEL_842')\n\n"
     )
     adapter, event, parent = lark_message
     parent.body.content = json.dumps(content)
