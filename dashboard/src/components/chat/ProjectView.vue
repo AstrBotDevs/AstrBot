@@ -22,7 +22,11 @@
       </div>
     </section>
 
-    <section class="project-sessions-list">
+    <section
+      ref="sessionsContainer"
+      class="project-sessions-list"
+      @scroll.passive="loadMoreSessions"
+    >
       <div v-if="sessions.length > 0" class="project-session-list">
         <button
           v-for="session in sessions"
@@ -65,10 +69,26 @@
           </span>
         </button>
       </div>
-      <div v-else class="no-sessions-in-project">
+      <div
+        v-else-if="!pagination?.loading && !pagination?.error"
+        class="no-sessions-in-project"
+      >
         <MessageSquare :size="22" />
         <p>{{ tm("project.noSessions") }}</p>
       </div>
+      <v-progress-linear
+        v-if="pagination?.loading"
+        color="primary"
+        height="2"
+        indeterminate
+        :aria-label="tm('conversation.loading')"
+      />
+      <ChatLoadError
+        v-if="pagination?.error"
+        :message="tm('conversation.loadFailed')"
+        :loading="pagination.loading"
+        @retry="$emit('loadSessions', pagination.append)"
+      />
     </section>
 
     <div class="project-input-slot">
@@ -78,7 +98,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import ChatLoadError from "@/components/chat/ChatLoadError.vue";
+import type { ProjectSessionsPagination } from "@/composables/useProjects";
 import { FolderCog, MessageSquare, Pencil, Trash2 } from "@lucide/vue";
 import { useModuleI18n } from "@/i18n/composables";
 import type { Project } from "@/components/chat/ProjectList.vue";
@@ -93,15 +115,48 @@ interface Session {
 interface Props {
   project?: Project | null;
   sessions: Session[];
+  pagination?: ProjectSessionsPagination;
 }
 
 const props = defineProps<Props>();
 
 const emit = defineEmits<{
   selectSession: [sessionId: string];
+  loadSessions: [append: boolean];
   editSessionTitle: [sessionId: string, title: string];
   deleteSession: [sessionId: string];
 }>();
+
+const sessionsContainer = ref<HTMLElement | null>(null);
+let resizeObserver: ResizeObserver | null = null;
+
+function loadMoreSessions() {
+  const container = sessionsContainer.value;
+  if (
+    !container ||
+    container.clientHeight === 0 ||
+    !props.pagination?.hasMore ||
+    props.pagination.loading ||
+    props.pagination.error
+  )
+    return;
+  if (container.scrollHeight - container.scrollTop - container.clientHeight > 120)
+    return;
+  emit("loadSessions", true);
+}
+
+watch(
+  [() => props.pagination?.loading, () => props.project?.project_id],
+  () => loadMoreSessions(),
+  { flush: "post" },
+);
+
+onMounted(() => {
+  resizeObserver = new ResizeObserver(() => loadMoreSessions());
+  if (sessionsContainer.value) resizeObserver.observe(sessionsContainer.value);
+  loadMoreSessions();
+});
+onBeforeUnmount(() => resizeObserver?.disconnect());
 
 const { tm } = useModuleI18n("features/chat");
 
