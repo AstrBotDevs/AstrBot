@@ -322,6 +322,25 @@ async def test_send_message_accepts_json_encoded_messages_string():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "messages",
+    ["[" * 10000 + "]" * 10000, "[" + "1" * 10000 + "]"],
+    ids=["deep-nesting", "oversized-integer"],
+)
+async def test_send_message_rejects_json_decoder_resource_limits(messages):
+    """Decoder limits return a validation error before any message is sent.
+
+    Args:
+        messages: JSON exceeding the nesting or integer-conversion limit.
+    """
+    tool = SendMessageToUserTool()
+    ctx = _make_context()
+    result = await tool.call(ctx, messages=messages)
+    assert result == "error: messages parameter is empty or invalid."
+    ctx.context.context.send_message.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_send_message_rejects_non_json_messages_string():
     tool = SendMessageToUserTool()
     ctx = _make_context()
