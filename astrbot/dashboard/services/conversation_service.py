@@ -191,15 +191,22 @@ class ConversationService:
 
     async def delete_conversation(self, data: object) -> dict:
         payload = self._payload(data)
+        cleanup_metadata = bool(payload.get("cleanup_metadata", False))
         if "conversations" in payload:
-            return await self._delete_conversations(payload.get("conversations", []))
+            return await self._delete_conversations(
+                payload.get("conversations", []),
+                cleanup_metadata=cleanup_metadata,
+            )
 
         user_id, cid = self._require_user_and_cid(payload)
         await self.conv_mgr.delete_conversation(
             unified_msg_origin=user_id,
             conversation_id=cid,
         )
-        return {"message": "对话删除成功"}
+        result = {"message": "对话删除成功"}
+        if cleanup_metadata:
+            result["metadata_cleanup"] = await self._safe_cleanup_metadata([user_id])
+        return result
 
     async def update_history(self, data: object) -> dict:
         payload = self._payload(data)
@@ -290,12 +297,15 @@ class ConversationService:
             filename=f"astrbot_conversations_export_{timestamp}.jsonl",
         )
 
-    async def _delete_conversations(self, conversations: object) -> dict:
+    async def _delete_conversations(
+        self, conversations: object, cleanup_metadata: bool = False
+    ) -> dict:
         if not isinstance(conversations, list) or not conversations:
             raise ConversationServiceError("批量删除时conversations参数不能为空")
 
         deleted_count = 0
         failed_items = []
+        deleted_umos: set[str] = set()
 
         for conv in conversations:
             if not isinstance(conv, dict):
@@ -314,6 +324,7 @@ class ConversationService:
                     conversation_id=cid,
                 )
                 deleted_count += 1
+                deleted_umos.add(user_id)
             except Exception as exc:
                 failed_items.append(f"user_id:{user_id}, cid:{cid} - {exc!s}")
 
@@ -321,11 +332,65 @@ class ConversationService:
         if failed_items:
             message += f"，失败 {len(failed_items)} 个"
 
-        return {
+        result = {
             "message": message,
             "deleted_count": deleted_count,
             "failed_count": len(failed_items),
             "failed_items": failed_items,
+        }
+        if cleanup_metadata:
+            result["metadata_cleanup"] = await self._safe_cleanup_metadata(
+                sorted(deleted_umos)
+            )
+        return result
+
+    async def _safe_cleanup_metadata(self, umos: list[str]) -> dict:
+        """Run metadata cleanup without failing the completed deletion.
+
+        Conversations are already deleted when this runs, so a cleanup error
+        is reported as a structured field instead of a failed request.
+        """
+        try:
+            return await self._cleanup_orphaned_metadata(umos)
+        except Exception as exc:
+            logger.warning(f"清理会话元数据失败: {exc!s}")
+            return {
+                "deleted_aliases": 0,
+                "deleted_senders": 0,
+                "retained_umos": [],
+                "error": str(exc),
+            }
+
+    async def _cleanup_orphaned_metadata(self, umos: list[str]) -> dict:
+        """Delete UMO alias and sender metadata left without any conversation.
+
+        The deletion is conditional in the database layer, so a UMO that still
+        owns other conversations keeps its display names.
+
+        Args:
+            umos: Unified message origins of the conversations just deleted.
+
+        Returns:
+            Mapping with ``deleted_aliases``, ``deleted_senders`` and
+            ``retained_umos`` (UMOs kept because other conversations reference
+            them).
+        """
+        deleted_aliases = 0
+        deleted_senders = 0
+        retained_umos: list[str] = []
+
+        for umo in dict.fromkeys(umos):
+            outcome = await self.db_helper.delete_umo_metadata_if_unreferenced(umo)
+            if outcome["alias_deleted"]:
+                deleted_aliases += 1
+            deleted_senders += outcome["senders_deleted"]
+            if outcome["retained"]:
+                retained_umos.append(umo)
+
+        return {
+            "deleted_aliases": deleted_aliases,
+            "deleted_senders": deleted_senders,
+            "retained_umos": retained_umos,
         }
 
     @staticmethod

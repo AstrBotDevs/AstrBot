@@ -338,6 +338,10 @@
                 <v-card-text class="py-4">
                     <p>{{ tm('dialogs.delete.message', { title: selectedConversation?.title || tm('status.noTitle') })
                         }}</p>
+                    <v-checkbox v-model="dialogDeleteCleanup" :label="tm('dialogs.delete.cleanupMetadata')"
+                        :hint="tm('dialogs.delete.cleanupMetadataHint')" persistent-hint density="compact"
+                        :disabled="actionLoading" class="mt-2">
+                    </v-checkbox>
                 </v-card-text>
 
                 <v-divider></v-divider>
@@ -380,6 +384,11 @@
                     <v-alert type="warning" variant="tonal" class="mb-3">
                         {{ tm('dialogs.batchDelete.warning') }}
                     </v-alert>
+
+                    <v-checkbox v-model="dialogBatchDeleteCleanup" :label="tm('dialogs.batchDelete.cleanupMetadata')"
+                        :hint="tm('dialogs.batchDelete.cleanupMetadataHint')" persistent-hint density="compact"
+                        :disabled="actionLoading">
+                    </v-checkbox>
                 </v-card-text>
 
                 <v-divider></v-divider>
@@ -470,6 +479,8 @@ export default {
             dialogEdit: false,
             dialogDelete: false,
             dialogBatchDelete: false, // 批量删除对话框
+            dialogDeleteCleanup: false, // 同时清理无引用的会话元数据
+            dialogBatchDeleteCleanup: false,
 
             // 选中的对话
             selectedConversation: null,
@@ -998,6 +1009,7 @@ export default {
         // 确认删除对话
         confirmDeleteConversation(item) {
             this.selectedConversation = item;
+            this.dialogDeleteCleanup = false;
             this.dialogDelete = true;
         },
 
@@ -1007,7 +1019,8 @@ export default {
             try {
                 const response = await conversationApi.delete(
                     this.selectedConversation.user_id,
-                    this.selectedConversation.cid
+                    this.selectedConversation.cid,
+                    this.dialogDeleteCleanup
                 );
 
                 if (response.data.status === "ok") {
@@ -1047,6 +1060,7 @@ export default {
                 this.showErrorMessage(this.tm('messages.noItemSelected'));
                 return;
             }
+            this.dialogBatchDeleteCleanup = false;
             this.dialogBatchDelete = true;
         },
 
@@ -1076,7 +1090,8 @@ export default {
                 }));
 
                 const response = await conversationApi.batchDelete({
-                    conversations: conversations
+                    conversations: conversations,
+                    cleanup_metadata: this.dialogBatchDeleteCleanup
                 });
 
                 if (response.data.status === "ok") {

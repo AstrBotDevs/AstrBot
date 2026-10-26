@@ -446,6 +446,7 @@ class ConversationMessagesReplaceRequest(OpenModel):
 
 class ConversationBatchDeleteRequest(BaseModel):
     conversations: list[ConversationRef]
+    cleanup_metadata: bool = False
 
 
 class ConversationExportRequest(BaseModel):
