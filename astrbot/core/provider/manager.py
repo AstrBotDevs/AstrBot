@@ -3,7 +3,7 @@ import copy
 import os
 import traceback
 from collections.abc import Callable
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from deprecated import deprecated
 
@@ -12,9 +12,9 @@ from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.db import BaseDatabase
 from astrbot.core.utils.error_redaction import safe_error
 
-from ..persona_mgr import PersonaManager
 from .entities import ProviderType
 from .provider import (
+    DecisionProvider,
     EmbeddingProvider,
     Provider,
     Providers,
@@ -23,6 +23,9 @@ from .provider import (
     TTSProvider,
 )
 from .register import llm_tools, provider_cls_map
+
+if TYPE_CHECKING:
+    from ..persona_mgr import PersonaManager
 
 
 @runtime_checkable
@@ -35,7 +38,7 @@ class ProviderManager:
         self,
         acm: AstrBotConfigManager,
         db_helper: BaseDatabase,
-        persona_mgr: PersonaManager,
+        persona_mgr: "PersonaManager",
     ) -> None:
         self.reload_lock = asyncio.Lock()
         self.resource_lock = asyncio.Lock()
@@ -68,6 +71,8 @@ class ProviderManager:
         """Loaded Embedding Provider instances."""
         self.rerank_provider_insts: list[RerankProvider] = []
         """Loaded Rerank Provider instances."""
+        self.decision_provider_insts: list[DecisionProvider] = []
+        """Loaded decision Provider instances."""
         self.inst_map: dict[
             str,
             Providers,
@@ -81,6 +86,8 @@ class ProviderManager:
         """Default speech-to-text Provider. Deprecated; use get_using_provider()."""
         self.curr_tts_provider_inst: TTSProvider | None = None
         """Default text-to-speech Provider. Deprecated; use get_using_provider()."""
+        self.curr_decision_provider_inst: DecisionProvider | None = None
+        """Default decision Provider."""
         self.db_helper = db_helper
         self._provider_change_callback: (
             Callable[[str, ProviderType, str | None], None] | None
@@ -217,6 +224,18 @@ class ProviderManager:
                 scope_id="global",
             )
             self._notify_provider_changed(provider_id, provider_type, umo)
+        elif provider_type == ProviderType.DECISION and isinstance(
+            prov,
+            DecisionProvider,
+        ):
+            self.curr_decision_provider_inst = prov
+            await sp.put_async(
+                key="curr_provider_decision",
+                value=provider_id,
+                scope="global",
+                scope_id="global",
+            )
+            self._notify_provider_changed(provider_id, provider_type, umo)
 
     async def get_provider_by_id(self, provider_id: str) -> Providers | None:
         """根据提供商 ID 获取提供商实例"""
@@ -278,6 +297,12 @@ class ProviderManager:
                     provider = (
                         self.tts_provider_insts[0] if self.tts_provider_insts else None
                     )
+            elif provider_type == ProviderType.DECISION:
+                provider = self.curr_decision_provider_inst or (
+                    self.decision_provider_insts[0]
+                    if self.decision_provider_insts
+                    else None
+                )
             else:
                 raise ValueError(f"Unknown provider type: {provider_type}")
 
@@ -365,6 +390,12 @@ class ProviderManager:
             scope="global",
             scope_id="global",
         )
+        selected_decision_provider_id = await sp.get_async(
+            key="curr_provider_decision",
+            default=None,
+            scope="global",
+            scope_id="global",
+        )
 
         temp_provider = (
             self.inst_map.get(selected_provider_id)
@@ -398,6 +429,17 @@ class ProviderManager:
         )
         if not self.curr_tts_provider_inst and self.tts_provider_insts:
             self.curr_tts_provider_inst = self.tts_provider_insts[0]
+
+        temp_decision = (
+            self.inst_map.get(selected_decision_provider_id)
+            if isinstance(selected_decision_provider_id, str)
+            else None
+        )
+        self.curr_decision_provider_inst = (
+            temp_decision if isinstance(temp_decision, DecisionProvider) else None
+        )
+        if not self.curr_decision_provider_inst and self.decision_provider_insts:
+            self.curr_decision_provider_inst = self.decision_provider_insts[0]
 
         async def _init_mcp_clients_bg() -> None:
             try:
@@ -587,6 +629,10 @@ class ProviderManager:
                 from .sources.tei_rerank_source import (
                     TEIRerankProvider as TEIRerankProvider,
                 )
+            case "system_one_decision":
+                from .sources.system_one_decision_source import (
+                    SystemOneDecisionProvider as SystemOneDecisionProvider,
+                )
 
     def get_merged_provider_config(self, provider_config: dict) -> dict:
         """获取 provider 配置和 provider_source 配置合并后的结果
@@ -664,7 +710,10 @@ class ProviderManager:
         # 如果 provider_source_id 存在且不为空，则从 provider_sources 中找到对应的配置并合并
         provider_config = self.get_merged_provider_config(provider_config)
 
-        if provider_config.get("provider_type", "") == "chat_completion":
+        if provider_config.get("provider_type", "") in {
+            "chat_completion",
+            "decision",
+        }:
             provider_config = self._resolve_env_key_list(provider_config)
 
         if not provider_config["enable"]:
@@ -802,6 +851,17 @@ class ProviderManager:
                     if isinstance(inst, HasInitialize):
                         await inst.initialize()
                     self.rerank_provider_insts.append(inst)
+                case ProviderType.DECISION:
+                    if not issubclass(cls_type, DecisionProvider):
+                        raise TypeError(
+                            f"Provider class {cls_type} is not a subclass of DecisionProvider"
+                        )
+                    inst = cls_type(provider_config, self.provider_settings)
+                    if isinstance(inst, HasInitialize):
+                        await inst.initialize()
+                    self.decision_provider_insts.append(inst)
+                    if not self.curr_decision_provider_inst:
+                        self.curr_decision_provider_inst = inst
                 case _:
                     # 未知供应商抛出异常，确保inst初始化
                     # Should be unreachable
@@ -866,6 +926,18 @@ class ProviderManager:
                     "as the current text-to-speech provider adapter.",
                 )
 
+            if len(self.decision_provider_insts) == 0:
+                self.curr_decision_provider_inst = None
+            elif (
+                self.curr_decision_provider_inst is None
+                and len(self.decision_provider_insts) > 0
+            ):
+                self.curr_decision_provider_inst = self.decision_provider_insts[0]
+                logger.info(
+                    f"Automatically selected {self.curr_decision_provider_inst.meta().id} "
+                    "as the current decision provider adapter.",
+                )
+
     def get_insts(self):
         return self.provider_insts
 
@@ -889,6 +961,10 @@ class ProviderManager:
                 prov_inst = self.inst_map[provider_id]
                 if isinstance(prov_inst, TTSProvider):
                     self.tts_provider_insts.remove(prov_inst)
+            if self.inst_map[provider_id] in self.decision_provider_insts:
+                prov_inst = self.inst_map[provider_id]
+                if isinstance(prov_inst, DecisionProvider):
+                    self.decision_provider_insts.remove(prov_inst)
 
             if self.inst_map[provider_id] == self.curr_provider_inst:
                 self.curr_provider_inst = None
@@ -896,6 +972,8 @@ class ProviderManager:
                 self.curr_stt_provider_inst = None
             if self.inst_map[provider_id] == self.curr_tts_provider_inst:
                 self.curr_tts_provider_inst = None
+            if self.inst_map[provider_id] == self.curr_decision_provider_inst:
+                self.curr_decision_provider_inst = None
 
             if getattr(self.inst_map[provider_id], "terminate", None):
                 await self.inst_map[provider_id].terminate()  # type: ignore
@@ -981,7 +1059,7 @@ class ProviderManager:
             except asyncio.CancelledError:
                 pass
 
-        for provider_inst in self.provider_insts:
+        for provider_inst in [*self.provider_insts, *self.decision_provider_insts]:
             if hasattr(provider_inst, "terminate"):
                 await provider_inst.terminate()  # type: ignore
         try:

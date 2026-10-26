@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import enum
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TypeAlias
 
 from anthropic.types import Message as AnthropicMessage
 from deprecated import deprecated
@@ -36,6 +37,55 @@ class ProviderType(enum.Enum):
     TEXT_TO_SPEECH = "text_to_speech"
     EMBEDDING = "embedding"
     RERANK = "rerank"
+    DECISION = "decision"
+
+
+@dataclass(frozen=True, slots=True)
+class DecisionChoiceQuestion:
+    """A decision question with a fixed set of choices.
+
+    Attributes:
+        instructions: The question or instruction evaluated by the model.
+        options: Mapping of option IDs to descriptions. At least two options are required.
+    """
+
+    instructions: str
+    options: Mapping[str, str]
+
+
+@dataclass(frozen=True, slots=True)
+class DecisionBooleanQuestion:
+    """A decision question that asks for the probability of a statement being true.
+
+    Attributes:
+        instructions: The statement or question evaluated by the model.
+    """
+
+    instructions: str
+
+
+DecisionQuestion: TypeAlias = DecisionChoiceQuestion | DecisionBooleanQuestion
+
+
+@dataclass(frozen=True, slots=True)
+class DecisionAnswer:
+    """The normalized answer for one decision question.
+
+    Attributes:
+        choice: Selected option ID for a choice question, or None for a boolean question.
+        probability: Probability of the selected option or of a true boolean answer.
+        probabilities: Full distribution for a choice question; empty for a boolean question.
+        confidence: Model confidence for a choice question, or None for a boolean question.
+    """
+
+    choice: str | None
+    probability: float
+    probabilities: Mapping[str, float]
+    confidence: float | None
+
+
+class DecisionError(RuntimeError):
+    """Raised when a decision provider is unavailable or returns an invalid answer."""
 
 
 @dataclass

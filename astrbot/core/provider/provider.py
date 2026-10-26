@@ -1,12 +1,15 @@
 import abc
 import asyncio
 import os
-from collections.abc import AsyncGenerator
-from typing import Literal, TypeAlias, Union
+from collections.abc import AsyncGenerator, Mapping
+from typing import Any, Literal, TypeAlias, Union
 
 from astrbot.core.agent.message import ContentPart, Message, is_checkpoint_message
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.provider.entities import (
+    DecisionAnswer,
+    DecisionBooleanQuestion,
+    DecisionQuestion,
     LLMResponse,
     ProviderMeta,
     RerankResult,
@@ -22,6 +25,7 @@ Providers: TypeAlias = Union[
     "TTSProvider",
     "EmbeddingProvider",
     "RerankProvider",
+    "DecisionProvider",
 ]
 
 
@@ -436,3 +440,44 @@ class RerankProvider(AbstractProvider):
         result = await self.rerank("Apple", documents=["apple", "banana"])
         if not result:
             raise Exception("Rerank provider test failed, no results returned")
+
+
+class DecisionProvider(AbstractProvider):
+    """Provider for low-latency, structured decisions."""
+
+    def __init__(self, provider_config: dict, provider_settings: dict) -> None:
+        super().__init__(provider_config)
+        self.provider_config = provider_config
+        self.provider_settings = provider_settings
+
+    @abc.abstractmethod
+    async def ask(
+        self,
+        questions: Mapping[str, DecisionQuestion],
+        state: Any = None,
+        *,
+        request_max_retries: int | None = None,
+    ) -> Mapping[str, DecisionAnswer]:
+        """Answer multiple decision questions in one provider request.
+
+        Args:
+            questions: Question heads keyed by caller-defined identifiers.
+            state: Context evaluated by the model. Providers forward it as-is.
+            request_max_retries: Maximum attempts for retryable request errors.
+
+        Returns:
+            Answers keyed by the same identifiers as ``questions``.
+
+        Raises:
+            ValueError: The question or options are unusable.
+            DecisionError: The provider is unavailable, the request fails, or
+                the response violates the decision contract.
+        """
+        ...
+
+    async def test(self) -> None:
+        await self.ask(
+            {"test": DecisionBooleanQuestion("Is this provider available?")},
+            {},
+            request_max_retries=1,
+        )
