@@ -20,6 +20,45 @@ def _provider() -> ProviderAnthropic:
     return ProviderAnthropic.__new__(ProviderAnthropic)
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("custom_headers", "expected_key"),
+    [({}, "test-key"), ({"x-api-key": "override-key"}, "override-key")],
+)
+async def test_anthropic_request_sends_single_api_key_header(
+    monkeypatch, custom_headers, expected_key
+):
+    monkeypatch.delenv("ANTHROPIC_AUTH_TOKEN", raising=False)
+    monkeypatch.delenv("ANTHROPIC_CUSTOM_HEADERS", raising=False)
+
+    def handle(request):
+        assert request.headers.get_list("x-api-key") == [expected_key]
+        return sdk_httpx.Response(200, json={})
+
+    async with sdk_httpx.AsyncClient(
+        transport=sdk_httpx.MockTransport(handle)
+    ) as http_client:
+        monkeypatch.setattr(
+            ProviderAnthropic,
+            "_create_http_client",
+            lambda self, config: http_client,
+        )
+        provider = ProviderAnthropic(
+            provider_config={
+                "key": ["test-key"],
+                "api_base": "https://opencode.ai/zen/go",
+                "custom_headers": custom_headers,
+            },
+            provider_settings={},
+        )
+        provider.client.max_retries = 0
+        await provider.client.messages.with_raw_response.create(
+            model="claude-test",
+            max_tokens=16,
+            messages=[{"role": "user", "content": "hi"}],
+        )
+
+
 def test_anthropic_extract_usage_counts_cache_creation_input():
     provider = _provider()
 
