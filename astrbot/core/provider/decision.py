@@ -23,19 +23,6 @@ class DecisionService:
     def __init__(self, provider_manager: ProviderManager) -> None:
         self.provider_manager = provider_manager
 
-    async def _get_provider(self, provider_id: str | None) -> DecisionProvider:
-        provider = (
-            await self.provider_manager.get_provider_by_id(provider_id)
-            if provider_id
-            else await self.provider_manager.get_using_provider_async(
-                ProviderType.DECISION
-            )
-        )
-        if not isinstance(provider, DecisionProvider):
-            target = f" {provider_id}" if provider_id else ""
-            raise DecisionError(f"Decision provider{target} is not configured")
-        return provider
-
     async def ask(
         self,
         questions: Mapping[str, DecisionQuestion],
@@ -58,7 +45,16 @@ class DecisionService:
             DecisionError: The provider is unavailable, the request fails, or
                 the response violates the decision contract.
         """
-        provider = await self._get_provider(provider_id)
+        provider = (
+            await self.provider_manager.get_provider_by_id(provider_id)
+            if provider_id
+            else await self.provider_manager.get_using_provider_async(
+                ProviderType.DECISION
+            )
+        )
+        if not isinstance(provider, DecisionProvider):
+            target = f" {provider_id}" if provider_id else ""
+            raise DecisionError(f"Decision provider{target} is not configured")
         return await provider.ask(questions, state)
 
     async def choose(
