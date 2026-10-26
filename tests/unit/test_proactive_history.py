@@ -28,6 +28,7 @@ from astrbot.core.utils.history_saver import (
     persist_agent_history,
 )
 from astrbot.core.utils.session_lock import session_lock_manager
+from astrbot.dashboard.services.conversation_service import ConversationService
 
 
 @pytest_asyncio.fixture
@@ -72,10 +73,13 @@ async def proactive_session(temp_db):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("entrypoint", ["cron", "background"])
+@pytest.mark.parametrize(
+    "entrypoint,empty_completion",
+    [("cron", False), ("background", False), ("cron", True)],
+)
 @pytest.mark.parametrize("finish_during_reply", [False, True])
 async def test_delivered_message_is_visible_before_job_finishes(
-    proactive_session, monkeypatch, entrypoint, finish_during_reply
+    proactive_session, monkeypatch, entrypoint, empty_completion, finish_during_reply
 ):
     """Preserve a quick reply regardless of which run finishes first.
 
@@ -83,6 +87,7 @@ async def test_delivered_message_is_visible_before_job_finishes(
         proactive_session: Isolated conversation fixture.
         monkeypatch: Pytest patch fixture.
         entrypoint: Proactive agent entrypoint to exercise.
+        empty_completion: Whether the final response has no completion text.
         finish_during_reply: Whether the job finishes while the user owns the lock.
     """
     s = proactive_session
@@ -118,12 +123,14 @@ async def test_delivered_message_is_visible_before_job_finishes(
                 yield None
 
         def get_final_llm_resp(self):
-            """Return the same text as the delivery to exercise deduplication.
+            """Return delivered text or an absent completion to exercise summaries.
 
             Returns:
                 Final assistant response.
             """
-            return LLMResponse(role="assistant", completion_text=reminder)
+            return LLMResponse(
+                role="assistant", completion_text=None if empty_completion else reminder
+            )
 
     async def build(**kwargs):
         """Replace model construction while retaining the actual wakeup code.
@@ -221,7 +228,87 @@ async def test_task_summary_preserves_history_written_after_start(proactive_sess
         summary_note="[CronJob] finished",
     )
     final = await s.manager.get_conversation(s.umo, s.cid)
-    assert json.loads(final.history)[: len(updated)] == updated
+    assert json.loads(final.history) == updated + [
+        {"role": "user", "content": "Output your last task result below."},
+        {"role": "assistant", "content": "[CronJob] finished"},
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("save_summary", [False, True])
+@pytest.mark.parametrize("replacement", [[], [{"role": "user", "content": "Edited"}]])
+async def test_dashboard_history_edit_waits_for_proactive_save(
+    proactive_session, monkeypatch, save_summary, replacement
+):
+    """Keep edits and clears from being overwritten by an in-flight save.
+
+    Args:
+        proactive_session: Isolated conversation fixture.
+        monkeypatch: Pytest patch fixture.
+        save_summary: Whether to pause summary persistence instead of delivery.
+        replacement: Dashboard history replacement, including an empty reset.
+    """
+    s = proactive_session
+    s.event.set_extra(PROACTIVE_CONVERSATION_ID_KEY, s.cid)
+    original = await s.manager.get_conversation(s.umo, s.cid)
+    service = ConversationService(s.db, s.ctx)
+    writing = asyncio.Event()
+    allow_write = asyncio.Event()
+    editing = asyncio.Event()
+    update = s.manager.update_conversation
+
+    async def paused_write(*args, **kwargs):
+        """Pause only the proactive write before it reaches the database.
+
+        Args:
+            *args: Conversation identifiers.
+            **kwargs: History update arguments.
+        """
+        if kwargs.get("history") != replacement:
+            writing.set()
+            await allow_write.wait()
+        await update(*args, **kwargs)
+
+    async def edit_history():
+        """Signal the edit attempt and replace history through the dashboard."""
+        editing.set()
+        await service.update_history(
+            {"user_id": s.umo, "cid": s.cid, "history": replacement}
+        )
+
+    monkeypatch.setattr(s.manager, "update_conversation", paused_write)
+    save = asyncio.create_task(
+        persist_agent_history(
+            s.manager,
+            event=s.event,
+            req=ProviderRequest(conversation=original),
+            summary_note="[CronJob] finished",
+        )
+        if save_summary
+        else s.tool.call(
+            s.run_context, messages=[{"type": "plain", "text": "Reminder"}]
+        )
+    )
+    edit = None
+    try:
+        await asyncio.wait_for(writing.wait(), 5)
+        read = AsyncMock(wraps=s.manager.get_conversation)
+        monkeypatch.setattr(s.manager, "get_conversation", read)
+        edit = asyncio.create_task(edit_history())
+        await asyncio.wait_for(editing.wait(), 5)
+        read.assert_not_awaited()
+        assert not edit.done()
+        allow_write.set()
+        await asyncio.wait_for(asyncio.gather(save, edit), 5)
+        final = await s.manager.get_conversation(s.umo, s.cid)
+        assert json.loads(final.history) == replacement
+    finally:
+        allow_write.set()
+        tasks = [task for task in (save, edit) if task is not None]
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 
 @pytest.mark.asyncio

@@ -600,6 +600,7 @@ class CronJobManager:
             if (
                 llm_resp
                 and llm_resp.role == "assistant"
+                and llm_resp.completion_text
                 and llm_resp.completion_text.strip()
                 not in cron_event.get_extra(PROACTIVE_SAVED_TEXTS_KEY, [])
             ):
