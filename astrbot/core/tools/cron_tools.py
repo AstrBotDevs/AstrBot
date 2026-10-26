@@ -44,18 +44,6 @@ def _job_belongs_to_current_sender(
     )
 
 
-def _is_group_admin(event: Any) -> bool:
-    """Check whether the event sender is an AstrBot admin acting in a group chat.
-
-    Args:
-        event: The current message event.
-
-    Returns:
-        True when the sender is an AstrBot admin and the event is a group message.
-    """
-    return event.get_message_type() == MessageType.GROUP_MESSAGE and event.is_admin()
-
-
 def _parse_run_at(run_at: Any) -> datetime | None:
     if run_at in (None, ""):
         return None
@@ -204,8 +192,9 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
             )
             return f"Scheduled future task {job.job_id} ({job.name}) {suffix}."
 
-        current_umo = context.context.event.unified_msg_origin
-        current_sender_id = str(context.context.event.get_sender_id())
+        event = context.context.event
+        current_umo = event.unified_msg_origin
+        current_sender_id = str(event.get_sender_id())
         if action == "edit":
             job_id = kwargs.get("job_id")
             if not job_id:
@@ -231,8 +220,7 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
                     )
                 if (
                     same_session
-                    and context.context.event.get_message_type()
-                    == MessageType.GROUP_MESSAGE
+                    and event.get_message_type() == MessageType.GROUP_MESSAGE
                 ):
                     return (
                         f"error: cron job {job_id} was created by another member of "
@@ -312,7 +300,11 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
             same_session = _extract_job_session(job) == current_umo
             can_delete = _job_belongs_to_current_sender(
                 job, current_umo, current_sender_id
-            ) or (same_session and _is_group_admin(context.context.event))
+            ) or (
+                same_session
+                and event.get_message_type() == MessageType.GROUP_MESSAGE
+                and event.is_admin()
+            )
             if not can_delete:
                 if same_session and not _extract_job_sender(job):
                     # Dashboard / legacy rows have a session but no member as
@@ -324,8 +316,7 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
                     )
                 if (
                     same_session
-                    and context.context.event.get_message_type()
-                    == MessageType.GROUP_MESSAGE
+                    and event.get_message_type() == MessageType.GROUP_MESSAGE
                 ):
                     return (
                         f"error: cron job {job_id} was created by another member of "
@@ -342,7 +333,10 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
 
         if action == "list":
             all_jobs = await cron_mgr.list_jobs()
-            is_group_admin = _is_group_admin(context.context.event)
+            is_group_admin = (
+                event.get_message_type() == MessageType.GROUP_MESSAGE
+                and event.is_admin()
+            )
             jobs = [
                 job
                 for job in all_jobs
