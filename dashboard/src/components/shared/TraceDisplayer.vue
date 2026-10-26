@@ -63,6 +63,7 @@ let metadataLoaded = false;
 let historyRequest = 0;
 let detailRequest = 0;
 let queryTimer = null;
+let liveRefreshTimer = null;
 const clockNow = ref(Date.now() / 1000);
 const durationTimer = ref(null);
 const connected = ref(false);
@@ -809,6 +810,7 @@ function connectSSE() {
       if (payload?.type === "trace") {
         const traceId = payload.trace?.trace_id || payload.span?.trace_id || payload.span_id;
         const wasKnown = eventIndex.has(traceId);
+        // Page one absorbs new traces locally; later pages refetch because their boundaries shift.
         const canInsertLive = historyPage.value === 1
           && !hasActiveServerFilters.value;
         if (wasKnown || canInsertLive) {
@@ -822,7 +824,18 @@ function connectSSE() {
             traceEnterTimers.set(traceId, timer);
             totalRecords.value += 1;
             animateTraceListInsertion([traceId]);
+            const overflow = events.value.splice(pageSize.value);
+            for (const event of overflow) eventIndex.delete(event.span_id);
+            if (overflow.some((event) => event.span_id === selectedSpanId.value)) {
+              selectedSpanId.value = null;
+            }
           }
+        }
+        if (!wasKnown && !canInsertLive && !liveRefreshTimer) {
+          liveRefreshTimer = setTimeout(() => {
+            liveRefreshTimer = null;
+            fetchTraceHistory();
+          }, 400);
         }
         if (payload.storage_accepted === false) storageWarning.value = true;
       }
@@ -1153,6 +1166,7 @@ onBeforeUnmount(() => {
   historyRequest++;
   detailRequest++;
   if (queryTimer) clearTimeout(queryTimer);
+  if (liveRefreshTimer) clearTimeout(liveRefreshTimer);
   if (durationTimer.value) clearInterval(durationTimer.value);
   eventSource.value?.close();
   if (retryTimer.value) clearTimeout(retryTimer.value);
