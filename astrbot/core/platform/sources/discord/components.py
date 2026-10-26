@@ -113,7 +113,7 @@ class DiscordView(BaseMessageComponent):
     """Discord视图组件，包含按钮和选择菜单"""
 
     type: str = "discord_view"
-    components: list = []
+    components: list[BaseMessageComponent] = []
     timeout: float | None = None
 
     def __init__(

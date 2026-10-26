@@ -1,5 +1,6 @@
 import discord
 import pytest
+from pydantic.v1 import ValidationError
 
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.sources.discord.components import (
@@ -50,3 +51,20 @@ async def test_discord_view_builds_buttons():
 
     raw_view = discord.ui.View()
     assert DiscordViewComponent(raw_view).view is raw_view
+
+
+@pytest.mark.parametrize("item", [1, "not-a-component", None])
+def test_discord_view_rejects_non_component_items(item):
+    """Validate each view item before constructing a Discord view.
+
+    Args:
+        item: A value outside the message-component contract.
+    """
+    with pytest.raises(ValidationError):
+        DiscordView(components=[item])
+
+
+def test_discord_view_serialization_preserves_button_fields():
+    """Typed view items must retain their concrete component fields."""
+    view = DiscordView(components=[DiscordButton(label="ok", custom_id="ok-id")])
+    assert view.dict()["components"][0]["label"] == "ok"
