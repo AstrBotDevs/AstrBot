@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 import pytest
 
+from astrbot.core.config.default import CONFIG_METADATA_2
 from astrbot.core.provider.decision import DecisionService
 from astrbot.core.provider.entities import (
     DecisionAnswer,
@@ -135,6 +136,36 @@ async def test_system_one_resolves_api_base(api_base, expected_url):
     assert captured["url"] == expected_url
 
 
+def test_system_one_templates_use_two_second_timeout():
+    templates = CONFIG_METADATA_2["provider_group"]["metadata"]["provider"][
+        "config_template"
+    ]
+    for name in (
+        "TypeSafe System One",
+        "OpenRouter System One",
+        "Vercel System One",
+        "Custom System One",
+    ):
+        assert templates[name]["timeout"] == 2
+
+
+@pytest.mark.asyncio
+async def test_system_one_provider_defaults_to_two_second_timeout():
+    provider = SystemOneDecisionProvider(
+        {
+            "id": "decision_test",
+            "type": "system_one_decision",
+            "api_base": "https://decision.test/v1/systemone",
+        },
+        {},
+        transport=httpx.MockTransport(lambda request: httpx.Response(200)),
+    )
+    try:
+        assert provider.timeout == 2
+    finally:
+        await provider.terminate()
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "choice_answer",
@@ -215,8 +246,7 @@ async def test_system_one_normalizes_network_errors(error, message):
     try:
         with pytest.raises(DecisionError, match=message):
             await provider.ask(
-                {"available": DecisionBooleanQuestion("Is it available?")},
-                request_max_retries=1,
+                {"available": DecisionBooleanQuestion("Is it available?")}
             )
     finally:
         await provider.terminate()
@@ -269,6 +299,49 @@ async def test_decision_provider_test_does_not_retry():
         await provider.terminate()
 
     assert attempts == 1
+
+
+@pytest.mark.asyncio
+async def test_system_one_ask_does_not_retry_by_default():
+    attempts = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        return httpx.Response(503, json={"error": "unavailable"})
+
+    provider = _provider(handler)
+    try:
+        with pytest.raises(DecisionError, match="HTTP 503"):
+            await provider.ask(
+                {"available": DecisionBooleanQuestion("Is it available?")}
+            )
+    finally:
+        await provider.terminate()
+
+    assert attempts == 1
+
+
+@pytest.mark.asyncio
+async def test_system_one_retries_only_after_the_initial_request():
+    attempts = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        return httpx.Response(503, json={"error": "unavailable"})
+
+    provider = _provider(handler)
+    try:
+        with pytest.raises(DecisionError, match="HTTP 503"):
+            await provider.ask(
+                {"available": DecisionBooleanQuestion("Is it available?")},
+                request_max_retries=1,
+            )
+    finally:
+        await provider.terminate()
+
+    assert attempts == 2
 
 
 @pytest.mark.asyncio

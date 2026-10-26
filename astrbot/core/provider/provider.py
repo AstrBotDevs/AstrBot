@@ -456,14 +456,14 @@ class DecisionProvider(AbstractProvider):
         questions: Mapping[str, DecisionQuestion],
         state: Any = None,
         *,
-        request_max_retries: int | None = None,
+        request_max_retries: int = 0,
     ) -> Mapping[str, DecisionAnswer]:
         """Answer multiple decision questions in one provider request.
 
         Args:
             questions: Question heads keyed by caller-defined identifiers.
             state: Context evaluated by the model. Providers forward it as-is.
-            request_max_retries: Maximum attempts for retryable request errors.
+            request_max_retries: Number of retries after the initial request.
 
         Returns:
             Answers keyed by the same identifiers as ``questions``.
@@ -479,5 +479,5 @@ class DecisionProvider(AbstractProvider):
         await self.ask(
             {"test": DecisionBooleanQuestion("Is this provider available?")},
             {},
-            request_max_retries=1,
+            request_max_retries=0,
         )

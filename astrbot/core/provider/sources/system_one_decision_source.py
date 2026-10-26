@@ -60,7 +60,7 @@ class SystemOneDecisionProvider(DecisionProvider):
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
         self.proxy = str(provider_config.get("proxy") or "").strip() or None
-        self.timeout = float(provider_config.get("timeout", 20))
+        self.timeout = float(provider_config.get("timeout", 2))
         self.client = httpx.AsyncClient(
             timeout=self.timeout,
             proxy=self.proxy,
@@ -74,14 +74,14 @@ class SystemOneDecisionProvider(DecisionProvider):
         questions: Mapping[str, DecisionQuestion],
         state: Any = None,
         *,
-        request_max_retries: int | None = None,
+        request_max_retries: int = 0,
     ) -> Mapping[str, DecisionAnswer]:
         """Answer multiple questions through one System One request.
 
         Args:
             questions: Question heads keyed by caller-defined identifiers.
             state: Context forwarded to the model as the request state.
-            request_max_retries: Maximum attempts for retryable request errors.
+            request_max_retries: Number of retries after the initial request.
 
         Returns:
             Validated answers keyed by the same identifiers as ``questions``.
@@ -129,7 +129,7 @@ class SystemOneDecisionProvider(DecisionProvider):
             body = await retry_provider_request(
                 "System One Decision",
                 _post,
-                max_attempts=request_max_retries,
+                max_attempts=request_max_retries + 1,
             )
         except httpx.TimeoutException as exc:
             log_connection_failure("System One Decision", exc, self.proxy)
