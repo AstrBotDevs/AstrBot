@@ -1807,7 +1807,6 @@ class PluginService:
             repo_url=repo_url,
         )
         await self.refresh_plugin_install_source_after_update(plugin_name, update_info)
-        await self.plugin_manager.reload(plugin_name)
         await self.sync_skills_after_plugin_change()
         logger.info(f"Updated plugin {plugin_name} successfully.")
         return None, "更新成功。"
