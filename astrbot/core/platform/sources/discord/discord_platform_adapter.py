@@ -472,7 +472,12 @@ class DiscordPlatformAdapter(Platform):
         registered_commands = []
 
         for handler_md in star_handlers_registry:
-            if not star_map[handler_md.handler_module_path].activated:
+            # `star_map` is keyed by the plugin's main module, so a handler
+            # registered from a plugin submodule (e.g. a mixin class) has no
+            # entry here. Skip such handlers instead of raising KeyError and
+            # aborting the sync of every other plugin's commands.
+            plugin = star_map.get(handler_md.handler_module_path)
+            if not plugin or not plugin.activated:
                 continue
             if not handler_md.enabled:
                 continue
