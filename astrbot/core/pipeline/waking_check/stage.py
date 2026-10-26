@@ -213,9 +213,6 @@ class WakingCheckStage(Stage):
                         self._umo_auto_name_recorder.schedule(event)
                     return
 
-                is_wake = True
-                event.is_wake = True
-
                 is_group_cmd_handler = any(
                     isinstance(f, CommandGroupFilter) for f in handler.event_filters
                 )
@@ -234,6 +231,7 @@ class WakingCheckStage(Stage):
             activated_handlers,
         )
 
+        event.matched_handlers = activated_handlers
         event.set_extra("activated_handlers", activated_handlers)
         event.set_extra("handlers_parsed_params", handlers_parsed_params)
 
@@ -248,5 +246,5 @@ class WakingCheckStage(Stage):
 
         if is_wake:
             self._umo_auto_name_recorder.schedule(event)
-        else:
+        elif not activated_handlers:
             event.stop_event()

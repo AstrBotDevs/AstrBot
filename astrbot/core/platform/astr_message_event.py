@@ -8,7 +8,10 @@ from collections.abc import AsyncGenerator, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from time import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from astrbot.core.star.star_handler import StarHandlerMetadata
 
 from deprecated import deprecated
 
@@ -94,8 +97,10 @@ class AstrMessageEvent(abc.ABC):
         """用户是否是管理员。如果是管理员，这里是 admin"""
         self.is_wake = False
         """是否唤醒(是否通过 WakingStage)"""
+        self.matched_handlers: list[StarHandlerMetadata] = []
+        """通过消息过滤器的插件处理器，不代表事件已唤醒机器人。"""
         self.is_at_or_wake_command = False
-        """是否是 At 机器人或者带有唤醒词或者是私聊(插件注册的事件监听器会让 is_wake 设为 True, 但是不会让这个属性置为 True)"""
+        """是否是 At 机器人或者带有唤醒词或者是私聊"""
         self._extras: dict[str, Any] = {}
         self._force_stopped: bool = False
         """独立的停止标志，不依赖 _result，不会被 clear_result() 重置"""
