@@ -1534,7 +1534,7 @@
 
       "custom_headers": {
         "description": "Custom request headers",
-        "hint": "Key/value pairs added here are merged into the OpenAI SDK default_headers for custom HTTP headers. Values must be strings."
+        "hint": "Key/value pairs added here are sent by AstrBot as custom HTTP headers to the provider. Values must be strings."
       },
       "ollama_disable_thinking": {
         "description": "Disable thinking mode",

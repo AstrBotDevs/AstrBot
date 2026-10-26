@@ -30,7 +30,7 @@
         "decisionHints": {
             "apiBase": "Адрес System One. К базовому URL автоматически добавляется /systemone; завершите URL символом /, чтобы использовать его без изменений.",
             "model": "ID модели System One, например jev-latest, jev-preview или имя модели, указанное провайдером.",
-            "customHeaders": "HTTP-заголовки, добавляемые к запросам принятия решений."
+            "customHeaders": "HTTP-заголовки, добавляемые AstrBot к запросам принятия решений."
         }
     },
     "availability": {

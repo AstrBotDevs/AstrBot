@@ -1635,7 +1635,7 @@
 
       "custom_headers": {
         "description": "カスタムリクエストヘッダー",
-        "hint": "ここで追加したキーと値のペアは、カスタム HTTP リクエストヘッダーとして OpenAI SDK の default_headers に統合されます。値は文字列である必要があります。"
+        "hint": "ここで追加したキーと値のペアは、AstrBot からプロバイダーへの HTTP リクエストにカスタムヘッダーとして付加されます。値は文字列である必要があります。"
       },
       "ollama_disable_thinking": {
         "description": "思考モードを無効化",
