@@ -417,7 +417,8 @@ def test_build_skills_prompt_uses_permitted_skill_read_tools():
     assert "file-reading tool that is available in this session" in prompt
     assert "permitted to access the path" in prompt
     assert "If no permitted file-reading tool is available" in prompt
-    assert "permitted by the current user's policy" in prompt
+    assert "shell tool available in this session" in prompt
+    assert "the current user's policy permits execution" in prompt
     assert "If neither option is available" in prompt
     assert "do not execute it" in prompt
 
