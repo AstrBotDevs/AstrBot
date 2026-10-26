@@ -1660,6 +1660,11 @@
             "hint": "生成する最大トークン数です。",
             "name": "Max Tokens"
           },
+          "max_output_tokens": {
+            "description": "最大出力トークン数",
+            "hint": "生成する最大トークン数です。",
+            "name": "Max Output Tokens"
+          },
           "reasoning_effort": {
             "description": "推論強度",
             "hint": "推論モデルの推論強度を制御します。対応する値はモデルによって異なります。",
