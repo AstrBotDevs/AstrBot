@@ -220,8 +220,8 @@ const statusOptions = computed(() => [
 ]);
 
 const messageTypeOptions = computed(() => [
-  { title: tm("classification.group"), value: "GroupMessage" },
   { title: tm("classification.private"), value: "FriendMessage" },
+  { title: tm("classification.group"), value: "GroupMessage" },
 ]);
 
 const timeRangeOptions = computed(() => [
