@@ -38,6 +38,7 @@ Welcome to submit Issues or Pull Requests:
 - Group 15: 258637629
 - Group 16: 1044542496
 - Group 17: 201300335
+- Group 18: 167034393 
 - Chit-chat Group: 975206796
 
 ## Become an AstrBot Organization Member
