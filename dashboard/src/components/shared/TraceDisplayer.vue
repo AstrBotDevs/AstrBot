@@ -1553,6 +1553,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
+        <div class="trace-detail-body">
         <v-alert v-if="selectedEvent.truncated" class="mt-3" type="warning" variant="tonal" density="compact">{{ tm("history.truncated") }}</v-alert>
         <div v-if="detailBusy" class="trace-empty-state" aria-live="polite"><LoaderCircle :size="20" class="trace-connecting-icon" /><span>{{ tm("loading") }}</span></div>
         <v-alert v-if="detailError" class="mt-3" type="error" variant="tonal" density="compact">
@@ -1682,6 +1683,7 @@ onBeforeUnmount(() => {
               </template>
             </div>
           </div>
+        </div>
         </div>
       </section>
     </div>
@@ -2515,7 +2517,7 @@ onBeforeUnmount(() => {
   min-width: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  padding: 18px 22px 28px;
+  padding: 0;
   position: absolute;
   right: 8px;
   top: 8px;
@@ -2536,10 +2538,21 @@ onBeforeUnmount(() => {
 
 .trace-detail-header {
   align-items: flex-start;
+  background: rgb(var(--v-theme-surface));
+  border-bottom: 1px solid var(--trace-border);
   display: flex;
   gap: 16px;
   justify-content: space-between;
+  margin: 0;
   min-width: 0;
+  padding: 18px 22px 12px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.trace-detail-body {
+  padding: 0 22px 28px;
 }
 
 .trace-detail-kicker {
@@ -2938,18 +2951,17 @@ onBeforeUnmount(() => {
     box-shadow: none;
     inset: 0;
     max-width: none;
-    padding: 0 14px calc(20px + env(safe-area-inset-bottom));
+    padding: 0;
     width: 100%;
   }
 
   .trace-detail-header {
-    background: rgb(var(--v-theme-surface));
-    border-bottom: 1px solid var(--trace-border);
-    margin: 0 -14px;
+    margin: 0;
     padding: 14px 14px 10px;
-    position: sticky;
-    top: 0;
-    z-index: 2;
+  }
+
+  .trace-detail-body {
+    padding: 0 14px calc(20px + env(safe-area-inset-bottom));
   }
 
   .trace-detail-time {
