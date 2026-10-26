@@ -108,7 +108,6 @@
     "title": "Filters",
     "reset": "Reset",
     "close": "Close filters",
-    "errors": "Has errors",
     "models": "Has model calls",
     "plugins": "Has plugin calls",
     "commands": "Has command calls",

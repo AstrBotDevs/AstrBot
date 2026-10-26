@@ -206,7 +206,6 @@ const filteredEvents = computed(() => {
 });
 
 const filters = computed(() => [
-  { key: "errors", label: tm("filters.errors") },
   { key: "models", label: tm("filters.models") },
   { key: "plugins", label: tm("filters.plugins") },
   { key: "commands", label: tm("filters.commands") },
@@ -463,7 +462,6 @@ function timelineRecords(event) {
 }
 
 function matchesFilter(event, filter) {
-  if (filter === "errors") return event.status === "error";
   if (filter === "models") {
     return event.has_models ?? event.records.some((record) => record.kind === "agent" ||
       ["astr_agent_prepare", "astr_agent_complete"].includes(record.action));
@@ -692,7 +690,6 @@ async function fetchTraceHistory(reset = true, reloadMetadata = false, animateNe
     const response = await traceApi.history({
       limit: pageSize.value, page: historyPage.value,
       query: searchText.value.trim().slice(0, 256),
-      errors: selectedFilters.value.includes("errors"),
       models: selectedFilters.value.includes("models"),
       plugins: selectedFilters.value.includes("plugins"),
       commands: selectedFilters.value.includes("commands"),
