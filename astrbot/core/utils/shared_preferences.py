@@ -62,6 +62,7 @@ class SharedPreferences:
         self._write_queue: asyncio.Queue[_WriteOperation] | None = None
         self._writer_task: asyncio.Task[None] | None = None
         self._pending_writes: list[_WriteOperation] = []
+        self._sync_delete_error: Exception | None = None
         self._warned_sync_read_unsupported = False
         self._warned_sync_range_read_unsupported = False
 
@@ -146,7 +147,11 @@ class SharedPreferences:
             self._schedule_write(operation)
 
     async def _drain_write_queue(self) -> None:
-        """Persist queued preference mutations in FIFO order."""
+        """Persist queued mutations, retrying synchronous deletions in FIFO order.
+
+        Synchronous deletions get three attempts before their failure is reported
+        by flush(). Async operations continue to report failures to their caller.
+        """
         queue = self._write_queue
         if queue is None:
             return
@@ -158,19 +163,34 @@ class SharedPreferences:
 
             action, scope, scope_id, key, value, completion = operation
             try:
-                if action == "put" and key is not None:
-                    await self.db_helper.insert_preference_or_update(
-                        scope,
-                        scope_id,
-                        key,
-                        {"val": value},
-                    )
-                elif action == "remove" and key is not None:
-                    await self.db_helper.remove_preference(scope, scope_id, key)
-                elif action == "clear":
-                    await self.db_helper.clear_preferences(scope, scope_id)
-                else:
-                    raise ValueError(f"Unknown preference write operation: {action}")
+                for attempt in range(3):
+                    try:
+                        if action == "put" and key is not None:
+                            await self.db_helper.insert_preference_or_update(
+                                scope,
+                                scope_id,
+                                key,
+                                {"val": value},
+                            )
+                        elif action == "remove" and key is not None:
+                            await self.db_helper.remove_preference(scope, scope_id, key)
+                        elif action == "clear":
+                            await self.db_helper.clear_preferences(scope, scope_id)
+                        else:
+                            raise ValueError(
+                                f"Unknown preference write operation: {action}"
+                            )
+                    except Exception:
+                        if (
+                            completion is not None
+                            or action not in ("remove", "clear")
+                            or attempt == 2
+                        ):
+                            raise
+                        # Retry in place: a later put must not commit before deletion.
+                        await asyncio.sleep(0.1 * 2**attempt)
+                    else:
+                        break
             except Exception as exc:
                 logger.error(
                     "Failed to persist shared preference operation %s for %s/%s: %s",
@@ -182,6 +202,12 @@ class SharedPreferences:
                 )
                 if completion is not None and not completion.done():
                     completion.set_exception(exc)
+                elif (
+                    completion is None
+                    and action in ("remove", "clear")
+                    and self._sync_delete_error is None
+                ):
+                    self._sync_delete_error = exc
             else:
                 # An older completed deletion must not unmask a newer queued one.
                 # Retire successful masks so future misses still query the database.
@@ -256,10 +282,15 @@ class SharedPreferences:
             await self.flush()
 
     async def flush(self) -> None:
-        """Wait until all queued synchronous preference writes are persisted.
+        """Wait for queued writes and report synchronous deletion failures.
+
+        After draining the queue, report the first synchronous deletion failure
+        since the previous flush. This consumes the error notification; failed
+        deletions remain masked locally and all persistence failures are logged.
 
         Raises:
-            RuntimeError: If called from a different running event loop.
+            RuntimeError: If called from a different running event loop, or a
+                synchronous deletion exhausted its persistence retries.
         """
         if self._loop is None or self._write_queue is None:
             with self._cache_lock:
@@ -280,12 +311,24 @@ class SharedPreferences:
         await self._write_queue.join()
         if self._writer_task is not None:
             await self._writer_task
+        if self._sync_delete_error is not None:
+            error = self._sync_delete_error
+            self._sync_delete_error = None
+            raise RuntimeError(
+                "Failed to persist synchronous preference deletion after retries."
+            ) from error
 
     async def close(self) -> None:
-        """Flush pending writes and stop the temporary-cache scheduler."""
-        await self.flush()
-        if self._scheduler.running:
-            self._scheduler.shutdown(wait=False)
+        """Flush pending writes and always stop the temporary-cache scheduler.
+
+        Raises:
+            RuntimeError: If flushing pending writes fails.
+        """
+        try:
+            await self.flush()
+        finally:
+            if self._scheduler.running:
+                self._scheduler.shutdown(wait=False)
 
     async def get_async(
         self,

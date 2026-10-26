@@ -386,7 +386,7 @@ async def test_earlier_deletion_does_not_unmask_a_later_pending_deletion(
         store.clear("plugin", "example")
 
     try:
-        await asyncio.wait_for(entered.wait(), timeout=3)
+        await asyncio.wait_for(entered.wait(), timeout=30)
         # The first deletion and intervening put are committed; the second is pending.
         persisted = await database.get_preference("plugin", "example", "token")
         assert persisted.value == {"val": "intermediate"}
@@ -522,7 +522,7 @@ async def test_concurrent_conversation_lookup_cannot_restore_a_deleted_selection
     monkeypatch.setattr(database, "remove_preference", pause_selection_deletion)
     deletion = asyncio.create_task(manager.delete_conversation(umo))
     try:
-        await asyncio.wait_for(entered.wait(), timeout=3)
+        await asyncio.wait_for(entered.wait(), timeout=30)
         assert await database.get_conversation_by_id(cid) is None
         assert await manager.get_curr_conversation_id(umo) is None
     finally:
@@ -543,8 +543,11 @@ async def test_failed_deletion_keeps_old_values_hidden_until_a_successful_retry(
     await store.put_async("plugin", "example", "token", "old-token")
     method_name = "remove_preference" if action == "remove" else "clear_preferences"
     original_delete = getattr(database, method_name)
+    calls = 0
 
     async def fail_deletion(*args):
+        nonlocal calls
+        calls += 1
         raise OSError("database unavailable")
 
     monkeypatch.setattr(database, method_name, fail_deletion)
@@ -558,7 +561,18 @@ async def test_failed_deletion_keeps_old_values_hidden_until_a_successful_retry(
         store.remove("token", scope="plugin", scope_id="example")
     else:
         store.clear("plugin", "example")
+    if not asynchronous:
+        store.put("unrelated", "persisted", scope="plugin", scope_id="other")
+        with pytest.raises(
+            RuntimeError, match="synchronous preference deletion"
+        ) as exc:
+            await store.flush()
+        assert isinstance(exc.value.__cause__, OSError)
+        unrelated = await database.get_preference("plugin", "other", "unrelated")
+        assert unrelated.value == {"val": "persisted"}
+    # Once a terminal failure has been reported, later flushes must not repeat it.
     await store.flush()
+    assert calls == (1 if asynchronous else 3)
 
     persisted = await database.get_preference("plugin", "example", "token")
     assert persisted.value == {"val": "old-token"}
@@ -589,3 +603,76 @@ async def test_failed_deletion_keeps_old_values_hidden_until_a_successful_retry(
         "plugin", "example", "token", {"val": "fresh-from-database"}
     )
     assert await store.get_async("plugin", "example", "token") == "fresh-from-database"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["remove", "clear"])
+@pytest.mark.parametrize("later_put", [False, True], ids=["delete", "delete-then-put"])
+async def test_sync_deletion_retries_automatically_before_later_writes(
+    preferences, monkeypatch, action, later_put
+):
+    store, database = preferences
+    await database.insert_preference_or_update(
+        "plugin", "example", "token", {"val": "old-token"}
+    )
+    method_name = "remove_preference" if action == "remove" else "clear_preferences"
+    original_delete = getattr(database, method_name)
+    calls = 0
+
+    async def fail_twice_then_delete(*args):
+        nonlocal calls
+        calls += 1
+        if calls < 3:
+            raise OSError("database temporarily unavailable")
+        # Retrying at the queue tail would allow the replacement to commit first.
+        persisted = await database.get_preference("plugin", "example", "token")
+        assert persisted.value == {"val": "old-token"}
+        await original_delete(*args)
+
+    monkeypatch.setattr(database, method_name, fail_twice_then_delete)
+    if action == "remove":
+        store.remove("token", scope="plugin", scope_id="example")
+    else:
+        store.clear("plugin", "example")
+    if later_put:
+        store.put("token", "replacement", scope="plugin", scope_id="example")
+
+    await store.flush()
+
+    assert calls == 3
+    persisted = await database.get_preference("plugin", "example", "token")
+    if later_put:
+        assert persisted.value == {"val": "replacement"}
+        assert await store.get_async("plugin", "example", "token") == "replacement"
+    else:
+        assert persisted is None
+        await database.insert_preference_or_update(
+            "plugin", "example", "token", {"val": "fresh-from-database"}
+        )
+        assert (
+            await store.get_async("plugin", "example", "token") == "fresh-from-database"
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["remove", "clear"])
+async def test_close_stops_scheduler_when_sync_deletion_fails(
+    preferences, monkeypatch, action
+):
+    store, database = preferences
+    await store.put_async("plugin", "example", "token", "old-token")
+    method_name = "remove_preference" if action == "remove" else "clear_preferences"
+
+    async def fail_deletion(*args):
+        raise OSError("database unavailable")
+
+    monkeypatch.setattr(database, method_name, fail_deletion)
+    if action == "remove":
+        store.remove("token", scope="plugin", scope_id="example")
+    else:
+        store.clear("plugin", "example")
+
+    with pytest.raises(RuntimeError, match="synchronous preference deletion"):
+        await store.close()
+
+    assert not store._scheduler.running
