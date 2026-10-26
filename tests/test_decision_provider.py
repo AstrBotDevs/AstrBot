@@ -241,6 +241,18 @@ async def test_system_one_rejects_invalid_json():
 
 
 @pytest.mark.asyncio
+async def test_system_one_rejects_invalid_utf8():
+    provider = _provider(lambda request: httpx.Response(200, content=b"\xff"))
+    try:
+        with pytest.raises(DecisionError, match="text encoding"):
+            await provider.ask(
+                {"available": DecisionBooleanQuestion("Is it available?")}
+            )
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_decision_provider_test_does_not_retry():
     attempts = 0
 

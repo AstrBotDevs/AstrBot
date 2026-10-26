@@ -149,12 +149,14 @@ class SystemOneDecisionProvider(DecisionProvider):
             raise DecisionError(
                 "System One request failed: unable to connect (check network or proxy)"
             ) from exc
-        except json.JSONDecodeError as exc:
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
             logger.error(
-                f"[System One Decision] Invalid JSON response from "
+                f"[System One Decision] Invalid JSON or text encoding from "
                 f"{self.base_url}: {exc}"
             )
-            raise DecisionError("System One endpoint returned invalid JSON") from exc
+            raise DecisionError(
+                "System One endpoint returned invalid JSON or text encoding"
+            ) from exc
         raw_answers = body.get("answers") if isinstance(body, Mapping) else None
         if not isinstance(raw_answers, Mapping):
             raise DecisionError("System One endpoint returned an invalid response")
