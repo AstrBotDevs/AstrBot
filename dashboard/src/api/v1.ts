@@ -521,6 +521,13 @@ export const providerApi = {
       openApiV1.deleteProviderSourceById({ query: { source_id: sourceId } }),
     );
   },
+  reorderSources(orderedIds: string[]) {
+    return typed<OpenConfig>(
+      apiV1Client.put<ApiEnvelope<OpenConfig>>('/provider-sources/order', {
+        ordered_ids: orderedIds,
+      }),
+    );
+  },
   sourceModels(sourceId: string) {
     return typed<ProviderSourceModelsData>(
       openApiV1.listProviderSourceModelsById({

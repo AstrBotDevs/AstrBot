@@ -1021,6 +1021,44 @@
         "description": "**Required scope:** `provider`"
       }
     },
+    "/api/v1/provider-sources/order": {
+      "put": {
+        "tags": [
+          "Provider Sources"
+        ],
+        "summary": "Reorder provider sources",
+        "operationId": "reorderProviderSources",
+        "x-astrbot-scope": "provider",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "ordered_ids"
+                ],
+                "properties": {
+                  "ordered_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `provider`"
+      }
+    },
     "/api/v1/provider-sources/models": {
       "get": {
         "tags": [

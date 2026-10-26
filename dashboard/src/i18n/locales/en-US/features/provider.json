@@ -120,6 +120,8 @@
     "deleteConfirm": "Are you sure you want to delete provider source {id}? This will also delete all associated model configurations.",
     "deleteSuccess": "Provider source deleted successfully",
     "deleteError": "Failed to delete provider source",
+    "reorderSuccess": "Provider source order saved",
+    "reorderError": "Failed to save provider source order",
     "enabled": "Enabled",
     "disabled": "Disabled",
     "advancedConfig": "Advanced Configuration...",
