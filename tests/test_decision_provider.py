@@ -490,6 +490,23 @@ async def test_provider_manager_uses_selected_decision_provider():
 
 
 @pytest.mark.asyncio
+async def test_provider_manager_ignores_unknown_provider_id():
+    config = {
+        "provider": [],
+        "provider_sources": [],
+        "provider_settings": {},
+    }
+    acm = MagicMock()
+    acm.confs = {"default": config}
+    acm.get_conf.return_value = config
+    persona_manager = MagicMock()
+    persona_manager.default_persona = ""
+    manager = ProviderManager(acm, MagicMock(), persona_manager)
+
+    await manager.terminate_provider("missing")
+
+
+@pytest.mark.asyncio
 async def test_create_provider_rolls_back_when_loading_fails():
     config = MagicMock()
     providers = []
