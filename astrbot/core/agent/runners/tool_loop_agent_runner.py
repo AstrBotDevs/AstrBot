@@ -923,6 +923,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         if not llm_resp.tools_call_name:
             await self._complete_with_assistant_response(llm_resp)
+        else:
+            try:
+                await self.agent_hooks.on_agent_response(self.run_context, llm_resp)
+            except Exception as e:
+                logger.error(f"Error in on_agent_response hook: {e}", exc_info=True)
 
         # 返回 LLM 结果
         if llm_resp.reasoning_content:

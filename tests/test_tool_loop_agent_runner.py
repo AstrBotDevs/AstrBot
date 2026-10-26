@@ -398,6 +398,7 @@ class MockHooks(BaseAgentRunHooks):
     def __init__(self):
         self.agent_begin_called = False
         self.agent_done_called = False
+        self.agent_responses = []
         self.tool_start_called = False
         self.tool_end_called = False
 
@@ -412,6 +413,9 @@ class MockHooks(BaseAgentRunHooks):
 
     async def on_agent_done(self, run_context, llm_response):
         self.agent_done_called = True
+
+    async def on_agent_response(self, run_context, llm_response):
+        self.agent_responses.append(llm_response)
 
 
 class ClearingAgentBeginHooks(MockHooks):
@@ -910,6 +914,35 @@ async def test_hooks_called_with_max_step(
     assert mock_hooks.agent_done_called, "on_agent_done应该被调用"
     assert mock_hooks.tool_start_called, "on_tool_start应该被调用"
     assert mock_hooks.tool_end_called, "on_tool_end应该被调用"
+
+
+@pytest.mark.asyncio
+async def test_tool_call_response_invokes_response_hook(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+):
+    mock_provider.should_call_tools = True
+    mock_provider.max_calls_before_normal_response = 100
+
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    responses = [response async for response in runner.step()]
+
+    assert len(mock_hooks.agent_responses) == 1
+    assert mock_hooks.agent_responses[0].completion_text == "我需要使用工具来帮助您"
+    assert mock_hooks.agent_responses[0].tools_call_name == ["test_tool"]
+    assert not mock_hooks.agent_done_called
+    assert any(
+        response.type == "llm_result"
+        and response.data["chain"].get_plain_text() == "我需要使用工具来帮助您"
+        for response in responses
+    )
 
 
 @pytest.mark.asyncio
