@@ -149,6 +149,19 @@ def test_system_one_templates_use_two_second_timeout():
         assert templates[name]["timeout"] == 2
 
 
+def test_system_one_templates_expose_probability_tolerance():
+    templates = CONFIG_METADATA_2["provider_group"]["metadata"]["provider"][
+        "config_template"
+    ]
+    for name in (
+        "TypeSafe System One",
+        "OpenRouter System One",
+        "Vercel System One",
+        "Custom System One",
+    ):
+        assert templates[name]["probability_tolerance"] == 0.05
+
+
 @pytest.mark.asyncio
 async def test_system_one_provider_defaults_to_two_second_timeout():
     provider = SystemOneDecisionProvider(
@@ -206,6 +219,90 @@ async def test_system_one_rejects_invalid_choice_answers(choice_answer):
             )
     finally:
         await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_system_one_probability_tolerance_is_configurable():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "answers": {
+                    "decision": {
+                        "choice": "ignore",
+                        "confidence": 0.9,
+                        "probabilities": {"respond": 0.55, "ignore": 0.53},
+                    }
+                }
+            },
+        )
+
+    provider = _provider(handler)
+    try:
+        with pytest.raises(DecisionError, match="invalid choice answer"):
+            await provider.ask(
+                {
+                    "decision": DecisionChoiceQuestion(
+                        "Choose one",
+                        {"respond": "Reply", "ignore": "Ignore"},
+                    )
+                }
+            )
+    finally:
+        await provider.terminate()
+
+    provider = _provider(handler, probability_tolerance=0.1)
+    try:
+        answer = (
+            await provider.ask(
+                {
+                    "decision": DecisionChoiceQuestion(
+                        "Choose one",
+                        {"respond": "Reply", "ignore": "Ignore"},
+                    )
+                }
+            )
+        )["decision"]
+    finally:
+        await provider.terminate()
+
+    assert answer.choice == "ignore"
+    assert answer.probability == 0.53
+
+
+@pytest.mark.asyncio
+async def test_system_one_invalid_choice_reports_response_summary(caplog):
+    caplog.set_level(logging.WARNING, logger="astrbot")
+    provider = _provider(
+        lambda request: httpx.Response(
+            200,
+            json={
+                "answers": {
+                    "decision": {
+                        "choice": "respond",
+                        "confidence": 0.9,
+                        "probabilities": {"respond": 0.2, "ignore": 0.8},
+                        "reason": "jitter-observed",
+                    }
+                }
+            },
+        )
+    )
+    try:
+        with pytest.raises(DecisionError) as exc_info:
+            await provider.ask(
+                {
+                    "decision": DecisionChoiceQuestion(
+                        "Choose one",
+                        {"respond": "Reply", "ignore": "Ignore"},
+                    )
+                }
+            )
+    finally:
+        await provider.terminate()
+
+    assert "jitter-observed" in str(exc_info.value)
+    assert "jitter-observed" in caplog.text
 
 
 @pytest.mark.asyncio

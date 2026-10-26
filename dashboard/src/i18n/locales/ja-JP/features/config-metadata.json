@@ -2057,6 +2057,10 @@
       "api_base": {
         "description": "API Base URL"
       },
+      "probability_tolerance": {
+        "description": "判定確率の許容差",
+        "hint": "確率の合計と 1 の差、および選択された選択肢と最高確率の選択肢との差の許容値です。既定値は 0.05 です。"
+      },
       "proxy": {
         "description": "プロキシアドレス",
         "hint": "HTTP/HTTPS プロキシアドレスです。形式例: http://127.0.0.1:7890。このプロバイダーの API リクエストにのみ適用され、Docker 内部ネットワークの通信には影響しません。"

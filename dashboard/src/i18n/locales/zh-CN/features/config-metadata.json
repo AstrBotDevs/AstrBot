@@ -1977,6 +1977,10 @@
       "api_base": {
         "description": "API Base URL"
       },
+      "probability_tolerance": {
+        "description": "判定概率容差",
+        "hint": "允许概率总和与 1 的偏差，以及所选选项与最高概率选项的偏差；默认 0.05。"
+      },
       "proxy": {
         "description": "代理地址",
         "hint": "HTTP/HTTPS 代理地址，格式如 http://127.0.0.1:7890。仅对该提供商的 API 请求生效，不影响 Docker 内网通信。"

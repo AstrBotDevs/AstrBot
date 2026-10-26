@@ -21,7 +21,15 @@ from ..provider import DecisionProvider
 from ..register import register_provider_adapter
 from .request_retry import retry_provider_request
 
-_PROBABILITY_TOLERANCE = 0.02
+_DEFAULT_PROBABILITY_TOLERANCE = 0.05
+_RESPONSE_SUMMARY_CHARS = 500
+
+
+def _summarize_response(value: Any) -> str:
+    summary = json.dumps(value, ensure_ascii=False, default=str)
+    if len(summary) <= _RESPONSE_SUMMARY_CHARS:
+        return summary
+    return f"{summary[: _RESPONSE_SUMMARY_CHARS - 3]}..."
 
 
 @register_provider_adapter(
@@ -61,6 +69,14 @@ class SystemOneDecisionProvider(DecisionProvider):
             headers["Authorization"] = f"Bearer {self.api_key}"
         self.proxy = str(provider_config.get("proxy") or "").strip() or None
         self.timeout = float(provider_config.get("timeout", 2))
+        self.probability_tolerance = float(
+            provider_config.get(
+                "probability_tolerance",
+                _DEFAULT_PROBABILITY_TOLERANCE,
+            )
+        )
+        if not 0 <= self.probability_tolerance <= 1:
+            raise ValueError("probability_tolerance must be between 0 and 1")
         self.client = httpx.AsyncClient(
             timeout=self.timeout,
             proxy=self.proxy,
@@ -159,14 +175,22 @@ class SystemOneDecisionProvider(DecisionProvider):
             ) from exc
         raw_answers = body.get("answers") if isinstance(body, Mapping) else None
         if not isinstance(raw_answers, Mapping):
-            raise DecisionError("System One endpoint returned an invalid response")
+            summary = _summarize_response(body)
+            logger.warning(f"[System One Decision] Invalid response: {summary}")
+            raise DecisionError(
+                f"System One endpoint returned an invalid response: {summary}"
+            )
 
         answers: dict[str, DecisionAnswer] = {}
         for head, question in questions.items():
             raw_answer = raw_answers.get(head)
             if not isinstance(raw_answer, Mapping):
+                summary = _summarize_response(raw_answers)
+                logger.warning(
+                    f"[System One Decision] Missing answer for {head}: {summary}"
+                )
                 raise DecisionError(
-                    f"System One endpoint returned no answer for {head}"
+                    f"System One endpoint returned no answer for {head}: {summary}"
                 )
 
             if isinstance(question, DecisionChoiceQuestion):
@@ -191,11 +215,19 @@ class SystemOneDecisionProvider(DecisionProvider):
                     and valid_numbers
                     and set(probabilities) == set(question.options)
                     and choice in question.options
-                    and abs(sum(probabilities.values()) - 1) < _PROBABILITY_TOLERANCE
-                    and probabilities[choice] >= max(probabilities.values()) - 1e-6
+                    and abs(sum(probabilities.values()) - 1)
+                    <= self.probability_tolerance
+                    and probabilities[choice]
+                    >= max(probabilities.values()) - self.probability_tolerance
                 ):
+                    summary = _summarize_response(raw_answer)
+                    logger.warning(
+                        f"[System One Decision] Invalid choice answer for "
+                        f"{head}: {summary}"
+                    )
                     raise DecisionError(
-                        f"System One endpoint returned an invalid answer for {head}"
+                        f"System One endpoint returned an invalid choice answer "
+                        f"for {head}: {summary}"
                     )
                 answers[head] = DecisionAnswer(
                     choice=choice,
@@ -215,8 +247,14 @@ class SystemOneDecisionProvider(DecisionProvider):
                 and math.isfinite(probability)
                 and 0 <= probability <= 1
             ):
+                summary = _summarize_response(raw_answer)
+                logger.warning(
+                    f"[System One Decision] Invalid boolean answer for "
+                    f"{head}: {summary}"
+                )
                 raise DecisionError(
-                    f"System One endpoint returned an invalid answer for {head}"
+                    f"System One endpoint returned an invalid boolean answer "
+                    f"for {head}: {summary}"
                 )
             answers[head] = DecisionAnswer(
                 choice=None,
