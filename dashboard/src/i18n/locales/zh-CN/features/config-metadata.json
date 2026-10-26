@@ -112,10 +112,11 @@
       "provider_settings": {
         "default_image_caption_provider_id": {
           "description": "图片转述模型",
-          "hint": "留空代表不使用,可用于非多模态模型"
+          "hint": "当对话模型不支持图片输入时，调用图片转述模型来获得图片描述。留空代表不使用。"
         },
         "image_caption_prompt": {
-          "description": "图片转述提示词"
+          "description": "图片转述提示词",
+          "hint": "用于图片转述模型的提示词。"
         }
       },
       "provider_stt_settings": {
@@ -125,7 +126,7 @@
         },
         "provider_id": {
           "description": "默认语音转文本模型",
-          "hint": "用户也可使用 /provider 指令单独选择会话的 STT 模型。"
+          "hint": "也可使用 /provider 指令单独选择会话的模型。"
         }
       },
       "provider_tts_settings": {
@@ -134,10 +135,12 @@
           "hint": "使用文字转语音模型将文字转为语音回复。"
         },
         "provider_id": {
-          "description": "默认文本转语音模型"
+          "description": "默认文本转语音模型",
+          "hint": "也可使用 /provider 指令单独选择会话的模型。"
         },
         "trigger_probability": {
-          "description": "TTS 触发概率"
+          "description": "TTS 触发概率",
+          "hint": "采用随机概率触发语音回复。"
         }
       }
     },
@@ -440,9 +443,9 @@
               "hint": "当超过\"压缩前最多保留对话轮数\"且无法使用 LLM 压缩时，一次丢弃多少轮旧对话；请求期截断也会复用该值。"
             },
             "overflow_strategy": {
-              "description": "历史超限或上下文接近上限时的处理方式",
+              "description": "压缩策略",
               "labels": ["按对话轮数截断", "由 LLM 压缩上下文"],
-              "hint": "普通会话历史仅在超过\"压缩前最多保留对话轮数\"后执行该策略；请求发送前也会在上下文 token 接近模型窗口时使用同一策略保护本次请求。"
+              "hint": "模型上下文超限时的处理策略。"
             },
             "instruction": {
               "description": "上下文压缩提示词",
@@ -453,8 +456,8 @@
               "hint": "按当前上下文 token 数保留最近内容，范围 0-0.3。0.15 表示保留 15%；比例大于 0 时至少保留最后一轮。"
             },
             "provider_id": {
-              "description": "用于上下文压缩的模型提供商 ID",
-              "hint": "留空时使用当前聊天模型进行压缩；如果模型不可用或压缩失败，将回退为\"按对话轮数截断\"的策略。"
+              "description": "压缩模型",
+              "hint": "用于上下文压缩的模型。默认选择当前的对话模型。"
             },
             "fallback_max_tokens": {
               "description": "上下文窗口兜底值",
@@ -487,22 +490,24 @@
       },
       "provider_settings": {
         "display_reasoning_text": {
-          "description": "显示思考内容"
+          "description": "显示思考内容",
+          "hint": "显示模型的思维链信息到最终回复中。"
         },
         "identifier": {
           "description": "用户识别",
-          "hint": "启用后,会在提示词前包含用户 ID 信息。"
+          "hint": "在用户提示词前带上用户 ID 信息。"
         },
         "group_name_display": {
           "description": "显示群名称",
-          "hint": "启用后,在支持的平台(OneBot v11)上会在提示词前包含群名称信息。"
+          "hint": "在受支持的消息平台的群聊中的用户提示词前带上群名称信息。"
         },
         "datetime_system_prompt": {
           "description": "现实世界时间感知",
-          "hint": "启用后,会在系统提示词中附带当前时间信息。"
+          "hint": "在用户提示词中带上当前的时间信息。"
         },
         "show_tool_use_status": {
-          "description": "输出工具调用信息"
+          "description": "输出工具调用信息",
+          "hint": "有工具调用时，同时发送带有工具调用名字的消息。"
         },
         "show_tool_call_result": {
           "description": "输出工具调用结果",
@@ -535,7 +540,8 @@
           }
         },
         "streaming_response": {
-          "description": "流式输出"
+          "description": "流式输出",
+          "hint": "在受支持的聊天平台中以打字机的形式输出响应。"
         },
         "unsupported_streaming_strategy": {
           "description": "不支持流式回复的平台",
@@ -1001,26 +1007,33 @@
           "hint": "启用后，支持隔离的渠道会为每位群成员使用独立上下文。指令权限请在「管理行为 → 指令」中设置。"
         },
         "friend_message_needs_wake_prefix": {
-          "description": "私聊消息需要唤醒词"
+          "description": "私聊消息需要唤醒词",
+          "hint": "私聊消息也必须带上唤醒前缀才能唤醒机器人。"
         },
         "reply_prefix": {
-          "description": "回复时的文本前缀"
+          "description": "回复时的文本前缀",
+          "hint": "回复中附带的文本前缀。"
         },
         "reply_with_mention": {
-          "description": "回复时 @ 发送人"
+          "description": "回复时 @ 发送人",
+          "hint": "回复时提及发送人。"
         },
         "reply_with_quote": {
-          "description": "回复时引用发送人消息"
+          "description": "回复时引用发送人消息",
+          "hint": "回复时引用发送人的对应消息。"
         },
         "forward_threshold": {
-          "description": "转发消息的字数阈值"
+          "description": "转发消息的字数阈值",
+          "hint": "在受支持的平台上，当回复消息过长时，采用 “合并消息转发” 的方式发送消息。"
         },
         "empty_mention_waiting": {
-          "description": "只 @ 机器人是否触发等待"
+          "description": "只 @ 机器人是否触发等待",
+          "hint": "当发送一条只有提及机器人的消息时，是否在接下来的 1 分钟内保持唤醒状态等待用户的第二条消息。"
         }
       },
       "wake_prefix": {
-        "description": "唤醒词"
+        "description": "唤醒词",
+        "hint": "唤醒机器人的消息前缀的列表。也可以通过 @ 机器人来唤醒。"
       },
       "disable_builtin_commands": {
         "description": "禁用自带指令",
@@ -1175,7 +1188,8 @@
       "platform_settings": {
         "segmented_reply": {
           "enable": {
-            "description": "启用分段回复"
+            "description": "启用分段回复",
+            "hint": "以分段输出的方式发送回复消息。"
           },
           "only_llm_result": {
             "description": "仅对 LLM 结果分段"
@@ -1223,14 +1237,16 @@
       "description": "群聊上下文感知",
       "provider_ltm_settings": {
         "group_icl_enable": {
-          "description": "群聊消息记录注入上下文"
+          "description": "群聊消息记录注入上下文",
+          "hint": "是否记录群聊非唤醒机器人的消息，并在唤醒机器人时将消息传给模型。"
         },
         "group_message_max_cnt": {
-          "description": "注入上下文最大消息数量"
+          "description": "注入上下文最大消息数量",
+          "hint": "传给模型的消息的最大数量。"
         },
         "image_caption": {
           "description": "自动理解图片",
-          "hint": "需要设置群聊图片转述模型。"
+          "hint": "对非唤醒机器人的图片消息启用图片转述，转换成图片描述文本。对于图片消息频繁的群聊，此功能可能造成较大的开销，请慎用。"
         },
         "image_caption_provider_id": {
           "description": "群聊图片转述模型",
@@ -1238,14 +1254,16 @@
         },
         "group_message_history_enable": {
           "description": "持久化群聊消息记录",
-          "hint": "启用后保存群消息，并向模型提供当前群聊历史查询工具。暂时不支持媒体消息记录，媒体消息将保存为 [Image] 等占位文本。"
+          "hint": "将群内的所有消息都持久化保存，并允许模型通过工具来查询群内消息。"
         },
         "group_message_history_max_cnt": {
-          "description": "持久化最大消息数量"
+          "description": "持久化最大消息数量",
+          "hint": "持久化保存的消息的最大数量，超过后抛弃旧的消息。"
         },
         "active_reply": {
           "enable": {
-            "description": "主动回复"
+            "description": "主动回复",
+            "hint": "是否在合适的时机主动发消息。"
           },
           "method": {
             "description": "主动回复方法"
@@ -1264,7 +1282,8 @@
     "t2i": {
       "description": "文本转图像",
       "t2i": {
-        "description": "文本转图像输出"
+        "description": "文本转图像输出",
+        "hint": "将模型回复转换成图片后再发送，防止刷屏。"
       },
       "t2i_word_threshold": {
         "description": "文本转图像字数阈值"
@@ -1311,17 +1330,21 @@
         "description": "临时目录大小上限 (MB)",
         "hint": "用于限制 data/temp 目录总大小，单位为 MB。系统每 10 分钟检查一次，超限时按文件修改时间从旧到新删除，释放约 30% 当前体积。"
       },
-      "trace_log_enable": {
-        "description": "启用 Trace 文件日志",
-        "hint": "将 Trace 事件写入独立文件（不影响控制台输出）。"
+      "trace_enable": {
+        "description": "启用追踪记录",
+        "hint": "追踪用户的每次指令和 AI 调用。"
       },
-      "trace_log_path": {
-        "description": "Trace 日志文件路径",
-        "hint": "相对路径以 data 目录为基准，例如 logs/astrbot.trace.log；支持绝对路径。"
+      "trace_db_path": {
+        "description": "追踪数据库路径",
+        "hint": "相对路径以 data 目录为基准，例如 logs/traces.db；支持绝对路径。"
       },
-      "trace_log_max_mb": {
-        "description": "Trace 日志大小上限 (MB)",
-        "hint": "超过大小后自动轮转，默认 20MB。"
+      "trace_db_max_mb": {
+        "description": "追踪数据库容量预算 (MB)",
+        "hint": "默认 80 MB，最小 32 MB，低于最小值时按 32 MB 生效。超出后自动清除旧数据。"
+      },
+      "trace_retention_days": {
+        "description": "追踪保留天数",
+        "hint": "默认 7 天，期限或容量先达到者触发清理。"
       },
       "pip_install_arg": {
         "description": "pip 安装额外参数",

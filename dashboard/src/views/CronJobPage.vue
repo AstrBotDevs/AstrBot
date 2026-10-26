@@ -65,19 +65,24 @@
                 clearable
                 hide-details
               />
-              <v-autocomplete
-                v-model="selectedUmoFilter"
-                :items="jobUmoFilterOptions"
-                item-title="label"
-                item-value="value"
-                :label="tm('filters.umo')"
-                prepend-inner-icon="mdi-send-outline"
-                variant="solo-filled"
-                density="compact"
-                clearable
-                hide-details
-                :no-data-text="tm('filters.noUmos')"
-              />
+              <div class="d-flex align-center ga-2">
+                <UmoSelector
+                  :model-value="selectedUmoFilter === NO_DELIVERY_TARGET_FILTER ? '' : selectedUmoFilter || ''"
+                  :items="jobUmos"
+                  :allow-manual="false"
+                  :label="tm('filters.umo')"
+                  class="flex-grow-1"
+                  @update:model-value="value => selectedUmoFilter = String(value || '')"
+                />
+                <v-checkbox
+                  v-if="jobs.some(job => !getJobSessions(job).length)"
+                  :model-value="selectedUmoFilter === NO_DELIVERY_TARGET_FILTER"
+                  :label="tm('filters.noDeliveryTarget')"
+                  hide-details
+                  density="compact"
+                  @update:model-value="value => selectedUmoFilter = value ? NO_DELIVERY_TARGET_FILTER : ''"
+                />
+              </div>
             </div>
 
             <div v-if="!sortedJobs.length" class="text-center pa-8">
@@ -365,57 +370,11 @@
                   />
                 </div>
 
-                <v-autocomplete
+                <UmoSelector
                   v-model="newJob.sessions"
-                  :items="availableUmos"
-                  :loading="loadingUmos"
                   :label="tm('form.session')"
-                  variant="outlined"
-                  density="comfortable"
                   multiple
-                  clearable
-                  hide-details
-                  :no-data-text="tm('form.noUmos')"
-                  @focus="loadUmos()"
-                >
-                  <template #item="{ props, item }">
-                    <v-list-item v-bind="props">
-                      <template #title>
-                        <UmoDisplay
-                          v-bind="getUmoDisplayProps(item.raw)"
-                          compact
-                          :show-info="false"
-                          :show-platform="false"
-                        />
-                      </template>
-                      <template #append>
-                        <v-chip
-                          v-if="getUmoInfo(item.raw).platform"
-                          size="x-small"
-                          :color="
-                            getPlatformColor(getUmoInfo(item.raw).platform)
-                          "
-                          class="cron-umo-platform"
-                        >
-                          {{ getUmoInfo(item.raw).platform }}
-                        </v-chip>
-                      </template>
-                    </v-list-item>
-                  </template>
-                  <template #selection="{ item }">
-                    <v-chip
-                      v-if="item && getUmoSelectionText(item.raw)"
-                      size="small"
-                      variant="tonal"
-                      color="primary"
-                      class="umo-selection-chip"
-                      closable
-                      @click:close="removeSession(item.raw)"
-                    >
-                      {{ getUmoSelectionText(item.raw) }}
-                    </v-chip>
-                  </template>
-                </v-autocomplete>
+                />
               </div>
             </v-card-text>
             <v-card-actions class="justify-end px-5 pb-5">
@@ -441,11 +400,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useTheme } from "vuetify";
-import { botApi, cronApi, sessionApi } from "@/api/v1";
+import { botApi, cronApi } from "@/api/v1";
 import { useModuleI18n } from "@/i18n/composables";
 import OutlinedActionListItem from "@/components/shared/OutlinedActionListItem.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
-import UmoDisplay from "@/components/shared/UmoDisplay.vue";
+import UmoSelector from "@/components/shared/UmoSelector.vue";
 
 const { tm } = useModuleI18n("features/cron");
 const theme = useTheme();
@@ -458,9 +417,6 @@ const selectedUmoFilter = ref<string | null>(null);
 const proactivePlatforms = ref<
   { id: string; name: string; display_name?: string }[]
 >([]);
-const availableUmos = ref<string[]>([]);
-const availableUmoInfoMap = ref<Record<string, UmoInfo>>({});
-const loadingUmos = ref(false);
 const platformDialog = ref(false);
 const createDialog = ref(false);
 const creating = ref(false);
@@ -475,16 +431,6 @@ type ScheduleMode =
   | "monthly"
   | "cron";
 type IntervalUnit = "minutes" | "hours" | "days";
-type UmoInfo = {
-  umo: string;
-  platform?: string;
-  message_type?: string;
-  session_id?: string;
-  auto_name?: string;
-  user_alias?: string;
-  display_name?: string;
-};
-
 const newJob = ref({
   schedule_mode: "once" as ScheduleMode,
   name: "",
@@ -505,18 +451,8 @@ const newJob = ref({
 
 const snackbar = ref({ show: false, message: "", color: "success" });
 
-const jobUmoFilterOptions = computed(() => [
-  ...(jobs.value.some((job) => !getJobSessions(job).length)
-    ? [
-        {
-          label: tm("filters.noDeliveryTarget"),
-          value: NO_DELIVERY_TARGET_FILTER,
-        },
-      ]
-    : []),
-  ...Array.from(new Set(jobs.value.flatMap((job) => getJobSessions(job))))
-    .sort((a, b) => a.localeCompare(b))
-    .map((umo) => ({ label: umo, value: umo })),
+const jobUmos = computed(() => [
+  ...new Set(jobs.value.flatMap((job) => getJobSessions(job)).filter(Boolean)),
 ]);
 
 const filteredJobs = computed(() => {
@@ -641,11 +577,7 @@ function deliveryTargetText(item: any): string {
   if (!sessions.length) {
     return tm("card.noDeliveryTarget");
   }
-  return sessions.map((s) => getUmoSelectionText(s) || s).join(", ");
-}
-
-function removeSession(umo: string) {
-  newJob.value.sessions = newJob.value.sessions.filter((s) => s !== umo);
+  return sessions.join(", ");
 }
 
 function nextRunText(item: any): string {
@@ -761,88 +693,6 @@ function weekdayText(value: number): string {
   return tm(`form.weekdays.${keyMap[value]}`);
 }
 
-function parseUmoInfo(umo: string): UmoInfo {
-  const parts = umo.split(":");
-  return {
-    umo,
-    platform: parts[0] || "",
-    message_type: parts[1] || "",
-    session_id: parts.slice(2).join(":") || umo,
-    auto_name: "",
-    user_alias: "",
-    display_name: umo,
-  };
-}
-
-function mergeUmoInfos(infos: UmoInfo[] = []) {
-  const next = { ...availableUmoInfoMap.value };
-  for (const info of infos) {
-    if (info?.umo) {
-      next[info.umo] = { ...(next[info.umo] || {}), ...info };
-    }
-  }
-  availableUmoInfoMap.value = next;
-}
-
-function getUmoInfo(umo: string): UmoInfo {
-  return availableUmoInfoMap.value[umo] || parseUmoInfo(umo);
-}
-
-function getUmoDisplayProps(umo: string) {
-  const info = getUmoInfo(umo);
-  return {
-    umo,
-    platform: info.platform || "",
-    messageType: info.message_type || "",
-    sessionId: info.session_id || "",
-    autoName: info.auto_name || "",
-    userAlias: info.user_alias || "",
-  };
-}
-
-function getPlatformColor(platform = "") {
-  const colors: Record<string, string> = {
-    aiocqhttp: "blue",
-    qq_official: "purple",
-    telegram: "light-blue",
-    discord: "indigo",
-    webchat: "orange",
-  };
-  return colors[platform] || "grey";
-}
-
-function getUmoSelectionText(value?: string | null): string {
-  if (!value) return "";
-  const info = getUmoInfo(value);
-  const aliasName = info.user_alias || "";
-  const autoName = info.auto_name || "";
-  if (aliasName && autoName && aliasName !== autoName) {
-    return `${aliasName}（${autoName}）`;
-  }
-  return aliasName || autoName || value || info.display_name || "";
-}
-
-async function loadUmos(force = false) {
-  if (loadingUmos.value || (!force && availableUmos.value.length)) return;
-  loadingUmos.value = true;
-  try {
-    const res = await sessionApi.activeUmos();
-    if (res.data.status === "ok") {
-      const loadedUmos = Array.isArray(res.data.data?.umos)
-        ? res.data.data.umos
-        : [];
-      mergeUmoInfos(res.data.data?.umo_infos || []);
-      availableUmos.value = Array.from(
-        new Set([...availableUmos.value, ...loadedUmos]),
-      );
-    }
-  } catch {
-    // The field remains editable through free search only when a UMO list is available.
-  } finally {
-    loadingUmos.value = false;
-  }
-}
-
 async function loadJobs() {
   loading.value = true;
   try {
@@ -853,9 +703,6 @@ async function loadJobs() {
         ...job,
         sessions: getJobSessions(job),
       }));
-      mergeUmoInfos(
-        jobs.value.flatMap((job) => getJobSessions(job)).map(parseUmoInfo),
-      );
     } else {
       toast(res.data.message || tm("messages.loadFailed"), "error");
     }
@@ -937,7 +784,6 @@ function openCreate() {
   editingJobId.value = "";
   resetNewJob();
   createDialog.value = true;
-  loadUmos();
 }
 
 function toDatetimeLocalValue(value: any): string {
@@ -979,12 +825,6 @@ function openEdit(job: any) {
   editingJobId.value = job.job_id;
   const schedule = readScheduleFromJob(job);
   const sessions = getJobSessions(job);
-  for (const umo of sessions) {
-    if (!availableUmos.value.includes(umo)) {
-      availableUmos.value = [umo, ...availableUmos.value];
-      mergeUmoInfos([parseUmoInfo(umo)]);
-    }
-  }
   newJob.value = {
     schedule_mode: schedule.schedule_mode,
     name: job.name || "",
@@ -1003,7 +843,6 @@ function openEdit(job: any) {
     enabled: job.enabled !== false,
   };
   createDialog.value = true;
-  loadUmos(true);
 }
 
 function parseTimeParts(
@@ -1454,22 +1293,6 @@ onMounted(() => {
   white-space: nowrap;
 }
 
-.cron-umo-platform {
-  margin-inline-start: 12px;
-  max-width: 96px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.umo-selection-chip {
-  max-width: 100%;
-}
-
-.umo-selection-chip :deep(.v-chip__content) {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
 .list-action-icon-btn {
   color: rgba(var(--v-theme-on-surface), 0.78);

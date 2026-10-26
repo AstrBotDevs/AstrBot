@@ -205,9 +205,23 @@ class ProviderGoogleGenAI(Provider):
         tool_choice: Literal["auto", "required"] = "auto",
         system_instruction: str | None = None,
         modalities: list[str] | None = None,
-        temperature: float = 0.7,
     ) -> types.GenerateContentConfig:
-        """准备查询配置"""
+        """Build the shared generation config for regular and streaming requests.
+
+        Args:
+            payloads: Request messages, model, and optional generation parameters.
+            tools: Function tools available to the model.
+            tool_choice: Whether function calling is automatic or required.
+            system_instruction: System prompt for the request.
+            modalities: Requested response modalities.
+
+        Returns:
+            SDK config with explicit generation parameters and adapter settings.
+
+        Raises:
+            ValueError: Custom parameters are not an object or contain unsupported
+                fields, or the SDK rejects their values.
+        """
         if not modalities:
             modalities = ["TEXT"]
 
@@ -309,22 +323,49 @@ class ProviderGoogleGenAI(Provider):
                     thinking_level=types.ThinkingLevel(thinking_level)
                 )
 
+        parameter_aliases = {
+            "temperature": ("temperature",),
+            "max_output_tokens": ("max_output_tokens", "max_tokens", "maxOutputTokens"),
+            "top_p": ("top_p", "topP"),
+            "top_k": ("top_k", "topK"),
+            "frequency_penalty": ("frequency_penalty", "frequencyPenalty"),
+            "presence_penalty": ("presence_penalty", "presencePenalty"),
+            "stop_sequences": ("stop_sequences", "stop", "stopSequences"),
+            "response_logprobs": ("response_logprobs", "responseLogprobs"),
+            "logprobs": ("logprobs",),
+            "seed": ("seed",),
+        }
+        extra_body = self.provider_config.get("custom_extra_body", {})
+        if extra_body is None:
+            extra_body = {}
+        if not isinstance(extra_body, dict):
+            raise ValueError("Gemini custom_extra_body must be a JSON object.")
+        supported_keys = {
+            key for aliases in parameter_aliases.values() for key in aliases
+        }
+        unsupported_keys = extra_body.keys() - supported_keys
+        if unsupported_keys:
+            raise ValueError(
+                "Unsupported Gemini custom_extra_body parameters: "
+                + ", ".join(sorted(unsupported_keys))
+            )
+
+        generation_config = {}
+        for field, aliases in parameter_aliases.items():
+            # Request parameters take precedence over model settings. Within
+            # either source, prefer SDK snake_case, then OpenAI, then camelCase.
+            for source in (payloads, extra_body):
+                for alias in aliases:
+                    if alias in source:
+                        generation_config[field] = source[alias]
+                        break
+                else:
+                    continue
+                break
+
         return types.GenerateContentConfig(
+            **generation_config,
             system_instruction=system_instruction,
-            temperature=temperature,
-            max_output_tokens=payloads.get("max_tokens")
-            or payloads.get("maxOutputTokens"),
-            top_p=payloads.get("top_p") or payloads.get("topP"),
-            top_k=payloads.get("top_k") or payloads.get("topK"),
-            frequency_penalty=payloads.get("frequency_penalty")
-            or payloads.get("frequencyPenalty"),
-            presence_penalty=payloads.get("presence_penalty")
-            or payloads.get("presencePenalty"),
-            stop_sequences=payloads.get("stop") or payloads.get("stopSequences"),
-            response_logprobs=payloads.get("response_logprobs")
-            or payloads.get("responseLogprobs"),
-            logprobs=payloads.get("logprobs"),
-            seed=payloads.get("seed"),
             response_modalities=modalities,
             tools=cast(types.ToolListUnion | None, tool_list),
             tool_config=tool_config,
@@ -658,7 +699,7 @@ class ProviderGoogleGenAI(Provider):
             modalities.append("IMAGE")
 
         conversation = await self._prepare_conversation(payloads)
-        temperature = payloads.get("temperature", 0.7)
+        recitation_retries = 0
 
         result: types.GenerateContentResponse | None = None
         while True:
@@ -669,7 +710,6 @@ class ProviderGoogleGenAI(Provider):
                     payloads.get("tool_choice", "auto"),
                     system_instruction,
                     modalities,
-                    temperature,
                 )
                 async with self._conversation_header(conversation_id):
                     result = await retry_provider_request(
@@ -690,13 +730,14 @@ class ProviderGoogleGenAI(Provider):
                     raise Exception("Gemini request failed: candidates is empty.")
 
                 if result.candidates[0].finish_reason == types.FinishReason.RECITATION:
-                    if temperature > 2:
+                    if recitation_retries >= 2:
                         raise Exception(
-                            "Temperature exceeded the maximum value of 2, but Gemini recitation still occurred."
+                            "Gemini recitation still occurred after 2 retries."
                         )
-                    temperature += 0.2
+                    recitation_retries += 1
                     logger.warning(
-                        f"Gemini recitation detected; increasing temperature to {temperature:.1f} and retrying...",
+                        "Gemini recitation detected; retrying with unchanged generation parameters (%s/2).",
+                        recitation_retries,
                     )
                     continue
 

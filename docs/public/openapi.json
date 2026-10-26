@@ -667,6 +667,9 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/BotCleanup"
           }
         ],
         "responses": {
@@ -810,6 +813,9 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/BotId"
+          },
+          {
+            "$ref": "#/components/parameters/BotCleanup"
           }
         ],
         "responses": {
@@ -6081,12 +6087,73 @@
         "summary": "List active and known UMOs",
         "operationId": "listActiveUmos",
         "x-astrbot-scope": "data",
+        "parameters": [
+          {
+            "name": "platform_id",
+            "in": "query",
+            "description": "Exact platform instance ID; omit to list all instances.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "$ref": "#/components/responses/Ok"
           }
         },
         "description": "**Required scope:** `data`"
+      }
+    },
+    "/api/v1/sessions/senders": {
+      "get": {
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "Search known senders with source session names",
+        "description": "Search recorded senders, deduplicate by platform instance and sender ID, then paginate in descending update order. Returns senders, page and has_more in the data object. Historical messages are not backfilled.\n\n**Required scope:** `data`",
+        "operationId": "listSessionSenders",
+        "x-astrbot-scope": "data",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "name": "sender_ids",
+            "in": "query",
+            "description": "Resolve the latest record per exact sender ID instead of returning all source sessions.",
+            "schema": {
+              "type": "array",
+              "maxItems": 100,
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 512
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
       }
     },
     "/api/v1/sessions/rules": {
@@ -6920,6 +6987,20 @@
       }
     },
     "parameters": {
+      "BotCleanup": {
+        "name": "cleanup",
+        "in": "query",
+        "description": "Data categories to permanently remove for this adapter. Omit to retain all associated data. Shared resources and cross-platform routing rules are preserved.",
+        "required": false,
+        "style": "form",
+        "explode": true,
+        "schema": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/BotCleanupTarget"
+          }
+        }
+      },
       "AttachmentId": {
         "name": "attachment_id",
         "in": "path",
@@ -7079,6 +7160,19 @@
       }
     },
     "schemas": {
+      "BotCleanupTarget": {
+        "type": "string",
+        "enum": [
+          "custom_rules",
+          "preferences",
+          "routing",
+          "cron_jobs",
+          "conversations",
+          "message_history",
+          "traces",
+          "stats"
+        ]
+      },
       "SuccessEnvelope": {
         "type": "object",
         "required": [

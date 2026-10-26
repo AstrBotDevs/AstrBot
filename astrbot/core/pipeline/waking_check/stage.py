@@ -9,6 +9,7 @@ from astrbot.core.star.filter.permission import PermissionTypeFilter
 from astrbot.core.star.session_plugin_manager import SessionPluginManager
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
+from astrbot.core.utils.session_waiter import FILTERS, USER_SESSIONS
 
 from ..context import PipelineContext
 from ..stage import Stage, register_stage
@@ -235,6 +236,15 @@ class WakingCheckStage(Stage):
 
         event.set_extra("activated_handlers", activated_handlers)
         event.set_extra("handlers_parsed_params", handlers_parsed_params)
+
+        # Admit follow-up input without invoking callbacks before access checks.
+        if not is_wake:
+            for session_filter in tuple(FILTERS):
+                session = USER_SESSIONS.get(session_filter.filter(event))
+                if session and not session.session_controller.future.done():
+                    is_wake = True
+                    event.is_wake = True
+                    break
 
         if is_wake:
             self._umo_auto_name_recorder.schedule(event)

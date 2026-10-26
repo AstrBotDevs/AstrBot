@@ -1022,7 +1022,24 @@ class PipInstaller:
         requirements_path: str | None = None,
         mirror: str | None = None,
         allow_target_upgrade: bool = True,
+        bypass_core_constraints: bool = False,
     ) -> None:
+        """Install packages while protecting core dependency versions by default.
+
+        Args:
+            package_name: Package specifications to install.
+            requirements_path: Requirements file to install instead of packages.
+            mirror: Optional package index overriding the configured index.
+            allow_target_upgrade: Whether desktop target packages may be upgraded.
+            bypass_core_constraints: Skip automatically generated core and desktop
+                dependency locks when updating AstrBot itself. Plugin installs
+                should keep the default protection enabled.
+
+        Raises:
+            ValueError: Package input is invalid or both input forms are provided.
+            DependencyConflictError: Pip cannot resolve the requested dependencies.
+            PipInstallError: Pip fails without a classified dependency conflict.
+        """
         args, requested_requirements = self._build_pip_args(
             package_name, requirements_path, mirror
         )
@@ -1050,7 +1067,11 @@ class PipInstaller:
                     ]
                 )
 
-        with self._core_constraints.constraints_file() as constraints_file_path:
+        with (
+            contextlib.nullcontext(None)
+            if bypass_core_constraints
+            else self._core_constraints.constraints_file()
+        ) as constraints_file_path:
             if constraints_file_path:
                 args.extend(["-c", constraints_file_path])
 

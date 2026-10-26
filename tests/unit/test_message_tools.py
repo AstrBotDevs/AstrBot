@@ -1,12 +1,13 @@
 """Tests for send_message_to_user session handling."""
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.pipeline.respond.stage import RespondStage
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.tools.message_tools import SendMessageToUserTool
 
 
@@ -32,9 +33,11 @@ def _make_context(
         role=role,
         _has_send_oper=False,
         get_sender_id=lambda: "user-1",
+        trace=MagicMock(),
     )
     event.set_extra = lambda key, value: extras.__setitem__(key, value)
     event.get_extra = lambda key, default=None: extras.get(key, default)
+    event._outline_chain = lambda chain: AstrMessageEvent._outline_chain(event, chain)
     return SimpleNamespace(
         context=SimpleNamespace(
             event=event,
@@ -53,6 +56,7 @@ class _DummyRespondEvent:
         }
         self._result = MessageEventResult().message(result_text)
         self.send = AsyncMock()
+        self.trace = MagicMock()
         self.plugins_name = []
 
     def get_result(self):
@@ -151,6 +155,7 @@ async def test_send_message_defaults_to_current_session():
     target_session = call_args[0][0]
     assert str(target_session) == "feishu:GroupMessage:oc_xxx"
     assert ctx.context.event._has_send_oper is True
+    ctx.context.event.trace.record.assert_not_called()
     assert ctx.context.event.get_extra(
         "_send_message_to_user_current_session_plain_texts",
     ) == ["hello"]
@@ -175,6 +180,20 @@ async def test_send_message_returns_platform_error_to_tool_result():
         "qq_official:GroupMessage:group-1: 413 Request Entity Too Large"
     )
     assert ctx.context.event._has_send_oper is False
+    ctx.context.event.trace.record.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_send_message_missing_platform_does_not_record_delivery():
+    """Keep missing-platform failures out of delivered-response traces."""
+    ctx = _make_context()
+    ctx.context.context.send_message.return_value = False
+    result = await SendMessageToUserTool().call(
+        ctx, messages=[{"type": "plain", "text": "hello"}]
+    )
+    assert result.startswith("error: failed to find platform")
+    ctx.context.event.trace.record.assert_not_called()
+    assert ctx.context.event._has_send_oper is False
 
 
 @pytest.mark.asyncio
@@ -189,6 +208,7 @@ async def test_send_message_other_session_does_not_record_current_text():
     )
     assert "Message sent to session" in result
     assert ctx.context.event._has_send_oper is False
+    ctx.context.event.trace.record.assert_not_called()
     assert (
         ctx.context.event.get_extra(
             "_send_message_to_user_current_session_plain_texts",
@@ -225,6 +245,7 @@ async def test_respond_stage_sends_different_text_after_send_message_to_user():
 
     assert result is None
     event.send.assert_awaited_once()
+    event.trace.record.assert_not_called()
     assert event.get_result() is None
 
 

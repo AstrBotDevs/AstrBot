@@ -58,7 +58,7 @@ Open **Extensions → Future Tasks** and click **New Task**. You do not need to 
 
 If no conversations appear, talk to AstrBot on the target platform first, then return to select it. The target is identified by a UMO (unified message origin), which includes the platform, message type, and conversation identifier.
 
-When you select multiple targets, the task wakes the Agent once per target and delivers the result to each conversation. Every target keeps its own conversation context, and one failing target does not stop delivery to the others. Use the chips below the selector to review or remove individual targets.
+When you select multiple targets, the task wakes the Agent once per target and delivers the result to each conversation. Every target keeps its own conversation context, and one failing target does not stop delivery to the others. Open the selector to review or remove individual targets.
 
 The list shows each schedule, delivery targets, and next run. Search by name or content, or filter by target. Click a task to edit it, use its switch to disable scheduled execution, and use **More actions** for **Run now** or **Delete**. Hover over its timing information to see the last execution time and any recorded error.
 

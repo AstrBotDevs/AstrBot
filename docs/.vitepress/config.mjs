@@ -43,7 +43,7 @@ export default defineConfig({
             base: "/deploy",
             collapsed: false,
             items: [
-              { text: "包管理器部署", link: "/astrbot/package" },
+              { text: "脚本部署", link: "/astrbot/package" },
               { text: "雨云一键云部署", link: "/astrbot/rainyun" },
               { text: "桌面客户端部署", link: "/astrbot/desktop" },
               { text: "启动器一键部署", link: "/astrbot/launcher" },
@@ -51,7 +51,7 @@ export default defineConfig({
               { text: "Kubernetes 部署", link: "/astrbot/kubernetes" },
               { text: "宝塔面板部署", link: "/astrbot/btpanel" },
               { text: "1Panel 部署", link: "/astrbot/1panel" },
-              { text: "手动部署", link: "/astrbot/cli" },
+              { text: "源码部署", link: "/astrbot/cli" },
               {
                 text: "其他部署方式",
                 link: "/astrbot/other-deployments",
@@ -179,7 +179,15 @@ export default defineConfig({
                   { text: "Agent 沙盒环境", link: "/astrbot-agent-sandbox" },
                   { text: "SubAgent 编排", link: "/subagent" },
                   { text: "主动型能力", link: "/proactive-agent" },
-                  { text: "网页搜索", link: "/websearch" },
+                  {
+                    text: "网页搜索",
+                    link: "/websearch",
+                    collapsed: true,
+                    items: [
+                      { text: "SerpApi", link: "/websearch/serpapi" },
+                      { text: "DeepSeek Search API", link: "/websearch/deepseek" },
+                    ],
+                  },
                   { text: "知识库", link: "/knowledge-base" },
                   { text: "上下文压缩", link: "/context-compress" },
                 ],
@@ -313,14 +321,14 @@ export default defineConfig({
             base: "/en/deploy",
             collapsed: false,
             items: [
-              { text: "Package Manager", link: "/astrbot/package" },
+              { text: "Script Deployment", link: "/astrbot/package" },
               { text: "Desktop Client", link: "/astrbot/desktop" },
               { text: "One-click Launcher", link: "/astrbot/launcher" },
               { text: "Docker", link: "/astrbot/docker" },
               { text: "Kubernetes", link: "/astrbot/kubernetes" },
               { text: "BT Panel", link: "/astrbot/btpanel" },
               { text: "1Panel", link: "/astrbot/1panel" },
-              { text: "Manual", link: "/astrbot/cli" },
+              { text: "Source Deployment", link: "/astrbot/cli" },
               {
                 text: "Other Deployments",
                 link: "/astrbot/other-deployments",
@@ -451,7 +459,15 @@ export default defineConfig({
                   { text: "Agent Sandbox", link: "/astrbot-agent-sandbox" },
                   { text: "SubAgent Orchestration", link: "/subagent" },
                   { text: "Proactive Capabilities", link: "/proactive-agent" },
-                  { text: "Web Search", link: "/websearch" },
+                  {
+                    text: "Web Search",
+                    link: "/websearch",
+                    collapsed: true,
+                    items: [
+                      { text: "SerpApi", link: "/websearch/serpapi" },
+                      { text: "DeepSeek Search API", link: "/websearch/deepseek" },
+                    ],
+                  },
                   { text: "Knowledge Base", link: "/knowledge-base" },
                   { text: "Context Compression", link: "/context-compress" },
                 ],

@@ -113,7 +113,7 @@
       "button": "Backup Manager"
     },
     "cleanup": {
-      "title": "Log & Cache Cleanup",
+      "title": "Log, Cache & Trace Cleanup",
       "subtitle": "Review disk usage for logs and caches, then clean them from the UI without shell commands.",
       "refresh": "Refresh Usage",
       "clean": "Clean",
@@ -127,7 +127,8 @@
       "targetNames": {
         "cache": "cache",
         "logs": "logs",
-        "all": "logs and cache"
+        "all": "logs, cache, and trace data",
+        "traces": "trace data"
       },
       "targets": {
         "cache": {
@@ -139,13 +140,25 @@
           "title": "Logs",
           "subtitle": "Remove rotated logs and truncate the current active log files.",
           "button": "Clean Logs"
+        },
+        "traces": {
+          "title": "Traces",
+          "subtitle": "Clear historical traces while keeping running traces.",
+          "button": "Clear Trace Data"
         }
       },
       "messages": {
         "statusFailed": "Failed to load storage usage",
         "cleanupSuccess": "Cleared {count} files and freed {size}",
-        "cleanupFailed": "Cleanup failed"
-      }
+        "cleanupFailed": "Cleanup failed",
+        "cleanupTracesSuccess": "Cleared {count} traces and freed {size}",
+        "cleanupWithTracesSuccess": "Cleared {count} files and {traces} traces, freeing {size}"
+      },
+      "confirmWithTraces": "Clean {target} now? Historical traces cannot be recovered. Running traces are retained."
+    },
+    "diagnostics": {
+      "title": "Diagnostics",
+      "subtitle": "Export a diagnostic bundle to troubleshoot AstrBot."
     }
   },
   "backup": {
