@@ -5705,6 +5705,7 @@ components:
         - tts
         - embedding
         - rerank
+        - decision
 
     LoginRequest:
       type: object

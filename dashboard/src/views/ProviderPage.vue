@@ -215,7 +215,7 @@
                   </div>
                   <AstrBotConfig
                     :iterable="newSelectedProviderConfig"
-                    :metadata="configSchema"
+                    :metadata="legacyConfigSchema"
                     metadataKey="provider"
                     :is-editing="updatingMode"
                   />
@@ -383,6 +383,20 @@ const {
   defaultTab: props.defaultTab,
   tm,
   showMessage
+})
+
+const legacyConfigSchema = computed(() => {
+  const schema = JSON.parse(JSON.stringify(configSchema.value || {}))
+  if (selectedLegacyProvider.value?.type !== 'system_one_decision') return schema
+
+  const items = schema.provider?.items
+  if (!items) return schema
+  if (items.api_base) items.api_base.hint = tm('providers.decisionHints.apiBase')
+  if (items.model) items.model.hint = tm('providers.decisionHints.model')
+  if (items.custom_headers) {
+    items.custom_headers.hint = tm('providers.decisionHints.customHeaders')
+  }
+  return schema
 })
 
 const unsavedLegacyProviderMarker = Symbol('unsavedLegacyProvider')

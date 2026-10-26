@@ -11,6 +11,7 @@
     "tabs": {
       "all": "すべて",
       "chatCompletion": "チャット",
+      "decision": "判定",
       "speechToText": "音声認識",
       "textToSpeech": "音声合成",
       "embedding": "埋め込み",
@@ -25,6 +26,11 @@
       "kimi_code": "Kimi Code の会話モデルを設定します。",
       "vllm_rerank": "Jina AI、Cohere、PPIO などのプロバイダーにも対応しています。",
       "default": ""
+    },
+    "decisionHints": {
+      "apiBase": "System One のエンドポイントです。ベース URL には /systemone が自動追加されます。末尾を / にするとそのまま使用します。",
+      "model": "System One のモデル ID（例: jev-latest、jev-preview、またはサービス指定のモデル名）。",
+      "customHeaders": "判断リクエストに追加する HTTP ヘッダーです。"
     }
   },
   "availability": {
@@ -48,6 +54,7 @@
       "title": "モデルプロバイダー",
       "tabs": {
         "basic": "チャット",
+        "decision": "判定",
         "speechToText": "音声認識",
         "textToSpeech": "音声合成",
         "embedding": "埋め込み",

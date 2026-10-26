@@ -45,6 +45,10 @@ export function resolveDefaultTab(value?: string) {
     return 'rerank'
   }
 
+  if (normalized.includes('decision')) {
+    return 'decision'
+  }
+
   return 'chat_completion'
 }
 
@@ -85,6 +89,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
   const providerTypes = computed(() => [
     { value: 'chat_completion', label: tm('providers.tabs.chatCompletion'), icon: 'mdi-message-text' },
+    { value: 'decision', label: tm('providers.tabs.decision'), icon: 'mdi-source-branch' },
     { value: 'speech_to_text', label: tm('providers.tabs.speechToText'), icon: 'mdi-microphone-message' },
     { value: 'text_to_speech', label: tm('providers.tabs.textToSpeech'), icon: 'mdi-volume-high' },
     { value: 'embedding', label: tm('providers.tabs.embedding'), icon: 'mdi-code-json' },
@@ -405,7 +410,8 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       dashscope_tts: 'text_to_speech',
       azure_tts: 'text_to_speech',
       minimax_tts_api: 'text_to_speech',
-      volcengine_tts: 'text_to_speech'
+      volcengine_tts: 'text_to_speech',
+      system_one_decision: 'decision'
     }
     return oldVersionProviderTypeMapping[provider.type]
   }
