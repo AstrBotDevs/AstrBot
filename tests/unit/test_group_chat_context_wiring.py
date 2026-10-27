@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from astrbot.api.message_components import Json, Plain
-from astrbot.api.provider import LLMResponse
+from astrbot.api.provider import LLMResponse, ProviderRequest
 from astrbot.builtin_stars.astrbot.group_chat_context import GroupChatContext
 from astrbot.builtin_stars.astrbot.main import Main
 from astrbot.core.message.message_event_result import MessageChain
@@ -270,6 +270,38 @@ async def test_llm_response_persists_final_complete_chain():
             },
             " [Shared Card: Title: Wrapped card; URL: https://example.com/news]",
         ),
+        (
+            {
+                "app": "com.tencent.music.lua",
+                "meta": {
+                    "music": {
+                        "title": "Example song",
+                        "desc": "Example artist",
+                        "tag": "QQ Music",
+                    }
+                },
+            },
+            " [Shared Card: Title: Example song; Description: Example artist; "
+            "Source: QQ Music]",
+        ),
+        (
+            {
+                "data": json.dumps(
+                    {
+                        "meta": {
+                            "music": {
+                                "title": "Wrapped song",
+                                "desc": "Example artist",
+                                "tag": "NetEase Cloud Music",
+                            }
+                        }
+                    }
+                )
+            },
+            " [Shared Card: Title: Wrapped song; Description: Example artist; "
+            "Source: NetEase Cloud Music]",
+        ),
+        ({"meta": {"music": "invalid"}}, " [Shared Card]"),
         ({"app": "com.example.unknown"}, " [Shared Card]"),
     ],
 )
@@ -285,14 +317,15 @@ async def test_format_message_summarizes_json_card(card_data, expected):
 
 
 @pytest.mark.asyncio
-async def test_format_message_truncates_long_json_card_fields():
+@pytest.mark.parametrize("card_kind", ["news", "music"])
+async def test_format_message_truncates_long_json_card_fields(card_kind):
     context = GroupChatContext(MagicMock(), MagicMock())
     event = MagicMock()
     event.message_obj = SimpleNamespace(sender=SimpleNamespace(nickname="Alice"))
     event.get_messages.return_value = [
         Json(
             data={
-                "meta": {"news": {"desc": "a" * 201}},
+                "meta": {card_kind: {"desc": "a" * 201}},
             }
         )
     ]
@@ -300,3 +333,57 @@ async def test_format_message_truncates_long_json_card_fields():
     formatted = await context._format_message(event, {})
 
     assert f"Description: {'a' * 200}...]" in formatted
+
+
+@pytest.mark.asyncio
+async def test_music_card_metadata_reaches_followup_without_forwarding_private_fields():
+    context = MagicMock()
+    context.get_config.return_value = {
+        "provider_ltm_settings": {
+            "image_caption": False,
+            "active_reply": {
+                "method": "possibility_reply",
+                "possibility_reply": 0,
+            },
+        },
+        "provider_settings": {"image_caption_prompt": ""},
+    }
+    group_context = GroupChatContext(MagicMock(), context)
+    card = Json(
+        data={
+            "config": {"token": "private-share-token"},
+            "meta": {
+                "music": {
+                    "title": "Example song",
+                    "desc": "Example artist",
+                    "tag": "QQ Music",
+                    "jumpUrl": "https://example.com/song?token=private-link-token",
+                    "musicUrl": "https://example.com/private-audio",
+                    "preview": "https://example.com/private-cover",
+                    "uin": "private-sender-id",
+                }
+            },
+        }
+    )
+    shared = make_event()
+    shared.get_message_type.return_value = MessageType.GROUP_MESSAGE
+    shared.message_obj.sender = SimpleNamespace(nickname="Alice")
+    shared.get_messages.return_value = [card]
+    original_data = json.dumps(card.data)
+    await group_context.handle_message(shared)
+
+    followup = make_event()
+    followup.get_message_type.return_value = MessageType.GROUP_MESSAGE
+    followup.message_obj.sender = SimpleNamespace(nickname="Alice")
+    followup.get_messages.return_value = [Plain("What do you think of this song?")]
+    await group_context.handle_message(followup)
+    request = ProviderRequest(prompt="What do you think of this song?")
+
+    await group_context.on_req_llm(followup, request)
+
+    injected = "\n".join(part.text for part in request.extra_user_content_parts)
+    assert "Title: Example song" in injected
+    assert "Description: Example artist" in injected
+    assert "Source: QQ Music" in injected
+    assert "private-" not in injected
+    assert json.dumps(card.data) == original_data
