@@ -1378,9 +1378,30 @@ export const pluginApi = {
       }),
     );
   },
-  readme(pluginId: string) {
+  readme(pluginId: string, locale?: string) {
     return typed<OpenConfig>(
-      openApiV1.getPluginReadmeById({ query: { plugin_id: pluginId } }),
+      openApiV1.getPluginReadmeById({
+        query: {
+          plugin_id: pluginId,
+          ...(locale ? { locale } : {}),
+        },
+      }),
+    );
+  },
+  marketReadme(
+    pluginId: string,
+    options?: { locale?: string; customRegistry?: string | null },
+  ) {
+    return typed<OpenConfig>(
+      openApiV1.getMarketPluginReadme({
+        query: {
+          plugin_id: pluginId,
+          ...(options?.locale ? { locale: options.locale } : {}),
+          ...(options?.customRegistry
+            ? { custom_registry: options.customRegistry }
+            : {}),
+        },
+      }),
     );
   },
   changelog(pluginId: string) {

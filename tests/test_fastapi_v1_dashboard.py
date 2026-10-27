@@ -3594,7 +3594,7 @@ async def test_v1_safe_plugin_routes_accept_slash_ids(
     async def fake_update_plugin(data):
         return {"payload": data}
 
-    def fake_get_plugin_readme(name: str):
+    def fake_get_plugin_readme(name: str, locale: str | None = None):
         return {"name": name, "content": "readme"}, "ok"
 
     async def fake_get_configs(name: str):
@@ -3631,7 +3631,7 @@ async def test_v1_safe_plugin_routes_accept_slash_ids(
     )
     readme_response = await asgi_client.get(
         "/api/v1/plugins/readme",
-        params={"plugin_id": plugin_id},
+        params={"plugin_id": plugin_id, "locale": "zh-CN"},
         headers=headers,
     )
     schema_response = await asgi_client.get(
@@ -3678,6 +3678,57 @@ async def test_v1_safe_plugin_routes_accept_slash_ids(
         "name": plugin_id,
         "key": "assets/path",
     }
+
+
+@pytest.mark.asyncio
+async def test_v1_market_readme_route(
+    asgi_app: FastAPI,
+    asgi_client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    plugin_service = asgi_app.state.services.plugins
+    captured: dict[str, object] = {}
+
+    async def fake_get_market_plugin_readme(
+        *,
+        plugin_id: str,
+        locale: str | None,
+        custom_registry: str | None,
+    ):
+        captured.update(
+            plugin_id=plugin_id,
+            locale=locale,
+            custom_registry=custom_registry,
+        )
+        return {
+            "content": "# README",
+            "locale": locale,
+            "filename": "README_zh.md",
+        }, "ok"
+
+    monkeypatch.setattr(
+        plugin_service,
+        "get_market_plugin_readme",
+        fake_get_market_plugin_readme,
+    )
+
+    response = await asgi_client.get(
+        "/api/v1/plugins/market/readme",
+        params={
+            "plugin_id": "owner/plugin",
+            "locale": "zh-CN",
+            "custom_registry": "https://example.com/plugins.json",
+        },
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    assert captured == {
+        "plugin_id": "owner/plugin",
+        "locale": "zh-CN",
+        "custom_registry": "https://example.com/plugins.json",
+    }
+    assert response.json()["data"]["filename"] == "README_zh.md"
 
 
 @pytest.mark.asyncio

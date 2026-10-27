@@ -2097,9 +2097,13 @@ paths:
           required: true
           schema:
             type: string
+        - name: locale
+          in: query
+          schema:
+            type: string
       responses:
         "200":
-          $ref: "#/components/responses/Text"
+          $ref: "#/components/responses/Ok"
 
   /api/v1/plugins/changelog:
     get:
@@ -2340,9 +2344,13 @@ paths:
       x-astrbot-scope: plugin
       parameters:
         - $ref: "#/components/parameters/PluginId"
+        - name: locale
+          in: query
+          schema:
+            type: string
       responses:
         "200":
-          $ref: "#/components/responses/Text"
+          $ref: "#/components/responses/Ok"
 
   /api/v1/plugins/{plugin_id}/changelog:
     get:
@@ -2604,6 +2612,30 @@ paths:
           in: query
           schema:
             type: boolean
+        - name: custom_registry
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugins/market/readme:
+    get:
+      tags: [Plugins]
+      summary: Get README content for a marketplace plugin
+      operationId: getMarketPluginReadme
+      x-astrbot-scope: plugin
+      parameters:
+        - name: plugin_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: locale
+          in: query
+          schema:
+            type: string
         - name: custom_registry
           in: query
           schema:

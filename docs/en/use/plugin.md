@@ -50,6 +50,8 @@ Search by plugin name or a keyword describing the feature you want. You can also
 - **AstrBot version requirements**: whether your installed version is compatible.
 - **Configuration and dependencies**: whether it needs an API key, external service, additional program, or particular deployment environment.
 
+The plugin detail page displays the README. It follows the WebUI language and uses the default README when no localized version is available. You can also read documentation from the default branch of a GitHub repository before installing a marketplace plugin. If it cannot be loaded, use **Repository** to open the project directly.
+
 If the description is incomplete, open the repository and read its README and usage documentation. Stars, downloads, and update dates can help you browse, but they do not replace compatibility checks or usage instructions.
 
 ### 3. Install and check that it loads

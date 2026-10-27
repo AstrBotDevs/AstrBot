@@ -2,14 +2,18 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import ipaddress
 import json
 import os
+import re
+import socket
 import ssl
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urljoin, urlparse
 
 import aiohttp
 import certifi
@@ -18,6 +22,7 @@ from astrbot.api import sp
 from astrbot.core import DEMO_MODE, file_token_service, logger
 from astrbot.core.computer.computer_client import sync_skills_to_active_sandboxes
 from astrbot.core.repository import (
+    GitHubRepository,
     GitUnavailableError,
     normalize_repository_url,
     parse_repository_url,
@@ -36,6 +41,8 @@ from astrbot.core.star.star_manager import (
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
 
 PLUGIN_UPDATE_CONCURRENCY = 3
+PLUGIN_README_MAX_BYTES = 1024 * 1024
+PLUGIN_README_TIMEOUT_SECONDS = 15
 PLUGIN_OPERATION_FAILED_MESSAGE = "插件操作失败，请查看服务端日志。"
 PLUGIN_UPDATE_FAILED_MESSAGE = "更新失败，请查看服务端日志。"
 PLUGIN_INSTALL_SOURCES_KEY = "plugin_install_sources"
@@ -1940,34 +1947,397 @@ class PluginService:
             raise PluginServiceError(f"无法找到插件 {plugin_name} 的目录")
         return plugin_dir
 
-    def get_plugin_readme(self, plugin_name: str | None) -> tuple[dict, str]:
+    @staticmethod
+    def _readme_filename_candidates(locale: str | None) -> list[str]:
+        """Build preferred README filenames for a UI locale.
+
+        Args:
+            locale: UI locale such as ``zh-CN``, or None for the default file.
+
+        Returns:
+            Ordered README filenames, ending with the default README.
+
+        Raises:
+            PluginServiceError: If the locale contains unsupported characters.
+        """
+        candidates: list[str] = []
+        normalized_locale = str(locale or "").strip().replace("_", "-")
+        if normalized_locale:
+            if not re.fullmatch(
+                r"[A-Za-z]{2,8}(?:-[A-Za-z0-9]{2,8})?",
+                normalized_locale,
+            ):
+                raise PluginServiceError(
+                    "Invalid README locale",
+                    public_message="README 语言参数无效",
+                )
+            language = normalized_locale.split("-", 1)[0]
+            tags = list(dict.fromkeys((normalized_locale, language)))
+            for tag in tags:
+                for separator in ("_", "-", "."):
+                    candidates.append(f"README{separator}{tag}.md")
+        candidates.append("README.md")
+        return list(dict.fromkeys(candidates))
+
+    def _read_local_readme(
+        self,
+        plugin_name: str,
+        plugin_dir: Path,
+        locale: str | None,
+    ) -> tuple[dict, str]:
+        """Read a localized README from an installed plugin directory.
+
+        Args:
+            plugin_name: Installed plugin metadata name.
+            plugin_dir: Resolved plugin directory.
+            locale: UI locale used to prefer a localized README.
+
+        Returns:
+            README content and resolved file metadata, plus a success message.
+
+        Raises:
+            PluginServiceError: If no safe, readable README is available.
+        """
+        candidates = self._readme_filename_candidates(locale)
+        try:
+            files = {
+                item.name.casefold(): item
+                for item in plugin_dir.iterdir()
+                if item.is_file()
+            }
+        except OSError as exc:
+            logger.warning("Failed to list README files for %s: %s", plugin_name, exc)
+            raise PluginServiceError(
+                "Failed to list README files",
+                public_message="读取README文件失败",
+            ) from exc
+
+        selected_path: Path | None = None
+        for filename in candidates:
+            candidate = files.get(filename.casefold())
+            if candidate is not None:
+                selected_path = candidate
+                break
+
+        if selected_path is None:
+            localized_names = sorted(
+                item.name
+                for item in files.values()
+                if re.fullmatch(
+                    r"readme(?:[_.-][A-Za-z0-9_-]+)\.md",
+                    item.name,
+                    flags=re.IGNORECASE,
+                )
+            )
+            if len(localized_names) == 1:
+                selected_path = files[localized_names[0].casefold()]
+
+        if selected_path is None:
+            logger.warning("Plugin %s has no README file.", plugin_name)
+            raise PluginServiceError(f"插件 {plugin_name} 没有README文件")
+
+        resolved_path = selected_path.resolve()
+        try:
+            resolved_path.relative_to(plugin_dir.resolve())
+        except ValueError as exc:
+            raise PluginServiceError(
+                "README path escapes the plugin directory",
+                public_message="README 文件路径无效",
+            ) from exc
+
+        content = self._read_readme_text(resolved_path)
+        return {
+            "content": content,
+            "locale": str(locale or "").strip().replace("_", "-"),
+            "filename": selected_path.name,
+        }, "成功获取README内容"
+
+    @staticmethod
+    def _read_readme_text(readme_path: Path) -> str:
+        """Read a UTF-8 README with a bounded file size.
+
+        Args:
+            readme_path: README file to read.
+
+        Returns:
+            Decoded README text.
+
+        Raises:
+            PluginServiceError: If the file is too large, not UTF-8, or unreadable.
+        """
+        try:
+            if readme_path.stat().st_size > PLUGIN_README_MAX_BYTES:
+                raise PluginServiceError(
+                    "README exceeds the size limit",
+                    public_message="README 文件超过 1 MiB，无法显示",
+                )
+            return readme_path.read_text(encoding="utf-8-sig")
+        except PluginServiceError:
+            raise
+        except UnicodeDecodeError as exc:
+            raise PluginServiceError(
+                "README is not valid UTF-8",
+                public_message="README 文件必须使用 UTF-8 编码",
+            ) from exc
+        except OSError as exc:
+            logger.warning("Failed to read README %s: %s", readme_path, exc)
+            raise PluginServiceError(
+                "Failed to read README",
+                public_message="读取README文件失败",
+            ) from exc
+
+    @staticmethod
+    async def _validate_public_readme_url(url: str) -> str:
+        """Validate that a README URL is HTTPS and resolves publicly.
+
+        Args:
+            url: Candidate README URL.
+
+        Returns:
+            The normalized URL.
+
+        Raises:
+            PluginServiceError: If the URL is invalid or resolves privately.
+        """
+        parsed = urlparse(str(url or "").strip())
+        if (
+            parsed.scheme != "https"
+            or not parsed.hostname
+            or parsed.username
+            or parsed.password
+        ):
+            raise PluginServiceError(
+                "Unsupported README URL",
+                public_message="README 地址必须使用 HTTPS",
+            )
+        try:
+            port = parsed.port or 443
+            addresses = await asyncio.get_running_loop().getaddrinfo(
+                parsed.hostname,
+                port,
+                type=socket.SOCK_STREAM,
+            )
+        except (OSError, ValueError) as exc:
+            raise PluginServiceError(
+                "Failed to resolve README host",
+                public_message="无法解析 README 地址",
+            ) from exc
+        public_addresses = []
+        for address in addresses:
+            try:
+                public_addresses.append(ipaddress.ip_address(address[4][0]).is_global)
+            except ValueError:
+                public_addresses.append(False)
+        if not public_addresses or not all(public_addresses):
+            raise PluginServiceError(
+                "README URL resolves to a non-public address",
+                public_message="README 地址必须指向公网主机",
+            )
+        return parsed.geturl()
+
+    async def _fetch_remote_readme(self, url: str) -> str | None:
+        """Fetch a README through a bounded public HTTPS request.
+
+        Args:
+            url: README URL to fetch.
+
+        Returns:
+            Decoded README text, or None when the file does not exist.
+
+        Raises:
+            PluginServiceError: If validation or download fails.
+        """
+        request_url = url
+        ssl_context = ssl.create_default_context(cafile=certifi.where())
+        timeout = aiohttp.ClientTimeout(total=PLUGIN_README_TIMEOUT_SECONDS)
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+        async with aiohttp.ClientSession(
+            timeout=timeout,
+            connector=connector,
+            trust_env=True,
+        ) as session:
+            for _ in range(4):
+                request_url = await self._validate_public_readme_url(request_url)
+                async with session.get(
+                    request_url,
+                    allow_redirects=False,
+                ) as response:
+                    if response.status in {301, 302, 303, 307, 308}:
+                        location = response.headers.get("Location", "")
+                        if not location:
+                            raise PluginServiceError(
+                                "README redirect has no location",
+                                public_message="README 重定向无效",
+                            )
+                        request_url = urljoin(request_url, location)
+                        continue
+                    if response.status == 404:
+                        return None
+                    if response.status != 200:
+                        raise PluginServiceError(
+                            f"README request failed with status {response.status}",
+                            public_message="获取市场 README 失败",
+                        )
+
+                    content_length = response.headers.get("Content-Length")
+                    if content_length:
+                        try:
+                            too_large = int(content_length) > PLUGIN_README_MAX_BYTES
+                        except ValueError:
+                            too_large = False
+                        if too_large:
+                            raise PluginServiceError(
+                                "README exceeds the size limit",
+                                public_message="README 文件超过 1 MiB，无法显示",
+                            )
+
+                    content = bytearray()
+                    async for chunk in response.content.iter_chunked(64 * 1024):
+                        content.extend(chunk)
+                        if len(content) > PLUGIN_README_MAX_BYTES:
+                            raise PluginServiceError(
+                                "README exceeds the size limit",
+                                public_message="README 文件超过 1 MiB，无法显示",
+                            )
+                    if not content:
+                        return None
+                    try:
+                        return bytes(content).decode("utf-8-sig")
+                    except UnicodeDecodeError as exc:
+                        raise PluginServiceError(
+                            "README is not valid UTF-8",
+                            public_message="README 文件必须使用 UTF-8 编码",
+                        ) from exc
+        raise PluginServiceError(
+            "README redirected too many times",
+            public_message="README 重定向次数过多",
+        )
+
+    async def get_market_plugin_readme(
+        self,
+        *,
+        plugin_id: str,
+        locale: str | None = None,
+        custom_registry: str | None = None,
+    ) -> tuple[dict, str]:
+        """Fetch README content for an uninstalled marketplace plugin.
+
+        Args:
+            plugin_id: Exact marketplace plugin identifier.
+            locale: UI locale used to prefer a localized README.
+            custom_registry: Optional custom marketplace registry URL.
+
+        Returns:
+            README content and resolved file metadata, plus a success message.
+
+        Raises:
+            PluginServiceError: If the entry or README cannot be resolved.
+        """
+        normalized_plugin_id = str(plugin_id or "").strip()
+        if not normalized_plugin_id:
+            raise PluginServiceError(
+                "Marketplace plugin ID is required",
+                public_message="缺少插件市场标识",
+            )
+
+        registry_url = self.normalize_registry_url(custom_registry)
+        market_data, _ = await self.get_online_plugins(
+            custom_registry=registry_url,
+            force_refresh=False,
+        )
+        market_plugin = self.resolve_market_plugin_entry_by_id(
+            market_data,
+            normalized_plugin_id,
+        )
+        if not market_plugin:
+            raise PluginServiceError(
+                "Marketplace plugin not found",
+                public_message="插件源中未找到该插件",
+            )
+
+        explicit_readme_url = str(market_plugin.get("readme_url") or "").strip()
+        if explicit_readme_url:
+            content = await self._fetch_remote_readme(explicit_readme_url)
+            if content is None:
+                raise PluginServiceError(
+                    "Marketplace README not found",
+                    public_message="该插件没有 README 文件",
+                )
+            return {
+                "content": content,
+                "locale": str(locale or "").strip().replace("_", "-"),
+                "filename": Path(urlparse(explicit_readme_url).path).name
+                or "README.md",
+            }, "成功获取README内容"
+
+        repo_url = str(market_plugin.get("repo") or "").strip()
+        try:
+            normalized_repo = normalize_repository_url(repo_url)
+            repository = parse_repository_url(normalized_repo)
+        except ValueError as exc:
+            raise PluginServiceError(
+                "Marketplace plugin has no supported repository",
+                public_message="该插件没有可用于读取 README 的仓库地址",
+            ) from exc
+        if repository.provider != "github":
+            raise PluginServiceError(
+                "Automatic README lookup only supports GitHub",
+                public_message="该仓库不是 GitHub，无法自动读取 README",
+            )
+
+        github_repository = GitHubRepository.parse(normalized_repo)
+        candidates = self._readme_filename_candidates(locale)
+        candidates.extend(
+            filename
+            for filename in ("README_zh.md", "README-zh.md", "README.zh.md")
+            if filename not in candidates
+        )
+        for filename in candidates:
+            content = await self._fetch_remote_readme(
+                github_repository.raw_file_url(filename)
+            )
+            if content is not None:
+                return {
+                    "content": content,
+                    "locale": str(locale or "").strip().replace("_", "-"),
+                    "filename": filename,
+                }, "成功获取README内容"
+
+        raise PluginServiceError(
+            "Marketplace README not found",
+            public_message="该插件没有 README 文件",
+        )
+
+    def get_plugin_readme(
+        self,
+        plugin_name: str | None,
+        locale: str | None = None,
+    ) -> tuple[dict, str]:
+        """Read a plugin README using the requested UI locale.
+
+        Args:
+            plugin_name: Installed plugin metadata name.
+            locale: UI locale used to prefer a localized README file.
+
+        Returns:
+            README content and resolved file metadata, plus a success message.
+
+        Raises:
+            PluginServiceError: If the plugin or README cannot be read.
+        """
         if not plugin_name:
             logger.warning("The plugin name is empty.")
             raise PluginServiceError("插件名称不能为空")
 
         plugin_dir = self.resolve_plugin_dir(plugin_name)
-        readme_path = plugin_dir / "README.md"
-
-        if not readme_path.is_file():
-            logger.warning(f"Plugin {plugin_name} has no README file.")
-            raise PluginServiceError(f"插件 {plugin_name} 没有README文件")
-
-        try:
-            return {
-                "content": readme_path.read_text(encoding="utf-8")
-            }, "成功获取README内容"
-        except Exception as exc:
-            logger.warning(f"Failed to read README for plugin {plugin_name}: {exc}")
-            raise PluginServiceError(
-                "读取README文件失败",
-                public_message="读取README文件失败",
-            ) from exc
+        return self._read_local_readme(plugin_name, plugin_dir, locale)
 
     def get_plugin_readme_from_dashboard_query(
         self,
         plugin_name: str | None,
+        locale: str | None = None,
     ) -> tuple[dict, str]:
-        return self.get_plugin_readme(plugin_name)
+        return self.get_plugin_readme(plugin_name, locale=locale)
 
     def get_plugin_changelog(self, plugin_name: str | None) -> tuple[dict, str]:
         logger.debug(f"Getting the changelog for plugin {plugin_name}")

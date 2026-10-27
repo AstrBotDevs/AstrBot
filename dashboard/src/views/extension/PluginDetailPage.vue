@@ -35,7 +35,7 @@ const props = defineProps({
   },
 });
 
-const { tm, router } = props.state;
+const { tm, router, selectedSource } = props.state;
 const { locale } = useI18n();
 const {
   pluginName,
@@ -92,6 +92,7 @@ const readmeLoading = ref(false);
 const readmeError = ref("");
 const readmeEmpty = ref(false);
 const renderedReadme = ref("");
+let readmeRequestId = 0;
 const changelogLoading = ref(false);
 const changelogError = ref("");
 const changelogEmpty = ref(false);
@@ -696,30 +697,36 @@ const fetchReadme = async () => {
   const plugin = pluginData.value || {};
   if (!plugin?.name) return;
 
+  const requestId = ++readmeRequestId;
   readmeLoading.value = true;
   readmeError.value = "";
   readmeEmpty.value = false;
   renderedReadme.value = "";
 
   if (isMarketDetail.value) {
-    const readmeUrl = getDocumentUrl("readme_url");
-    if (!readmeUrl) {
-      readmeEmpty.value = true;
-      readmeLoading.value = false;
-      return;
-    }
-
     try {
-      const content = await fetchRemoteMarkdown(readmeUrl);
+      const res = await pluginApi.marketReadme(plugin.name, {
+        locale: locale.value,
+        customRegistry: selectedSource?.value || null,
+      });
+      if (requestId !== readmeRequestId) return;
+      if (res.data.status !== "ok") {
+        readmeEmpty.value = true;
+        return;
+      }
+      const content = res.data.data?.content || "";
       if (!content.trim()) {
         readmeEmpty.value = true;
         return;
       }
       renderedReadme.value = renderMarkdown(content);
     } catch (err) {
+      if (requestId !== readmeRequestId) return;
       readmeError.value = err?.message || String(err);
     } finally {
-      readmeLoading.value = false;
+      if (requestId === readmeRequestId) {
+        readmeLoading.value = false;
+      }
     }
     return;
   }
@@ -736,13 +743,15 @@ const fetchReadme = async () => {
     "";
 
   if (inlineReadme) {
+    if (requestId !== readmeRequestId) return;
     renderedReadme.value = renderMarkdown(inlineReadme);
     readmeLoading.value = false;
     return;
   }
 
   try {
-    const res = await pluginApi.readme(plugin.name);
+    const res = await pluginApi.readme(plugin.name, locale.value);
+    if (requestId !== readmeRequestId) return;
 
     if (res.data.status !== "ok") {
       readmeError.value = res.data.message || tm("messages.operationFailed");
@@ -757,9 +766,12 @@ const fetchReadme = async () => {
 
     renderedReadme.value = renderMarkdown(content);
   } catch (err) {
+    if (requestId !== readmeRequestId) return;
     readmeError.value = err?.message || String(err);
   } finally {
-    readmeLoading.value = false;
+    if (requestId === readmeRequestId) {
+      readmeLoading.value = false;
+    }
   }
 };
 
@@ -817,10 +829,6 @@ const fetchChangelog = async () => {
   }
 };
 
-const showDocsSection = computed(
-  () => !isMarketDetail.value || !!getDocumentUrl("readme_url"),
-);
-
 const showChangelogSection = computed(
   () => !isMarketDetail.value || !!getDocumentUrl("changelog_url"),
 );
@@ -841,6 +849,10 @@ watch(
   },
   { immediate: true },
 );
+
+watch(locale, () => {
+  void fetchReadme();
+});
 
 onMounted(() => {
   updateHeaderStuckState();
@@ -1084,7 +1096,7 @@ onBeforeUnmount(() => {
       </v-card>
     </section>
 
-    <section v-if="showDocsSection" class="detail-section">
+    <section class="detail-section">
       <h3 class="detail-section__title">{{ tm("detail.docsTitle") }}</h3>
       <v-card class="rounded-lg docs-card" variant="outlined">
         <v-card-text>
@@ -1103,6 +1115,17 @@ onBeforeUnmount(() => {
             v-html="renderedReadme"
             @click="handleDocsClick"
           ></div>
+          <v-btn
+            v-if="readmeError || readmeEmpty"
+            class="mt-4"
+            color="primary"
+            variant="text"
+            prepend-icon="mdi-github"
+            :disabled="!getDocumentUrl('repo')"
+            @click="openExternal(getDocumentUrl('repo'))"
+          >
+            {{ tm("buttons.viewRepo") }}
+          </v-btn>
         </v-card-text>
       </v-card>
     </section>
