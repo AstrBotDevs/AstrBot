@@ -33,7 +33,7 @@ llm_resp = await self.context.llm_generate(
 
 判断提供商（Decision Provider）用于低延迟的结构化选择，例如是否回复、回复哪条消息或选择执行分支。先在 WebUI 的「模型提供商」→「判断」中配置提供商，插件通过 `self.context.decision` 调用，它与聊天模型互不影响。
 
-一次请求可以同时回答多个问题。`state` 会原样传给判断模型，可传入消息列表、会话摘要等任意 JSON 数据：
+一次请求可以同时回答多个问题。`state` 会原样传给判断模型，类型为 `str | list | dict`：
 
 ```py
 from astrbot.api.provider import (

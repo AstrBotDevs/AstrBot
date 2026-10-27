@@ -34,7 +34,7 @@ llm_resp = await self.context.llm_generate(
 
 A Decision Provider handles low-latency structured choices, such as whether to reply, which message to answer, or which branch to execute. Configure one under **Providers → Decision** in the WebUI, then call it from a plugin through `self.context.decision`. It is independent of the chat model.
 
-One request can answer multiple questions. `state` is passed to the decision model as-is, so callers can provide a message list, conversation summary, or any other JSON data:
+One request can answer multiple questions. `state` is passed to the decision model as-is and must be a `str`, `list`, or `dict`:
 
 ```py
 from astrbot.api.provider import (

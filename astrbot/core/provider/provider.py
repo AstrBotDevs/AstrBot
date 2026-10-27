@@ -2,7 +2,7 @@ import abc
 import asyncio
 import os
 from collections.abc import AsyncGenerator, Mapping
-from typing import Any, Literal, TypeAlias, Union
+from typing import Literal, TypeAlias, Union
 
 from astrbot.core.agent.message import ContentPart, Message, is_checkpoint_message
 from astrbot.core.agent.tool import ToolSet
@@ -10,6 +10,7 @@ from astrbot.core.provider.entities import (
     DecisionAnswer,
     DecisionBooleanQuestion,
     DecisionQuestion,
+    DecisionState,
     LLMResponse,
     ProviderMeta,
     RerankResult,
@@ -454,7 +455,7 @@ class DecisionProvider(AbstractProvider):
     async def ask(
         self,
         questions: Mapping[str, DecisionQuestion],
-        state: Any = None,
+        state: DecisionState | None = None,
         *,
         request_max_retries: int = 0,
     ) -> Mapping[str, DecisionAnswer]:

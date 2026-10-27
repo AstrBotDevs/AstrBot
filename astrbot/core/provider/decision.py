@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from astrbot import logger
 
@@ -12,6 +12,7 @@ from .entities import (
     DecisionChoiceQuestion,
     DecisionError,
     DecisionQuestion,
+    DecisionState,
     ProviderType,
 )
 from .provider import DecisionProvider
@@ -31,7 +32,7 @@ class DecisionService:
     async def ask(
         self,
         questions: Mapping[str, DecisionQuestion],
-        state: Any = None,
+        state: DecisionState | None = None,
         *,
         provider_id: str | None = None,
     ) -> Mapping[str, DecisionAnswer]:
@@ -78,7 +79,7 @@ class DecisionService:
         question: str,
         options: Mapping[str, str] | Sequence[str],
         *,
-        state: Any = None,
+        state: DecisionState | None = None,
         provider_id: str | None = None,
     ) -> DecisionAnswer:
         """Choose one option for a question.
@@ -144,7 +145,7 @@ class DecisionService:
         self,
         question: str,
         *,
-        state: Any = None,
+        state: DecisionState | None = None,
         threshold: float = 0.5,
         provider_id: str | None = None,
         default: bool | None = None,

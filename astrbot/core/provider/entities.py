@@ -65,6 +65,7 @@ class DecisionBooleanQuestion:
 
 
 DecisionQuestion: TypeAlias = DecisionChoiceQuestion | DecisionBooleanQuestion
+DecisionState: TypeAlias = str | list[Any] | dict[str, Any]
 
 
 @dataclass(frozen=True, slots=True)

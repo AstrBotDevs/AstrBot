@@ -16,6 +16,7 @@ from ..entities import (
     DecisionChoiceQuestion,
     DecisionError,
     DecisionQuestion,
+    DecisionState,
     ProviderType,
 )
 from ..provider import DecisionProvider
@@ -102,7 +103,7 @@ class SystemOneDecisionProvider(DecisionProvider):
     async def ask(
         self,
         questions: Mapping[str, DecisionQuestion],
-        state: Any = None,
+        state: DecisionState | None = None,
         *,
         request_max_retries: int = 0,
     ) -> Mapping[str, DecisionAnswer]:
