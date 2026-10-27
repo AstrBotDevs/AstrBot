@@ -7,7 +7,7 @@ import httpx
 import pytest
 
 from astrbot.core.config.default import CONFIG_METADATA_2
-from astrbot.core.provider.decision import MAX_DECISION_STATE_CHARS, DecisionService
+from astrbot.core.provider.decision import DecisionService
 from astrbot.core.provider.entities import (
     DecisionAnswer,
     DecisionBooleanQuestion,
@@ -555,24 +555,6 @@ async def test_decision_service_maps_choice_ids_and_applies_threshold():
     assert choice.probabilities == {"wait": 0.25, "reply": 0.75}
     assert result is True
     assert manager.get_using_provider_async.await_args.args == (ProviderType.DECISION,)
-
-
-@pytest.mark.asyncio
-async def test_decision_service_rejects_oversized_state(caplog):
-    caplog.set_level(logging.WARNING, logger="astrbot")
-    provider = MagicMock(spec=DecisionProvider)
-    provider.ask = AsyncMock()
-    manager = MagicMock()
-    manager.get_using_provider_async = AsyncMock(return_value=provider)
-
-    with pytest.raises(ValueError, match="state exceeds the maximum size"):
-        await DecisionService(manager).ask(
-            {"answer": DecisionBooleanQuestion("Continue?")},
-            "x" * (MAX_DECISION_STATE_CHARS + 1),
-        )
-
-    provider.ask.assert_not_awaited()
-    assert "Refusing state" in caplog.text
 
 
 @pytest.mark.asyncio

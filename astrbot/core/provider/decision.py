@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING
 
@@ -19,8 +18,6 @@ from .provider import DecisionProvider
 
 if TYPE_CHECKING:
     from .manager import ProviderManager
-
-MAX_DECISION_STATE_CHARS = 20_000
 
 
 class DecisionService:
@@ -61,17 +58,6 @@ class DecisionService:
         if not isinstance(provider, DecisionProvider):
             target = f" {provider_id}" if provider_id else ""
             raise DecisionError(f"Decision provider{target} is not configured")
-        if state is not None:
-            state_chars = len(json.dumps(state, ensure_ascii=False, default=str))
-            if state_chars > MAX_DECISION_STATE_CHARS:
-                logger.warning(
-                    f"[Decision] Refusing state with {state_chars} characters; "
-                    f"limit is {MAX_DECISION_STATE_CHARS}"
-                )
-                raise ValueError(
-                    "state exceeds the maximum size of "
-                    f"{MAX_DECISION_STATE_CHARS} characters"
-                )
         return await provider.ask(questions, state)
 
     async def choose(
