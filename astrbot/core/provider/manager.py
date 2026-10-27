@@ -942,48 +942,47 @@ class ProviderManager:
         return self.provider_insts
 
     async def terminate_provider(self, provider_id: str) -> None:
-        if provider_id in self.inst_map:
-            logger.info(
-                f"Terminating provider adapter {provider_id} "
-                f"({len(self.provider_insts)}, {len(self.stt_provider_insts)}, "
-                f"{len(self.tts_provider_insts)}) ...",
-            )
+        prov_inst = self.inst_map.get(provider_id)
+        if prov_inst is None:
+            return
 
-            if self.inst_map[provider_id] in self.provider_insts:
-                prov_inst = self.inst_map[provider_id]
-                if isinstance(prov_inst, Provider):
-                    self.provider_insts.remove(prov_inst)
-            if self.inst_map[provider_id] in self.stt_provider_insts:
-                prov_inst = self.inst_map[provider_id]
-                if isinstance(prov_inst, STTProvider):
-                    self.stt_provider_insts.remove(prov_inst)
-            if self.inst_map[provider_id] in self.tts_provider_insts:
-                prov_inst = self.inst_map[provider_id]
-                if isinstance(prov_inst, TTSProvider):
-                    self.tts_provider_insts.remove(prov_inst)
-            if self.inst_map[provider_id] in self.decision_provider_insts:
-                prov_inst = self.inst_map[provider_id]
-                if isinstance(prov_inst, DecisionProvider):
-                    self.decision_provider_insts.remove(prov_inst)
+        logger.info(
+            f"Terminating provider adapter {provider_id} "
+            f"({len(self.provider_insts)}, {len(self.stt_provider_insts)}, "
+            f"{len(self.tts_provider_insts)}) ...",
+        )
 
-            if self.inst_map[provider_id] == self.curr_provider_inst:
-                self.curr_provider_inst = None
-            if self.inst_map[provider_id] == self.curr_stt_provider_inst:
-                self.curr_stt_provider_inst = None
-            if self.inst_map[provider_id] == self.curr_tts_provider_inst:
-                self.curr_tts_provider_inst = None
-            if self.inst_map[provider_id] == self.curr_decision_provider_inst:
-                self.curr_decision_provider_inst = None
+        if prov_inst in self.provider_insts:
+            if isinstance(prov_inst, Provider):
+                self.provider_insts.remove(prov_inst)
+        if prov_inst in self.stt_provider_insts:
+            if isinstance(prov_inst, STTProvider):
+                self.stt_provider_insts.remove(prov_inst)
+        if prov_inst in self.tts_provider_insts:
+            if isinstance(prov_inst, TTSProvider):
+                self.tts_provider_insts.remove(prov_inst)
+        if prov_inst in self.decision_provider_insts:
+            if isinstance(prov_inst, DecisionProvider):
+                self.decision_provider_insts.remove(prov_inst)
 
-            if getattr(self.inst_map[provider_id], "terminate", None):
-                await self.inst_map[provider_id].terminate()  # type: ignore
+        if prov_inst == self.curr_provider_inst:
+            self.curr_provider_inst = None
+        if prov_inst == self.curr_stt_provider_inst:
+            self.curr_stt_provider_inst = None
+        if prov_inst == self.curr_tts_provider_inst:
+            self.curr_tts_provider_inst = None
+        if prov_inst == self.curr_decision_provider_inst:
+            self.curr_decision_provider_inst = None
 
-            logger.info(
-                f"Provider adapter {provider_id} terminated "
-                f"({len(self.provider_insts)}, {len(self.stt_provider_insts)}, "
-                f"{len(self.tts_provider_insts)})",
-            )
-            del self.inst_map[provider_id]
+        if getattr(prov_inst, "terminate", None):
+            await prov_inst.terminate()  # type: ignore
+
+        logger.info(
+            f"Provider adapter {provider_id} terminated "
+            f"({len(self.provider_insts)}, {len(self.stt_provider_insts)}, "
+            f"{len(self.tts_provider_insts)})",
+        )
+        del self.inst_map[provider_id]
 
     async def delete_provider(
         self, provider_id: str | None = None, provider_source_id: str | None = None
