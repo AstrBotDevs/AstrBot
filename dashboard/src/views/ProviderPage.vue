@@ -214,12 +214,33 @@
                     <div class="provider-section-title">{{ tm('providers.settings') }}</div>
                   </div>
                   <AstrBotConfig
-                    :iterable="newSelectedProviderConfig"
+                    :iterable="legacyConfigSections.basic"
                     :metadata="legacyConfigSchema"
                     metadataKey="provider"
                     :is-editing="updatingMode"
                   />
                 </section>
+
+                <v-divider v-if="legacyConfigSections.advanced"></v-divider>
+
+                <details
+                  v-if="legacyConfigSections.advanced"
+                  :key="selectedLegacyProvider.id"
+                  class="provider-section provider-section--advanced config-form"
+                >
+                  <summary class="provider-section-head provider-section-title">
+                    {{ tm('providerSources.advancedConfig') }}
+                    <v-icon class="provider-section-chevron" size="20">mdi-chevron-right</v-icon>
+                  </summary>
+                  <div class="provider-section-content">
+                    <AstrBotConfig
+                      :iterable="legacyConfigSections.advanced"
+                      :metadata="legacyConfigSchema"
+                      metadataKey="provider"
+                      :is-editing="updatingMode"
+                    />
+                  </div>
+                </details>
               </div>
             </div>
 
@@ -411,6 +432,31 @@ const newProviderOriginalId = ref('')
 const updatingMode = ref(false)
 const loading = ref(false)
 const isLegacyProviderModified = ref(false)
+const legacyConfigSections = computed(() => {
+  const config = newSelectedProviderConfig.value
+  if (config.type !== 'system_one_decision') return { basic: config, advanced: null }
+
+  const advancedFields = new Set([
+    'timeout', 'total_timeout', 'max_concurrency',
+    'probability_tolerance', 'proxy', 'custom_headers'
+  ])
+  const basic = {}
+  const advanced = {}
+  for (const key of Object.keys(config)) {
+    const property = {
+      get() {
+        return config[key]
+      },
+      set(value) {
+        config[key] = value
+      }
+    }
+    // Keep hidden fields accessible to schema conditions in both sections.
+    Object.defineProperty(basic, key, { ...property, enumerable: !advancedFields.has(key) })
+    Object.defineProperty(advanced, key, { ...property, enumerable: advancedFields.has(key) })
+  }
+  return { basic, advanced }
+})
 const showManualModelDialog = ref(false)
 let suppressLegacyProviderWatch = false
 
