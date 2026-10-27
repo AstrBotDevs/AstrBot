@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import importlib.metadata as importlib_metadata
 import logging
 import os
 import re
@@ -10,6 +11,7 @@ from pathlib import Path, PureWindowsPath
 from typing import Any, Generic
 
 import httpx
+from packaging.version import Version
 from tenacity import (
     before_sleep_log,
     retry,
@@ -479,7 +481,29 @@ class MCPClient:
         Args:
             mcp_server_config (dict): Configuration for the MCP server. See https://modelcontextprotocol.io/quickstart/server
 
+        Raises:
+            RuntimeError: If the installed mcp SDK major version is unsupported.
         """
+        # mcp 2.x renamed Tool.inputSchema to input_schema and takes float
+        # timeout seconds instead of timedelta, so the 1.x client code below
+        # cannot drive a server on 2.x. Plugin dependencies share this
+        # environment and can upgrade mcp past the core pin, so name the
+        # version here instead of surfacing a per-server initialization
+        # timeout for a cause the log never explains.
+        try:
+            installed_mcp_version = importlib_metadata.version("mcp")
+        except importlib_metadata.PackageNotFoundError:
+            installed_mcp_version = None
+        if (
+            installed_mcp_version is not None
+            and Version(installed_mcp_version).major >= 2
+        ):
+            raise RuntimeError(
+                f"Unsupported MCP SDK version: mcp {installed_mcp_version} is "
+                "installed, but AstrBot requires mcp>=1.8.0,<2. MCP servers stay "
+                'unavailable until mcp is downgraded (pip install "mcp>=1.8.0,<2").'
+            )
+
         self._mcp_server_config = mcp_server_config
         self._server_name = name
 
