@@ -201,8 +201,9 @@ class BackupService:
             try:
                 stat = os.stat(file_path)
             except FileNotFoundError:
-                # 备份文件在读取 manifest 之后被删除或重命名，跳过它而不是让整个列表失败
-                logger.debug(f"备份文件在扫描期间被移除: {filename}")
+                # The archive was removed or renamed after its manifest was read;
+                # skip it instead of failing the whole listing.
+                logger.debug(f"Backup file vanished while listing: {filename}")
                 continue
             backup_files.append(
                 {
