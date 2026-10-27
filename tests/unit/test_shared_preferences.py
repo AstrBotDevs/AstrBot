@@ -279,7 +279,7 @@ def test_legacy_shared_preferences_file_is_read_as_utf8(tmp_path):
         encoding="utf-8",
     )
 
-    store = SharedPreferences(str(path))
+    store = SharedPreferences(path)
 
     assert store.get("greeting") == "こんにちは \u2603 snowman"
 
@@ -293,7 +293,7 @@ def test_legacy_put_preserves_the_file_when_a_value_is_unencodable(tmp_path):
     original = {"keep": "value"}
     path.write_text(json.dumps(original, ensure_ascii=False), encoding="utf-8")
 
-    store = SharedPreferences(str(path))
+    store = SharedPreferences(path)
     store.put("extra", "☃ snowman")
 
     assert json.loads(path.read_text(encoding="utf-8")) == {
