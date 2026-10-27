@@ -12,6 +12,7 @@ from collections.abc import Mapping
 from concurrent.futures import Future
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from contextlib import closing
+from dataclasses import dataclass
 from pathlib import Path
 from queue import Empty, Full, Queue
 from typing import Any
@@ -23,6 +24,12 @@ logger = logging.getLogger("astrbot")
 QUEUE_BYTES = 128 * 1024 * 1024
 MAX_WAL_BYTES = 4 * 1024 * 1024
 MAX_FRAME_BYTES = 2 * 1024 * 1024
+
+
+@dataclass
+class _HistoryCleanup:
+    future: Future
+    platform_id: str | None
 
 
 class TraceStore:
@@ -122,10 +129,14 @@ class TraceStore:
                 "Trace database writer did not finish within the shutdown deadline."
             )
 
-    def clear_history(self) -> dict:
+    def clear_history(self, *, platform_id: str | None = None) -> dict:
         """Clear finished history using the same queue as trace writes.
 
         Running traces are retained so their later updates remain complete.
+
+        Args:
+            platform_id: Restrict cleanup to this exact adapter instance, or
+                clear all finished traces when omitted.
 
         Returns:
             The number of removed message traces.
@@ -137,7 +148,7 @@ class TraceStore:
             raise RuntimeError(self.last_error or "Trace writer is unavailable.")
         result = Future()
         try:
-            self.queue.put((result, 0), timeout=5)
+            self.queue.put((_HistoryCleanup(result, platform_id), 0), timeout=5)
         except Full as exc:
             raise RuntimeError("Trace cleanup queue is full.") from exc
         try:
@@ -379,7 +390,7 @@ class TraceStore:
                 items = [first]
                 for _ in range(31):
                     # Cleanup is a barrier: never batch later writes before it.
-                    if isinstance(items[-1][0], Future):
+                    if isinstance(items[-1][0], _HistoryCleanup):
                         break
                     try:
                         items.append(self.queue.get_nowait())
@@ -419,19 +430,23 @@ class TraceStore:
                         last_prune = time.monotonic()
                     command = items[-1][0]
                     if (
-                        isinstance(command, Future)
-                        and command.set_running_or_notify_cancel()
+                        isinstance(command, _HistoryCleanup)
+                        and command.future.set_running_or_notify_cancel()
                     ):
                         with connection:
                             self._interrupt_inactive(connection)
-                            removed = connection.execute(
-                                "DELETE FROM traces WHERE state != 'running'"
-                            ).rowcount
+                            query = "DELETE FROM traces WHERE state != 'running'"
+                            parameters = ()
+                            if command.platform_id is not None:
+                                prefix = command.platform_id + ":"
+                                query += " AND substr(json_extract(data, '$.attributes.\"astrbot.umo\"'), 1, ?) = ?"
+                                parameters = (len(prefix), prefix)
+                            removed = connection.execute(query, parameters).rowcount
                         connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
                         connection.execute("VACUUM")
                         connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
                         self.last_error = None
-                        command.set_result({"removed_traces": removed})
+                        command.future.set_result({"removed_traces": removed})
                 except Exception as exc:
                     self.last_error = str(exc)
                     self.dropped += len(batch) if not written else 0
@@ -444,8 +459,8 @@ class TraceStore:
                                     del self._pending_traces[trace_id]
                     logger.error("Trace database write failed: %s", exc)
                     for item, _ in items:
-                        if isinstance(item, Future) and not item.done():
-                            item.set_exception(exc)
+                        if isinstance(item, _HistoryCleanup) and not item.future.done():
+                            item.future.set_exception(exc)
                 finally:
                     for item, size in items:
                         with self._lock:
@@ -472,8 +487,8 @@ class TraceStore:
                             del self._pending_traces[trace_id]
                 if isinstance(item, threading.Event):
                     item.set()
-                elif isinstance(item, Future) and not item.done():
-                    item.set_exception(RuntimeError(self.last_error))
+                elif isinstance(item, _HistoryCleanup) and not item.future.done():
+                    item.future.set_exception(RuntimeError(self.last_error))
                 self.queue.task_done()
         finally:
             self._ready.set()

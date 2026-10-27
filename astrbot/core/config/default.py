@@ -1239,6 +1239,7 @@ CONFIG_METADATA_2 = {
                     },
                     "id_whitelist": {
                         "type": "list",
+                        "_special": "umo",
                         "items": {"type": "string"},
                         "hint": "只处理填写的 ID 发来的消息事件，为空时不启用。可使用 /sid 指令获取在平台上的会话 ID(类似 abc:GroupMessage:123)。管理员可在 WebUI 的配置文件 -> 访问控制 -> 白名单中管理白名单。",
                     },
@@ -2106,6 +2107,66 @@ CONFIG_METADATA_2 = {
                         "tei_rerank_raw_scores": False,
                         "tei_rerank_return_text": False,
                     },
+                    "TypeSafe System One": {
+                        "id": "typesafe_decision",
+                        "type": "system_one_decision",
+                        "provider": "typesafe",
+                        "provider_type": "decision",
+                        "enable": True,
+                        "key": "",
+                        "api_base": "https://api.typesafe.ai/v1/systemone",
+                        "model": "jev-latest",
+                        "timeout": 2,
+                        "total_timeout": 5,
+                        "max_concurrency": 4,
+                        "proxy": "",
+                        "custom_headers": {},
+                    },
+                    "OpenRouter System One": {
+                        "id": "openrouter_decision",
+                        "type": "system_one_decision",
+                        "provider": "openrouter",
+                        "provider_type": "decision",
+                        "enable": True,
+                        "key": "",
+                        "api_base": "https://openrouter.ai/api/v1/systemone",
+                        "model": "jev-latest",
+                        "timeout": 2,
+                        "total_timeout": 5,
+                        "max_concurrency": 4,
+                        "proxy": "",
+                        "custom_headers": {},
+                    },
+                    "Vercel System One": {
+                        "id": "vercel_decision",
+                        "type": "system_one_decision",
+                        "provider": "vercel",
+                        "provider_type": "decision",
+                        "enable": True,
+                        "key": "",
+                        "api_base": "https://ai-gateway.vercel.sh/typesafe/v1/systemone",
+                        "model": "typesafe-ai/jev",
+                        "timeout": 2,
+                        "total_timeout": 5,
+                        "max_concurrency": 4,
+                        "proxy": "",
+                        "custom_headers": {},
+                    },
+                    "Custom System One": {
+                        "id": "custom_decision",
+                        "type": "system_one_decision",
+                        "provider": "custom",
+                        "provider_type": "decision",
+                        "enable": True,
+                        "key": "",
+                        "api_base": "",
+                        "model": "",
+                        "timeout": 2,
+                        "total_timeout": 5,
+                        "max_concurrency": 4,
+                        "proxy": "",
+                        "custom_headers": {},
+                    },
                     "Xinference STT": {
                         "id": "xinference_stt",
                         "type": "xinference_stt",
@@ -2256,7 +2317,7 @@ CONFIG_METADATA_2 = {
                         "description": "自定义请求头",
                         "type": "dict",
                         "items": {},
-                        "hint": "此处添加的键值对将被合并到 OpenAI SDK 的 default_headers 中，用于自定义 HTTP 请求头。",
+                        "hint": "此处添加的键值对将作为自定义 HTTP 请求头，附加到 AstrBot 发往模型服务商的请求中。值必须为字符串。",
                     },
                     "ollama_disable_thinking": {
                         "description": "关闭思考模式",
@@ -2824,6 +2885,18 @@ CONFIG_METADATA_2 = {
                         "type": "int",
                         "hint": "超时时间，单位为秒。",
                     },
+                    "total_timeout": {
+                        "description": "总超时时间",
+                        "type": "float",
+                        "hint": "单次决策请求的总超时时间（秒），包含等待并发名额、重试与退避；默认 5 秒。",
+                        "condition": {"type": "system_one_decision"},
+                    },
+                    "max_concurrency": {
+                        "description": "最大并发数",
+                        "type": "int",
+                        "hint": "该提供商同时进行的决策请求上限；默认 4。",
+                        "condition": {"type": "system_one_decision"},
+                    },
                     "openai-tts-voice": {
                         "description": "voice",
                         "type": "string",
@@ -3189,6 +3262,7 @@ CONFIG_METADATA_2 = {
             },
             "admins_id": {
                 "type": "list",
+                "_special": "sender_id",
                 "items": {"type": "string"},
             },
             "http_proxy": {
@@ -3693,7 +3767,7 @@ CONFIG_METADATA_3 = {
                             "AnySearch",
                         ],
                         "subtitles": [
-                            "Google 网页、图片、学术和财经搜索",
+                            "Google 网页、新闻、图片、学术和财经搜索",
                             "DeepSeek 官方搜索接口",
                             "",
                             "",
@@ -3797,7 +3871,7 @@ CONFIG_METADATA_3 = {
                         "description": "SerpApi API Key",
                         "type": "list",
                         "items": {"type": "string"},
-                        "hint": "支持 Google 网页、图片、学术和财经搜索。可添加多个 Key 轮询。获取 Key：[https://serpapi.com/manage-api-key](https://serpapi.com/manage-api-key)",
+                        "hint": "支持 Google 网页、新闻、图片、学术和财经搜索。可添加多个 Key 轮询。获取 Key：[https://serpapi.com/manage-api-key](https://serpapi.com/manage-api-key)",
                         "secret": True,
                         "condition": {
                             "provider_settings.websearch_provider": "serpapi",
@@ -4077,6 +4151,7 @@ CONFIG_METADATA_3 = {
                     "agent_runner.config.compression.max_turns": {
                         "description": "压缩前最多保留对话轮数",
                         "type": "int",
+                        "collapsed": True,
                         "hint": "普通会话历史超过该轮数后，才会按下方策略进行持久化截断或 LLM 压缩；请求发送前也会先按该值约束上下文。-1 表示不按轮数限制。",
                         "condition": {
                             "agent_runner.runner_type": "local",
@@ -4085,24 +4160,26 @@ CONFIG_METADATA_3 = {
                     "agent_runner.config.compression.trim_turns": {
                         "description": "轮次超限时一次丢弃轮数",
                         "type": "int",
+                        "collapsed": True,
                         "hint": "当超过“压缩前最多保留对话轮数”且无法使用 LLM 压缩时，一次丢弃多少轮旧对话；请求期截断也会复用该值。",
                         "condition": {
                             "agent_runner.runner_type": "local",
                         },
                     },
                     "agent_runner.config.compression.overflow_strategy": {
-                        "description": "历史超限或上下文接近上限时的处理方式",
+                        "description": "压缩策略",
                         "type": "string",
                         "options": ["truncate_by_turns", "llm_compress"],
                         "labels": ["按对话轮数截断", "由 LLM 压缩上下文"],
                         "condition": {
                             "agent_runner.runner_type": "local",
                         },
-                        "hint": "普通会话历史仅在超过“压缩前最多保留对话轮数”后执行该策略；请求发送前也会在上下文 token 接近模型窗口时使用同一策略保护本次请求。",
+                        "hint": "模型上下文超限时的处理策略。",
                     },
                     "agent_runner.config.compression.instruction": {
                         "description": "上下文压缩提示词",
                         "type": "text",
+                        "collapsed": True,
                         "hint": "如果为空则使用默认提示词。",
                         "condition": {
                             "agent_runner.config.compression.overflow_strategy": "llm_compress",
@@ -4112,6 +4189,7 @@ CONFIG_METADATA_3 = {
                     "agent_runner.config.compression.keep_recent_ratio": {
                         "description": "压缩时保留最近上下文比例",
                         "type": "float",
+                        "collapsed": True,
                         "slider": {"min": 0, "max": 0.3, "step": 0.01},
                         "hint": "按当前上下文 token 数保留最近内容，范围 0-0.3。0.15 表示保留 15%；比例大于 0 时至少保留最后一轮。",
                         "condition": {
@@ -4120,10 +4198,10 @@ CONFIG_METADATA_3 = {
                         },
                     },
                     "agent_runner.config.compression.provider_id": {
-                        "description": "用于上下文压缩的模型提供商 ID",
+                        "description": "压缩模型",
                         "type": "string",
                         "_special": "select_provider",
-                        "hint": "留空时使用当前聊天模型进行压缩；如果模型不可用或压缩失败，将回退为“按对话轮数截断”的策略。",
+                        "hint": "用于上下文压缩的模型。默认选择当前的对话模型。",
                         "condition": {
                             "agent_runner.config.compression.overflow_strategy": "llm_compress",
                             "agent_runner.runner_type": "local",
@@ -4132,6 +4210,7 @@ CONFIG_METADATA_3 = {
                     "agent_runner.config.compression.fallback_max_tokens": {
                         "description": "上下文窗口兜底值",
                         "type": "int",
+                        "collapsed": True,
                         "hint": "当 max_context_tokens 为 0 且模型不在内置元数据中时，使用此值作为上下文窗口大小。默认 128000。",
                         "condition": {
                             "agent_runner.runner_type": "local",
@@ -4517,6 +4596,7 @@ CONFIG_METADATA_3 = {
                     "admins_id": {
                         "description": "管理员 ID",
                         "type": "list",
+                        "_special": "sender_id",
                         "items": {"type": "string"},
                         "hint": "给机器人发送 /sid 指令以获取 ID。",
                     },
@@ -4534,6 +4614,7 @@ CONFIG_METADATA_3 = {
                     "platform_settings.id_whitelist": {
                         "description": "白名单 ID 列表",
                         "type": "list",
+                        "_special": "umo",
                         "items": {"type": "string"},
                         "hint": "给机器人发送 /sid 指令以获取 ID。为空时代表不启用白名单功能。",
                     },
@@ -4907,7 +4988,7 @@ CONFIG_METADATA_3_SYSTEM = {
                     "pip_install_arg": {
                         "description": "pip 安装额外参数",
                         "type": "string",
-                        "hint": "安装插件依赖时，会使用 Python 的 pip 工具。这里可以填写额外的参数，如 `--break-system-package` 等。",
+                        "hint": "安装插件依赖时，会使用 Python 的 pip 工具。这里可以填写额外的参数，如 `--break-system-package` 等。PyPI 镜像的 TLS 证书默认会校验；若使用自签名/私有 CA 镜像，请通过 `--cert <CA 路径>` 指定信任的证书（推荐），或显式添加 `--trusted-host <主机名>`。",
                     },
                     "pypi_index_url": {
                         "description": "PyPI 软件仓库地址",

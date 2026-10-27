@@ -210,7 +210,7 @@ Nous avons plus de 15 groupes de discussion. Consultez la page [Communauté](htt
 Un grand merci à tous les contributeurs et développeurs de plugins pour leurs contributions à AstrBot ❤️
 
 <a href="https://github.com/AstrBotDevs/AstrBot/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=AstrBotDevs/AstrBot&max=300&columns=15" />
+  <img src="https://contrib.rocks/image?repo=AstrBotDevs/AstrBot&max=500&columns=17" />
 </a>
 
 Amis de l'open source ❤️

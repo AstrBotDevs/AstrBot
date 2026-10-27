@@ -31,8 +31,8 @@
 
 | 提供商 | Key 申请入口 | AstrBot 提供的能力 |
 | --- | --- | --- |
-| <span id="serpapi">SerpApi</span> | [SerpApi API Key](https://serpapi.com/manage-api-key) | Google 网页搜索、Images Light 图片搜索、Finance 金融查询、Scholar 学术搜索 |
-| <span id="deepseek">DeepSeek Search API</span> | [DeepSeek 开放平台](https://platform.deepseek.com/api_keys) / [搜索文档](https://api-docs.deepseek.com/zh-cn/guides/search) | 网页搜索、按 URL 提取网页正文 |
+| <span id="serpapi">[SerpApi](./websearch/serpapi.md)</span> | [SerpApi API Key](https://serpapi.com/manage-api-key) | Google 网页搜索、News 新闻、Images Light 图片搜索、Finance 金融查询、Scholar 学术搜索 |
+| <span id="deepseek">[DeepSeek Search API](./websearch/deepseek.md)</span> | [DeepSeek 开放平台](https://platform.deepseek.com/api_keys) / [搜索文档](https://api-docs.deepseek.com/zh-cn/guides/search) | 网页搜索、按 URL 提取网页正文 |
 | <span id="tavily">Tavily</span> | [Tavily 控制台](https://app.tavily.com/home) | 网页搜索、按 URL 提取网页正文 |
 | <span id="bocha">Bocha</span> | [博查](https://bochaai.com/) | 网页搜索 |
 | <span id="百度-ai-搜索">Baidu AI Search</span> | [百度智能云 API Key 管理](https://console.bce.baidu.com/iam/#/iam/apikey/list) | 百度 AI 搜索；需要开通相应服务 |
@@ -43,11 +43,9 @@
 
 AnySearch 的 Key 留空时会使用匿名模式，服务提供每日免费额度。其他提供商需要填写相应的 Key。服务的额度、收费、可用地区和授权方式以各自官网为准。
 
-DeepSeek 搜索与对话模型独立配置。即使对话模型已配置 DeepSeek，也需要单独填写搜索 Key，可以使用同一个 Key。搜索和正文提取接口各按账号限制 5 QPS，配置多个同账号 Key 不会增加限额。
+DeepSeek Search API 的配置与专属示例见 [网页搜索 → DeepSeek Search API](./websearch/deepseek.md)，包含 Key 获取、搜索筛选、网页正文提取和账号限速说明。
 
-SerpApi 使用 [Google Search API](https://serpapi.com/search-api)，需要填写 SerpApi 的 API Key。AstrBot 返回第一页中的标题、来源链接和摘要（最多 10 条，实际可能更少）。多个 Key 会轮询使用，鉴权或额度错误时会尝试下一个 Key。同一个 Key 也会启用基于 [Google Images Light API](https://serpapi.com/google-images-light-api) 的图片搜索工具，返回最多 10 张图片的直链、缩略图、来源页面及可用的尺寸信息，无需额外开关或 Key。此接入不提供网页正文提取工具。
-
-同一个 SerpApi Key 还会启用 [Google Finance](https://serpapi.com/google-finance-api) 和 [Google Scholar](https://serpapi.com/google-scholar-api)。Finance 接受 `AAPL:NASDAQ`、`EUR-USD` 等代码，返回可用的行情、币种、更新时间、财务数据和新闻；指定历史区间后返回行情摘要和可用的价格序列。Scholar 返回最多 20 篇文献的摘要片段、出版信息、被引次数和可用的全文链接，支持按发表年份筛选。
+SerpApi 的详细说明与专属示例已移至 [网页搜索 → SerpApi](./websearch/serpapi.md)，包含 Key 获取、配置步骤，以及网页、图片、金融和学术搜索的使用方法。
 
 ### 搜索与读取链接的区别
 
@@ -65,20 +63,6 @@ SerpApi 使用 [Google Search API](https://serpapi.com/search-api)，需要填�
 
 ```text
 请查找 bubblewrap 的官方使用文档，说明它适合解决什么问题。
-```
-
-选择 SerpApi 后，还可以搜索图片：
-
-```text
-请找三张咖啡图片，并附上来源页面。
-```
-
-```text
-请通过 Google Finance 查询 AAPL:NASDAQ 的行情，并注明更新时间。
-```
-
-```text
-请用 Google Scholar 查找 2023 年以来的检索增强生成论文，附上被引次数和可用的 PDF 链接。
 ```
 
 如果选择了支持正文提取的提供商，还可以发送：

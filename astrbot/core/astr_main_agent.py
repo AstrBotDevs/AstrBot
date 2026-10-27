@@ -107,6 +107,7 @@ from astrbot.core.tools.web_search_tools import (
     FirecrawlWebSearchTool,
     SerpApiFinanceSearchTool,
     SerpApiImageSearchTool,
+    SerpApiNewsSearchTool,
     SerpApiScholarSearchTool,
     SerpApiWebSearchTool,
     TavilyExtractWebPageTool,
@@ -170,6 +171,7 @@ WEB_SEARCH_CITATION_TOOL_NAMES = frozenset(
         "web_search_anysearch",
         "web_search_deepseek",
         "web_search_serpapi",
+        "news_search_serpapi",
         "image_search_serpapi",
         "finance_search_serpapi",
         "scholar_search_serpapi",
@@ -1312,6 +1314,7 @@ async def _apply_web_search_tools(
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(DeepSeekFetchWebPageTool))
     elif provider == "serpapi":
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(SerpApiWebSearchTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(SerpApiNewsSearchTool))
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(SerpApiImageSearchTool))
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(SerpApiFinanceSearchTool))
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(SerpApiScholarSearchTool))

@@ -204,7 +204,7 @@
             "AnySearch"
           ],
           "subtitles": [
-            "Google 网页、图片、学术和财经搜索",
+            "Google 网页、新闻、图片、学术和财经搜索",
             "DeepSeek 官方搜索接口",
             "",
             "",
@@ -248,7 +248,7 @@
         },
         "websearch_serpapi_key": {
           "description": "SerpApi API Key",
-          "hint": "支持 Google 网页、图片、学术和财经搜索。可添加多个 Key 轮询。获取 Key：[https://serpapi.com/manage-api-key](https://serpapi.com/manage-api-key)"
+          "hint": "支持 Google 网页、新闻、图片、学术和财经搜索。可添加多个 Key 轮询。获取 Key：[https://serpapi.com/manage-api-key](https://serpapi.com/manage-api-key)"
         },
         "websearch_deepseek_key": {
           "description": "DeepSeek API Key",
@@ -443,9 +443,9 @@
               "hint": "当超过\"压缩前最多保留对话轮数\"且无法使用 LLM 压缩时，一次丢弃多少轮旧对话；请求期截断也会复用该值。"
             },
             "overflow_strategy": {
-              "description": "历史超限或上下文接近上限时的处理方式",
+              "description": "压缩策略",
               "labels": ["按对话轮数截断", "由 LLM 压缩上下文"],
-              "hint": "普通会话历史仅在超过\"压缩前最多保留对话轮数\"后执行该策略；请求发送前也会在上下文 token 接近模型窗口时使用同一策略保护本次请求。"
+              "hint": "模型上下文超限时的处理策略。"
             },
             "instruction": {
               "description": "上下文压缩提示词",
@@ -456,8 +456,8 @@
               "hint": "按当前上下文 token 数保留最近内容，范围 0-0.3。0.15 表示保留 15%；比例大于 0 时至少保留最后一轮。"
             },
             "provider_id": {
-              "description": "用于上下文压缩的模型提供商 ID",
-              "hint": "留空时使用当前聊天模型进行压缩；如果模型不可用或压缩失败，将回退为\"按对话轮数截断\"的策略。"
+              "description": "压缩模型",
+              "hint": "用于上下文压缩的模型。默认选择当前的对话模型。"
             },
             "fallback_max_tokens": {
               "description": "上下文窗口兜底值",
@@ -1348,7 +1348,7 @@
       },
       "pip_install_arg": {
         "description": "pip 安装额外参数",
-        "hint": "安装插件依赖时,会使用 Python 的 pip 工具。这里可以填写额外的参数,如 `--break-system-package` 等。"
+        "hint": "安装插件依赖时,会使用 Python 的 pip 工具。这里可以填写额外的参数,如 `--break-system-package` 等。PyPI 镜像的 TLS 证书默认会校验;若使用自签名/私有 CA 镜像,请通过 `--cert <CA 路径>` 指定信任的证书(推荐),或显式添加 `--trusted-host <主机名>`。"
       },
       "pypi_index_url": {
         "description": "PyPI 软件仓库地址",
@@ -1555,7 +1555,7 @@
 
       "custom_headers": {
         "description": "自定义请求头",
-        "hint": "此处添加的键值对将被合并到 OpenAI SDK 的 default_headers 中，用于自定义 HTTP 请求头。值必须为字符串。"
+        "hint": "此处添加的键值对将作为自定义 HTTP 请求头，附加到 AstrBot 发往模型服务商的请求中。值必须为字符串。"
       },
       "ollama_disable_thinking": {
         "description": "关闭思考模式",
@@ -1976,6 +1976,14 @@
       },
       "api_base": {
         "description": "API Base URL"
+      },
+      "total_timeout": {
+        "description": "总超时时间",
+        "hint": "单次决策请求的总超时时间（秒），包含等待并发名额、重试与退避；默认 5 秒。"
+      },
+      "max_concurrency": {
+        "description": "最大并发数",
+        "hint": "该提供商同时进行的决策请求上限；默认 4。"
       },
       "proxy": {
         "description": "代理地址",
