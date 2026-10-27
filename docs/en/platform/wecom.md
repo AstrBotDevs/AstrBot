@@ -19,8 +19,8 @@ Proactive message push: Supported for WeCom Application. Not fully tested for We
 ## Before You Start
 
 1. Open AstrBot Dashboard.
-2. Click `Bots` in the left sidebar.
-3. Click `+ Create Bot`.
+2. Click `Platforms` in the left sidebar.
+3. Click `Add Adapter`.
 4. Select `wecom`.
 
 A configuration dialog will appear. Keep it open and continue with the steps below.
@@ -46,21 +46,19 @@ A configuration dialog will appear. Keep it open and continue with the steps bel
 
 For callback URL:
 
-- If unified mode is enabled, AstrBot generates a unique webhook callback URL after save. Copy it from logs or bot card in WebUI.
+- If unified mode is enabled, AstrBot generates a unique webhook callback URL after save. Copy it from `Data & Logs → Logs`, or select the bot in `Platforms` and click `View Webhook URL`.
 - If unified mode is disabled, use `http://<your-public-server-ip>:6195/callback/command`.
-
-![unified_webhook](https://files.astrbot.app/docs/source/images/use/unified-webhook.png)
 
 > If unified mode is enabled, forward external requests to AstrBot port `6185`; otherwise forward to configured adapter port (default `6195`).
 
 Back in WeCom Customer Service callback settings, click `Complete`. If successful, status shows completed.
 
-7. In `Development Configuration`, get `Secret`, edit your WeCom adapter in AstrBot, set `secret`, then save again.
+7. In `Development Configuration`, get `Secret`, select your WeCom bot in AstrBot under `Platforms`, set `secret` in `Connection settings`, and click `Save changes`.
 
 > [!TIP]
 > Based on [#571](https://github.com/Soulter/AstrBot/issues/571), for newly registered enterprises, `corp_id` may take about 30 minutes to become valid.
 
-Then open `Data` -> `Logs` in AstrBot, where you should see logs asking you to open a WeChat scan link.
+Then open `Data & Logs` -> `Logs` in AstrBot, where you should see logs asking you to open a WeChat scan link.
 
 ```txt
 Please open the following link and scan with WeChat ...
@@ -93,14 +91,12 @@ Open: <https://work.weixin.qq.com/wework_admin/frame#apps>
 ![image](https://files.astrbot.app/docs/source/images/wecom/image-9.png)
 
 5. Generate `Token` and `EncodingAESKey`, fill AstrBot `token` and `encoding_aes_key`.
-6. Keep `Unified Webhook Mode (unified_webhook_mode)` enabled (recommended), then click Save in AstrBot and wait for restart.
+6. Keep `Unified Webhook Mode (unified_webhook_mode)` enabled (recommended), then click `Save` in the creation dialog (or `Save changes` for an existing bot) and wait for the adapter to reload.
 
 For callback URL:
 
-- If unified mode is enabled, use the generated unique callback URL from logs or bot card.
+- If unified mode is enabled, copy the generated URL from `Data & Logs → Logs`, or select the bot in `Platforms` and click `View Webhook URL`.
 - If unified mode is disabled, use `http://<your-public-server-ip>:6195/callback/command`.
-
-![unified_webhook](https://files.astrbot.app/docs/source/images/use/unified-webhook.png)
 
 > If unified mode is enabled, forward to port `6185`; otherwise forward to configured adapter port (default `6195`).
 
@@ -112,7 +108,7 @@ Add your public IP and confirm.
 
 ![image](https://files.astrbot.app/docs/source/images/wecom/image-12.png)
 
-After AstrBot restart, return to API receive page and click save. If you see callback verification errors, re-check all required fields.
+After the adapter reloads, return to API receive page and click save. If you see callback verification errors, re-check all required fields.
 
 If save succeeds, AstrBot can receive messages from WeCom.
 

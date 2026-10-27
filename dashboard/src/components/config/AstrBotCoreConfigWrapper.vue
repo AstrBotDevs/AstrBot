@@ -16,7 +16,7 @@
     </nav>
 
     <main
-      class="config-workspace__main"
+      class="config-workspace__main config-form"
       :class="{ 'config-workspace__main--readonly': readonly }"
     >
       <template v-for="section in visibleSections" :key="section.key">
@@ -99,9 +99,10 @@ import AstrBotConfigV4 from '@/components/shared/AstrBotConfigV4.vue';
 import PluginSetSelector from '@/components/shared/PluginSetSelector.vue';
 import { useModuleI18n } from '@/i18n/composables';
 
-const SECTION_ORDER = ['ai_group', 'plugin_group', 'platform_group', 'ext_group'];
+const SECTION_ORDER = ['ai_group', 'platform_group', 'access_group', 'plugin_group', 'ext_group'];
 const SECTION_ICONS = {
   ai_group: 'mdi-auto-fix',
+  access_group: 'mdi-account-lock-outline',
   plugin_group: 'mdi-puzzle-outline',
   platform_group: 'mdi-robot-outline',
   ext_group: 'mdi-tune-variant'
@@ -228,6 +229,7 @@ export default {
 .config-workspace {
   --config-border: rgba(17, 24, 39, 0.13);
   --config-divider: rgba(17, 24, 39, 0.09);
+  --config-form-divider: var(--config-divider);
   display: grid;
   grid-template-columns: 126px minmax(0, 1fr);
   gap: 34px;
@@ -348,93 +350,21 @@ export default {
 .config-standard-section__groups :deep(.config-hint),
 :deep(.config-product-groups .config-hint) {
   margin-top: 5px;
-  color: rgba(var(--v-theme-on-surface), 0.64) !important;
+  color: rgba(var(--v-theme-on-surface), 0.76) !important;
   font-size: 0.78rem;
   line-height: 1.45;
+  opacity: 1 !important;
   white-space: normal;
 }
 
-.config-standard-section__groups :deep(.config-row),
-:deep(.config-product-groups .config-row) {
-  min-height: 60px;
-  padding: 12px 16px;
-  border-radius: 0;
+.config-standard-section__groups :deep(.config-hint *),
+:deep(.config-product-groups .config-hint *) {
+  opacity: 1 !important;
 }
 
-.config-standard-section__groups :deep(.config-row:hover),
-:deep(.config-product-groups .config-row:hover) {
-  background: transparent;
-}
-
-.config-standard-section__groups :deep(.property-info),
-:deep(.config-product-groups .property-info) {
-  padding: 0 16px 0 0;
-}
-
-.config-standard-section__groups :deep(.property-info .v-list-item),
-:deep(.config-product-groups .property-info .v-list-item) {
-  padding: 0;
-}
-
-.config-standard-section__groups :deep(.property-name),
-:deep(.config-product-groups .property-name) {
-  color: rgb(var(--v-theme-on-surface));
-  font-size: 0.88rem;
-  font-weight: 700;
-  line-height: 1.4;
-  white-space: normal;
-}
-
-.config-standard-section__groups :deep(.property-hint),
-:deep(.config-product-groups .property-hint) {
-  margin-top: 4px;
-  color: rgba(var(--v-theme-on-surface), 0.7) !important;
-  font-size: 0.78rem;
-  line-height: 1.45;
-  white-space: normal;
-}
-
-.config-standard-section__groups :deep(.config-input),
-:deep(.config-product-groups .config-input) {
-  display: flex;
-  justify-content: flex-end;
-  min-width: 0;
-  padding: 0;
-}
-
-.config-standard-section__groups :deep(.config-input > *),
-:deep(.config-product-groups .config-input > *) {
-  width: 100%;
-  max-width: 270px;
-}
-
-.config-standard-section__groups :deep(.config-input .v-switch),
-:deep(.config-product-groups .config-input .v-switch) {
-  width: auto;
-  max-width: none;
-  margin-left: auto;
-}
-
-.config-standard-section__groups :deep(.config-input .v-switch .v-input__control),
-:deep(.config-product-groups .config-input .v-switch .v-input__control) {
-  margin-left: auto;
-}
-
-.config-standard-section__groups :deep(.config-input .v-switch .v-selection-control),
-:deep(.config-product-groups .config-input .v-switch .v-selection-control) {
-  justify-content: flex-end;
-}
-
-.config-standard-section__groups :deep(.v-field),
-:deep(.config-product-groups .v-field) {
-  border-radius: 10px;
-  background: transparent;
-}
-
-.config-standard-section__groups :deep(.config-divider),
-:deep(.config-product-groups .config-divider) {
-  margin-left: 0;
-  border-color: var(--config-divider);
+.config-standard-section__groups :deep(.config-hint a),
+:deep(.config-product-groups .config-hint a) {
+  color: rgb(var(--v-theme-primary)) !important;
 }
 
 .config-standard-section__groups :deep(.collapsed-config-toggle-row),
@@ -493,26 +423,7 @@ export default {
     border: 1px solid var(--config-border);
     background: rgb(var(--v-theme-surface));
   }
-
-  .config-standard-section__groups :deep(.config-row),
-  :deep(.config-product-groups .config-row) {
-    padding: 14px 16px;
-  }
-
-  .config-standard-section__groups :deep(.property-info),
-  :deep(.config-product-groups .property-info) {
-    padding-right: 0;
-  }
-
-  .config-standard-section__groups :deep(.config-input),
-  :deep(.config-product-groups .config-input) {
-    justify-content: stretch;
-    padding-top: 10px;
-  }
-
-  .config-standard-section__groups :deep(.config-input > *),
-  :deep(.config-product-groups .config-input > *) {
-    max-width: none;
-  }
 }
 </style>
+
+<style scoped src="@/styles/config-form.css"></style>

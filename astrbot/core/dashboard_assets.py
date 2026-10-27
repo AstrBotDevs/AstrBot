@@ -1,11 +1,15 @@
 """Dashboard asset discovery, compatibility, and package handling."""
 
 import re
+import shutil
+import tempfile
 import zipfile
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
+from astrbot.core.desktop_runtime import is_desktop_managed_backend
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_path
 from astrbot.core.utils.io import download_file, ensure_dir
 from astrbot.core.utils.version_comparator import VersionComparator
@@ -102,10 +106,54 @@ def _is_dist_compatible(dist_dir: str | Path, current_version: str) -> bool:
         Whether the dist contains an index and a matching version.
     """
     dist_path = Path(dist_dir)
-    return (dist_path / "index.html").is_file() and _is_version_compatible(
-        _read_dashboard_version(dist_path),
-        current_version,
+    return _is_dist_complete(dist_path) and _is_version_compatible(
+        _read_dashboard_version(dist_path), current_version
     )
+
+
+def _is_dist_complete(dist_dir: str | Path) -> bool:
+    """Check whether a Dashboard dist has a usable local entry bundle.
+
+    Args:
+        dist_dir: Dashboard dist directory path.
+
+    Returns:
+        Whether the index references a local JavaScript entry and every local
+        JavaScript or stylesheet entry exists inside the dist directory.
+    """
+    dist_path = Path(dist_dir)
+    index_path = dist_path / "index.html"
+    try:
+        index_html = index_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return False
+
+    entry_paths: list[Path] = []
+    for match in re.finditer(
+        r"\b(?:src|href)\s*=\s*[\"']([^\"']+)[\"']",
+        index_html,
+        flags=re.IGNORECASE,
+    ):
+        reference = match.group(1).strip()
+        if not reference or reference.startswith(("#", "//")):
+            continue
+        try:
+            parsed = urlsplit(reference)
+            if parsed.scheme or parsed.netloc:
+                continue
+            decoded_path = unquote(parsed.path).replace("\\", "/").lstrip("/")
+        except (UnicodeError, ValueError):
+            return False
+        if not decoded_path.lower().endswith((".js", ".css")):
+            continue
+        entry_path = Path(decoded_path)
+        if entry_path.is_absolute() or ".." in entry_path.parts:
+            return False
+        entry_paths.append(entry_path)
+
+    if not any(path.suffix.lower() == ".js" for path in entry_paths):
+        return False
+    return all((dist_path / path).is_file() for path in entry_paths)
 
 
 def _should_use_bundled_dist(user_dist: str | Path, current_version: str) -> bool:
@@ -119,16 +167,13 @@ def _should_use_bundled_dist(user_dist: str | Path, current_version: str) -> boo
         Whether the user dist is stale or incomplete and bundled assets match.
     """
     user_dist = Path(user_dist)
-    user_version = _read_dashboard_version(user_dist)
     bundled_dist = _get_bundled_dist_path()
     if not user_dist.exists() or not _is_dist_compatible(
         bundled_dist,
         current_version,
     ):
         return False
-    if user_version is None or not (user_dist / "index.html").is_file():
-        return True
-    return not _is_version_compatible(user_version, current_version)
+    return not _is_dist_compatible(user_dist, current_version)
 
 
 def resolve_dashboard_dist(webui_dir: str | Path | None = None) -> Path | None:
@@ -138,23 +183,36 @@ def resolve_dashboard_dist(webui_dir: str | Path | None = None) -> Path | None:
         webui_dir: Optional explicitly configured Dashboard directory.
 
     Returns:
-        Explicit, managed, bundled, or stale fallback dist in priority order;
-        None when an existing managed dist is incomplete.
+        Explicit, managed, bundled, or stale fallback dist in priority order.
+        A managed desktop backend never receives assets with a known version
+        mismatch, and None is returned when no compatible fallback exists.
     """
     explicit_dist = Path(webui_dir).absolute() if webui_dir else None
     if explicit_dist is not None and explicit_dist.exists():
-        if not _is_dist_compatible(explicit_dist, VERSION):
-            explicit_version = _read_dashboard_version(explicit_dist) or "unknown"
+        if _is_dist_compatible(explicit_dist, VERSION):
+            return explicit_dist
+
+        explicit_version = _read_dashboard_version(explicit_dist)
+        if is_desktop_managed_backend():
+            logger.warning(
+                "Refusing the explicitly configured WebUI directory in "
+                "desktop-managed mode because it is incomplete or its version "
+                "does not match core: %s, expected v%s (%s).",
+                explicit_version or "unknown",
+                VERSION,
+                explicit_dist,
+            )
+        else:
             logger.warning(
                 "Serving the explicitly configured WebUI directory even though it "
                 "does not declare a version matching core: %s, expected v%s (%s). "
                 "Some dashboard features may not work until matching assets are "
                 "available.",
-                explicit_version,
+                explicit_version or "unknown",
                 VERSION,
                 explicit_dist,
             )
-        return explicit_dist
+            return explicit_dist
 
     user_dist = Path(get_astrbot_data_path()) / "dist"
     bundled_dist = _get_bundled_dist_path()
@@ -167,6 +225,15 @@ def resolve_dashboard_dist(webui_dir: str | Path | None = None) -> Path | None:
     ):
         logger.info("Using bundled dashboard dist: %s", bundled_dist)
         return bundled_dist
+    if is_desktop_managed_backend():
+        if user_dist.exists():
+            logger.warning(
+                "Refusing data/dist in desktop-managed mode because WebUI version "
+                "does not match core: %s, expected v%s.",
+                user_version or "unknown",
+                VERSION,
+            )
+        return None
     if user_dist.exists() and (user_dist / "index.html").is_file():
         logger.warning(
             "Using existing data/dist as a fallback even though WebUI version "
@@ -303,27 +370,86 @@ async def _download_package(
         _extract_package(
             zip_path,
             extract_path or Path(get_astrbot_data_path()),
+            expected_version=None if len(version) == 40 else version,
         )
 
 
 def _extract_package(
     zip_path: str | Path,
     extract_path: str | Path,
+    expected_version: str | None = None,
 ) -> None:
-    """Safely extract a Dashboard package.
+    """Safely stage, validate, and replace a Dashboard package.
 
     Args:
         zip_path: Dashboard ZIP archive path.
         extract_path: Directory where package contents should be extracted.
+        expected_version: Optional Core version the Dashboard must match.
 
     Raises:
-        ValueError: If an archive member escapes the extraction root.
+        ValueError: If an archive member escapes the staging root.
+        RuntimeError: If the staged Dashboard is incomplete or mismatched.
     """
     extract_root = Path(extract_path).resolve()
     ensure_dir(extract_root)
-    with zipfile.ZipFile(zip_path, "r") as archive:
-        for member in archive.infolist():
-            target_path = (extract_root / member.filename).resolve()
-            if not target_path.is_relative_to(extract_root):
-                raise ValueError(f"Unsafe dashboard archive path: {member.filename}")
-            archive.extract(member, extract_root)
+    staging_root = Path(
+        tempfile.mkdtemp(prefix=".dashboard-stage-", dir=extract_root)
+    ).resolve()
+    backup_dist = staging_root / "previous-dist"
+    target_dist = extract_root / "dist"
+    moved_existing = False
+    cleanup_staging = True
+    try:
+        with zipfile.ZipFile(zip_path, "r") as archive:
+            for member in archive.infolist():
+                target_path = (staging_root / member.filename).resolve()
+                if not target_path.is_relative_to(staging_root):
+                    raise ValueError(
+                        f"Unsafe dashboard archive path: {member.filename}"
+                    )
+                archive.extract(member, staging_root)
+
+        staged_dist = staging_root / "dist"
+        if not _is_dist_complete(staged_dist):
+            raise RuntimeError("Downloaded Dashboard package is incomplete")
+        if expected_version is not None and not _is_version_compatible(
+            _read_dashboard_version(staged_dist), expected_version
+        ):
+            raise RuntimeError(
+                "Downloaded Dashboard version does not match "
+                f"AstrBot {expected_version}"
+            )
+
+        if target_dist.exists() or target_dist.is_symlink():
+            target_dist.replace(backup_dist)
+            moved_existing = True
+        try:
+            staged_dist.replace(target_dist)
+        except BaseException as apply_error:
+            if moved_existing:
+                cleanup_staging = False
+                rollback_error: BaseException | str | None = None
+                if target_dist.exists() or target_dist.is_symlink():
+                    rollback_error = "the target path reappeared before rollback"
+                else:
+                    try:
+                        backup_dist.replace(target_dist)
+                        moved_existing = False
+                        cleanup_staging = True
+                    except BaseException as exc:
+                        rollback_error = exc
+                if moved_existing:
+                    logger.critical(
+                        "Dashboard replacement and rollback both failed. The "
+                        "previous Dashboard remains at %s: %s",
+                        backup_dist,
+                        rollback_error,
+                    )
+                    raise RuntimeError(
+                        "Dashboard replacement failed and the previous Dashboard "
+                        f"must be restored from {backup_dist}"
+                    ) from apply_error
+            raise
+    finally:
+        if cleanup_staging:
+            shutil.rmtree(staging_root, ignore_errors=True)

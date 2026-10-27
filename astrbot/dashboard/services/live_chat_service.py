@@ -287,6 +287,12 @@ class LiveChatService:
             "web_search_tavily",
             "web_search_bocha",
             "web_search_brave",
+            "web_search_deepseek",
+            "web_search_serpapi",
+            "news_search_serpapi",
+            "image_search_serpapi",
+            "finance_search_serpapi",
+            "scholar_search_serpapi",
         ]
         web_search_results = {}
         tool_call_parts = [
@@ -574,6 +580,7 @@ class LiveChatService:
                         "persona_prompt": persona_prompt,
                         "show_reasoning": show_reasoning,
                         "flags": flags,
+                        "locale": message.get("locale"),
                         "message_id": message_id,
                         "llm_checkpoint_id": llm_checkpoint_id,
                     },

@@ -33,8 +33,13 @@
     "conflict": "Conflict"
   },
   "permission": {
+    "groupAdmin": "Administrators Only in Group Chats",
+    "groupAdminHint": "Everyone can use this command in private chats; only AstrBot administrators can use it in groups.",
+    "followIsolation": "Follow Conversation Isolation",
+    "followIsolationHint": "Everyone can use this command in isolated group conversations and private chats; shared group conversations require AstrBot administrator permission.",
     "everyone": "Everyone",
-    "admin": "Admin"
+    "admin": "Administrators Only",
+    "adminHint": "Only AstrBot administrators can use this command in both private and group chats, regardless of conversation isolation."
   },
   "tooltips": {
     "enable": "Enable command",
@@ -91,7 +96,7 @@
     "byType": "Filter by type",
     "byPermission": "Filter by permission",
     "byStatus": "Filter by status",
-    "showSystemPlugins": "Show system plugins commands",
+    "showSystemPlugins": "Show System Plugin Commands",
     "systemPluginConflictHint": "System plugin conflicts detected. Resolve conflicts to hide."
   }
 }

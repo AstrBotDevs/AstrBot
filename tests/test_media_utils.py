@@ -6,6 +6,7 @@ import sys
 import wave
 from io import BytesIO
 from pathlib import Path
+from types import SimpleNamespace
 from urllib.parse import quote
 
 import pytest
@@ -204,6 +205,41 @@ def test_detect_image_mime_type_accepts_path(tmp_path):
     assert (
         media_utils.detect_image_mime_type(image_path, default_mime_type=None)
         == "image/png"
+    )
+
+
+def test_detect_image_mime_type_sniffs_common_headers():
+    """Header sniffing recognizes common formats from bytes alone."""
+    assert (
+        media_utils.detect_image_mime_type(b"\x89PNG\r\n\x1a\n" + b"\x00" * 24)
+        == "image/png"
+    )
+    assert (
+        media_utils.detect_image_mime_type(b"\xff\xd8\xff\xe0" + b"\x00" * 28)
+        == "image/jpeg"
+    )
+    assert media_utils.detect_image_mime_type(b"GIF89a" + b"\x00" * 26) == "image/gif"
+    assert (
+        media_utils.detect_image_mime_type(b"RIFF\x00\x00\x00\x00WEBPVP8 ")
+        == "image/webp"
+    )
+    assert (
+        media_utils.detect_image_mime_type(b"\x00\x00\x00\x20ftypavif" + b"\x00" * 20)
+        == "image/avif"
+    )
+
+
+def test_detect_image_mime_type_returns_default_for_unknown_input():
+    """Unknown or empty headers fall back to the provided default."""
+    assert (
+        media_utils.detect_image_mime_type(
+            b"definitely not an image", default_mime_type=None
+        )
+        is None
+    )
+    assert (
+        media_utils.detect_image_mime_type(b"", default_mime_type="image/jpeg")
+        == "image/jpeg"
     )
 
 
@@ -505,6 +541,51 @@ async def test_convert_audio_format_keeps_missing_target_path():
 
 
 @pytest.mark.asyncio
+async def test_convert_audio_format_offloads_magic_byte_probe(tmp_path, monkeypatch):
+    source_path = tmp_path / "voice.wav"
+    source_path.write_bytes(b"RIFF\x24\x00\x00\x00WAVEfmt " + b"\x00" * 16)
+    probe_calls = []
+
+    async def fake_to_thread(func, *args):
+        probe_calls.append((func, args))
+        return "wav"
+
+    monkeypatch.setattr(media_utils.asyncio, "to_thread", fake_to_thread)
+
+    result = await media_utils.convert_audio_format(
+        str(source_path),
+        output_format="wav",
+    )
+
+    assert result == str(source_path)
+    assert probe_calls == [(media_utils._get_audio_magic_type, (str(source_path),))]
+
+
+@pytest.mark.asyncio
+async def test_convert_audio_format_keeps_ogg_opus_without_reencoding(
+    tmp_path, monkeypatch
+):
+    source_path = tmp_path / "voice.ogg"
+    source_path.write_bytes(b"OggS" + b"\x00" * 20 + b"OpusHead" + b"\x00" * 32)
+
+    async def fail_create_subprocess_exec(*args, **kwargs):
+        raise AssertionError("an Ogg/Opus source should not be re-encoded")
+
+    monkeypatch.setattr(
+        media_utils.asyncio,
+        "create_subprocess_exec",
+        fail_create_subprocess_exec,
+    )
+
+    result = await media_utils.convert_audio_format(
+        str(source_path),
+        output_format="ogg",
+    )
+
+    assert result == str(source_path)
+
+
+@pytest.mark.asyncio
 async def test_media_resolver_cleans_http_target_when_download_fails(
     tmp_path, monkeypatch
 ):
@@ -523,6 +604,154 @@ async def test_media_resolver_cleans_http_target_when_download_fails(
         ).to_base64_data(strict=True)
 
     assert not list(tmp_path.iterdir())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("media_type", ["image", "audio", "file"])
+async def test_media_resolver_rejects_directory_ref(tmp_path, media_type):
+    with pytest.raises(ValueError, match="not a regular file"):
+        await media_utils.MediaResolver(str(tmp_path), media_type=media_type).to_path()
+
+    with pytest.raises(ValueError, match="not a regular file"):
+        await media_utils.MediaResolver(tmp_path.as_uri(), media_type=media_type).to_path()
+
+
+@pytest.mark.asyncio
+async def test_media_resolver_rejects_unresolved_image_url_path():
+    ref = "/api/v1/files/tokens/ddbb1afd-84d9-4b1d-9b0e-5c7e6fe75684"
+
+    with pytest.raises(FileNotFoundError) as excinfo:
+        await media_utils.MediaResolver(ref, media_type="image").to_path()
+
+    assert ref in str(excinfo.value)
+
+
+@pytest.mark.asyncio
+async def test_media_resolver_rejects_missing_image_file_uri(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        await media_utils.MediaResolver(
+            (tmp_path / "missing.png").as_uri(),
+            media_type="image",
+        ).to_path()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("media_type", ["audio", "file"])
+async def test_media_resolver_keeps_pending_path_for_non_image(tmp_path, media_type):
+    # Platforms such as NapCat can hand over a path before the file is readable.
+    missing = str(tmp_path / "not-written-yet.amr")
+
+    resolved = await media_utils.MediaResolver(missing, media_type=media_type).to_path()
+
+    assert resolved == missing
+
+
+@pytest.mark.asyncio
+async def test_record_keeps_pending_local_path_for_platform_races(tmp_path):
+    # The STT stage retries this path until the platform finishes writing it.
+    missing = tmp_path / "not-written-yet.amr"
+
+    resolved = await Record(file=str(missing)).convert_to_file_path()
+
+    assert resolved == str(missing)
+
+
+@pytest.mark.asyncio
+async def test_image_base64_data_degrades_for_unresolved_ref_when_not_strict():
+    ref = "/api/v1/files/tokens/ddbb1afd-84d9-4b1d-9b0e-5c7e6fe75684"
+
+    assert await media_utils.resolve_image_ref_to_base64_data(ref) is None
+    assert await media_utils.MediaResolver(ref, media_type="image").to_data_url() is None
+
+    with pytest.raises(FileNotFoundError):
+        await media_utils.resolve_image_ref_to_base64_data(ref, strict=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["directory", "empty"])
+async def test_image_base64_data_degrades_for_non_regular_ref_when_not_strict(
+    tmp_path, kind
+):
+    ref = str(tmp_path) if kind == "directory" else ""
+
+    assert await media_utils.resolve_image_ref_to_base64_data(ref) is None
+    assert await media_utils.MediaResolver(ref, media_type="image").to_data_url() is None
+
+    with pytest.raises(ValueError):
+        await media_utils.resolve_image_ref_to_base64_data(ref, strict=True)
+
+
+@pytest.mark.asyncio
+async def test_media_resolver_materializes_oversized_bare_base64_image(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    # Past the Windows path limit stat() raises ValueError while pathlib's
+    # exists() reports False, so the payload must still be decoded and stored.
+    payload = base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"a" * (30 * 1024)).decode()
+    assert len(payload) > 32767
+
+    resolved = await media_utils.MediaResolver(payload, media_type="image").to_path()
+
+    assert Path(resolved).read_bytes() == base64.b64decode(payload)
+
+
+@pytest.mark.asyncio
+async def test_media_resolver_keeps_oversized_pending_path_for_audio():
+    # An over-long reference is not a usable path, so audio keeps retrying it.
+    # to_path() additionally calls Path.resolve(), which rejects over-long
+    # Windows paths on its own, so assert at the materialization layer.
+    ref = "/api/v1/files/tokens/" + "a" * 40000
+
+    async with media_utils.MediaResolver(ref, media_type="audio").as_path() as resolved:
+        assert resolved.path == Path(ref)
+
+
+@pytest.mark.asyncio
+async def test_media_resolver_prefers_existing_file_over_base64(tmp_path):
+    # "abcd" is both a valid file name and a valid bare base64 payload.
+    image_path = tmp_path / "abcd"
+    image_path.write_bytes(b"not-really-an-image")
+
+    resolved = await media_utils.MediaResolver(
+        str(image_path),
+        media_type="image",
+    ).to_path()
+
+    assert resolved == str(image_path.resolve())
+
+
+@pytest.mark.asyncio
+async def test_media_resolver_still_materializes_bare_base64_image(tmp_path, monkeypatch):
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    payload = base64.b64encode(b"abcd").decode()
+
+    resolved = await media_utils.MediaResolver(payload, media_type="image").to_path()
+
+    assert Path(resolved).read_bytes() == b"abcd"
+
+
+@pytest.mark.asyncio
+async def test_media_resolver_follows_symlink_to_regular_file(tmp_path):
+    target = tmp_path / "target.png"
+    target.write_bytes(b"png-bytes")
+    link = tmp_path / "link.png"
+    try:
+        link.symlink_to(target)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks are not available in this environment")
+
+    resolved = await media_utils.MediaResolver(str(link), media_type="image").to_path()
+
+    assert resolved == str(link.resolve())
+
+
+def test_describe_media_ref_marks_unresolved_ref():
+    ref = "/api/v1/files/tokens/ddbb1afd-84d9-4b1d-9b0e-5c7e6fe75684"
+
+    assert media_utils.describe_media_ref(ref) == (
+        f"unresolved media ref name={Path(ref).name!r} len={len(ref)}"
+    )
 
 
 def test_describe_media_ref_does_not_include_payload_or_query():
@@ -654,7 +883,9 @@ def test_is_file_uri_uses_parsed_file_scheme(value, expected):
 def test_file_uri_to_path_supports_localhost_and_encoded_paths(tmp_path):
     media_path = tmp_path / "voice note.wav"
     media_path.write_bytes(b"audio")
-    file_uri = f"file://localhost{quote(media_path.as_posix())}"
+    # Keep a "/" between the host and the path so the URI stays well-formed
+    # on Windows, where as_posix() yields "C:/..." without a leading slash.
+    file_uri = "file://localhost/" + quote(media_path.as_posix().lstrip("/"))
 
     assert media_utils.file_uri_to_path(file_uri) == str(media_path)
 
@@ -718,14 +949,55 @@ async def test_video_and_file_components_accept_standard_file_uri(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_file_token_service_accepts_standard_file_uri(tmp_path):
+@pytest.mark.parametrize("single_use", [True, False])
+async def test_file_token_service_accepts_standard_file_uri(tmp_path, single_use):
     file_path = tmp_path / "document with space.txt"
     file_path.write_text("document", encoding="utf-8")
     service = FileTokenService()
 
-    token = await service.register_file(file_path.as_uri())
+    token = await service.register_file(file_path.as_uri(), single_use=single_use)
 
     assert await service.handle_file(token) == str(file_path)
+
+
+@pytest.mark.asyncio
+async def test_file_token_service_reusable_token_expires(tmp_path, monkeypatch):
+    file_path = tmp_path / "logo.png"
+    file_path.write_bytes(b"logo")
+    now = 1000.0
+    monkeypatch.setattr(
+        sys.modules[FileTokenService.__module__],
+        "time",
+        SimpleNamespace(time=lambda: now),
+    )
+    service = FileTokenService()
+    single_use_token = await service.register_file(str(file_path), timeout=1)
+    reusable_token = await service.register_file(
+        str(file_path), timeout=60, single_use=False
+    )
+
+    now += 2
+    assert await service.check_token_expired(single_use_token)
+    assert await service.handle_file(reusable_token) == str(file_path)
+    assert await service.handle_file(reusable_token) == str(file_path)
+    assert not await service.check_token_expired(reusable_token)
+
+    now += 59
+    with pytest.raises(KeyError, match="Invalid or expired file token"):
+        await service.handle_file(reusable_token)
+    assert await service.check_token_expired(reusable_token)
+
+
+@pytest.mark.asyncio
+async def test_file_token_service_reusable_token_checks_file_exists(tmp_path):
+    file_path = tmp_path / "logo.png"
+    file_path.write_bytes(b"logo")
+    service = FileTokenService()
+    token = await service.register_file(str(file_path), single_use=False)
+    file_path.unlink()
+
+    with pytest.raises(FileNotFoundError, match="File does not exist"):
+        await service.handle_file(token)
 
 
 def test_path_mapping_accepts_standard_and_legacy_file_uri(tmp_path):
@@ -871,3 +1143,84 @@ async def test_wav_to_tencent_silk_skips_resample_for_supported_rate(
 
     assert len(fake.calls) == 1
     assert fake.calls[0]["sample_rate"] == 24000
+
+
+@pytest.mark.asyncio
+async def test_prepare_model_image_skips_oversized_input(tmp_path, monkeypatch):
+    """Inputs above the model-image byte cap must be skipped before decoding."""
+    from PIL import Image as PILImage
+
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    image_path = tmp_path / "oversized.png"
+    PILImage.new("RGB", (4, 4)).save(image_path, format="PNG")
+    with image_path.open("ab") as f:
+        f.truncate(media_utils.MODEL_IMAGE_MAX_INPUT_BYTES + 1)
+
+    def fail_read(self):
+        pytest.fail("Oversized inputs must be rejected before reading image bytes")
+
+    monkeypatch.setattr(media_utils.ResolvedMediaFile, "read_bytes", fail_read)
+    with pytest.raises(media_utils.ImageInputTooLargeError) as error:
+        await media_utils.prepare_model_image(
+            str(image_path), max_size=1280, output_dir=tmp_path
+        )
+
+    assert str(error.value) == str(image_path)
+    assert image_path.is_file()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("input_size", [33 * 1024 * 1024, 64 * 1024 * 1024])
+async def test_prepare_model_image_accepts_inputs_up_to_64_mib(tmp_path, input_size):
+    """The input cap includes 64 MiB; accepted inputs still obey the output cap."""
+    from PIL import Image as PILImage
+
+    image_path = tmp_path / "large.png"
+    PILImage.new("RGB", (4, 4)).save(image_path, format="PNG")
+    with image_path.open("ab") as file:
+        file.truncate(input_size)
+
+    result = await media_utils.prepare_model_image(
+        str(image_path), max_size=1280, output_dir=tmp_path / "previews"
+    )
+
+    assert result is not None
+    output_path, is_montage, needs_cleanup, original_path = result
+    assert original_path == str(image_path)
+    assert not is_montage and needs_cleanup
+    assert Path(output_path).stat().st_size < 512 * 1024
+    assert image_path.stat().st_size == input_size
+
+
+def test_convert_image_bytes_reuses_small_in_range_input():
+    """A small oriented in-range PNG keeps its original bytes."""
+    from PIL import Image as PILImage
+
+    buffer = BytesIO()
+    PILImage.new("RGB", (10, 10), (255, 0, 0)).save(buffer, format="PNG")
+    source = buffer.getvalue()
+
+    result, is_montage = media_utils._prepare_model_image_sync(source, 1280)
+
+    assert result is source
+    assert not is_montage
+
+
+def test_convert_image_bytes_reencodes_large_in_range_input(tmp_path, monkeypatch):
+    """An in-range but byte-heavy PNG is re-encoded instead of reused."""
+    from PIL import Image as PILImage
+
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    img = PILImage.new("RGB", (1024, 1024))
+    img.frombytes(os.urandom(1024 * 1024 * 3))
+    buffer = BytesIO()
+    img.save(buffer, format="PNG")
+    source = buffer.getvalue()
+    assert len(source) >= media_utils.MODEL_IMAGE_MAX_BYTES
+
+    result, is_montage = media_utils._prepare_model_image_sync(source, 1280)
+
+    assert not is_montage
+    assert result is not source
+    assert result[:2] == b"\xff\xd8"
+    assert len(result) < media_utils.MODEL_IMAGE_MAX_BYTES

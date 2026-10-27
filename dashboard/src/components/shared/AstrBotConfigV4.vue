@@ -1,6 +1,6 @@
 <script setup>
 import MarkdownIt from 'markdown-it'
-import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
+import { LazyMonacoEditor as VueMonacoEditor } from '@/components/shared/LazyMonacoEditor';
 import { ref, computed } from 'vue'
 import ConfigItemRenderer from './ConfigItemRenderer.vue'
 import TemplateListEditor from './TemplateListEditor.vue'
@@ -49,6 +49,12 @@ const hintMarkdown = new MarkdownIt({
   linkify: true,
   breaks: true
 })
+
+hintMarkdown.renderer.rules.link_open = (tokens, index, options, env, renderer) => {
+  tokens[index].attrSet('target', '_blank')
+  tokens[index].attrSet('rel', 'noopener noreferrer')
+  return renderer.renderToken(tokens, index, options)
+}
 
 const renderHint = (value) => {
   const text = translateIfKey(value)
@@ -178,7 +184,7 @@ function getVisibleItemEntries(collapsed = false) {
   const sectionItems = props.metadata?.[props.metadataKey]?.items || {}
   return Object.entries(sectionItems).filter(([itemKey, itemMeta]) => {
     const isCollapsed = Boolean(itemMeta?.collapsed)
-    return isCollapsed === collapsed && shouldShowItem(itemMeta, itemKey)
+    return isCollapsed === collapsed && !itemMeta?.invisible && shouldShowItem(itemMeta, itemKey)
   })
 }
 
@@ -280,7 +286,7 @@ function getSpecialSubtype(value) {
         class="config-item"
       >
         <v-row v-if="!itemMeta?.invisible" class="config-row">
-          <v-col cols="12" sm="6" class="property-info">
+          <v-col cols="12" :sm="itemMeta?.full_width ? 12 : 6" class="property-info">
             <v-list-item density="compact">
               <v-list-item-title class="property-name">
                 {{ getItemDescription(itemKey, itemMeta) }}
@@ -293,7 +299,7 @@ function getSpecialSubtype(value) {
               </v-list-item-subtitle>
             </v-list-item>
           </v-col>
-          <v-col cols="12" sm="6" class="config-input">
+          <v-col cols="12" :sm="itemMeta?.full_width ? 12 : 6" class="config-input">
             <TemplateListEditor
               v-if="itemMeta?.type === 'template_list'"
               v-model="createSelectorModel(itemKey).value"

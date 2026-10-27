@@ -21,7 +21,6 @@ from lark_oapi.api.im.v1 import (
     CreateMessageReactionRequestBody,
     Emoji,
     GetChatMembersRequest,
-    GetChatRequest,
     ReplyMessageRequest,
     ReplyMessageRequestBody,
 )
@@ -38,6 +37,8 @@ from astrbot.core.utils.media_utils import (
     get_media_duration,
 )
 from astrbot.core.utils.metrics import Metric
+
+from .lark_group_info import get_lark_group
 
 
 class LarkMessageEvent(AstrMessageEvent):
@@ -57,7 +58,7 @@ class LarkMessageEvent(AstrMessageEvent):
         group_id: str | None = None,
         **kwargs,
     ) -> Group | None:
-        """Get Lark chat details and members.
+        """Get cached Lark chat details and fetch its current members.
 
         Args:
             group_id: Chat ID to query. Defaults to the current chat ID.
@@ -78,56 +79,11 @@ class LarkMessageEvent(AstrMessageEvent):
         ):
             basic_group = self.message_obj.group
 
-        if self.bot.im is None:
-            logger.warning("[Lark] IM API is unavailable while getting chat details")
+        group = await get_lark_group(self.bot, basic_group)
+        if group is None:
             return basic_group
 
-        try:
-            request = (
-                GetChatRequest.builder()
-                .chat_id(resolved_group_id)
-                .user_id_type("open_id")
-                .build()
-            )
-            response = await self.bot.im.v1.chat.aget(request)
-        except Exception as exc:
-            logger.warning(
-                "[Lark] Failed to get chat details for %s: %s",
-                resolved_group_id,
-                exc,
-            )
-            return basic_group
-
-        if not response.success() or response.data is None:
-            logger.warning(
-                "[Lark] Failed to get chat details for %s (%s): %s",
-                resolved_group_id,
-                response.code,
-                response.msg,
-            )
-            return basic_group
-
-        chat_data = response.data
-        member_count = None
-        if chat_data.user_count is not None:
-            try:
-                member_count = int(chat_data.user_count)
-            except (TypeError, ValueError):
-                logger.warning(
-                    "[Lark] Chat %s returned an invalid user count: %r",
-                    resolved_group_id,
-                    chat_data.user_count,
-                )
-
-        group = Group(
-            group_id=resolved_group_id,
-            group_name=chat_data.name or basic_group.group_name,
-            group_avatar=chat_data.avatar or basic_group.group_avatar,
-            group_owner=chat_data.owner_id or basic_group.group_owner,
-            group_admins=list(chat_data.user_manager_id_list or []),
-            member_count=member_count,
-        )
-
+        group.members = None
         members: list[MessageMember] = []
         members_complete = False
         page_token: str | None = None
@@ -196,21 +152,29 @@ class LarkMessageEvent(AstrMessageEvent):
         reply_message_id: str | None = None,
         receive_id: str | None = None,
         receive_id_type: str | None = None,
+        fallback_chat_id: str | None = None,
     ) -> bool:
-        """发送飞书 IM 消息的通用辅助函数
+        """Send one IM message, retrying rejected private sends by chat ID once.
 
         Args:
-            lark_client: 飞书客户端
-            content: 消息内容（JSON字符串）
-            msg_type: 消息类型（post/file/audio/media等）
-            reply_message_id: 回复的消息ID（用于回复消息）
-            receive_id: 接收者ID（用于主动发送）
-            receive_id_type: 接收者ID类型（用于主动发送）
+            lark_client: Lark API client.
+            content: JSON-encoded message content.
+            msg_type: Lark message type.
+            reply_message_id: Message to reply to, when sending a reply.
+            receive_id: Recipient for proactive messages.
+            receive_id_type: Recipient ID type for proactive messages.
+            fallback_chat_id: Known private chat to use if open ID is rejected.
 
         Returns:
-            是否发送成功
+            Whether the message was delivered.
+
+        Raises:
+            RuntimeError: A proactive send fails, including its fallback attempt.
+            ValueError: A proactive send has no recipient or recipient ID type.
         """
         if lark_client.im is None:
+            if not reply_message_id:
+                raise RuntimeError("[Lark] IM API client is not initialized")
             logger.error("[Lark] API Client im 模块未初始化")
             return False
 
@@ -236,10 +200,9 @@ class LarkMessageEvent(AstrMessageEvent):
             )
 
             if receive_id_type is None or receive_id is None:
-                logger.error(
-                    "[Lark] 主动发送消息时，receive_id 和 receive_id_type 不能为空",
+                raise ValueError(
+                    "[Lark] Proactive messages require receive_id and receive_id_type"
                 )
-                return False
 
             request = (
                 CreateMessageRequest.builder()
@@ -255,8 +218,37 @@ class LarkMessageEvent(AstrMessageEvent):
                 .build()
             )
             response = await lark_client.im.v1.message.acreate(request)
+            if (
+                not response.success()
+                and receive_id_type == "open_id"
+                and fallback_chat_id
+            ):
+                logger.warning(
+                    "[Lark] Open ID send failed (%s): %s; retrying with private chat ID",
+                    response.code,
+                    response.msg,
+                )
+                # Retry only this rejected message, preserving its deduplication UUID.
+                fallback_request = (
+                    CreateMessageRequest.builder()
+                    .receive_id_type("chat_id")
+                    .request_body(
+                        CreateMessageRequestBody.builder()
+                        .receive_id(fallback_chat_id)
+                        .content(content)
+                        .msg_type(msg_type)
+                        .uuid(request.request_body.uuid)
+                        .build()
+                    )
+                    .build()
+                )
+                response = await lark_client.im.v1.message.acreate(fallback_request)
 
         if not response.success():
+            if not reply_message_id:
+                raise RuntimeError(
+                    f"[Lark] Message send failed ({response.code}): {response.msg}"
+                )
             logger.error(f"[Lark] 发送飞书消息失败({response.code}): {response.msg}")
             return False
 
@@ -487,6 +479,7 @@ class LarkMessageEvent(AstrMessageEvent):
         reply_message_id: str | None = None,
         receive_id: str | None = None,
         receive_id_type: str | None = None,
+        fallback_chat_id: str | None = None,
     ) -> bool:
         if lark_client.cardkit is None:
             logger.error("[Lark] API Client cardkit 模块未初始化，无法发送卡片")
@@ -525,6 +518,7 @@ class LarkMessageEvent(AstrMessageEvent):
             reply_message_id=reply_message_id,
             receive_id=receive_id,
             receive_id_type=receive_id_type,
+            fallback_chat_id=fallback_chat_id,
         )
 
     @staticmethod
@@ -535,6 +529,7 @@ class LarkMessageEvent(AstrMessageEvent):
         reply_message_id: str | None = None,
         receive_id: str | None = None,
         receive_id_type: str | None = None,
+        fallback_chat_id: str | None = None,
     ) -> bool:
         if not reasoning_content:
             return True
@@ -548,6 +543,7 @@ class LarkMessageEvent(AstrMessageEvent):
             reply_message_id=reply_message_id,
             receive_id=receive_id,
             receive_id_type=receive_id_type,
+            fallback_chat_id=fallback_chat_id,
         )
 
     @staticmethod
@@ -557,17 +553,24 @@ class LarkMessageEvent(AstrMessageEvent):
         reply_message_id: str | None = None,
         receive_id: str | None = None,
         receive_id_type: str | None = None,
+        fallback_chat_id: str | None = None,
     ) -> None:
-        """通用的消息链发送方法
+        """Send each message component with an optional private chat fallback.
 
         Args:
-            message_chain: 要发送的消息链
-            lark_client: 飞书客户端
-            reply_message_id: 回复的消息ID（用于回复消息）
-            receive_id: 接收者ID（用于主动发送）
-            receive_id_type: 接收者ID类型，如 'open_id', 'chat_id'（用于主动发送）
+            message_chain: Message components to send.
+            lark_client: Lark API client.
+            reply_message_id: Message to reply to, when sending a reply.
+            receive_id: Recipient for proactive messages.
+            receive_id_type: Recipient ID type for proactive messages.
+            fallback_chat_id: Known private chat to use if open ID is rejected.
+
+        Raises:
+            RuntimeError: A proactive message cannot be delivered.
         """
         if lark_client.im is None:
+            if not reply_message_id:
+                raise RuntimeError("[Lark] IM API client is not initialized")
             logger.error("[Lark] API Client im 模块未初始化")
             return
 
@@ -606,6 +609,7 @@ class LarkMessageEvent(AstrMessageEvent):
                 reply_message_id=reply_message_id,
                 receive_id=receive_id,
                 receive_id_type=receive_id_type,
+                fallback_chat_id=fallback_chat_id,
             ):
                 return
 
@@ -640,6 +644,7 @@ class LarkMessageEvent(AstrMessageEvent):
                         reply_message_id=reply_message_id,
                         receive_id=receive_id,
                         receive_id_type=receive_id_type,
+                        fallback_chat_id=fallback_chat_id,
                     )
 
             # 维持组件顺序：遇到折叠面板标记先 flush 当前普通内容并发送卡片
@@ -659,6 +664,7 @@ class LarkMessageEvent(AstrMessageEvent):
                                 reply_message_id=reply_message_id,
                                 receive_id=receive_id,
                                 receive_id_type=receive_id_type,
+                                fallback_chat_id=fallback_chat_id,
                             )
                             if not success:
                                 buffered_components.append(
@@ -674,17 +680,32 @@ class LarkMessageEvent(AstrMessageEvent):
         # 发送附件
         for file_comp in file_components:
             await LarkMessageEvent._send_file_message(
-                file_comp, lark_client, reply_message_id, receive_id, receive_id_type
+                file_comp,
+                lark_client,
+                reply_message_id,
+                receive_id,
+                receive_id_type,
+                fallback_chat_id,
             )
 
         for audio_comp in audio_components:
             await LarkMessageEvent._send_audio_message(
-                audio_comp, lark_client, reply_message_id, receive_id, receive_id_type
+                audio_comp,
+                lark_client,
+                reply_message_id,
+                receive_id,
+                receive_id_type,
+                fallback_chat_id,
             )
 
         for media_comp in media_components:
             await LarkMessageEvent._send_media_message(
-                media_comp, lark_client, reply_message_id, receive_id, receive_id_type
+                media_comp,
+                lark_client,
+                reply_message_id,
+                receive_id,
+                receive_id_type,
+                fallback_chat_id,
             )
 
     async def send(self, message: MessageChain) -> None:
@@ -703,21 +724,28 @@ class LarkMessageEvent(AstrMessageEvent):
         reply_message_id: str | None = None,
         receive_id: str | None = None,
         receive_id_type: str | None = None,
+        fallback_chat_id: str | None = None,
     ) -> None:
-        """发送文件消息
+        """Upload and send a file.
 
         Args:
-            file_comp: 文件组件
-            lark_client: 飞书客户端
-            reply_message_id: 回复的消息ID（用于回复消息）
-            receive_id: 接收者ID（用于主动发送）
-            receive_id_type: 接收者ID类型（用于主动发送）
+            file_comp: File component to upload.
+            lark_client: Lark API client.
+            reply_message_id: Message to reply to, when sending a reply.
+            receive_id: Recipient for proactive messages.
+            receive_id_type: Recipient ID type for proactive messages.
+            fallback_chat_id: Known private chat to use if open ID is rejected.
+
+        Raises:
+            RuntimeError: A proactive message cannot be delivered.
         """
         file_path = file_comp.file or ""
         file_key = await LarkMessageEvent._upload_lark_file(
             lark_client, path=file_path, file_type="stream"
         )
         if not file_key:
+            if not reply_message_id:
+                raise RuntimeError("[Lark] Attachment upload failed")
             return
 
         content = json.dumps({"file_key": file_key})
@@ -728,6 +756,7 @@ class LarkMessageEvent(AstrMessageEvent):
             reply_message_id=reply_message_id,
             receive_id=receive_id,
             receive_id_type=receive_id_type,
+            fallback_chat_id=fallback_chat_id,
         )
 
     @staticmethod
@@ -737,15 +766,20 @@ class LarkMessageEvent(AstrMessageEvent):
         reply_message_id: str | None = None,
         receive_id: str | None = None,
         receive_id_type: str | None = None,
+        fallback_chat_id: str | None = None,
     ) -> None:
-        """发送音频消息
+        """Upload and send an audio message.
 
         Args:
-            audio_comp: 音频组件
-            lark_client: 飞书客户端
-            reply_message_id: 回复的消息ID（用于回复消息）
-            receive_id: 接收者ID（用于主动发送）
-            receive_id_type: 接收者ID类型（用于主动发送）
+            audio_comp: Audio component to upload.
+            lark_client: Lark API client.
+            reply_message_id: Message to reply to, when sending a reply.
+            receive_id: Recipient for proactive messages.
+            receive_id_type: Recipient ID type for proactive messages.
+            fallback_chat_id: Known private chat to use if open ID is rejected.
+
+        Raises:
+            RuntimeError: A proactive message cannot be delivered.
         """
         # 获取音频文件路径
         try:
@@ -792,6 +826,8 @@ class LarkMessageEvent(AstrMessageEvent):
                 logger.warning(f"[Lark] 删除转换后的音频文件失败: {e}")
 
         if not file_key:
+            if not reply_message_id:
+                raise RuntimeError("[Lark] Attachment upload failed")
             return
 
         await LarkMessageEvent._send_im_message(
@@ -801,6 +837,7 @@ class LarkMessageEvent(AstrMessageEvent):
             reply_message_id=reply_message_id,
             receive_id=receive_id,
             receive_id_type=receive_id_type,
+            fallback_chat_id=fallback_chat_id,
         )
 
     @staticmethod
@@ -810,15 +847,20 @@ class LarkMessageEvent(AstrMessageEvent):
         reply_message_id: str | None = None,
         receive_id: str | None = None,
         receive_id_type: str | None = None,
+        fallback_chat_id: str | None = None,
     ) -> None:
-        """发送视频消息
+        """Upload and send a video message.
 
         Args:
-            media_comp: 视频组件
-            lark_client: 飞书客户端
-            reply_message_id: 回复的消息ID（用于回复消息）
-            receive_id: 接收者ID（用于主动发送）
-            receive_id_type: 接收者ID类型（用于主动发送）
+            media_comp: Video component to upload.
+            lark_client: Lark API client.
+            reply_message_id: Message to reply to, when sending a reply.
+            receive_id: Recipient for proactive messages.
+            receive_id_type: Recipient ID type for proactive messages.
+            fallback_chat_id: Known private chat to use if open ID is rejected.
+
+        Raises:
+            RuntimeError: A proactive message cannot be delivered.
         """
         # 获取视频文件路径
         try:
@@ -865,6 +907,8 @@ class LarkMessageEvent(AstrMessageEvent):
                 logger.warning(f"[Lark] 删除转换后的视频文件失败: {e}")
 
         if not file_key:
+            if not reply_message_id:
+                raise RuntimeError("[Lark] Attachment upload failed")
             return
 
         await LarkMessageEvent._send_im_message(
@@ -874,6 +918,7 @@ class LarkMessageEvent(AstrMessageEvent):
             reply_message_id=reply_message_id,
             receive_id=receive_id,
             receive_id_type=receive_id_type,
+            fallback_chat_id=fallback_chat_id,
         )
 
     async def react(self, emoji: str) -> None:

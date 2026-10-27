@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from deprecated import deprecated
-from sqlalchemy import CursorResult, Row, case, not_
+from sqlalchemy import CursorResult, Row, Text, case, cast, literal, not_
 from sqlalchemy.dialects.sqlite import dialect as sqlite_dialect
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,6 +34,7 @@ from astrbot.core.db.po import (
     SessionProjectRelation,
     SQLModel,
     UmoAlias,
+    UmoSender,
     WebChatThread,
 )
 from astrbot.core.db.po import (
@@ -46,6 +47,31 @@ from astrbot.core.sentinels import NOT_GIVEN
 
 TxResult = T.TypeVar("TxResult")
 CRON_FIELD_NOT_SET = object()
+
+
+def _webchat_session_title_match(keyword: str):
+    """Build a correlated EXISTS condition matching WebChat session titles.
+
+    WebChat generates its title on the platform session instead of the
+    conversation row, so the conversation is matched through the unified
+    message origin suffix ``!<session_id>``.
+
+    Args:
+        keyword: Search text matched against the session display name.
+
+    Returns:
+        A SQLAlchemy EXISTS expression usable inside a conversation query.
+    """
+    return (
+        select(1)
+        .where(col(PlatformSession.display_name).ilike(f"%{keyword}%"))
+        .where(
+            col(ConversationV2.user_id).like(
+                literal("%!").concat(col(PlatformSession.session_id)),
+            )
+        )
+        .exists()
+    )
 
 
 class SQLiteDatabase(BaseDatabase):
@@ -358,10 +384,14 @@ class SQLiteDatabase(BaseDatabase):
             session: AsyncSession
             # Build the base query with filters
             base_query = select(ConversationV2)
+            # Cast JSON explicitly for portable substring searches.
+            content_text = cast(ConversationV2.content, Text)
             conditions = []
 
             if platform_ids:
                 conditions.append(col(ConversationV2.platform_id).in_(platform_ids))
+            # WebChat titles live on the platform session, not on the
+            # conversation row, so the search also matches session titles.
             if search_query:
                 escaped_search_query = json.dumps(
                     search_query,
@@ -372,8 +402,9 @@ class SQLiteDatabase(BaseDatabase):
                         col(ConversationV2.title).ilike(f"%{search_query}%"),
                         col(ConversationV2.user_id).ilike(f"%{search_query}%"),
                         col(ConversationV2.conversation_id).ilike(f"%{search_query}%"),
-                        col(ConversationV2.content).ilike(f"%{search_query}%"),
-                        col(ConversationV2.content).ilike(f"%{escaped_search_query}%"),
+                        content_text.ilike(f"%{search_query}%"),
+                        content_text.ilike(f"%{escaped_search_query}%"),
+                        _webchat_session_title_match(search_query),
                     )
                 )
             keyword_query = str(kwargs.get("keyword_query") or "").strip()
@@ -385,8 +416,9 @@ class SQLiteDatabase(BaseDatabase):
                 conditions.append(
                     or_(
                         col(ConversationV2.title).ilike(f"%{keyword_query}%"),
-                        col(ConversationV2.content).ilike(f"%{keyword_query}%"),
-                        col(ConversationV2.content).ilike(f"%{escaped_keyword_query}%"),
+                        content_text.ilike(f"%{keyword_query}%"),
+                        content_text.ilike(f"%{escaped_keyword_query}%"),
+                        _webchat_session_title_match(keyword_query),
                     )
                 )
             message_types = kwargs.get("message_types") or []
@@ -404,8 +436,23 @@ class SQLiteDatabase(BaseDatabase):
                 conditions.append(col(ConversationV2.platform_id).in_(platforms))
             exclude_ids = kwargs.get("exclude_ids") or []
             for exclude_id in exclude_ids:
+                # Match the whole UMO or its platform segment only, so an id
+                # like "astrbot" does not swallow platforms such as
+                # "astrbotweb". Escape LIKE wildcards inside the id itself.
+                escaped = (
+                    exclude_id.replace("\\", "\\\\")
+                    .replace("%", r"\%")
+                    .replace("_", r"\_")
+                )
                 conditions.append(
-                    not_(col(ConversationV2.user_id).like(f"{exclude_id}%"))
+                    not_(
+                        or_(
+                            col(ConversationV2.user_id) == exclude_id,
+                            col(ConversationV2.user_id).like(
+                                f"{escaped}:%", escape="\\"
+                            ),
+                        )
+                    )
                 )
             exclude_platforms = kwargs.get("exclude_platforms") or []
             if exclude_platforms:
@@ -636,13 +683,12 @@ class SQLiteDatabase(BaseDatabase):
         async with self.get_db() as session:
             session: AsyncSession
             offset = (page - 1) * page_size
+            conversation_id = col(Preference.value)["val"].as_string()
 
             base_query = (
                 select(
                     col(Preference.scope_id).label("session_id"),
-                    func.json_extract(Preference.value, "$.val").label(
-                        "conversation_id",
-                    ),  # type: ignore
+                    conversation_id.label("conversation_id"),
                     col(ConversationV2.persona_id).label("persona_id"),
                     col(ConversationV2.title).label("title"),
                     col(Persona.persona_id).label("persona_name"),
@@ -650,8 +696,7 @@ class SQLiteDatabase(BaseDatabase):
                 .select_from(Preference)
                 .outerjoin(
                     ConversationV2,
-                    func.json_extract(Preference.value, "$.val")
-                    == ConversationV2.conversation_id,
+                    conversation_id == ConversationV2.conversation_id,
                 )
                 .outerjoin(
                     Persona,
@@ -692,8 +737,7 @@ class SQLiteDatabase(BaseDatabase):
                 .select_from(Preference)
                 .outerjoin(
                     ConversationV2,
-                    func.json_extract(Preference.value, "$.val")
-                    == ConversationV2.conversation_id,
+                    conversation_id == ConversationV2.conversation_id,
                 )
                 .outerjoin(
                     Persona,
@@ -822,7 +866,8 @@ class SQLiteDatabase(BaseDatabase):
         async with self.get_db() as session:
             session: AsyncSession
             async with session.begin():
-                now = datetime.now()
+                # created_at stores UTC wall-clock values, so compare in UTC.
+                now = datetime.now(timezone.utc)
                 cutoff_time = now - timedelta(seconds=offset_sec)
                 await session.execute(
                     delete(PlatformMessageHistory).where(
@@ -856,6 +901,30 @@ class SQLiteDatabase(BaseDatabase):
             )
             result = await session.execute(query.offset(offset).limit(page_size))
             return result.scalars().all()
+
+    async def count_platform_message_history(
+        self,
+        platform_id: str,
+        user_id: str,
+    ) -> int:
+        """Count platform message history records for a scope.
+
+        Args:
+            platform_id: Platform identifier used to partition history.
+            user_id: Platform user or session identifier.
+
+        Returns:
+            Number of records matching the platform/user scope.
+        """
+        async with self.get_db() as session:
+            session: AsyncSession
+            result = await session.execute(
+                select(func.count(PlatformMessageHistory.id)).where(
+                    PlatformMessageHistory.platform_id == platform_id,
+                    PlatformMessageHistory.user_id == user_id,
+                )
+            )
+            return int(result.scalar_one() or 0)
 
     async def get_platform_message_history_by_id(
         self, message_id: int
@@ -1346,10 +1415,12 @@ class SQLiteDatabase(BaseDatabase):
         return await self.get_persona_folder_by_id(folder_id)
 
     async def delete_persona_folder(self, folder_id: str) -> None:
-        """Delete a persona folder by its folder_id.
+        """Delete a folder, moving its direct personas and child folders to root.
 
-        Note: This will also set folder_id to NULL for all personas in this folder,
-        moving them to the root directory.
+        Descendant folders retain their contents and internal hierarchy.
+
+        Args:
+            folder_id: ID of the folder to delete.
         """
         async with self.get_db() as session:
             session: AsyncSession
@@ -1359,6 +1430,12 @@ class SQLiteDatabase(BaseDatabase):
                     update(Persona)
                     .where(col(Persona.folder_id) == folder_id)
                     .values(folder_id=None)
+                )
+                # Preserve child subtrees by moving them to the root directory.
+                await session.execute(
+                    update(PersonaFolder)
+                    .where(col(PersonaFolder.parent_id) == folder_id)
+                    .values(parent_id=None)
                 )
                 # Delete the folder
                 await session.execute(
@@ -2106,7 +2183,9 @@ class SQLiteDatabase(BaseDatabase):
             total = int(total_result.scalar_one() or 0)
 
             result_query = (
-                base_query.order_by(desc(PlatformSession.updated_at))
+                base_query.order_by(
+                    desc(PlatformSession.updated_at), desc(PlatformSession.session_id)
+                )
                 .offset(offset)
                 .limit(page_size)
             )
@@ -2252,6 +2331,113 @@ class SQLiteDatabase(BaseDatabase):
                 query = query.where(col(UmoAlias.umo).in_(umos))
             result = await session.execute(query)
             return list(result.scalars().all())
+
+    # ====
+    # UMO Sender Management
+    # ====
+
+    async def upsert_umo_sender(
+        self, umo: str, sender_id: str, sender_name: str
+    ) -> None:
+        """Insert a sender or update a changed, nonempty name.
+
+        Args:
+            umo: Unified message origin containing the sender.
+            sender_id: Sender identifier reported by the platform.
+            sender_name: Latest display name, or an empty string if unavailable.
+        """
+        if not sender_id:
+            return
+        now = datetime.now(timezone.utc)
+        statement = sqlite_insert(UmoSender).values(
+            umo=umo,
+            sender_id=sender_id,
+            sender_name=sender_name,
+            created_at=now,
+            updated_at=now,
+        )
+        statement = statement.on_conflict_do_update(
+            index_elements=[UmoSender.umo, UmoSender.sender_id],
+            set_={"sender_name": statement.excluded.sender_name, "updated_at": now},
+            where=(statement.excluded.sender_name != "")
+            & col(UmoSender.sender_name).is_distinct_from(
+                statement.excluded.sender_name
+            ),
+        )
+        async with self.get_db() as session:
+            async with session.begin():
+                await session.execute(statement)
+
+    async def get_umo_senders(
+        self,
+        search: str = "",
+        limit: int = 50,
+        sender_ids: list[str] | None = None,
+        offset: int = 0,
+    ) -> list[tuple[UmoSender, UmoAlias | None]]:
+        """Search sender metadata joined to session aliases.
+
+        Args:
+            search: Literal substring matched against sender and session metadata.
+            limit: Maximum number of results to return.
+            sender_ids: Resolve the latest record per exact sender ID when provided.
+            offset: Number of deduplicated results to skip.
+
+        Returns:
+            The latest matching sender and optional alias per platform and sender
+            ID, most recently updated first. Exact ID resolution returns one
+            record per ID instead.
+        """
+        query = select(UmoSender, UmoAlias).outerjoin(
+            UmoAlias, col(UmoSender.umo) == col(UmoAlias.umo)
+        )
+        if sender_ids is not None:
+            if not sender_ids:
+                return []
+            query = query.where(col(UmoSender.sender_id).in_(sender_ids))
+        if search:
+            query = query.where(
+                or_(
+                    *(
+                        column.icontains(search, autoescape=True)
+                        for column in (
+                            col(UmoSender.sender_id),
+                            col(UmoSender.sender_name),
+                            col(UmoSender.umo),
+                            col(UmoAlias.auto_name),
+                            col(UmoAlias.user_alias),
+                        )
+                    )
+                )
+            )
+        # Derive the instance ID from UMO; deduplicate before limiting results.
+        platform_id = func.substr(
+            UmoSender.umo, 1, func.instr(col(UmoSender.umo) + ":", ":") - 1
+        )
+        ranked = query.with_only_columns(
+            col(UmoSender.id),
+            func.row_number()
+            .over(
+                partition_by=(
+                    [UmoSender.sender_id]
+                    if sender_ids is not None
+                    else [platform_id, UmoSender.sender_id]
+                ),
+                order_by=(col(UmoSender.updated_at).desc(), col(UmoSender.id).desc()),
+            )
+            .label("rank"),
+        ).subquery()
+        query = query.where(
+            col(UmoSender.id).in_(select(ranked.c.id).where(ranked.c.rank == 1))
+        )
+        query = (
+            query.order_by(col(UmoSender.updated_at).desc(), col(UmoSender.id).desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        async with self.get_db() as session:
+            result = await session.execute(query)
+            return [(sender, alias) for sender, alias in result.all()]
 
     # ====
     # ChatUI Project Management

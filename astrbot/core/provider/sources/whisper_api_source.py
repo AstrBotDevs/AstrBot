@@ -22,6 +22,7 @@ class ProviderOpenAIWhisperAPI(STTProvider):
         self.chosen_api_key = provider_config.get("api_key", "")
 
         self.client = AsyncOpenAI(
+            default_headers=self.request_headers,
             api_key=self.chosen_api_key,
             base_url=provider_config.get("api_base"),
             timeout=provider_config.get("timeout", NOT_GIVEN),

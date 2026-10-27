@@ -25,6 +25,7 @@ from astrbot.core.db.po import (
     SessionProjectRelation,
     Stats,
     UmoAlias,
+    UmoSender,
     WebChatThread,
 )
 from astrbot.core.sentinels import NOT_GIVEN
@@ -266,6 +267,23 @@ class BaseDatabase(abc.ABC):
         page_size: int = 20,
     ) -> list[PlatformMessageHistory]:
         """Get platform message history for a specific user."""
+        ...
+
+    @abc.abstractmethod
+    async def count_platform_message_history(
+        self,
+        platform_id: str,
+        user_id: str,
+    ) -> int:
+        """Count platform message history records for a scope.
+
+        Args:
+            platform_id: Platform identifier used to partition history.
+            user_id: Platform user or session identifier.
+
+        Returns:
+            Number of records belonging to the platform/user scope.
+        """
         ...
 
     @abc.abstractmethod
@@ -874,6 +892,46 @@ class BaseDatabase(abc.ABC):
     @abc.abstractmethod
     async def get_umo_aliases(self, umos: list[str] | None = None) -> list[UmoAlias]:
         """Get alias metadata, optionally restricted to the given UMO list."""
+        ...
+
+    # ====
+    # UMO Sender Management
+    # ====
+
+    @abc.abstractmethod
+    async def upsert_umo_sender(
+        self, umo: str, sender_id: str, sender_name: str
+    ) -> None:
+        """Persist a sender's latest nonempty name within a session.
+
+        Args:
+            umo: Unified message origin containing the sender.
+            sender_id: Sender identifier reported by the platform.
+            sender_name: Display name, or an empty string if unavailable.
+        """
+        ...
+
+    @abc.abstractmethod
+    async def get_umo_senders(
+        self,
+        search: str = "",
+        limit: int = 50,
+        sender_ids: list[str] | None = None,
+        offset: int = 0,
+    ) -> list[tuple[UmoSender, UmoAlias | None]]:
+        """Search senders with optional session alias metadata.
+
+        Args:
+            search: Substring matched against sender and session names or IDs.
+            limit: Maximum number of results to return.
+            sender_ids: Resolve the latest record per exact sender ID when provided.
+            offset: Number of deduplicated results to skip.
+
+        Returns:
+            Latest matching sender and optional alias pairs per platform and
+            sender ID, most recently updated first. Exact ID resolution returns
+            one record per ID instead.
+        """
         ...
 
     # ====

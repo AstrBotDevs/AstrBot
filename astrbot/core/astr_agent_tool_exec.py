@@ -6,6 +6,7 @@ import typing as T
 import uuid
 from collections.abc import Sequence
 from collections.abc import Set as AbstractSet
+from contextlib import aclosing
 
 import mcp
 
@@ -20,6 +21,7 @@ from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.astr_main_agent_resources import (
     BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT,
 )
+from astrbot.core.config.agent_runner import resolve_context_compression_config
 from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import (
@@ -47,7 +49,9 @@ from astrbot.core.tools.computer_tools import (
     ShellSessionTool,
 )
 from astrbot.core.tools.message_tools import SendMessageToUserTool
+from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.async_generator import iterate_in_task
 from astrbot.core.utils.config_number import coerce_int_config
 from astrbot.core.utils.history_saver import persist_agent_history
 from astrbot.core.utils.image_ref_utils import is_supported_image_ref
@@ -143,21 +147,31 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         if isinstance(tool, HandoffTool):
             is_bg = tool_args.pop("background_task", False)
             if is_bg:
-                async for r in cls._execute_handoff_background(
-                    tool, run_context, **tool_args
-                ):
-                    yield r
+                async with aclosing(
+                    cls._execute_handoff_background(tool, run_context, **tool_args)
+                ) as results:
+                    async for r in results:
+                        yield r
                 return
-            async for r in cls._execute_handoff(tool, run_context, **tool_args):
-                yield r
+            async with aclosing(
+                cls._execute_handoff(tool, run_context, **tool_args)
+            ) as results:
+                async for r in results:
+                    yield r
             return
 
         elif isinstance(tool, MCPTool):
-            async for r in cls._execute_mcp(tool, run_context, **tool_args):
-                yield r
+            async with aclosing(
+                cls._execute_mcp(tool, run_context, **tool_args)
+            ) as results:
+                async for r in results:
+                    yield r
             return
 
         elif tool.is_background_task:
+            event = run_context.context.event
+            if active_event_registry.get_background_stop_signal(event).is_set():
+                return
             task_id = uuid.uuid4().hex
 
             async def _run_in_background() -> None:
@@ -174,7 +188,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                         exc_info=True,
                     )
 
-            asyncio.create_task(_run_in_background())
+            task = asyncio.create_task(_run_in_background())
+            active_event_registry.register_background_task(event, task)
             text_content = mcp.types.TextContent(
                 type="text",
                 text=f"Background task submitted. task_id={task_id}",
@@ -183,8 +198,11 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
             return
         else:
-            async for r in cls._execute_local(tool, run_context, **tool_args):
-                yield r
+            async with aclosing(
+                cls._execute_local(tool, run_context, **tool_args)
+            ) as results:
+                async for r in results:
+                    yield r
             return
 
     @classmethod
@@ -255,7 +273,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         event = run_context.context.event
         cfg = ctx.get_config(umo=event.unified_msg_origin)
         provider_settings = cfg.get("provider_settings", {})
-        runtime = str(provider_settings.get("computer_use_runtime", "local"))
+        runtime = str(provider_settings.get("computer_use_runtime", "none"))
         tool_mgr = (
             ctx.get_llm_tool_manager()
             if hasattr(ctx, "get_llm_tool_manager")
@@ -364,7 +382,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             config.get("agent_runner", {})
             .get("config", {})
             .get("misc", {})
-            .get("max_steps", 30)
+            .get("max_steps", 128)
         )
         stream = prov_settings.get("streaming_response", False)
         llm_resp = await ctx.tool_loop_agent(
@@ -398,6 +416,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         user of the result – the same pattern used by
         ``_execute_background`` for regular background tasks.
         """
+        event = run_context.context.event
+        if active_event_registry.get_background_stop_signal(event).is_set():
+            return
         task_id = uuid.uuid4().hex
 
         async def _run_handoff_in_background() -> None:
@@ -414,7 +435,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     exc_info=True,
                 )
 
-        asyncio.create_task(_run_handoff_in_background())
+        task = asyncio.create_task(_run_handoff_in_background())
+        active_event_registry.register_background_task(event, task)
 
         text_content = mcp.types.TextContent(
             type="text",
@@ -533,6 +555,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         )
 
         event = run_context.context.event
+        stop_signal = active_event_registry.get_background_stop_signal(event)
+        if stop_signal.is_set():
+            return
         ctx = run_context.context.context
 
         task_result = {
@@ -543,7 +568,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         }
         if extra_result_fields:
             task_result.update(extra_result_fields)
-        extras = {"background_task_result": task_result}
+        extras = {
+            "background_task_result": task_result,
+            "_background_stop_signal": stop_signal,
+        }
 
         session = MessageSession.from_str(event.unified_msg_origin)
         cron_event = CronMessageEvent(
@@ -556,23 +584,41 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         cron_event.role = event.role
         cfg = ctx.get_config(umo=event.unified_msg_origin) or {}
         provider_settings = cfg.get("provider_settings") or {}
+        persona_config = (
+            cfg.get("agent_runner", {}).get("config", {}).get("persona", {})
+        )
         agent_max_step = coerce_int_config(
             cfg.get("agent_runner", {})
             .get("config", {})
             .get("misc", {})
-            .get("max_steps", 30),
-            default=30,
+            .get("max_steps", 128),
+            default=128,
             min_value=1,
             field_name="agent_runner.config.misc.max_steps",
         )
         config = MainAgentBuildConfig(
             tool_call_timeout=run_context.tool_call_timeout,
+            fallback_provider_ids=cfg.get("agent_runner", {})
+            .get("config", {})
+            .get("model", {})
+            .get("fallback_provider_ids", []),
+            **resolve_context_compression_config(
+                cfg.get("agent_runner", {}).get("config", {}).get("compression", {})
+            ),
             streaming_response=provider_settings.get("stream", False),
+            llm_safety_mode=persona_config.get("safety_mode", True),
+            safety_mode_strategy=persona_config.get(
+                "safety_mode_strategy", "system_prompt"
+            ),
+            computer_use_runtime=provider_settings.get("computer_use_runtime", "none"),
+            sandbox_cfg=provider_settings.get("sandbox", {}),
             provider_settings=provider_settings,
         )
 
         req = ProviderRequest()
         conv = await _get_session_conv(event=cron_event, plugin_context=ctx)
+        if stop_signal.is_set():
+            return
         req.conversation = conv
         req.contexts = json.loads(conv.history)
 
@@ -597,6 +643,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         result = await build_main_agent(
             event=cron_event, plugin_context=ctx, config=config, req=req
         )
+        if stop_signal.is_set():
+            return
         if not result:
             logger.error(f"Failed to build main agent for background task {tool_name}.")
             return
@@ -625,6 +673,13 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         if not llm_resp:
             logger.warning("background task agent got no response")
             return
+        # Set once anything reaches this session, e.g. via send_message_to_user.
+        if not cron_event._has_send_oper:
+            logger.warning(
+                f"Background task {tool_name} (task_id={task_id}) finished, but "
+                "nothing was sent to the user. The result was only saved to the "
+                "conversation history."
+            )
 
     @classmethod
     async def _execute_local(
@@ -663,52 +718,65 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         if awaitable is None:
             raise ValueError("Tool must have a valid handler or override 'run' method.")
 
+        effective_timeout = tool_call_timeout or run_context.tool_call_timeout
+        if isinstance(tool, ShellSessionTool) and tool_args.get("action") in {
+            "poll",
+            "write",
+            "write_line",
+            "interrupt",
+        }:
+            yield_time_ms = tool_args.get("yield_time_ms", 5_000)
+            if isinstance(yield_time_ms, int) and 0 <= yield_time_ms <= 300_000:
+                # Allow the requested wait plus time to write input and collect output.
+                effective_timeout = max(effective_timeout, yield_time_ms / 1000 + 5)
+
         wrapper = call_local_llm_tool(
             context=run_context,
             handler=awaitable,
             method_name=method_name,
             **tool_args,
         )
-        while True:
-            try:
-                resp = await asyncio.wait_for(
-                    anext(wrapper),
-                    timeout=tool_call_timeout or run_context.tool_call_timeout,
-                )
-                if resp is not None:
-                    if isinstance(resp, mcp.types.CallToolResult):
-                        yield resp
+        async with aclosing(wrapper):
+            while True:
+                try:
+                    resp = await asyncio.wait_for(
+                        anext(wrapper),
+                        timeout=effective_timeout,
+                    )
+                    if resp is not None:
+                        if isinstance(resp, mcp.types.CallToolResult):
+                            yield resp
+                        else:
+                            text_content = mcp.types.TextContent(
+                                type="text",
+                                text=str(resp),
+                            )
+                            yield mcp.types.CallToolResult(content=[text_content])
                     else:
-                        text_content = mcp.types.TextContent(
-                            type="text",
-                            text=str(resp),
-                        )
-                        yield mcp.types.CallToolResult(content=[text_content])
-                else:
-                    # NOTE: Tool 在这里直接请求发送消息给用户
-                    # TODO: 是否需要判断 event.get_result() 是否为空?
-                    # 如果为空,则说明没有发送消息给用户,并且返回值为空,将返回一个特殊的 TextContent,其内容如"工具没有返回内容"
-                    if res := run_context.context.event.get_result():
-                        if res.chain:
-                            try:
-                                await event.send(
-                                    MessageChain(
-                                        chain=res.chain,
-                                        type="tool_direct_result",
+                        # NOTE: Tool 在这里直接请求发送消息给用户
+                        # TODO: 是否需要判断 event.get_result() 是否为空?
+                        # 如果为空,则说明没有发送消息给用户,并且返回值为空,将返回一个特殊的 TextContent,其内容如"工具没有返回内容"
+                        if res := run_context.context.event.get_result():
+                            if res.chain:
+                                try:
+                                    await event.send(
+                                        MessageChain(
+                                            chain=res.chain,
+                                            type="tool_direct_result",
+                                        )
                                     )
-                                )
-                            except Exception as e:
-                                logger.error(
-                                    f"Tool 直接发送消息失败: {e}",
-                                    exc_info=True,
-                                )
-                    yield None
-            except asyncio.TimeoutError:
-                raise Exception(
-                    f"tool {tool.name} execution timeout after {tool_call_timeout or run_context.tool_call_timeout} seconds.",
-                )
-            except StopAsyncIteration:
-                break
+                                except Exception as e:
+                                    logger.error(
+                                        f"Tool 直接发送消息失败: {e}",
+                                        exc_info=True,
+                                    )
+                        yield None
+                except asyncio.TimeoutError:
+                    raise Exception(
+                        f"tool {tool.name} execution timeout after {effective_timeout} seconds.",
+                    )
+                except StopAsyncIteration:
+                    break
 
     @classmethod
     async def _execute_mcp(
@@ -792,18 +860,19 @@ async def call_local_llm_tool(
     if inspect.isasyncgen(ready_to_call):
         _has_yielded = False
         try:
-            async for ret in ready_to_call:
-                # 这里逐步执行异步生成器, 对于每个 yield 返回的 ret, 执行下面的代码
-                # 返回值只能是 MessageEventResult 或者 None（无返回值）
-                _has_yielded = True
-                if isinstance(ret, MessageEventResult | CommandResult):
-                    # 如果返回值是 MessageEventResult, 设置结果并继续
-                    event.set_result(ret)
-                    yield
-                else:
-                    # 如果返回值是 None, 则不设置结果并继续
-                    # 继续执行后续阶段
-                    yield ret
+            async with aclosing(iterate_in_task(ready_to_call)) as results:
+                async for ret in results:
+                    # 这里逐步执行异步生成器, 对于每个 yield 返回的 ret, 执行下面的代码
+                    # 返回值只能是 MessageEventResult 或者 None（无返回值）
+                    _has_yielded = True
+                    if isinstance(ret, MessageEventResult | CommandResult):
+                        # 如果返回值是 MessageEventResult, 设置结果并继续
+                        event.set_result(ret)
+                        yield
+                    else:
+                        # 如果返回值是 None, 则不设置结果并继续
+                        # 继续执行后续阶段
+                        yield ret
             if not _has_yielded:
                 # 如果这个异步生成器没有执行到 yield 分支
                 yield

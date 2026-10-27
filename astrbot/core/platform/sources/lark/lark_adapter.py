@@ -25,6 +25,7 @@ from astrbot.api.platform import (
     Platform,
     PlatformMetadata,
 )
+from astrbot.core import sp
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import MediaResolver
@@ -33,6 +34,7 @@ from astrbot.core.utils.webhook_utils import log_webhook_info
 from ...register import register_platform_adapter
 from .bot_info import request_lark_bot_info
 from .lark_event import LarkMessageEvent
+from .lark_group_info import get_lark_group
 from .server import LarkWebhookServer
 
 USER_NAME_CACHE_TTL_SECONDS = 1800
@@ -140,25 +142,29 @@ class LarkPlatformAdapter(Platform):
         *,
         bot_self_id: str | None = None,
         bot_name: str | None = None,
+        preserve_whitespace: bool = False,
     ) -> str:
         """Build the text projection for parsed Lark message components.
 
-        A leading bot-self mention is omitted when identity information is provided;
-        the original component list is not modified.
+        A leading bot-self mention (after any whitespace) is omitted when identity
+        information is provided; the original component list is not modified.
 
         Args:
             components: Parsed Lark message components.
             bot_self_id: Bot identifier used to recognize a leading self mention.
             bot_name: Bot display name used when the mention has no identifier.
+            preserve_whitespace: Preserve post text and explicit paragraph separators.
 
         Returns:
-            Normalized text used by wake-prefix and command matching.
+            Message text, preserving post formatting when requested.
         """
         normalized_self_id = str(bot_self_id or "").strip()
         normalized_bot_name = str(bot_name or "").strip()
         parts: list[str] = []
-        for index, comp in enumerate(components):
-            if index == 0 and isinstance(comp, Comp.At):
+        is_leading = True
+        for comp in components:
+            if is_leading and isinstance(comp, Comp.At):
+                is_leading = False
                 mention_id = str(comp.qq or "").strip()
                 mention_name = str(comp.name or "").strip()
                 is_self_mention = bool(
@@ -171,8 +177,11 @@ class LarkPlatformAdapter(Platform):
                 if is_self_mention:
                     continue
 
+            if not isinstance(comp, Comp.Plain) or comp.text.strip():
+                is_leading = False
+
             if isinstance(comp, Comp.Plain):
-                text = comp.text.strip()
+                text = comp.text if preserve_whitespace else comp.text.strip()
                 if text:
                     parts.append(text)
             elif isinstance(comp, Comp.At):
@@ -188,12 +197,28 @@ class LarkPlatformAdapter(Platform):
             elif isinstance(comp, Comp.Video):
                 parts.append("[video]")
 
-        return " ".join(parts).strip()
+        return "".join(parts) if preserve_whitespace else " ".join(parts).strip()
 
     @staticmethod
     def _parse_post_content(content: dict[str, Any]) -> list[dict[str, Any]]:
+        """Flatten a post while retaining its title and paragraph boundaries.
+
+        The title is part of the full text used for prefix and command matching.
+
+        Args:
+            content: Decoded Lark post content.
+
+        Returns:
+            Post elements with text elements for the title and line breaks.
+        """
         result: list[dict[str, Any]] = []
-        for item in content.get("content", []):
+        title = content.get("title", "")
+        if title:
+            result.append({"tag": "text", "text": title})
+        for index, item in enumerate(content.get("content", [])):
+            # Empty paragraphs still contribute a line break.
+            if index > 0 or title:
+                result.append({"tag": "text", "text": "\n"})
             if isinstance(item, list):
                 for comp in item:
                     if isinstance(comp, dict):
@@ -268,11 +293,11 @@ class LarkPlatformAdapter(Platform):
                     if user_key in at_map:
                         components.append(at_map[user_key])
                 elif tag == "text":
-                    text = str(comp.get("text", "")).strip()
+                    text = str(comp.get("text", ""))
                     if text:
                         components.append(Comp.Plain(text))
                 elif tag == "a":
-                    text = str(comp.get("text", "")).strip()
+                    text = str(comp.get("text", ""))
                     href = str(comp.get("href", "")).strip()
                     if text and href:
                         components.append(Comp.Plain(f"{text}({href})"))
@@ -383,7 +408,15 @@ class LarkPlatformAdapter(Platform):
     async def _build_reply_from_parent_id(
         self,
         parent_message_id: str,
-    ) -> Comp.Reply | None:
+    ) -> tuple[Comp.Reply, str] | None:
+        """Fetch a reply component and its original Lark message type.
+
+        Args:
+            parent_message_id: ID of the quoted message.
+
+        Returns:
+            Reply and source message type, or None if the message is unavailable.
+        """
         if self.lark_api.im is None:
             logger.error("[Lark] API Client im 模块未初始化")
             return None
@@ -438,12 +471,14 @@ class LarkPlatformAdapter(Platform):
             content=quoted_content_json,
             at_map=quoted_at_map,
         )
-        quoted_text = self._build_message_str_from_components(quoted_chain)
+        quoted_text = self._build_message_str_from_components(
+            quoted_chain, preserve_whitespace=quoted_type == "post"
+        )
         sender_nickname = (
             quoted_sender_id[:8] if quoted_sender_id != "unknown" else "unknown"
         )
 
-        return Comp.Reply(
+        reply = Comp.Reply(
             id=quoted_message_id,
             chain=quoted_chain,
             sender_id=quoted_sender_id,
@@ -452,6 +487,7 @@ class LarkPlatformAdapter(Platform):
             message_str=quoted_text,
             text=quoted_text,
         )
+        return reply, quoted_type
 
     async def _download_file_resource_to_temp(
         self,
@@ -510,6 +546,7 @@ class LarkPlatformAdapter(Platform):
         session: MessageSesion,
         message_chain: MessageChain,
     ) -> None:
+        fallback_chat_id = None
         if session.message_type == MessageType.GROUP_MESSAGE:
             id_type = "chat_id"
             receive_id = session.session_id
@@ -518,6 +555,15 @@ class LarkPlatformAdapter(Platform):
         else:
             id_type = "open_id"
             receive_id = session.session_id
+            try:
+                fallback_chat_id = await sp.get_async(
+                    "lark",
+                    f"{self.meta().id}:{self.appid}",
+                    f"private_chat:{receive_id}",
+                    None,
+                )
+            except Exception as exc:
+                logger.warning("[Lark] Failed to load private chat route: %s", exc)
 
         # 复用 LarkMessageEvent 中的通用发送逻辑
         await LarkMessageEvent.send_message_chain(
@@ -525,6 +571,7 @@ class LarkPlatformAdapter(Platform):
             self.lark_api,
             receive_id=receive_id,
             receive_id_type=id_type,
+            fallback_chat_id=fallback_chat_id,
         )
 
         await super().send_by_session(session, message_chain)
@@ -564,10 +611,14 @@ class LarkPlatformAdapter(Platform):
         abm.message_str = ""
 
         at_list = {}
+        quoted_post_id = None
         if message.parent_id:
-            reply_seg = await self._build_reply_from_parent_id(message.parent_id)
-            if reply_seg:
+            quoted_reply = await self._build_reply_from_parent_id(message.parent_id)
+            if quoted_reply:
+                reply_seg, quoted_type = quoted_reply
                 abm.message.append(reply_seg)
+                if quoted_type == "post":
+                    quoted_post_id = str(reply_seg.id)
 
         if message.mentions:
             for m in message.mentions:
@@ -608,6 +659,7 @@ class LarkPlatformAdapter(Platform):
             parsed_components,
             bot_self_id=self.bot_open_id,
             bot_name=self.bot_name,
+            preserve_whitespace=message.message_type == "post",
         )
 
         if message.message_id is None:
@@ -626,10 +678,7 @@ class LarkPlatformAdapter(Platform):
         abm.raw_message = message
         sender_open_id = event.event.sender.sender_id.open_id
         sender_name = sender_open_id[:8]
-        if (
-            abm.type == MessageType.FRIEND_MESSAGE
-            and getattr(event.event.sender, "sender_type", "user") == "user"
-        ):
+        if getattr(event.event.sender, "sender_type", "user") == "user":
             cached_name = self._user_name_cache.get(sender_open_id)
             if cached_name and time.time() <= cached_name[1]:
                 sender_name = cached_name[0]
@@ -679,8 +728,18 @@ class LarkPlatformAdapter(Platform):
             abm.session_id = abm.group_id
         else:
             abm.session_id = abm.sender.user_id
+            if message.chat_type == "p2p" and message.chat_id:
+                try:
+                    await sp.put_async(
+                        "lark",
+                        f"{self.meta().id}:{self.appid}",
+                        f"private_chat:{sender_open_id}",
+                        message.chat_id,
+                    )
+                except Exception as exc:
+                    logger.warning("[Lark] Failed to save private chat route: %s", exc)
 
-        await self.handle_msg(abm)
+        await self.handle_msg(abm, quoted_post_id=quoted_post_id)
 
     def create_event(self, message: AstrBotMessage) -> LarkMessageEvent:
         """Creates a Lark message event.
@@ -699,8 +758,21 @@ class LarkPlatformAdapter(Platform):
             bot=self.lark_api,
         )
 
-    async def handle_msg(self, abm: AstrBotMessage) -> None:
-        self.commit_event(self.create_event(abm))
+    async def handle_msg(
+        self, abm: AstrBotMessage, *, quoted_post_id: str | None = None
+    ) -> None:
+        """Queue a Lark event with metadata for preserving quoted post whitespace.
+
+        Args:
+            abm: Parsed message, including its reply component.
+            quoted_post_id: Quoted message ID, only when its source type is post.
+        """
+        if abm.type == MessageType.GROUP_MESSAGE and abm.group:
+            await get_lark_group(self.lark_api, abm.group)
+        event = self.create_event(abm)
+        if quoted_post_id is not None:
+            event.set_extra("lark_quoted_post_id", quoted_post_id)
+        self.commit_event(event)
 
     async def handle_webhook_event(self, event_data: dict) -> None:
         """处理 Webhook 事件

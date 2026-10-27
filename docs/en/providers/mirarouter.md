@@ -9,7 +9,7 @@
 
 ## Configure AstrBot
 
-Open the AstrBot dashboard and go to **Providers → Add Provider → MiraRouter**. Enter the following values:
+Open the AstrBot dashboard and go to **Providers → Chat Completion → Add → MiraRouter**. Enter the following values:
 
 | Field | Value |
 | --- | --- |
@@ -19,10 +19,10 @@ Open the AstrBot dashboard and go to **Providers → Add Provider → MiraRouter
 
 AstrBot automatically adds the `X-APP-CODE: astrbot` identifier to MiraRouter requests.
 
-Save the provider, then open its card and add the models you want to use from the [MiraRouter models and pricing](https://mirarouter.com/models) page.
+Enter the provider name and `API Key`, check the `API Base URL`, then click **Save and Fetch Models**. Click `+` beside the desired model and make sure it is enabled. Alternatively, click **Save Configuration**, then **Custom Model** and enter the exact model ID. Use **Test Model** beside the configured model to check availability.
 
 ## Set as Default
 
-Go to **Settings → Provider Settings**, select the MiraRouter model you just added as the default chat model, and save the configuration.
+Open **Config**, select the profile to use, and go to **AI → Model**. Set **Chat Model** to the model you just added, then click **Save Configuration** at the bottom right. This setting is for AstrBot built-in AI.
 
 For more details, see the [MiraRouter documentation](https://docs.mirarouter.com/).

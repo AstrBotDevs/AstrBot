@@ -8,7 +8,7 @@ AstrBot 支持接入微信公众平台（版本 >= v3.5.8），并以微信公�
 
 1. 进入 AstrBot 的管理面板
 2. 点击左边栏 `机器人`
-3. 然后在右边的界面中，点击 `+ 创建机器人`
+3. 点击机器人列表上方的 `创建机器人`
 4. 选择 `weixin_official_account(微信公众平台)`
 
 这将弹出一个对话框。接下来，不要关闭页面，转移到下一步。
@@ -39,13 +39,11 @@ AstrBot 支持接入微信公众平台（版本 >= v3.5.8），并以微信公�
 
 建议保持 `统一 Webhook 模式 (unified_webhook_mode)` 为开启状态。
 
-现在应该已经填完 AstrBot 连接到微信公众平台的所有配置项。点击 AstrBot 配置页右下角保存，等待 AstrBot 重启。
+现在应该已经填完 AstrBot 连接到微信公众平台的所有配置项。点击创建弹窗中的 `保存`（修改已有机器人时点击 `保存更改`），等待适配器重新加载。
 
 `URL` 填写：
 
-- 如果开启了 `统一 Webhook 模式`，点击保存之后，AstrBot 将会自动为你生成唯一的 Webhook 回调链接，你可以在日志中或者 WebUI 的机器人页的卡片上找到，将该链接填入 URL 处。
-
-![unified_webhook](https://files.astrbot.app/docs/source/images/use/unified-webhook.png)
+- 如果开启了 `统一 Webhook 模式`，点击保存之后，AstrBot 将会自动为你生成唯一的 Webhook 回调链接，你可以在 `数据与日志 → 日志` 中查看，或在 `机器人` 页选中该机器人，点击 `查看 Webhook 链接`，将该链接填入 URL 处。
 
 - 如果没有开启 `统一 Webhook 模式`，请填入 `http://你的域名/callback/command`。
 
