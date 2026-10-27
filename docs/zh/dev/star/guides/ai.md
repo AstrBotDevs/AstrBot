@@ -86,13 +86,13 @@ if should_reply.choice == "reply" and should_reply.probability >= 0.7:
 
 ```py
 choice = await self.context.decision.choose(
-    "Which reply strategy should be used?",
-    {"short": "A brief reply", "detailed": "A detailed reply"},
+    question="Which reply strategy should be used?",
+    options={"short": "A brief reply", "detailed": "A detailed reply"},
     state=recent_messages,
 )
 
 should_reply = await self.context.decision.yes_no(
-    "Should the assistant reply now?",
+    question="Should the assistant reply now?",
     state=recent_messages,
     threshold=0.7,
 )
