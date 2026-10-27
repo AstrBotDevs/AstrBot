@@ -17,6 +17,7 @@ from urllib.parse import urljoin, urlparse
 
 import aiohttp
 import certifi
+from aiohttp.abc import AbstractResolver
 
 from astrbot.api import sp
 from astrbot.core import DEMO_MODE, file_token_service, logger
@@ -69,6 +70,52 @@ class RegistrySource:
     urls: list[str]
     cache_file: str
     md5_url: str | None
+
+
+class _StaticReadmeResolver(AbstractResolver):
+    """Resolve a README host only to addresses validated by PluginService."""
+
+    def __init__(self, addresses: list[tuple]) -> None:
+        self._addresses = addresses
+
+    async def resolve(
+        self,
+        host: str,
+        port: int = 0,
+        family: int = socket.AF_INET,
+    ) -> list[dict[str, Any]]:
+        """Return only the prevalidated addresses for the requested host.
+
+        Args:
+            host: Original hostname used for TLS and the Host header.
+            port: Connection port.
+            family: Requested socket address family.
+
+        Returns:
+            Resolver-compatible records containing validated addresses.
+        """
+        results = []
+        for address in self._addresses:
+            if family not in {socket.AF_UNSPEC, address[0]}:
+                continue
+            sockaddr = address[4]
+            resolved = {
+                "hostname": host,
+                "host": sockaddr[0],
+                "port": port,
+                "family": address[0],
+                "proto": address[2],
+                "flags": 0,
+            }
+            if address[0] == socket.AF_INET6 and len(sockaddr) >= 4:
+                resolved["flowinfo"] = sockaddr[2]
+                resolved["scopeid"] = sockaddr[3]
+            results.append(resolved)
+        return results
+
+    async def close(self) -> None:
+        """Close the resolver; pinned addresses need no cleanup."""
+        return None
 
 
 class PluginServiceError(Exception):
@@ -2087,14 +2134,16 @@ class PluginService:
             ) from exc
 
     @staticmethod
-    async def _validate_public_readme_url(url: str) -> str:
-        """Validate that a README URL is HTTPS and resolves publicly.
+    async def _resolve_public_readme_url(
+        url: str,
+    ) -> tuple[str, list[tuple]]:
+        """Validate a README URL and return its public DNS answers.
 
         Args:
             url: Candidate README URL.
 
         Returns:
-            The normalized URL.
+            The normalized URL and the validated socket addresses.
 
         Raises:
             PluginServiceError: If the URL is invalid or resolves privately.
@@ -2133,7 +2182,20 @@ class PluginService:
                 "README URL resolves to a non-public address",
                 public_message="README 地址必须指向公网主机",
             )
-        return parsed.geturl()
+        return parsed.geturl(), addresses
+
+    @staticmethod
+    async def _validate_public_readme_url(url: str) -> str:
+        """Validate that a README URL is HTTPS and resolves publicly.
+
+        Args:
+            url: Candidate README URL.
+
+        Returns:
+            The normalized URL.
+        """
+        normalized_url, _ = await PluginService._resolve_public_readme_url(url)
+        return normalized_url
 
     async def _fetch_remote_readme(self, url: str) -> str | None:
         """Fetch a README through a bounded public HTTPS request.
@@ -2150,14 +2212,17 @@ class PluginService:
         request_url = url
         ssl_context = ssl.create_default_context(cafile=certifi.where())
         timeout = aiohttp.ClientTimeout(total=PLUGIN_README_TIMEOUT_SECONDS)
-        connector = aiohttp.TCPConnector(ssl=ssl_context)
-        async with aiohttp.ClientSession(
-            timeout=timeout,
-            connector=connector,
-            trust_env=True,
-        ) as session:
-            for _ in range(4):
-                request_url = await self._validate_public_readme_url(request_url)
+        for _ in range(4):
+            request_url, addresses = await self._resolve_public_readme_url(request_url)
+            connector = aiohttp.TCPConnector(
+                ssl=ssl_context,
+                resolver=_StaticReadmeResolver(addresses),
+            )
+            async with aiohttp.ClientSession(
+                timeout=timeout,
+                connector=connector,
+                trust_env=True,
+            ) as session:
                 async with session.get(
                     request_url,
                     allow_redirects=False,
@@ -2279,19 +2344,25 @@ class PluginService:
                 "Marketplace plugin has no supported repository",
                 public_message="该插件没有可用于读取 README 的仓库地址",
             ) from exc
-        if repository.provider != "github":
+        if repository.provider not in {"github", "github.com"}:
             raise PluginServiceError(
                 "Automatic README lookup only supports GitHub",
                 public_message="该仓库不是 GitHub，无法自动读取 README",
             )
 
-        github_repository = GitHubRepository.parse(normalized_repo)
-        candidates = self._readme_filename_candidates(locale)
-        candidates.extend(
-            filename
-            for filename in ("README_zh.md", "README-zh.md", "README.zh.md")
-            if filename not in candidates
+        github_repository = GitHubRepository(
+            owner=repository.owner,
+            name=repository.name,
+            branch=repository.branch,
         )
+        candidates = self._readme_filename_candidates(locale)
+        normalized_locale = str(locale or "").strip().replace("_", "-").lower()
+        if normalized_locale.startswith("zh"):
+            candidates.extend(
+                filename
+                for filename in ("README_zh.md", "README-zh.md", "README.zh.md")
+                if filename not in candidates
+            )
         for filename in candidates:
             content = await self._fetch_remote_readme(
                 github_repository.raw_file_url(filename)

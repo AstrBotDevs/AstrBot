@@ -161,6 +161,68 @@ async def test_market_readme_rejects_non_github_repository_without_url(
 
 
 @pytest.mark.asyncio
+async def test_market_readme_supports_scp_github_repository(monkeypatch) -> None:
+    service = _empty_plugin_service()
+    requested_urls: list[str] = []
+
+    async def fake_get_online_plugins(**_kwargs):
+        return {
+            "owner/astrbot_plugin_demo": {
+                "author": "owner",
+                "name": "astrbot_plugin_demo",
+                "repo": "git@github.com:owner/astrbot_plugin_demo.git",
+            }
+        }, None
+
+    async def fake_fetch_remote_readme(url: str):
+        requested_urls.append(url)
+        return "# Default README"
+
+    monkeypatch.setattr(service, "get_online_plugins", fake_get_online_plugins)
+    monkeypatch.setattr(service, "_fetch_remote_readme", fake_fetch_remote_readme)
+
+    data, _ = await service.get_market_plugin_readme(
+        plugin_id="owner/astrbot_plugin_demo",
+        locale="en-US",
+    )
+
+    assert data["filename"] == "README_en-US.md"
+    assert requested_urls == [
+        "https://raw.githubusercontent.com/owner/astrbot_plugin_demo/HEAD/README_en-US.md"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_market_readme_does_not_fallback_to_chinese_for_other_locale(
+    monkeypatch,
+) -> None:
+    service = _empty_plugin_service()
+
+    async def fake_get_online_plugins(**_kwargs):
+        return {
+            "owner/astrbot_plugin_demo": {
+                "author": "owner",
+                "name": "astrbot_plugin_demo",
+                "repo": "https://github.com/owner/astrbot_plugin_demo",
+            }
+        }, None
+
+    async def fake_fetch_remote_readme(url: str):
+        if url.endswith("/README_zh.md"):
+            return "# 中文 README"
+        return None
+
+    monkeypatch.setattr(service, "get_online_plugins", fake_get_online_plugins)
+    monkeypatch.setattr(service, "_fetch_remote_readme", fake_fetch_remote_readme)
+
+    with pytest.raises(PluginServiceError, match="not found"):
+        await service.get_market_plugin_readme(
+            plugin_id="owner/astrbot_plugin_demo",
+            locale="en-US",
+        )
+
+
+@pytest.mark.asyncio
 async def test_readme_url_rejects_private_address() -> None:
     with pytest.raises(PluginServiceError, match="non-public"):
         await PluginService._validate_public_readme_url("https://127.0.0.1/README.md")

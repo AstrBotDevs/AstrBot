@@ -35,7 +35,7 @@ const props = defineProps({
   },
 });
 
-const { tm, router, selectedSource } = props.state;
+const { tm, router, selectedSource, getMarketPluginKey } = props.state;
 const { locale } = useI18n();
 const {
   pluginName,
@@ -705,10 +705,13 @@ const fetchReadme = async () => {
 
   if (isMarketDetail.value) {
     try {
-      const res = await pluginApi.marketReadme(plugin.name, {
-        locale: locale.value,
-        customRegistry: selectedSource?.value || null,
-      });
+      const res = await pluginApi.marketReadme(
+        getMarketPluginKey(plugin) || plugin.name,
+        {
+          locale: locale.value,
+          customRegistry: selectedSource?.value || null,
+        },
+      );
       if (requestId !== readmeRequestId) return;
       if (res.data.status !== "ok") {
         readmeEmpty.value = true;
