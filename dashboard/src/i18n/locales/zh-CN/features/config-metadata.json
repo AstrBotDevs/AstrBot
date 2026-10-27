@@ -1985,6 +1985,10 @@
         "description": "总超时时间",
         "hint": "单次决策请求的总超时时间（秒），包含等待并发名额、重试与退避；默认 5 秒。"
       },
+      "max_concurrency": {
+        "description": "最大并发数",
+        "hint": "该提供商同时进行的决策请求上限；默认 4。"
+      },
       "proxy": {
         "description": "代理地址",
         "hint": "HTTP/HTTPS 代理地址，格式如 http://127.0.0.1:7890。仅对该提供商的 API 请求生效，不影响 Docker 内网通信。"

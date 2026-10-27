@@ -176,6 +176,19 @@ def test_system_one_templates_expose_total_timeout():
         assert templates[name]["total_timeout"] == 5
 
 
+def test_system_one_templates_expose_max_concurrency():
+    templates = CONFIG_METADATA_2["provider_group"]["metadata"]["provider"][
+        "config_template"
+    ]
+    for name in (
+        "TypeSafe System One",
+        "OpenRouter System One",
+        "Vercel System One",
+        "Custom System One",
+    ):
+        assert templates[name]["max_concurrency"] == 4
+
+
 @pytest.mark.asyncio
 async def test_system_one_provider_defaults_to_two_second_timeout():
     provider = SystemOneDecisionProvider(
@@ -208,6 +221,40 @@ async def test_system_one_total_timeout_caps_the_request():
             )
     finally:
         await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_system_one_limits_concurrent_requests():
+    in_flight = 0
+    peak = 0
+
+    async def post(*args, **kwargs):
+        nonlocal in_flight, peak
+        in_flight += 1
+        peak = max(peak, in_flight)
+        try:
+            await asyncio.sleep(0.03)
+            return httpx.Response(
+                200,
+                json={"answers": {"available": {"type": "noul", "noul": 1.0}}},
+                request=httpx.Request("POST", provider.base_url),
+            )
+        finally:
+            in_flight -= 1
+
+    provider = _provider(lambda request: httpx.Response(500), max_concurrency=2)
+    provider.client.post = AsyncMock(side_effect=post)
+    try:
+        await asyncio.gather(
+            *(
+                provider.ask({"available": DecisionBooleanQuestion("Is it available?")})
+                for _ in range(6)
+            )
+        )
+    finally:
+        await provider.terminate()
+
+    assert peak == 2
 
 
 @pytest.mark.asyncio

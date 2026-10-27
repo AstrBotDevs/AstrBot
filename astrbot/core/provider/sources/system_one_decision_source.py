@@ -24,6 +24,7 @@ from .request_retry import retry_provider_request
 
 _DEFAULT_PROBABILITY_TOLERANCE = 0.05
 _DEFAULT_TOTAL_TIMEOUT = 5.0
+_DEFAULT_MAX_CONCURRENCY = 4
 _RESPONSE_SUMMARY_CHARS = 500
 
 
@@ -76,6 +77,12 @@ class SystemOneDecisionProvider(DecisionProvider):
         )
         if self.total_timeout <= 0:
             raise ValueError("total_timeout must be greater than 0")
+        self.max_concurrency = int(
+            provider_config.get("max_concurrency", _DEFAULT_MAX_CONCURRENCY)
+        )
+        if self.max_concurrency <= 0:
+            raise ValueError("max_concurrency must be greater than 0")
+        self.request_semaphore = asyncio.Semaphore(self.max_concurrency)
         self.probability_tolerance = float(
             provider_config.get(
                 "probability_tolerance",
@@ -149,11 +156,12 @@ class SystemOneDecisionProvider(DecisionProvider):
             return response.json()
 
         async def _request() -> Any:
-            return await retry_provider_request(
-                "System One Decision",
-                _post,
-                max_attempts=request_max_retries + 1,
-            )
+            async with self.request_semaphore:
+                return await retry_provider_request(
+                    "System One Decision",
+                    _post,
+                    max_attempts=request_max_retries + 1,
+                )
 
         try:
             body = await asyncio.wait_for(_request(), timeout=self.total_timeout)
