@@ -23,7 +23,6 @@ from ..provider import DecisionProvider
 from ..register import register_provider_adapter
 from .request_retry import retry_provider_request
 
-_DEFAULT_PROBABILITY_TOLERANCE = 0.05
 _DEFAULT_TOTAL_TIMEOUT = 5.0
 _DEFAULT_MAX_CONCURRENCY = 4
 _RESPONSE_SUMMARY_CHARS = 500
@@ -81,14 +80,6 @@ class SystemOneDecisionProvider(DecisionProvider):
         if self.max_concurrency <= 0:
             raise ValueError("max_concurrency must be greater than 0")
         self.request_semaphore = asyncio.Semaphore(self.max_concurrency)
-        self.probability_tolerance = float(
-            provider_config.get(
-                "probability_tolerance",
-                _DEFAULT_PROBABILITY_TOLERANCE,
-            )
-        )
-        if not 0 <= self.probability_tolerance <= 1:
-            raise ValueError("probability_tolerance must be between 0 and 1")
         self.client = httpx.AsyncClient(
             timeout=self.timeout,
             proxy=self.proxy,
@@ -239,10 +230,8 @@ class SystemOneDecisionProvider(DecisionProvider):
                     and valid_numbers
                     and set(probabilities) == set(question.options)
                     and choice in question.options
-                    and abs(sum(probabilities.values()) - 1)
-                    <= self.probability_tolerance
-                    and probabilities[choice]
-                    >= max(probabilities.values()) - self.probability_tolerance
+                    and math.isclose(sum(probabilities.values()), 1.0)
+                    and math.isclose(probabilities[choice], max(probabilities.values()))
                 ):
                     summary = _summarize_response(raw_answer)
                     logger.warning(

@@ -2057,10 +2057,6 @@
       "api_base": {
         "description": "API Base URL"
       },
-      "probability_tolerance": {
-        "description": "判定確率の許容差",
-        "hint": "確率の合計と 1 の差、および選択された選択肢と最高確率の選択肢との差の許容値です。既定値は 0.05 です。"
-      },
       "total_timeout": {
         "description": "総タイムアウト",
         "hint": "1 回の判定リクエストの総タイムアウト（秒）です。同時実行枠の待機、再試行、バックオフを含みます。既定値は 5 秒です。"

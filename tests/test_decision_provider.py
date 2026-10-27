@@ -151,19 +151,6 @@ def test_system_one_templates_use_a_single_key_and_two_second_timeout():
         assert templates[name]["timeout"] == 2
 
 
-def test_system_one_templates_expose_probability_tolerance():
-    templates = CONFIG_METADATA_2["provider_group"]["metadata"]["provider"][
-        "config_template"
-    ]
-    for name in (
-        "TypeSafe System One",
-        "OpenRouter System One",
-        "Vercel System One",
-        "Custom System One",
-    ):
-        assert templates[name]["probability_tolerance"] == 0.05
-
-
 def test_system_one_templates_expose_total_timeout():
     templates = CONFIG_METADATA_2["provider_group"]["metadata"]["provider"][
         "config_template"
@@ -298,55 +285,6 @@ async def test_system_one_rejects_invalid_choice_answers(choice_answer):
             )
     finally:
         await provider.terminate()
-
-
-@pytest.mark.asyncio
-async def test_system_one_probability_tolerance_is_configurable():
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
-            200,
-            json={
-                "answers": {
-                    "decision": {
-                        "choice": "ignore",
-                        "confidence": 0.9,
-                        "probabilities": {"respond": 0.55, "ignore": 0.53},
-                    }
-                }
-            },
-        )
-
-    provider = _provider(handler)
-    try:
-        with pytest.raises(DecisionError, match="invalid choice answer"):
-            await provider.ask(
-                {
-                    "decision": DecisionChoiceQuestion(
-                        "Choose one",
-                        {"respond": "Reply", "ignore": "Ignore"},
-                    )
-                }
-            )
-    finally:
-        await provider.terminate()
-
-    provider = _provider(handler, probability_tolerance=0.1)
-    try:
-        answer = (
-            await provider.ask(
-                {
-                    "decision": DecisionChoiceQuestion(
-                        "Choose one",
-                        {"respond": "Reply", "ignore": "Ignore"},
-                    )
-                }
-            )
-        )["decision"]
-    finally:
-        await provider.terminate()
-
-    assert answer.choice == "ignore"
-    assert answer.probability == 0.53
 
 
 @pytest.mark.asyncio

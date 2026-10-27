@@ -438,7 +438,7 @@ const legacyConfigSections = computed(() => {
 
   const advancedFields = new Set([
     'timeout', 'total_timeout', 'max_concurrency',
-    'probability_tolerance', 'proxy', 'custom_headers'
+    'proxy', 'custom_headers'
   ])
   const basic = {}
   const advanced = {}
@@ -629,6 +629,9 @@ function selectLegacyProvider(provider) {
 
   if (defaultConfig) {
     mergeConfigWithOrder(newSelectedProviderConfig.value, provider, defaultConfig)
+  }
+  if (provider.type === 'system_one_decision') {
+    delete newSelectedProviderConfig.value.probability_tolerance
   }
 
   updatingMode.value = !provider[unsavedLegacyProviderMarker]

@@ -1956,10 +1956,6 @@
       "api_base": {
         "description": "API Base URL"
       },
-      "probability_tolerance": {
-        "description": "Decision probability tolerance",
-        "hint": "Allowed deviation of the probability sum from 1 and of the selected option from the highest-probability option; default 0.05."
-      },
       "total_timeout": {
         "description": "Total timeout",
         "hint": "Total timeout in seconds for one decision request, including concurrency-slot wait, retries, and backoff; default 5 seconds."

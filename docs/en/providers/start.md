@@ -30,7 +30,7 @@ AstrBot's **Decision** provider performs low-latency structured decisions, such 
 2. Select `TypeSafe System One`, `OpenRouter System One`, or `Vercel System One`. For another System One-compatible service, select `Custom System One`.
 3. Enter a single `API Key`, the `API Base URL`, and model ID. The key is a string with no multi-key rotation; use `$ENV_VARIABLE_NAME` to reference an environment variable. Custom service base URLs get `/systemone` appended by default, so `https://api.example.com/v1` requests `https://api.example.com/v1/systemone`; end the URL with `/` to use it as the complete endpoint. Save, then click **Test** to verify connectivity.
 
-Timeout, total timeout, maximum concurrency, probability tolerance, proxy address, and custom headers have moved from **Settings** to the collapsed **Advanced Configuration...** section. Expand it to edit these fields, then click **Save**.
+Timeout, total timeout, maximum concurrency, proxy address, and custom headers have moved from **Settings** to the collapsed **Advanced Configuration...** section. Expand it to edit these fields, then click **Save**. Probability tolerance has been removed from advanced configuration and is handled internally by floating-point comparisons.
 
 One request can answer multiple decision questions. Reply gating and proactive-reply thresholds remain in the caller; AstrBot only handles the model request, response validation, and normalized results.
 
