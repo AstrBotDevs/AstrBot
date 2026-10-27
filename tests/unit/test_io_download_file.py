@@ -1,4 +1,5 @@
 import asyncio
+import os
 import stat
 
 import pytest
@@ -319,12 +320,120 @@ async def test_failed_publication_preserves_destination(
     target.write_bytes(b"old")
     patch_response(_FakeResponse(status=200, chunks=[b"new"]))
 
-    def fail_replace(self, destination):
+    def fail_replace(staging, destination, original_stat):
         raise PermissionError("destination is busy")
 
-    monkeypatch.setattr(io.Path, "replace", fail_replace)
+    monkeypatch.setattr(io, "_publish_download", fail_replace)
     with pytest.raises(PermissionError, match="destination is busy"):
         await io.download_file("https://example.test/file", str(target))
 
     assert target.read_bytes() == b"old"
     assert list(tmp_path.iterdir()) == [target]
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="POSIX mode and xattrs")
+async def test_download_preserves_access_metadata_without_privilege_bits(
+    patch_response, tmp_path
+):
+    target = tmp_path / "download.bin"
+    target.write_bytes(b"old")
+    target.chmod(0o6750)
+    before = target.stat()
+    if hasattr(os, "setxattr"):
+        os.setxattr(target, "user.astrbot-test", b"keep this metadata")
+    patch_response(_FakeResponse(status=200, chunks=[b"new"]))
+
+    await io.download_file("https://example.test/file", str(target))
+
+    assert target.read_bytes() == b"new"
+    assert stat.S_IMODE(target.stat().st_mode) == 0o750
+    assert (target.stat().st_uid, target.stat().st_gid) == (before.st_uid, before.st_gid)
+    if hasattr(os, "getxattr"):
+        assert os.getxattr(target, "user.astrbot-test") == b"keep this metadata"
+
+
+@pytest.mark.asyncio
+async def test_readonly_destination_is_not_overwritten(patch_response, tmp_path):
+    if os.name != "nt" and os.geteuid() == 0:
+        pytest.skip("Root bypasses ordinary file write permissions")
+    target = tmp_path / "download.bin"
+    target.write_bytes(b"old")
+    target.chmod(0o444)
+    patch_response(_FakeResponse(status=200, chunks=[b"new"]))
+    try:
+        with pytest.raises(PermissionError):
+            await io.download_file("https://example.test/file", str(target))
+        assert target.read_bytes() == b"old"
+        assert list(tmp_path.iterdir()) == [target]
+    finally:
+        target.chmod(0o600)
+
+
+@pytest.mark.asyncio
+async def test_older_success_cannot_replace_newer_download(monkeypatch, tmp_path):
+    target = tmp_path / "download.bin"
+    target.write_bytes(b"old")
+    older_ready = asyncio.Event()
+    release_older = asyncio.Event()
+    _patch_download_sessions(monkeypatch, [
+        _FakeResponse(status=200, chunks=[b"older response"]),
+        _FakeResponse(status=200, chunks=[b"newer response"]),
+    ])
+
+    async def older_progress(payload):
+        if payload["downloaded"]:
+            older_ready.set()
+            await release_older.wait()
+
+    pending = asyncio.create_task(io.download_file(
+        "https://example.test/older", str(target), progress_callback=older_progress
+    ))
+    try:
+        await asyncio.wait_for(older_ready.wait(), 5)
+        await io.download_file("https://example.test/newer", str(target))
+        release_older.set()
+        with pytest.raises(FileExistsError, match="changed while downloading"):
+            await pending
+        assert target.read_bytes() == b"newer response"
+        assert list(tmp_path.iterdir()) == [target]
+    finally:
+        release_older.set()
+        pending.cancel()
+        await asyncio.gather(pending, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(os.name != "nt", reason="Windows alternate data streams")
+async def test_windows_replacement_preserves_alternate_stream(patch_response, tmp_path):
+    target = tmp_path / "download.bin"
+    target.write_bytes(b"old")
+    stream = io.Path(str(target) + ":astrbot-test")
+    stream.write_bytes(b"existing access metadata")
+    patch_response(_FakeResponse(status=200, chunks=[b"new"]))
+
+    await io.download_file("https://example.test/file", str(target))
+
+    assert target.read_bytes() == b"new"
+    assert stream.read_bytes() == b"existing access metadata"
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="POSIX directory permissions")
+async def test_nonwritable_parent_fails_without_changing_existing_file(
+    patch_response, tmp_path
+):
+    if os.geteuid() == 0:
+        pytest.skip("Root bypasses ordinary directory write permissions")
+    folder = tmp_path / "protected"
+    folder.mkdir()
+    target = folder / "download.bin"
+    target.write_bytes(b"old")
+    folder.chmod(0o555)
+    patch_response(_FakeResponse(status=200, chunks=[b"new"]))
+    try:
+        with pytest.raises(PermissionError):
+            await io.download_file("https://example.test/file", str(target))
+        assert target.read_bytes() == b"old"
+    finally:
+        folder.chmod(0o755)
