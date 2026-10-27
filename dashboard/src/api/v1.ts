@@ -47,6 +47,7 @@ import {
   type PluginValidateRepoRequest,
   type PluginConfigFileDeleteRequest,
   type ProviderConfigRequest,
+  type PypiIndexTestRequest,
   type RuntimeInfo,
   type BatchSessionProviderRequest,
   type BatchSessionServiceRequest,
@@ -157,7 +158,7 @@ export interface BotListParams {
 }
 
 export interface ProviderListParams {
-  capability?: 'chat' | 'stt' | 'tts' | 'embedding' | 'rerank';
+  capability?: 'chat' | 'stt' | 'tts' | 'embedding' | 'rerank' | 'decision';
   source_id?: string;
   enabled?: boolean;
 }
@@ -214,6 +215,7 @@ const PROVIDER_TYPE_TO_CAPABILITY: Record<string, ProviderCapability> = {
   text_to_speech: 'tts',
   embedding: 'embedding',
   rerank: 'rerank',
+  decision: 'decision',
 };
 
 type V1Response<T> = Promise<
@@ -1882,6 +1884,21 @@ export const statsApi = {
           '/api/stat/test-ghproxy-connection',
           payload,
         ),
+    );
+  },
+  testPypiIndex(payload: PypiIndexTestRequest) {
+    return typed<{ latency?: number }>(
+      openApiV1.testPypiIndexConnection({ body: payload }),
+    );
+  },
+  measureGhproxySpeed(payload: GhproxyTestRequest) {
+    return typed<{ speed?: number; bytes?: number; duration?: number }>(
+      openApiV1.measureGhproxySpeed({ body: payload }),
+    );
+  },
+  measurePypiIndexSpeed(payload: PypiIndexTestRequest) {
+    return typed<{ speed?: number; bytes?: number; duration?: number }>(
+      openApiV1.measurePypiIndexSpeed({ body: payload }),
     );
   },
   startTime() {
