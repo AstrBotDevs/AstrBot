@@ -445,6 +445,9 @@
     "discardChanges": "This file has unsaved changes. Discard them?"
   },
   "card": {
+    "repositoryVersion": "Last validated: {version}",
+    "repositoryVersionUnknown": "Repository version not checked",
+    "repositoryVersionHint": "Recorded: {time}. This is a saved observation, not a live update check. Use Change Plugin Source and validate the repository to refresh it.",
     "actions": {
       "pluginConfig": "Extension Config",
       "uninstallPlugin": "Delete Plugin",

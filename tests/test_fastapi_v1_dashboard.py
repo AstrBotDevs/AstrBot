@@ -3037,7 +3037,9 @@ async def test_plugin_service_bind_market_source_validates_and_persists(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("repository_version", [" v2.0.0 ", None, "", {"version": "2.0"}])
 async def test_plugin_service_bind_repo_source_persists_github_method(
+    repository_version,
     asgi_app: FastAPI,
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -3071,6 +3073,7 @@ async def test_plugin_service_bind_repo_source_persists_github_method(
         {
             "name": "astrbot_plugin_demo",
             "install_method": "repository",
+            "repository_version": repository_version,
         }
     )
 
@@ -3081,6 +3084,14 @@ async def test_plugin_service_bind_repo_source_persists_github_method(
     assert record["repo"] == "https://github.com/AstrBotDevs/astrbot-plugin-demo"
     assert record["installed_at"] == "2026-06-26T00:00:00+00:00"
     assert captured["records"]["astrbot_plugin_demo"] == record
+
+    if isinstance(repository_version, str) and repository_version.strip():
+        assert record["repository_version"] == "v2.0.0"
+        assert record["repository_version_recorded_at"] == record["updated_at"]
+        assert datetime.fromisoformat(record["repository_version_recorded_at"]).tzinfo
+    else:
+        assert "repository_version" not in record
+        assert "repository_version_recorded_at" not in record
 
 
 @pytest.mark.asyncio

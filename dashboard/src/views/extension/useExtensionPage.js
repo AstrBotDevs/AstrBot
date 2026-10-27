@@ -781,6 +781,15 @@ export const useExtensionPage = (initialTab = "installed") => {
       extension.update_market_plugin = null;
 
       const source = extension.install_source;
+      if (
+        extension.updates_enabled &&
+        source?.install_method === "repository"
+      ) {
+        extension.online_version = String(
+          source.repository_version || "",
+        ).trim();
+        return;
+      }
       // Implicit records (legacy plugins with no persisted install source)
       // resolve to the default registry, so keep them in the update check
       // instead of skipping them entirely.
@@ -833,26 +842,29 @@ export const useExtensionPage = (initialTab = "installed") => {
           }
 
           extension.update_market_plugin = matchedPlugin;
-          const localVersion = String(extension.version || "").trim();
-          const onlineVersion = String(matchedPlugin.version || "").trim();
-          const isKnownVersion =
-            /^v?\d+/.test(localVersion) &&
-            /^v?\d+/.test(onlineVersion) &&
-            onlineVersion !== tm("status.unknown");
-          const versionCompare = isKnownVersion
-            ? compareVersions(localVersion, onlineVersion)
-            : 0;
-
-          extension.online_version = onlineVersion;
-          extension.has_update =
-            isKnownVersion &&
-            (versionCompare < 0 ||
-              (versionCompare === 0 &&
-                localVersion.includes("-") &&
-                !onlineVersion.includes("-")));
+          extension.online_version = String(matchedPlugin.version || "").trim();
         });
       }),
     );
+
+    data.forEach((extension) => {
+      if (!extension.updates_enabled) return;
+      const localVersion = String(extension.version || "").trim();
+      const onlineVersion = extension.online_version;
+      const isKnownVersion =
+        /^v?\d+/.test(localVersion) &&
+        /^v?\d+/.test(onlineVersion) &&
+        onlineVersion !== tm("status.unknown");
+      const versionCompare = isKnownVersion
+        ? compareVersions(localVersion, onlineVersion)
+        : 0;
+      extension.has_update =
+        isKnownVersion &&
+        (versionCompare < 0 ||
+          (versionCompare === 0 &&
+            localVersion.includes("-") &&
+            !onlineVersion.includes("-")));
+    });
   };
 
   const uninstallExtension = async (
@@ -1664,7 +1676,10 @@ export const useExtensionPage = (initialTab = "installed") => {
       const pendingUpdate = sourceBindingDialog.pendingUpdate;
       const payload =
         candidate.install_method === "repository"
-          ? { install_method: "repository" }
+          ? {
+              install_method: "repository",
+              repository_version: candidate.metadata?.version || "",
+            }
           : {
               install_method: "market",
               registry_url: candidate.registry_url,

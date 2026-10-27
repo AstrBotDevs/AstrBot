@@ -338,6 +338,30 @@ const openView = () => {
               {{ extension.online_version }}
             </v-chip>
             <v-chip
+              v-if="
+                !marketMode &&
+                extension.install_source?.install_method === 'repository'
+              "
+              variant="outlined"
+              label
+              size="small"
+              :title="
+                tm('card.repositoryVersionHint', {
+                  time:
+                    extension.install_source.repository_version_recorded_at ||
+                    tm('status.unknown'),
+                })
+              "
+            >
+              {{
+                extension.install_source.repository_version
+                  ? tm("card.repositoryVersion", {
+                      version: extension.install_source.repository_version,
+                    })
+                  : tm("card.repositoryVersionUnknown")
+              }}
+            </v-chip>
+            <v-chip
               v-for="tag in extension.tags"
               :key="tag"
               :color="tag === 'danger' ? 'error' : 'primary'"

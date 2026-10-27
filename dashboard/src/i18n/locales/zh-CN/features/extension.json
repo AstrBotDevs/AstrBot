@@ -445,6 +445,9 @@
     "discardChanges": "当前文件有未保存修改，确定要丢弃吗？"
   },
   "card": {
+    "repositoryVersion": "上次校验：{version}",
+    "repositoryVersionUnknown": "尚未校验仓库版本",
+    "repositoryVersionHint": "记录时间：{time}。这是已保存的版本记录，并非实时检测结果。通过“更换插件源”校验仓库可刷新记录。",
     "actions": {
       "pluginConfig": "插件配置",
       "uninstallPlugin": "删除插件",
