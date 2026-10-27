@@ -17,14 +17,14 @@ class SharedPreferences:
     def _load_preferences(self):
         if os.path.exists(self.path):
             try:
-                with open(self.path) as f:
+                with open(self.path, encoding="utf-8") as f:
                     return json.load(f)
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, UnicodeDecodeError):
                 os.remove(self.path)
         return {}
 
     def _save_preferences(self) -> None:
-        with open(self.path, "w") as f:
+        with open(self.path, "w", encoding="utf-8") as f:
             json.dump(self._data, f, indent=4, ensure_ascii=False)
             f.flush()
 

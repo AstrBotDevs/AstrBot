@@ -1,4 +1,5 @@
 import asyncio
+import json
 import time
 
 import pytest
@@ -266,3 +267,36 @@ async def test_sync_get_reads_persisted_value_with_exhausted_pool(preferences):
     finally:
         for connection in connections:
             await connection.close()
+
+
+def test_legacy_shared_preferences_file_is_read_as_utf8(tmp_path):
+    """The v3 file holds raw non-ASCII, so the charset cannot depend on the OS locale."""
+    from astrbot.core.db.migration.shared_preferences_v3 import SharedPreferences
+
+    path = tmp_path / "shared_preferences.json"
+    path.write_text(
+        json.dumps({"greeting": "こんにちは \u2603 snowman"}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    store = SharedPreferences(str(path))
+
+    assert store.get("greeting") == "こんにちは \u2603 snowman"
+
+
+def test_legacy_put_preserves_the_file_when_a_value_is_unencodable(tmp_path):
+    """``open(path, "w")`` truncates before encoding, so a failed write must not
+    destroy the preferences that are already on disk."""
+    from astrbot.core.db.migration.shared_preferences_v3 import SharedPreferences
+
+    path = tmp_path / "shared_preferences.json"
+    original = {"keep": "value"}
+    path.write_text(json.dumps(original, ensure_ascii=False), encoding="utf-8")
+
+    store = SharedPreferences(str(path))
+    store.put("extra", "☃ snowman")
+
+    assert json.loads(path.read_text(encoding="utf-8")) == {
+        "keep": "value",
+        "extra": "☃ snowman",
+    }
