@@ -620,11 +620,23 @@ class TelegramPlatformAdapter(Platform):
                     reply_chain = [Comp.Plain(quote_text)]
                     reply_message_str = quote_text
 
+                # waking_check 用 str(message.sender_id) == str(event.get_self_id())
+                # 判断"是否回复了机器人"，但 self_id 是 bot 用户名（见 571 行），
+                # sender_id 却是数字 id，两者永不相等。
+                # 文字消息只是因为下面伪造了 "/@bot " 前缀才碰巧能唤醒，
+                # 贴纸/图片/文件/语音则完全收不到 —— 这里把两者对齐。
+                _reply_sender_id = reply_abm.sender.user_id
+                try:
+                    _reply_from = update.message.reply_to_message.from_user
+                    if _reply_from and str(_reply_from.id) == str(context.bot.id):
+                        _reply_sender_id = message.self_id
+                except Exception:
+                    pass
                 message.message.append(
                     Comp.Reply(
                         id=reply_abm.message_id,
                         chain=reply_chain,
-                        sender_id=reply_abm.sender.user_id,
+                        sender_id=_reply_sender_id,
                         sender_nickname=reply_abm.sender.nickname,
                         time=reply_abm.timestamp,
                         message_str=reply_message_str,
