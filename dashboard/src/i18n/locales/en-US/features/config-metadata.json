@@ -1534,7 +1534,7 @@
 
       "custom_headers": {
         "description": "Custom request headers",
-        "hint": "Key/value pairs added here are merged into the OpenAI SDK default_headers for custom HTTP headers. Values must be strings."
+        "hint": "Key/value pairs added here are sent by AstrBot as custom HTTP headers to the provider. Values must be strings."
       },
       "ollama_disable_thinking": {
         "description": "Disable thinking mode",
@@ -1955,6 +1955,14 @@
       },
       "api_base": {
         "description": "API Base URL"
+      },
+      "total_timeout": {
+        "description": "Total timeout",
+        "hint": "Total timeout in seconds for one decision request, including concurrency-slot wait, retries, and backoff; default 5 seconds."
+      },
+      "max_concurrency": {
+        "description": "Maximum concurrency",
+        "hint": "Maximum number of simultaneous decision requests for this provider; default 4."
       },
       "proxy": {
         "description": "Proxy address",

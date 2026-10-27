@@ -234,6 +234,14 @@ def validate_config(
             if key not in metadata:
                 continue
             meta = metadata[key]
+            if (
+                is_core
+                and path == "provider."
+                and key == "key"
+                and data.get("type") == "system_one_decision"
+            ):
+                # System One uses a single key within the shared provider schema.
+                meta = {**meta, "type": "string"}
             if "type" not in meta:
                 logger.debug(f"配置项 {path}{key} 没有类型定义, 跳过校验")
                 continue
@@ -1526,6 +1534,7 @@ class ProviderConfigService:
         "tts": "text_to_speech",
         "embedding": "embedding",
         "rerank": "rerank",
+        "decision": "decision",
     }
 
     def __init__(self, core_lifecycle: AstrBotCoreLifecycle) -> None:
@@ -1967,7 +1976,7 @@ class ProviderConfigService:
             await target.test()
             result["status"] = "available"
         except Exception as exc:
-            result["error"] = str(exc)
+            result["error"] = str(exc) or type(exc).__name__
         return result
 
     async def test_provider_from_dashboard_args(self, args) -> dict:

@@ -560,6 +560,7 @@ class ProviderConfigRequest(OpenModel):
                 "tts": "text_to_speech",
                 "embedding": "embedding",
                 "rerank": "rerank",
+                "decision": "decision",
             }
             config["provider_type"] = capability_map.get(
                 self.capability, self.capability

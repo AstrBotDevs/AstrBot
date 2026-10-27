@@ -1635,7 +1635,7 @@
 
       "custom_headers": {
         "description": "カスタムリクエストヘッダー",
-        "hint": "ここで追加したキーと値のペアは、カスタム HTTP リクエストヘッダーとして OpenAI SDK の default_headers に統合されます。値は文字列である必要があります。"
+        "hint": "ここで追加したキーと値のペアは、AstrBot からプロバイダーへの HTTP リクエストにカスタムヘッダーとして付加されます。値は文字列である必要があります。"
       },
       "ollama_disable_thinking": {
         "description": "思考モードを無効化",
@@ -2056,6 +2056,14 @@
       },
       "api_base": {
         "description": "API Base URL"
+      },
+      "total_timeout": {
+        "description": "総タイムアウト",
+        "hint": "1 回の判定リクエストの総タイムアウト（秒）です。同時実行枠の待機、再試行、バックオフを含みます。既定値は 5 秒です。"
+      },
+      "max_concurrency": {
+        "description": "最大同時実行数",
+        "hint": "このプロバイダーで同時に実行する判定リクエストの上限です。既定値は 4 です。"
       },
       "proxy": {
         "description": "プロキシアドレス",

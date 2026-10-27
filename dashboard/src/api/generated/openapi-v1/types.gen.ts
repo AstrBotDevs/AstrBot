@@ -604,7 +604,7 @@ export type PluginVersionSupportRequest = {
     astrbot_version?: string;
 };
 
-export type ProviderCapability = 'chat' | 'agent' | 'stt' | 'tts' | 'embedding' | 'rerank';
+export type ProviderCapability = 'chat' | 'agent' | 'stt' | 'tts' | 'embedding' | 'rerank' | 'decision';
 
 export type ProviderConfigRequest = {
     id?: string;

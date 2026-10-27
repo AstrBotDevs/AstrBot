@@ -2295,6 +2295,40 @@ async def test_v1_create_standalone_provider_matches_dashboard_alias_capability(
 
 
 @pytest.mark.asyncio
+async def test_v1_decision_provider_capability_maps_and_filters(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    response = await asgi_client.post(
+        "/api/v1/providers",
+        json={
+            "capability": "decision",
+            "config": {
+                "id": "decision-main",
+                "type": "system_one_decision",
+                "api_base": "https://api.example.test/v1/systemone",
+                "model": "jev-latest",
+                "enable": True,
+            },
+        },
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+    provider = fake_core_lifecycle.astrbot_config["provider"][-1]
+    assert provider["provider_type"] == "decision"
+
+    list_response = await asgi_client.get(
+        "/api/v1/providers?capability=decision",
+        headers=_jwt_headers(),
+    )
+    assert list_response.status_code == 200
+    providers = list_response.json()["data"]["providers"]
+    assert [item["id"] for item in providers] == ["decision-main"]
+
+
+@pytest.mark.asyncio
 async def test_v1_safe_provider_routes_accept_slash_ids(
     asgi_client: httpx.AsyncClient,
     fake_core_lifecycle,
