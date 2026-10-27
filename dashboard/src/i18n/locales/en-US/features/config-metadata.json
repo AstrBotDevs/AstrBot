@@ -188,7 +188,7 @@
             "AnySearch"
           ],
           "subtitles": [
-            "Google web, image, scholar, and finance search",
+            "Google web, news, image, scholar, and finance search",
             "Official DeepSeek search API",
             "",
             "",
@@ -232,7 +232,7 @@
         },
         "websearch_serpapi_key": {
           "description": "SerpApi API Key",
-          "hint": "Supports Google web, image, scholar, and finance search. Multiple keys can be added for rotation. Get a key: [https://serpapi.com/manage-api-key](https://serpapi.com/manage-api-key)"
+          "hint": "Supports Google web, news, image, scholar, and finance search. Multiple keys can be added for rotation. Get a key: [https://serpapi.com/manage-api-key](https://serpapi.com/manage-api-key)"
         },
         "websearch_deepseek_key": {
           "description": "DeepSeek API Key",
@@ -1327,7 +1327,7 @@
       },
       "pip_install_arg": {
         "description": "Additional pip Installation Arguments",
-        "hint": "When installing plugin dependencies, Python's pip tool will be used. Additional arguments can be provided here, such as `--break-system-package`."
+        "hint": "When installing plugin dependencies, Python's pip tool will be used. Additional arguments can be provided here, such as `--break-system-package`. TLS certificates of the PyPI index are verified by default; for self-signed/private-CA mirrors, pass `--cert <CA bundle path>` (recommended) or explicitly add `--trusted-host <host>`."
       },
       "pypi_index_url": {
         "description": "PyPI Repository URL",
@@ -1534,7 +1534,7 @@
 
       "custom_headers": {
         "description": "Custom request headers",
-        "hint": "Key/value pairs added here are merged into the OpenAI SDK default_headers for custom HTTP headers. Values must be strings."
+        "hint": "Key/value pairs added here are sent by AstrBot as custom HTTP headers to the provider. Values must be strings."
       },
       "ollama_disable_thinking": {
         "description": "Disable thinking mode",
@@ -1955,6 +1955,14 @@
       },
       "api_base": {
         "description": "API Base URL"
+      },
+      "total_timeout": {
+        "description": "Total timeout",
+        "hint": "Total timeout in seconds for one decision request, including concurrency-slot wait, retries, and backoff; default 5 seconds."
+      },
+      "max_concurrency": {
+        "description": "Maximum concurrency",
+        "hint": "Maximum number of simultaneous decision requests for this provider; default 4."
       },
       "proxy": {
         "description": "Proxy address",

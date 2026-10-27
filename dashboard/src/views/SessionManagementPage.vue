@@ -39,6 +39,7 @@
             :loading="loading"
             :items-length="totalItems"
             v-model:items-per-page="itemsPerPage"
+            :items-per-page-options="[10, 25, 50, 100]"
             v-model:page="currentPage"
             @update:options="onTableOptionsUpdate"
             class="elevation-0"

@@ -87,10 +87,13 @@
   -ms-overflow-style: none;
 }
 
-/* Firefox 兼容性 */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--astrbot-scrollbar-thumb) var(--astrbot-scrollbar-track);
+/* Firefox only: setting these in WebKit/Blink makes them ignore
+   ::-webkit-scrollbar and fall back to native overlay scrollbars. */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--astrbot-scrollbar-thumb) var(--astrbot-scrollbar-track);
+  }
 }
 
 /* 平滑滚动 */

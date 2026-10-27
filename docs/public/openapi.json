@@ -667,6 +667,9 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/BotCleanup"
           }
         ],
         "responses": {
@@ -810,6 +813,9 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/BotId"
+          },
+          {
+            "$ref": "#/components/parameters/BotCleanup"
           }
         ],
         "responses": {
@@ -7067,6 +7073,20 @@
       }
     },
     "parameters": {
+      "BotCleanup": {
+        "name": "cleanup",
+        "in": "query",
+        "description": "Data categories to permanently remove for this adapter. Omit to retain all associated data. Shared resources and cross-platform routing rules are preserved.",
+        "required": false,
+        "style": "form",
+        "explode": true,
+        "schema": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/BotCleanupTarget"
+          }
+        }
+      },
       "AttachmentId": {
         "name": "attachment_id",
         "in": "path",
@@ -7226,6 +7246,19 @@
       }
     },
     "schemas": {
+      "BotCleanupTarget": {
+        "type": "string",
+        "enum": [
+          "custom_rules",
+          "preferences",
+          "routing",
+          "cron_jobs",
+          "conversations",
+          "message_history",
+          "traces",
+          "stats"
+        ]
+      },
       "SuccessEnvelope": {
         "type": "object",
         "required": [
@@ -7256,7 +7289,8 @@
           "stt",
           "tts",
           "embedding",
-          "rerank"
+          "rerank",
+          "decision"
         ]
       },
       "CreateConfigProfileRequest": {

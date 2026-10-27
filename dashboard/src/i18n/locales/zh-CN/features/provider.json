@@ -11,6 +11,7 @@
     "tabs": {
       "all": "全部",
       "chatCompletion": "对话",
+      "decision": "判断",
       "speechToText": "语音转文字",
       "textToSpeech": "文字转语音",
       "embedding": "嵌入",
@@ -25,6 +26,11 @@
       "kimi_code": "Kimi 的 CodingPlan / Kimi Code 专用接入，使用特殊的 Anthropic API 兼容适配。",
       "vllm_rerank": "也支持 Jina AI, Cohere, PPIO 等提供商。",
       "default": ""
+    },
+    "decisionHints": {
+      "apiBase": "System One 接口地址。填写基础地址时自动补全 /systemone；以 / 结尾则按完整地址请求。",
+      "model": "System One 模型 ID，如 jev-latest、jev-preview，或服务商指定的模型名。",
+      "customHeaders": "附加到 AstrBot 判断请求的 HTTP 请求头。"
     }
   },
   "availability": {
@@ -48,6 +54,7 @@
       "title": "模型提供商",
       "tabs": {
         "basic": "对话",
+        "decision": "判断",
         "speechToText": "语音转文字",
         "textToSpeech": "文字转语音",
         "embedding": "嵌入",

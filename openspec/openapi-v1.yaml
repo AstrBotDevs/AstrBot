@@ -542,6 +542,7 @@ paths:
           required: true
           schema:
             type: string
+        - $ref: "#/components/parameters/BotCleanup"
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -624,6 +625,7 @@ paths:
       x-astrbot-scope: bot
       parameters:
         - $ref: "#/components/parameters/BotId"
+        - $ref: "#/components/parameters/BotCleanup"
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -4715,6 +4717,54 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
+  /api/v1/stats/pypi-index/test:
+    post:
+      tags: [Stats]
+      summary: Test a PyPI index (mirror) endpoint
+      operationId: testPypiIndexConnection
+      x-astrbot-scope: system
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PypiIndexTestRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/stats/pypi-index/speed:
+    post:
+      tags: [Stats]
+      summary: Download a wheel from a PyPI index and measure the throughput
+      operationId: measurePypiIndexSpeed
+      x-astrbot-scope: system
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PypiIndexTestRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/stats/ghproxy/speed:
+    post:
+      tags: [Stats]
+      summary: Download a repository file through a GitHub proxy and measure the throughput
+      operationId: measureGhproxySpeed
+      x-astrbot-scope: system
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GhproxyTestRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
   /api/v1/changelogs:
     get:
       tags: [Stats]
@@ -5497,6 +5547,17 @@ components:
             type: string
 
   parameters:
+    BotCleanup:
+      name: cleanup
+      in: query
+      description: Data categories to permanently remove for this adapter. Omit to retain all associated data. Shared resources and cross-platform routing rules are preserved.
+      required: false
+      style: form
+      explode: true
+      schema:
+        type: array
+        items:
+          $ref: "#/components/schemas/BotCleanupTarget"
     AttachmentId:
       name: attachment_id
       in: path
@@ -5673,6 +5734,9 @@ components:
         type: string
 
   schemas:
+    BotCleanupTarget:
+      type: string
+      enum: [custom_rules, preferences, routing, cron_jobs, conversations, message_history, traces, stats]
     RuntimeInfo:
       type: object
       description: The AstrBot backend runtime, including when running inside a container. Values are captured at application startup.
@@ -5749,6 +5813,7 @@ components:
         - tts
         - embedding
         - rerank
+        - decision
 
     LoginRequest:
       type: object
@@ -6833,6 +6898,14 @@ components:
       required: [proxy_url]
       properties:
         proxy_url:
+          type: string
+      additionalProperties: false
+
+    PypiIndexTestRequest:
+      type: object
+      required: [index_url]
+      properties:
+        index_url:
           type: string
       additionalProperties: false
 

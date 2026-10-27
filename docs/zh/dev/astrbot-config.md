@@ -296,7 +296,7 @@ ID 白名单。填写后，将只处理所填写的 ID 发来的消息事件。�
 
 网页搜索提供商类型。默认为 `tavily`。目前支持 `serpapi`、`deepseek`、`tavily`、`bocha`、`baidu_ai_search`、`brave`、`firecrawl`、`exa`、`anysearch`。
 
-- `serpapi`：使用 SerpApi Google Search、Google Images Light、Google Finance 和 Google Scholar。
+- `serpapi`：使用 SerpApi Google Search、Google News、Google Images Light、Google Finance 和 Google Scholar。
 - `deepseek`：使用 DeepSeek Search API。
 - `tavily`：使用 Tavily 搜索引擎。
 - `bocha`：使用 BoCha 搜索引擎。
@@ -328,7 +328,7 @@ DeepSeek 搜索引擎的 API Key 列表。使用 `deepseek` 作为网页搜索�
 
 #### `provider_settings.websearch_serpapi_key`
 
-SerpApi Google Search、Google Images Light、Google Finance 和 Google Scholar 共用的 API Key 列表。使用 `serpapi` 作为网页搜索提供商时需要填写。前往 [SerpApi](https://serpapi.com/manage-api-key) 获取 Key。多个 Key 轮询使用，鉴权或额度错误时会尝试下一个 Key。
+SerpApi Google Search、Google News、Google Images Light、Google Finance 和 Google Scholar 共用的 API Key 列表。使用 `serpapi` 作为网页搜索提供商时需要填写。前往 [SerpApi](https://serpapi.com/manage-api-key) 获取 Key。多个 Key 轮询使用，鉴权或额度错误时会尝试下一个 Key。
 
 #### `provider_settings.web_search_link`
 
