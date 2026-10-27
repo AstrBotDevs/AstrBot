@@ -773,15 +773,23 @@ export const useExtensionPage = (initialTab = "installed") => {
       }
 
       try {
-        const res = await pluginApi.installUrl({
+        const downloadUrl = String(plugin.download_url || "").trim();
+        const installPayload = {
           url: plugin.repo,
-          download_url: plugin.download_url || "",
-          proxy: plugin.download_url ? "" : getRepositoryProxy(plugin.repo),
+          repository: plugin.repo,
+          download_url: downloadUrl,
+          proxy: downloadUrl ? "" : getRepositoryProxy(plugin.repo),
           ignore_version_check: false,
           install_method: "market",
           registry_url: selectedSource.value || null,
           market_plugin_id: getMarketPluginId(plugin),
-        });
+        };
+        const installRequest = downloadUrl
+          ? pluginApi.installUrl(installPayload)
+          : isGithubArchiveUrl(plugin.repo)
+            ? pluginApi.installGithub(installPayload)
+            : pluginApi.installGit(installPayload);
+        const res = await installRequest;
         if (res.data.status === "warning") {
           pendingKeys.push(pluginKey);
           batchProgress.skipped += 1;
