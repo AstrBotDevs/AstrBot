@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 266 icons */
+/* Auto-generated MDI subset – 267 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -358,6 +358,10 @@
 
 .mdi-download::before {
   content: "\F01DA";
+}
+
+.mdi-download-multiple::before {
+  content: "\F09E9";
 }
 
 .mdi-download-outline::before {

@@ -63,6 +63,47 @@
     "deleteSource": "Delete Source",
     "reshuffle": "Shuffle Again"
   },
+  "batch": {
+    "actions": {
+      "selectAll": "Select all results",
+      "clearSelection": "Clear selection",
+      "cancel": "Exit batch mode",
+      "close": "Close"
+    },
+    "installed": {
+      "select": "Select plugins",
+      "uninstallSelected": "Uninstall selected ({count})",
+      "confirmTitle": "Uninstall {count} plugins",
+      "confirmMessage": "The following plugins will be uninstalled one by one. Failed items remain selected so you can retry them.",
+      "reservedDisabled": "System plugins cannot be uninstalled in a batch",
+      "selectPlugin": "Select plugin {name}"
+    },
+    "market": {
+      "select": "Select for install",
+      "installSelected": "Install selected ({count})",
+      "selectPlugin": "Select marketplace plugin {name}",
+      "unavailable": "This marketplace entry cannot be selected because its ID, repository, or install state is unavailable",
+      "dangerReason": "This plugin is marked dangerous and will be skipped during batch installation",
+      "versionReason": "This plugin does not support the current AstrBot version and will be skipped during batch installation",
+      "confirmTitle": "Install marketplace plugins",
+      "confirmMessage": "The selected {count} uninstalled plugins will be installed one by one.",
+      "exceptionsTitle": "The following items will be skipped",
+      "confirmAction": "Install {count} plugins"
+    },
+    "progress": {
+      "uninstallTitle": "Uninstalling plugins",
+      "installTitle": "Installing plugins",
+      "current": "Processing {current} ({completed}/{total})",
+      "succeeded": "Succeeded {count}",
+      "failed": "Failed {count}",
+      "skipped": "Skipped {count}",
+      "failureTitle": "Failed items",
+      "skippedTitle": "Skipped items",
+      "allSucceeded": "Batch operation completed successfully for {count} plugins.",
+      "partial": "Batch operation completed: {succeeded} succeeded, {failed} failed, and {skipped} skipped."
+    },
+    "refreshLabel": "Refresh plugin list"
+  },
   "status": {
     "enabled": "Enabled",
     "disabled": "Disabled",

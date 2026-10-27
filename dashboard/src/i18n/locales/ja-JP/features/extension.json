@@ -63,6 +63,47 @@
     "deleteSource": "ソースを削除",
     "reshuffle": "もう一度シャッフル"
   },
+  "batch": {
+    "actions": {
+      "selectAll": "現在の結果をすべて選択",
+      "clearSelection": "選択を解除",
+      "cancel": "一括操作を終了",
+      "close": "閉じる"
+    },
+    "installed": {
+      "select": "一括選択",
+      "uninstallSelected": "選択項目をアンインストール ({count})",
+      "confirmTitle": "{count} 個のプラグインをアンインストール",
+      "confirmMessage": "以下のプラグインを順番にアンインストールします。失敗した項目は再試行できるよう選択状態に残ります。",
+      "reservedDisabled": "システムプラグインは一括アンインストールできません",
+      "selectPlugin": "プラグイン {name} を選択"
+    },
+    "market": {
+      "select": "一括インストール",
+      "installSelected": "選択項目をインストール ({count})",
+      "selectPlugin": "マーケットプラグイン {name} を選択",
+      "unavailable": "ID、リポジトリ、またはインストール状態が無効なため選択できません",
+      "dangerReason": "危険タグが付いているため一括インストールではスキップされます",
+      "versionReason": "現在の AstrBot バージョンに対応していないため一括インストールではスキップされます",
+      "confirmTitle": "マーケットプラグインを一括インストール",
+      "confirmMessage": "選択した未インストールの {count} 個のプラグインを順番にインストールします。",
+      "exceptionsTitle": "以下の項目はスキップされます",
+      "confirmAction": "{count} 個のプラグインをインストール"
+    },
+    "progress": {
+      "uninstallTitle": "プラグインを一括アンインストール中",
+      "installTitle": "プラグインを一括インストール中",
+      "current": "{current} を処理中（{completed}/{total}）",
+      "succeeded": "成功 {count}",
+      "failed": "失敗 {count}",
+      "skipped": "スキップ {count}",
+      "failureTitle": "失敗した項目",
+      "skippedTitle": "スキップした項目",
+      "allSucceeded": "一括操作が完了し、{count} 個のプラグインを処理しました。",
+      "partial": "一括操作が完了しました：成功 {succeeded}、失敗 {failed}、スキップ {skipped}。"
+    },
+    "refreshLabel": "プラグイン一覧を更新"
+  },
   "status": {
     "enabled": "有効",
     "disabled": "無効",

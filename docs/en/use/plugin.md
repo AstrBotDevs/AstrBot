@@ -137,6 +137,14 @@ On the **Installed** page, you can:
 
 Pay attention to the options for deleting plugin configuration files and persistent data. Leave the corresponding option unchecked if you want to retain settings or business data.
 
+### Batch selection and processing
+
+The installed plugins page and the plugin marketplace both provide a batch selection mode. Selections can span pages, while Select All only includes entries matching the current search, category, and sort conditions. Changing filters removes selections that no longer match.
+
+- **Batch uninstall** applies only to regular installed plugins. System plugins cannot be selected, and failed plugins remain in the separate failed-plugin list. The configuration and data deletion options in the confirmation dialog apply to the whole batch and are cleared by default to preserve configuration and data.
+- **Batch install** applies only to marketplace plugins that are not installed and have complete source information. Plugins marked as dangerous or incompatible with the current version are listed in the confirmation step and skipped during execution.
+- Plugins are installed or uninstalled one at a time. A failed item does not stop the remaining queue. The result reports succeeded, failed, and skipped counts, and failed items remain selected for retry.
+
 ## Plugins, MCP, and Skills
 
 | Extension | Main purpose | Learn more |

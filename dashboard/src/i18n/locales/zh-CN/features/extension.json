@@ -63,6 +63,47 @@
     "deleteSource": "删除源",
     "reshuffle": "随机一发"
   },
+  "batch": {
+    "actions": {
+      "selectAll": "全选当前结果",
+      "clearSelection": "取消全选",
+      "cancel": "退出批量",
+      "close": "关闭"
+    },
+    "installed": {
+      "select": "批量选择",
+      "uninstallSelected": "卸载所选 ({count})",
+      "confirmTitle": "批量卸载 {count} 个插件",
+      "confirmMessage": "将依次卸载以下插件。卸载失败的项目会被保留，便于你重试。",
+      "reservedDisabled": "系统插件不能批量卸载",
+      "selectPlugin": "选择插件 {name}"
+    },
+    "market": {
+      "select": "批量安装",
+      "installSelected": "安装所选 ({count})",
+      "selectPlugin": "选择市场插件 {name}",
+      "unavailable": "该市场条目缺少有效标识、仓库或安装状态，无法批量选择",
+      "dangerReason": "插件带有危险标签，批量安装时会跳过",
+      "versionReason": "当前 AstrBot 版本不满足插件要求，批量安装时会跳过",
+      "confirmTitle": "批量安装市场插件",
+      "confirmMessage": "将依次安装所选的 {count} 个未安装插件。",
+      "exceptionsTitle": "以下项目会被跳过",
+      "confirmAction": "安装 {count} 个插件"
+    },
+    "progress": {
+      "uninstallTitle": "正在批量卸载插件",
+      "installTitle": "正在批量安装插件",
+      "current": "正在处理 {current}（{completed}/{total}）",
+      "succeeded": "成功 {count}",
+      "failed": "失败 {count}",
+      "skipped": "跳过 {count}",
+      "failureTitle": "失败项目",
+      "skippedTitle": "跳过项目",
+      "allSucceeded": "批量操作完成，成功处理 {count} 个插件。",
+      "partial": "批量操作完成：成功 {succeeded}，失败 {failed}，跳过 {skipped}。"
+    },
+    "refreshLabel": "刷新插件列表"
+  },
   "status": {
     "enabled": "启用",
     "disabled": "禁用",
