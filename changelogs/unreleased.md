@@ -2,7 +2,7 @@
 
 - Simplify Context Management Strategy settings: Handling for History Limits or Context Window Pressure → Compression Strategy; Model Provider ID for Context Compression → Compression Model. Move maximum turns, discarded turns, compression instruction, recent-context ratio and fallback context window size under the collapsed More Settings section. Preserve existing configuration keys, defaults and runtime behavior.
 
-- - Use the official SerpApi Python SDK and add Google News search with publisher, author, publication time, and WebUI citation support.
+- Add SerpApi Google News search with publisher, author, publication time, and WebUI citation support.
 
 - Add compact data-cleanup checkboxes to the existing bot deletion dialog. Custom rules, preferences, configuration routes and scheduled tasks are selected by default; AI conversations, message history, local traces and usage statistics are retained unless selected. Preserve shared resources and match adapter IDs exactly.
 
