@@ -208,6 +208,23 @@ def test_gemini_extract_usage_without_cache_keeps_full_prompt_tokens():
     assert usage.output == 20
 
 
+def test_gemini_extract_usage_counts_thinking_tokens_as_output():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+
+    usage_metadata = SimpleNamespace(
+        prompt_token_count=100,
+        cached_content_token_count=0,
+        candidates_token_count=20,
+        thoughts_token_count=300,
+    )
+
+    usage = provider._extract_usage(usage_metadata)
+
+    # candidates_token_count excludes thinking tokens, which Gemini bills as
+    # output, so they must be added or output is under-counted.
+    assert usage.output == 320
+
+
 @pytest.mark.asyncio
 async def test_gemini_get_models_retries_transient_request_error(monkeypatch):
     monkeypatch.setattr(request_retry, "REQUEST_RETRY_WAIT_MIN_S", 0)
