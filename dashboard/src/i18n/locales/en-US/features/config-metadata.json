@@ -1960,6 +1960,10 @@
         "description": "Decision probability tolerance",
         "hint": "Allowed deviation of the probability sum from 1 and of the selected option from the highest-probability option; default 0.05."
       },
+      "total_timeout": {
+        "description": "Total timeout",
+        "hint": "Total timeout in seconds for one decision request, including concurrency-slot wait, retries, and backoff; default 5 seconds."
+      },
       "proxy": {
         "description": "Proxy address",
         "hint": "HTTP/HTTPS proxy URL, e.g. http://127.0.0.1:7890. Applies only to this provider's API requests and does not affect Docker internal networking."

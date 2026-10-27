@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from unittest.mock import AsyncMock, MagicMock
@@ -162,6 +163,19 @@ def test_system_one_templates_expose_probability_tolerance():
         assert templates[name]["probability_tolerance"] == 0.05
 
 
+def test_system_one_templates_expose_total_timeout():
+    templates = CONFIG_METADATA_2["provider_group"]["metadata"]["provider"][
+        "config_template"
+    ]
+    for name in (
+        "TypeSafe System One",
+        "OpenRouter System One",
+        "Vercel System One",
+        "Custom System One",
+    ):
+        assert templates[name]["total_timeout"] == 5
+
+
 @pytest.mark.asyncio
 async def test_system_one_provider_defaults_to_two_second_timeout():
     provider = SystemOneDecisionProvider(
@@ -175,6 +189,23 @@ async def test_system_one_provider_defaults_to_two_second_timeout():
     )
     try:
         assert provider.timeout == 2
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_system_one_total_timeout_caps_the_request():
+    async def post(*args, **kwargs):
+        await asyncio.sleep(1)
+        return httpx.Response(200, json={"answers": {}})
+
+    provider = _provider(lambda request: httpx.Response(500), total_timeout=0.05)
+    provider.client.post = AsyncMock(side_effect=post)
+    try:
+        with pytest.raises(DecisionError, match="total request timed out after 0.05s"):
+            await provider.ask(
+                {"available": DecisionBooleanQuestion("Is it available?")}
+            )
     finally:
         await provider.terminate()
 

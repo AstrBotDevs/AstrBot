@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import math
 from collections.abc import Mapping
@@ -22,6 +23,7 @@ from ..register import register_provider_adapter
 from .request_retry import retry_provider_request
 
 _DEFAULT_PROBABILITY_TOLERANCE = 0.05
+_DEFAULT_TOTAL_TIMEOUT = 5.0
 _RESPONSE_SUMMARY_CHARS = 500
 
 
@@ -69,6 +71,11 @@ class SystemOneDecisionProvider(DecisionProvider):
             headers["Authorization"] = f"Bearer {self.api_key}"
         self.proxy = str(provider_config.get("proxy") or "").strip() or None
         self.timeout = float(provider_config.get("timeout", 2))
+        self.total_timeout = float(
+            provider_config.get("total_timeout", _DEFAULT_TOTAL_TIMEOUT)
+        )
+        if self.total_timeout <= 0:
+            raise ValueError("total_timeout must be greater than 0")
         self.probability_tolerance = float(
             provider_config.get(
                 "probability_tolerance",
@@ -141,16 +148,27 @@ class SystemOneDecisionProvider(DecisionProvider):
             response.raise_for_status()
             return response.json()
 
-        try:
-            body = await retry_provider_request(
+        async def _request() -> Any:
+            return await retry_provider_request(
                 "System One Decision",
                 _post,
                 max_attempts=request_max_retries + 1,
             )
+
+        try:
+            body = await asyncio.wait_for(_request(), timeout=self.total_timeout)
+        except TimeoutError as exc:
+            logger.warning(
+                f"[System One Decision] Total request timed out after "
+                f"{self.total_timeout:g}s"
+            )
+            raise DecisionError(
+                f"System One total request timed out after {self.total_timeout:g}s"
+            ) from exc
         except httpx.TimeoutException as exc:
             log_connection_failure("System One Decision", exc, self.proxy)
             raise DecisionError(
-                f"System One request timed out after {self.timeout:g}s"
+                f"System One attempt timed out after {self.timeout:g}s"
             ) from exc
         except httpx.HTTPStatusError as exc:
             logger.error(
