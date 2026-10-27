@@ -276,7 +276,7 @@
                         "AnySearch"
                     ],
                     "subtitles": [
-                        "Веб-поиск, изображения, научные публикации и финансы Google",
+                        "Веб-поиск, новости, изображения, научные публикации и финансы Google",
                         "Официальный поисковый API DeepSeek",
                         "",
                         "",
@@ -320,7 +320,7 @@
                 },
                 "websearch_serpapi_key": {
                     "description": "SerpApi API Key",
-                    "hint": "Поддерживает веб-поиск, поиск изображений, научных публикаций и финансовых данных Google. Можно добавить несколько ключей для ротации. Получить ключ: [https://serpapi.com/manage-api-key](https://serpapi.com/manage-api-key)"
+                    "hint": "Поддерживает веб-поиск, поиск новостей, изображений, научных публикаций и финансовых данных Google. Можно добавить несколько ключей для ротации. Получить ключ: [https://serpapi.com/manage-api-key](https://serpapi.com/manage-api-key)"
                 },
                 "websearch_deepseek_key": {
                     "description": "API-ключ DeepSeek",

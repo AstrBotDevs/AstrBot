@@ -276,7 +276,7 @@
             "AnySearch"
           ],
           "subtitles": [
-            "Google のウェブ・画像・学術・金融検索",
+            "Google のウェブ・ニュース・画像・学術・金融検索",
             "DeepSeek 公式検索 API",
             "",
             "",
@@ -320,7 +320,7 @@
         },
         "websearch_serpapi_key": {
           "description": "SerpApi API Key",
-          "hint": "Google のウェブ・画像・学術・金融検索に対応。複数の Key を追加してローテーションできます。Key の取得：[https://serpapi.com/manage-api-key](https://serpapi.com/manage-api-key)"
+          "hint": "Google のウェブ・ニュース・画像・学術・金融検索に対応。複数の Key を追加してローテーションできます。Key の取得：[https://serpapi.com/manage-api-key](https://serpapi.com/manage-api-key)"
         },
         "websearch_deepseek_key": {
           "description": "DeepSeek API Key",
