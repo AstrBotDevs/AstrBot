@@ -3,6 +3,7 @@ import json
 import uuid
 from dataclasses import dataclass as std_dataclass
 from dataclasses import field
+from urllib.parse import quote, urlsplit
 
 import aiohttp
 from pydantic import Field
@@ -23,6 +24,14 @@ WEB_SEARCH_TOOL_NAMES = [
     "firecrawl_extract_web_page",
     "web_search_exa",
     "exa_get_contents",
+    "web_search_anysearch",
+    "web_search_serpapi",
+    "news_search_serpapi",
+    "image_search_serpapi",
+    "finance_search_serpapi",
+    "scholar_search_serpapi",
+    "web_search_deepseek",
+    "deepseek_fetch_web_page",
 ]
 _TAVILY_WEB_SEARCH_TOOL_CONFIG = {
     "provider_settings.web_search": True,
@@ -47,6 +56,18 @@ _BAIDU_WEB_SEARCH_TOOL_CONFIG = {
 _EXA_WEB_SEARCH_TOOL_CONFIG = {
     "provider_settings.web_search": True,
     "provider_settings.websearch_provider": "exa",
+}
+_ANYSEARCH_WEB_SEARCH_TOOL_CONFIG = {
+    "provider_settings.web_search": True,
+    "provider_settings.websearch_provider": "anysearch",
+}
+_DEEPSEEK_WEB_SEARCH_TOOL_CONFIG = {
+    "provider_settings.web_search": True,
+    "provider_settings.websearch_provider": "deepseek",
+}
+_SERPAPI_WEB_SEARCH_TOOL_CONFIG = {
+    "provider_settings.web_search": True,
+    "provider_settings.websearch_provider": "serpapi",
 }
 
 
@@ -104,12 +125,16 @@ class _KeyRotator:
 # 429 - Rate limited.
 # 432 - Tavily quota exceeded.
 _RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({401, 403, 429, 432})
+_ANYSEARCH_RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({401, 402, 403, 429})
 
 _TAVILY_KEY_ROTATOR = _KeyRotator("websearch_tavily_key", "Tavily")
 _BOCHA_KEY_ROTATOR = _KeyRotator("websearch_bocha_key", "BoCha")
 _BRAVE_KEY_ROTATOR = _KeyRotator("websearch_brave_key", "Brave")
 _FIRECRAWL_KEY_ROTATOR = _KeyRotator("websearch_firecrawl_key", "Firecrawl")
 _EXA_KEY_ROTATOR = _KeyRotator("websearch_exa_key", "Exa")
+_ANYSEARCH_KEY_ROTATOR = _KeyRotator("websearch_anysearch_key", "AnySearch")
+_DEEPSEEK_KEY_ROTATOR = _KeyRotator("websearch_deepseek_key", "DeepSeek")
+_SERPAPI_KEY_ROTATOR = _KeyRotator("websearch_serpapi_key", "SerpApi")
 
 
 def normalize_legacy_web_search_config(cfg) -> None:
@@ -134,6 +159,8 @@ def normalize_legacy_web_search_config(cfg) -> None:
         "websearch_brave_key",
         "websearch_firecrawl_key",
         "websearch_exa_key",
+        "websearch_anysearch_key",
+        "websearch_serpapi_key",
     ):
         value = provider_settings.get(setting_name)
         if isinstance(value, str):
@@ -419,6 +446,553 @@ async def _brave_search(
     if last_error is not None:
         raise last_error
     raise Exception("Brave web search failed with all configured keys.")
+
+
+async def _serpapi_request(
+    provider_settings: dict,
+    payload: dict,
+    *,
+    engine: str,
+) -> dict:
+    """Call a SerpApi search engine with API key failover.
+
+    Args:
+        provider_settings: Provider settings containing SerpApi API keys.
+        payload: Search parameters, excluding credentials and the engine.
+        engine: SerpApi engine name for the requested search service.
+
+    Returns:
+        The JSON search response.
+
+    Raises:
+        ValueError: If SerpApi API keys are not configured.
+        RuntimeError: If the API or network request fails.
+    """
+    keys = provider_settings.get("websearch_serpapi_key", [])
+    if not keys:
+        raise ValueError("Error: SerpApi API key is not configured in AstrBot.")
+
+    last_error = None
+    for _ in range(len(keys)):
+        api_key = await _SERPAPI_KEY_ROTATOR.get(provider_settings)
+        try:
+            async with aiohttp.ClientSession(trust_env=True) as session:
+                async with session.get(
+                    "https://serpapi.com/search.json",
+                    params={**payload, "engine": engine, "api_key": api_key},
+                    timeout=aiohttp.ClientTimeout(total=60),
+                ) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        status = data.get("search_metadata", {}).get("status")
+                        # SerpApi also returns an error message for successful
+                        # searches with no results; these should remain empty.
+                        if status == "Error" or (
+                            data.get("error") and status != "Success"
+                        ):
+                            reason = str(data.get("error") or "Unknown API error.")
+                            raise RuntimeError(
+                                f"SerpApi search failed: {reason.replace(api_key, '[redacted]')}"
+                            )
+                        return data
+                    reason = (await response.text()).replace(api_key, "[redacted]")
+                    last_error = RuntimeError(
+                        f"SerpApi search failed: {reason}, status: {response.status}"
+                    )
+                    if response.status in {401, 403, 429}:
+                        continue
+                    raise last_error
+        except (aiohttp.ClientError, asyncio.TimeoutError):
+            # Transport errors can include the request URL with its API key.
+            raise RuntimeError("SerpApi search request failed or timed out.") from None
+
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("SerpApi search failed with all configured keys.")
+
+
+async def _serpapi_search(
+    provider_settings: dict,
+    payload: dict,
+) -> list[SearchResult]:
+    """Search Google and normalize organic results.
+
+    Args:
+        provider_settings: Provider settings containing SerpApi API keys.
+        payload: Google search parameters, excluding credentials.
+
+    Returns:
+        Normalized organic search results.
+
+    Raises:
+        ValueError: If SerpApi API keys are not configured.
+        RuntimeError: If the API or network request fails.
+    """
+    data = await _serpapi_request(provider_settings, payload, engine="google")
+    return [
+        SearchResult(
+            title=item.get("title") or "",
+            url=item["link"],
+            snippet=item.get("snippet") or "",
+            favicon=item.get("favicon"),
+        )
+        for item in data.get("organic_results", [])
+        if item.get("link")
+    ]
+
+
+@builtin_tool(config=_SERPAPI_WEB_SEARCH_TOOL_CONFIG)
+@pydantic_dataclass
+class SerpApiWebSearchTool(FunctionTool[AstrAgentContext]):
+    name: str = "web_search_serpapi"
+    description: str = (
+        "Search the web using SerpApi Google Search for current information. "
+        "Returns page titles, URLs, and snippets."
+    )
+    parameters: dict = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Required. Search query."},
+                "max_results": {
+                    "type": "integer",
+                    "description": "Maximum results to return from the first page, 1-10. Default is 5; fewer may be available.",
+                },
+                "country": {
+                    "type": "string",
+                    "description": "Optional. Google country code, such as us, uk, or cn.",
+                },
+                "search_lang": {
+                    "type": "string",
+                    "description": "Optional. Google interface language code, such as en or zh-cn.",
+                },
+                "location": {
+                    "type": "string",
+                    "description": "Optional. Search origin, such as Austin, Texas, United States.",
+                },
+            },
+            "required": ["query"],
+        }
+    )
+
+    async def call(self, context, **kwargs) -> ToolExecResult:
+        """Search Google and format results with source references.
+
+        Args:
+            context: Agent context containing the active profile settings.
+            **kwargs: Search query, result limit, and optional localization.
+
+        Returns:
+            Search results as JSON, or an error if credentials are missing.
+
+        Raises:
+            RuntimeError: If the search request fails.
+        """
+        _, provider_settings, _ = _get_runtime(context)
+        if not provider_settings.get("websearch_serpapi_key", []):
+            return "Error: SerpApi API key is not configured in AstrBot."
+
+        max_results = max(1, min(int(kwargs.get("max_results", 5)), 10))
+        payload = {"q": kwargs["query"]}
+        for name, parameter in (
+            ("country", "gl"),
+            ("search_lang", "hl"),
+            ("location", "location"),
+        ):
+            if kwargs.get(name):
+                payload[parameter] = kwargs[name]
+        results = await _serpapi_search(provider_settings, payload)
+        return _search_result_payload(results[:max_results])
+
+
+@builtin_tool(config=_SERPAPI_WEB_SEARCH_TOOL_CONFIG)
+@pydantic_dataclass
+class SerpApiNewsSearchTool(FunctionTool[AstrAgentContext]):
+    name: str = "news_search_serpapi"
+    description: str = (
+        "Search current news using the SerpApi Google News API. Returns article "
+        "titles, source URLs, publishers, authors, snippets, and publication times."
+    )
+    parameters: dict = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Required. News search query. Google News operators such as site: and when: are supported.",
+                },
+                "max_results": {
+                    "type": "integer",
+                    "description": "Maximum articles to return, 1-10. Default is 5; fewer may be available.",
+                },
+                "country": {
+                    "type": "string",
+                    "description": "Optional. Google News country code, such as us, uk, or cn.",
+                },
+                "search_lang": {
+                    "type": "string",
+                    "description": "Optional. Google News language code, such as en or zh-cn.",
+                },
+            },
+            "required": ["query"],
+        }
+    )
+
+    async def call(self, context, **kwargs) -> ToolExecResult:
+        """Search Google News and preserve article metadata for citations.
+
+        Args:
+            context: Agent context containing the active profile settings.
+            **kwargs: News query, result limit, country, and language.
+
+        Returns:
+            News results as JSON, or a configuration or validation error.
+
+        Raises:
+            RuntimeError: If the search request fails.
+        """
+        _, provider_settings, _ = _get_runtime(context)
+        if not provider_settings.get("websearch_serpapi_key", []):
+            return "Error: SerpApi API key is not configured in AstrBot."
+
+        query = kwargs["query"].strip()
+        if not query:
+            return "Error: query must not be empty."
+        max_results = max(1, min(int(kwargs.get("max_results", 5)), 10))
+        payload = {"q": query}
+        for name, parameter in (("country", "gl"), ("search_lang", "hl")):
+            if kwargs.get(name):
+                payload[parameter] = kwargs[name]
+        data = await _serpapi_request(provider_settings, payload, engine="google_news")
+
+        ref_uuid = str(uuid.uuid4())[:4]
+        results = []
+        seen_urls = set()
+        for group in data.get("news_results", []):
+            articles = []
+            if group.get("link"):
+                articles.append(group)
+            if isinstance(group.get("highlight"), dict):
+                articles.append(group["highlight"])
+            articles.extend(
+                story for story in group.get("stories", []) if isinstance(story, dict)
+            )
+            for article in articles:
+                source_url = article.get("link")
+                if not source_url or source_url in seen_urls:
+                    continue
+                seen_urls.add(source_url)
+                source = article.get("source") or {}
+                results.append(
+                    {
+                        "title": article.get("title") or "",
+                        "url": source_url,
+                        "snippet": article.get("snippet") or "",
+                        "source": source.get("name") or source.get("title") or "",
+                        "authors": source.get("authors") or [],
+                        "published_at": article.get("iso_date")
+                        or article.get("date")
+                        or "",
+                        "thumbnail_url": article.get("thumbnail")
+                        or article.get("thumbnail_small")
+                        or "",
+                        "index": f"{ref_uuid}.{len(results) + 1}",
+                    }
+                )
+                _cache_favicon(source_url, source.get("icon"))
+                if len(results) >= max_results:
+                    break
+            if len(results) >= max_results:
+                break
+        return json.dumps({"results": results}, ensure_ascii=False)
+
+
+@builtin_tool(config=_SERPAPI_WEB_SEARCH_TOOL_CONFIG)
+@pydantic_dataclass
+class SerpApiImageSearchTool(FunctionTool[AstrAgentContext]):
+    name: str = "image_search_serpapi"
+    description: str = (
+        "Find images using SerpApi Google Images Light. Returns direct image URLs, "
+        "thumbnails, dimensions, and source page URLs. Use image_url to display "
+        "or send an image, and url to cite its source page."
+    )
+    parameters: dict = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Required. Image search query.",
+                },
+                "max_results": {
+                    "type": "integer",
+                    "description": "Maximum images to return, 1-10. Default is 5; fewer may be available.",
+                },
+                "country": {
+                    "type": "string",
+                    "description": "Optional. Google country code, such as us, uk, or cn.",
+                },
+                "search_lang": {
+                    "type": "string",
+                    "description": "Optional. Google interface language code, such as en or zh-cn.",
+                },
+            },
+            "required": ["query"],
+        }
+    )
+
+    async def call(self, context, **kwargs) -> ToolExecResult:
+        """Search Google Images Light and return image links with source references.
+
+        Args:
+            context: Agent context containing the active profile settings.
+            **kwargs: Image search query, result limit, country, and language.
+
+        Returns:
+            Image results as JSON, or an error if credentials are missing.
+
+        Raises:
+            RuntimeError: If the search request fails.
+        """
+        _, provider_settings, _ = _get_runtime(context)
+        if not provider_settings.get("websearch_serpapi_key", []):
+            return "Error: SerpApi API key is not configured in AstrBot."
+
+        max_results = max(1, min(int(kwargs.get("max_results", 5)), 10))
+        payload = {"q": kwargs["query"]}
+        for name, parameter in (("country", "gl"), ("search_lang", "hl")):
+            if kwargs.get(name):
+                payload[parameter] = kwargs[name]
+        data = await _serpapi_request(
+            provider_settings, payload, engine="google_images_light"
+        )
+        ref_uuid = str(uuid.uuid4())[:4]
+        results = []
+        for item in data.get("images_results", []):
+            image_url = item.get("original") or ""
+            thumbnail_url = item.get("thumbnail") or item.get("serpapi_thumbnail") or ""
+            # Images extracted from PDFs can use x-raw-image:// references.
+            # Return their HTTP thumbnail when a direct image URL is unavailable.
+            if not image_url.startswith(("https://", "http://")):
+                image_url = thumbnail_url
+            if not image_url.startswith(("https://", "http://")):
+                continue
+            source_url = item.get("link") or image_url
+            results.append(
+                {
+                    "title": item.get("title") or "",
+                    "url": source_url,
+                    "snippet": item.get("source") or "",
+                    "image_url": image_url,
+                    "thumbnail_url": thumbnail_url,
+                    "width": item.get("original_width")
+                    if image_url == item.get("original")
+                    else None,
+                    "height": item.get("original_height")
+                    if image_url == item.get("original")
+                    else None,
+                    "index": f"{ref_uuid}.{len(results) + 1}",
+                }
+            )
+            _cache_favicon(source_url, item.get("source_logo"))
+            if len(results) >= max_results:
+                break
+        return json.dumps({"results": results}, ensure_ascii=False)
+
+
+@builtin_tool(config=_SERPAPI_WEB_SEARCH_TOOL_CONFIG)
+@pydantic_dataclass
+class SerpApiFinanceSearchTool(FunctionTool[AstrAgentContext]):
+    name: str = "finance_search_serpapi"
+    description: str = (
+        "Look up stocks, indices, funds, currencies, and futures using Google Finance. "
+        "Use ticker symbols such as AAPL:NASDAQ or currency pairs such as EUR-USD. "
+        "Returns quote prices, currency, timestamps, key statistics, financials, "
+        "and news when available. Set window only when price history is needed."
+    )
+    parameters: dict = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Required. Google Finance symbol, such as AAPL:NASDAQ, .INX:INDEXSP, BTC-USD, or EUR-USD.",
+                },
+                "search_lang": {
+                    "type": "string",
+                    "description": "Optional. Google interface language code, such as en or zh-cn.",
+                },
+                "window": {
+                    "type": "string",
+                    "enum": ["1D", "5D", "1M", "6M", "YTD", "1Y", "5Y", "MAX"],
+                    "description": "Optional. Price history range. When set, Google Finance returns a quote summary and graph instead of full financials and news.",
+                },
+            },
+            "required": ["query"],
+        }
+    )
+
+    async def call(self, context, **kwargs) -> ToolExecResult:
+        """Retrieve financial data and attach a citation to the quote summary.
+
+        Args:
+            context: Agent context containing the active profile settings.
+            **kwargs: Finance symbol, optional language, and price history window.
+
+        Returns:
+            Financial data as JSON, or a configuration or validation error.
+
+        Raises:
+            RuntimeError: If the search request fails.
+        """
+        _, provider_settings, _ = _get_runtime(context)
+        if not provider_settings.get("websearch_serpapi_key", []):
+            return "Error: SerpApi API key is not configured in AstrBot."
+
+        query = kwargs["query"].strip()
+        if not query:
+            return "Error: query must not be empty."
+        window = kwargs.get("window")
+        if window and window not in {"1D", "5D", "1M", "6M", "YTD", "1Y", "5Y", "MAX"}:
+            return "Error: window must be one of 1D, 5D, 1M, 6M, YTD, 1Y, 5Y, MAX."
+        payload = {"q": query}
+        if window:
+            payload["window"] = window
+        if kwargs.get("search_lang"):
+            payload["hl"] = kwargs["search_lang"]
+        data = await _serpapi_request(
+            provider_settings, payload, engine="google_finance"
+        )
+        summary = data.get("summary") or {}
+        result = {
+            "results": [],
+            "summary": summary,
+            "knowledge_graph": data.get("knowledge_graph") or {},
+            "financials": data.get("financials") or [],
+            "news_results": data.get("news_results") or [],
+            "suggestions": data.get("suggestions") or [],
+        }
+        if summary:
+            source_url = data.get("search_metadata", {}).get("google_finance_url")
+            if not source_url:
+                source_url = (
+                    f"https://www.google.com/finance/quote/{quote(query, safe=':-.')}"
+                )
+            result["results"].append(
+                {
+                    "title": summary.get("title") or query,
+                    "url": source_url,
+                    "snippet": json.dumps(summary, ensure_ascii=False),
+                    "index": f"{str(uuid.uuid4())[:4]}.1",
+                }
+            )
+        if window:
+            result["graph"] = data.get("graph") or []
+            result["key_events"] = data.get("key_events") or []
+        return json.dumps(result, ensure_ascii=False)
+
+
+@builtin_tool(config=_SERPAPI_WEB_SEARCH_TOOL_CONFIG)
+@pydantic_dataclass
+class SerpApiScholarSearchTool(FunctionTool[AstrAgentContext]):
+    name: str = "scholar_search_serpapi"
+    description: str = (
+        "Search academic publications using Google Scholar. Returns titles, "
+        "source URLs, snippets, publication details, citation counts, and available "
+        "PDF or full-text links. Supports publication year filters."
+    )
+    parameters: dict = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Required. Academic search query.",
+                },
+                "max_results": {
+                    "type": "integer",
+                    "description": "Maximum publications to return, 1-20. Default is 5.",
+                },
+                "search_lang": {
+                    "type": "string",
+                    "description": "Optional. Google Scholar interface language, such as en or zh-cn.",
+                },
+                "year_from": {
+                    "type": "integer",
+                    "description": "Optional. Earliest publication year, inclusive.",
+                },
+                "year_to": {
+                    "type": "integer",
+                    "description": "Optional. Latest publication year, inclusive.",
+                },
+            },
+            "required": ["query"],
+        }
+    )
+
+    async def call(self, context, **kwargs) -> ToolExecResult:
+        """Search scholarly publications and preserve academic metadata.
+
+        Args:
+            context: Agent context containing the active profile settings.
+            **kwargs: Query, result limit, language, and publication year bounds.
+
+        Returns:
+            Publication results as JSON, or a configuration or validation error.
+
+        Raises:
+            RuntimeError: If the search request fails.
+        """
+        _, provider_settings, _ = _get_runtime(context)
+        if not provider_settings.get("websearch_serpapi_key", []):
+            return "Error: SerpApi API key is not configured in AstrBot."
+
+        query = kwargs["query"].strip()
+        if not query:
+            return "Error: query must not be empty."
+        max_results = max(1, min(int(kwargs.get("max_results", 5)), 20))
+        payload = {"q": query, "num": max_results}
+        for name, parameter in (("year_from", "as_ylo"), ("year_to", "as_yhi")):
+            if kwargs.get(name) is not None:
+                year = int(kwargs[name])
+                if not 1 <= year <= 9999:
+                    return "Error: publication years must be between 1 and 9999."
+                payload[parameter] = year
+        if payload.get("as_ylo", 1) > payload.get("as_yhi", 9999):
+            return "Error: year_from must not be greater than year_to."
+        if kwargs.get("search_lang"):
+            payload["hl"] = kwargs["search_lang"]
+        data = await _serpapi_request(
+            provider_settings, payload, engine="google_scholar"
+        )
+        ref_uuid = str(uuid.uuid4())[:4]
+        results = []
+        for item in data.get("organic_results", []):
+            resources = item.get("resources") or []
+            source_url = item.get("link") or next(
+                (resource["link"] for resource in resources if resource.get("link")),
+                None,
+            )
+            # Citation-only entries can have a title without a publisher URL.
+            if not source_url:
+                source_url = f"https://scholar.google.com/scholar?q={quote(item.get('title') or query, safe='')}"
+            cited_by = (item.get("inline_links") or {}).get("cited_by") or {}
+            publication_info = item.get("publication_info") or {}
+            results.append(
+                {
+                    "title": item.get("title") or "",
+                    "url": source_url,
+                    "snippet": item.get("snippet") or "",
+                    "publication_info": publication_info,
+                    "cited_by_count": cited_by.get("total"),
+                    "cited_by_url": cited_by.get("link"),
+                    "resources": resources,
+                    "index": f"{ref_uuid}.{len(results) + 1}",
+                }
+            )
+            if len(results) >= max_results:
+                break
+        return json.dumps({"results": results}, ensure_ascii=False)
 
 
 async def _firecrawl_search(
@@ -1240,12 +1814,426 @@ class ExaGetContentsTool(FunctionTool[AstrAgentContext]):
         return ret or "Error: Exa get contents does not return any results."
 
 
+async def _anysearch_search(
+    provider_settings: dict,
+    payload: dict,
+) -> list[SearchResult]:
+    """Call the AnySearch /v1/search endpoint and return normalized results.
+
+    AnySearch also serves anonymous traffic with a daily free quota, so an empty
+    key list is valid and results in a single unauthenticated request.
+
+    Args:
+        provider_settings: Provider settings containing AnySearch API keys.
+        payload: Request payload for the AnySearch search endpoint.
+
+    Returns:
+        Normalized search results.
+
+    Raises:
+        Exception: If the request fails after all configured keys are exhausted,
+            or if a non-retryable HTTP error is returned.
+    """
+    keys = provider_settings.get("websearch_anysearch_key", [])
+    # `None` marks the anonymous attempt used when no key is configured.
+    attempts: list[str | None] = list(keys) if keys else [None]
+
+    last_error = None
+    for _ in range(len(attempts)):
+        headers = {"Content-Type": "application/json"}
+        if keys:
+            anysearch_key = await _ANYSEARCH_KEY_ROTATOR.get(provider_settings)
+            headers["Authorization"] = f"Bearer {anysearch_key}"
+
+        async with aiohttp.ClientSession(trust_env=True) as session:
+            async with session.post(
+                "https://api.anysearch.com/v1/search",
+                json=payload,
+                headers=headers,
+            ) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    # AnySearch reports business errors (e.g. missing required vertical params)
+                    # with HTTP 200 and a non-zero code; surface the message to the LLM.
+                    code = data.get("code")
+                    if code not in (None, 0):
+                        raise Exception(
+                            f"AnySearch web search failed: {data.get('message') or code}"
+                        )
+                    body = data.get("data") or data
+                    results = []
+                    for item in body.get("results", []):
+                        if not item.get("url"):
+                            continue
+                        snippet = item.get("snippet") or item.get("content") or ""
+                        # Vertical searches (finance.quote, security.vuln, ...) return structured
+                        # fields instead of snippet/content; append them as text so they are not lost.
+                        extras = []
+                        for key, value in item.items():
+                            if (
+                                key in {"title", "url", "snippet", "content", "favicon"}
+                                or value is None
+                            ):
+                                continue
+                            if isinstance(value, dict | list):
+                                # Nested structures (e.g. security.vuln affected_products,
+                                # travel.flight segments) are serialized as JSON text
+                                # so no structured data is dropped.
+                                value = json.dumps(value, ensure_ascii=False)
+                            elif not isinstance(value, str | int | float | bool):
+                                continue
+                            extras.append(f"{key}: {value}")
+                        if extras:
+                            snippet = "\n".join([snippet, *extras]).strip()
+                        results.append(
+                            SearchResult(
+                                title=item.get("title", ""),
+                                url=item["url"],
+                                snippet=snippet,
+                            )
+                        )
+                    return results
+                reason = await response.text()
+                if response.status in _ANYSEARCH_RETRYABLE_HTTP_STATUSES:
+                    last_error = Exception(
+                        f"AnySearch web search failed: {reason}, status: {response.status}",
+                    )
+                    continue
+                raise Exception(
+                    f"AnySearch web search failed: {reason}, status: {response.status}",
+                )
+
+    if last_error is not None:
+        raise last_error
+    raise Exception("AnySearch web search failed with all configured keys.")
+
+
+@builtin_tool(config=_ANYSEARCH_WEB_SEARCH_TOOL_CONFIG)
+@pydantic_dataclass
+class AnySearchWebSearchTool(FunctionTool[AstrAgentContext]):
+    """Web search tool powered by the AnySearch API."""
+
+    name: str = "web_search_anysearch"
+    description: str = (
+        "A web search tool powered by AnySearch. Supports general web search and "
+        "16 vertical domains: academic(search/biomedical/citation/preprint/dataset), "
+        "business(company/jobs/people/trade), code(doc/snippet), "
+        "energy(production/electricity), environment(aqi), "
+        "finance(quote/fundamental/news/calendar/screen/macro), film(torrent), "
+        "gaming(esports/store), health(drug/stats/trial), ip(global), "
+        "legal(case/statute/legislation), resource(image), "
+        "security(vuln/noise/intel/scan), social_media, "
+        "travel(flight/flight_status), agriculture(fao), and general web search."
+    )
+    parameters: dict = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Required. Search query."},
+                "max_results": {
+                    "type": "integer",
+                    "description": "Optional. The maximum number of results to return. Default is 10. Range is 1-10.",
+                },
+                "tag": {
+                    "type": "string",
+                    "description": (
+                        'Optional. Domain capability tag in "{domain}.{subdomain}" form, '
+                        'for example "finance.quote" or "academic.search". '
+                        "Available domains: general, resource, social_media, finance(quote/fundamental/news/calendar/screen/macro), "
+                        "academic(search/biomedical/citation/preprint/dataset), legal(case/statute/legislation), "
+                        "health(drug/stats/trial), business(company/jobs/people/trade), "
+                        "security(vuln/noise/intel/scan), ip(global), code(doc/snippet), "
+                        "energy(production/electricity), environment(aqi), agriculture(fao), "
+                        "travel(flight/flight_status), film(torrent), gaming(esports/store). "
+                        "Omit for general web search."
+                    ),
+                },
+                "zone": {
+                    "type": "string",
+                    "description": 'Optional. Result region, must be one of "cn", "intl", "global".',
+                },
+                "language": {
+                    "type": "string",
+                    "description": 'Optional. Preferred result language, for example "zh-CN" or "en".',
+                },
+                "params": {
+                    "type": "object",
+                    "description": (
+                        "Optional. Extra parameters required by specific vertical tags. "
+                        'Examples: {"symbol": "AAPL", "type": "stock"} for finance.quote, '
+                        '{"type": "cve", "value": "CVE-2021-44228"} for security.vuln, '
+                        '{"doi": "10.1038/s41586-021-03819-2"} for academic.search, '
+                        '{"departure": "SHA", "arrival": "PEK", "date": "2026-09-10"} for travel.flight.'
+                    ),
+                },
+            },
+            "required": ["query"],
+        }
+    )
+
+    async def call(self, context, **kwargs) -> ToolExecResult:
+        _, provider_settings, _ = _get_runtime(context)
+
+        try:
+            max_results = int(kwargs.get("max_results", 10))
+        except (TypeError, ValueError):
+            max_results = 10
+        max_results = min(max(max_results, 1), 10)
+
+        payload: dict = {
+            "query": kwargs["query"],
+            "max_results": max_results,
+            "format": "json",
+        }
+
+        tag = str(kwargs.get("tag", "")).strip()
+        if tag:
+            payload["tag"] = tag
+
+        zone = kwargs.get("zone", "")
+        if zone in ("cn", "intl", "global"):
+            payload["zone"] = zone
+
+        language = str(kwargs.get("language", "")).strip()
+        if language:
+            payload["language"] = language
+
+        params = kwargs.get("params")
+        if isinstance(params, dict):
+            payload["params"] = params
+
+        results = await _anysearch_search(provider_settings, payload)
+        if not results:
+            return "Error: AnySearch web search does not return any results."
+        return _search_result_payload(results)
+
+
+@builtin_tool(config=_DEEPSEEK_WEB_SEARCH_TOOL_CONFIG)
+@pydantic_dataclass
+class DeepSeekWebSearchTool(FunctionTool[AstrAgentContext]):
+    name: str = "web_search_deepseek"
+    description: str = (
+        "Search the web using DeepSeek and return summaries with source references. "
+        "Use deepseek_fetch_web_page for full page content when needed."
+    )
+    parameters: dict = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "description": (
+                        "Search query, 1-128 Unicode characters including filters, "
+                        "not all whitespace. Filters can be combined. Examples:\n"
+                        "Find DeepSeek API references on GitHub or Hugging Face -> "
+                        'DeepSeek "API reference" site:github.com OR site:huggingface.co\n'
+                        "Find Chinese or English DeepSeek news published after 2026-01-01 "
+                        "and before 2027-01-01 -> "
+                        "DeepSeek news lang:zh,en after:2026-01-01 before:2027-01-01\n"
+                        "Find DeepSeek information excluding ads, example.com and the phrase "
+                        '"release notes" -> DeepSeek -Ads -site:example.com -"release notes"\n'
+                        "Date filters accept YYYY or YYYY-MM-DD."
+                    ),
+                },
+                "count": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50,
+                    "default": 10,
+                    "description": "Optional. Number of results, 1-50. Default is 10.",
+                },
+                "ori_question": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "description": "Optional. Original user question, 1-128 Unicode characters.",
+                },
+                "need_content": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "Optional. Include full page content in results. Default is false.",
+                },
+            },
+            "required": ["query"],
+        }
+    )
+
+    async def call(self, context, **kwargs) -> ToolExecResult:
+        """Search DeepSeek and normalize summaries and optional page content.
+
+        Args:
+            context: Current agent execution context.
+            **kwargs: Search query and optional count, ori_question, need_content.
+
+        Returns:
+            Search results with citation indices, or an input/configuration error.
+
+        Raises:
+            RuntimeError: If the DeepSeek API returns an HTTP error.
+        """
+        _, provider_settings, _ = _get_runtime(context)
+        if not provider_settings.get("websearch_deepseek_key", []):
+            return "Error: DeepSeek API key is not configured in AstrBot."
+
+        query = kwargs.get("query")
+        if (
+            not isinstance(query, str)
+            or not query.strip()
+            or not 1 <= len(query) <= 128
+        ):
+            return (
+                "Error: query must be a non-blank string of 1-128 Unicode characters."
+            )
+        count = kwargs.get("count", 10)
+        if type(count) is not int or not 1 <= count <= 50:
+            return "Error: count must be an integer between 1 and 50."
+        ori_question = kwargs.get("ori_question")
+        if ori_question is not None and (
+            not isinstance(ori_question, str) or not 1 <= len(ori_question) <= 128
+        ):
+            return "Error: ori_question must be a string of 1-128 Unicode characters."
+        need_content = kwargs.get("need_content", False)
+        if not isinstance(need_content, bool):
+            return "Error: need_content must be a boolean."
+
+        payload = {"query": query, "count": count, "need_content": need_content}
+        if ori_question is not None:
+            payload["ori_question"] = ori_question
+        key = await _DEEPSEEK_KEY_ROTATOR.get(provider_settings)
+        headers = {
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+        }
+        # Account-level limits and safety refusals cannot be resolved by rotating keys.
+        async with aiohttp.ClientSession(trust_env=True) as session:
+            async with session.post(
+                "https://api.deepseek.com/v1/tools/search",
+                json=payload,
+                headers=headers,
+            ) as response:
+                if response.status != 200:
+                    reason = await response.text()
+                    raise RuntimeError(
+                        f"DeepSeek web search failed: {reason}, status: {response.status}"
+                    )
+                data = await response.json()
+
+        results = []
+        for item in data.get("results", []):
+            snippet = item.get("summary") or item.get("snippet") or ""
+            if need_content and item.get("content"):
+                snippet = "\n\n".join(filter(None, [snippet, item["content"]]))
+            results.append(
+                SearchResult(
+                    title=item.get("title", ""),
+                    url=item.get("url", ""),
+                    snippet=snippet,
+                    favicon=item.get("site_icon"),
+                )
+            )
+        if not results:
+            return "Error: DeepSeek web search does not return any results."
+        return _search_result_payload(results)
+
+
+@builtin_tool(config=_DEEPSEEK_WEB_SEARCH_TOOL_CONFIG)
+@pydantic_dataclass
+class DeepSeekFetchWebPageTool(FunctionTool[AstrAgentContext]):
+    name: str = "deepseek_fetch_web_page"
+    description: str = (
+        "Fetch a single web page using DeepSeek and return its title and Markdown content. "
+        "Use this to read a known URL, including a page found through web search."
+    )
+    parameters: dict = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192,
+                    "description": "Required. HTTP or HTTPS URL with a host, no embedded credentials, and at most 8192 characters.",
+                },
+            },
+            "required": ["url"],
+        }
+    )
+
+    async def call(self, context, **kwargs) -> ToolExecResult:
+        """Fetch Markdown content from the DeepSeek Fetch API.
+
+        Args:
+            context: Current agent execution context.
+            **kwargs: The HTTP or HTTPS page URL to fetch.
+
+        Returns:
+            The page URL, title and Markdown content, or an input/configuration error.
+
+        Raises:
+            RuntimeError: If the DeepSeek API returns an HTTP error.
+        """
+        _, provider_settings, _ = _get_runtime(context)
+        if not provider_settings.get("websearch_deepseek_key", []):
+            return "Error: DeepSeek API key is not configured in AstrBot."
+
+        url = kwargs.get("url")
+        if not isinstance(url, str) or not 1 <= len(url) <= 8192:
+            return "Error: url must be a string of 1-8192 characters."
+        try:
+            parsed = urlsplit(url)
+            # Port syntax and range are validated only when this property is read.
+            _ = parsed.port
+            valid_url = (
+                parsed.scheme in {"http", "https"}
+                and bool(parsed.hostname)
+                and parsed.username is None
+                and parsed.password is None
+                and not any(char.isspace() for char in url)
+            )
+        except ValueError:
+            valid_url = False
+        if not valid_url:
+            return "Error: url must be an HTTP or HTTPS URL with a host and no embedded credentials."
+
+        key = await _DEEPSEEK_KEY_ROTATOR.get(provider_settings)
+        headers = {
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+        }
+        async with aiohttp.ClientSession(trust_env=True) as session:
+            async with session.post(
+                "https://api.deepseek.com/v1/tools/fetch",
+                json={"url": url},
+                headers=headers,
+            ) as response:
+                if response.status != 200:
+                    reason = await response.text()
+                    raise RuntimeError(
+                        f"DeepSeek fetch failed: {reason}, status: {response.status}"
+                    )
+                data = await response.json()
+
+        if not data.get("content"):
+            return "Error: DeepSeek fetch does not return any content."
+        return f"URL: {url}\nTitle: {data.get('title', '')}\nContent: {data['content']}"
+
+
 __all__ = [
+    "AnySearchWebSearchTool",
     "BaiduWebSearchTool",
     "BochaWebSearchTool",
     "BraveWebSearchTool",
+    "DeepSeekFetchWebPageTool",
+    "DeepSeekWebSearchTool",
     "ExaGetContentsTool",
     "ExaWebSearchTool",
+    "SerpApiFinanceSearchTool",
+    "SerpApiImageSearchTool",
+    "SerpApiNewsSearchTool",
+    "SerpApiScholarSearchTool",
+    "SerpApiWebSearchTool",
     "TavilyExtractWebPageTool",
     "TavilyWebSearchTool",
     "WEB_SEARCH_TOOL_NAMES",

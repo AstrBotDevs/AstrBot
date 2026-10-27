@@ -1,13 +1,16 @@
 """备份功能单元测试"""
 
+import hashlib
 import json
 import os
 import re
 import zipfile
 from datetime import datetime
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from sqlmodel import SQLModel, select
 
 from astrbot.core.backup import (
     BACKUP_MANIFEST_VERSION,
@@ -15,6 +18,7 @@ from astrbot.core.backup import (
     MAIN_DB_MODELS,
     ImportPreCheckResult,
 )
+from astrbot.core.backup.constants import EXCLUDED_MAIN_DB_MODELS
 from astrbot.core.backup.exporter import AstrBotExporter
 from astrbot.core.backup.importer import (
     PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT,
@@ -24,11 +28,23 @@ from astrbot.core.backup.importer import (
     _get_major_version,
 )
 from astrbot.core.config.default import VERSION
+from astrbot.core.db import po
 from astrbot.core.db.po import (
+    ApiKey,
     ConversationV2,
+    DashboardTrustedDevice,
+    ProviderStat,
+    UmoAlias,
+    UmoSender,
 )
+from astrbot.core.db.sqlite import SQLiteDatabase
+from astrbot.core.utils.upload import UploadTooLargeError
 from astrbot.core.utils.version_comparator import VersionComparator
 from astrbot.dashboard.services.backup_service import (
+    CHUNK_SIZE,
+    MAX_BACKUP_TOTAL_BYTES,
+    BackupService,
+    BackupServiceError,
     generate_unique_filename,
     secure_filename,
 )
@@ -1010,6 +1026,21 @@ class TestModelMappings:
         """测试主数据库模型映射非空"""
         assert len(MAIN_DB_MODELS) > 0
 
+    def test_all_main_db_models_have_a_backup_policy(self):
+        """Require each main database table to be backed up or explicitly excluded."""
+        models = {
+            model.__tablename__: model
+            for model in vars(po).values()
+            if isinstance(model, type)
+            and issubclass(model, SQLModel)
+            and "__table__" in vars(model)
+        }
+        assert MAIN_DB_MODELS.keys().isdisjoint(EXCLUDED_MAIN_DB_MODELS)
+        assert models == MAIN_DB_MODELS | EXCLUDED_MAIN_DB_MODELS
+        assert EXCLUDED_MAIN_DB_MODELS == {
+            "dashboard_trusted_devices": DashboardTrustedDevice,
+        }
+
     def test_main_db_models_contain_expected_tables(self):
         """测试主数据库模型映射包含预期的表"""
         expected_tables = [
@@ -1041,6 +1072,264 @@ class TestModelMappings:
 
 class TestBackupIntegration:
     """备份集成测试"""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("model", "data"),
+        [
+            (
+                UmoAlias,
+                {
+                    "umo": "qq:GroupMessage:123",
+                    "creator_sender_id": "admin",
+                    "auto_name": "Original group name",
+                    "user_alias": "Team chat",
+                },
+            ),
+            (
+                UmoSender,
+                {
+                    "umo": "qq:GroupMessage:123",
+                    "sender_id": "456",
+                    "sender_name": "Alice",
+                },
+            ),
+            (
+                ProviderStat,
+                {
+                    "umo": "qq:GroupMessage:123",
+                    "conversation_id": "conversation-1",
+                    "provider_id": "provider-1",
+                    "provider_model": "model-1",
+                    "status": "completed",
+                    "token_input_other": 120,
+                    "token_input_cached": 80,
+                    "token_output": 40,
+                    "start_time": 10.0,
+                    "end_time": 12.5,
+                    "time_to_first_token": 0.5,
+                },
+            ),
+            (
+                ApiKey,
+                {
+                    "name": "External client",
+                    "key_id": "key-1",
+                    "key_hash": "a" * 64,
+                    "key_prefix": "ab_test",
+                    "scopes": ["chat", "sessions"],
+                    "created_by": "admin",
+                    "last_used_at": datetime(2026, 1, 1),
+                    "expires_at": datetime(2099, 1, 1),
+                },
+            ),
+            (
+                ApiKey,
+                {
+                    "name": "Revoked client",
+                    "key_id": "key-2",
+                    "key_hash": "b" * 64,
+                    "key_prefix": "ab_revoked",
+                    "scopes": [],
+                    "created_by": "admin",
+                    "revoked_at": datetime(2026, 1, 1),
+                },
+            ),
+        ],
+        ids=["umo-alias", "umo-sender", "provider-stats", "api-key", "revoked-api-key"],
+    )
+    async def test_persistent_models_roundtrip(
+        self, tmp_path, monkeypatch, model, data
+    ):
+        """Preserve persistent records and replace existing target rows.
+
+        Args:
+            tmp_path: Temporary directory for SQLite databases and the archive.
+            monkeypatch: Fixture used to isolate the AstrBot data directory.
+            model: Model whose backup behavior is under test.
+            data: Persisted field values to preserve through the archive.
+        """
+        monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
+        source = SQLiteDatabase(str(tmp_path / "source.db"))
+        target = SQLiteDatabase(str(tmp_path / "target.db"))
+        try:
+            async with source.get_db() as session:
+                async with session.begin():
+                    session.add(model(**data))
+            async with source.get_db() as session:
+                expected = (
+                    (await session.execute(select(model))).scalar_one().model_dump()
+                )
+            async with target.get_db() as session:
+                async with session.begin():
+                    primary_key = next(iter(model.__table__.primary_key)).name
+                    session.add(model(**(data | {primary_key: 999})))
+            exporter = AstrBotExporter(
+                main_db=source, config_path=str(tmp_path / "missing-config.json")
+            )
+            zip_path = await exporter.export_all(output_dir=str(tmp_path / "backups"))
+
+            result = await AstrBotImporter(main_db=target).import_all(zip_path)
+            assert result.success, result.errors
+            assert result.imported_tables[model.__tablename__] == 1
+            async with target.get_db() as session:
+                restored = (await session.execute(select(model))).scalars().all()
+                assert [row.model_dump() for row in restored] == [expected]
+            if model is ApiKey:
+                active = await target.get_active_api_key_by_hash(data["key_hash"])
+                assert (active is None) == (data.get("revoked_at") is not None)
+        finally:
+            await source.engine.dispose()
+            await target.engine.dispose()
+
+    @pytest.mark.asyncio
+    async def test_device_trust_is_excluded_and_cleared(self, tmp_path, monkeypatch):
+        """Exclude source device trust and invalidate target trust on replace restore.
+
+        Args:
+            tmp_path: Temporary directory for databases and the archive.
+            monkeypatch: Fixture used to isolate the AstrBot data directory.
+        """
+        monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
+        source = SQLiteDatabase(str(tmp_path / "source.db"))
+        target = SQLiteDatabase(str(tmp_path / "target.db"))
+        try:
+            for database in (source, target):
+                async with database.get_db() as session:
+                    async with session.begin():
+                        session.add(
+                            DashboardTrustedDevice(
+                                token_hash="device-token",
+                                totp_secret_hash="totp-secret",
+                                expires_at=datetime(2099, 1, 1),
+                            )
+                        )
+            exporter = AstrBotExporter(
+                main_db=source, config_path=str(tmp_path / "missing-config.json")
+            )
+            zip_path = await exporter.export_all(output_dir=str(tmp_path / "backups"))
+            with zipfile.ZipFile(zip_path) as archive:
+                main_data = json.loads(archive.read("databases/main_db.json"))
+                assert "dashboard_trusted_devices" not in main_data
+
+            result = await AstrBotImporter(main_db=target).import_all(zip_path)
+            assert result.success, result.errors
+            async with target.get_db() as session:
+                assert (
+                    not (await session.execute(select(DashboardTrustedDevice)))
+                    .scalars()
+                    .all()
+                )
+        finally:
+            await source.engine.dispose()
+            await target.engine.dispose()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("include_mcp", [True, False], ids=["mcp", "legacy"])
+    @pytest.mark.parametrize(
+        "existing_target", [True, False], ids=["existing", "fresh"]
+    )
+    async def test_mcp_config_roundtrip(
+        self, tmp_path, monkeypatch, include_mcp, existing_target
+    ):
+        """Restore MCP configuration across distinct AstrBot roots.
+
+        Args:
+            tmp_path: Temporary directory for both instances and their databases.
+            monkeypatch: Fixture used to switch between instance roots.
+            include_mcp: Whether the backup contains an MCP configuration.
+            existing_target: Whether the target already has MCP configuration.
+        """
+        source_root = tmp_path / "source"
+        target_root = tmp_path / "target"
+        source_data = source_root / "data"
+        source_data.mkdir(parents=True)
+        mcp_content = json.dumps(
+            {
+                "mcpServers": {
+                    "search": {"url": "https://example.com/mcp", "enabled": False}
+                }
+            },
+            indent=2,
+        ).encode("utf-8")
+        if include_mcp:
+            (source_data / "mcp_server.json").write_bytes(mcp_content)
+        target_data = target_root / "data"
+        target_mcp = target_data / "mcp_server.json"
+        if existing_target:
+            target_data.mkdir(parents=True)
+            target_mcp.write_bytes(b'{"mcpServers": {}}')
+
+        source = SQLiteDatabase(str(tmp_path / "source.db"))
+        target = SQLiteDatabase(str(tmp_path / "target.db"))
+        try:
+            monkeypatch.setenv("ASTRBOT_ROOT", str(source_root))
+            exporter = AstrBotExporter(
+                main_db=source, config_path=str(source_data / "cmd_config.json")
+            )
+            zip_path = await exporter.export_all(output_dir=str(tmp_path / "backups"))
+            with zipfile.ZipFile(zip_path) as archive:
+                manifest = json.loads(archive.read("manifest.json"))
+                assert ("config/mcp_server.json" in archive.namelist()) == include_mcp
+                if include_mcp:
+                    assert manifest["checksums"]["config/mcp_server.json"] == (
+                        "sha256:" + hashlib.sha256(mcp_content).hexdigest()
+                    )
+
+            monkeypatch.setenv("ASTRBOT_ROOT", str(target_root))
+            result = await AstrBotImporter(
+                main_db=target, config_path=str(target_data / "cmd_config.json")
+            ).import_all(zip_path)
+            assert result.success, result.errors
+            assert not result.warnings
+            if include_mcp:
+                assert target_mcp.read_bytes() == mcp_content
+                assert result.imported_files["mcp_config"] == 1
+                if existing_target:
+                    assert (
+                        target_mcp.with_suffix(".json.bak").read_bytes()
+                        == b'{"mcpServers": {}}'
+                    )
+            elif existing_target:
+                assert target_mcp.read_bytes() == b'{"mcpServers": {}}'
+                assert not target_mcp.with_suffix(".json.bak").exists()
+            else:
+                assert not target_mcp.exists()
+        finally:
+            await source.engine.dispose()
+            await target.engine.dispose()
+
+    @pytest.mark.asyncio
+    async def test_cron_jobs_roundtrip(self, tmp_path):
+        """Preserve a scheduled task through backup export and import."""
+        source = SQLiteDatabase(str(tmp_path / "source.db"))
+        target = SQLiteDatabase(str(tmp_path / "target.db"))
+        try:
+            job = await source.create_cron_job(
+                name="Daily reminder",
+                job_type="active_agent",
+                cron_expression="0 9 * * *",
+                timezone="Asia/Taipei",
+                payload={"message": "Reminder"},
+            )
+            exporter = AstrBotExporter(
+                main_db=source, config_path=str(tmp_path / "missing-config.json")
+            )
+            with patch(
+                "astrbot.core.backup.exporter.get_backup_directories", return_value={}
+            ):
+                zip_path = await exporter.export_all(
+                    output_dir=str(tmp_path / "backups")
+                )
+
+            result = await AstrBotImporter(main_db=target).import_all(zip_path)
+            assert result.success, result.errors
+            restored = await target.list_cron_jobs()
+            assert len(restored) == 1
+            assert restored[0].model_dump() == job.model_dump()
+        finally:
+            await source.engine.dispose()
+            await target.engine.dispose()
 
     @pytest.mark.asyncio
     async def test_export_import_roundtrip(self, tmp_path):
@@ -1093,3 +1382,362 @@ class TestBackupIntegration:
             # 读取主数据库
             main_db = json.loads(zf.read("databases/main_db.json"))
             assert "platform_stats" in main_db
+
+
+class _StubUploadFile:
+    """模拟 adapter 风格 save() 契约的上传文件对象"""
+
+    def __init__(self, data: bytes):
+        self._data = data
+
+    async def save(self, destination, *, max_bytes=None) -> int:
+        if max_bytes is not None and len(self._data) > max_bytes:
+            raise UploadTooLargeError(max_bytes)
+        Path(destination).write_bytes(self._data)
+        return len(self._data)
+
+
+class TestBackupUploadLimits:
+    """备份上传大小限制测试"""
+
+    @pytest.fixture
+    def backup_service(self, tmp_path):
+        """创建使用临时目录的 BackupService"""
+        service = BackupService(db=MagicMock(), core_lifecycle=MagicMock())
+        service.backup_dir = str(tmp_path / "backups")
+        service.chunks_dir = str(tmp_path / "backups" / ".chunks")
+        service.chunked_uploads.chunks_root = Path(service.chunks_dir)
+        return service
+
+    def test_upload_init_rejects_oversized_total(self, backup_service):
+        """声明总大小超过上限时拒绝初始化"""
+        with pytest.raises(BackupServiceError, match="size limit"):
+            backup_service.upload_init(
+                {"filename": "b.zip", "total_size": MAX_BACKUP_TOTAL_BYTES + 1},
+                owner="tester",
+            )
+
+    @pytest.mark.asyncio
+    async def test_upload_chunk_rejects_oversized_chunk(self, backup_service):
+        """超过 CHUNK_SIZE 的分片被拒绝且不产生残留文件"""
+        session = backup_service.upload_init(
+            {"filename": "b.zip", "total_size": CHUNK_SIZE}, owner="tester"
+        )
+        big_chunk = _StubUploadFile(b"x" * (CHUNK_SIZE + 1))
+
+        with pytest.raises(BackupServiceError, match="Chunk exceeds the size limit"):
+            await backup_service.upload_chunk(
+                upload_id=session["upload_id"],
+                chunk_index_str="0",
+                chunk_file=big_chunk,
+                owner="tester",
+            )
+
+        await backup_service.cleanup_upload_session(session["upload_id"])
+
+    @pytest.mark.asyncio
+    async def test_upload_chunk_accepts_small_chunk(self, backup_service):
+        """正常大小的分片可以上传"""
+        session = backup_service.upload_init(
+            {"filename": "b.zip", "total_size": 100}, owner="tester"
+        )
+        result = await backup_service.upload_chunk(
+            upload_id=session["upload_id"],
+            chunk_index_str="0",
+            chunk_file=_StubUploadFile(b"x" * 100),
+            owner="tester",
+        )
+        assert result["received"] == 1
+        assert result["total"] == 1
+
+        await backup_service.cleanup_upload_session(session["upload_id"])
+
+    @pytest.mark.asyncio
+    async def test_upload_complete_rejects_size_mismatch(self, backup_service):
+        """合并后大小与声明大小不一致时拒绝完成（分片带外损坏的兜底）"""
+        declared = CHUNK_SIZE + 100
+        session = backup_service.upload_init(
+            {"filename": "b.zip", "total_size": declared}, owner="tester"
+        )
+        await backup_service.upload_chunk(
+            upload_id=session["upload_id"],
+            chunk_index_str="0",
+            chunk_file=_StubUploadFile(b"x" * CHUNK_SIZE),
+            owner="tester",
+        )
+        await backup_service.upload_chunk(
+            upload_id=session["upload_id"],
+            chunk_index_str="1",
+            chunk_file=_StubUploadFile(b"x" * 100),
+            owner="tester",
+        )
+        # 传片时的字节数校验已拦截短写；此处绕过保存路径直接篡改磁盘上的
+        # 分片（模拟带外损坏），验证合并时的大小复核仍然兜底
+        chunk_path = (
+            backup_service.chunked_uploads.chunks_root / session["upload_id"] / "1.part"
+        )
+        chunk_path.write_bytes(b"x" * 50)
+
+        with pytest.raises(BackupServiceError, match="does not match"):
+            await backup_service.upload_complete(
+                {"upload_id": session["upload_id"]}, owner="tester"
+            )
+
+        await backup_service.cleanup_upload_session(session["upload_id"])
+
+    @pytest.mark.asyncio
+    async def test_session_rejects_other_owner(self, backup_service):
+        """会话绑定创建者，其他用户无法传片、合并或取消"""
+        session = backup_service.upload_init(
+            {"filename": "b.zip", "total_size": 100}, owner="alice"
+        )
+
+        with pytest.raises(BackupServiceError, match="not found or expired"):
+            await backup_service.upload_chunk(
+                upload_id=session["upload_id"],
+                chunk_index_str="0",
+                chunk_file=_StubUploadFile(b"x" * 100),
+                owner="mallory",
+            )
+        with pytest.raises(BackupServiceError, match="not found or expired"):
+            await backup_service.upload_complete(
+                {"upload_id": session["upload_id"]}, owner="mallory"
+            )
+        with pytest.raises(BackupServiceError, match="not found or expired"):
+            await backup_service.upload_abort(
+                {"upload_id": session["upload_id"]}, owner="mallory"
+            )
+
+        # 会话在攻击后仍然存活，真正的主人可以正常使用
+        result = await backup_service.upload_chunk(
+            upload_id=session["upload_id"],
+            chunk_index_str="0",
+            chunk_file=_StubUploadFile(b"x" * 100),
+            owner="alice",
+        )
+        assert result["received"] == 1
+
+        await backup_service.cleanup_upload_session(session["upload_id"])
+
+    @pytest.mark.asyncio
+    async def test_upload_status_reports_progress(self, backup_service):
+        """状态查询返回已收分片，支持乱序后的续传定位"""
+        session = backup_service.upload_init(
+            {"filename": "b.zip", "total_size": CHUNK_SIZE * 2}, owner="tester"
+        )
+        # 故意乱序：只传第 1 片（索引 1）
+        await backup_service.upload_chunk(
+            upload_id=session["upload_id"],
+            chunk_index_str="1",
+            chunk_file=_StubUploadFile(b"x" * CHUNK_SIZE),
+            owner="tester",
+        )
+
+        status = backup_service.upload_status(
+            {"upload_id": session["upload_id"]}, owner="tester"
+        )
+        assert status["received_chunks"] == [1]
+        assert status["total_chunks"] == 2
+        assert status["chunk_size"] == CHUNK_SIZE
+        assert 0 < status["expires_in"] <= 3600
+
+        await backup_service.cleanup_upload_session(session["upload_id"])
+
+    def test_upload_status_bound_to_owner(self, backup_service):
+        """状态查询同样绑定 owner，且不能探测他人会话"""
+        session = backup_service.upload_init(
+            {"filename": "b.zip", "total_size": 100}, owner="alice"
+        )
+
+        with pytest.raises(BackupServiceError, match="not found or expired"):
+            backup_service.upload_status(
+                {"upload_id": session["upload_id"]}, owner="mallory"
+            )
+        with pytest.raises(BackupServiceError, match="not found or expired"):
+            backup_service.upload_status({"upload_id": "no-such-id"}, owner="alice")
+
+    def test_upload_status_does_not_extend_lifetime(self, backup_service):
+        """查询状态不得刷新 last_activity，否则轮询会让会话永不过期"""
+        session = backup_service.upload_init(
+            {"filename": "b.zip", "total_size": 100}, owner="alice"
+        )
+        inner = backup_service.chunked_uploads.get_session(
+            session["upload_id"], owner="alice"
+        )
+        inner.last_activity -= 100  # 模拟会话已经闲置了 100 秒
+
+        status = backup_service.upload_status(
+            {"upload_id": session["upload_id"]}, owner="alice"
+        )
+        assert status["expires_in"] <= 3600 - 100 + 1
+        assert (
+            backup_service.chunked_uploads.get_session(
+                session["upload_id"], owner="alice"
+            ).last_activity
+            == inner.last_activity
+        )
+
+    @pytest.mark.asyncio
+    async def test_failed_chunk_retry_preserves_received_chunk(self, backup_service):
+        """同索引重传失败不得破坏已收到的分片"""
+        session = backup_service.upload_init(
+            {"filename": "b.zip", "total_size": 100}, owner="alice"
+        )
+        upload_id = session["upload_id"]
+        good = b"x" * 100
+        await backup_service.upload_chunk(
+            upload_id=upload_id,
+            chunk_index_str="0",
+            chunk_file=_StubUploadFile(good),
+            owner="alice",
+        )
+
+        # 同索引用超大分片重试：必须报错，且已收到的分片原样保留
+        with pytest.raises(BackupServiceError, match="size limit"):
+            await backup_service.upload_chunk(
+                upload_id=upload_id,
+                chunk_index_str="0",
+                chunk_file=_StubUploadFile(b"y" * (CHUNK_SIZE + 1)),
+                owner="alice",
+            )
+
+        result = await backup_service.upload_complete(
+            {"upload_id": upload_id}, owner="alice"
+        )
+        assert result["size"] == 100
+        merged = Path(backup_service.backup_dir) / result["filename"]
+        assert merged.read_bytes() == good
+
+    @pytest.mark.asyncio
+    async def test_chunk_publish_failure_cleans_temp(self, backup_service, monkeypatch):
+        """原子改名失败时临时文件必须清理，已收分片不受影响"""
+        session = backup_service.upload_init(
+            {"filename": "b.zip", "total_size": CHUNK_SIZE + 100}, owner="alice"
+        )
+        upload_id = session["upload_id"]
+        await backup_service.upload_chunk(
+            upload_id=upload_id,
+            chunk_index_str="0",
+            chunk_file=_StubUploadFile(b"x" * CHUNK_SIZE),
+            owner="alice",
+        )
+
+        def _boom(*args, **kwargs):
+            raise OSError("simulated rename failure")
+
+        monkeypatch.setattr(
+            "astrbot.dashboard.services.chunked_upload_service.os.replace", _boom
+        )
+        with pytest.raises(OSError, match="simulated rename failure"):
+            await backup_service.upload_chunk(
+                upload_id=upload_id,
+                chunk_index_str="1",
+                chunk_file=_StubUploadFile(b"y" * 100),
+                owner="alice",
+            )
+
+        chunk_dir = backup_service.chunked_uploads.chunks_root / upload_id
+        assert not list(chunk_dir.glob("*.tmp"))
+        # 改名失败的分片未登记，已收到的第 0 片完好
+        status = backup_service.upload_status({"upload_id": upload_id}, owner="alice")
+        assert status["received_chunks"] == [0]
+        assert (chunk_dir / "0.part").read_bytes() == b"x" * CHUNK_SIZE
+
+        await backup_service.cleanup_upload_session(upload_id)
+
+    @pytest.mark.asyncio
+    async def test_expired_session_is_rejected_and_abortable(self, backup_service):
+        """过期会话不可用（get_session 强制过期），但 abort 清理仍有效"""
+        session = backup_service.upload_init(
+            {"filename": "b.zip", "total_size": 100}, owner="alice"
+        )
+        upload_id = session["upload_id"]
+        inner = backup_service.chunked_uploads.get_session(upload_id, owner="alice")
+        inner.last_activity -= 7200  # 闲置两小时，已过 1 小时过期线
+
+        with pytest.raises(BackupServiceError, match="not found or expired"):
+            backup_service.upload_status({"upload_id": upload_id}, owner="alice")
+        with pytest.raises(BackupServiceError, match="not found or expired"):
+            await backup_service.upload_chunk(
+                upload_id=upload_id,
+                chunk_index_str="0",
+                chunk_file=_StubUploadFile(b"x" * 100),
+                owner="alice",
+            )
+
+        # abort 是清理路径，对过期会话仍然有效
+        await backup_service.upload_abort({"upload_id": upload_id}, owner="alice")
+        assert upload_id not in backup_service.chunked_uploads.sessions
+
+    @pytest.mark.asyncio
+    async def test_upload_init_starts_cleanup_task(self, backup_service):
+        """备份上传初始化必须启动过期清理任务"""
+        backup_service.upload_init(
+            {"filename": "b.zip", "total_size": 100}, owner="alice"
+        )
+        task = backup_service.chunked_uploads._cleanup_task
+        assert task is not None and not task.done()
+        task.cancel()
+
+    @pytest.mark.asyncio
+    async def test_cleanup_failure_keeps_session_for_retry(
+        self, backup_service, monkeypatch
+    ):
+        """目录删除失败时会话保持注册，看门狗可重试，成功后正常摘除"""
+        import shutil
+
+        session = backup_service.upload_init(
+            {"filename": "b.zip", "total_size": 100}, owner="alice"
+        )
+        upload_id = session["upload_id"]
+
+        calls = {"n": 0}
+        real_rmtree = shutil.rmtree
+
+        def _flaky(path, *args, **kwargs):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise OSError("transient fs error")
+            return real_rmtree(path, *args, **kwargs)
+
+        monkeypatch.setattr(
+            "astrbot.dashboard.services.chunked_upload_service.shutil.rmtree", _flaky
+        )
+        await backup_service.chunked_uploads.cleanup_session(upload_id)
+        assert upload_id in backup_service.chunked_uploads.sessions
+
+        await backup_service.chunked_uploads.cleanup_session(upload_id)
+        assert upload_id not in backup_service.chunked_uploads.sessions
+
+    @pytest.mark.asyncio
+    async def test_short_write_chunk_is_rejected(self, backup_service):
+        """save() 落盘字节数不足时不得发布分片，且不留临时文件"""
+        session = backup_service.upload_init(
+            {"filename": "b.zip", "total_size": 100}, owner="alice"
+        )
+        upload_id = session["upload_id"]
+
+        with pytest.raises(BackupServiceError, match="size mismatch"):
+            await backup_service.upload_chunk(
+                upload_id=upload_id,
+                chunk_index_str="0",
+                chunk_file=_StubUploadFile(b"x" * 50),
+                owner="alice",
+            )
+
+        # 分片未发布、无临时文件残留；补传完整数据后正常完成
+        chunk_dir = backup_service.chunked_uploads.chunks_root / upload_id
+        assert not list(chunk_dir.glob("*.tmp"))
+        status = backup_service.upload_status({"upload_id": upload_id}, owner="alice")
+        assert status["received_chunks"] == []
+
+        await backup_service.upload_chunk(
+            upload_id=upload_id,
+            chunk_index_str="0",
+            chunk_file=_StubUploadFile(b"y" * 100),
+            owner="alice",
+        )
+        result = await backup_service.upload_complete(
+            {"upload_id": upload_id}, owner="alice"
+        )
+        assert result["size"] == 100

@@ -14,6 +14,7 @@ from astrbot.api.event import MessageChain
 from astrbot.api.message_components import At, ButtonInteraction, Plain
 from astrbot.api.platform import (
     AstrBotMessage,
+    Group,
     MessageMember,
     MessageType,
     Platform,
@@ -253,15 +254,18 @@ class MattermostPlatformAdapter(Platform):
             abm.type = MessageType.FRIEND_MESSAGE
         else:
             abm.type = MessageType.GROUP_MESSAGE
-            abm.group_id = channel_id
+            abm.group = Group(
+                group_id=channel_id,
+                group_name=(
+                    data.get("channel_display_name") or data.get("channel_name") or None
+                ),
+            )
 
         if file_ids:
-            (
-                attachment_components,
-                temp_paths,
-            ) = await self.client.parse_post_attachments(file_ids)
+            attachment_components, _ = await self.client.parse_post_attachments(
+                file_ids
+            )
             abm.message.extend(attachment_components)
-            setattr(abm, "temporary_file_paths", temp_paths)
 
         abm.message_str = self._build_message_str(
             abm.message,

@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
+from astrbot.core.computer import process_sandbox
 from astrbot.core.computer.booters import local as local_booter
 from astrbot.core.computer.booters.local import LocalFileSystemComponent
 
@@ -214,6 +216,87 @@ def test_local_file_system_component_preserves_python_ripgrep_before_314(monkeyp
             "after_context": 3,
             "before_context": 2,
             "line_number": True,
+        }
+    ]
+
+
+@pytest.mark.skipif(
+    sys.version_info >= (3, 14),
+    reason="python-ripgrep is only used before Python 3.14",
+)
+def test_local_file_system_component_runs_restricted_search_in_read_only_sandbox(
+    monkeypatch,
+    tmp_path,
+):
+    sandbox_calls = []
+
+    class FakeSandbox:
+        def run(self, argv, spec, *, env=None, timeout=None, **kwargs):
+            sandbox_calls.append(
+                {
+                    "argv": argv,
+                    "workspace": spec.workspace,
+                    "env": env,
+                    "workspace_writable": spec.workspace_writable,
+                    "timeout": timeout,
+                    "kwargs": kwargs,
+                }
+            )
+            return process_sandbox.SandboxRunResult(
+                returncode=0,
+                stdout=b"target.txt:1:needle\n",
+                stderr=b"",
+            )
+
+    monkeypatch.setattr(local_booter.sys, "version_info", (3, 13))
+    monkeypatch.setattr(local_booter.shutil, "which", lambda _name: "/usr/bin/rg")
+    monkeypatch.setattr(
+        local_booter,
+        "create_process_sandbox",
+        lambda: FakeSandbox(),
+    )
+    monkeypatch.setattr(
+        local_booter,
+        "search",
+        lambda **_kwargs: pytest.fail(
+            "Restricted search must not use host python-ripgrep."
+        ),
+    )
+
+    result = asyncio.run(
+        LocalFileSystemComponent().search_files(
+            "needle",
+            path=str(tmp_path / "target.txt"),
+            sandboxed=True,
+            sandbox_root=str(tmp_path),
+        )
+    )
+
+    site_packages = str(
+        Path(local_booter.python_ripgrep.__file__).resolve().parent.parent
+    )
+    expected_search_command = [
+        local_booter.sys.executable,
+        "-I",
+        "-S",
+        "-c",
+        local_booter._SANDBOXED_PYTHON_RIPGREP,
+        site_packages,
+        "needle",
+        str(tmp_path / "target.txt"),
+        "",
+        "",
+        "",
+    ]
+    assert result == {"success": True, "content": "target.txt:1:needle\n"}
+    assert sandbox_calls == [
+        {
+            "argv": expected_search_command,
+            "workspace": tmp_path,
+            "env": None,
+            "workspace_writable": False,
+            "timeout": 30,
+            "kwargs": {},
         }
     ]
 

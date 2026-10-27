@@ -37,6 +37,7 @@ class ProviderOpenAITTSAPI(TTSProvider):
             logger.info(f"[OpenAI TTS] 使用代理: {proxy}")
             http_client = httpx.AsyncClient(proxy=proxy)
         self.client = AsyncOpenAI(
+            default_headers=self.request_headers,
             api_key=self.chosen_api_key,
             base_url=provider_config.get("api_base"),
             timeout=timeout,

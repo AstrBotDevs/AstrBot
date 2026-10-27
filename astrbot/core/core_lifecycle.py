@@ -130,8 +130,7 @@ class AstrBotCoreLifecycle:
         if len(providers) == 0:
             return
 
-        provider_settings = getattr(pm, "provider_settings", None) or {}
-        default_id = provider_settings.get("default_provider_id")
+        default_id = getattr(pm, "default_chat_provider_id", "")
         fallback = pm.curr_provider_inst or providers[0]
         fallback_id = fallback.provider_config.get("id") or "unknown"
 
@@ -140,7 +139,7 @@ class AstrBotCoreLifecycle:
                 return
             self._default_chat_provider_warning_emitted = True
             logger.warning(
-                "Detected %d enabled chat providers but `provider_settings.default_provider_id` is empty. "
+                "Detected %d enabled chat providers but `agent_runner.config.model.provider_id` is empty. "
                 "AstrBot will use `%s` as the startup fallback chat provider. "
                 "Set a default chat model in the WebUI configuration page to avoid unexpected provider switching.",
                 len(providers),
@@ -152,7 +151,7 @@ class AstrBotCoreLifecycle:
         if not found:
             self._default_chat_provider_warning_emitted = True
             logger.warning(
-                "Configured `default_provider_id` is `%s` but no enabled provider matches that ID. "
+                "Configured Agent Runner model provider ID `%s` does not match an enabled provider. "
                 "AstrBot will use `%s` as the fallback chat provider. "
                 "Please check the WebUI configuration page.",
                 default_id,
@@ -170,10 +169,8 @@ class AstrBotCoreLifecycle:
             LogManager.configure_logger(
                 logger, self.astrbot_config, override_level="DEBUG"
             )
-            LogManager.configure_trace_logger(self.astrbot_config)
         else:
             LogManager.configure_logger(logger, self.astrbot_config)
-            LogManager.configure_trace_logger(self.astrbot_config)
 
         await self.db.initialize()
         button_callback_db_path = getattr(self.db, "db_path", None)
@@ -261,6 +258,7 @@ class AstrBotCoreLifecycle:
             self.cron_manager,
             self.subagent_orchestrator,
         )
+        self.star_context.html_renderer = html_renderer
 
         # 初始化插件管理器
         self.plugin_manager = PluginManager(self.star_context, self.astrbot_config)
@@ -427,6 +425,9 @@ class AstrBotCoreLifecycle:
                 logger.error(f"任务 {task.get_name()} 发生错误: {e}")
 
         # 释放数据库引擎连接池
+        from astrbot.core.utils.trace_store import close_trace_store
+
+        await asyncio.to_thread(close_trace_store)
         try:
             await self.db.engine.dispose()
         except Exception as e:
@@ -438,6 +439,9 @@ class AstrBotCoreLifecycle:
         await self.provider_manager.terminate()
         await self.platform_manager.terminate()
         await self.kb_manager.terminate()
+        from astrbot.core.utils.trace_store import close_trace_store
+
+        await asyncio.to_thread(close_trace_store)
         if sp.db_helper is self.db:
             await sp.close()
         self.dashboard_shutdown_event.set()
@@ -470,7 +474,7 @@ class AstrBotCoreLifecycle:
         mapping = {}
         for conf_id, ab_config in self.astrbot_config_mgr.confs.items():
             scheduler = PipelineScheduler(
-                PipelineContext(ab_config, self.plugin_manager, conf_id),
+                PipelineContext(ab_config, self.plugin_manager, conf_id, self.db),
             )
             await scheduler.initialize()
             mapping[conf_id] = scheduler
@@ -487,7 +491,7 @@ class AstrBotCoreLifecycle:
         if not ab_config:
             raise ValueError(f"配置文件 {conf_id} 不存在")
         scheduler = PipelineScheduler(
-            PipelineContext(ab_config, self.plugin_manager, conf_id),
+            PipelineContext(ab_config, self.plugin_manager, conf_id, self.db),
         )
         await scheduler.initialize()
         self.pipeline_scheduler_mapping[conf_id] = scheduler

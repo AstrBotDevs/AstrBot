@@ -114,7 +114,7 @@ def _merge_buffered_llm_chains(
 
 async def run_agent(
     agent_runner: AgentRunner,
-    max_step: int = 30,
+    max_step: int = 128,
     show_tool_use: bool = True,
     show_tool_call_result: bool = False,
     stream_to_general: bool = False,
@@ -122,6 +122,9 @@ async def run_agent(
     buffer_intermediate_messages: bool = False,
 ) -> AsyncGenerator[MessageChain | None, None]:
     step_idx = 0
+    agent_runner._step_budget_max = max_step
+    agent_runner._step_budget_used = 0
+    agent_runner._step_budget_notified = set()
     astr_event = agent_runner.run_context.context.event
     tool_name_by_call_id: dict[str, str] = {}
     buffered_llm_chains: list[MessageChain] = []
@@ -145,7 +148,7 @@ async def run_agent(
                 agent_runner.run_context.messages.append(
                     Message(
                         role="user",
-                        content="工具调用次数已达到上限，请停止使用工具，并根据已经收集到的信息，对你的任务和发现进行总结，然后直接回复用户。",
+                        content=ToolLoopAgentRunner.MAX_STEPS_REACHED_PROMPT,
                     )
                 )
 
@@ -364,7 +367,7 @@ async def _watch_agent_stop_signal(agent_runner: AgentRunner, astr_event) -> Non
 async def run_live_agent(
     agent_runner: AgentRunner,
     tts_provider: TTSProvider | None = None,
-    max_step: int = 30,
+    max_step: int = 128,
     show_tool_use: bool = True,
     show_tool_call_result: bool = False,
     show_reasoning: bool = False,

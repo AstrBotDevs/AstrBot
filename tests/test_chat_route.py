@@ -29,7 +29,10 @@ def chat_service_instance(monkeypatch, tmp_path):
     )
     db = Mock()
     db.get_platform_session_by_id = AsyncMock(
-        return_value=SimpleNamespace(session_id="existing-session")
+        return_value=SimpleNamespace(
+            session_id="existing-session",
+            creator="alice",
+        )
     )
     db.create_platform_session = AsyncMock()
     service = ChatService(db, core_lifecycle)
@@ -85,6 +88,28 @@ def _decode_sse_event(event: str) -> dict:
         Decoded event payload.
     """
     return json.loads(event.removeprefix("data: ").strip())
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_rejects_session_owned_by_another_user(
+    chat_service_instance,
+):
+    service = chat_service_instance
+    service.db.get_platform_session_by_id.return_value = SimpleNamespace(
+        session_id="alice-session",
+        creator="alice",
+    )
+
+    with pytest.raises(ChatServiceError, match="Permission denied"):
+        await service.build_chat_stream(
+            "bob",
+            {"message": "canary", "session_id": "alice-session"},
+        )
+
+    service.db.create_platform_session.assert_not_awaited()
+    history_mgr = service.core_lifecycle.platform_message_history_manager
+    history_mgr.insert.assert_not_awaited()
+    assert not service.chat_runs
 
 
 @pytest.mark.asyncio
@@ -448,6 +473,7 @@ async def test_chat_stream_forwards_normalized_request_flags(chat_service_instan
             "enable_inline_genui": True,
             "enable_default_system_prompt": False,
             "enable_streaming": False,
+            "enable_reasoning": True,
         }
         assert "enable_streaming" not in payload
     finally:
@@ -507,3 +533,44 @@ async def test_chat_stream_forwards_follow_up_status_by_default(
             run.task.cancel()
             await asyncio.gather(run.task, return_exceptions=True)
         chat_service.webchat_queue_mgr.remove_queues(session_id)
+
+
+@pytest.mark.asyncio
+async def test_save_uploaded_file_rejects_oversized_content_length(
+    chat_service_instance,
+):
+    class FakeUpload:
+        filename = "big.bin"
+        content_type = "application/octet-stream"
+        content_length = chat_service.MAX_UPLOAD_FILE_SIZE_BYTES + 1
+
+    with pytest.raises(ChatServiceError, match="File too large"):
+        await chat_service_instance.save_uploaded_file(FakeUpload())
+
+
+@pytest.mark.asyncio
+async def test_save_uploaded_file_rejects_oversized_saved_file(
+    chat_service_instance,
+):
+    from pathlib import Path
+
+    class FakeUpload:
+        filename = "big.bin"
+        content_type = "application/octet-stream"
+        content_length = None
+
+        async def save(self, path, *, max_bytes=None):
+            saved = Path(path)
+            saved.write_bytes(b"x")
+            with saved.open("rb+") as f:
+                f.truncate(chat_service.MAX_UPLOAD_FILE_SIZE_BYTES + 1)
+            # Mirror save_upload_stream: enforce the cap mid-write and
+            # remove the partial file on overflow.
+            if max_bytes is not None and saved.stat().st_size > max_bytes:
+                saved.unlink()
+                raise chat_service.UploadTooLargeError(max_bytes)
+
+    with pytest.raises(ChatServiceError, match="File too large"):
+        await chat_service_instance.save_uploaded_file(FakeUpload())
+
+    assert not list(Path(chat_service_instance.attachments_dir).iterdir())

@@ -71,6 +71,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
 
         kwargs = {
             "model": model,
+            "headers": self.request_headers.copy(),
             "messages": None,
             "api_key": self.chosen_api_key,
             "voice": self.voice or "Cherry",
@@ -122,7 +123,9 @@ class ProviderDashscopeTTSAPI(TTSProvider):
         timeout = max(self.timeout_ms / 1000, 1) if self.timeout_ms else 20
         try:
             async with (
-                aiohttp.ClientSession() as session,
+                aiohttp.ClientSession(
+                    headers={"User-Agent": self.request_headers["User-Agent"]}
+                ) as session,
                 session.get(
                     url,
                     timeout=aiohttp.ClientTimeout(total=timeout),
@@ -139,6 +142,9 @@ class ProviderDashscopeTTSAPI(TTSProvider):
         text: str,
     ) -> tuple[bytes | None, str]:
         synthesizer = SpeechSynthesizer(
+            headers={
+                name.lower(): value for name, value in self.request_headers.items()
+            },
             model=model,
             voice=self.voice,
             format=AudioFormat.WAV_24000HZ_MONO_16BIT,

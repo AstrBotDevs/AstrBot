@@ -50,6 +50,7 @@ class UpdateService:
         pip_install_func: Callable[..., Awaitable[Any]],
         demo_mode: bool,
         clear_site_data_headers: dict,
+        dashboard_static_folder: str | None = None,
     ) -> None:
         self._updater = astrbot_updater
         self.core_lifecycle = core_lifecycle
@@ -57,6 +58,7 @@ class UpdateService:
         self.pip_install = pip_install_func
         self.demo_mode = demo_mode
         self.clear_site_data_headers = clear_site_data_headers
+        self.dashboard_static_folder = dashboard_static_folder
         self.update_progress: dict[str, dict] = {}
         self._update_tasks: dict[str, asyncio.Task] = {}
 
@@ -73,7 +75,9 @@ class UpdateService:
 
     async def check_update(self, update_type: str | None) -> UpdateServiceResult:
         try:
-            dashboard_version = await self.get_dashboard_version()
+            dashboard_version = await self.get_dashboard_version(
+                self.dashboard_static_folder
+            )
             if update_type == "dashboard":
                 return UpdateServiceResult(
                     data={
@@ -213,7 +217,10 @@ class UpdateService:
             )
             logger.info("Updating dependencies...")
             try:
-                await self.pip_install(requirements_path="requirements.txt")
+                await self.pip_install(
+                    requirements_path="requirements.txt",
+                    bypass_core_constraints=True,
+                )
             except Exception as exc:
                 logger.error(f"Failed to update dependencies: {exc}")
             self._set_update_stage(

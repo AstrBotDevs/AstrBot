@@ -75,6 +75,38 @@ async def test_slack_action_row_renders_block_kit_buttons():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("fallback_text", [None, "Please approve"])
+async def test_slack_rejected_button_blocks_retry_readable_text(fallback_text):
+    client = AsyncMock()
+    client.chat_postMessage.side_effect = [
+        RuntimeError("blocks rejected"),
+        {"ok": True},
+    ]
+
+    await SlackMessageEvent._send_message(
+        MessageChain(
+            [
+                Plain("Choose: "),
+                ActionRow(
+                    buttons=[
+                        Button(id="approve", label="Approve", action=CallbackAction())
+                    ],
+                    fallback_text=fallback_text,
+                ),
+            ]
+        ),
+        client,
+        "C1",
+    )
+
+    assert client.chat_postMessage.await_count == 2
+    assert client.chat_postMessage.await_args.kwargs == {
+        "channel": "C1",
+        "text": "Choose: " + (fallback_text or "Approve"),
+    }
+
+
+@pytest.mark.asyncio
 async def test_slack_block_action_converts_to_button_interaction():
     adapter = SlackAdapter.__new__(SlackAdapter)
     adapter.bot_self_id = "B1"

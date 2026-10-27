@@ -11,6 +11,7 @@
           :available-source-types="availableSourceTypes"
           :tm="tm"
           :resolve-source-icon="resolveSourceIcon"
+          :is-monochrome-source-icon="isMonochromeSourceIcon"
           :get-source-display-name="getSourceDisplayName"
           @add-provider-source="addProviderSource"
           @select-provider-source="selectProviderSource"
@@ -25,9 +26,12 @@
           <div class="provider-config-header">
             <div class="provider-config-headline">
               <div class="provider-config-title">{{ getSourceDisplayName(selectedProviderSource) }}</div>
-              <div class="provider-config-subtitle">
-                {{ selectedProviderSource.api_base || 'N/A' }}
-              </div>
+              <ProviderSourceSubtitle
+                class="provider-config-subtitle"
+                :api-base="selectedProviderSource.api_base"
+                :sponsor="selectedSponsor"
+                :tm="tm"
+              />
             </div>
 
             <div class="provider-config-actions">
@@ -48,7 +52,7 @@
           <v-divider></v-divider>
 
           <div class="provider-config-body">
-            <section class="provider-section">
+            <section class="provider-section config-form">
               <div class="provider-section-head">
                 <div class="provider-section-title">{{ tm('providers.settings') }}</div>
               </div>
@@ -64,17 +68,24 @@
 
             <v-divider v-if="advancedSourceConfig"></v-divider>
 
-            <section v-if="advancedSourceConfig" class="provider-section">
-              <div class="provider-section-head">
-                <div class="provider-section-title">{{ tm('providerSources.advancedConfig') }}</div>
+            <details
+              v-if="advancedSourceConfig"
+              :key="selectedProviderSource.id"
+              class="provider-section provider-section--advanced config-form"
+            >
+              <summary class="provider-section-head provider-section-title">
+                {{ tm('providerSources.advancedConfig') }}
+                <v-icon class="provider-section-chevron" size="20">mdi-chevron-right</v-icon>
+              </summary>
+              <div class="provider-section-content">
+                <AstrBotConfig
+                  :iterable="advancedSourceConfig"
+                  :metadata="providerSourceSchema"
+                  metadataKey="provider"
+                  :is-editing="true"
+                />
               </div>
-              <AstrBotConfig
-                :iterable="advancedSourceConfig"
-                :metadata="providerSourceSchema"
-                metadataKey="provider"
-                :is-editing="true"
-              />
-            </section>
+            </details>
 
             <v-divider></v-divider>
 
@@ -148,7 +159,7 @@
         <v-card-title class="text-h3 pa-4 pb-0 pl-6">
           {{ providerEditDialogTitle }}
         </v-card-title>
-        <v-card-text class="py-4">
+        <v-card-text class="py-4 config-form">
           <AstrBotConfig
             v-if="providerEditData"
             :iterable="providerEditData"
@@ -189,6 +200,7 @@ import { computed, ref } from 'vue'
 import { useModuleI18n } from '@/i18n/composables'
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue'
 import ProviderModelsPanel from '@/components/provider/ProviderModelsPanel.vue'
+import ProviderSourceSubtitle from '@/components/provider/ProviderSourceSubtitle.vue'
 import ProviderSourcesPanel from '@/components/provider/ProviderSourcesPanel.vue'
 import { useProviderModelConfigDialog } from '@/composables/useProviderModelConfigDialog'
 import { useProviderSources } from '@/composables/useProviderSources'
@@ -214,6 +226,7 @@ function showMessage(message, color = 'success') {
 
 const {
   selectedProviderSource,
+  selectedSponsor,
   availableModels,
   loadingModels,
   savingSource,
@@ -231,6 +244,7 @@ const {
   advancedSourceConfig,
   manualProviderId,
   resolveSourceIcon,
+  isMonochromeSourceIcon,
   getSourceDisplayName,
   supportsImageInput,
   supportsAudioInput,
@@ -426,6 +440,31 @@ async function confirmManualModel() {
   line-height: 1.4;
 }
 
+.provider-section--advanced > summary {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.provider-section--advanced > summary::-webkit-details-marker {
+  display: none;
+}
+
+.provider-section--advanced:not([open]) > summary {
+  margin-bottom: 0;
+}
+
+.provider-section--advanced[open] .provider-section-chevron {
+  transform: rotate(90deg);
+}
+
+.provider-section-content {
+  /* Restore Vuetify's inherited box sizing across the native details content boundary. */
+  box-sizing: border-box;
+}
+
 .provider-empty-state {
   flex: 1;
   min-height: 420px;
@@ -500,3 +539,5 @@ async function confirmManualModel() {
   }
 }
 </style>
+
+<style scoped src="@/styles/config-form.css"></style>

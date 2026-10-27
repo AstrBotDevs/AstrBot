@@ -49,6 +49,7 @@ async def test_button_click_only_activates_button_handlers(monkeypatch):
     stage.ignore_at_all = False
     stage.disable_builtin_commands = False
     stage.no_permission_reply = True
+    stage._umo_auto_name_recorder = MagicMock()
 
     ordinary_filter = MagicMock()
     ordinary_filter.filter.return_value = True

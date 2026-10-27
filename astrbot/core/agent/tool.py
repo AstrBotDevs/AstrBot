@@ -1,4 +1,5 @@
 import copy
+import json
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import Any, Generic
 
@@ -203,7 +204,8 @@ class ToolSet:
     def openai_schema(self, omit_empty_parameter_field: bool = False) -> list[dict]:
         """Convert tools to OpenAI API function calling schema format."""
         result = []
-        for tool in self.tools:
+        # Stable ordering preserves prompt-cache prefixes for compatible providers.
+        for tool in sorted(self.tools, key=lambda tool: tool.name):
             func_def = {"type": "function", "function": {"name": tool.name}}
             if tool.description:
                 func_def["function"]["description"] = tool.description
@@ -218,13 +220,26 @@ class ToolSet:
         return result
 
     def anthropic_schema(self) -> list[dict]:
-        """Convert tools to Anthropic API format."""
+        """Convert tools to Anthropic API format.
+
+        Returns:
+            Tool definitions with object input schemas.
+
+        Raises:
+            ValueError: If a tool explicitly declares a non-object root type.
+        """
         result = []
         for tool in self.tools:
             input_schema = {"type": "object"}
             if tool.parameters:
-                input_schema["properties"] = tool.parameters.get("properties", {})
-                input_schema["required"] = tool.parameters.get("required", [])
+                if tool.parameters.get("type", "object") != "object":
+                    raise ValueError(
+                        f"Anthropic tool '{tool.name}' input schema must have an object root."
+                    )
+                # Preserve reference targets and all other JSON Schema constraints.
+                input_schema.update(copy.deepcopy(tool.parameters))
+                input_schema.setdefault("properties", {})
+                input_schema.setdefault("required", [])
             tool_def = {"name": tool.name, "input_schema": input_schema}
             if tool.description:
                 tool_def["description"] = tool.description
@@ -288,6 +303,25 @@ class ToolSet:
                 "required",
             }
             result.update({k: schema[k] for k in support_fields if k in schema})
+
+            # Gemini only accepts string enums ("enum: only allowed for STRING
+            # type"). Other fields keep their type, so the model still sends
+            # e.g. an integer, and list the allowed values in the description.
+            if "enum" in result:
+                enum = result.pop("enum")
+                values = [v for v in enum if v is not None]
+                if None in enum:
+                    result["nullable"] = True
+                if result["type"] == "string":
+                    result["enum"] = [
+                        v if isinstance(v, str) else json.dumps(v) for v in values
+                    ]
+                else:
+                    allowed = ", ".join(json.dumps(v) for v in values)
+                    description = result.get("description", "")
+                    result["description"] = (
+                        f"{description}\nAllowed values: {allowed}".strip()
+                    )
 
             if "properties" in schema:
                 properties = {}
