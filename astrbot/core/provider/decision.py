@@ -44,7 +44,7 @@ class DecisionService:
             Answers keyed by the same identifiers as ``questions``.
 
         Raises:
-            ValueError: The questions or options are unusable.
+            ValueError: The questions or criteria are unusable.
             DecisionError: The provider is unavailable, the request fails, or
                 the response violates the decision contract.
         """
@@ -63,7 +63,7 @@ class DecisionService:
     async def choose(
         self,
         question: str,
-        options: Mapping[str, str] | Sequence[str],
+        criteria: Mapping[str, str] | Sequence[str],
         *,
         state: DecisionState | None = None,
         provider_id: str | None = None,
@@ -72,7 +72,7 @@ class DecisionService:
 
         Args:
             question: The decision question.
-            options: Option values, or a mapping of values to descriptions.
+            criteria: Option values, or a mapping of values to descriptions.
             state: Context forwarded to the provider.
             provider_id: Provider instance ID, or None to use the default decision provider.
 
@@ -80,21 +80,21 @@ class DecisionService:
             The selected original option value and its probability distribution.
 
         Raises:
-            ValueError: The questions or options are unusable.
+            ValueError: The questions or criteria are unusable.
         """
         question = question.strip()
         if not question:
             raise ValueError("question must not be empty")
         normalized = (
-            [(str(value), str(description)) for value, description in options.items()]
-            if isinstance(options, Mapping)
-            else [(str(value), str(value)) for value in options]
+            [(str(value), str(description)) for value, description in criteria.items()]
+            if isinstance(criteria, Mapping)
+            else [(str(value), str(value)) for value in criteria]
         )
         if len(normalized) < 2:
-            raise ValueError("options must contain at least two values")
+            raise ValueError("criteria must contain at least two values")
         values = [value for value, _ in normalized]
         if len(set(values)) != len(values):
-            raise ValueError("options must be unique")
+            raise ValueError("criteria must be unique")
 
         option_ids = {f"o{index}": value for index, value in enumerate(values, start=1)}
         answers = await self.ask(

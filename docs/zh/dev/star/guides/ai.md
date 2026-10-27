@@ -87,7 +87,7 @@ if should_reply.choice == "reply" and should_reply.probability >= 0.7:
 ```py
 choice = await self.context.decision.choose(
     question="Which reply strategy should be used?",
-    options={"short": "A brief reply", "detailed": "A detailed reply"},
+    criteria={"short": "A brief reply", "detailed": "A detailed reply"},
     state=recent_messages,
 )
 

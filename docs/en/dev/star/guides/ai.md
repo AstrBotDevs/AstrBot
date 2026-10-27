@@ -88,7 +88,7 @@ Use the convenience methods for a single question:
 ```py
 choice = await self.context.decision.choose(
     question="Which reply strategy should be used?",
-    options={"short": "A brief reply", "detailed": "A detailed reply"},
+    criteria={"short": "A brief reply", "detailed": "A detailed reply"},
     state=recent_messages,
 )
 

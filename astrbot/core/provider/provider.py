@@ -470,7 +470,7 @@ class DecisionProvider(AbstractProvider):
             Answers keyed by the same identifiers as ``questions``.
 
         Raises:
-            ValueError: The question or options are unusable.
+            ValueError: The question or criteria are unusable.
             DecisionError: The provider is unavailable, the request fails, or
                 the response violates the decision contract.
         """
