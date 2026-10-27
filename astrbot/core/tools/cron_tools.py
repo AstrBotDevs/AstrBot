@@ -88,7 +88,7 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
                 },
                 "run_at": {
                     "type": "string",
-                    "description": "ISO datetime for one-time execution, e.g. 2026-02-02T08:00:00+08:00.",
+                    "description": "Future ISO datetime for one-time execution: YYYY-MM-DDTHH:MM:SS+HH:MM.",
                 },
                 "job_id": {
                     "type": "string",
@@ -125,7 +125,7 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
             try:
                 run_at_dt = _parse_run_at(run_at)
             except Exception:
-                return "error: run_at must be ISO datetime, e.g., 2026-02-02T08:00:00+08:00"
+                return "error: run_at must be a future ISO datetime: YYYY-MM-DDTHH:MM:SS+HH:MM"
 
             payload = {
                 "session": context.context.event.unified_msg_origin,
@@ -249,7 +249,7 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
                     "edit it. Only whoever created it can edit it."
                 )
 
-            payload = dict(job.payload) if isinstance(job.payload, dict) else {}
+            payload = {}
 
             updates: dict[str, Any] = {}
             if "name" in kwargs:
@@ -265,7 +265,7 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
                 payload["note"] = note
                 updates["description"] = note
 
-            current_run_at = payload.get("run_at")
+            current_run_at = (job.payload or {}).get("run_at")
             run_once = (
                 bool(kwargs["run_once"]) if "run_once" in kwargs else bool(job.run_once)
             )
@@ -283,7 +283,7 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
                     else _parse_run_at(current_run_at)
                 )
             except Exception:
-                return "error: run_at must be ISO datetime, e.g., 2026-02-02T08:00:00+08:00"
+                return "error: run_at must be a future ISO datetime: YYYY-MM-DDTHH:MM:SS+HH:MM"
 
             if run_once:
                 if run_at_dt is None:
@@ -312,15 +312,18 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
                             "Check the current date and time and use a future run_at."
                         )
                 cron_expression = None
-                payload["run_at"] = run_at_dt.isoformat()
+                if "run_at" in kwargs:
+                    payload["run_at"] = run_at_dt.isoformat()
             else:
                 if not cron_expression:
                     return "error: cron_expression is required when run_once=false."
                 payload.pop("run_at", None)
 
-            updates["run_once"] = run_once
-            updates["cron_expression"] = cron_expression
-            updates["payload"] = payload
+            if "run_once" in kwargs:
+                updates["run_once"] = run_once
+            if "cron_expression" in kwargs or "run_once" in kwargs:
+                updates["cron_expression"] = cron_expression
+            updates["payload_patch"] = payload
 
             try:
                 job = await cron_mgr.update_job(str(job_id), **updates)

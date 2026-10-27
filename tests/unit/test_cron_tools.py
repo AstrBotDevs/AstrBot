@@ -158,11 +158,8 @@ async def test_future_task_edit_updates_existing_job():
         description="new note",
         run_once=True,
         cron_expression=None,
-        payload={
-            "session": "test:private:session",
-            "sender_id": "user-1",
+        payload_patch={
             "note": "new note",
-            "origin": "tool",
             "run_at": "2099-02-02T08:00:00+08:00",
         },
     )
