@@ -28,7 +28,7 @@ def _provider(handler, **overrides) -> SystemOneDecisionProvider:
         "type": "system_one_decision",
         "api_base": "https://decision.test/v1/systemone",
         "model": "jev-latest",
-        "key": ["sk-test"],
+        "key": "sk-test",
         "timeout": 5,
         "custom_headers": {"X-Test": "yes"},
     }
@@ -137,7 +137,7 @@ async def test_system_one_resolves_api_base(api_base, expected_url):
     assert captured["url"] == expected_url
 
 
-def test_system_one_templates_use_two_second_timeout():
+def test_system_one_templates_use_a_single_key_and_two_second_timeout():
     templates = CONFIG_METADATA_2["provider_group"]["metadata"]["provider"][
         "config_template"
     ]
@@ -147,6 +147,7 @@ def test_system_one_templates_use_two_second_timeout():
         "Vercel System One",
         "Custom System One",
     ):
+        assert templates[name]["key"] == ""
         assert templates[name]["timeout"] == 2
 
 
@@ -637,7 +638,19 @@ async def test_decision_service_rejects_non_decision_provider():
 
 
 @pytest.mark.asyncio
-async def test_provider_manager_loads_decision_provider():
+@pytest.mark.parametrize(
+    ("key", "expected_key"),
+    [
+        ("", ""),
+        ("sk-direct", "sk-direct"),
+        ("$ASTRBOT_TEST_DECISION_KEY", "sk-env"),
+        ("${ASTRBOT_TEST_DECISION_KEY}", "sk-env"),
+        ("$ASTRBOT_TEST_MISSING_DECISION_KEY", ""),
+    ],
+)
+async def test_provider_manager_loads_decision_provider(monkeypatch, key, expected_key):
+    monkeypatch.setenv("ASTRBOT_TEST_DECISION_KEY", "sk-env")
+    monkeypatch.delenv("ASTRBOT_TEST_MISSING_DECISION_KEY", raising=False)
     config = {
         "provider": [],
         "provider_sources": [],
@@ -657,7 +670,7 @@ async def test_provider_manager_loads_decision_provider():
             "provider_type": "decision",
             "api_base": "https://decision.test/v1/systemone",
             "model": "jev-latest",
-            "key": [],
+            "key": key,
             "enable": True,
         }
     )
@@ -666,6 +679,10 @@ async def test_provider_manager_loads_decision_provider():
     assert isinstance(loaded, SystemOneDecisionProvider)
     assert manager.decision_provider_insts == [loaded]
     assert manager.curr_decision_provider_inst is loaded
+    assert loaded.api_key == expected_key
+    assert loaded.client.headers.get("Authorization") == (
+        f"Bearer {expected_key}" if expected_key else None
+    )
     await loaded.terminate()
 
 
@@ -690,7 +707,7 @@ async def test_provider_manager_uses_selected_decision_provider():
             "provider_type": "decision",
             "api_base": f"https://decision{index}.test/v1/systemone",
             "model": "jev-latest",
-            "key": [],
+            "key": "",
             "enable": True,
         }
         for index in range(2)

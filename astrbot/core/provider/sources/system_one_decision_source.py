@@ -62,12 +62,9 @@ class SystemOneDecisionProvider(DecisionProvider):
             else f"{base_url}/systemone"
         )
         self.model = str(provider_config.get("model") or "jev-latest")
-        keys = provider_config.get("key") or []
-        self.api_key = (
-            keys
-            if isinstance(keys, str)
-            else next((str(key) for key in keys if key), "")
-        )
+        self.api_key = provider_config.get("key", "")
+        if not isinstance(self.api_key, str):
+            raise ValueError("System One API key must be a string")
         headers = dict(self.request_headers)
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"

@@ -391,6 +391,10 @@ const legacyConfigSchema = computed(() => {
 
   const items = schema.provider?.items
   if (!items) return schema
+  if (items.key) {
+    items.key.type = 'string'
+    delete items.key.items
+  }
   if (items.api_base) items.api_base.hint = tm('providers.decisionHints.apiBase')
   if (items.model) items.model.hint = tm('providers.decisionHints.model')
   if (items.custom_headers) {

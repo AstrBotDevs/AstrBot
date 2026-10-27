@@ -679,7 +679,10 @@ class ProviderManager:
 
     def _resolve_env_key_list(self, provider_config: dict) -> dict:
         keys = provider_config.get("key", [])
-        if not isinstance(keys, list):
+        single_key = isinstance(keys, str)
+        if single_key:
+            keys = [keys]
+        elif not isinstance(keys, list):
             return provider_config
         resolved_keys = []
         for idx, key in enumerate(keys):
@@ -703,7 +706,7 @@ class ProviderManager:
                     resolved_keys.append(key)
             else:
                 resolved_keys.append(key)
-        provider_config["key"] = resolved_keys
+        provider_config["key"] = resolved_keys[0] if single_key else resolved_keys
         return provider_config
 
     async def load_provider(self, provider_config: dict) -> None:

@@ -28,7 +28,7 @@ AstrBot 的「判断」提供商用于低延迟结构化判断，例如是否回
 
 1. 打开「模型提供商」→「判断」，点击「新增」。「判断」标签使用天平图标，位置由「对话」后移至「文字转语音」后、「嵌入」前。
 2. 选择 `TypeSafe System One`、`OpenRouter System One` 或 `Vercel System One`。其他兼容 System One 的服务可选择 `Custom System One`。
-3. 填写 `API Key`、`API Base URL` 和模型 ID。自定义服务填写基础地址后会默认补全 `/systemone`，例如 `https://api.example.com/v1` 会请求 `https://api.example.com/v1/systemone`；以 `/` 结尾则按完整接口地址使用。保存后点击「测试」检查连通性。
+3. 填写单个 `API Key`、`API Base URL` 和模型 ID。`API Key` 是字符串，不支持多 Key 轮换，可填写 `$环境变量名称` 引用环境变量。自定义服务填写基础地址后会默认补全 `/systemone`，例如 `https://api.example.com/v1` 会请求 `https://api.example.com/v1/systemone`；以 `/` 结尾则按完整接口地址使用。保存后点击「测试」检查连通性。
 
 判断提供商支持一次请求回答多个问题。主动回复、回复门控等业务阈值由调用方决定，AstrBot 只负责模型请求、响应校验和结果归一化。
 
