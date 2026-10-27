@@ -9,8 +9,9 @@ import pytest
 from astrbot.core.config.default import CONFIG_METADATA_2
 from astrbot.core.provider.decision import DecisionService
 from astrbot.core.provider.entities import (
-    DecisionAnswer,
+    DecisionBooleanAnswer,
     DecisionBooleanQuestion,
+    DecisionChoiceAnswer,
     DecisionChoiceQuestion,
     DecisionError,
     ProviderType,
@@ -100,7 +101,7 @@ async def test_system_one_decisions_share_one_request_and_parse_all_heads():
     assert answers["decision"].probability == 0.8
     assert answers["decision"].confidence == 0.9
     assert answers["decision"].probabilities == {"respond": 0.8, "ignore": 0.2}
-    assert answers["available"].choice is None
+    assert isinstance(answers["available"], DecisionBooleanAnswer)
     assert answers["available"].probability == 0.73
 
 
@@ -464,7 +465,7 @@ async def test_decision_service_maps_choice_ids_and_applies_threshold():
     provider.ask = AsyncMock(
         side_effect=[
             {
-                "answer": DecisionAnswer(
+                "answer": DecisionChoiceAnswer(
                     choice="o2",
                     probability=0.75,
                     probabilities={"o1": 0.25, "o2": 0.75},
@@ -472,12 +473,7 @@ async def test_decision_service_maps_choice_ids_and_applies_threshold():
                 )
             },
             {
-                "answer": DecisionAnswer(
-                    choice=None,
-                    probability=0.6,
-                    probabilities={},
-                    confidence=None,
-                )
+                "answer": DecisionBooleanAnswer(probability=0.6)
             },
         ]
     )
@@ -524,13 +520,13 @@ async def test_decision_service_yes_no_reraises_without_default():
 @pytest.mark.parametrize(
     "answer",
     [
-        DecisionAnswer(
+        DecisionChoiceAnswer(
             choice="o3",
             probability=0.6,
             probabilities={"o1": 0.4, "o2": 0.6},
             confidence=0.8,
         ),
-        DecisionAnswer(
+        DecisionChoiceAnswer(
             choice="o2",
             probability=0.6,
             probabilities={"o1": 0.4, "o3": 0.6},

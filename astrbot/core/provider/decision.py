@@ -7,7 +7,9 @@ from astrbot import logger
 
 from .entities import (
     DecisionAnswer,
+    DecisionBooleanAnswer,
     DecisionBooleanQuestion,
+    DecisionChoiceAnswer,
     DecisionChoiceQuestion,
     DecisionError,
     DecisionQuestion,
@@ -67,7 +69,7 @@ class DecisionService:
         *,
         state: DecisionState | None = None,
         provider_id: str | None = None,
-    ) -> DecisionAnswer:
+    ) -> DecisionChoiceAnswer:
         """Choose one option for a question.
 
         Args:
@@ -111,13 +113,13 @@ class DecisionService:
             provider_id=provider_id,
         )
         answer = answers["answer"]
-        if answer.choice is None:
-            raise DecisionError("Decision provider returned no choice")
+        if not isinstance(answer, DecisionChoiceAnswer):
+            raise DecisionError("Decision provider returned no choice answer")
         if answer.choice not in option_ids or set(answer.probabilities) != set(
             option_ids
         ):
             raise DecisionError("Decision provider returned an invalid choice")
-        return DecisionAnswer(
+        return DecisionChoiceAnswer(
             choice=option_ids[answer.choice],
             probability=answer.probability,
             probabilities={
@@ -164,12 +166,12 @@ class DecisionService:
                 state,
                 provider_id=provider_id,
             )
-            probability = answers["answer"].probability
-            if probability is None:
-                raise DecisionError("Decision provider returned no boolean probability")
+            answer = answers["answer"]
+            if not isinstance(answer, DecisionBooleanAnswer):
+                raise DecisionError("Decision provider returned no boolean answer")
         except DecisionError as exc:
             if default is None:
                 raise
             logger.warning(f"[Decision] yes_no failed; using default {default}: {exc}")
             return default
-        return probability >= threshold
+        return answer.probability >= threshold

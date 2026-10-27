@@ -84,26 +84,53 @@ DecisionState: TypeAlias = str | list[Any] | dict[str, Any]
 
 
 @dataclass(frozen=True, slots=True)
-class DecisionAnswer:
-    """The normalized answer for one decision question.
+class DecisionChoiceAnswer:
+    """The normalized answer for a choice question.
 
     Attributes:
-        choice: Selected option ID for a choice question, otherwise None.
-        probability: Probability of the selected option or a true boolean answer;
-            None for a score question.
-        probabilities: Distribution over option IDs or string level numbers;
-            empty for a boolean question.
-        confidence: Model confidence for choice and score questions, otherwise None.
-        score: Expected level number for a score question, otherwise None.
-        legend: Mapping of string level numbers to descriptions for a score question.
+        choice: Selected option ID.
+        probability: Probability of the selected option.
+        probabilities: Full probability distribution over option IDs.
+        confidence: Model confidence in the selected option.
     """
 
-    choice: str | None
-    probability: float | None
+    choice: str
+    probability: float
     probabilities: Mapping[str, float]
-    confidence: float | None
-    score: float | None = None
-    legend: Mapping[str, str] = field(default_factory=dict)
+    confidence: float
+
+
+@dataclass(frozen=True, slots=True)
+class DecisionBooleanAnswer:
+    """The normalized answer for a boolean question.
+
+    Attributes:
+        probability: Probability of the statement being true.
+    """
+
+    probability: float
+
+
+@dataclass(frozen=True, slots=True)
+class DecisionScoreAnswer:
+    """The normalized answer for a score question.
+
+    Attributes:
+        score: Probability-weighted level number, possibly fractional.
+        legend: Mapping of string level numbers to descriptions.
+        probabilities: Full probability distribution over string level numbers.
+        confidence: Model confidence in the score.
+    """
+
+    score: float
+    legend: Mapping[str, str]
+    probabilities: Mapping[str, float]
+    confidence: float
+
+
+DecisionAnswer: TypeAlias = (
+    DecisionChoiceAnswer | DecisionBooleanAnswer | DecisionScoreAnswer
+)
 
 
 class DecisionError(RuntimeError):

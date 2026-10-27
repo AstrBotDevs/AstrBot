@@ -39,6 +39,7 @@ One request can answer multiple questions. `state` is passed to the decision mod
 ```py
 from astrbot.api.provider import (
     DecisionBooleanQuestion,
+    DecisionChoiceAnswer,
     DecisionChoiceQuestion,
     DecisionScoreQuestion,
 )
@@ -74,14 +75,20 @@ answers = await self.context.decision.ask(
 )
 
 should_reply = answers["should_reply"]
-if should_reply.choice == "reply" and should_reply.probability >= 0.7:
+if (
+    isinstance(should_reply, DecisionChoiceAnswer)
+    and should_reply.choice == "reply"
+    and should_reply.probability >= 0.7
+):
     target = answers["target"]
     # Use target.choice and answers["needs_tool"].probability in later logic
 ```
 
 `DecisionChoiceQuestion.criteria` maps option IDs to descriptions and corresponds to `criteria` in the System One request. For choice questions, `choice` is the selected option ID, `probabilities` contains the full distribution, and `confidence` is the model confidence. For boolean questions, `probability` is the probability that the statement is true. Business rules such as proactive-reply thresholds remain the caller's responsibility.
 
-`DecisionScoreQuestion.criteria` is a list of 2–10 string levels, ordered from lowest to highest and numbered from 0. The returned `score` is a probability-weighted rating, possibly fractional, from `0` to `len(criteria) - 1`. Read it with `answers["severity"].score`. Both `legend` and `probabilities` use string level numbers such as `"0"` as keys, mapping to descriptions and probabilities; `confidence` reports certainty. A score answer has `choice=None` and `probability=None`. All three question types can be mixed in one `ask()` call.
+Results use three independent frozen dataclasses: `DecisionChoiceAnswer`, `DecisionBooleanAnswer`, and `DecisionScoreAnswer`. `DecisionAnswer` is their union type. After calling `ask()`, use `isinstance()` to identify the result type before accessing its fields. `choose()` returns `DecisionChoiceAnswer`, while `yes_no()` returns `bool`.
+
+`DecisionScoreQuestion.criteria` is a list of 2–10 string levels, ordered from lowest to highest and numbered from 0. `DecisionScoreAnswer.score` is a probability-weighted rating, possibly fractional, from `0` to `len(criteria) - 1`. Both `legend` and `probabilities` use string level numbers such as `"0"` as keys, mapping to descriptions and probabilities; `confidence` reports certainty. A score answer contains only these four fields. All three question types can be mixed in one `ask()` call.
 
 Use the convenience methods for a single question:
 

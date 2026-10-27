@@ -13,9 +13,12 @@ from astrbot.core.utils.network_utils import log_connection_failure
 
 from ..entities import (
     DecisionAnswer,
+    DecisionBooleanAnswer,
+    DecisionChoiceAnswer,
     DecisionChoiceQuestion,
     DecisionError,
     DecisionQuestion,
+    DecisionScoreAnswer,
     DecisionScoreQuestion,
     DecisionState,
     ProviderType,
@@ -265,9 +268,7 @@ class SystemOneDecisionProvider(DecisionProvider):
                         f"System One endpoint returned an invalid score answer "
                         f"for {head}: {summary}"
                     )
-                answers[head] = DecisionAnswer(
-                    choice=None,
-                    probability=None,
+                answers[head] = DecisionScoreAnswer(
                     probabilities={
                         level: float(probability)
                         for level, probability in probabilities.items()
@@ -312,7 +313,7 @@ class SystemOneDecisionProvider(DecisionProvider):
                         f"System One endpoint returned an invalid choice answer "
                         f"for {head}: {summary}"
                     )
-                answers[head] = DecisionAnswer(
+                answers[head] = DecisionChoiceAnswer(
                     choice=choice,
                     probability=float(probabilities[choice]),
                     probabilities={
@@ -339,12 +340,7 @@ class SystemOneDecisionProvider(DecisionProvider):
                     f"System One endpoint returned an invalid boolean answer "
                     f"for {head}: {summary}"
                 )
-            answers[head] = DecisionAnswer(
-                choice=None,
-                probability=float(probability),
-                probabilities={},
-                confidence=None,
-            )
+            answers[head] = DecisionBooleanAnswer(probability=float(probability))
 
         return answers
 
