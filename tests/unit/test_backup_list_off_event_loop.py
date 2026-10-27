@@ -1,5 +1,6 @@
 """Backup listing must keep per-file ZIP reads off the event loop thread."""
 
+import asyncio
 import json
 import threading
 import zipfile
@@ -99,4 +100,51 @@ async def test_legacy_backup_list_reads_manifests_off_the_event_loop(
     assert len(manifest_threads) == 1
     assert manifest_threads[0] != loop_thread, (
         "backup ZIP was opened on the event loop thread"
+    )
+
+
+@pytest.mark.asyncio
+async def test_upload_cleanup_is_scheduled_on_the_event_loop(
+    tmp_path: Path,
+) -> None:
+    """``ensure_cleanup_task_started`` calls ``asyncio.create_task``.
+
+    ``chunked_upload_service.ensure_cleanup_task_started`` wraps that call in
+    ``except RuntimeError: pass``, so scheduling it from a worker thread does not
+    raise: the cleanup coroutine is simply dropped, expired upload chunks are
+    never cleaned, and asyncio emits a "was never awaited" warning. Listing must
+    therefore schedule it on the event loop thread before offloading the scan.
+    """
+    backup_dir = tmp_path / "backups"
+    backup_dir.mkdir()
+    write_backup(backup_dir, "delta.zip")
+
+    started_threads: list[int] = []
+
+    async def noop_cleanup() -> None:
+        return None
+
+    def fake_ensure_started(self: BackupService) -> None:  # noqa: ARG001
+        started_threads.append(threading.get_ident())
+        try:
+            asyncio.ensure_future(noop_cleanup())
+        except RuntimeError:  # pragma: no cover - mirrors the real service
+            pass
+
+    service = BackupService.__new__(BackupService)
+    service.backup_dir = str(backup_dir)
+    service.ensure_cleanup_task_started = lambda: fake_ensure_started(service)
+
+    loop_thread = threading.get_ident()
+    response = await list_backups(
+        page=1,
+        page_size=10,
+        _auth=object(),
+        service=service,
+    )
+
+    assert response["status"] == "ok"
+    assert loop_thread in started_threads, (
+        "upload cleanup was scheduled from a worker thread, where "
+        "asyncio.create_task cannot run"
     )
