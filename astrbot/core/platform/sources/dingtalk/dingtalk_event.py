@@ -111,6 +111,10 @@ class DingtalkMessageEvent(AstrMessageEvent):
             )
 
         if not card_finalized:
+            await self.adapter.mark_message_card_failed(
+                card_token=card_token,
+                content="卡片输出失败，完整回复已通过普通消息发送。",
+            )
             if fallback_chain is not None:
                 fallback_chain.squash_plain()
                 await self._send_as_normal_message(fallback_chain)

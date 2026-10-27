@@ -338,6 +338,111 @@ async def test_proactive_card_animation_can_be_disabled():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("update_succeeded", "session_retained"),
+    [(True, False), (False, True)],
+)
+async def test_final_message_card_update_tracks_failure_for_cleanup(
+    monkeypatch,
+    update_succeeded,
+    session_retained,
+):
+    class FakeClientSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return None
+
+    adapter = DingtalkPlatformAdapter.__new__(DingtalkPlatformAdapter)
+    adapter._card_sessions = {"card-token": (object(), "card-instance-id")}
+    adapter.get_access_token = AsyncMock(return_value="access-token")
+    adapter._put_proactive_card_content = AsyncMock(
+        return_value=update_succeeded,
+    )
+    http_session = FakeClientSession()
+    monkeypatch.setattr(
+        dingtalk_adapter.aiohttp,
+        "ClientSession",
+        lambda: http_session,
+    )
+
+    result = await adapter.send_card_message(
+        card_token="card-token",
+        content="complete result",
+        is_final=True,
+    )
+
+    assert result is update_succeeded
+    assert ("card-token" in adapter._card_sessions) is session_retained
+    adapter._put_proactive_card_content.assert_awaited_once_with(
+        http_session=http_session,
+        access_token="access-token",
+        out_track_id="card-instance-id",
+        content="complete result",
+        is_final=True,
+    )
+
+
+@pytest.mark.asyncio
+async def test_mark_message_card_failed_updates_status_and_cleans_session(
+    monkeypatch,
+):
+    captured = {}
+
+    class FakeResponse:
+        status = 200
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return None
+
+        async def text(self):
+            return ""
+
+    class FakeClientSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return None
+
+        def put(self, url, headers, json):
+            captured.update(url=url, headers=headers, json=json)
+            return FakeResponse()
+
+    adapter = DingtalkPlatformAdapter.__new__(DingtalkPlatformAdapter)
+    adapter.card_content_key = "content"
+    adapter._card_sessions = {"card-token": (object(), "card-instance-id")}
+    adapter.get_access_token = AsyncMock(return_value="access-token")
+    monkeypatch.setattr(
+        dingtalk_adapter.aiohttp,
+        "ClientSession",
+        FakeClientSession,
+    )
+
+    result = await adapter.mark_message_card_failed(
+        card_token="card-token",
+        content="fallback notice",
+    )
+
+    assert result is True
+    assert "card-token" not in adapter._card_sessions
+    assert captured["url"] == "https://api.dingtalk.com/v1.0/card/instances"
+    assert captured["json"] == {
+        "outTrackId": "card-instance-id",
+        "cardData": {
+            "cardParamMap": {
+                "content": "fallback notice",
+                "flowStatus": dingtalk_stream.AICardStatus.FAILED.value,
+            },
+        },
+    }
+
+
+@pytest.mark.asyncio
 async def test_event_streams_accumulated_content_without_consuming_generator(
     monkeypatch,
 ):
@@ -423,6 +528,7 @@ async def test_event_falls_back_to_normal_message_when_card_finalize_fails(
         card_update_interval=0.35,
         create_message_card=AsyncMock(return_value="card-token"),
         send_card_message=AsyncMock(side_effect=[False, False]),
+        mark_message_card_failed=AsyncMock(return_value=True),
         send_message_chain_with_incoming=AsyncMock(),
     )
     incoming_message = object()
@@ -443,6 +549,10 @@ async def test_event_falls_back_to_normal_message_when_card_finalize_fails(
 
     await event.send_streaming(generate())
 
+    adapter.mark_message_card_failed.assert_awaited_once_with(
+        card_token="card-token",
+        content="卡片输出失败，完整回复已通过普通消息发送。",
+    )
     adapter.send_message_chain_with_incoming.assert_awaited_once()
     fallback = adapter.send_message_chain_with_incoming.await_args.kwargs
     assert fallback["incoming_message"] is incoming_message

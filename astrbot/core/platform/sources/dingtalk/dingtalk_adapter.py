@@ -1068,24 +1068,77 @@ class DingtalkPlatformAdapter(Platform):
         if not card_session:
             return False
 
-        card_replier, card_instance_id = card_session
+        _, card_instance_id = card_session
+        succeeded = False
         try:
-            await card_replier.async_streaming(
-                card_instance_id,
-                content_key=self.card_content_key,
-                content_value=content,
-                append=False,
-                finished=is_final,
-                failed=False,
-            )
+            access_token = await self.get_access_token()
+            if not access_token:
+                logger.error("钉钉流式卡片更新失败: access_token 为空")
+                return False
+            async with aiohttp.ClientSession() as http_session:
+                succeeded = await self._put_proactive_card_content(
+                    http_session=http_session,
+                    access_token=access_token,
+                    out_track_id=card_instance_id,
+                    content=content,
+                    is_final=is_final,
+                )
         except Exception as e:
             logger.error("钉钉流式卡片更新失败: %s", e)
-            if is_final:
+            return False
+        finally:
+            if is_final and succeeded:
                 self._card_sessions.pop(card_token, None)
+        return succeeded
+
+    async def mark_message_card_failed(
+        self,
+        card_token: str,
+        content: str,
+    ) -> bool:
+        card_session = self._card_sessions.pop(card_token, None)
+        if not card_session:
             return False
 
-        if is_final:
-            self._card_sessions.pop(card_token, None)
+        _, card_instance_id = card_session
+        access_token = await self.get_access_token()
+        if not access_token:
+            logger.error("钉钉流式卡片失败状态更新失败: access_token 为空")
+            return False
+
+        payload = {
+            "outTrackId": card_instance_id,
+            "cardData": {
+                "cardParamMap": {
+                    self.card_content_key: content,
+                    "flowStatus": dingtalk_stream.AICardStatus.FAILED.value,
+                },
+            },
+        }
+        headers = {
+            "Content-Type": "application/json",
+            "x-acs-dingtalk-access-token": access_token,
+        }
+        try:
+            async with (
+                aiohttp.ClientSession() as http_session,
+                http_session.put(
+                    "https://api.dingtalk.com/v1.0/card/instances",
+                    headers=headers,
+                    json=payload,
+                ) as resp,
+            ):
+                resp_text = await resp.text()
+                if resp.status != 200:
+                    logger.error(
+                        "钉钉流式卡片失败状态更新失败: %s, %s",
+                        resp.status,
+                        resp_text,
+                    )
+                    return False
+        except Exception as e:
+            logger.error("钉钉流式卡片失败状态更新异常: %s", e)
+            return False
         return True
 
     def create_event(self, message: AstrBotMessage) -> DingtalkMessageEvent:
