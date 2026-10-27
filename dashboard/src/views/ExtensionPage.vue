@@ -4,6 +4,8 @@ import ConsoleDisplayer from "@/components/shared/ConsoleDisplayer.vue";
 import ReadmeDialog from "@/components/shared/ReadmeDialog.vue";
 import ProxySelector from "@/components/shared/ProxySelector.vue";
 import UninstallConfirmDialog from "@/components/shared/UninstallConfirmDialog.vue";
+import PluginBatchInstallConfirmDialog from "@/components/extension/PluginBatchInstallConfirmDialog.vue";
+import PluginBatchProgressDialog from "@/components/extension/PluginBatchProgressDialog.vue";
 import { useExtensionPage } from "./extension/useExtensionPage";
 import { computed, defineAsyncComponent } from "vue";
 import defaultPluginIcon from "/favicon.svg";
@@ -16,14 +18,14 @@ const props = defineProps({
   },
 });
 
-const InstalledPluginsTab = defineAsyncComponent(
-  () => import("./extension/InstalledPluginsTab.vue"),
+const InstalledPluginsTab = defineAsyncComponent(() =>
+  import("./extension/InstalledPluginsTab.vue"),
 );
-const MarketPluginsTab = defineAsyncComponent(
-  () => import("./extension/MarketPluginsTab.vue"),
+const MarketPluginsTab = defineAsyncComponent(() =>
+  import("./extension/MarketPluginsTab.vue"),
 );
-const PluginDetailPage = defineAsyncComponent(
-  () => import("./extension/PluginDetailPage.vue"),
+const PluginDetailPage = defineAsyncComponent(() =>
+  import("./extension/PluginDetailPage.vue"),
 );
 
 const pageState = useExtensionPage(props.initialTab);
@@ -71,6 +73,10 @@ const {
   versionSupportDialog,
   showUninstallDialog,
   uninstallTarget,
+  installedBatchConfirm,
+  marketBatchConfirm,
+  marketBatchExceptions,
+  batchProgress,
   showSourceDialog,
   showSourceManagerDialog,
   sourceName,
@@ -123,6 +129,8 @@ const {
   checkUpdate,
   uninstallExtension,
   handleUninstallConfirm,
+  executeInstalledBatchUninstall,
+  executeMarketBatchInstall,
   updateExtension,
   closeUpdateConfirmDialog,
   confirmUpdatePlugin,
@@ -222,8 +230,9 @@ const selectedMarketPlugin = computed(() => {
   // fallback for legacy deep links, since multiple market entries can share
   // the same metadata name.
   const marketKeyMatch =
-    market.find((item) => getMarketPluginKey(item) === selectedPluginId.value) ||
-      null;
+    market.find(
+      (item) => getMarketPluginKey(item) === selectedPluginId.value,
+    ) || null;
   const marketNameMatch =
     market.find((item) => item.name === selectedPluginId.value) || null;
   const marketMatch = marketKeyMatch || marketNameMatch;
@@ -235,9 +244,7 @@ const selectedMarketPlugin = computed(() => {
   const repo = normalizeRepoUrl(installedPlugin.repo);
   if (!repo) return null;
 
-  return (
-    market.find((item) => normalizeRepoUrl(item?.repo) === repo) || null
-  );
+  return market.find((item) => normalizeRepoUrl(item?.repo) === repo) || null;
 });
 
 const selectedDetailPlugin = computed(() => {
@@ -294,7 +301,8 @@ const updateDialogTargetVersion = computed(() =>
 
 const updateDialogPluginLogo = computed(() => {
   const logo =
-    selectedUpdateMarketPlugin.value?.logo || selectedUpdateExtension.value?.logo;
+    selectedUpdateMarketPlugin.value?.logo ||
+    selectedUpdateExtension.value?.logo;
   return typeof logo === "string" && logo.trim() ? logo : defaultPluginIcon;
 });
 </script>
@@ -459,7 +467,9 @@ const updateDialogPluginLogo = computed(() => {
     transition="dialog-transition"
   >
     <v-card>
-      <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ loadingDialog.title }}</v-card-title>
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{
+        loadingDialog.title
+      }}</v-card-title>
       <v-card-text style="max-height: calc(100vh - 200px); overflow-y: auto">
         <v-progress-linear
           v-if="loadingDialog.statusCode === 0"
@@ -469,10 +479,7 @@ const updateDialogPluginLogo = computed(() => {
         ></v-progress-linear>
 
         <v-fade-transition>
-          <div
-            v-if="loadingDialog.statusCode !== 0"
-            class="py-8 text-center"
-          >
+          <div v-if="loadingDialog.statusCode !== 0" class="py-8 text-center">
             <v-icon
               class="mb-6"
               :color="loadingDialog.statusCode === 1 ? 'success' : 'error'"
@@ -483,7 +490,9 @@ const updateDialogPluginLogo = computed(() => {
               "
               size="128"
             ></v-icon>
-            <div class="text-h4 font-weight-bold">{{ loadingDialog.result }}</div>
+            <div class="text-h4 font-weight-bold">
+              {{ loadingDialog.result }}
+            </div>
           </div>
         </v-fade-transition>
 
@@ -539,6 +548,25 @@ const updateDialogPluginLogo = computed(() => {
   <UninstallConfirmDialog
     v-model="showUninstallDialog"
     @confirm="handleUninstallConfirm"
+  />
+
+  <UninstallConfirmDialog
+    v-model="installedBatchConfirm.show"
+    :plugin-names="installedBatchConfirm.pluginNames"
+    @confirm="executeInstalledBatchUninstall"
+    @cancel="installedBatchConfirm.pluginNames = []"
+  />
+
+  <PluginBatchInstallConfirmDialog
+    v-model="marketBatchConfirm.show"
+    :targets="marketBatchConfirm.targets"
+    :exceptions="marketBatchExceptions"
+    @confirm="executeMarketBatchInstall"
+  />
+
+  <PluginBatchProgressDialog
+    v-model="batchProgress.show"
+    :progress="batchProgress"
   />
 
   <!-- 更新全部插件确认对话框 -->
@@ -644,10 +672,18 @@ const updateDialogPluginLogo = computed(() => {
       </v-card-text>
       <v-card-actions>
         <v-spacer></v-spacer>
-        <v-btn color="grey" variant="text" @click="cancelInstallOnVersionWarning">
+        <v-btn
+          color="grey"
+          variant="text"
+          @click="cancelInstallOnVersionWarning"
+        >
           {{ tm("dialogs.versionSupport.cancel") }}
         </v-btn>
-        <v-btn color="warning" variant="tonal" @click="continueInstallIgnoringVersionWarning">
+        <v-btn
+          color="warning"
+          variant="tonal"
+          @click="continueInstallIgnoringVersionWarning"
+        >
           {{ tm("dialogs.versionSupport.confirm") }}
         </v-btn>
       </v-card-actions>
@@ -767,10 +803,7 @@ const updateDialogPluginLogo = computed(() => {
             {{ tm("dialogs.install.repositorySecurityWarning") }}
           </v-alert>
 
-          <ProxySelector
-            v-if="installUsesGithubArchiveSource"
-            class="mt-4"
-          />
+          <ProxySelector v-if="installUsesGithubArchiveSource" class="mt-4" />
         </div>
 
         <template v-else>
@@ -1229,10 +1262,7 @@ const updateDialogPluginLogo = computed(() => {
             {{ tm("dialogs.install.repositorySecurityWarning") }}
           </v-alert>
 
-          <ProxySelector
-            v-if="updateUsesGithubArchiveSource"
-            class="mt-4"
-          />
+          <ProxySelector v-if="updateUsesGithubArchiveSource" class="mt-4" />
         </div>
       </v-card-text>
       <v-card-actions>
@@ -1240,11 +1270,7 @@ const updateDialogPluginLogo = computed(() => {
         <v-btn color="grey" variant="text" @click="closeUpdateConfirmDialog">
           {{ tm("buttons.cancel") }}
         </v-btn>
-        <v-btn
-          color="primary"
-          variant="tonal"
-          @click="confirmUpdatePlugin"
-        >
+        <v-btn color="primary" variant="tonal" @click="confirmUpdatePlugin">
           {{ tm("dialogs.update.confirm") }}
         </v-btn>
       </v-card-actions>

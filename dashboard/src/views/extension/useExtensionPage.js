@@ -174,6 +174,32 @@ export const useExtensionPage = (initialTab = "installed") => {
   const showUninstallDialog = ref(false);
   const uninstallTarget = ref(null);
 
+  const installedBatchMode = ref(false);
+  const installedBatchSelected = ref([]);
+  const installedBatchConfirm = reactive({
+    show: false,
+    pluginNames: [],
+  });
+  const marketBatchMode = ref(false);
+  const marketBatchSelected = ref([]);
+  const marketBatchConfirm = reactive({
+    show: false,
+    targets: [],
+  });
+  const batchProgress = reactive({
+    show: false,
+    running: false,
+    action: "",
+    total: 0,
+    completed: 0,
+    current: "",
+    succeeded: 0,
+    failed: 0,
+    skipped: 0,
+    failures: [],
+    skippedItems: [],
+  });
+
   // 自定义插件源相关
   const showSourceDialog = ref(false);
   const showSourceManagerDialog = ref(false);
@@ -480,6 +506,339 @@ export const useExtensionPage = (initialTab = "installed") => {
     return sortedPlugins.value.slice(start, end);
   });
 
+  const selectableInstalledPlugins = computed(() =>
+    filteredPlugins.value.filter((plugin) => plugin?.name && !plugin.reserved),
+  );
+
+  const allSelectableInstalledPluginsSelected = computed(() => {
+    if (selectableInstalledPlugins.value.length === 0) return false;
+    const selected = new Set(installedBatchSelected.value);
+    return selectableInstalledPlugins.value.every((plugin) =>
+      selected.has(plugin.name),
+    );
+  });
+
+  const selectableMarketPlugins = computed(() =>
+    sortedPlugins.value.filter(
+      (plugin) =>
+        !plugin.installed &&
+        !!getMarketPluginId(plugin) &&
+        !!String(plugin.repo || "").trim(),
+    ),
+  );
+
+  const allSelectableMarketPluginsSelected = computed(() => {
+    if (selectableMarketPlugins.value.length === 0) return false;
+    const selected = new Set(marketBatchSelected.value);
+    return selectableMarketPlugins.value.every((plugin) =>
+      selected.has(getMarketPluginKey(plugin)),
+    );
+  });
+
+  const selectedMarketBatchPlugins = computed(() => {
+    const selected = new Set(marketBatchSelected.value);
+    return selectableMarketPlugins.value.filter((plugin) =>
+      selected.has(getMarketPluginKey(plugin)),
+    );
+  });
+
+  const marketBatchExceptions = computed(() =>
+    selectedMarketBatchPlugins.value.flatMap((plugin) => {
+      const label = plugin.display_name || plugin.name;
+      const entries = [];
+      if (Array.isArray(plugin.tags) && plugin.tags.includes("danger")) {
+        entries.push({
+          key: `${getMarketPluginKey(plugin)}|danger`,
+          label,
+          reason: tm("batch.market.dangerReason"),
+        });
+      }
+      if (plugin.astrbot_version_supported === false) {
+        entries.push({
+          key: `${getMarketPluginKey(plugin)}|version`,
+          label,
+          reason:
+            plugin.astrbot_support_message || tm("batch.market.versionReason"),
+        });
+      }
+      return entries;
+    }),
+  );
+
+  const startInstalledBatchSelection = () => {
+    installedBatchSelected.value = [];
+    installedBatchMode.value = true;
+  };
+
+  const cancelInstalledBatchSelection = () => {
+    if (batchProgress.running) return;
+    installedBatchMode.value = false;
+    installedBatchSelected.value = [];
+    installedBatchConfirm.show = false;
+    installedBatchConfirm.pluginNames = [];
+  };
+
+  const toggleInstalledBatchPlugin = (extension) => {
+    if (!installedBatchMode.value || !extension?.name) return;
+    if (extension.reserved) {
+      toast(tm("batch.installed.reservedDisabled"), "info");
+      return;
+    }
+    const selected = new Set(installedBatchSelected.value);
+    if (selected.has(extension.name)) {
+      selected.delete(extension.name);
+    } else {
+      selected.add(extension.name);
+    }
+    installedBatchSelected.value = [...selected];
+  };
+
+  const toggleSelectAllInstalledBatch = () => {
+    installedBatchSelected.value = allSelectableInstalledPluginsSelected.value
+      ? []
+      : selectableInstalledPlugins.value.map((plugin) => plugin.name);
+  };
+
+  const requestInstalledBatchUninstall = () => {
+    if (batchProgress.running) return;
+    const selected = new Set(installedBatchSelected.value);
+    const pluginNames = selectableInstalledPlugins.value
+      .filter((plugin) => selected.has(plugin.name))
+      .map((plugin) => plugin.name);
+    if (pluginNames.length === 0) return;
+    installedBatchConfirm.pluginNames = pluginNames;
+    installedBatchConfirm.show = true;
+  };
+
+  const startBatchProgress = (action, total) => {
+    Object.assign(batchProgress, {
+      show: true,
+      running: true,
+      action,
+      total,
+      completed: 0,
+      current: "",
+      succeeded: 0,
+      failed: 0,
+      skipped: 0,
+      failures: [],
+      skippedItems: [],
+    });
+  };
+
+  const executeInstalledBatchUninstall = async (options = {}) => {
+    if (batchProgress.running) return;
+    const pluginNames = [...installedBatchConfirm.pluginNames];
+    installedBatchConfirm.show = false;
+    if (pluginNames.length === 0) return;
+
+    startBatchProgress("uninstall", pluginNames.length);
+    const failedNames = [];
+    for (const pluginName of pluginNames) {
+      batchProgress.current = pluginName;
+      try {
+        const res = await pluginApi.uninstall(pluginName, {
+          delete_config: options.deleteConfig === true,
+          delete_data: options.deleteData === true,
+        });
+        if (res.data.status === "error") {
+          failedNames.push(pluginName);
+          batchProgress.failed += 1;
+          batchProgress.failures.push({
+            label: pluginName,
+            reason: res.data.message || tm("messages.operationFailed"),
+          });
+        } else {
+          batchProgress.succeeded += 1;
+        }
+      } catch (error) {
+        failedNames.push(pluginName);
+        batchProgress.failed += 1;
+        batchProgress.failures.push({
+          label: pluginName,
+          reason: resolveErrorMessage(error, tm("messages.operationFailed")),
+        });
+      } finally {
+        batchProgress.completed += 1;
+      }
+    }
+
+    try {
+      await getExtensions({ withLoading: false });
+      checkAlreadyInstalled();
+    } catch (error) {
+      batchProgress.failures.push({
+        label: tm("batch.refreshLabel"),
+        reason: resolveErrorMessage(error, tm("messages.refreshFailed")),
+      });
+    }
+
+    const installedNames = new Set(
+      (extension_data.data || [])
+        .filter((plugin) => plugin?.name && !plugin.reserved)
+        .map((plugin) => plugin.name),
+    );
+    installedBatchSelected.value = failedNames.filter((name) =>
+      installedNames.has(name),
+    );
+    if (installedBatchSelected.value.length === 0) {
+      installedBatchMode.value = false;
+    }
+    batchProgress.current = "";
+    batchProgress.running = false;
+  };
+
+  const startMarketBatchSelection = () => {
+    marketBatchSelected.value = [];
+    marketBatchMode.value = true;
+  };
+
+  const cancelMarketBatchSelection = () => {
+    if (batchProgress.running) return;
+    marketBatchMode.value = false;
+    marketBatchSelected.value = [];
+    marketBatchConfirm.show = false;
+    marketBatchConfirm.targets = [];
+  };
+
+  const toggleMarketBatchPlugin = (plugin) => {
+    if (!marketBatchMode.value) return;
+    const pluginKey = getMarketPluginKey(plugin);
+    const canSelect =
+      pluginKey &&
+      !plugin.installed &&
+      !!getMarketPluginId(plugin) &&
+      !!String(plugin.repo || "").trim();
+    if (!canSelect) {
+      toast(tm("batch.market.unavailable"), "info");
+      return;
+    }
+    const selected = new Set(marketBatchSelected.value);
+    if (selected.has(pluginKey)) {
+      selected.delete(pluginKey);
+    } else {
+      selected.add(pluginKey);
+    }
+    marketBatchSelected.value = [...selected];
+  };
+
+  const toggleSelectAllMarketBatch = () => {
+    marketBatchSelected.value = allSelectableMarketPluginsSelected.value
+      ? []
+      : selectableMarketPlugins.value.map((plugin) =>
+          getMarketPluginKey(plugin),
+        );
+  };
+
+  const requestMarketBatchInstall = () => {
+    if (batchProgress.running) return;
+    const targets = selectedMarketBatchPlugins.value.map((plugin) => ({
+      ...plugin,
+    }));
+    if (targets.length === 0) return;
+    marketBatchConfirm.targets = targets;
+    marketBatchConfirm.show = true;
+  };
+
+  const executeMarketBatchInstall = async () => {
+    if (batchProgress.running) return;
+    const targets = marketBatchConfirm.targets.map((plugin) => ({ ...plugin }));
+    marketBatchConfirm.show = false;
+    if (targets.length === 0) return;
+
+    startBatchProgress("install", targets.length);
+    const pendingKeys = [];
+    let installedAny = false;
+    for (const plugin of targets) {
+      const pluginKey = getMarketPluginKey(plugin);
+      const pluginLabel = plugin.display_name || plugin.name;
+      batchProgress.current = pluginLabel;
+
+      let skipReason = "";
+      if (Array.isArray(plugin.tags) && plugin.tags.includes("danger")) {
+        skipReason = tm("batch.market.dangerReason");
+      } else if (plugin.astrbot_version_supported === false) {
+        skipReason =
+          plugin.astrbot_support_message || tm("batch.market.versionReason");
+      }
+      if (skipReason) {
+        pendingKeys.push(pluginKey);
+        batchProgress.skipped += 1;
+        batchProgress.skippedItems.push({
+          label: pluginLabel,
+          reason: skipReason,
+        });
+        batchProgress.completed += 1;
+        continue;
+      }
+
+      try {
+        const res = await pluginApi.installUrl({
+          url: plugin.repo,
+          download_url: plugin.download_url || "",
+          proxy: plugin.download_url ? "" : getRepositoryProxy(plugin.repo),
+          ignore_version_check: false,
+          install_method: "market",
+          registry_url: selectedSource.value || null,
+          market_plugin_id: getMarketPluginId(plugin),
+        });
+        if (res.data.status === "warning") {
+          pendingKeys.push(pluginKey);
+          batchProgress.skipped += 1;
+          batchProgress.skippedItems.push({
+            label: pluginLabel,
+            reason: res.data.message || tm("batch.market.versionReason"),
+          });
+        } else if (res.data.status === "error") {
+          pendingKeys.push(pluginKey);
+          batchProgress.failed += 1;
+          batchProgress.failures.push({
+            label: pluginLabel,
+            reason: res.data.message || tm("messages.installFailed"),
+          });
+        } else {
+          installedAny = true;
+          batchProgress.succeeded += 1;
+        }
+      } catch (error) {
+        pendingKeys.push(pluginKey);
+        batchProgress.failed += 1;
+        batchProgress.failures.push({
+          label: pluginLabel,
+          reason: resolveErrorMessage(error, tm("messages.installFailed")),
+        });
+      } finally {
+        batchProgress.completed += 1;
+      }
+    }
+
+    try {
+      await getExtensions({ withLoading: false });
+      checkAlreadyInstalled();
+      refreshRandomPlugins();
+    } catch (error) {
+      batchProgress.failures.push({
+        label: tm("batch.refreshLabel"),
+        reason: resolveErrorMessage(error, tm("messages.refreshFailed")),
+      });
+    }
+
+    const currentKeys = new Set(
+      selectableMarketPlugins.value.map((plugin) => getMarketPluginKey(plugin)),
+    );
+    marketBatchSelected.value = pendingKeys.filter((key) =>
+      currentKeys.has(key),
+    );
+    if (marketBatchSelected.value.length === 0) {
+      marketBatchMode.value = false;
+    }
+    if (installedAny) {
+      await checkAndPromptConflicts();
+    }
+    batchProgress.current = "";
+    batchProgress.running = false;
+  };
+
   const updatableExtensions = computed(() => {
     const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
     return data.filter((ext) => ext.has_update);
@@ -661,7 +1020,9 @@ export const useExtensionPage = (initialTab = "installed") => {
     if (!["http:", "https:", "ssh:"].includes(parsed.protocol)) return false;
     if (!parsed.hostname || parsed.search || parsed.hash) return false;
     if (
-      ["github.com", "www.github.com"].includes(parsed.hostname.toLowerCase()) &&
+      ["github.com", "www.github.com"].includes(
+        parsed.hostname.toLowerCase(),
+      ) &&
       ["http:", "https:"].includes(parsed.protocol)
     ) {
       return false;
@@ -946,11 +1307,7 @@ export const useExtensionPage = (initialTab = "installed") => {
     const ext = getInstalledExtensionByName(extension_name);
     const { repoUrl, needsSourceSelection } = buildUpdateContext(ext);
 
-    if (
-      needsSourceSelection &&
-      !options.skipSourceCheck &&
-      !repoUrl
-    ) {
+    if (needsSourceSelection && !options.skipSourceCheck && !repoUrl) {
       toast(tm("messages.updateDisabled"), "info");
       return;
     }
@@ -1179,10 +1536,7 @@ export const useExtensionPage = (initialTab = "installed") => {
         const serverLevel = res.data.data?.log_level;
         // Preserve null as "follow global" and only skip synchronization
         // when an older server does not return the field.
-        if (
-          curr_namespace.value === pluginName &&
-          serverLevel !== undefined
-        ) {
+        if (curr_namespace.value === pluginName && serverLevel !== undefined) {
           extension_config.log_level = serverLevel;
         }
         toast(tm("messages.logLevelUpdated"), "success");
@@ -1538,10 +1892,7 @@ export const useExtensionPage = (initialTab = "installed") => {
         if (!marketPluginId || !pluginRepo || pluginRepo !== extensionRepo) {
           return;
         }
-        if (
-          currentMarketPluginId &&
-          marketPluginId !== currentMarketPluginId
-        ) {
+        if (currentMarketPluginId && marketPluginId !== currentMarketPluginId) {
           return;
         }
 
@@ -1584,7 +1935,8 @@ export const useExtensionPage = (initialTab = "installed") => {
         ? candidates.find(
             (candidate) =>
               candidate.install_method === "repository" &&
-              normalizeInstallUrl(candidate.repo).toLowerCase() === extensionRepo,
+              normalizeInstallUrl(candidate.repo).toLowerCase() ===
+                extensionRepo,
           )
         : candidates.find((candidate) => {
             return (
@@ -1593,7 +1945,8 @@ export const useExtensionPage = (initialTab = "installed") => {
                 currentRegistryUrl &&
               (!currentMarketPluginId ||
                 candidate.market_plugin_id === currentMarketPluginId) &&
-              normalizeInstallUrl(candidate.repo).toLowerCase() === extensionRepo
+              normalizeInstallUrl(candidate.repo).toLowerCase() ===
+                extensionRepo
             );
           });
 
@@ -1645,9 +1998,13 @@ export const useExtensionPage = (initialTab = "installed") => {
       return;
     }
 
-    await updateExtension(pendingUpdate.extensionName, pendingUpdate.forceUpdate, {
-      skipSourceCheck: true,
-    });
+    await updateExtension(
+      pendingUpdate.extensionName,
+      pendingUpdate.forceUpdate,
+      {
+        skipSourceCheck: true,
+      },
+    );
   };
 
   const confirmPluginSourceBinding = async () => {
@@ -2495,6 +2852,34 @@ export const useExtensionPage = (initialTab = "installed") => {
     void replaceTabRoute(router, route, newTab);
   });
 
+  watch(activeTab, (newTab) => {
+    if (batchProgress.running) return;
+    if (newTab !== "installed") {
+      cancelInstalledBatchSelection();
+    }
+    if (newTab !== "market") {
+      cancelMarketBatchSelection();
+    }
+  });
+
+  watch(selectableInstalledPlugins, (plugins) => {
+    if (!installedBatchMode.value) return;
+    const visibleNames = new Set(plugins.map((plugin) => plugin.name));
+    installedBatchSelected.value = installedBatchSelected.value.filter((name) =>
+      visibleNames.has(name),
+    );
+  });
+
+  watch(selectableMarketPlugins, (plugins) => {
+    if (!marketBatchMode.value) return;
+    const visibleKeys = new Set(
+      plugins.map((plugin) => getMarketPluginKey(plugin)),
+    );
+    marketBatchSelected.value = marketBatchSelected.value.filter((key) =>
+      visibleKeys.has(key),
+    );
+  });
+
   watch(marketCategoryFilter, () => {
     if (activeTab.value === "market") {
       currentPage.value = 1;
@@ -2558,6 +2943,19 @@ export const useExtensionPage = (initialTab = "installed") => {
     versionSupportDialog,
     showUninstallDialog,
     uninstallTarget,
+    installedBatchMode,
+    installedBatchSelected,
+    installedBatchConfirm,
+    marketBatchMode,
+    marketBatchSelected,
+    marketBatchConfirm,
+    batchProgress,
+    selectableInstalledPlugins,
+    allSelectableInstalledPluginsSelected,
+    selectableMarketPlugins,
+    allSelectableMarketPluginsSelected,
+    selectedMarketBatchPlugins,
+    marketBatchExceptions,
     showSourceDialog,
     showSourceManagerDialog,
     sourceName,
@@ -2615,6 +3013,18 @@ export const useExtensionPage = (initialTab = "installed") => {
     requestUninstallPlugin,
     requestUninstallFailedPlugin,
     handleUninstallConfirm,
+    startInstalledBatchSelection,
+    cancelInstalledBatchSelection,
+    toggleInstalledBatchPlugin,
+    toggleSelectAllInstalledBatch,
+    requestInstalledBatchUninstall,
+    executeInstalledBatchUninstall,
+    startMarketBatchSelection,
+    cancelMarketBatchSelection,
+    toggleMarketBatchPlugin,
+    toggleSelectAllMarketBatch,
+    requestMarketBatchInstall,
+    executeMarketBatchInstall,
     updateExtension,
     closeUpdateConfirmDialog,
     confirmUpdatePlugin,

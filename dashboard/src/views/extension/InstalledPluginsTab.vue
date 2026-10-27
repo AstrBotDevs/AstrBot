@@ -53,6 +53,9 @@ const {
   versionSupportDialog,
   showUninstallDialog,
   uninstallTarget,
+  installedBatchMode,
+  installedBatchSelected,
+  allSelectableInstalledPluginsSelected,
   showSourceDialog,
   showSourceManagerDialog,
   sourceName,
@@ -101,6 +104,11 @@ const {
   uninstallExtension,
   requestUninstallFailedPlugin,
   handleUninstallConfirm,
+  startInstalledBatchSelection,
+  cancelInstalledBatchSelection,
+  toggleInstalledBatchPlugin,
+  toggleSelectAllInstalledBatch,
+  requestInstalledBatchUninstall,
   updateExtension,
   showUpdateAllConfirm,
   confirmUpdateAll,
@@ -247,6 +255,53 @@ const togglePinnedExtension = (extension) => {
           </v-tab>
         </v-tabs>
 
+        <div class="installed-header-actions d-flex align-center ml-auto">
+          <template v-if="installedBatchMode">
+            <v-btn
+              variant="text"
+              size="small"
+              :disabled="installedBatchSelected.length === 0"
+              @click="toggleSelectAllInstalledBatch"
+            >
+              {{
+                allSelectableInstalledPluginsSelected
+                  ? tm("batch.actions.clearSelection")
+                  : tm("batch.actions.selectAll")
+              }}
+            </v-btn>
+            <v-btn
+              color="error"
+              variant="tonal"
+              size="small"
+              prepend-icon="mdi-delete-outline"
+              :disabled="installedBatchSelected.length === 0"
+              @click="requestInstalledBatchUninstall"
+            >
+              {{
+                tm("batch.installed.uninstallSelected", {
+                  count: installedBatchSelected.length,
+                })
+              }}
+            </v-btn>
+            <v-btn
+              variant="text"
+              size="small"
+              @click="cancelInstalledBatchSelection"
+            >
+              {{ tm("batch.actions.cancel") }}
+            </v-btn>
+          </template>
+          <v-btn
+            v-else
+            variant="tonal"
+            size="small"
+            prepend-icon="mdi-select-multiple"
+            @click="startInstalledBatchSelection"
+          >
+            {{ tm("batch.installed.select") }}
+          </v-btn>
+        </div>
+
         <div class="installed-search-wrap d-flex align-center ml-auto">
           <v-text-field
             :model-value="pluginSearch"
@@ -365,9 +420,17 @@ const togglePinnedExtension = (extension) => {
             <ExtensionCard
               :extension="extension"
               :is-pinned="isPinnedExtension(extension)"
+              :selection-mode="installedBatchMode"
+              :selected="installedBatchSelected.includes(extension.name)"
+              :selection-disabled="!!extension.reserved"
               class="rounded-lg"
               style="background-color: rgb(var(--v-theme-mcpCardBg))"
-              @click="openPluginDetail(extension)"
+              @click="
+                installedBatchMode
+                  ? toggleInstalledBatchPlugin(extension)
+                  : openPluginDetail(extension)
+              "
+              @toggle-select="toggleInstalledBatchPlugin(extension)"
               @toggle-pin="togglePinnedExtension(extension)"
               @configure="openExtensionConfig(extension.name)"
               @uninstall="
@@ -474,16 +537,13 @@ const togglePinnedExtension = (extension) => {
               </span>
               <span v-else>
                 {{
-                  selectedSourceBindingCandidate.version ||
-                  tm("status.unknown")
+                  selectedSourceBindingCandidate.version || tm("status.unknown")
                 }}
               </span>
             </div>
           </div>
           <v-alert
-            v-if="
-              selectedSourceBindingCandidate?.validation_status === 'error'
-            "
+            v-if="selectedSourceBindingCandidate?.validation_status === 'error'"
             type="error"
             variant="tonal"
             density="compact"
@@ -505,7 +565,8 @@ const togglePinnedExtension = (extension) => {
               sourceBindingDialog.loading ||
               sourceBindingDialog.candidates.length === 0 ||
               !sourceBindingDialog.selectedKey ||
-              (selectedSourceBindingCandidate?.install_method === 'repository' &&
+              (selectedSourceBindingCandidate?.install_method ===
+                'repository' &&
                 selectedSourceBindingCandidate?.validation_status !== 'valid')
             "
             @click="confirmPluginSourceBinding"
@@ -596,6 +657,11 @@ const togglePinnedExtension = (extension) => {
   gap: 12px;
 }
 
+.installed-header-actions {
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
 .installed-search-wrap {
   flex: 0 1 340px;
   min-width: 220px;
@@ -609,6 +675,11 @@ const togglePinnedExtension = (extension) => {
   .installed-header-row {
     align-items: stretch !important;
     flex-direction: column;
+  }
+
+  .installed-header-actions {
+    margin-left: 0 !important;
+    width: 100%;
   }
 
   .installed-search-wrap {

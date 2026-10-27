@@ -25,6 +25,18 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  selectionMode: {
+    type: Boolean,
+    default: false,
+  },
+  selected: {
+    type: Boolean,
+    default: false,
+  },
+  selectionDisabled: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 // 定义要发送到父组件的事件
@@ -40,6 +52,7 @@ const emit = defineEmits([
   "toggle-pin",
   "open-view",
   "change-source",
+  "toggle-select",
 ]);
 
 const attrs = useAttrs();
@@ -182,12 +195,21 @@ const togglePin = () => {
 const openView = () => {
   emit("open-view", props.extension);
 };
+
+const toggleSelection = () => {
+  if (props.selectionDisabled) return;
+  emit("toggle-select", props.extension);
+};
 </script>
 
 <template>
   <v-card
     v-bind="attrs"
     class="extension-card mx-auto d-flex flex-column h-100"
+    :class="{
+      'extension-card--selected': selectionMode && selected,
+      'extension-card--selection-disabled': selectionMode && selectionDisabled,
+    }"
     elevation="0"
     height="100%"
     :ripple="false"
@@ -210,6 +232,31 @@ const openView = () => {
   >
     <v-card-text class="extension-card-text">
       <div class="extension-content-row">
+        <div
+          v-if="selectionMode"
+          class="extension-selection-control"
+          @click.stop
+        >
+          <v-tooltip
+            location="top"
+            :disabled="!selectionDisabled"
+            :text="tm('batch.installed.reservedDisabled')"
+          >
+            <template #activator="{ props: tooltipProps }">
+              <div v-bind="tooltipProps">
+                <v-checkbox-btn
+                  :model-value="selected"
+                  :disabled="selectionDisabled"
+                  :aria-label="
+                    tm('batch.installed.selectPlugin', { name: extension.name })
+                  "
+                  @click.stop
+                  @update:model-value="toggleSelection"
+                />
+              </div>
+            </template>
+          </v-tooltip>
+        </div>
         <div class="extension-image-container">
           <img
             :src="logoSrc"
@@ -292,7 +339,7 @@ const openView = () => {
               </v-tooltip>
             </p>
 
-            <template v-if="!marketMode">
+            <template v-if="!marketMode && !selectionMode">
               <v-tooltip location="left">
                 <template v-slot:activator="{ props: tooltipProps }">
                   <div class="extension-switch-wrap" @click.stop>
@@ -317,9 +364,7 @@ const openView = () => {
                   </div>
                 </template>
                 <span>{{
-                  extension.activated
-                    ? tm("buttons.stop")
-                    : tm("buttons.load")
+                  extension.activated ? tm("buttons.stop") : tm("buttons.load")
                 }}</span>
               </v-tooltip>
             </template>
@@ -368,7 +413,7 @@ const openView = () => {
       </div>
     </v-card-text>
 
-    <v-card-actions class="extension-actions">
+    <v-card-actions v-if="!selectionMode" class="extension-actions">
       <template v-if="!marketMode">
         <v-spacer></v-spacer>
         <v-tooltip location="top">
@@ -544,6 +589,22 @@ const openView = () => {
 
 .extension-card {
   cursor: pointer;
+}
+
+.extension-card--selected {
+  border-color: rgb(var(--v-theme-primary)) !important;
+  box-shadow: 0 0 0 1px rgb(var(--v-theme-primary));
+}
+
+.extension-card--selection-disabled {
+  cursor: default;
+  opacity: 0.68;
+}
+
+.extension-selection-control {
+  display: flex;
+  flex-shrink: 0;
+  align-items: flex-start;
 }
 
 .extension-image-container {

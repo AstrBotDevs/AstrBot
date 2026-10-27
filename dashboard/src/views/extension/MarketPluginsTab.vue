@@ -57,6 +57,14 @@ const {
   versionSupportDialog,
   showUninstallDialog,
   uninstallTarget,
+  marketBatchMode,
+  marketBatchSelected,
+  allSelectableMarketPluginsSelected,
+  startMarketBatchSelection,
+  cancelMarketBatchSelection,
+  toggleMarketBatchPlugin,
+  toggleSelectAllMarketBatch,
+  requestMarketBatchInstall,
   showSourceDialog,
   showSourceManagerDialog,
   sourceName,
@@ -312,6 +320,53 @@ const openMarketPluginDetail = (plugin) => {
         </div>
 
         <div class="market-filter-group d-flex align-center">
+          <div class="market-batch-actions d-flex align-center">
+            <template v-if="marketBatchMode">
+              <v-btn
+                variant="text"
+                size="small"
+                :disabled="marketBatchSelected.length === 0"
+                @click="toggleSelectAllMarketBatch"
+              >
+                {{
+                  allSelectableMarketPluginsSelected
+                    ? tm("batch.actions.clearSelection")
+                    : tm("batch.actions.selectAll")
+                }}
+              </v-btn>
+              <v-btn
+                color="primary"
+                variant="tonal"
+                size="small"
+                prepend-icon="mdi-download-multiple"
+                :disabled="marketBatchSelected.length === 0"
+                @click="requestMarketBatchInstall"
+              >
+                {{
+                  tm("batch.market.installSelected", {
+                    count: marketBatchSelected.length,
+                  })
+                }}
+              </v-btn>
+              <v-btn
+                variant="text"
+                size="small"
+                @click="cancelMarketBatchSelection"
+              >
+                {{ tm("batch.actions.cancel") }}
+              </v-btn>
+            </template>
+            <v-btn
+              v-else
+              variant="tonal"
+              size="small"
+              prepend-icon="mdi-select-multiple"
+              @click="startMarketBatchSelection"
+            >
+              {{ tm("batch.market.select") }}
+            </v-btn>
+          </div>
+
           <v-select
             v-if="marketCategoryItems.length > 0"
             v-model="marketCategoryFilter"
@@ -353,8 +408,14 @@ const openMarketPluginDetail = (plugin) => {
             :plugin="plugin"
             :default-plugin-icon="defaultPluginIcon"
             :show-plugin-full-name="showPluginFullName"
+            :selection-mode="marketBatchMode"
+            :selected="marketBatchSelected.includes(getMarketPluginKey(plugin))"
+            :selection-disabled="
+              plugin.installed || !plugin.market_plugin_id || !plugin.repo
+            "
             @install="handleInstallPlugin"
             @open="openMarketPluginDetail"
+            @toggle-select="toggleMarketBatchPlugin"
           />
         </v-col>
       </v-row>
@@ -369,7 +430,7 @@ const openMarketPluginDetail = (plugin) => {
       </div>
 
       <v-expand-transition>
-        <div v-if="randomPlugins.length > 0">
+        <div v-if="!marketBatchMode && randomPlugins.length > 0">
           <div
             class="d-flex align-center mb-2 mt-4"
             style="justify-content: space-between; flex-wrap: wrap; gap: 8px"
@@ -401,8 +462,10 @@ const openMarketPluginDetail = (plugin) => {
                 :plugin="plugin"
                 :default-plugin-icon="defaultPluginIcon"
                 :show-plugin-full-name="showPluginFullName"
+                :selection-mode="marketBatchMode"
                 @install="handleInstallPlugin"
                 @open="openMarketPluginDetail"
+                @toggle-select="toggleMarketBatchPlugin"
               />
             </v-col>
           </v-row>
@@ -443,6 +506,11 @@ const openMarketPluginDetail = (plugin) => {
 .market-header-primary,
 .market-filter-group {
   gap: 12px;
+}
+
+.market-batch-actions {
+  gap: 4px;
+  flex-wrap: wrap;
 }
 
 .market-header-primary {
@@ -498,6 +566,10 @@ const openMarketPluginDetail = (plugin) => {
     align-items: stretch !important;
     flex-direction: column;
     width: 100%;
+  }
+
+  .market-batch-actions {
+    justify-content: flex-start;
   }
 
   .market-filter-control {

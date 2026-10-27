@@ -20,9 +20,21 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  selectionMode: {
+    type: Boolean,
+    default: false,
+  },
+  selected: {
+    type: Boolean,
+    default: false,
+  },
+  selectionDisabled: {
+    type: Boolean,
+    default: false,
+  },
 });
 
-const emit = defineEmits(["install", "open"]);
+const emit = defineEmits(["install", "open", "toggle-select"]);
 
 const normalizePlatformList = (platforms) => {
   if (!Array.isArray(platforms)) return [];
@@ -57,19 +69,41 @@ const handleInstall = (plugin) => {
 };
 
 const handleOpen = () => {
+  if (props.selectionMode) {
+    emit("toggle-select", props.plugin);
+    return;
+  }
   emit("open", props.plugin);
+};
+
+const toggleSelection = () => {
+  if (props.selectionDisabled) return;
+  emit("toggle-select", props.plugin);
 };
 </script>
 
 <template>
   <v-card
     class="rounded-lg d-flex flex-column plugin-card"
+    :class="{
+      'plugin-card--selected': selectionMode && selected,
+      'plugin-card--selection-disabled': selectionMode && selectionDisabled,
+    }"
     variant="outlined"
     elevation="0"
     :ripple="false"
     @click="handleOpen"
   >
     <v-card-text class="plugin-card-content">
+      <div v-if="selectionMode" class="plugin-selection-control" @click.stop>
+        <v-checkbox-btn
+          :model-value="selected"
+          :disabled="selectionDisabled"
+          :aria-label="tm('batch.market.selectPlugin', { name: plugin.name })"
+          @click.stop
+          @update:model-value="toggleSelection"
+        />
+      </div>
       <div class="plugin-cover">
         <img
           :src="plugin?.logo || defaultPluginIcon"
@@ -176,6 +210,7 @@ const handleOpen = () => {
     </v-card-text>
 
     <v-card-actions
+      v-if="!selectionMode"
       style="gap: 6px; padding: 8px 12px; padding-top: 0"
       @click.stop
     >
@@ -247,6 +282,22 @@ const handleOpen = () => {
 .plugin-card:hover,
 .plugin-card:focus-within {
   background: rgba(var(--v-theme-on-surface), 0.04);
+}
+
+.plugin-card--selected {
+  border-color: rgb(var(--v-theme-primary)) !important;
+  box-shadow: 0 0 0 1px rgb(var(--v-theme-primary));
+}
+
+.plugin-card--selection-disabled {
+  cursor: default;
+  opacity: 0.68;
+}
+
+.plugin-selection-control {
+  display: flex;
+  flex-shrink: 0;
+  align-items: flex-start;
 }
 
 .plugin-card :deep(.v-card__overlay),
