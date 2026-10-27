@@ -185,8 +185,12 @@ class Main(star.Star):
         filter.EventMessageType.GROUP_MESSAGE,
         priority=maxsize - 2,
     )
-    async def on_message(self, event: AstrMessageEvent):
-        """群聊上下文感知"""
+    async def on_message(self, event: AstrMessageEvent) -> None:
+        """Record group context and defer proactive replies until after listeners.
+
+        Args:
+            event: Incoming group message.
+        """
         message_components = _iter_message_components(event)
         has_context_content = False
         for comp in message_components:
@@ -255,11 +259,16 @@ class Main(star.Star):
                             except Exception:
                                 logger.exception("主动回复处理图片失败")
 
-                    yield event.request_llm(
-                        prompt=prompt,
-                        session_id=event.session_id,
-                        image_urls=image_urls,
-                        conversation=conv,
+                    # Message listeners must prepare context or handle the event
+                    # before the pipeline starts this default reply.
+                    event.set_extra(
+                        "_active_reply_request",
+                        event.request_llm(
+                            prompt=prompt,
+                            session_id=event.session_id,
+                            image_urls=image_urls,
+                            conversation=conv,
+                        ),
                     )
                 except BaseException as e:
                     logger.error(traceback.format_exc())

@@ -421,9 +421,12 @@ class AstrMessageEvent(abc.ABC):
         return self._result.is_stopped()
 
     def should_call_llm(self, call_llm: bool) -> None:
-        """是否在此消息事件中禁止默认的 LLM 请求。
+        """Control suppression of default LLM requests, including proactive replies.
 
-        只会阻止 AstrBot 默认的 LLM 请求链路，不会阻止插件中的 LLM 请求。
+        Explicit requests yielded by plugins are not affected.
+
+        Args:
+            call_llm: True to suppress default requests; False to allow them.
         """
         self.call_llm = call_llm
 

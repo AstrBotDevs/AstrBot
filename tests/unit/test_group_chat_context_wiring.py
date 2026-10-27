@@ -76,9 +76,9 @@ async def test_active_reply_does_not_create_conversation_when_current_missing():
     )
     event = make_event()
 
-    results = [item async for item in main.on_message(event)]
+    await main.on_message(event)
 
-    assert results == []
+    assert event.get_extra("_active_reply_request") is None
     conv_mgr.get_curr_conversation_id.assert_awaited_once_with(event.unified_msg_origin)
     conv_mgr.new_conversation.assert_not_called()
     conv_mgr.get_conversation.assert_not_called()
@@ -109,9 +109,9 @@ async def test_active_reply_reuses_current_umo_conversation():
     llm_request = object()
     event.request_llm.return_value = llm_request
 
-    results = [item async for item in main.on_message(event)]
+    await main.on_message(event)
 
-    assert results == [llm_request]
+    assert event.get_extra("_active_reply_request") is llm_request
     conv_mgr.get_curr_conversation_id.assert_awaited_once_with(event.unified_msg_origin)
     conv_mgr.new_conversation.assert_not_called()
     conv_mgr.get_conversation.assert_awaited_once_with(
@@ -143,8 +143,7 @@ async def test_on_message_does_not_clear_group_context_on_first_enabled_message(
     )
     event = make_event()
 
-    async for _ in main.on_message(event):
-        pass
+    await main.on_message(event)
 
     main.group_chat_context.need_active_reply.assert_awaited_once_with(event)
     main.group_chat_context.handle_message.assert_awaited_once_with(event)
@@ -168,8 +167,7 @@ async def test_on_message_records_json_card_and_checks_active_reply():
     event = make_event()
     event.message_obj.message = [Json(data={"meta": {"news": {"title": "News"}}})]
 
-    async for _ in main.on_message(event):
-        pass
+    await main.on_message(event)
 
     main.group_chat_context.need_active_reply.assert_awaited_once_with(event)
     main.group_chat_context.handle_message.assert_awaited_once_with(event)
@@ -197,8 +195,7 @@ async def test_on_message_skips_recording_when_command_handler_matched():
         },
     )
 
-    async for _ in main.on_message(event):
-        pass
+    await main.on_message(event)
 
     main.group_chat_context.need_active_reply.assert_awaited_once_with(event)
     main.group_chat_context.handle_message.assert_not_awaited()
