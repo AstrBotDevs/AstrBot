@@ -14,6 +14,7 @@ registry never hands out.
 from __future__ import annotations
 
 import ast
+from functools import lru_cache
 from pathlib import Path
 
 from astrbot.dashboard.services.auth_service import ALL_OPEN_API_SCOPES
@@ -48,6 +49,7 @@ def _scope_call_argument(node: ast.Call, index: int) -> ast.expr | None:
     return None
 
 
+@lru_cache(maxsize=1)
 def _collect_scope_arguments() -> tuple[dict[str, list[str]], list[str]]:
     """Collect statically written scopes and dynamic call sites.
 
