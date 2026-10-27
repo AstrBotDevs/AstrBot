@@ -38,7 +38,11 @@ If the API Key does not include the required scope for the target endpoint, the 
 - `config:edit_admin` and `chat:admin` must be granted explicitly and are never inherited from their parent scopes.
 - Deselecting `bot` or `provider` in the WebUI also removes the dependent `config` scope.
 
-Developer API keys currently support 11 top-level scopes and two sensitive sub-scopes. `tool`, `skills`, `kb`, and `system` are not valid developer API key scopes. Use the singular `skill` scope for `/api/v1/skills/*` endpoints.
+Developer API keys currently support 12 top-level scopes and two sensitive sub-scopes. `tool`, `skills`, and `system` are not valid developer API key scopes. Use the singular `skill` scope for `/api/v1/skills/*` endpoints.
+
+The `kb` scope grants full knowledge-base access, including reading, importing, modifying, and deleting knowledge bases, documents, and chunks. It is not a read-only permission. Grant it only to callers trusted with this data. Revoking a key prevents future requests but does not restore deleted data or undo previous access.
+
+The WebUI does not select `kb` by default. When creating a key through the API, pass an explicit `scopes` list to limit its permissions. Omitting `scopes` grants the default scopes, including `kb`. Legacy keys without a stored scope list also use those defaults, and stored wildcard (`*`) keys can access knowledge-base endpoints. Existing keys with explicit scope lists that exclude `kb` remain unable to access them.
 
 Every operation in the interactive reference also displays `Required scope: ...`; operations involving administrator capabilities additionally display `Conditional sensitive scope: ...`.
 

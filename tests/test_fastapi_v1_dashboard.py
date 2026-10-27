@@ -36,7 +36,10 @@ from astrbot.dashboard.asgi_runtime import (
 )
 from astrbot.dashboard.responses import ok
 from astrbot.dashboard.services.api_key_service import ApiKeyService
-from astrbot.dashboard.services.auth_service import DASHBOARD_JWT_COOKIE_NAME
+from astrbot.dashboard.services.auth_service import (
+    DASHBOARD_JWT_COOKIE_NAME,
+    DEFAULT_OPEN_API_SCOPES,
+)
 from astrbot.dashboard.services.backup_service import BackupDownload
 from astrbot.dashboard.services.plugin_service import (
     PLUGIN_UPDATE_SOURCE_REQUIRED_MESSAGE,
@@ -49,7 +52,16 @@ JWT_SECRET = "fastapi-v1-test-secret-with-32-bytes"
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "access", ["kb", "wildcard", "legacy", "jwt", "im", "invalid", "missing"]
+    "access",
+    [
+        *DEFAULT_OPEN_API_SCOPES,
+        "wildcard",
+        "legacy",
+        "jwt",
+        "empty",
+        "invalid",
+        "missing",
+    ],
 )
 async def test_all_knowledge_base_routes_enforce_scope(
     asgi_app, asgi_client, fake_db, access
@@ -90,7 +102,8 @@ async def test_all_knowledge_base_routes_enforce_scope(
         setattr(service, name, AsyncMock(return_value=marker))
     asgi_app.dependency_overrides[knowledge_base_routes.get_service] = lambda: service
     key = "knowledge-base-route-test"
-    scopes = {"kb": ["kb"], "wildcard": ["*"], "legacy": None, "im": ["im"]}
+    scopes = {scope: [scope] for scope in DEFAULT_OPEN_API_SCOPES}
+    scopes.update({"wildcard": ["*"], "legacy": None, "empty": []})
     if access in scopes:
         fake_db.api_keys[ApiKeyService.hash_key(key)] = FakeApiKey(
             key_id="kb-route-key", scopes=scopes[access]
@@ -103,7 +116,11 @@ async def test_all_knowledge_base_routes_enforce_scope(
         else {"X-API-Key": key}
     )
     expected_status = (
-        403 if access == "im" else 401 if access in {"invalid", "missing"} else 200
+        401
+        if access in {"invalid", "missing"}
+        else 200
+        if access in {"kb", "wildcard", "legacy", "jwt"}
+        else 403
     )
     for method, path in operations:
         path = path.format(
@@ -127,6 +144,28 @@ async def test_all_knowledge_base_routes_enforce_scope(
 class FakeApiKey:
     key_id: str
     scopes: list[str] | None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scopes", [["kb"], ["*"], None])
+async def test_knowledge_base_keys_cannot_access_dashboard_only_routes(
+    asgi_client, fake_db, scopes
+):
+    """Keep administrative endpoints unavailable to knowledge-base API keys.
+
+    Args:
+        asgi_client: HTTP client with the real authorization dependencies.
+        fake_db: Key store for the requested permission mode.
+        scopes: Explicit knowledge-base, wildcard, or legacy default permissions.
+    """
+    key = "knowledge-base-admin-isolation-test"
+    fake_db.api_keys[ApiKeyService.hash_key(key)] = FakeApiKey(
+        key_id="kb-admin-isolation", scopes=scopes
+    )
+    for path in ("/api/v1/api-keys", "/api/v1/tools"):
+        response = await asgi_client.get(path, headers={"X-API-Key": key})
+        assert response.status_code == 403, (path, response.text)
+    assert not fake_db.touched_key_ids
 
 
 class _FakeScalarResult:
