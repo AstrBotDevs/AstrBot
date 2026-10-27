@@ -301,6 +301,18 @@ async def test_llm_response_persists_final_complete_chain():
             " [Shared Card: Title: Wrapped song; Description: Example artist; "
             "Source: NetEase Cloud Music]",
         ),
+        (
+            {
+                "meta": {
+                    "music": {
+                        "title": "  Example\n song\t ",
+                        "desc": 123,
+                        "tag": {"unexpected": "source"},
+                    }
+                }
+            },
+            " [Shared Card: Title: Example song]",
+        ),
         ({"meta": {"music": "invalid"}}, " [Shared Card]"),
         ({"app": "com.example.unknown"}, " [Shared Card]"),
     ],
@@ -317,22 +329,64 @@ async def test_format_message_summarizes_json_card(card_data, expected):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("card_kind", ["news", "music"])
-async def test_format_message_truncates_long_json_card_fields(card_kind):
+@pytest.mark.parametrize(
+    ("card_kind", "field", "label"),
+    [
+        ("news", "desc", "Description"),
+        ("music", "desc", "Description"),
+        ("music", "title", "Title"),
+        ("music", "tag", "Source"),
+    ],
+)
+async def test_format_message_truncates_long_json_card_fields(card_kind, field, label):
     context = GroupChatContext(MagicMock(), MagicMock())
     event = MagicMock()
     event.message_obj = SimpleNamespace(sender=SimpleNamespace(nickname="Alice"))
     event.get_messages.return_value = [
         Json(
             data={
-                "meta": {card_kind: {"desc": "a" * 201}},
+                "meta": {card_kind: {field: "a" * 201}},
             }
         )
     ]
 
     formatted = await context._format_message(event, {})
 
-    assert f"Description: {'a' * 200}...]" in formatted
+    assert f"{label}: {'a' * 200}...]" in formatted
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("primary_kind", ["detail_1", "news"])
+async def test_music_fallback_preserves_existing_card_priority(primary_kind):
+    context = GroupChatContext(MagicMock(), MagicMock())
+    event = make_event()
+    event.message_obj.sender = SimpleNamespace(nickname="Alice")
+    event.get_messages.return_value = [
+        Json(
+            data={
+                "meta": {
+                    primary_kind: {
+                        "title": "Existing card",
+                        "desc": "Existing description",
+                        "jumpUrl": "https://example.com/article",
+                        "tag": "Existing tag",
+                    },
+                    "music": {
+                        "title": "Fallback song",
+                        "desc": "Fallback artist",
+                        "tag": "QQ Music",
+                    },
+                }
+            }
+        )
+    ]
+
+    formatted = await context._format_message(event, {})
+
+    assert formatted.endswith(
+        " [Shared Card: Title: Existing card; Description: Existing description; "
+        "URL: https://example.com/article]"
+    )
 
 
 @pytest.mark.asyncio
