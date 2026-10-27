@@ -3544,6 +3544,70 @@ async def test_multipart_parts_preserves_duplicate_form_values():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("reload_result", "expected_status", "expected_detail"),
+    [
+        ((True, None), 200, None),
+        ((False, "Invalid endpoint"), 400, "Invalid endpoint"),
+        ((False, None), 400, "未知错误"),
+        (RuntimeError("Initialization failed"), 400, "Initialization failed"),
+        (TimeoutError(), 400, "未知错误，请查看日志"),
+    ],
+)
+async def test_v1_plugin_config_save_reports_reload_failure(
+    asgi_client,
+    fake_core_lifecycle,
+    monkeypatch,
+    tmp_path,
+    reload_result,
+    expected_status,
+    expected_detail,
+):
+    """Report reload failures without claiming the saved configuration was reverted."""
+    config_path = tmp_path / "plugin.json"
+    plugin_config = config_service.AstrBotConfig(
+        str(config_path),
+        schema={"endpoint": {"type": "string", "default": "old"}},
+    )
+    monkeypatch.setattr(
+        config_service,
+        "star_registry",
+        [SimpleNamespace(name="demo", config=plugin_config)],
+    )
+
+    async def reload_plugin(plugin_name):
+        assert plugin_name == "demo"
+        assert json.loads(config_path.read_text(encoding="utf-8-sig")) == {
+            "endpoint": "new"
+        }
+        if isinstance(reload_result, Exception):
+            raise reload_result
+        return reload_result
+
+    monkeypatch.setattr(fake_core_lifecycle.plugin_manager, "reload", reload_plugin)
+    response = await asgi_client.put(
+        "/api/v1/plugins/demo/config",
+        json={"config": {"endpoint": "new"}},
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == expected_status
+    payload = response.json()
+    assert json.loads(config_path.read_text(encoding="utf-8-sig")) == {
+        "endpoint": "new"
+    }
+    if expected_status == 200:
+        assert payload["status"] == "ok"
+    else:
+        assert payload["status"] == "error"
+        assert "demo" in payload["message"]
+        assert "配置已保存" in payload["message"]
+        assert "重载失败" in payload["message"]
+        if expected_detail:
+            assert expected_detail in payload["message"]
+
+
+@pytest.mark.asyncio
 async def test_v1_plugin_config_file_routes_reach_service_layer(
     asgi_client: httpx.AsyncClient,
 ):
