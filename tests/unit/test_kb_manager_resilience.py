@@ -5,11 +5,13 @@ Tests the following scenarios:
 1. update_kb preserves old instance when re-initialization fails
 2. update_kb switches instance only after new instance initializes successfully
 3. _ensure_vec_db clears stale init_error after successful initialization
+4. _ensure_vec_db reuses or disposes FaissVecDB instances instead of leaking them
 
 These tests use lazy imports and mocks to avoid circular import issues
 in the astrbot core module chain.
 """
 
+import asyncio
 import sys
 import types
 from pathlib import Path
@@ -303,3 +305,195 @@ async def test_ensure_vec_db_sets_init_error_on_failure(
         # Verify: init_error should NOT be cleared (still has previous error)
         # Note: _ensure_vec_db doesn't set init_error; that's done by the caller
         assert helper.init_error is not None
+
+
+def _make_helper(kb_helper_cls, kb, provider_manager, kb_db):
+    helper = kb_helper_cls.__new__(kb_helper_cls)
+    helper.kb = kb
+    helper.prov_mgr = provider_manager
+    helper.kb_db = kb_db
+    helper.kb_root_dir = "/tmp/test_kb"
+    helper.chunker = MagicMock()
+    helper.init_error = None
+    helper.kb_dir = Path("/tmp/test_kb") / kb.kb_id
+    helper.kb_medias_dir = helper.kb_dir / "medias" / kb.kb_id
+    helper.kb_files_dir = helper.kb_dir / "files" / kb.kb_id
+    return helper
+
+
+def _fake_vec_db_factory(created: list):
+    def factory(*, embedding_provider, rerank_provider, **kwargs):
+        vec_db = MagicMock()
+        vec_db.embedding_provider = embedding_provider
+        vec_db.rerank_provider = rerank_provider
+        vec_db.initialize = AsyncMock()
+        vec_db.close = AsyncMock()
+        created.append(vec_db)
+        return vec_db
+
+    return factory
+
+
+@pytest.mark.asyncio
+async def test_ensure_vec_db_reuses_instance_when_providers_unchanged(
+    stub_provider_manager_module,
+    mock_provider_manager,
+    mock_kb_db,
+    mock_knowledge_base,
+    mock_embedding_provider,
+):
+    """Repeated uploads must not build (and leak) a new FaissVecDB each time."""
+    from astrbot.core.knowledge_base.kb_helper import KBHelper
+
+    mock_provider_manager.get_provider_by_id.return_value = mock_embedding_provider
+    helper = _make_helper(
+        KBHelper, mock_knowledge_base, mock_provider_manager, mock_kb_db
+    )
+    created: list = []
+
+    with patch(
+        "astrbot.core.db.vec_db.faiss_impl.vec_db.FaissVecDB",
+        side_effect=_fake_vec_db_factory(created),
+    ):
+        first = await helper._ensure_vec_db()
+        for _ in range(5):
+            assert await helper._ensure_vec_db() is first
+
+    assert len(created) == 1
+    first.close.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_ensure_vec_db_closes_replaced_instance_when_provider_changes(
+    stub_provider_manager_module,
+    mock_provider_manager,
+    mock_kb_db,
+    mock_knowledge_base,
+    mock_embedding_provider,
+):
+    """A provider swap rebuilds the vec db and disposes the old one."""
+    from astrbot.core.knowledge_base.kb_helper import KBHelper
+
+    mock_provider_manager.get_provider_by_id.return_value = mock_embedding_provider
+    helper = _make_helper(
+        KBHelper, mock_knowledge_base, mock_provider_manager, mock_kb_db
+    )
+    created: list = []
+
+    with patch(
+        "astrbot.core.db.vec_db.faiss_impl.vec_db.FaissVecDB",
+        side_effect=_fake_vec_db_factory(created),
+    ):
+        old = await helper._ensure_vec_db()
+        new_provider = MagicMock()
+        mock_provider_manager.get_provider_by_id.return_value = new_provider
+        new = await helper._ensure_vec_db()
+
+    assert new is not old
+    assert new.embedding_provider is new_provider
+    assert helper.vec_db is new
+    old.close.assert_awaited_once()
+    new.close.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_ensure_vec_db_concurrent_calls_build_single_instance(
+    stub_provider_manager_module,
+    mock_provider_manager,
+    mock_kb_db,
+    mock_knowledge_base,
+    mock_embedding_provider,
+):
+    """Concurrent uploads share one instance instead of each building one."""
+    from astrbot.core.knowledge_base.kb_helper import KBHelper
+
+    async def slow_lookup(_provider_id):
+        await asyncio.sleep(0)
+        return mock_embedding_provider
+
+    mock_provider_manager.get_provider_by_id.side_effect = slow_lookup
+    helper = _make_helper(
+        KBHelper, mock_knowledge_base, mock_provider_manager, mock_kb_db
+    )
+    created: list = []
+
+    with patch(
+        "astrbot.core.db.vec_db.faiss_impl.vec_db.FaissVecDB",
+        side_effect=_fake_vec_db_factory(created),
+    ):
+        results = await asyncio.gather(*(helper._ensure_vec_db() for _ in range(8)))
+
+    assert len(created) == 1
+    assert all(result is created[0] for result in results)
+
+
+@pytest.mark.asyncio
+async def test_ensure_vec_db_closes_instance_when_initialize_fails(
+    stub_provider_manager_module,
+    mock_provider_manager,
+    mock_kb_db,
+    mock_knowledge_base,
+    mock_embedding_provider,
+):
+    """A half-initialized vec db must not keep its engine alive."""
+    from astrbot.core.knowledge_base.kb_helper import KBHelper
+
+    mock_provider_manager.get_provider_by_id.return_value = mock_embedding_provider
+    helper = _make_helper(
+        KBHelper, mock_knowledge_base, mock_provider_manager, mock_kb_db
+    )
+    created: list = []
+    factory = _fake_vec_db_factory(created)
+
+    def failing_factory(**kwargs):
+        vec_db = factory(**kwargs)
+        vec_db.initialize.side_effect = RuntimeError("boom")
+        return vec_db
+
+    with (
+        patch(
+            "astrbot.core.db.vec_db.faiss_impl.vec_db.FaissVecDB",
+            side_effect=failing_factory,
+        ),
+        pytest.raises(RuntimeError, match="boom"),
+    ):
+        await helper._ensure_vec_db()
+
+    created[0].close.assert_awaited_once()
+    assert getattr(helper, "vec_db", None) is None
+
+
+@pytest.mark.asyncio
+async def test_terminate_closes_and_forgets_vec_db(
+    stub_provider_manager_module,
+    mock_provider_manager,
+    mock_kb_db,
+    mock_knowledge_base,
+    mock_embedding_provider,
+):
+    """After terminate(), the next call must not reuse the disposed instance."""
+    from astrbot.core.knowledge_base.kb_helper import KBHelper
+
+    mock_provider_manager.get_provider_by_id.return_value = mock_embedding_provider
+    helper = _make_helper(
+        KBHelper, mock_knowledge_base, mock_provider_manager, mock_kb_db
+    )
+    created: list = []
+
+    with patch(
+        "astrbot.core.db.vec_db.faiss_impl.vec_db.FaissVecDB",
+        side_effect=_fake_vec_db_factory(created),
+    ):
+        first = await helper._ensure_vec_db()
+        await helper.terminate()
+        first.close.assert_awaited_once()
+        assert getattr(helper, "vec_db", None) is None
+
+        # terminate() is idempotent.
+        await helper.terminate()
+        first.close.assert_awaited_once()
+
+        second = await helper._ensure_vec_db()
+
+    assert second is not first
+    assert len(created) == 2
