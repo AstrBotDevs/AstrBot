@@ -4916,7 +4916,7 @@ CONFIG_METADATA_3_SYSTEM = {
                     "pip_install_arg": {
                         "description": "pip 安装额外参数",
                         "type": "string",
-                        "hint": "安装插件依赖时，会使用 Python 的 pip 工具。这里可以填写额外的参数，如 `--break-system-package` 等。",
+                        "hint": "安装插件依赖时，会使用 Python 的 pip 工具。这里可以填写额外的参数，如 `--break-system-package` 等。PyPI 镜像的 TLS 证书默认会校验；若使用自签名/私有 CA 镜像，请通过 `--cert <CA 路径>` 指定信任的证书（推荐），或显式添加 `--trusted-host <主机名>`。",
                     },
                     "pypi_index_url": {
                         "description": "PyPI 软件仓库地址",
