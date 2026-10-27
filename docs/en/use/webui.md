@@ -9,6 +9,7 @@ These paths use the current default sidebar with a fixed menu order. Extension i
 | Previous entry point or name | Current entry point |
 | --- | --- |
 | Providers → Add Provider → Agent Runner | Config → Select a profile → AI → `…` beside the AI heading → Change execution mode |
+| Providers → Decision (after Chat Completion) | Providers → Decision (balance-scale icon, between Text to Speech and Embedding) |
 | Data / Dashboard | Data & Logs → Statistics |
 | Conversation Management / Conversations | Data & Logs → Conversations |
 | Logs / Console | Data & Logs → Logs |

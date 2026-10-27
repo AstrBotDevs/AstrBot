@@ -214,12 +214,33 @@
                     <div class="provider-section-title">{{ tm('providers.settings') }}</div>
                   </div>
                   <AstrBotConfig
-                    :iterable="newSelectedProviderConfig"
-                    :metadata="configSchema"
+                    :iterable="legacyConfigSections.basic"
+                    :metadata="legacyConfigSchema"
                     metadataKey="provider"
                     :is-editing="updatingMode"
                   />
                 </section>
+
+                <v-divider v-if="legacyConfigSections.advanced"></v-divider>
+
+                <details
+                  v-if="legacyConfigSections.advanced"
+                  :key="selectedLegacyProvider.id"
+                  class="provider-section provider-section--advanced config-form"
+                >
+                  <summary class="provider-section-head provider-section-title">
+                    {{ tm('providerSources.advancedConfig') }}
+                    <v-icon class="provider-section-chevron" size="20">mdi-chevron-right</v-icon>
+                  </summary>
+                  <div class="provider-section-content">
+                    <AstrBotConfig
+                      :iterable="legacyConfigSections.advanced"
+                      :metadata="legacyConfigSchema"
+                      metadataKey="provider"
+                      :is-editing="updatingMode"
+                    />
+                  </div>
+                </details>
               </div>
             </div>
 
@@ -385,6 +406,24 @@ const {
   showMessage
 })
 
+const legacyConfigSchema = computed(() => {
+  const schema = JSON.parse(JSON.stringify(configSchema.value || {}))
+  if (selectedLegacyProvider.value?.type !== 'system_one_decision') return schema
+
+  const items = schema.provider?.items
+  if (!items) return schema
+  if (items.key) {
+    items.key.type = 'string'
+    delete items.key.items
+  }
+  if (items.api_base) items.api_base.hint = tm('providers.decisionHints.apiBase')
+  if (items.model) items.model.hint = tm('providers.decisionHints.model')
+  if (items.custom_headers) {
+    items.custom_headers.hint = tm('providers.decisionHints.customHeaders')
+  }
+  return schema
+})
+
 const unsavedLegacyProviderMarker = Symbol('unsavedLegacyProvider')
 const legacyProviderDrafts = ref([])
 const selectedLegacyProvider = ref(null)
@@ -393,6 +432,31 @@ const newProviderOriginalId = ref('')
 const updatingMode = ref(false)
 const loading = ref(false)
 const isLegacyProviderModified = ref(false)
+const legacyConfigSections = computed(() => {
+  const config = newSelectedProviderConfig.value
+  if (config.type !== 'system_one_decision') return { basic: config, advanced: null }
+
+  const advancedFields = new Set([
+    'timeout', 'total_timeout', 'max_concurrency',
+    'proxy', 'custom_headers'
+  ])
+  const basic = {}
+  const advanced = {}
+  for (const key of Object.keys(config)) {
+    const property = {
+      get() {
+        return config[key]
+      },
+      set(value) {
+        config[key] = value
+      }
+    }
+    // Keep hidden fields accessible to schema conditions in both sections.
+    Object.defineProperty(basic, key, { ...property, enumerable: !advancedFields.has(key) })
+    Object.defineProperty(advanced, key, { ...property, enumerable: advancedFields.has(key) })
+  }
+  return { basic, advanced }
+})
 const showManualModelDialog = ref(false)
 let suppressLegacyProviderWatch = false
 
@@ -565,6 +629,9 @@ function selectLegacyProvider(provider) {
 
   if (defaultConfig) {
     mergeConfigWithOrder(newSelectedProviderConfig.value, provider, defaultConfig)
+  }
+  if (provider.type === 'system_one_decision') {
+    delete newSelectedProviderConfig.value.probability_tolerance
   }
 
   updatingMode.value = !provider[unsavedLegacyProviderMarker]

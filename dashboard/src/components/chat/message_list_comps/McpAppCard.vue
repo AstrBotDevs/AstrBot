@@ -51,9 +51,11 @@ async function openApp() {
     opened.value = true;
     await nextTick();
     if (disposed || !frame.value) return;
+    const nonce = Array.from(crypto.getRandomValues(new Uint8Array(32)), value => value.toString(16).padStart(2, '0')).join('');
     host = createAppHost({
       source: () => frame.value?.contentWindow,
-      send: data => frame.value?.contentWindow?.postMessage(data, '*'),
+      nonce,
+      send: message => frame.value?.contentWindow?.postMessage({ nonce, message }, '*'),
       arguments: data.arguments,
       result: data.result,
       theme: props.isDark ? 'dark' : 'light',
@@ -61,7 +63,7 @@ async function openApp() {
       resize: value => { height.value = value; },
     });
     window.addEventListener('message', host.receive);
-    frame.value.srcdoc = appDocument(data.html);
+    frame.value.srcdoc = appDocument(data.html, nonce);
   } catch {
     error.value = tm('mcpApp.error');
     closeApp();

@@ -11,6 +11,7 @@
     "tabs": {
       "all": "All",
       "chatCompletion": "Chat Completion",
+      "decision": "Decision",
       "speechToText": "Speech to Text",
       "textToSpeech": "Text to Speech",
       "embedding": "Embedding",
@@ -25,6 +26,11 @@
       "kimi_code": "Dedicated Kimi CodingPlan / Kimi Code integration using a custom Anthropic API adapter.",
       "vllm_rerank": "Also supports Jina AI, Cohere, PPIO and other providers.",
       "default": ""
+    },
+    "decisionHints": {
+      "apiBase": "System One endpoint. /systemone is appended to base URLs; end the URL with / to use it as-is.",
+      "model": "System One model ID, such as jev-latest, jev-preview, or the provider's model name.",
+      "customHeaders": "HTTP headers added by AstrBot to decision requests."
     }
   },
   "availability": {
@@ -48,6 +54,7 @@
       "title": "Service Provider",
       "tabs": {
         "basic": "Basic",
+        "decision": "Decision",
         "speechToText": "Speech to Text",
         "textToSpeech": "Text to Speech",
         "embedding": "Embedding",

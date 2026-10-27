@@ -11,6 +11,74 @@ from astrbot.dashboard.services import chat_service
 from astrbot.dashboard.services.chat_service import ChatService, ChatServiceError
 
 
+@pytest.mark.asyncio
+async def test_completed_chat_run_binds_app_reference_to_saved_message(
+    chat_service_instance,
+):
+    from mcp.types import Tool
+
+    from astrbot.core.agent.mcp_app_registry import McpAppCapability, mcp_apps
+    from astrbot.core.agent.mcp_client import MCPTool
+
+    service = chat_service_instance
+    stream = await service.build_chat_stream(
+        "alice", {"message": "hello", "session_id": "app-session"}
+    )
+    run = next(iter(service.chat_runs.values()))
+    connection = object()
+    tool = MCPTool(
+        Tool(
+            name="picker", inputSchema={}, _meta={"ui": {"resourceUri": "ui://picker"}}
+        ),
+        SimpleNamespace(active=True, session=connection),
+        "photos",
+    )
+    cap = McpAppCapability(
+        username="alice",
+        session_id=run.session_id,
+        origin="webchat:FriendMessage:webchat!alice!app-session",
+        run_id=run.run_id,
+        checkpoint_id=run.llm_checkpoint_id,
+        call_id="call",
+        tool=tool,
+        connection=connection,
+        server_name="photos",
+        original_tool_name="picker",
+        resource_uri="ui://picker",
+        arguments={},
+    )
+    ref = mcp_apps.issue(cap, {"content": []})
+    try:
+        for chain_type, data in [
+            ("tool_call", {"id": "call", "name": "picker", "args": {}}),
+            (
+                "tool_call_result",
+                {"id": "call", "result": "text", "mcp_app": {"app_ref": ref}},
+            ),
+        ]:
+            await run.back_queue.put(
+                {
+                    "type": "plain",
+                    "chain_type": chain_type,
+                    "data": json.dumps(data),
+                    "message_id": run.run_id,
+                    "streaming": True,
+                }
+            )
+        await run.back_queue.put({"type": "end", "data": "", "message_id": run.run_id})
+        await asyncio.wait_for(run.task, 2)
+        stored = service.save_bot_message.await_args.args[1][0]["tool_calls"][0]
+        assert stored["mcp_app"] == {"app_ref": ref}
+        assert mcp_apps.entries[ref].message_id == "2"
+    finally:
+        mcp_apps.entries.pop(ref, None)
+        await stream.aclose()
+        if run.task and not run.task.done():
+            run.task.cancel()
+            await asyncio.gather(run.task, return_exceptions=True)
+        chat_service.webchat_queue_mgr.remove_queues(run.session_id)
+
+
 @pytest.fixture
 def chat_service_instance(monkeypatch, tmp_path):
     """Create a ChatService with isolated persistence dependencies."""

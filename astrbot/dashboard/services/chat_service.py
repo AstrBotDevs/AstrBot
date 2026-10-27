@@ -259,8 +259,9 @@ class BotMessageAccumulator:
         }
         tool_call["result"] = tool_result.get("result")
         tool_call["finished_ts"] = tool_result.get("ts")
-        if isinstance(tool_result.get("mcp_app"), dict):
-            tool_call["mcp_app"] = tool_result["mcp_app"]
+        app = tool_result.get("mcp_app")
+        if isinstance(app, dict) and isinstance(app.get("app_ref"), str):
+            tool_call["mcp_app"] = {"app_ref": app["app_ref"]}
         self.parts.append({"type": "tool_call", "tool_calls": [tool_call]})
 
     @staticmethod
@@ -280,6 +281,7 @@ def extract_web_search_refs(accumulated_text: str, accumulated_parts: list) -> d
         "web_search_brave",
         "web_search_deepseek",
         "web_search_serpapi",
+        "news_search_serpapi",
         "image_search_serpapi",
         "finance_search_serpapi",
         "scholar_search_serpapi",
@@ -1117,6 +1119,23 @@ class ChatService:
                 run.llm_checkpoint_id,
                 run.platform_history_id,
             )
+            from astrbot.core.agent.mcp_app_registry import mcp_apps
+
+            for part in message_parts_to_save:
+                if part.get("type") != "tool_call":
+                    continue
+                for call in part.get("tool_calls", []):
+                    app = call.get("mcp_app")
+                    if isinstance(app, dict) and isinstance(app.get("app_ref"), str):
+                        mcp_apps.bind_message(
+                            app["app_ref"],
+                            run.username,
+                            run.session_id,
+                            run.run_id,
+                            run.llm_checkpoint_id,
+                            call.get("id"),
+                            saved_record.id,
+                        )
             pending_accumulator = BotMessageAccumulator()
             pending_agent_stats = {}
             pending_refs = {}

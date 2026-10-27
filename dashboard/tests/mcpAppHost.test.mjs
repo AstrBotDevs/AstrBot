@@ -5,8 +5,8 @@ import { appDocument, createAppHost } from '../src/utils/mcpAppHost.mjs';
 function fixture() {
   const source = {};
   const sent = [], proposed = [], sizes = [];
-  const host = createAppHost({ source: () => source, send: d => sent.push(d), arguments: { choices: [1, 2] }, result: { content: [], structuredContent: { ids: [1, 2] } }, propose: t => proposed.push(t), resize: h => sizes.push(h) });
-  const request = (method, params = {}, id) => host.receive({ source, origin: 'null', data: { jsonrpc: '2.0', method, params, ...(id !== undefined ? { id } : {}) } });
+  const host = createAppHost({ source: () => source, nonce: 'test-nonce', send: d => sent.push(d), arguments: { choices: [1, 2] }, result: { content: [], structuredContent: { ids: [1, 2] } }, propose: t => proposed.push(t), resize: h => sizes.push(h) });
+  const request = (method, params = {}, id) => host.receive({ source, origin: 'null', data: { nonce: 'test-nonce', message: { jsonrpc: '2.0', method, params, ...(id !== undefined ? { id } : {}) } } });
   const init = () => { request('ui/initialize', { protocolVersion: '2026-01-26', appInfo: { name: 'Picker', version: '1' } }, 1); request('ui/notifications/initialized'); };
   return { host, source, sent, proposed, sizes, request, init };
 }
@@ -47,7 +47,23 @@ test('rejects messages before init, non-text, oversized text and overlapping req
 test('bounds resize and puts restrictive CSP before any supplied markup', () => {
   const f = fixture(); f.init(); f.request('ui/notifications/size-changed', {height: 1e9});
   assert.deepEqual(f.sizes, [800]);
-  const html = appDocument('<script>test()</script>');
+  const html = appDocument('<script>test()</script>', 'nonce');
   assert.ok(html.startsWith('<meta http-equiv="Content-Security-Policy"'));
   assert.ok(html.includes("connect-src 'none'"));
+  assert.ok(html.includes('frame-src about:'));
+  assert.ok(html.includes("frame-src 'none'"));
+  assert.ok(!html.includes('<script>test()'));
+});
+
+test('rejects forged nonce, unexpected fields and malformed schemas', () => {
+  const f = fixture(); f.init();
+  const message = {jsonrpc:'2.0',id:2,method:'ui/message',params:{role:'user',content:[{type:'text',text:'forged'}]}};
+  for (const data of [message, {nonce:'wrong-view', message}, {nonce:'test-nonce',message,extra:1}, {nonce:'test-nonce',message:{...message,result:{}}}]) {
+    f.host.receive({source:f.source,origin:'null',data});
+  }
+  assert.equal(f.proposed.length, 0); assert.equal(f.sent.length, 3);
+  for (const params of [null, [], 'invalid', {...message.params, tools:[]}, {role:'user',content:[{type:'text',text:'forged',resource:'ui://other'}]}]) {
+    f.request('ui/message',params,3); assert.ok(f.sent.at(-1).error);
+  }
+  assert.equal(f.proposed.length, 0);
 });

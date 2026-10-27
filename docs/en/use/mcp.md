@@ -166,11 +166,13 @@ WebChat can open a bundled MCP Apps view from a completed tool call. This initia
 
 1. Add an MCP server whose tool declares `_meta.ui.resourceUri` with a `ui://` URI and serves bundled HTML with MIME type `text/html;profile=mcp-app`.
 2. Ask the assistant to use that tool in WebChat and wait for the response to finish. If needed, reload the conversation so the assistant message is persisted.
-3. Click **Open interactive app** below the tool call. The current user must own the conversation, and the original tool and server must still be active.
+3. Click **Open interactive app** below the tool call within 15 minutes. The current user must own the conversation, and the exact original tool and MCP connection must still be active. After expiry, reconnect or an AstrBot restart, run the tool again to obtain a new view.
 4. Make a selection in the app. Review its proposed text, then click **Add to message**. Existing draft text is preserved. Send the message with the normal chat composer to continue.
 5. **Dismiss** rejects a proposed message; **Close** removes the embedded view.
 
 Views run with an opaque origin (`sandbox="allow-scripts"`) and a restrictive CSP. Inline scripts/styles and data images are supported; network connections, external scripts, nested frames and forms are blocked by CSP. Bundle assets into the HTML. Resource size is limited to 1 MiB. App code cannot read dashboard storage or DOM. Only the tool's recorded arguments/result are passed into its view; no dashboard credentials are supplied.
+
+The tool invocation mints an opaque server-side reference bound to its user, conversation/UMO, request, checkpoint, persisted assistant message, tool call, original MCP tool name, declared URI and live ClientSession generation. Only this reference is added to history; structured app data stays in a bounded in-memory registry (256 entries, 1 MiB of arguments/result per entry). Refresh can reopen a valid reference, but eviction, expiry or restart requires a fresh tool call. Displayed/sanitized tool names and history-supplied resource URIs are never authorization keys. A trusted outer sandbox relays the app's standard MCP messages using a fresh per-view nonce; the host verifies the relay window, nonce and message schema before accepting any proposal. The inner app cannot read the relay or navigate its parent.
 
 ### Local picker example
 

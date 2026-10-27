@@ -13,6 +13,6 @@
 import { ref } from 'vue';
 import ToolCallCard from '../../src/components/chat/message_list_comps/ToolCallCard.vue';
 const draft = ref('Existing draft');
-const call = {id: 'call', name: 'show_photo_picker', args: {}, result: 'Three sample illustrations', ts: 1, finished_ts: 2, mcp_app: {uri:'ui://photo-picker/index.html'}};
+const call = {id: 'call', name: 'show_photo_picker', args: {}, result: 'Three sample illustrations', ts: 1, finished_ts: 2, mcp_app: {app_ref:'opaque-fixture-reference'}};
 const append = (text: string) => { draft.value += `\n\n${text}`; };
 </script>
