@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { useChatHeaderStore } from "@/stores/chatHeader";
+import { useHeaderContextStore } from "@/stores/headerContext";
+import { useMobileDrawerStore } from "@/stores/mobileDrawer";
 import { useCustomizerStore } from "@/stores/customizer";
 import axios from "axios";
 import Logo from "@/components/shared/Logo.vue";
@@ -15,13 +17,14 @@ import { router } from "@/router";
 import { useRoute } from "vue-router";
 import { useDisplay, useTheme } from "vuetify";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
+import { Menu } from "@lucide/vue";
+import { Minus, Square, X } from "@lucide/vue";
 import DesktopUpdateProgress from "@/components/shared/DesktopUpdateProgress.vue";
 import { useLanguageSwitcher } from "@/i18n/composables";
 import type { Locale } from "@/i18n/types";
 import AboutPage from "@/views/AboutPage.vue";
 import { authApi, isLegacyFallbackError, statsApi, updatesApi } from "@/api/v1";
 import { getDesktopRuntimeInfo } from "@/utils/desktopRuntime";
-import ProviderModelMenu from "@/components/chat/ProviderModelMenu.vue";
 
 enableKatex();
 enableMermaid();
@@ -30,8 +33,14 @@ const customizer = useCustomizerStore();
 const commonStore = useCommonStore();
 const authStore = useAuthStore();
 const chatHeader = useChatHeaderStore();
+const headerContext = useHeaderContextStore();
+const mobileDrawer = useMobileDrawerStore();
+
+/** Windows hides the native title bar, so the header draws its own caption buttons. */
+const isWindowsDesktop = ref(false);
+const astrbotDesktop = computed(() => window.astrbotDesktop);
 const theme = useTheme();
-const { lgAndUp } = useDisplay();
+const { smAndDown } = useDisplay();
 const { t } = useI18n();
 const { tm } = useModuleI18n("features/chat");
 const route = useRoute();
@@ -125,6 +134,16 @@ const desktopUpdateCurrentVersion = ref("-");
 const desktopUpdateLatestVersion = ref("-");
 const desktopUpdateStatus = ref("");
 const desktopDownloadProgress = ref<AstrBotDesktopAppUpdateProgress | null>(null);
+const appHasNewVersion = computed(() =>
+  isDesktopReleaseMode.value
+    ? desktopUpdateHasNewVersion.value
+    : hasNewVersion.value,
+);
+const hasAvailableUpdate = computed(
+  () =>
+    appHasNewVersion.value ||
+    (!isDesktopReleaseMode.value && dashboardHasNewVersion.value),
+);
 const isChatPath = computed(
   () => route.path === "/chat" || route.path.startsWith("/chat/"),
 );
@@ -133,27 +152,21 @@ const isDarkTheme = computed(
 );
 const chatHeaderStyle = computed(() => {
   if (!isChatPath.value) return undefined;
-  const sidebarWidth = lgAndUp.value
-    ? customizer.chatSidebarCollapsed
+  const sidebarWidth = smAndDown.value
+    ? 0
+    : customizer.chatSidebarCollapsed
       ? 56
-      : 280
-    : 0;
+      : 245;
   return {
-    left: `${sidebarWidth}px`,
-    width: `calc(100% - ${sidebarWidth}px)`,
+    // The chat toolbar is window chrome, so it must paint the full window. The
+    // sidebar width remains available to contextual content through this CSS
+    // variable, but must not offset the toolbar itself and expose the native
+    // window material in the top-left corner.
+    left: "0px",
+    width: "100%",
+    "--astrbot-chat-sidebar-width": `${sidebarWidth}px`,
   };
 });
-const chatHeaderSubtitleText = computed(() => {
-  const title = chatHeader.title.trim();
-  const subtitle = chatHeader.subtitle.trim();
-  if (title && subtitle) return `${subtitle}/${title}`;
-  return title || subtitle;
-});
-
-function toggleChatSidebarFromHeader() {
-  customizer.TOGGLE_CHAT_SIDEBAR();
-}
-
 const getAppUpdaterBridge = (): AstrBotAppUpdaterBridge | null => {
   if (typeof window === "undefined") {
     return null;
@@ -294,10 +307,11 @@ function cancelDesktopUpdate() {
   desktopUpdateDialog.value = false;
 }
 
-async function openDesktopUpdateDialog() {
+async function checkDesktopUpdate(showDialog = false) {
   if (desktopUpdateInstalling.value) return;
+  if (showDialog) desktopUpdateDialog.value = true;
+  if (desktopUpdateChecking.value) return;
   desktopDownloadProgress.value = null;
-  desktopUpdateDialog.value = true;
   desktopUpdateChecking.value = true;
   desktopUpdateInstalling.value = false;
   desktopUpdateHasNewVersion.value = false;
@@ -307,6 +321,7 @@ async function openDesktopUpdateDialog() {
 
   const bridge = getAppUpdaterBridge();
   if (!bridge) {
+    console.warn("[desktop-update] App updater bridge is unavailable.");
     desktopUpdateChecking.value = false;
     desktopUpdateStatus.value = t(
       "core.header.updateDialog.desktopApp.checkFailed",
@@ -314,9 +329,21 @@ async function openDesktopUpdateDialog() {
     return;
   }
 
+  let checkTimeout: ReturnType<typeof setTimeout> | undefined;
   try {
-    const result = await bridge.checkForAppUpdate();
+    const result = await Promise.race([
+      bridge.checkForAppUpdate(),
+      new Promise<never>((_, reject) => {
+        checkTimeout = setTimeout(() => {
+          reject(new Error("Desktop app update check timed out."));
+        }, 30_000);
+      }),
+    ]);
     if (!result?.ok) {
+      console.warn(
+        "[desktop-update] Failed to check for app updates.",
+        result?.reason || "Unknown error",
+      );
       desktopUpdateCurrentVersion.value = result?.currentVersion || "-";
       desktopUpdateLatestVersion.value =
         result?.latestVersion || result?.currentVersion || "-";
@@ -333,11 +360,12 @@ async function openDesktopUpdateDialog() {
       ? t("core.header.updateDialog.desktopApp.hasNewVersion")
       : t("core.header.updateDialog.desktopApp.isLatest");
   } catch (error) {
-    console.error(error);
+    console.error("[desktop-update] Failed to check for app updates.", error);
     desktopUpdateStatus.value = t(
       "core.header.updateDialog.desktopApp.checkFailed",
     );
   } finally {
+    if (checkTimeout !== undefined) clearTimeout(checkTimeout);
     desktopUpdateChecking.value = false;
   }
 }
@@ -388,7 +416,7 @@ async function confirmDesktopUpdate() {
 
 function handleUpdateClick() {
   if (isDesktopReleaseMode.value) {
-    void openDesktopUpdateDialog();
+    void checkDesktopUpdate(true);
     return;
   }
   checkUpdate();
@@ -525,9 +553,10 @@ function checkUpdate() {
   updatesApi
     .check()
     .then((res) => {
-      hasNewVersion.value = res.data.data.has_new_version;
+      const backendHasNewVersion = !isDesktopReleaseMode.value && res.data.data.has_new_version;
+      hasNewVersion.value = backendHasNewVersion;
 
-      if (res.data.data.has_new_version) {
+      if (backendHasNewVersion) {
         releaseMessage.value = res.data.message || "";
         updateStatus.value = t("core.header.version.hasNewVersion");
       } else {
@@ -902,19 +931,10 @@ function openReleaseNotesDialog(body: string, tag: string) {
   releaseNotesDialog.value = true;
 }
 
-function handleLogoClick() {
-  if (isChatPath.value) {
-    aboutDialog.value = true;
-  } else {
-    router.push("/about");
-  }
-}
-
 getVersion();
 checkUpdate();
 initPasswordWarningFromStorage();
 
-commonStore.createEventSource(); // log
 commonStore.getStartTime();
 
 onUnmounted(() => {
@@ -925,6 +945,8 @@ onUnmounted(() => {
 
 // 视图模式切换
 onMounted(() => {
+  isWindowsDesktop.value =
+    document.documentElement.dataset.astrbotDesktopPlatform === "windows";
   // 初次加載時保存當前路由
   if (typeof window !== "undefined") {
     if (isChatPath.value) {
@@ -1025,14 +1047,6 @@ function switchMode() {
   mainMenuOpen.value = false;
 }
 
-// Merry Christmas! 🎄
-const isChristmas = computed(() => {
-  const today = new Date();
-  const month = today.getMonth() + 1; // getMonth() 返回 0-11
-  const day = today.getDate();
-  return month === 12 && day === 25;
-});
-
 // 语言切换相关
 const { languageOptions, currentLanguage, switchLanguage, locale } =
   useLanguageSwitcher();
@@ -1054,14 +1068,23 @@ onMounted(async () => {
   isDesktopReleaseMode.value = runtimeInfo.isDesktopRuntime;
   if (isDesktopReleaseMode.value) {
     dashboardHasNewVersion.value = false;
+    void checkDesktopUpdate();
   }
+
+  // The toolbar band doubles as the window drag region on desktop (no native title bar).
+  // Interactive children stay clickable because the handler only fires when the hit
+  // target itself carries the attribute.
+  document
+    .querySelector(".top-header .v-toolbar__content")
+    ?.setAttribute("data-tauri-drag-region", "");
 });
 </script>
 
 <template>
   <v-app-bar
     elevation="0"
-    height="50"
+    height="40"
+    data-tauri-drag-region
     class="top-header"
     :class="{
       'chat-mode-header': isChatPath,
@@ -1070,88 +1093,42 @@ onMounted(async () => {
     :absolute="isChatPath"
     :style="chatHeaderStyle"
   >
-    <!-- 桌面端 menu 按钮 - 仅在 bot 模式下显示 -->
+    <!-- Mobile: open the navigation drawer (sidebars become temporary overlays). -->
     <v-btn
-      v-if="!isChatPath"
-      style="margin-left: 16px"
-      class="hidden-md-and-down"
+      v-if="$vuetify.display.smAndDown"
+      class="header-menu-btn"
       icon
-      rounded="sm"
-      variant="flat"
-      @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)"
-    >
-      <v-icon>mdi-menu</v-icon>
-    </v-btn>
-
-    <!-- 移动端 menu 按钮 -->
-    <v-btn
-      v-if="!isChatPath"
-      class="hidden-lg-and-up ms-3"
-      icon
-      rounded="sm"
-      variant="flat"
-      @click.stop="customizer.SET_SIDEBAR_DRAWER"
-    >
-      <v-icon>mdi-menu</v-icon>
-    </v-btn>
-
-    <div
-      v-if="!isChatPath"
-      class="logo-container"
-      :class="{
-        'mobile-logo': $vuetify.display.xs,
-      }"
-      @click="handleLogoClick"
-    >
-      <span class="logo-text Outfit"
-        >Astr<span class="logo-text bot-text-wrapper"
-          >Bot
-          <img
-            v-if="isChristmas"
-            src="@/assets/images/xmas-hat.png"
-            alt="Christmas hat"
-            class="xmas-hat"
-          /> </span
-      ></span>
-      <span class="version-text hidden-xs">{{ botCurrVersion }}</span>
-    </div>
-
-    <!-- Keep the chat drawer accessible whenever it is not permanent. -->
-    <v-btn
-      v-if="isChatPath && !lgAndUp"
-      class="chat-mobile-sidebar-toggle"
-      icon
-      size="small"
       rounded="lg"
       variant="text"
-      @click.stop="toggleChatSidebarFromHeader"
+      :ripple="false"
+      :aria-label="t('core.navigation.options')"
+      @click="mobileDrawer.TOGGLE"
     >
-      <v-icon size="20">
-        {{ customizer.chatSidebarOpen ? "mdi-chevron-left" : "mdi-chevron-right" }}
-      </v-icon>
+      <Menu :size="20" />
     </v-btn>
 
-    <div
-      v-if="isChatPath"
-      class="chat-header-context"
-    >
-      <ProviderModelMenu variant="header" />
-      <div v-if="chatHeaderSubtitleText" class="chat-header-subtitle">
-        {{ chatHeaderSubtitleText }}
-      </div>
+    <!-- Pages register their contextual toolbar content through the
+         headerContext store (e.g. the chat page's model selector and title). -->
+    <div class="app-header-context">
+      <component :is="headerContext.component" v-if="headerContext.component" />
     </div>
 
     <v-spacer />
 
-    <!-- 版本提示信息 - 在手机上隐藏 -->
-    <div v-if="!isChatPath" class="mr-4 hidden-xs">
-      <small v-if="hasNewVersion">
+    <!-- Desktop keeps the update notice visible in both Bot and Chat modes. -->
+    <button
+      v-if="hasAvailableUpdate && (!isChatPath || isDesktopReleaseMode)"
+      type="button"
+      class="update-notice mr-4 hidden-xs text-no-wrap"
+      @click="handleUpdateClick"
+    >
+      <small v-if="appHasNewVersion">
         {{ t("core.header.version.hasNewVersion") }}
       </small>
       <small v-else-if="dashboardHasNewVersion && !isDesktopReleaseMode">
         {{ t("core.header.version.dashboardHasNewVersion") }}
       </small>
-    </div>
+    </button>
 
     <div class="header-actions" :class="{ 'chat-header-actions': isChatPath }">
       <v-btn
@@ -1184,10 +1161,13 @@ onMounted(async () => {
         variant="text"
         size="small"
         rounded="sm"
+        :ripple="false"
         @click="switchMode"
       >
         <v-icon start>{{ nextMode === "bot" ? "mdi-robot" : "mdi-chat" }}</v-icon>
-        {{ nextMode === "bot" ? "Bot" : "Chat" }}
+        <span class="mode-switch-label">{{
+          nextMode === "bot" ? t("core.navigation.botMode") : t("core.navigation.chat")
+        }}</span>
       </v-btn>
 
       <!-- 功能菜单 -->
@@ -1204,8 +1184,12 @@ onMounted(async () => {
             :variant="isChatPath ? 'text' : 'flat'"
             rounded="sm"
             icon
+            :ripple="false"
           >
-            <v-icon>mdi-dots-vertical</v-icon>
+            <v-badge :model-value="hasAvailableUpdate" color="primary" dot floating>
+              <v-icon>mdi-dots-vertical</v-icon>
+            </v-badge>
+            <span class="header-toolbar-label">{{ t("core.navigation.options") }}</span>
           </v-btn>
         </template>
 
@@ -1226,7 +1210,11 @@ onMounted(async () => {
               <v-icon start>{{
                 nextMode === "bot" ? "mdi-robot" : "mdi-chat"
               }}</v-icon>
-              {{ nextMode === "bot" ? "Bot" : "Chat" }}
+              {{
+                nextMode === "bot"
+                  ? t("core.navigation.botMode")
+                  : t("core.navigation.chat")
+              }}
             </v-btn>
           </div>
           <v-divider class="my-1" />
@@ -1369,9 +1357,7 @@ onMounted(async () => {
         }}</v-list-item-title>
         <template
           v-slot:append
-          v-if="
-            hasNewVersion || (dashboardHasNewVersion && !isDesktopReleaseMode)
-          "
+          v-if="hasAvailableUpdate"
         >
           <v-chip size="x-small" color="primary" variant="tonal" class="ml-2"
             >!</v-chip
@@ -1402,6 +1388,36 @@ onMounted(async () => {
         </v-list-item-title>
       </v-list-item>
       </StyledMenu>
+      <!-- Custom caption buttons on Windows, where the native title bar is disabled. -->
+      <div v-if="isWindowsDesktop" class="header-caption-btns">
+        <v-btn
+          class="caption-btn"
+          variant="text"
+          :ripple="false"
+          aria-label="Minimize"
+          @click="astrbotDesktop?.minimizeWindow?.()"
+        >
+          <Minus :size="16" />
+        </v-btn>
+        <v-btn
+          class="caption-btn"
+          variant="text"
+          :ripple="false"
+          aria-label="Maximize"
+          @click="astrbotDesktop?.toggleMaximizeWindow?.()"
+        >
+          <Square :size="14" />
+        </v-btn>
+        <v-btn
+          class="caption-btn caption-btn--close"
+          variant="text"
+          :ripple="false"
+          aria-label="Close"
+          @click="astrbotDesktop?.closeWindow?.()"
+        >
+          <X :size="16" />
+        </v-btn>
+      </div>
     </div>
 
     <!-- 更新对话框 -->
@@ -2090,13 +2106,9 @@ onMounted(async () => {
 }
 
 .top-header.chat-mode-header {
-  background: #fdfcfc !important;
+  background: var(--astrbot-chrome-bg, #fdfcfc) !important;
   border-bottom: 0;
   box-shadow: none !important;
-}
-
-.top-header.chat-mode-header.chat-mode-header--dark {
-  background: rgb(var(--v-theme-background)) !important;
 }
 
 .top-header.chat-mode-header .v-toolbar__content {
@@ -2171,10 +2183,11 @@ onMounted(async () => {
 .header-actions {
   display: flex;
   align-items: center;
+  gap: 10px;
 }
 
 .chat-header-actions {
-  gap: 4px;
+  gap: 10px;
   margin-right: 0;
 }
 
@@ -2214,49 +2227,6 @@ onMounted(async () => {
 .chat-action-btn {
   margin-right: 0;
   color: rgb(var(--v-theme-on-surface));
-}
-
-/* 响应式布局样式 */
-.logo-container {
-  margin-left: 10px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-}
-
-.mobile-logo {
-  margin-left: 8px;
-  gap: 4px;
-}
-
-.logo-text {
-  font-size: 24px;
-  font-weight: 1000;
-}
-
-.logo-text-light {
-  font-weight: normal;
-}
-
-.bot-text-wrapper {
-  position: relative;
-  display: inline-block;
-}
-
-.xmas-hat {
-  position: absolute;
-  top: -3px;
-  right: -14px;
-  width: 24px;
-  height: 24px;
-  z-index: 1;
-}
-
-.version-text {
-  font-size: 12px;
-  color: gray;
-  margin-left: 4px;
 }
 
 .action-btn {
@@ -2499,10 +2469,6 @@ onMounted(async () => {
 
 /* 移动端样式优化 */
 @media (max-width: 600px) {
-  .logo-text {
-    font-size: 20px;
-  }
-
   .action-btn {
     margin-right: 4px;
     min-width: 32px !important;
@@ -2556,4 +2522,194 @@ onMounted(async () => {
     flex-direction: column;
   }
 }
+
+/* The header doubles as a slim toolbar, so its actions follow the provider tab
+   styling. On macOS desktop it also becomes the draggable window chrome.
+   This style block is NOT scoped, so plain selectors are already global here. */
+.top-header {
+  user-select: none;
+}
+
+.top-header .update-notice {
+  cursor: pointer;
+}
+
+.top-header .update-notice:hover {
+  text-decoration: underline;
+}
+
+/* Mount point for page-contextual toolbar content (see the template note). */
+.app-header-context {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 100%;
+  min-width: 0;
+}
+
+/* The toolbar background spans the window, while page-specific context starts
+   where the permanent chat sidebar ends. Keeping this offset on the content
+   mount point avoids moving the toolbar itself and keeps the sidebar brand
+   unobstructed. */
+.top-header.chat-mode-header .app-header-context {
+  margin-left: var(--astrbot-chat-sidebar-width, 0px);
+}
+
+html {
+  /* Keep in sync with the app bar height above. */
+  --astrbot-toolbar-height: 40px;
+}
+
+.top-header,
+.top-header.chat-mode-header,
+.top-header.chat-mode-header.chat-mode-header--dark {
+  border-bottom: 0 !important;
+  box-shadow: none !important;
+}
+
+html[data-astrbot-desktop-platform='macos'] .top-header,
+html[data-astrbot-desktop-platform='macos'] .top-header.chat-mode-header,
+html[data-astrbot-desktop-platform='macos'] .top-header.chat-mode-header.chat-mode-header--dark {
+  background: var(--astrbot-vibrancy-tint, transparent) !important;
+}
+
+/* Keep the toolbar in the normal flow so the content area sits below it instead of
+   scrolling underneath a floating bar. */
+.top-header {
+  position: relative !important;
+  top: 0 !important;
+  /* Vuetify's app-bar layout writes the drawer offset as inline left/width
+     values. The toolbar is shared window chrome, so it must cover that area
+     too; otherwise a transparent macOS window exposes its native material as
+     a visible block above the sidebar. */
+  left: 0 !important;
+  right: auto !important;
+  width: 100% !important;
+}
+
+
+.top-header .v-toolbar__content {
+  padding-inline-end: 24px !important;
+}
+
+/* On macOS the traffic lights sit over the toolbar's left zone once the sidebar
+   is no longer permanent, so the menu button must clear them. */
+@media (max-width: 959.98px) {
+  html[data-astrbot-desktop-platform='macos'] .top-header .v-toolbar__content {
+    padding-inline-start: 74px !important;
+  }
+}
+
+.top-header .header-menu-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px !important;
+  color: rgba(var(--v-theme-on-surface), 0.58);
+}
+
+.top-header .header-menu-btn:hover {
+  color: rgba(var(--v-theme-on-surface), 0.9);
+}
+
+.header-toolbar-label {
+  display: inline;
+  margin-inline-start: 6px;
+}
+
+.top-header .header-actions .v-btn {
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: rgba(var(--v-theme-on-surface), 0.58);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.top-header .header-actions .v-btn .v-btn__overlay {
+  opacity: 0 !important;
+}
+
+/* Hover keeps a text-only affordance: no background, just a stronger label color. */
+.top-header .header-actions .v-btn:hover {
+  color: rgba(var(--v-theme-on-surface), 0.9);
+}
+
+/* Normalize header action contents: identical font size and unit line-height so
+   icon+label stay mutually centered across platform font metrics (Windows
+   otherwise shows a 1-2px optical offset between the buttons). */
+.top-header .header-actions .v-btn {
+  font-size: 0.8125rem;
+}
+
+.top-header .header-actions .v-btn .v-btn__content {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+
+.top-header .header-actions .v-btn .v-icon {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+
+.top-header .header-actions .v-btn .mode-switch-label,
+.top-header .header-actions .v-btn .header-toolbar-label {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+
+/* Keep the two header variants on the same right edge. The bot view used a
+   Vuetify mr-4 utility while chat used the action button's 6px margin, which
+   made the same controls shift by a few pixels between panels. */
+.top-header .header-actions .mode-switch-btn,
+.top-header .header-actions .action-btn {
+  margin-right: 0 !important;
+}
+
+.top-header .header-actions .mode-switch-btn {
+  width: 66px;
+  min-width: 66px;
+}
+
+.top-header .header-actions .action-btn {
+  width: 74px !important;
+  min-width: 74px !important;
+  justify-content: center;
+}
+
+.header-caption-btns {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-inline-start: 8px;
+}
+
+.top-header .header-caption-btns .caption-btn {
+  width: 40px;
+  min-width: 40px;
+  height: 34px;
+  padding: 0;
+  border-radius: 8px;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: rgba(var(--v-theme-on-surface), 0.58);
+}
+
+.top-header .header-caption-btns .caption-btn:hover {
+  background: rgba(var(--v-theme-on-surface), 0.08) !important;
+  color: rgba(var(--v-theme-on-surface), 0.9);
+}
+
+/* Windows convention: the close button turns red on hover. */
+.top-header .header-caption-btns .caption-btn--close:hover {
+  background: rgba(232, 17, 35, 0.9) !important;
+  color: #fff;
+}
+
 </style>

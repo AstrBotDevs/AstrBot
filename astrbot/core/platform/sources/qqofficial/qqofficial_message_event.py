@@ -27,13 +27,15 @@ from tenacity import (
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import File, Image, Plain, Record, Video
+from astrbot.api.message_components import At, File, Image, Plain, Record, Reply, Video
 from astrbot.api.platform import AstrBotMessage, Group, PlatformMetadata
 from astrbot.core.platform.sources.qqofficial.qqofficial_chunked_upload import (
     QQOFFICIAL_CHUNKED_UPLOAD_THRESHOLD,
     QQOfficialChunkedUploader,
 )
 from astrbot.core.utils.media_utils import MediaResolver, file_uri_to_path, is_file_uri
+
+from .qqofficial_group_info import get_qq_group
 
 
 class APIReturnNoneError(Exception):
@@ -111,7 +113,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
     async def get_group(self, group_id: str | None = None, **kwargs) -> Group | None:
         """Get QQ group or guild-channel information for this event.
 
-        QQ group metadata is restricted to allowlisted bots. When the API is
+        QQ group lookups share the inbound adapter's per-client cache. Metadata
+        is restricted to allowlisted bots. When the API is
         unavailable, the basic group object attached to the incoming message is
         returned so callers can still rely on the group identifier.
 
@@ -138,40 +141,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         source = self.message_obj.raw_message
 
         if isinstance(source, botpy.message.GroupMessage):
-            try:
-                route = Route(
-                    "GET",
-                    "/v2/groups/{group_openid}/info",
-                    group_openid=target_id,
-                )
-                payload = await self.bot.api._http.request(route)
-                if not isinstance(payload, dict):
-                    logger.warning(
-                        "[QQOfficial] Group info API returned an invalid response for %s",
-                        target_id,
-                    )
-                    return group
-
-                group.group_name = payload.get("group_name") or group.group_name
-                member_count = payload.get(
-                    "group_member_num",
-                    payload.get("member_count"),
-                )
-                if member_count is not None:
-                    try:
-                        group.member_count = int(member_count)
-                    except (TypeError, ValueError):
-                        logger.warning(
-                            "[QQOfficial] Group info API returned an invalid member_count for %s",
-                            target_id,
-                        )
-            except Exception as exc:
-                logger.warning(
-                    "[QQOfficial] Failed to get group info for %s: %s",
-                    target_id,
-                    exc,
-                )
-            return group
+            return await get_qq_group(self.bot, group)
 
         if isinstance(source, botpy.message.Message):
             try:
@@ -236,6 +206,31 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 return None
             self.send_buffer = MessageChain(chain=[Plain(text="\n")])
         return await self._post_send(stream=stream_payload)
+
+    @staticmethod
+    def _extract_self_ref_idx(message: object) -> str:
+        """取本条消息自身的引用 ID（REFIDX_...），用于出站引用回复。
+
+        QQ 官方文档：message_reference.message_id 对「非机器人发的消息」需从
+        消息事件的 message_scene.ext 数组的 msg_idx 字段获取；它与 message.id
+        （ROBOT1.0_...）不是同一个值，格式也不同。
+        """
+        try:
+            raw = getattr(message, "raw_data", None)
+            if not isinstance(raw, dict):
+                return ""
+            scene = raw.get("message_scene")
+            if not isinstance(scene, dict):
+                return ""
+            for item in scene.get("ext") or []:
+                text = str(item)
+                if text.startswith("msg_idx="):
+                    value = text[len("msg_idx=") :].strip()
+                    if value:
+                        return value
+        except Exception:
+            return ""
+        return ""
 
     async def send_streaming(self, generator, use_fallback: bool = False):
         """流式输出仅支持消息列表私聊（C2C），其他消息源退化为普通发送"""
@@ -452,6 +447,30 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         if not isinstance(source, botpy.message.Message | botpy.message.DirectMessage):
             payload["msg_seq"] = random.randint(1, 10000)
+
+        # 出站引用回复：消息链里存在 Reply 组件时填 message_reference。
+        # 注意 botpy 在同时传 message_reference 与 file_image 时会主动去除前者（SDK 限制）。
+        _reply_id = next(
+            (
+                str(_component.id).strip()
+                for _component in (getattr(message_to_send, "chain", None) or [])
+                if isinstance(_component, Reply) and str(_component.id or "").strip()
+            ),
+            "",
+        )
+        if _reply_id:
+            # 调用方已经给出 REFIDX_... 时直接使用（插件可借此引用任意消息）；
+            # 否则回退到本条消息自身的 msg_idx。注意 message.id（ROBOT1.0_...）
+            # 不可直接用作 message_reference.message_id。
+            _ref_idx = (
+                _reply_id
+                if _reply_id.startswith("REFIDX_")
+                else QQOfficialMessageEvent._extract_self_ref_idx(
+                    self.message_obj.raw_message
+                )
+            )
+            if _ref_idx:
+                payload["message_reference"] = {"message_id": _ref_idx}
 
         ret = None
 
@@ -919,6 +938,10 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         for i in message.chain:
             if isinstance(i, Plain):
                 plain_text += i.text
+            elif isinstance(i, At):
+                mention_id = str(i.qq) if i.qq else ""
+                if mention_id and mention_id != "all":
+                    plain_text += f'<qqbot-at-user id="{mention_id}" />'
             elif isinstance(i, Image) and not image_base64:
                 if not i.file:
                     raise ValueError("Unsupported image file format")

@@ -32,6 +32,7 @@ from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.utils.media_utils import MediaResolver
 
 from ...register import register_platform_adapter
+from .qqofficial_group_info import get_qq_group
 from .qqofficial_message_event import QQOfficialMessageEvent
 
 # remove logger handler
@@ -201,6 +202,7 @@ class botClient(Client):
             message,
             MessageType.GROUP_MESSAGE,
             force_group_mention=True,
+            bot=self,
         )
         abm.group_id = cast(str, message.group_openid)
         abm.session_id = abm.group_id
@@ -213,6 +215,7 @@ class botClient(Client):
         abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.GROUP_MESSAGE,
+            bot=self,
         )
         abm.group_id = cast(str, message.group_openid)
         abm.session_id = abm.group_id
@@ -755,6 +758,25 @@ class QQOfficialPlatformAdapter(Platform):
         return re.sub(r"<faceType=\d+[^>]*>", replace_face, content)
 
     @staticmethod
+    def _strip_bot_mention_markup(content: str | None, mention_id: str) -> str:
+        """Remove the current bot's QQ mention markup from incoming text.
+
+        Args:
+            content: Raw QQ message content.
+            mention_id: OpenID of the mentioned bot.
+
+        Returns:
+            Message content with current and legacy bot mention markup removed.
+        """
+        import re
+
+        escaped_id = re.escape(mention_id)
+        markup_pattern = (
+            rf'(?:<qqbot-at-user\s+id="{escaped_id}"\s*/>|<@!?{escaped_id}>)'
+        )
+        return re.sub(rf"(?:[ \t]*{markup_pattern}[ \t]*)+", " ", content or "")
+
+    @staticmethod
     async def _parse_from_qqofficial(
         message: botpy.message.Message
         | botpy.message.GroupMessage
@@ -762,7 +784,20 @@ class QQOfficialPlatformAdapter(Platform):
         | botpy.message.C2CMessage,
         message_type: MessageType,
         force_group_mention: bool = False,
+        *,
+        bot: Client | None = None,
     ) -> AstrBotMessage:
+        """Parse a QQ message and optionally enrich its group before event creation.
+
+        Args:
+            message: Incoming QQ message with preserved raw payload fields.
+            message_type: AstrBot message type for this event.
+            force_group_mention: Treat a legacy group-at event as mentioning the bot.
+            bot: Authenticated client used for cached QQ group metadata lookups.
+
+        Returns:
+            Parsed message with available sender, group and message components.
+        """
         abm = AstrBotMessage()
         abm.type = message_type
         abm.timestamp = int(time.time())
@@ -835,6 +870,8 @@ class QQOfficialPlatformAdapter(Platform):
                     group_id=message.group_openid,
                     group_name=str(group_name) if group_name else None,
                 )
+                if bot is not None:
+                    await get_qq_group(bot, abm.group)
                 bot_mentions = [
                     mention
                     for mention in (getattr(message, "mentions", None) or [])
@@ -845,12 +882,11 @@ class QQOfficialPlatformAdapter(Platform):
                 group_mentioned = bool(bot_mention_ids) or force_group_mention
                 plain_content_raw = message.content or ""
                 for mention_id in bot_mention_ids:
-                    plain_content_raw = plain_content_raw.replace(
-                        f"<@{mention_id}>",
-                        "",
-                    ).replace(
-                        f"<@!{mention_id}>",
-                        "",
+                    plain_content_raw = (
+                        QQOfficialPlatformAdapter._strip_bot_mention_markup(
+                            plain_content_raw,
+                            mention_id,
+                        )
                     )
                 abm.message_str = QQOfficialPlatformAdapter._parse_face_message(
                     plain_content_raw.strip()
@@ -887,9 +923,9 @@ class QQOfficialPlatformAdapter(Platform):
                 abm.self_id = ""
 
             plain_content = QQOfficialPlatformAdapter._parse_face_message(
-                message.content.replace(
-                    "<@!" + str(abm.self_id) + ">",
-                    "",
+                QQOfficialPlatformAdapter._strip_bot_mention_markup(
+                    message.content,
+                    str(abm.self_id),
                 ).strip()
             )
 

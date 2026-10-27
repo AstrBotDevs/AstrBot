@@ -7,7 +7,7 @@ import os
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from astrbot.core import file_token_service, logger
@@ -40,6 +40,8 @@ from astrbot.core.utils.upload import UploadTooLargeError
 from astrbot.core.utils.webhook_utils import ensure_platform_webhook_config
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import ApiError
+from astrbot.dashboard.schemas import BotCleanupTarget
+from astrbot.dashboard.services.bot_cleanup_service import delete_bot_data
 
 PROTECTED_2FA_CONFIG_PATHS = (
     ("dashboard", "totp", "enable"),
@@ -213,7 +215,6 @@ def validate_config(
     is_core: bool,
     *,
     runtime: dict | None = None,
-    current_config: dict | None = None,
 ) -> tuple[list[str], dict]:
     """Validate configuration values and normalize linked Local permissions.
 
@@ -221,9 +222,7 @@ def validate_config(
         data: Submitted configuration, normalized in place.
         schema: Configuration metadata used for validation.
         is_core: Whether this is a core configuration rather than a plugin.
-        runtime: Startup runtime snapshot for platform-specific validation.
-        current_config: Existing configuration whose unchanged Local policies
-            may be retained when saving unrelated settings.
+        runtime: Startup runtime snapshot for platform-specific defaults.
 
     Returns:
         Validation errors and the normalized configuration.
@@ -235,6 +234,14 @@ def validate_config(
             if key not in metadata:
                 continue
             meta = metadata[key]
+            if (
+                is_core
+                and path == "provider."
+                and key == "key"
+                and data.get("type") == "system_one_decision"
+            ):
+                # System One uses a single key within the shared provider schema.
+                meta = {**meta, "type": "string"}
             if "type" not in meta:
                 logger.debug(f"配置项 {path}{key} 没有类型定义, 跳过校验")
                 continue
@@ -333,7 +340,6 @@ def validate_config(
             if isinstance(provider_settings, dict)
             else {}
         )
-        submitted_permissions = copy.deepcopy(permissions)
         if not isinstance(permissions, dict):
             errors.append("Local computer permissions must be an object.")
         else:
@@ -367,57 +373,6 @@ def validate_config(
                 ):
                     policy["allow_network"] = False
 
-        if (
-            not errors
-            and runtime is not None
-            and isinstance(provider_settings, dict)
-            and provider_settings.get("computer_use_runtime") == "local"
-            and runtime["sandbox"]["status"] != "detected"
-        ):
-            old_settings = (current_config or {}).get("provider_settings", {})
-            old_permissions = old_settings.get("computer_use_local_permissions", {})
-            was_local = old_settings.get("computer_use_runtime") == "local"
-            for role in ("member", "admin"):
-                # Keep unchanged legacy policies, but check both roles when
-                # activating Local access or creating a profile.
-                if was_local and submitted_permissions.get(
-                    role, {}
-                ) == old_permissions.get(role, {}):
-                    continue
-                policy = {**defaults[role], **permissions.get(role, {})}
-                scope = policy["filesystem_scope"]
-                if scope == "none":
-                    continue
-                unsupported = runtime["sandbox"]["status"] == "unsupported"
-                if not (
-                    (unsupported and scope == "workspace")
-                    or (
-                        policy["allow_execution"]
-                        and (scope == "workspace" or not policy["allow_network"])
-                    )
-                ):
-                    continue
-                if unsupported:
-                    reason = f"Local isolation is not supported on {runtime['os']}."
-                else:
-                    dependency = (
-                        "Seatbelt (/usr/bin/sandbox-exec)"
-                        if runtime["sandbox"]["backend"] == "seatbelt"
-                        else "bubblewrap (bwrap)"
-                    )
-                    if runtime["sandbox"]["status"] == "unavailable":
-                        detail = runtime["sandbox"].get(
-                            "error", "Sandbox startup failed."
-                        )
-                        reason = (
-                            f"{dependency} is installed but cannot start a sandbox: "
-                            f"{detail} Restricted Local execution is unavailable. "
-                            "Check system security policies or container restrictions, "
-                            "then restart AstrBot to check again."
-                        )
-                    else:
-                        reason = f"Missing {dependency}; restricted Local execution is unavailable."
-                errors.append(f"Local permission {role}: {reason}")
     else:
         validate(data, schema)
 
@@ -584,7 +539,6 @@ def save_config(
                 CONFIG_METADATA_2,
                 is_core,
                 runtime=runtime,
-                current_config=dict(config),
             )
         else:
             errors, post_config = validate_config(
@@ -1035,38 +989,49 @@ class ConfigDisplayService:
         return result
 
     async def register_platform_logo(self, platform, platform_default_tmpl) -> None:
+        """Attach a reusable logo token to a platform's configuration template.
+
+        Args:
+            platform: Registered adapter metadata including its logo path.
+            platform_default_tmpl: Configuration templates updated with the token.
+        """
         if not platform.logo_path:
             return
 
         try:
             cache_key = f"{platform.name}:{platform.logo_path}"
-            if cache_key in self._logo_token_cache:
-                self._set_platform_logo_token(
-                    platform_default_tmpl,
-                    platform.name,
-                    self._logo_token_cache[cache_key],
-                )
-                logger.debug(f"Using cached logo token for platform {platform.name}")
-                return
+            if cached_token := self._logo_token_cache.get(cache_key):
+                if not await file_token_service.check_token_expired(cached_token):
+                    self._set_platform_logo_token(
+                        platform_default_tmpl,
+                        platform.name,
+                        cached_token,
+                    )
+                    logger.debug(
+                        f"Using cached logo token for platform {platform.name}"
+                    )
+                    return
+                self._logo_token_cache.pop(cache_key, None)
 
             platform_cls = platform_cls_map.get(platform.name)
             if not platform_cls:
                 logger.warning(f"Platform class not found for {platform.name}")
                 return
 
-            module_file = inspect.getfile(platform_cls)
-            plugin_dir = os.path.dirname(module_file)
-            logo_file_path = os.path.join(plugin_dir, platform.logo_path)
+            logo_file_path = (
+                Path(inspect.getfile(platform_cls)).parent / platform.logo_path
+            )
 
-            if not os.path.exists(logo_file_path):
+            if not logo_file_path.exists():
                 logger.warning(
                     f"Platform {platform.name} logo file not found: {logo_file_path}",
                 )
                 return
 
             logo_token = await file_token_service.register_file(
-                logo_file_path,
+                str(logo_file_path),
                 timeout=3600,
+                single_use=False,
             )
             self._set_platform_logo_token(
                 platform_default_tmpl,
@@ -1177,7 +1142,21 @@ class ConfigFileService:
         if errors:
             raise ValueError(f"格式校验未通过: {errors}")
         metadata.config.save_config(post_configs)
-        await self.core_lifecycle.plugin_manager.reload(plugin_name)
+        try:
+            success, error_message = await self.core_lifecycle.plugin_manager.reload(
+                plugin_name
+            )
+        except Exception as exc:
+            logger.exception(
+                f"Failed to reload plugin {plugin_name} after saving its configuration."
+            )
+            raise ValueError(
+                f"插件 {plugin_name} 配置已保存，但重载失败: {str(exc) or '未知错误，请查看日志'}"
+            ) from exc
+        if not success:
+            raise ValueError(
+                f"插件 {plugin_name} 配置已保存，但重载失败: {error_message or '未知错误，请查看日志'}"
+            )
 
     async def save_plugin_configs_from_dashboard_payload(
         self,
@@ -1438,6 +1417,8 @@ class BotConfigService:
         ensure_platform_webhook_config(config)
         self.config["platform"].append(config)
         save_config(self.config, self.config, is_core=True)
+        if event_bus := getattr(self.core_lifecycle, "event_bus", None):
+            event_bus.stopped_platforms.discard(bot_id)
         await self.core_lifecycle.platform_manager.load_platform(config)
 
     async def update_bot(self, bot_id: str, config: dict) -> None:
@@ -1460,14 +1441,45 @@ class BotConfigService:
         new_config["enable"] = enabled
         await self.update_bot(bot_id, new_config)
 
-    async def delete_bot(self, bot_id: str) -> None:
-        for idx, bot in enumerate(self.config.get("platform", [])):
-            if bot.get("id") == bot_id:
-                del self.config["platform"][idx]
+    async def delete_bot(
+        self, bot_id: str, *, cleanup: list[BotCleanupTarget] | None = None
+    ) -> None:
+        """Stop an adapter and delete only explicitly selected associated data.
+
+        Args:
+            bot_id: Exact platform instance ID.
+            cleanup: Data categories to remove; omitted categories are retained.
+
+        Raises:
+            ValueError: The bot or a cleanup category is invalid.
+            Exception: Cleanup or configuration persistence fails.
+        """
+        bot = self._find_bot(bot_id)
+        if bot is None:
+            raise ValueError(f"Bot {bot_id} not found")
+        targets = set(cleanup or [])
+        if targets - set(get_args(BotCleanupTarget)):
+            raise ValueError("Invalid bot cleanup category")
+        event_bus = getattr(self.core_lifecycle, "event_bus", None)
+        await self.core_lifecycle.platform_manager.terminate_platform(bot_id)
+        try:
+            if event_bus:
+                await event_bus.stop_platform(bot_id)
+            if targets:
+                await delete_bot_data(self.core_lifecycle, bot_id, targets)
+            self.config["platform"].remove(bot)
+            try:
                 save_config(self.config, self.config, is_core=True)
-                await self.core_lifecycle.platform_manager.terminate_platform(bot_id)
-                return
-        raise ValueError(f"Bot {bot_id} not found")
+            except Exception:
+                self.config["platform"].append(bot)
+                raise
+        except Exception:
+            # Keep the adapter available for inspection or retry after a failure.
+            if event_bus:
+                event_bus.stopped_platforms.discard(bot_id)
+            if bot.get("enable"):
+                await self.core_lifecycle.platform_manager.load_platform(bot)
+            raise
 
     def list_platforms_for_dashboard(self) -> dict:
         return {"platforms": self.list_bots()["bots"]}
@@ -1522,6 +1534,7 @@ class ProviderConfigService:
         "tts": "text_to_speech",
         "embedding": "embedding",
         "rerank": "rerank",
+        "decision": "decision",
     }
 
     def __init__(self, core_lifecycle: AstrBotCoreLifecycle) -> None:
@@ -1963,7 +1976,7 @@ class ProviderConfigService:
             await target.test()
             result["status"] = "available"
         except Exception as exc:
-            result["error"] = str(exc)
+            result["error"] = str(exc) or type(exc).__name__
         return result
 
     async def test_provider_from_dashboard_args(self, args) -> dict:

@@ -61,10 +61,6 @@
       "tempStorage": {
         "title": "キャッシュ",
         "subtitle": "一時ディレクトリを自動消去するしきい値。"
-      },
-      "t2iRendering": {
-        "title": "長文の画像化",
-        "subtitle": "長文を画像としてレンダリングする際の方式、エンドポイント、カスタムテンプレート。"
       }
     },
     "timePreview": {
@@ -83,14 +79,39 @@
       "subtitle": "プラグインのダウンロードや AstrBot の更新に使用する GitHub プロキシアドレスを設定します。中国本土のネットワーク環境で有効です。カスタム入力は即時反映されます。各アドレスの安定性は保証されません。プラグインやプロジェクトの更新時にエラーが発生した場合は、まずプロキシアドレスが正常に利用できるか確認してください。",
       "label": "GitHub プロキシアドレスを選択"
     },
-    "proxySelector": {
-      "title": "GitHub プロキシ",
-      "noProxy": "GitHub プロキシを使用しない",
-      "useProxy": "GitHub プロキシを使用",
+    "pypiMirror": {
+      "title": "PyPI パッケージインデックス",
+      "subtitle": "AstrBot の Python 依存関係をインストールする際に使用する PyPI インデックスです。国内ミラーまたはカスタム URL を選択できます。変更は AstrBot の再起動後に反映されます。",
+      "label": "PyPI ソースを選択",
+      "custom": "カスタム",
+      "customPlaceholder": "https://example.com/pypi/simple",
       "testConnection": "接続をテスト",
-      "available": "利用可能",
+      "testTip": {
+        "serial": "クリック：選択中の項目から 1 件ずつ順番にテスト",
+        "single": "Ctrl / ⌘ + クリック：選択中の項目のみテスト",
+        "parallel": "Shift + クリック：すべて並列にテスト"
+      },
       "unavailable": "利用不可",
-      "custom": "カスタム"
+      "presets": {
+        "official": "公式",
+        "aliyun": "Alibaba Cloud",
+        "ustc": "中国科学技術大学",
+        "tsinghua": "清華大学",
+        "tencent": "Tencent Cloud"
+      }
+    },
+    "proxySelector": {
+      "title": "GitHub ミラーを選択",
+      "noProxy": "GitHub ミラーを使用しない",
+      "testConnection": "接続をテスト",
+      "testTip": {
+        "serial": "クリック：選択中の項目から 1 件ずつ順番にテスト",
+        "single": "Ctrl / ⌘ + クリック：選択中の項目のみテスト",
+        "parallel": "Shift + クリック：すべて並列にテスト"
+      },
+      "unavailable": "利用不可",
+      "custom": "カスタム",
+      "customPlaceholder": "https://example.com"
     }
   },
   "theme": {
@@ -117,7 +138,7 @@
       "button": "バックアップ管理"
     },
     "cleanup": {
-      "title": "ログとキャッシュの消去",
+      "title": "ログ・キャッシュ・トレースの消去",
       "subtitle": "ログとキャッシュの使用量を確認し、まとめて消去します。",
       "refresh": "使用量を再読み込み",
       "clean": "消去",
@@ -131,7 +152,8 @@
       "targetNames": {
         "cache": "キャッシュ",
         "logs": "ログ",
-        "all": "ログとキャッシュ"
+        "all": "ログ、キャッシュ、トレースデータ",
+        "traces": "トレースデータ"
       },
       "targets": {
         "cache": {
@@ -143,23 +165,25 @@
           "title": "ログ",
           "subtitle": "過去のログを削除し、現在書き込み中のログファイルを空にします。",
           "button": "ログを消去"
+        },
+        "traces": {
+          "title": "トレース",
+          "subtitle": "履歴を削除します。実行中のトレースは保持します。",
+          "button": "トレースデータを消去"
         }
       },
       "messages": {
         "statusFailed": "ストレージ使用量の読み込みに失敗しました",
         "cleanupSuccess": "{count} ファイルを消去し、{size} を解放しました",
-        "cleanupFailed": "消去に失敗しました"
-      }
-    }
-  },
-  "sidebar": {
-    "title": "サイドバー",
-    "customize": {
-      "title": "サイドバーをカスタマイズ",
-      "subtitle": "ドラッグしてモジュールを並べ替えるか、「その他の機能」グループへ移動またはグループから取り出します。設定はブラウザー内にのみ保存されます。",
-      "reset": "既定に戻す",
-      "mainItems": "メインモジュール",
-      "moreItems": "その他の機能"
+        "cleanupFailed": "消去に失敗しました",
+        "cleanupTracesSuccess": "{count} 件のトレースを消去し、{size} を解放しました",
+        "cleanupWithTracesSuccess": "{count} ファイルと {traces} 件のトレースを消去し、{size} を解放しました"
+      },
+      "confirmWithTraces": "{target}を消去しますか？過去のトレースは復元できません。実行中のトレースは保持します。"
+    },
+    "diagnostics": {
+      "title": "診断",
+      "subtitle": "診断パッケージを出力して AstrBot の問題を調査します。"
     }
   },
   "backup": {

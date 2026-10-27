@@ -10,6 +10,7 @@ import {
   type BackupUploadRequest,
   type BackupUploadSessionRequest,
   type BotConfigRequest,
+  type BotCleanupTarget,
   type BotRegistrationRequest,
   type ChatChunkUploadRequest,
   type ChatMessagePatchRequest,
@@ -46,6 +47,7 @@ import {
   type PluginValidateRepoRequest,
   type PluginConfigFileDeleteRequest,
   type ProviderConfigRequest,
+  type PypiIndexTestRequest,
   type RuntimeInfo,
   type BatchSessionProviderRequest,
   type BatchSessionServiceRequest,
@@ -156,7 +158,7 @@ export interface BotListParams {
 }
 
 export interface ProviderListParams {
-  capability?: 'chat' | 'stt' | 'tts' | 'embedding' | 'rerank';
+  capability?: 'chat' | 'stt' | 'tts' | 'embedding' | 'rerank' | 'decision';
   source_id?: string;
   enabled?: boolean;
 }
@@ -213,6 +215,7 @@ const PROVIDER_TYPE_TO_CAPABILITY: Record<string, ProviderCapability> = {
   text_to_speech: 'tts',
   embedding: 'embedding',
   rerank: 'rerank',
+  decision: 'decision',
 };
 
 type V1Response<T> = Promise<
@@ -489,9 +492,12 @@ export const botApi = {
       }),
     );
   },
-  delete(botId: string) {
+  delete(botId: string, cleanup: BotCleanupTarget[] = []) {
     return typed<OpenConfig>(
-      openApiV1.deleteBotById({ query: { bot_id: botId } }),
+      openApiV1.deleteBotById({
+        query: { bot_id: botId, cleanup },
+        paramsSerializer: { indexes: null },
+      }),
     );
   },
 };
@@ -688,6 +694,12 @@ export const apiKeyApi = {
 };
 
 export const traceApi = {
+  history(query?: { limit?: number; page?: number; cursor?: string; query?: string; errors?: boolean; models?: boolean; plugins?: boolean }) {
+    return typed<OpenConfig>(openApiV1.listTraces({ query }));
+  },
+  detail(traceId: string) {
+    return typed<OpenConfig>(openApiV1.getTraceDetail({ path: { trace_id: traceId } }));
+  },
   getSettings() {
     return typed<OpenConfig>(openApiV1.getTraceSettings());
   },
@@ -1022,11 +1034,20 @@ export const fileApi = {
 };
 
 export const sessionApi = {
+  senders(params?: { search?: string; limit?: number; page?: number; sender_ids?: string[] }) {
+    return typed<{ page: number; has_more: boolean; senders: Array<{
+      umo: string;
+      sender_id: string;
+      sender_name: string;
+      platform: string;
+      display_name: string;
+    }> }>(openApiV1.listSessionSenders({ query: params }));
+  },
   list(params?: SessionListParams) {
     return typed<any>(openApiV1.listSessions({ query: generatedQuery(params) }));
   },
-  activeUmos() {
-    return typed<any>(openApiV1.listActiveUmos());
+  activeUmos(params?: { platform_id?: string }) {
+    return typed<any>(openApiV1.listActiveUmos({ query: params }));
   },
   listRules(params?: SessionRuleListParams) {
     return typed<any>(
@@ -1234,6 +1255,12 @@ export const logApi = {
   history() {
     return typed<{ logs?: OpenConfig[] }>(openApiV1.getLogHistory());
   },
+  exportArchive(redact = true, startTime?: number, endTime?: number) {
+    return openApiV1.exportLogs({
+      query: { redact, start_time: startTime, end_time: endTime },
+      responseType: 'blob',
+    }) as Promise<AxiosResponse<Blob>>;
+  },
   liveUrl() {
     return '/api/v1/logs/live';
   },
@@ -1425,7 +1452,7 @@ export const pluginApi = {
   },
   page(pluginId: string, pageName: string) {
     return typed<any>(
-      openApiV1.getPluginPageById({
+      openApiV1.getPluginViewById({
         query: { plugin_id: pluginId, page_name: pageName },
       }) as any,
     );
@@ -1838,6 +1865,21 @@ export const statsApi = {
         ),
     );
   },
+  testPypiIndex(payload: PypiIndexTestRequest) {
+    return typed<{ latency?: number }>(
+      openApiV1.testPypiIndexConnection({ body: payload }),
+    );
+  },
+  measureGhproxySpeed(payload: GhproxyTestRequest) {
+    return typed<{ speed?: number; bytes?: number; duration?: number }>(
+      openApiV1.measureGhproxySpeed({ body: payload }),
+    );
+  },
+  measurePypiIndexSpeed(payload: PypiIndexTestRequest) {
+    return typed<{ speed?: number; bytes?: number; duration?: number }>(
+      openApiV1.measurePypiIndexSpeed({ body: payload }),
+    );
+  },
   startTime() {
     const v1Request = typed<StartTimeData>(openApiV1.getStartTime());
     const legacyRequest = httpClient.get<ApiEnvelope<StartTimeData>>(
@@ -1855,7 +1897,7 @@ export const statsApi = {
   storage() {
     return typed<OpenConfig>(openApiV1.getStorageStatus());
   },
-  cleanupStorage(target?: string) {
+  cleanupStorage(target: 'logs' | 'cache' | 'traces' | 'all' = 'all') {
     return typed<OpenConfig>(
       openApiV1.cleanupStorage({
         body: target ? { target } : undefined,

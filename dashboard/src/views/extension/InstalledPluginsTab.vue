@@ -155,11 +155,11 @@ const openPluginDetail = (extension) => {
   });
 };
 
-const openPluginWebui = (extension) => {
+const openPluginView = (extension) => {
   const pages = extension?.pages;
   if (!Array.isArray(pages) || pages.length === 0 || !extension?.name) return;
   router.push({
-    name: "PluginPage",
+    name: "PluginView",
     params: {
       pluginName: extension.name,
       pageName: pages[0],
@@ -381,7 +381,7 @@ const togglePinnedExtension = (extension) => {
               @view-handlers="showPluginInfo(extension)"
               @view-readme="viewReadme(extension)"
               @view-changelog="viewChangelog(extension)"
-              @open-webui="openPluginWebui(extension)"
+              @open-view="openPluginView(extension)"
               @change-source="openPluginSourceBindingDialog(extension)"
             >
             </ExtensionCard>

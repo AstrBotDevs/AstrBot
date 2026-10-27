@@ -100,10 +100,11 @@
       "provider_settings": {
         "default_image_caption_provider_id": {
           "description": "Image Caption Model",
-          "hint": "Leave empty to disable; useful for non-multimodal models"
+          "hint": "When the chat model does not support image input, use the image captioning model to describe images. Leave blank to disable."
         },
         "image_caption_prompt": {
-          "description": "Image Caption Prompt"
+          "description": "Image Caption Prompt",
+          "hint": "The prompt used by the image captioning model."
         }
       },
       "provider_stt_settings": {
@@ -113,7 +114,7 @@
         },
         "provider_id": {
           "description": "Default Speech-to-Text Model",
-          "hint": "Users can also select session-specific STT models using the /provider command."
+          "hint": "You can also use /provider to select a model for an individual conversation."
         }
       },
       "provider_tts_settings": {
@@ -122,10 +123,12 @@
           "hint": "Use a text-to-speech model to turn text into voice replies."
         },
         "provider_id": {
-          "description": "Default Text-to-Speech Model"
+          "description": "Default Text-to-Speech Model",
+          "hint": "You can also use /provider to select a model for an individual conversation."
         },
         "trigger_probability": {
-          "description": "TTS Trigger Probability"
+          "description": "TTS Trigger Probability",
+          "hint": "Trigger voice replies based on a random probability."
         }
       }
     },
@@ -172,7 +175,29 @@
           "description": "Enable Web Search"
         },
         "websearch_provider": {
-          "description": "Web Search Provider"
+          "description": "Web Search Provider",
+          "labels": [
+            "SerpApi",
+            "DeepSeek Search API",
+            "Tavily",
+            "Baidu AI Search",
+            "Bocha",
+            "Brave",
+            "Firecrawl",
+            "Exa",
+            "AnySearch"
+          ],
+          "subtitles": [
+            "Google web, news, image, scholar, and finance search",
+            "Official DeepSeek search API",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            ""
+          ]
         },
         "websearch_tavily_key": {
           "description": "Tavily API Key",
@@ -204,6 +229,14 @@
         "websearch_anysearch_key": {
           "description": "AnySearch API Key",
           "hint": "Multiple keys can be added for rotation. Leave empty to use anonymous mode with a daily free quota."
+        },
+        "websearch_serpapi_key": {
+          "description": "SerpApi API Key",
+          "hint": "Supports Google web, news, image, scholar, and finance search. Multiple keys can be added for rotation. Get a key: [https://serpapi.com/manage-api-key](https://serpapi.com/manage-api-key)"
+        },
+        "websearch_deepseek_key": {
+          "description": "DeepSeek API Key",
+          "hint": "Enter your DeepSeek API key. Can use the same key as the chat model (must be entered separately). Supports multiple keys for rotation. Get a key: [https://platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys)"
         }
       }
     },
@@ -225,7 +258,7 @@
     },
     "agent_computer_use": {
       "description": "Agent Computer Use",
-      "hint": "Allows the AstrBot to access and use your computer or an sandbox environment to perform more complex tasks. See: [Computer Use](https://docs.astrbot.app/use/computer.html).",
+      "hint": "Allows the AstrBot to access and use your computer or an sandbox environment to perform more complex tasks. See: [Agent Sandbox Environment](https://docs.astrbot.app/en/use/astrbot-agent-sandbox.html).",
       "provider_settings": {
         "computer_use_runtime": {
           "description": "Computer Use Runtime",
@@ -237,7 +270,7 @@
         },
         "computer_use_require_admin": {
           "description": "Require Admin Permission for Sandbox",
-          "hint": "When enabled, AstrBot admin permission is required to use remote sandbox capabilities. Admins can be added in Platform Config. Use the /sid command to view admin IDs."
+          "hint": "When enabled, AstrBot admin permission is required to use remote sandbox capabilities. Add admins under Config -> Access Control -> Administrators -> Administrator IDs. Send /sid to the bot to get the ID."
         },
         "sandbox": {
           "booter": {
@@ -313,6 +346,7 @@
         "scopeHints": {
           "none": "No file access allowed",
           "workspace": "Restricted workspace, temporary directories, and skill files.",
+          "workspaceUnsupported": "Restricted workspace file access is unavailable on this platform.",
           "host": "All files in the environment where AstrBot runs."
         },
         "scopeDetails": {
@@ -323,22 +357,42 @@
           "member": "Member",
           "admin": "Administrator"
         },
-        "accessMode": "Local computer access",
         "modes": {
-          "none": "Disabled",
-          "files": "File access only",
-          "full": "Unrestricted access"
+          "none": "Disabled"
         },
-        "unsupportedSelection": "Current policy is unsupported",
         "runtimeUnknown": "Runtime information is unavailable.",
         "memberWarning": "Members have network access or file access across the entire environment.",
+        "executionInactive": "Inactive",
+        "executionInactiveHelp": "Why execution is inactive",
+        "executionBlocked": "Code execution is enabled for {role}, but the configured isolation requirements cannot currently be met. {reason}",
         "runtime": {
           "os": "OS",
           "arch": "Architecture",
           "sandbox": "Local isolation",
           "unavailableHint": "Sandbox startup failed, affecting restricted Shell/Python execution and workspace file search. Use the error below to check system security policies (such as Linux AppArmor and user namespace restrictions) or container restrictions, then restart AstrBot to check again.",
+          "dialog": {
+            "intro": "Using Seatbelt on macOS or bubblewrap (bwrap) on Linux, AstrBot provides security isolation for Agent execution, restricting file access scope and network permissions for different users of AstrBot Agent to improve security.",
+            "startupError": "View startup error",
+            "documentation": "View detailed setup documentation"
+          },
+          "close": "Close",
+          "setupHint": {
+            "missing": "Install {dependency} to enable all local isolation features.",
+            "unavailable": "Configure {backend} to enable all local isolation features.",
+            "unsupported": "Learn about local isolation support."
+          },
+          "isolationFailure": {
+            "missing": "Missing {dependency}.",
+            "unavailable": "{backend} failed its startup probe.",
+            "unsupported": "Local process isolation is not supported on this platform."
+          },
+          "executionUnavailable": {
+            "missing": "Missing {dependency}; code execution cannot be enabled when File access scope is set to Workspace.",
+            "unavailable": "{backend} cannot start; code execution cannot be enabled when File access scope is set to Workspace.",
+            "unsupported": "Local isolation is unsupported on this platform; code execution cannot be enabled when File access scope is set to Workspace."
+          },
           "status": {
-            "detected": "{backend} · Startup check passed",
+            "detected": "{backend}",
             "missing": "Missing {dependency}",
             "unavailable": "{backend} · Installed but cannot start",
             "unsupported": "Unsupported"
@@ -371,12 +425,12 @@
           "hint": "When history exceeds 'Max Turns Before Compression' and LLM compression is unavailable, discard this many oldest turns at once. Request-time truncation also reuses this value."
         },
         "overflow_strategy": {
-          "description": "Handling for History Limits or Context Window Pressure",
+          "description": "Compression Strategy",
           "labels": [
             "Truncate by Turns",
             "Compress by LLM"
           ],
-          "hint": "Persistent conversation history uses this strategy only after exceeding 'Max Turns Before Compression'. Before each request, the same strategy may also protect the in-flight context when tokens approach the model window."
+          "hint": "Strategy for handling model context limits."
         },
         "instruction": {
           "description": "Context Compression Instruction",
@@ -387,8 +441,8 @@
           "hint": "Keep recent exact context by current context token ratio, from 0-0.3. 0.15 means keeping 15%; values above 0 keep at least the latest round."
         },
         "provider_id": {
-          "description": "Model Provider ID for Context Compression",
-          "hint": "When left empty, the current chat model will be used for compression. If the model is unavailable or compression fails, AstrBot falls back to the 'Truncate by Turns' strategy."
+          "description": "Compression Model",
+          "hint": "The model used for context compression. Defaults to the current chat model."
         },
         "fallback_max_tokens": {
           "description": "Fallback context window size",
@@ -415,22 +469,24 @@
       } } },
       "provider_settings": {
         "display_reasoning_text": {
-          "description": "Display Reasoning Content"
+          "description": "Display Reasoning Content",
+          "hint": "Include the model's chain-of-thought information in the final reply."
         },
         "identifier": {
           "description": "User Identification",
-          "hint": "When enabled, user ID information will be included in the prompt."
+          "hint": "Prepend the user ID to the user prompt."
         },
         "group_name_display": {
           "description": "Display Group Name",
-          "hint": "When enabled, group name information will be included in the prompt on supported platforms (OneBot v11)."
+          "hint": "Prepend the group name to user prompts in group chats on supported messaging platforms."
         },
         "datetime_system_prompt": {
           "description": "Real-world Time Awareness",
-          "hint": "When enabled, current time information will be appended to the system prompt."
+          "hint": "Include the current time in the user prompt."
         },
         "show_tool_use_status": {
-          "description": "Show Tool Call Information"
+          "description": "Show Tool Call Information",
+          "hint": "When a tool is called, also send a message containing the tool name."
         },
         "show_tool_call_result": {
           "description": "Output Tool Call Results",
@@ -463,7 +519,8 @@
           }
         },
         "streaming_response": {
-          "description": "Streaming Output"
+          "description": "Streaming Output",
+          "hint": "Display responses with a typewriter effect on supported chat platforms."
         },
         "unsupported_streaming_strategy": {
           "description": "Platforms Without Streaming Support",
@@ -502,7 +559,7 @@
     }
   },
   "platform_group": {
-    "name": "Platform",
+    "name": "Platforms & Messages",
     "platform": {
       "description": "Message Platform Adapters",
       "app_id": {
@@ -923,62 +980,43 @@
     },
     "general": {
       "description": "General",
-      "admins_id": {
-        "description": "Administrator IDs"
-      },
       "platform_settings": {
         "unique_session": {
           "description": "Isolate Conversation",
           "hint": "On supported platforms, each group member has a separate conversation context when enabled. Manage command permissions under Handlers → Command."
         },
         "friend_message_needs_wake_prefix": {
-          "description": "Private Messages Require Wake Word"
+          "description": "Private Messages Require Wake Word",
+          "hint": "Private messages must also include a wake prefix to activate the bot."
         },
         "reply_prefix": {
-          "description": "Reply Text Prefix"
+          "description": "Reply Text Prefix",
+          "hint": "The text prefix added to replies."
         },
         "reply_with_mention": {
-          "description": "Mention Sender in Reply"
+          "description": "Mention Sender in Reply",
+          "hint": "Mention the sender when replying."
         },
         "reply_with_quote": {
-          "description": "Quote Sender's Message in Reply"
+          "description": "Quote Sender's Message in Reply",
+          "hint": "Quote the sender's corresponding message when replying."
         },
         "forward_threshold": {
-          "description": "Forward Message Word Count Threshold"
+          "description": "Forward Message Word Count Threshold",
+          "hint": "On supported platforms, send overly long replies as merged forwarded messages."
         },
         "empty_mention_waiting": {
-          "description": "Trigger Waiting on Mention-only Messages"
+          "description": "Trigger Waiting on Mention-only Messages",
+          "hint": "After a message that only mentions the bot, stay awake for one minute to wait for the user's next message."
         }
       },
       "wake_prefix": {
-        "description": "Wake Word"
+        "description": "Wake Word",
+        "hint": "A list of message prefixes that wake the bot. You can also wake it by mentioning it."
       },
       "disable_builtin_commands": {
         "description": "Disable Built-in Commands",
         "hint": "Disable all built-in AstrBot commands such as help, sid, new, etc."
-      }
-    },
-    "whitelist": {
-      "description": "Whitelist",
-      "platform_settings": {
-        "enable_id_white_list": {
-          "description": "Enable Whitelist",
-          "hint": "When enabled, only sessions in the whitelist will be responded to. If the whitelist is empty, the whitelist is disabled and all IDs are allowed."
-        },
-        "id_whitelist": {
-          "description": "Whitelist ID List",
-          "hint": "Use /sid to get IDs. If the list is empty, it means whitelist is disabled (all IDs are in the whitelist)."
-        },
-        "id_whitelist_log": {
-          "description": "Output Logs",
-          "hint": "When enabled, INFO level logs will be output when a message doesn't pass the whitelist."
-        },
-        "wl_ignore_admin_on_group": {
-          "description": "Administrator Group Messages Bypass ID Whitelist"
-        },
-        "wl_ignore_admin_on_friend": {
-          "description": "Administrator Private Messages Bypass ID Whitelist"
-        }
       }
     },
     "rate_limit": {
@@ -1027,15 +1065,6 @@
             "hint": "Additional keyword blocklist, supports regular expressions."
           }
         }
-      }
-    },
-    "t2i": {
-      "description": "Text-to-Image",
-      "t2i": {
-        "description": "Text-to-Image Output"
-      },
-      "t2i_word_threshold": {
-        "description": "Text-to-Image Word Count Threshold"
       }
     },
     "others": {
@@ -1088,6 +1117,39 @@
       }
     }
   },
+  "access_group": {
+    "name": "Access Control",
+    "admins": {
+      "description": "Administrators",
+      "admins_id": {
+        "description": "Administrator IDs",
+        "hint": "Send the /sid command to the bot to get the ID."
+      }
+    },
+    "whitelist": {
+      "description": "Whitelist",
+      "platform_settings": {
+        "enable_id_white_list": {
+          "description": "Enable Whitelist",
+          "hint": "When enabled, only sessions in the whitelist will be responded to."
+        },
+        "id_whitelist": {
+          "description": "Whitelist ID List",
+          "hint": "Send the /sid command to the bot to get the ID. An empty list disables the whitelist."
+        },
+        "id_whitelist_log": {
+          "description": "Log Blocked Messages",
+          "hint": "Log messages that fail whitelist checks."
+        },
+        "wl_ignore_admin_on_group": {
+          "description": "Administrator Group Messages Bypass ID Whitelist"
+        },
+        "wl_ignore_admin_on_friend": {
+          "description": "Administrator Private Messages Bypass ID Whitelist"
+        }
+      }
+    }
+  },
   "plugin_group": {
     "name": "Plugin",
     "plugin": {
@@ -1105,7 +1167,8 @@
       "platform_settings": {
         "segmented_reply": {
           "enable": {
-            "description": "Enable Segmented Reply"
+            "description": "Enable Segmented Reply",
+            "hint": "Send replies in multiple segments."
           },
           "only_llm_result": {
             "description": "Segment Only LLM Results"
@@ -1153,14 +1216,16 @@
       "description": "Group Chat Context Awareness",
       "provider_ltm_settings": {
         "group_icl_enable": {
-          "description": "Inject Group Chat Records into Context"
+          "description": "Inject Group Chat Records into Context",
+          "hint": "Record group messages that do not wake the bot and pass them to the model when the bot is activated."
         },
         "group_message_max_cnt": {
-          "description": "Maximum Messages Injected into Context"
+          "description": "Maximum Messages Injected into Context",
+          "hint": "The maximum number of messages passed to the model."
         },
         "image_caption": {
           "description": "Auto-understand Images",
-          "hint": "Requires setting a group chat image caption model."
+          "hint": "Convert image messages that do not wake the bot into text descriptions. Use with care in image-heavy group chats, as this can incur substantial costs."
         },
         "image_caption_provider_id": {
           "description": "Group Chat Image Caption Model",
@@ -1168,14 +1233,16 @@
         },
         "group_message_history_enable": {
           "description": "Persist Group Chat Messages",
-          "hint": "Saves group messages and provides the model with a tool for querying the current group's history. Media content is not currently persisted; media messages are stored as placeholders such as [Image]."
+          "hint": "Persist all group messages and allow the model to query them using tools."
         },
         "group_message_history_max_cnt": {
-          "description": "Maximum Persisted Messages"
+          "description": "Maximum Persisted Messages",
+          "hint": "The maximum number of persisted messages. Older messages are discarded when the limit is exceeded."
         },
         "active_reply": {
           "enable": {
-            "description": "Active Reply"
+            "description": "Active Reply",
+            "hint": "Send messages proactively at suitable times."
           },
           "method": {
             "description": "Active Reply Method"
@@ -1190,12 +1257,16 @@
           }
         }
       }
-    }
-  },
-  "system_group": {
-    "name": "System",
-    "system": {
-      "description": "System Settings",
+    },
+    "t2i": {
+      "description": "Text-to-Image",
+      "t2i": {
+        "description": "Text-to-Image Output",
+        "hint": "Convert model replies to images before sending to avoid flooding the chat."
+      },
+      "t2i_word_threshold": {
+        "description": "Text-to-Image Word Count Threshold"
+      },
       "t2i_strategy": {
         "description": "Text-to-Image Strategy",
         "hint": "Text-to-image strategy. `remote` uses a remote HTML-based rendering service, `local` uses PIL for local rendering. When using local, place a TTF font named 'font.ttf' in the data/ directory to customize the font."
@@ -1211,7 +1282,13 @@
       "t2i_active_template": {
         "description": "Currently Active Text-to-Image Rendering Template",
         "hint": "This value is maintained by the text-to-image template management page."
-      },
+      }
+    }
+  },
+  "system_group": {
+    "name": "System",
+    "system": {
+      "description": "System Settings",
       "log_level": {
         "description": "Console Log Level",
         "hint": "Log level for console output."
@@ -1232,21 +1309,25 @@
         "description": "Temp Directory Size Limit (MB)",
         "hint": "Limits total size of data/temp in MB. The system checks every 10 minutes, and when exceeded, deletes oldest files first to release about 30% of current size."
       },
-      "trace_log_enable": {
-        "description": "Enable Trace File Logging",
-        "hint": "Write trace events to a separate file (does not change console output)."
+      "trace_enable": {
+        "description": "Enable Trace Recording",
+        "hint": "Trace each user command and AI call."
       },
-      "trace_log_path": {
-        "description": "Trace Log File Path",
-        "hint": "Relative paths are resolved under the data directory, e.g. logs/astrbot.trace.log; absolute paths are supported."
+      "trace_db_path": {
+        "description": "Trace Database Path",
+        "hint": "Relative paths start from the data directory, for example logs/traces.db. Absolute paths are also supported."
       },
-      "trace_log_max_mb": {
-        "description": "Trace Log Max Size (MB)",
-        "hint": "Rotate when exceeding this size; default 20MB."
+      "trace_db_max_mb": {
+        "description": "Trace Database Capacity Budget (MB)",
+        "hint": "Default: 80 MB. Values below 32 MB use 32 MB. Old data is automatically cleared when this size is exceeded."
+      },
+      "trace_retention_days": {
+        "description": "Trace Retention Days",
+        "hint": "Default: 7 days. Old data is cleared when either the retention period or capacity is reached."
       },
       "pip_install_arg": {
         "description": "Additional pip Installation Arguments",
-        "hint": "When installing plugin dependencies, Python's pip tool will be used. Additional arguments can be provided here, such as `--break-system-package`."
+        "hint": "When installing plugin dependencies, Python's pip tool will be used. Additional arguments can be provided here, such as `--break-system-package`. TLS certificates of the PyPI index are verified by default; for self-signed/private-CA mirrors, pass `--cert <CA bundle path>` (recommended) or explicitly add `--trusted-host <host>`."
       },
       "pypi_index_url": {
         "description": "PyPI Repository URL",
@@ -1453,7 +1534,7 @@
 
       "custom_headers": {
         "description": "Custom request headers",
-        "hint": "Key/value pairs added here are merged into the OpenAI SDK default_headers for custom HTTP headers. Values must be strings."
+        "hint": "Key/value pairs added here are sent by AstrBot as custom HTTP headers to the provider. Values must be strings."
       },
       "ollama_disable_thinking": {
         "description": "Disable thinking mode",
@@ -1874,6 +1955,14 @@
       },
       "api_base": {
         "description": "API Base URL"
+      },
+      "total_timeout": {
+        "description": "Total timeout",
+        "hint": "Total timeout in seconds for one decision request, including concurrency-slot wait, retries, and backoff; default 5 seconds."
+      },
+      "max_concurrency": {
+        "description": "Maximum concurrency",
+        "hint": "Maximum number of simultaneous decision requests for this provider; default 4."
       },
       "proxy": {
         "description": "Proxy address",

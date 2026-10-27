@@ -4,6 +4,7 @@ import functools
 import json
 import os
 import sys
+import tempfile
 import zipfile
 from pathlib import Path
 from types import ModuleType
@@ -16,6 +17,7 @@ import yaml
 from astrbot.core.star import star_manager as star_manager_module
 from astrbot.core.star.star_handler import EventType, StarHandlerMetadata
 from astrbot.core.star.star_manager import PluginDependencyInstallError, PluginManager
+from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
 from astrbot.core.utils.pip_installer import PipInstallError
 from astrbot.core.utils.requirements_utils import MissingRequirementsPlan
 
@@ -141,11 +143,26 @@ def test_load_plugin_metadata_includes_i18n(tmp_path: Path):
 
     assert metadata is not None
     assert metadata.short_desc == "Local test short description"
-    assert metadata.pages == []
+    assert metadata.views == []
     assert metadata.i18n == {"zh-CN": {"metadata": {"display_name": "你好世界"}}}
 
 
-def test_load_plugin_metadata_includes_pages(tmp_path: Path):
+def test_load_plugin_metadata_includes_views(tmp_path: Path):
+    plugin_path = tmp_path / "helloworld"
+    _write_local_test_plugin(plugin_path, TEST_PLUGIN_REPO)
+    metadata_path = plugin_path / "metadata.yaml"
+    metadata = yaml.safe_load(metadata_path.read_text(encoding="utf-8"))
+    metadata["views"] = [{"name": "dashboard", "title": "Dashboard"}]
+    metadata_path.write_text(yaml.dump(metadata), encoding="utf-8")
+
+    loaded_metadata = PluginManager._load_plugin_metadata(str(plugin_path))
+
+    assert loaded_metadata is not None
+    assert loaded_metadata.views == [{"name": "dashboard", "title": "Dashboard"}]
+
+
+def test_load_plugin_metadata_pages_alias_maps_to_views(tmp_path: Path):
+    # "pages" stays a compatible alias for "views" in metadata.yaml.
     plugin_path = tmp_path / "helloworld"
     _write_local_test_plugin(plugin_path, TEST_PLUGIN_REPO)
     metadata_path = plugin_path / "metadata.yaml"
@@ -156,7 +173,7 @@ def test_load_plugin_metadata_includes_pages(tmp_path: Path):
     loaded_metadata = PluginManager._load_plugin_metadata(str(plugin_path))
 
     assert loaded_metadata is not None
-    assert loaded_metadata.pages == [{"name": "dashboard", "title": "Dashboard"}]
+    assert loaded_metadata.views == [{"name": "dashboard", "title": "Dashboard"}]
 
 
 def test_load_plugin_metadata_accepts_yml_suffix(tmp_path: Path):
@@ -412,13 +429,16 @@ def local_updater(plugin_manager_pm):
 @pytest.mark.parametrize("dependency_install_fails", [False, True])
 @pytest.mark.parametrize("cross_filesystem", [False, True])
 async def test_install_plugin_dependency_install_flow(
-    plugin_manager_pm: PluginManager, monkeypatch, dependency_install_fails: bool,
+    plugin_manager_pm: PluginManager,
+    monkeypatch,
+    dependency_install_fails: bool,
     cross_filesystem: bool,
 ):
     plugin_path = Path(plugin_manager_pm.plugin_store_path) / TEST_PLUGIN_DIR
     events = []
     _mock_missing_requirements(monkeypatch, {"networkx"})
     if cross_filesystem:
+
         def cross_device_rename(*args, **kwargs):
             raise OSError(errno.EXDEV, "Cross-device move")
 
@@ -463,6 +483,49 @@ async def test_install_plugin_dependency_install_flow(
             expected_content="networkx\n",
         )
         assert events[1] == ("load", TEST_PLUGIN_DIR)
+
+
+@pytest.mark.asyncio
+async def test_install_plugin_staging_root_does_not_shadow_the_marker_file(
+    plugin_manager_pm: PluginManager, monkeypatch, tmp_path
+):
+    """Installing a plugin must not fail when the temp dir holds the marker file.
+
+    Python falls back to the current working directory when the system
+    temporary directory is unusable, and that directory holds the ".astrbot"
+    marker file created by "astrbot init".
+    """
+    system_temp = tmp_path / "system_temp"
+    system_temp.mkdir()
+    marker = system_temp / ".astrbot"
+    marker.write_text("", encoding="utf-8")
+    monkeypatch.setattr(tempfile, "tempdir", str(system_temp))
+    monkeypatch.setattr(
+        star_manager_module,
+        "get_astrbot_system_tmp_path",
+        get_astrbot_system_tmp_path,
+    )
+
+    events = []
+    _mock_missing_requirements(monkeypatch, {"networkx"})
+
+    async def mock_install(repo_url: str, proxy="", *, download_url="", target_dir):
+        staged_path = Path(target_dir)
+        _write_local_test_plugin(staged_path, repo_url)
+        _write_requirements(staged_path)
+        return str(staged_path)
+
+    monkeypatch.setattr(plugin_manager_pm._updater, "install", mock_install)
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.pip_installer.install",
+        _build_dependency_install_mock(events, False),
+    )
+    monkeypatch.setattr(plugin_manager_pm, "load", _build_load_mock(events))
+
+    await plugin_manager_pm.install_plugin(TEST_PLUGIN_REPO)
+
+    assert marker.is_file()
+    assert events[-1] == ("load", TEST_PLUGIN_DIR)
 
 
 @pytest.mark.asyncio
@@ -570,7 +633,9 @@ async def test_install_updates_existing_plugin_and_restores_on_failure(
     original_rename = os.rename
 
     def cross_device_rename(source, destination, *args, **kwargs):
-        if Path(source).is_relative_to(system_temp) != Path(destination).is_relative_to(system_temp):
+        if Path(source).is_relative_to(system_temp) != Path(destination).is_relative_to(
+            system_temp
+        ):
             raise OSError(errno.EXDEV, "Cross-device move")
         return original_rename(source, destination, *args, **kwargs)
 
@@ -801,7 +866,9 @@ async def test_install_copy_failure_preserves_complete_old_code(
         assert {path.name: path.read_bytes() for path in backup.iterdir()} == old_files
         assert versions_loaded == ["2.0.0"]
     else:
-        assert {path.name: path.read_bytes() for path in local_updater.iterdir()} == old_files
+        assert {
+            path.name: path.read_bytes() for path in local_updater.iterdir()
+        } == old_files
         assert versions_loaded == ["1.0.0"]
         assert list(system_temp.iterdir()) == []
 
@@ -2020,7 +2087,6 @@ async def test_update_plugin_dependency_install_flow(
 async def test_install_plugin_skips_dependency_install_when_no_requirements_missing(
     plugin_manager_pm: PluginManager, monkeypatch
 ):
-    plugin_path = Path(plugin_manager_pm.plugin_store_path) / TEST_PLUGIN_DIR
     events = []
     _mock_missing_requirements(monkeypatch, set())
 
