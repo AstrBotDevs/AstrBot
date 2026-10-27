@@ -292,6 +292,7 @@
       "chatAdmin": "Allow username to use configured administrator IDs and receive their administrator privileges.",
       "data": "Access statistics and runtime data.",
       "file": "Upload and access API files.",
+      "kb": "Manage knowledge bases, documents, chunks, imports, and retrieval.",
       "plugin": "Read and manage plugins.",
       "mcp": "Read and manage MCP servers.",
       "skill": "Read and manage skills."

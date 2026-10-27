@@ -1,6 +1,8 @@
 import json
+import re
 from pathlib import Path
 
+from astrbot.dashboard.services.auth_service import DEFAULT_OPEN_API_SCOPES
 from docs.scripts.update_openapi_json import (
     PUBLIC_OPEN_API_SCOPES,
     filter_public_openapi,
@@ -18,6 +20,39 @@ ZH_REFERENCE_PATH = (
 EN_REFERENCE_PATH = (
     Path(__file__).resolve().parents[2] / "docs" / "en" / "dev" / "openapi-scopes.md"
 )
+
+
+def test_scope_registry_matches_documentation_and_dashboard() -> None:
+    """Keep the grantable scopes selectable and translated in every locale."""
+    root = SPEC_PATH.parents[1]
+    assert set(PUBLIC_OPEN_API_SCOPES) == set(DEFAULT_OPEN_API_SCOPES)
+    settings = (root / "dashboard/src/views/Settings.vue").read_text(encoding="utf-8")
+    scope_options = settings.split("const availableScopes = [", 1)[1].split("];", 1)[0]
+    scopes = set(re.findall(r"value: '([^']+)'", scope_options))
+    assert {scope for scope in scopes if ":" not in scope} == set(
+        DEFAULT_OPEN_API_SCOPES
+    )
+    for path in (root / "dashboard/src/i18n/locales").glob("*/features/settings.json"):
+        translations = json.loads(path.read_text(encoding="utf-8"))["apiKey"][
+            "scopeDescriptions"
+        ]
+        for scope in DEFAULT_OPEN_API_SCOPES:
+            assert translations[scope].strip(), (path, scope)
+
+
+def test_public_openapi_includes_all_knowledge_base_operations() -> None:
+    """Include every knowledge-base operation in the public reference."""
+    full_spec = load_yaml(SPEC_PATH)
+    public_spec = filter_public_openapi(full_spec)
+    operations = [
+        (path, method)
+        for path, methods in full_spec["paths"].items()
+        for method, operation in methods.items()
+        if isinstance(operation, dict) and operation.get("x-astrbot-scope") == "kb"
+    ]
+    assert len(operations) == 16
+    for path, method in operations:
+        assert public_spec["paths"][path][method]["x-astrbot-scope"] == "kb"
 
 
 def test_public_openapi_is_filtered_by_supported_scope() -> None:

@@ -631,6 +631,7 @@ const availableScopes = [
     },
     { value: 'data', label: 'data', descriptionKey: 'apiKey.scopeDescriptions.data' },
     { value: 'file', label: 'file', descriptionKey: 'apiKey.scopeDescriptions.file' },
+    { value: 'kb', label: 'kb', descriptionKey: 'apiKey.scopeDescriptions.kb' },
     { value: 'plugin', label: 'plugin', descriptionKey: 'apiKey.scopeDescriptions.plugin' },
     { value: 'mcp', label: 'mcp', descriptionKey: 'apiKey.scopeDescriptions.mcp' },
     { value: 'skill', label: 'skill', descriptionKey: 'apiKey.scopeDescriptions.skill' }

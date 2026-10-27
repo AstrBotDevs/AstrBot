@@ -217,6 +217,29 @@ outline: deep
 | `DELETE` | `/api/v1/files/{attachment_id}` | — |
 | `GET` | `/api/v1/files/{attachment_id}/content` | — |
 
+## `kb`
+
+管理知识库、文档、文本块、导入和检索。
+
+| 方法 | 接口 | 条件性敏感子权限 |
+| --- | --- | --- |
+| `GET` | `/api/v1/knowledge-bases` | — |
+| `POST` | `/api/v1/knowledge-bases` | — |
+| `GET` | `/api/v1/knowledge-bases/tasks/{task_id}` | — |
+| `GET` | `/api/v1/knowledge-bases/{kb_id}` | — |
+| `PUT` | `/api/v1/knowledge-bases/{kb_id}` | — |
+| `DELETE` | `/api/v1/knowledge-bases/{kb_id}` | — |
+| `GET` | `/api/v1/knowledge-bases/{kb_id}/chunks` | — |
+| `DELETE` | `/api/v1/knowledge-bases/{kb_id}/chunks/{chunk_id}` | — |
+| `GET` | `/api/v1/knowledge-bases/{kb_id}/documents` | — |
+| `POST` | `/api/v1/knowledge-bases/{kb_id}/documents` | — |
+| `POST` | `/api/v1/knowledge-bases/{kb_id}/documents/import` | — |
+| `POST` | `/api/v1/knowledge-bases/{kb_id}/documents/import-url` | — |
+| `GET` | `/api/v1/knowledge-bases/{kb_id}/documents/{document_id}` | — |
+| `DELETE` | `/api/v1/knowledge-bases/{kb_id}/documents/{document_id}` | — |
+| `POST` | `/api/v1/knowledge-bases/{kb_id}/retrieve` | — |
+| `GET` | `/api/v1/knowledge-bases/{kb_id}/stats` | — |
+
 ## `plugin`
 
 管理插件、插件配置、插件源和插件市场数据。

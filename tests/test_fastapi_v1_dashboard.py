@@ -24,6 +24,7 @@ import astrbot.dashboard.services.config_service as config_service
 import astrbot.dashboard.services.stat_service as stat_service
 from astrbot.core import file_token_service
 from astrbot.core.utils import llm_metadata
+from astrbot.dashboard.api import knowledge_bases as knowledge_base_routes
 from astrbot.dashboard.api.app import create_dashboard_asgi_app
 from astrbot.dashboard.api.backups import download_backup as download_backup_route
 from astrbot.dashboard.asgi_runtime import (
@@ -44,6 +45,82 @@ from astrbot.dashboard.services.plugin_service import (
 from astrbot.dashboard.services.skills_service import SkillArchive, SkillsServiceError
 
 JWT_SECRET = "fastapi-v1-test-secret-with-32-bytes"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "access", ["kb", "wildcard", "legacy", "jwt", "im", "invalid", "missing"]
+)
+async def test_all_knowledge_base_routes_enforce_scope(
+    asgi_app, asgi_client, fake_db, access
+):
+    """Check real authorization dependencies with isolated business operations.
+
+    Args:
+        asgi_app: Dashboard application with its real authentication dependencies.
+        asgi_client: HTTP client for the dashboard application.
+        fake_db: Key store containing the credentials selected for this case.
+        access: Scope or authentication mode to exercise across every route.
+    """
+    marker = {"authorized": True}
+    service = Mock()
+    operations = [
+        (method, route.path)
+        for route in knowledge_base_routes.router.routes
+        for method in route.methods
+    ]
+    for name in (
+        "list_kbs",
+        "create_kb",
+        "get_upload_progress",
+        "get_kb",
+        "update_kb",
+        "delete_kb",
+        "get_kb_stats",
+        "list_documents",
+        "upload_document",
+        "import_documents",
+        "upload_document_from_url",
+        "get_document",
+        "delete_document",
+        "list_chunks",
+        "delete_chunk",
+        "retrieve",
+    ):
+        setattr(service, name, AsyncMock(return_value=marker))
+    asgi_app.dependency_overrides[knowledge_base_routes.get_service] = lambda: service
+    key = "knowledge-base-route-test"
+    scopes = {"kb": ["kb"], "wildcard": ["*"], "legacy": None, "im": ["im"]}
+    if access in scopes:
+        fake_db.api_keys[ApiKeyService.hash_key(key)] = FakeApiKey(
+            key_id="kb-route-key", scopes=scopes[access]
+        )
+    headers = (
+        _jwt_headers()
+        if access == "jwt"
+        else {}
+        if access == "missing"
+        else {"X-API-Key": key}
+    )
+    expected_status = (
+        403 if access == "im" else 401 if access in {"invalid", "missing"} else 200
+    )
+    for method, path in operations:
+        path = path.format(
+            kb_id="kb-test",
+            document_id="doc-test",
+            chunk_id="chunk-test",
+            task_id="task-test",
+        )
+        response = await asgi_client.request(
+            method, f"/api/v1{path}", headers=headers, json={}
+        )
+        assert response.status_code == expected_status, (method, path, response.text)
+        if expected_status == 200:
+            assert response.json()["data"] == marker, (method, path, response.text)
+    if expected_status != 200:
+        assert not service.mock_calls
+        assert not fake_db.touched_key_ids
 
 
 @dataclass

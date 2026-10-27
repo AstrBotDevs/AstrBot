@@ -8,7 +8,7 @@ info:
     JSON objects because their schemas are provided at runtime by template
     endpoints.
     Developer API keys currently support these scopes only: bot, provider,
-    persona, im, config, chat, data, file, plugin, mcp, skill, plus the sensitive
+    persona, im, config, chat, data, file, kb, plugin, mcp, skill, plus the sensitive
     config:edit_admin and chat:admin sub-scopes. The config scope also grants bot
     and provider access, but no parent scope grants a sensitive sub-scope.
 x-astrbot-scope-definitions:
@@ -47,6 +47,9 @@ x-astrbot-scope-definitions:
   file:
     description: Upload and download chat attachments.
     description_zh: 上传和下载对话附件。
+  kb:
+    description: Manage knowledge bases, documents, chunks, imports, and retrieval.
+    description_zh: 管理知识库、文档、文本块、导入和检索。
   plugin:
     description: Manage plugins, plugin configuration, plugin sources, and marketplace data.
     description_zh: 管理插件、插件配置、插件源和插件市场数据。
