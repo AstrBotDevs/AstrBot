@@ -9,6 +9,7 @@ from pathlib import Path
 from PIL import Image
 from pypdf import PdfReader
 
+from astrbot import logger
 from astrbot.core.knowledge_base.parsers.base import (
     BaseParser,
     MediaItem,
@@ -71,9 +72,22 @@ class PDFParser(BaseParser):
                         )
                     except Exception:
                         # A broken image must not hide other images on the page.
+                        logger.warning(
+                            "Failed to extract image %r on PDF page %d in %r",
+                            image_name,
+                            page_num + 1,
+                            file_name,
+                            exc_info=True,
+                        )
                         continue
             except Exception:
                 # A page-level image error must not discard other pages or text.
+                logger.warning(
+                    "Failed to enumerate images on PDF page %d in %r",
+                    page_num + 1,
+                    file_name,
+                    exc_info=True,
+                )
                 continue
 
         full_text = "\n\n".join(text_parts)

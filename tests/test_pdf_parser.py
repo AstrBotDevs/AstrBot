@@ -1,5 +1,6 @@
 import io
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 from PIL import Image
@@ -106,7 +107,11 @@ async def test_pdf_images_have_unique_names_across_pages():
 
 
 @pytest.mark.asyncio
-async def test_pdf_bad_image_does_not_discard_text_or_other_images():
+async def test_pdf_bad_image_does_not_discard_text_or_other_images(monkeypatch):
+    warning = Mock()
+    monkeypatch.setattr(
+        "astrbot.core.knowledge_base.parsers.pdf_parser.logger.warning", warning
+    )
     writer = PdfWriter(clone_from=io.BytesIO(_make_pdf()))
     xobjects = writer.pages[0]["/Resources"]["/XObject"]
     image_name = next(iter(xobjects))
@@ -124,9 +129,48 @@ async def test_pdf_bad_image_does_not_discard_text_or_other_images():
 
     assert "Page 1 text survives." in result.text
     assert len(result.media) == 1
+    warning.assert_called_once_with(
+        "Failed to extract image %r on PDF page %d in %r",
+        "/Broken",
+        1,
+        "broken.pdf",
+        exc_info=True,
+    )
     with Image.open(io.BytesIO(result.media[0].content)) as image:
         image.load()
         assert image.size == (8, 6)
+
+
+@pytest.mark.asyncio
+async def test_pdf_page_image_error_is_logged_and_later_pages_survive(monkeypatch):
+    from pypdf._page import PageObject
+
+    warning = Mock()
+    monkeypatch.setattr(
+        "astrbot.core.knowledge_base.parsers.pdf_parser.logger.warning", warning
+    )
+    images_property = PageObject.images
+    calls = 0
+
+    def images(page):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise ValueError("broken image resources")
+        return images_property.fget(page)
+
+    monkeypatch.setattr(PageObject, "images", property(images))
+    result = await PDFParser().parse(_make_pdf(pages=2), "broken-page.pdf")
+
+    assert "Page 1 text survives." in result.text
+    assert "Page 2 text survives." in result.text
+    assert len(result.media) == 1
+    warning.assert_called_once_with(
+        "Failed to enumerate images on PDF page %d in %r",
+        1,
+        "broken-page.pdf",
+        exc_info=True,
+    )
 
 
 @pytest.mark.asyncio
