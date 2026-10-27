@@ -1186,8 +1186,8 @@
             "hint": "Base for logarithmic intervals, defaults to 2.6. Value range: 1.0-10.0."
           },
           "words_count_threshold": {
-            "description": "Segmented Reply Word Count Threshold",
-            "hint": "Segmented reply word count threshold. Only messages with less than this number of words will be segmented, and messages with more than this number of words will be sent directly (not segmented)."
+            "description": "Segmented reply length threshold",
+            "hint": "Messages at or below this limit are segmented; longer messages are sent whole. Latin-script text (including accented letters) is counted in whitespace-separated words; other scripts such as Chinese are counted in characters. Default: 150."
           },
           "split_mode": {
             "description": "Split Mode",

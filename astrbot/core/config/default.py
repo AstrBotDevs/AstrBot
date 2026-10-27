@@ -33,6 +33,13 @@ def get_local_permission_defaults(system: str | None = None) -> dict:
     }
 
 
+# Keep decimals and common English titles together while splitting sentences.
+DEFAULT_SEGMENTED_REPLY_REGEX = (
+    r".*?(?:[。？！~…]+|[!?]+(?=\s|$)|"
+    r"(?<!\bMr)(?<!\bMrs)(?<!\bMs)(?<!\bDr)(?<!\bProf)"
+    r"(?<!\bSr)(?<!\bJr)(?<!\bSt)\.(?=\s|$))|.+$"
+)
+
 VERSION = __version__
 
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
@@ -114,7 +121,7 @@ DEFAULT_CONFIG = {
             "log_base": 2.6,
             "words_count_threshold": 150,
             "split_mode": "regex",  # regex 或 words
-            "regex": ".*?[。？！~…]+|.+$",
+            "regex": DEFAULT_SEGMENTED_REPLY_REGEX,
             "split_words": [
                 "。",
                 "？",

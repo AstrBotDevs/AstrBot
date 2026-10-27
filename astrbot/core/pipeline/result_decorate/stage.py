@@ -2,9 +2,11 @@ import random
 import re
 import time
 import traceback
+import unicodedata
 from collections.abc import AsyncGenerator
 
 from astrbot.core import file_token_service, html_renderer, logger
+from astrbot.core.config.default import DEFAULT_SEGMENTED_REPLY_REGEX
 from astrbot.core.message.components import At, Image, Json, Node, Plain, Record, Reply
 from astrbot.core.message.message_event_result import ResultContentType
 from astrbot.core.pipeline.content_safety_check.stage import ContentSafetyCheckStage
@@ -217,11 +219,15 @@ class ResultDecorateStage(Stage):
                     new_chain = []
                     for comp in result.chain:
                         if isinstance(comp, Plain):
-                            # Count words for space-separated (ASCII) text and
-                            # characters otherwise, e.g. for CJK text.
+                            # Latin-script text uses words, including accented letters
+                            # and Unicode punctuation; other scripts retain characters.
                             word_count = (
                                 len(comp.text.split())
-                                if comp.text.isascii()
+                                if all(
+                                    "LATIN" in unicodedata.name(char, "")
+                                    for char in comp.text
+                                    if char.isalpha()
+                                )
                                 else len(comp.text)
                             )
                             if word_count > self.words_count_threshold:
@@ -235,7 +241,11 @@ class ResultDecorateStage(Stage):
                             else:  # regex 模式
                                 try:
                                     split_response = re.findall(
-                                        self.regex,
+                                        (
+                                            DEFAULT_SEGMENTED_REPLY_REGEX
+                                            if self.regex == r".*?[。？！~…]+|.+$"
+                                            else self.regex
+                                        ),
                                         comp.text,
                                         re.DOTALL | re.MULTILINE,
                                     )
@@ -246,7 +256,7 @@ class ResultDecorateStage(Stage):
                                         f"{traceback.format_exc()}",
                                     )
                                     split_response = re.findall(
-                                        r".*?[。？！~…]+|.+$",
+                                        DEFAULT_SEGMENTED_REPLY_REGEX,
                                         comp.text,
                                         re.DOTALL | re.MULTILINE,
                                     )

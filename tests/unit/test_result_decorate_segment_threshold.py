@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from astrbot.core.config.default import DEFAULT_SEGMENTED_REPLY_REGEX
 from astrbot.core.message.components import Plain
 from astrbot.core.message.message_event_result import (
     MessageEventResult,
@@ -13,14 +14,15 @@ from astrbot.core.message.message_event_result import (
 from astrbot.core.pipeline.result_decorate.stage import ResultDecorateStage
 
 
-async def _segment(text: str, threshold: int) -> list[str]:
+async def _segment(text: str, threshold: int, regex: str | None = None) -> list[str]:
     stage = ResultDecorateStage()
     stage.reply_prefix = ""
     stage.content_safe_check_reply = False
     stage.enable_segmented_reply = True
     stage.only_llm_result = False
     stage.words_count_threshold = threshold
-    stage.split_mode = "words"
+    stage.split_mode = "regex" if regex is not None else "words"
+    stage.regex = regex
     stage.split_words = ["."]
     stage.split_words_pattern = re.compile(r"(.*?(\.)|.+$)", re.DOTALL)
     stage.content_cleanup_rule = ""
@@ -86,3 +88,51 @@ async def test_cjk_reply_threshold_still_counts_characters():
 
     assert await _segment(text, threshold=len(text) - 1) == [text]
     assert len(await _segment(text, threshold=len(text))) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "text",
+    [
+        "A café is open. Let's go!",
+        "It’s ready now. Enjoy 😊!",
+        "Cafe\u0301 is open. Enjoy!",
+    ],
+)
+async def test_non_ascii_english_counts_words(text):
+    assert len(await _segment(text, threshold=10)) == 2
+
+
+@pytest.mark.asyncio
+async def test_word_threshold_is_inclusive():
+    assert len(await _segment("One two. Three four.", threshold=4)) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "regex", [DEFAULT_SEGMENTED_REPLY_REGEX, r".*?[。？！~…]+|.+$", "["]
+)
+async def test_default_and_invalid_regex_split_english(regex):
+    assert await _segment("Hello there. How are you? Fine!", 20, regex) == [
+        "Hello there.",
+        "How are you?",
+        "Fine!",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_default_regex_preserves_decimals_abbreviations_and_cjk():
+    regex = r".*?[。？！~…]+|.+$"
+    assert await _segment("Dr. Smith paid 3.14 dollars. Next!", 20, regex) == [
+        "Dr. Smith paid 3.14 dollars.",
+        "Next!",
+    ]
+    assert await _segment("你好。再见！", 20, regex) == ["你好。", "再见！"]
+
+
+@pytest.mark.asyncio
+async def test_custom_regex_remains_authoritative():
+    assert await _segment("Hello. Still together|Next", 20, r"[^|]+") == [
+        "Hello. Still together",
+        "Next",
+    ]
