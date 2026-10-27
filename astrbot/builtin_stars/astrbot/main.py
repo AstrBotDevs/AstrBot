@@ -1,6 +1,6 @@
 import copy
 import traceback
-from collections.abc import Iterable
+from collections.abc import AsyncGenerator, Iterable
 from sys import maxsize
 
 import astrbot.api.message_components as Comp
@@ -185,11 +185,14 @@ class Main(star.Star):
         filter.EventMessageType.GROUP_MESSAGE,
         priority=maxsize - 2,
     )
-    async def on_message(self, event: AstrMessageEvent) -> None:
+    async def on_message(self, event: AstrMessageEvent) -> AsyncGenerator[None, None]:
         """Record group context and defer proactive replies until after listeners.
 
         Args:
             event: Incoming group message.
+
+        Yields:
+            None after queuing a proactive reply without starting an LLM request.
         """
         message_components = _iter_message_components(event)
         has_context_content = False
@@ -270,6 +273,7 @@ class Main(star.Star):
                             conversation=conv,
                         ),
                     )
+                    yield
                 except BaseException as e:
                     logger.error(traceback.format_exc())
                     logger.error(f"主动回复失败: {e}")
