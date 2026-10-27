@@ -89,9 +89,9 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
   const providerTypes = computed(() => [
     { value: 'chat_completion', label: tm('providers.tabs.chatCompletion'), icon: 'mdi-message-text' },
-    { value: 'decision', label: tm('providers.tabs.decision'), icon: 'mdi-source-branch' },
     { value: 'speech_to_text', label: tm('providers.tabs.speechToText'), icon: 'mdi-microphone-message' },
     { value: 'text_to_speech', label: tm('providers.tabs.textToSpeech'), icon: 'mdi-volume-high' },
+    { value: 'decision', label: tm('providers.tabs.decision'), icon: 'mdi-scale-balance' },
     { value: 'embedding', label: tm('providers.tabs.embedding'), icon: 'mdi-code-json' },
     { value: 'rerank', label: tm('providers.tabs.rerank'), icon: 'mdi-compare-vertical' }
   ])

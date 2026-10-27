@@ -26,7 +26,7 @@ For example, you may choose to connect model services provided by (but not limit
 
 AstrBot's **Decision** provider performs low-latency structured decisions, such as whether to reply, which message to answer, or which simple branch to take. It is separate from chat model selection and is available to plugins through `self.context.decision`.
 
-1. Open **Providers → Decision** and click **Add**.
+1. Open **Providers → Decision** and click **Add**. The **Decision** tab uses a balance-scale icon and has moved from after **Chat Completion** to between **Text to Speech** and **Embedding**.
 2. Select `TypeSafe System One`, `OpenRouter System One`, or `Vercel System One`. For another System One-compatible service, select `Custom System One`.
 3. Enter the `API Key`, `API Base URL`, and model ID. Custom service base URLs get `/systemone` appended by default, so `https://api.example.com/v1` requests `https://api.example.com/v1/systemone`; end the URL with `/` to use it as the complete endpoint. Save, then click **Test** to verify connectivity.
 

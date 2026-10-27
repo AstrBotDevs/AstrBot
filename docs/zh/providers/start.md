@@ -26,7 +26,7 @@ AstrBot 适配了 OpenAI、Google GenAI、Anthropic 三种原生 API 格式。�
 
 AstrBot 的「判断」提供商用于低延迟结构化判断，例如是否回复消息、选择回复目标或执行某个简单分支。它不参与聊天模型选择，插件通过 `self.context.decision` 调用。
 
-1. 打开「模型提供商」→「判断」，点击「新增」。
+1. 打开「模型提供商」→「判断」，点击「新增」。「判断」标签使用天平图标，位置由「对话」后移至「文字转语音」后、「嵌入」前。
 2. 选择 `TypeSafe System One`、`OpenRouter System One` 或 `Vercel System One`。其他兼容 System One 的服务可选择 `Custom System One`。
 3. 填写 `API Key`、`API Base URL` 和模型 ID。自定义服务填写基础地址后会默认补全 `/systemone`，例如 `https://api.example.com/v1` 会请求 `https://api.example.com/v1/systemone`；以 `/` 结尾则按完整接口地址使用。保存后点击「测试」检查连通性。
 
