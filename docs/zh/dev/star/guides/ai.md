@@ -39,8 +39,13 @@ llm_resp = await self.context.llm_generate(
 from astrbot.api.provider import (
     DecisionBooleanQuestion,
     DecisionChoiceQuestion,
+    DecisionScoreQuestion,
 )
 
+
+recent_messages = [
+    {"role": "user", "content": "I cannot log in; every request returns 500."},
+]
 
 answers = await self.context.decision.ask(
     {
@@ -55,6 +60,14 @@ answers = await self.context.decision.ask(
         "needs_tool": DecisionBooleanQuestion(
             "Does this request require a tool call?"
         ),
+        "severity": DecisionScoreQuestion(
+            instructions="How severe is the reported problem?",
+            criteria=[
+                "No impact on normal use",
+                "Some features fail, but a workaround exists",
+                "Core features are unavailable with no workaround",
+            ],
+        ),
     },
     state={"messages": recent_messages},
 )
@@ -66,6 +79,8 @@ if should_reply.choice == "reply" and should_reply.probability >= 0.7:
 ```
 
 `DecisionChoiceQuestion.criteria` 是选项 ID 到选项描述的映射，与 System One 请求中的 `criteria` 对应。选择类结果的 `choice` 是选项 ID，`probabilities` 包含完整概率分布，`confidence` 是模型置信度；布尔类结果使用 `probability` 表示陈述为真的概率。主动回复阈值等业务规则由调用方决定。
+
+评分类 `DecisionScoreQuestion.criteria` 是由低到高排列的 2～10 个字符串等级，等级从 0 编号。结果的 `score` 是概率加权评分，可以为小数，范围是 `0` 到 `len(criteria) - 1`。通过 `answers["severity"].score` 读取评分；`legend` 和 `probabilities` 分别以字符串等级编号（如 `"0"`）映射到描述和概率，`confidence` 表示置信度。评分结果的 `choice` 和 `probability` 均为 `None`。三种题型可以通过同一次 `ask()` 调用混合提交。
 
 对于单个问题，可以使用以下快捷方法：
 

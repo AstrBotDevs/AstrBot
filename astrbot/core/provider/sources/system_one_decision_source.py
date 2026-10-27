@@ -16,6 +16,7 @@ from ..entities import (
     DecisionChoiceQuestion,
     DecisionError,
     DecisionQuestion,
+    DecisionScoreQuestion,
     DecisionState,
     ProviderType,
 )
@@ -106,7 +107,7 @@ class SystemOneDecisionProvider(DecisionProvider):
             Validated answers keyed by the same identifiers as ``questions``.
 
         Raises:
-            ValueError: A question is empty or has fewer than two criteria entries.
+            ValueError: A question is empty or its criteria are unusable.
             DecisionError: The request fails or the response violates the
                 decision contract.
         """
@@ -127,6 +128,23 @@ class SystemOneDecisionProvider(DecisionProvider):
                     "type": "choice",
                     "instructions": instructions,
                     "criteria": dict(question.criteria),
+                }
+            elif isinstance(question, DecisionScoreQuestion):
+                if (
+                    not isinstance(question.criteria, list)
+                    or not 2 <= len(question.criteria) <= 10
+                    or not all(
+                        isinstance(level, str) and level.strip()
+                        for level in question.criteria
+                    )
+                ):
+                    raise ValueError(
+                        f"question {head} requires 2 to 10 non-empty criteria entries"
+                    )
+                payload_questions[head] = {
+                    "type": "score",
+                    "instructions": instructions,
+                    "criteria": list(question.criteria),
                 }
             else:
                 payload_questions[head] = {
@@ -209,6 +227,56 @@ class SystemOneDecisionProvider(DecisionProvider):
                 raise DecisionError(
                     f"System One endpoint returned no answer for {head}: {summary}"
                 )
+
+            if isinstance(question, DecisionScoreQuestion):
+                score = raw_answer.get("score")
+                probabilities = raw_answer.get("probabilities")
+                confidence = raw_answer.get("confidence")
+                legend = raw_answer.get("legend")
+                expected_legend = {
+                    str(index): level for index, level in enumerate(question.criteria)
+                }
+                valid_score = (
+                    isinstance(score, (int, float))
+                    and not isinstance(score, bool)
+                    and math.isfinite(score)
+                    and 0 <= score <= len(question.criteria) - 1
+                )
+                valid_probabilities = isinstance(probabilities, Mapping) and all(
+                    isinstance(value, (int, float))
+                    and not isinstance(value, bool)
+                    and math.isfinite(value)
+                    and 0 <= value <= 1
+                    for value in [confidence, *probabilities.values()]
+                )
+                if not (
+                    valid_score
+                    and valid_probabilities
+                    and isinstance(legend, Mapping)
+                    and dict(legend) == expected_legend
+                    and set(probabilities) == set(expected_legend)
+                    and math.isclose(sum(probabilities.values()), 1.0)
+                ):
+                    summary = _summarize_response(raw_answer)
+                    logger.warning(
+                        f"[System One Decision] Invalid score answer for {head}: {summary}"
+                    )
+                    raise DecisionError(
+                        f"System One endpoint returned an invalid score answer "
+                        f"for {head}: {summary}"
+                    )
+                answers[head] = DecisionAnswer(
+                    choice=None,
+                    probability=None,
+                    probabilities={
+                        level: float(probability)
+                        for level, probability in probabilities.items()
+                    },
+                    confidence=float(confidence),
+                    score=float(score),
+                    legend=dict(legend),
+                )
+                continue
 
             if isinstance(question, DecisionChoiceQuestion):
                 choice = raw_answer.get("choice")

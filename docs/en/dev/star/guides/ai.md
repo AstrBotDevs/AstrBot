@@ -40,8 +40,13 @@ One request can answer multiple questions. `state` is passed to the decision mod
 from astrbot.api.provider import (
     DecisionBooleanQuestion,
     DecisionChoiceQuestion,
+    DecisionScoreQuestion,
 )
 
+
+recent_messages = [
+    {"role": "user", "content": "I cannot log in; every request returns 500."},
+]
 
 answers = await self.context.decision.ask(
     {
@@ -56,6 +61,14 @@ answers = await self.context.decision.ask(
         "needs_tool": DecisionBooleanQuestion(
             "Does this request require a tool call?"
         ),
+        "severity": DecisionScoreQuestion(
+            instructions="How severe is the reported problem?",
+            criteria=[
+                "No impact on normal use",
+                "Some features fail, but a workaround exists",
+                "Core features are unavailable with no workaround",
+            ],
+        ),
     },
     state={"messages": recent_messages},
 )
@@ -67,6 +80,8 @@ if should_reply.choice == "reply" and should_reply.probability >= 0.7:
 ```
 
 `DecisionChoiceQuestion.criteria` maps option IDs to descriptions and corresponds to `criteria` in the System One request. For choice questions, `choice` is the selected option ID, `probabilities` contains the full distribution, and `confidence` is the model confidence. For boolean questions, `probability` is the probability that the statement is true. Business rules such as proactive-reply thresholds remain the caller's responsibility.
+
+`DecisionScoreQuestion.criteria` is a list of 2–10 string levels, ordered from lowest to highest and numbered from 0. The returned `score` is a probability-weighted rating, possibly fractional, from `0` to `len(criteria) - 1`. Read it with `answers["severity"].score`. Both `legend` and `probabilities` use string level numbers such as `"0"` as keys, mapping to descriptions and probabilities; `confidence` reports certainty. A score answer has `choice=None` and `probability=None`. All three question types can be mixed in one `ask()` call.
 
 Use the convenience methods for a single question:
 

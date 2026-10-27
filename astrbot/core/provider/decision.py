@@ -164,9 +164,12 @@ class DecisionService:
                 state,
                 provider_id=provider_id,
             )
+            probability = answers["answer"].probability
+            if probability is None:
+                raise DecisionError("Decision provider returned no boolean probability")
         except DecisionError as exc:
             if default is None:
                 raise
             logger.warning(f"[Decision] yes_no failed; using default {default}: {exc}")
             return default
-        return answers["answer"].probability >= threshold
+        return probability >= threshold

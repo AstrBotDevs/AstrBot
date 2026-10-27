@@ -64,7 +64,22 @@ class DecisionBooleanQuestion:
     instructions: str
 
 
-DecisionQuestion: TypeAlias = DecisionChoiceQuestion | DecisionBooleanQuestion
+@dataclass(frozen=True, slots=True)
+class DecisionScoreQuestion:
+    """A decision question scored against ordered levels.
+
+    Attributes:
+        instructions: The question or instruction evaluated by the model.
+        criteria: Two to ten level descriptions, ordered from lowest to highest.
+    """
+
+    instructions: str
+    criteria: list[str]
+
+
+DecisionQuestion: TypeAlias = (
+    DecisionChoiceQuestion | DecisionBooleanQuestion | DecisionScoreQuestion
+)
 DecisionState: TypeAlias = str | list[Any] | dict[str, Any]
 
 
@@ -73,16 +88,22 @@ class DecisionAnswer:
     """The normalized answer for one decision question.
 
     Attributes:
-        choice: Selected option ID for a choice question, or None for a boolean question.
-        probability: Probability of the selected option or of a true boolean answer.
-        probabilities: Full distribution for a choice question; empty for a boolean question.
-        confidence: Model confidence for a choice question, or None for a boolean question.
+        choice: Selected option ID for a choice question, otherwise None.
+        probability: Probability of the selected option or a true boolean answer;
+            None for a score question.
+        probabilities: Distribution over option IDs or string level numbers;
+            empty for a boolean question.
+        confidence: Model confidence for choice and score questions, otherwise None.
+        score: Expected level number for a score question, otherwise None.
+        legend: Mapping of string level numbers to descriptions for a score question.
     """
 
     choice: str | None
-    probability: float
+    probability: float | None
     probabilities: Mapping[str, float]
     confidence: float | None
+    score: float | None = None
+    legend: Mapping[str, str] = field(default_factory=dict)
 
 
 class DecisionError(RuntimeError):
