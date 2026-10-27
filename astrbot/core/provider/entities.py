@@ -46,11 +46,11 @@ class DecisionChoiceQuestion:
 
     Attributes:
         instructions: The question or instruction evaluated by the model.
-        options: Mapping of option IDs to descriptions. At least two options are required.
+        criteria: Mapping of option IDs to descriptions. At least two entries are required.
     """
 
     instructions: str
-    options: Mapping[str, str]
+    criteria: Mapping[str, str]
 
 
 @dataclass(frozen=True, slots=True)

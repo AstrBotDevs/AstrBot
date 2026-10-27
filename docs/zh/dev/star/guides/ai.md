@@ -45,12 +45,12 @@ from astrbot.api.provider import (
 answers = await self.context.decision.ask(
     {
         "should_reply": DecisionChoiceQuestion(
-            "Should the assistant reply to this message?",
-            {"reply": "Reply now", "ignore": "Stay silent"},
+            instructions="Should the assistant reply to this message?",
+            criteria={"reply": "Reply now", "ignore": "Stay silent"},
         ),
         "target": DecisionChoiceQuestion(
-            "Which message should the reply focus on?",
-            {"latest": "Latest message", "previous": "Previous message"},
+            instructions="Which message should the reply focus on?",
+            criteria={"latest": "Latest message", "previous": "Previous message"},
         ),
         "needs_tool": DecisionBooleanQuestion(
             "Does this request require a tool call?"
@@ -65,7 +65,7 @@ if should_reply.choice == "reply" and should_reply.probability >= 0.7:
     # 使用 target.choice 和 answers["needs_tool"].probability 执行后续业务逻辑
 ```
 
-选择类结果的 `choice` 是选项 ID，`probabilities` 包含完整概率分布，`confidence` 是模型置信度；布尔类结果使用 `probability` 表示陈述为真的概率。主动回复阈值等业务规则由调用方决定。
+`DecisionChoiceQuestion.criteria` 是选项 ID 到选项描述的映射，与 System One 请求中的 `criteria` 对应。选择类结果的 `choice` 是选项 ID，`probabilities` 包含完整概率分布，`confidence` 是模型置信度；布尔类结果使用 `probability` 表示陈述为真的概率。主动回复阈值等业务规则由调用方决定。
 
 对于单个问题，可以使用以下快捷方法：
 

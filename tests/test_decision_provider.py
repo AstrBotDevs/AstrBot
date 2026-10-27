@@ -69,8 +69,8 @@ async def test_system_one_decisions_share_one_request_and_parse_all_heads():
         answers = await provider.ask(
             {
                 "decision": DecisionChoiceQuestion(
-                    "Should the assistant reply?",
-                    {"respond": "Reply now", "ignore": "Stay silent"},
+                    instructions="Should the assistant reply?",
+                    criteria={"respond": "Reply now", "ignore": "Stay silent"},
                 ),
                 "available": DecisionBooleanQuestion("Is the endpoint available?"),
             },

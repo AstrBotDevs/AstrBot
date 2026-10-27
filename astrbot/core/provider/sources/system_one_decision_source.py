@@ -106,7 +106,7 @@ class SystemOneDecisionProvider(DecisionProvider):
             Validated answers keyed by the same identifiers as ``questions``.
 
         Raises:
-            ValueError: A question is empty or has fewer than two choices.
+            ValueError: A question is empty or has fewer than two criteria entries.
             DecisionError: The request fails or the response violates the
                 decision contract.
         """
@@ -119,12 +119,14 @@ class SystemOneDecisionProvider(DecisionProvider):
             if not instructions:
                 raise ValueError(f"question {head} must not be empty")
             if isinstance(question, DecisionChoiceQuestion):
-                if len(question.options) < 2:
-                    raise ValueError(f"question {head} requires at least two options")
+                if len(question.criteria) < 2:
+                    raise ValueError(
+                        f"question {head} requires at least two criteria entries"
+                    )
                 payload_questions[head] = {
                     "type": "choice",
                     "instructions": instructions,
-                    "criteria": dict(question.options),
+                    "criteria": dict(question.criteria),
                 }
             else:
                 payload_questions[head] = {
@@ -228,8 +230,8 @@ class SystemOneDecisionProvider(DecisionProvider):
                     isinstance(choice, str)
                     and isinstance(probabilities, Mapping)
                     and valid_numbers
-                    and set(probabilities) == set(question.options)
-                    and choice in question.options
+                    and set(probabilities) == set(question.criteria)
+                    and choice in question.criteria
                     and math.isclose(sum(probabilities.values()), 1.0)
                     and math.isclose(probabilities[choice], max(probabilities.values()))
                 ):

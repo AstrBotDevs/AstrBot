@@ -101,7 +101,7 @@ class DecisionService:
             {
                 "answer": DecisionChoiceQuestion(
                     instructions=question,
-                    options={
+                    criteria={
                         f"o{index}": description
                         for index, (_, description) in enumerate(normalized, start=1)
                     },

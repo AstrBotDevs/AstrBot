@@ -46,12 +46,12 @@ from astrbot.api.provider import (
 answers = await self.context.decision.ask(
     {
         "should_reply": DecisionChoiceQuestion(
-            "Should the assistant reply to this message?",
-            {"reply": "Reply now", "ignore": "Stay silent"},
+            instructions="Should the assistant reply to this message?",
+            criteria={"reply": "Reply now", "ignore": "Stay silent"},
         ),
         "target": DecisionChoiceQuestion(
-            "Which message should the reply focus on?",
-            {"latest": "Latest message", "previous": "Previous message"},
+            instructions="Which message should the reply focus on?",
+            criteria={"latest": "Latest message", "previous": "Previous message"},
         ),
         "needs_tool": DecisionBooleanQuestion(
             "Does this request require a tool call?"
@@ -66,7 +66,7 @@ if should_reply.choice == "reply" and should_reply.probability >= 0.7:
     # Use target.choice and answers["needs_tool"].probability in later logic
 ```
 
-For choice questions, `choice` is the selected option ID, `probabilities` contains the full distribution, and `confidence` is the model confidence. For boolean questions, `probability` is the probability that the statement is true. Business rules such as proactive-reply thresholds remain the caller's responsibility.
+`DecisionChoiceQuestion.criteria` maps option IDs to descriptions and corresponds to `criteria` in the System One request. For choice questions, `choice` is the selected option ID, `probabilities` contains the full distribution, and `confidence` is the model confidence. For boolean questions, `probability` is the probability that the statement is true. Business rules such as proactive-reply thresholds remain the caller's responsibility.
 
 Use the convenience methods for a single question:
 
