@@ -335,6 +335,11 @@ async def test_concurrent_conversation_creation_and_cleanup_do_not_error(temp_db
 
     assert not [result for result in results if isinstance(result, Exception)]
 
+    conversations = await temp_db.get_conversations(user_id=UMO)
+    if conversations:
+        # A committed conversation must keep the alias metadata it references.
+        assert await temp_db.get_umo_alias(UMO) is not None
+
 
 # ====
 # API layer parameter passing

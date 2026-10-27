@@ -205,7 +205,18 @@ class ConversationService:
         )
         result = {"message": "对话删除成功"}
         if cleanup_metadata:
-            result["metadata_cleanup"] = await self._safe_cleanup_metadata([user_id])
+            try:
+                result["metadata_cleanup"] = await self._cleanup_orphaned_metadata(
+                    [user_id]
+                )
+            except Exception as exc:
+                logger.warning(f"清理会话元数据失败: {exc!s}")
+                result["metadata_cleanup"] = {
+                    "deleted_aliases": 0,
+                    "deleted_senders": 0,
+                    "retained_umos": [],
+                    "error": str(exc),
+                }
         return result
 
     async def update_history(self, data: object) -> dict:
@@ -339,27 +350,19 @@ class ConversationService:
             "failed_items": failed_items,
         }
         if cleanup_metadata:
-            result["metadata_cleanup"] = await self._safe_cleanup_metadata(
-                sorted(deleted_umos)
-            )
+            try:
+                result["metadata_cleanup"] = await self._cleanup_orphaned_metadata(
+                    sorted(deleted_umos)
+                )
+            except Exception as exc:
+                logger.warning(f"清理会话元数据失败: {exc!s}")
+                result["metadata_cleanup"] = {
+                    "deleted_aliases": 0,
+                    "deleted_senders": 0,
+                    "retained_umos": [],
+                    "error": str(exc),
+                }
         return result
-
-    async def _safe_cleanup_metadata(self, umos: list[str]) -> dict:
-        """Run metadata cleanup without failing the completed deletion.
-
-        Conversations are already deleted when this runs, so a cleanup error
-        is reported as a structured field instead of a failed request.
-        """
-        try:
-            return await self._cleanup_orphaned_metadata(umos)
-        except Exception as exc:
-            logger.warning(f"清理会话元数据失败: {exc!s}")
-            return {
-                "deleted_aliases": 0,
-                "deleted_senders": 0,
-                "retained_umos": [],
-                "error": str(exc),
-            }
 
     async def _cleanup_orphaned_metadata(self, umos: list[str]) -> dict:
         """Delete UMO alias and sender metadata left without any conversation.

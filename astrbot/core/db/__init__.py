@@ -911,8 +911,8 @@ class BaseDatabase(abc.ABC):
         """Delete alias and sender metadata for a UMO without conversations.
 
         The reference check and the deletions run as conditional statements in
-        a single transaction so a conversation created concurrently cannot lose
-        its metadata.
+        a single transaction, so metadata is not deleted while a committed
+        conversation still references the UMO.
 
         Args:
             umo: Unified message origin whose orphaned metadata should be deleted.
