@@ -749,14 +749,26 @@ class CuaBooter(ComputerBooter):
             from cua import Image, Sandbox
         except ImportError as exc:
             raise RuntimeError(
-                "CUA sandbox support requires the optional `cua` package. "
-                "Install it with `pip install cua` in the AstrBot environment."
+                "CUA sandbox support requires the optional `cua` and `cua-sandbox` "
+                "packages. Install them with `pip install cua cua-sandbox` in the "
+                "AstrBot environment."
             ) from exc
 
+        ephemeral = getattr(Sandbox, "ephemeral", None)
+        if ephemeral is None:
+            raise RuntimeError(
+                "The installed `cua` package does not provide the sandbox facade "
+                "(`Sandbox.ephemeral`). Install the facade with "
+                "`pip install cua-sandbox` and restart AstrBot."
+            )
+
         image_obj = self._build_image(Image)
-        ephemeral_kwargs = self._build_ephemeral_kwargs(Sandbox.ephemeral)
-        sandbox_cm = Sandbox.ephemeral(image_obj, **ephemeral_kwargs)
-        sandbox = await sandbox_cm.__aenter__()
+        ephemeral_kwargs = self._build_ephemeral_kwargs(ephemeral)
+        sandbox_cm = ephemeral(image_obj, **ephemeral_kwargs)
+        try:
+            sandbox = await sandbox_cm.__aenter__()
+        except TypeError as exc:
+            raise self._describe_sandbox_error(exc) from exc
         try:
             self._runtime = _CuaRuntime(
                 sandbox_cm=sandbox_cm,
@@ -774,6 +786,22 @@ class CuaBooter(ComputerBooter):
             "[Computer] CUA sandbox booted: image=%s, os_type=%s",
             self.image,
             self.os_type,
+        )
+
+    def _describe_sandbox_error(self, error: TypeError) -> RuntimeError:
+        """Turn an opaque SDK failure into an actionable error.
+
+        A mismatched pair of `cua` and `cua-sandbox` releases fails deep inside
+        the SDK with a bare ``TypeError``, which tells the user nothing about
+        what to do next.
+        """
+        message = str(error)
+        if "unexpected keyword argument" not in message:
+            return RuntimeError(f"CUA sandbox failed to start: {error}")
+        return RuntimeError(
+            "The installed `cua` and `cua-sandbox` versions are incompatible "
+            f"({error}). Install a matching pair of the two packages and restart "
+            "AstrBot."
         )
 
     def _build_image(self, image_cls: Any) -> Any:
