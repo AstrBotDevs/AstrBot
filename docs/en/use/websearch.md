@@ -27,7 +27,7 @@ These settings belong to the selected profile. Changing `default` does not enabl
 
 ## Choose a search provider
 
-AstrBot supports nine providers. Configure one to start; you do not need an account with every service.
+AstrBot supports ten providers. Configure one to start; you do not need an account with every service.
 
 | Provider | Get a key | Capabilities available in AstrBot |
 | --- | --- | --- |
@@ -40,6 +40,7 @@ AstrBot supports nine providers. Configure one to start; you do not need an acco
 | <span id="firecrawl">Firecrawl</span> | [Firecrawl](https://firecrawl.dev/) | Web search and page content extraction from a URL |
 | <span id="exa">Exa</span> | [Exa dashboard](https://dashboard.exa.ai/) | Keyword or semantic search, page contents, and filters such as domain and date |
 | <span id="anysearch">AnySearch</span> | [AnySearch console](https://anysearch.com/console/api-keys) | General search and specialized retrieval for research, code documentation, finance, legal information, and other domains |
+| <span id="serply">Serply</span> | [Serply](https://serply.io) | Google web search, plus Google News and Google Scholar through the `search_type` parameter ([API docs](https://serply.io/docs)) |
 
 AnySearch uses anonymous mode with a daily free quota when its key list is empty. Other providers require their own keys. Check each service's website for current quotas, pricing, regional availability, and authorization requirements.
 
