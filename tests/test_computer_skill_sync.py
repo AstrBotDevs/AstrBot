@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import shutil
+import sys
 import zipfile
 from pathlib import Path
 from typing import cast
@@ -370,19 +373,106 @@ def test_sync_skills_never_uploads_globally_disabled_skills(
     assert booter.bundles == [{"active-skill"}]
 
 
-def test_sync_skills_with_empty_allowlist_uploads_nothing(monkeypatch, tmp_path: Path):
-    _setup_local_skills(monkeypatch, tmp_path, ["some-skill"])
+class _DirSandboxShell:
+    """Runs sync shell commands against a local directory acting as sandbox."""
 
-    booter = _BundleRecordingBooter()
+    def __init__(self, root: Path):
+        self.root = root
+
+    async def exec(self, command: str, **kwargs):
+        _ = kwargs
+        if "$PYBIN - <<'PY'" in command:
+            proc = await asyncio.create_subprocess_exec(
+                sys.executable,
+                "-",
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=self.root,
+            )
+            stdout, stderr = await proc.communicate(
+                _extract_embedded_python(command).encode("utf-8")
+            )
+            return {
+                "success": proc.returncode == 0,
+                "stdout": stdout.decode("utf-8"),
+                "stderr": stderr.decode("utf-8"),
+                "exit_code": proc.returncode,
+            }
+        if command.startswith("rm -f "):
+            (self.root / command.removeprefix("rm -f ")).unlink(missing_ok=True)
+        elif command.startswith("mkdir -p "):
+            (self.root / command.removeprefix("mkdir -p ")).mkdir(
+                parents=True, exist_ok=True
+            )
+        return {"success": True, "stdout": "", "stderr": "", "exit_code": 0}
+
+
+class _DirSandboxBooter:
+    def __init__(self, root: Path):
+        self.root = root
+        self.shell = _DirSandboxShell(root)
+
+    async def upload_file(self, path: str, file_name: str) -> dict:
+        target = self.root / file_name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(path, target)
+        return {"success": True}
+
+
+def _make_sandbox_with_revoked_skill(tmp_path: Path) -> Path:
+    """Sandbox holding a previously synced skill and a sandbox built-in."""
+    sandbox = tmp_path / "sandbox"
+    skills_dir = sandbox / "skills"
+    for name in ("revoked-skill", "builtin-skill"):
+        (skills_dir / name).mkdir(parents=True)
+        (skills_dir / name / "SKILL.md").write_text(f"# {name}", encoding="utf-8")
+    (skills_dir / ".astrbot_managed_skills.json").write_text(
+        json.dumps({"managed_skills": ["revoked-skill"]}), encoding="utf-8"
+    )
+    return sandbox
+
+
+def _sandbox_skill_dirs(sandbox: Path) -> set[str]:
+    return {p.name for p in (sandbox / "skills").iterdir() if p.is_dir()}
+
+
+def test_sync_skills_with_empty_allowlist_removes_revoked_skills(
+    monkeypatch, tmp_path: Path
+):
+    _setup_local_skills(monkeypatch, tmp_path, ["revoked-skill"])
+    sandbox = _make_sandbox_with_revoked_skill(tmp_path)
+
     asyncio.run(
         computer_client._sync_skills_to_sandbox(
-            cast(ComputerBooter, booter), frozenset()
+            cast(ComputerBooter, _DirSandboxBooter(sandbox)), frozenset()
         )
     )
 
-    assert booter.uploads == []
-    # The apply phase still runs, so previously managed copies are removed.
-    assert any("managed_skills" in cmd for cmd in booter.shell.commands)
+    # Revoked managed copies are deleted; sandbox built-ins are kept.
+    assert _sandbox_skill_dirs(sandbox) == {"builtin-skill"}
+    managed = json.loads(
+        (sandbox / "skills" / ".astrbot_managed_skills.json").read_text("utf-8")
+    )
+    assert managed == {"managed_skills": []}
+
+
+def test_sync_skills_replaces_revoked_skills_with_allowed_ones(
+    monkeypatch, tmp_path: Path
+):
+    _setup_local_skills(monkeypatch, tmp_path, ["revoked-skill", "allowed-skill"])
+    sandbox = _make_sandbox_with_revoked_skill(tmp_path)
+
+    asyncio.run(
+        computer_client._sync_skills_to_sandbox(
+            cast(ComputerBooter, _DirSandboxBooter(sandbox)),
+            frozenset({"allowed-skill"}),
+        )
+    )
+
+    assert _sandbox_skill_dirs(sandbox) == {"builtin-skill", "allowed-skill"}
+    assert (sandbox / "skills" / "allowed-skill" / "notes.txt").exists()
+    assert not (sandbox / "skills" / "skills.zip").exists()
 
 
 class _SessionContext:
@@ -455,3 +545,68 @@ def test_sync_skills_to_active_sandboxes_uses_session_allowlists(monkeypatch):
     asyncio.run(computer_client.sync_skills_to_active_sandboxes())
 
     assert synced == {id(known): frozenset({"a"}), id(unknown): frozenset()}
+
+
+def test_overlapping_session_syncs_are_serialized(monkeypatch):
+    session_id = "test:FriendMessage:sync-lock"
+    events: list[str] = []
+
+    async def _slow_sync(booter, skill_names=None):
+        events.append(f"start:{sorted(skill_names)}")
+        await asyncio.sleep(0.01)
+        events.append(f"end:{sorted(skill_names)}")
+
+    monkeypatch.setattr(computer_client, "_sync_skills_to_sandbox", _slow_sync)
+    monkeypatch.setattr(computer_client, "session_skill_names", {})
+    monkeypatch.setattr(computer_client, "_session_synced_skill_names", {})
+    monkeypatch.setattr(computer_client, "_session_skill_sync_locks", {})
+    booter = cast(ComputerBooter, _AvailableBooter())
+
+    async def _run():
+        computer_client.session_skill_names[session_id] = frozenset({"a"})
+        first = asyncio.create_task(
+            computer_client._sync_session_skills(session_id, booter, force=True)
+        )
+        await asyncio.sleep(0)
+        # The allowlist changes while the first sync is still running.
+        computer_client.session_skill_names[session_id] = frozenset({"b"})
+        second = asyncio.create_task(
+            computer_client._sync_session_skills(session_id, booter)
+        )
+        await asyncio.gather(first, second)
+
+    asyncio.run(_run())
+
+    assert events == ["start:['a']", "end:['a']", "start:['b']", "end:['b']"]
+    assert computer_client._session_synced_skill_names[session_id] == frozenset({"b"})
+
+
+def test_failed_session_sync_is_retried(monkeypatch):
+    session_id = "test:FriendMessage:sync-retry"
+    calls: list[frozenset[str] | None] = []
+    fail = True
+
+    async def _flaky_sync(booter, skill_names=None):
+        calls.append(skill_names)
+        if fail:
+            raise RuntimeError("apply failed")
+
+    monkeypatch.setattr(computer_client, "_sync_skills_to_sandbox", _flaky_sync)
+    monkeypatch.setattr(
+        computer_client, "session_skill_names", {session_id: frozenset({"b"})}
+    )
+    monkeypatch.setattr(
+        computer_client, "_session_synced_skill_names", {session_id: frozenset({"a"})}
+    )
+    monkeypatch.setattr(computer_client, "_session_skill_sync_locks", {})
+    booter = cast(ComputerBooter, _AvailableBooter())
+
+    with pytest.raises(RuntimeError):
+        asyncio.run(computer_client._sync_session_skills(session_id, booter))
+    # A failed sync must not leave a stale "already synced" record behind.
+    assert session_id not in computer_client._session_synced_skill_names
+
+    fail = False
+    asyncio.run(computer_client._sync_session_skills(session_id, booter))
+    assert calls == [frozenset({"b"}), frozenset({"b"})]
+    assert computer_client._session_synced_skill_names[session_id] == frozenset({"b"})

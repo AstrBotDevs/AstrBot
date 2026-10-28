@@ -25,6 +25,9 @@ session_booter: dict[str, ComputerBooter] = {}
 # Sessions without a record get no AstrBot-managed skills.
 session_skill_names: dict[str, frozenset[str]] = {}
 _session_synced_skill_names: dict[str, frozenset[str]] = {}
+# Serializes skill syncs per session so overlapping syncs cannot interleave
+# their upload/apply phases on the shared sandbox ``skills.zip``.
+_session_skill_sync_locks: dict[str, asyncio.Lock] = {}
 local_booter: ComputerBooter | None = None
 _MANAGED_SKILLS_FILE = ".astrbot_managed_skills.json"
 
@@ -577,6 +580,34 @@ async def _sync_skills_to_sandbox(
                 logger.warning(f"Failed to remove temp skills zip: {zip_path}")
 
 
+async def _sync_session_skills(
+    session_id: str,
+    booter: ComputerBooter,
+    *,
+    force: bool = False,
+) -> None:
+    """Sync a session's allowed skills to its sandbox, one sync at a time.
+
+    The allowlist is read and recorded inside the per-session lock, and only
+    after the sync succeeds, so the recorded allowlist always matches the
+    files left in the sandbox by the last completed sync.
+
+    Args:
+        session_id: Session that owns the sandbox.
+        booter: Sandbox to sync.
+        force: Sync even if the allowlist matches the last successful sync.
+    """
+    lock = _session_skill_sync_locks.setdefault(session_id, asyncio.Lock())
+    async with lock:
+        skill_names = session_skill_names.get(session_id, frozenset())
+        if not force and _session_synced_skill_names.get(session_id) == skill_names:
+            return
+        # Forget the old record first so a failed sync is retried next time.
+        _session_synced_skill_names.pop(session_id, None)
+        await _sync_skills_to_sandbox(booter, skill_names)
+        _session_synced_skill_names[session_id] = skill_names
+
+
 async def get_booter(
     context: Context,
     session_id: str,
@@ -591,7 +622,6 @@ async def get_booter(
 
     sandbox_cfg = config.get("provider_settings", {}).get("sandbox", {})
     booter_type = sandbox_cfg.get("booter", "shipyard_neo")
-    skill_names = session_skill_names.get(session_id, frozenset())
     cua_idle_timeout = _get_cua_idle_timeout(config) if booter_type == "cua" else 0.0
 
     if session_id in session_booter:
@@ -673,7 +703,7 @@ async def get_booter(
             logger.info(
                 f"[Computer] Sandbox booted successfully: type={booter_type}, session={session_id}"
             )
-            await _sync_skills_to_sandbox(client, skill_names)
+            await _sync_session_skills(session_id, client, force=True)
         except Exception as e:
             logger.error(f"Error booting sandbox for session {session_id}: {e}")
             try:
@@ -691,12 +721,10 @@ async def get_booter(
             raise e
 
         session_booter[session_id] = client
-        _session_synced_skill_names[session_id] = skill_names
-    elif _session_synced_skill_names.get(session_id) != skill_names:
-        # The allowed skills changed (persona, plugin set or global toggle), so
-        # resync before any tool runs to drop revoked skill files.
-        await _sync_skills_to_sandbox(session_booter[session_id], skill_names)
-        _session_synced_skill_names[session_id] = skill_names
+    else:
+        # Resync before any tool runs if the allowed skills changed (persona,
+        # plugin set or global toggle) so revoked skill files are dropped.
+        await _sync_session_skills(session_id, session_booter[session_id])
     if booter_type == "cua":
         _schedule_cua_idle_cleanup(session_id, cua_idle_timeout)
     return session_booter[session_id]
@@ -711,9 +739,7 @@ async def sync_skills_to_active_sandboxes() -> None:
         try:
             if not await booter.available():
                 continue
-            skill_names = session_skill_names.get(session_id, frozenset())
-            await _sync_skills_to_sandbox(booter, skill_names)
-            _session_synced_skill_names[session_id] = skill_names
+            await _sync_session_skills(session_id, booter, force=True)
         except Exception as e:
             logger.warning(
                 "Failed to sync skills to sandbox for session %s: %s",
