@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 import random
+import re
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -716,6 +717,32 @@ class QQOfficialPlatformAdapter(Platform):
                 else:
                     msg.append(File(name=filename, file=url, url=url))
 
+    #: QQ renders a quoted attachment into the quoted text as
+    #: ``[附件N] 类型:图片 ... URL:<url>`` and leaves ``attachments`` empty, so the
+    #: image would otherwise reach plugins as unstructured prose.
+    _FLATTENED_IMAGE_LINE_RE = re.compile(
+        r"^\[附件\d+\]\s*类型:图片\b[^\n]*?URL:(\S+)[^\n]*\n?",
+        re.MULTILINE,
+    )
+
+    @staticmethod
+    def _extract_flattened_quoted_images(content: str) -> tuple[str, list[str]]:
+        """Split flattened quoted image lines back out of pre-rendered text.
+
+        Returns the remaining text and the image URLs in document order. Only
+        image attachments are lifted; other attachment kinds stay as text.
+        """
+        urls: list[str] = []
+
+        def _collect(match: re.Match[str]) -> str:
+            urls.append(match.group(1))
+            return ""
+
+        return QQOfficialPlatformAdapter._FLATTENED_IMAGE_LINE_RE.sub(
+            _collect,
+            content,
+        ).strip(), urls
+
     @staticmethod
     def _parse_face_message(content: str) -> str:
         """Parse QQ official face message format and convert to readable text.
@@ -836,14 +863,35 @@ class QQOfficialPlatformAdapter(Platform):
             quoted_message_str = QQOfficialPlatformAdapter._parse_face_message(
                 str(quoted_content or "").strip()
             )
+            quoted_message_str, flattened_image_urls = (
+                QQOfficialPlatformAdapter._extract_flattened_quoted_images(
+                    quoted_message_str
+                )
+            )
             if quoted_message_str:
                 quoted_chain.append(Plain(quoted_message_str))
+            has_attachments = isinstance(quoted_attachments, list) and bool(
+                quoted_attachments
+            )
             if isinstance(quoted_attachments, list):
                 await QQOfficialPlatformAdapter._append_attachments(
                     quoted_chain,
                     quoted_attachments,
                 )
-        if quoted_message_id or quoted_element_message_id or quoted_chain:
+            if not has_attachments:
+                for image_url in flattened_image_urls:
+                    quoted_chain.append(
+                        Image.fromURL(
+                            QQOfficialPlatformAdapter._normalize_attachment_url(
+                                image_url
+                            )
+                        )
+                    )
+        # QQ tags a passive reply with message_type 103 and stuffs the previous
+        # message into msg_elements even when the user quoted nothing, so a
+        # message id is the only thing that marks a real quote. Building a Reply
+        # out of the echo makes downstream plugins verify the wrong message.
+        if quoted_message_id or quoted_element_message_id:
             msg.append(
                 Reply(
                     id=str(quoted_message_id or quoted_element_message_id or ""),
