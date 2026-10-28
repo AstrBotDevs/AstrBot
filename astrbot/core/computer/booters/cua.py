@@ -16,6 +16,7 @@ from .cua_defaults import CUA_CONFIG_KEYS, CUA_DEFAULT_CONFIG
 from .shipyard_search_file_util import search_files_via_shell
 
 _POSIX_OS_TYPES = {"linux", "darwin", "macos"}
+_CUA_IMAGE_KINDS = ("container", "vm")
 _CUA_SANDBOX_HEALTH_PROBE = "_astrbot_cua_ok_"
 
 _CUA_BACKGROUND_LAUNCHER = """
@@ -777,14 +778,47 @@ class CuaBooter(ComputerBooter):
         )
 
     def _build_image(self, image_cls: Any) -> Any:
-        image_name = (self.image or self.os_type or "linux").strip().lower()
+        image_name, image_kind = self._split_image_kind(self.image or self.os_type)
         factory = getattr(image_cls, image_name, None)
         if callable(factory):
-            return factory()
-        os_factory = getattr(image_cls, (self.os_type or "linux").strip().lower(), None)
+            return self._build_image_with_kind(factory, image_name, image_kind)
+        os_name = (self.os_type or "linux").strip().lower()
+        os_factory = getattr(image_cls, os_name, None)
         if callable(os_factory):
-            return os_factory()
+            return self._build_image_with_kind(os_factory, os_name, image_kind)
         return image_name
+
+    @staticmethod
+    def _split_image_kind(image: str) -> tuple[str, str]:
+        """Split a configured image into an image name and an optional kind.
+
+        The image setting accepts a factory name such as ``linux`` and may
+        carry a ``:container`` or ``:vm`` suffix to pick the image flavour.
+        Registry references contain a colon as well, so only a known kind is
+        split off and anything else is kept as the image name.
+        """
+        value = (image or "").strip().lower()
+        name, separator, suffix = value.rpartition(":")
+        if separator and name and suffix in _CUA_IMAGE_KINDS:
+            return name, suffix
+        return value, ""
+
+    def _build_image_with_kind(self, factory: Any, name: str, kind: str) -> Any:
+        """Build an image, applying the requested flavour when it is supported."""
+        if not kind:
+            return factory()
+        try:
+            parameters = inspect.signature(factory).parameters
+        except (TypeError, ValueError):
+            parameters = {}
+        if "kind" not in parameters:
+            logger.warning(
+                "[Computer] CUA image %s does not support the %s flavour, ignoring it.",
+                name,
+                kind,
+            )
+            return factory()
+        return factory(kind=kind)
 
     def _build_ephemeral_kwargs(self, ephemeral: Any) -> dict[str, Any]:
         try:

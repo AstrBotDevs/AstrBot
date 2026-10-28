@@ -294,7 +294,7 @@
           },
           "cua_image": {
             "description": "CUA Image",
-            "hint": "CUA sandbox image or OS type. Defaults to linux. Supported values depend on the installed CUA SDK."
+            "hint": "CUA sandbox image or OS type. Defaults to linux. Supported values depend on the installed CUA SDK. Append a :container or :vm suffix to pick the image flavour."
           },
           "cua_os_type": {
             "description": "CUA OS Type",
