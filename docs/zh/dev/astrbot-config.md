@@ -22,7 +22,8 @@ AstrBot 默认配置如下：
         "rate_limit": {
             "time": 60,
             "count": 30,
-            "strategy": "stall",  # stall, discard
+            "strategy": "discard",  # stall, discard
+            "max_pending": 1,
         },
         "reply_prefix": "",
         "forward_threshold": 1500,
@@ -167,7 +168,12 @@ AstrBot 默认配置如下：
 
 #### `platform_settings.rate_limit`
 
-当消息速率超过限制时的处理策略。`time` 为时间窗口，`count` 为消息数量，`strategy` 为限制策略。`stall` 为等待，`discard` 为丢弃。
+当消息速率超过限制时的处理策略。`time` 为时间窗口，`count` 为允许通过限流检查的消息数量，`strategy` 为限制策略。
+
+- `discard`：超额消息立即丢弃，不等待限流锁。新配置默认使用此策略，适合话题时效性较强的实时群聊。
+- `stall`：等待额度后继续处理。每个会话最多允许 `max_pending` 个任务等待，包含正在持锁等待额度的任务和等待同一把锁的任务；超出上限的消息直接丢弃。`max_pending` 默认为 `1`，设为 `0` 时不允许等待。
+
+已有配置显式选择的策略不会自动改写，但缺少 `max_pending` 的 `stall` 配置也采用默认上限 `1`。确实需要等待更多任务时请显式增加此值。等待任务可能在话题结束后才被处理，因此实时聊天建议选择 `discard`。该上限只覆盖本限流器，不是全局任务数上限。
 
 #### `platform_settings.reply_prefix`
 

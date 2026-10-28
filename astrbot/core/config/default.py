@@ -94,7 +94,8 @@ DEFAULT_CONFIG = {
         "rate_limit": {
             "time": 60,
             "count": 30,
-            "strategy": "stall",  # stall, discard
+            "strategy": "discard",  # discard for live chat; stall has bounded waiters
+            "max_pending": 1,
         },
         "reply_prefix": "",
         "forward_threshold": 1500,
@@ -1170,6 +1171,7 @@ CONFIG_METADATA_2 = {
                                 "type": "string",
                                 "options": ["stall", "discard"],
                             },
+                            "max_pending": {"type": "int"},
                         },
                     },
                     "no_permission_reply": {
@@ -4476,6 +4478,11 @@ CONFIG_METADATA_3 = {
                         "description": "速率限制策略",
                         "type": "string",
                         "options": ["stall", "discard"],
+                    },
+                    "platform_settings.rate_limit.max_pending": {
+                        "description": "最大限流等待任务数",
+                        "type": "int",
+                        "hint": "每个会话在 stall 策略下的最大等待任务数，包含持锁等待和等锁任务；0 表示不等待，超出直接丢弃。实时聊天建议使用 discard。",
                     },
                 },
             },

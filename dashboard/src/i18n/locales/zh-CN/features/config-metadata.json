@@ -1052,6 +1052,10 @@
           },
           "strategy": {
             "description": "速率限制策略"
+          },
+          "max_pending": {
+            "description": "最大限流等待任务数",
+            "hint": "每个会话在 stall 策略下的最大等待任务数，包含持锁等待和等锁任务；0 表示不等待，超出直接丢弃。实时聊天建议使用 discard。"
           }
         }
       }
