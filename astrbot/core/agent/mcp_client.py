@@ -11,6 +11,7 @@ from typing import Any, Generic
 
 import httpx
 from tenacity import (
+    RetryCallState,
     before_sleep_log,
     retry,
     retry_if_exception,
@@ -102,20 +103,28 @@ _MCP_RECONNECT_ERROR_MESSAGES = (
 def _is_mcp_reconnect_error(exc: BaseException) -> bool:
     """Check whether an MCP tool-call failure should trigger a reconnect.
 
-    A broken stdio pipe surfaces as ``anyio.ClosedResourceError``, while a
+    A broken stdio pipe surfaces as ``anyio.ClosedResourceError``; a
     streamable-HTTP server may report the same condition as a generic error
-    whose message mentions the terminated session. Anything else (business
-    errors, timeouts) must not trigger a reconnect.
+    whose message mentions the terminated session; and a wedged server makes
+    the call hit its read deadline (``TimeoutError`` or an ``McpError`` whose
+    code is ``httpx.codes.REQUEST_TIMEOUT``). Anything else (business errors,
+    upstream 5xx) must not trigger a reconnect.
 
     Args:
         exc: The exception raised by the MCP session call.
 
     Returns:
-        True if the exception indicates a terminated MCP session and a
-        reconnect is warranted.
+        True if the exception indicates a terminated or wedged MCP session
+        and a reconnect is warranted.
     """
     if "anyio" in globals() and isinstance(exc, anyio.ClosedResourceError):
         return True
+    if isinstance(exc, TimeoutError):
+        return True
+    if McpError is not None and isinstance(exc, McpError):
+        error = getattr(exc, "error", None)
+        if error is not None and error.code == httpx.codes.REQUEST_TIMEOUT:
+            return True
     message = str(exc).lower()
     return any(marker in message for marker in _MCP_RECONNECT_ERROR_MESSAGES)
 
@@ -124,10 +133,12 @@ try:
     import anyio
     import mcp
     from mcp.client.sse import sse_client
+    from mcp.shared.exceptions import McpError
 except (ModuleNotFoundError, ImportError):
     logger.warning(
         "Warning: Missing 'mcp' dependency, MCP services will be unavailable."
     )
+    McpError = None  # type: ignore[assignment, unused-ignore]
 
 streamable_http_client_legacy = None
 streamable_http_client = None
@@ -770,16 +781,33 @@ class MCPClient:
             ValueError: MCP session is not available
             anyio.ClosedResourceError: raised after reconnection failure
         """
+        last_reconnectable: BaseException | None = None
+
+        async def _reconnect_before_retry(retry_state: RetryCallState) -> None:
+            # Log, then reconnect outside the retry predicate so that a failing
+            # reconnect never masquerades as a retryable tool error.
+            before_sleep_log(logger, logging.WARNING)(retry_state)
+            try:
+                await self._reconnect()
+            except Exception:
+                logger.exception(
+                    "MCP reconnect before retry failed for tool %s.", tool_name
+                )
 
         @retry(
             retry=retry_if_exception(_is_mcp_reconnect_error),
             stop=stop_after_attempt(2),
             wait=wait_exponential(multiplier=1, min=1, max=3),
-            before_sleep=before_sleep_log(logger, logging.WARNING),
+            before_sleep=_reconnect_before_retry,
             reraise=True,
         )
         async def _call_with_retry():
+            nonlocal last_reconnectable
             if not self.session:
+                # The session disappeared (e.g. a failed reconnect cleared it).
+                # Surface the original tool error instead of a bare ValueError.
+                if last_reconnectable is not None:
+                    raise last_reconnectable
                 raise ValueError("MCP session is not available for MCP function tools.")
 
             try:
@@ -789,17 +817,8 @@ class MCPClient:
                     read_timeout_seconds=read_timeout_seconds,
                 )
             except Exception as exc:
-                if not _is_mcp_reconnect_error(exc):
-                    raise
-                logger.warning(
-                    "MCP tool %s call failed (%s: %s), attempting to reconnect...",
-                    tool_name,
-                    type(exc).__name__,
-                    exc,
-                )
-                # Attempt to reconnect
-                await self._reconnect()
-                # Reraise the exception to trigger tenacity retry
+                if _is_mcp_reconnect_error(exc):
+                    last_reconnectable = exc
                 raise
 
         return await _call_with_retry()
