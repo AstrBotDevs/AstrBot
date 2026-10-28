@@ -1948,7 +1948,7 @@ CONFIG_METADATA_2 = {
                         "gemini_tts_api_key": "",
                         "gemini_tts_api_base": "",
                         "gemini_tts_timeout": 20,
-                        "gemini_tts_model": "gemini-2.5-flash-preview-tts",
+                        "gemini_tts_model": "gemini-3.8-flash-tts",
                         "gemini_tts_prefix": "",
                         "gemini_tts_voice_name": "Leda",
                         "proxy": "",
