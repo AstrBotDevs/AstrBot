@@ -27,33 +27,59 @@ class _KindlessImage:
         return "linux-image"
 
 
+class _KwargsImage:
+    """Stand-in for an SDK image factory that forwards ``**kwargs``."""
+
+    def __init__(self, name: str, **kwargs):
+        self.name = name
+        self.kwargs = kwargs
+
+    @classmethod
+    def linux(cls, **kwargs):
+        return cls("linux", **kwargs)
+
+
+class _PositionalOnlyImage:
+    """Stand-in for an SDK image factory with a positional-only ``kind``."""
+
+    def __init__(self, name: str, kind: str):
+        self.name = name
+        self.kind = kind
+
+    @classmethod
+    def linux(cls, kind: str = "vm", /):
+        return cls("linux", kind)
+
+
 @pytest.mark.parametrize(
-    ("value", "expected"),
+    ("value", "expected_kind"),
     [
-        ("linux", ("linux", "")),
-        ("linux:container", ("linux", "container")),
-        ("LINUX:VM", ("linux", "vm")),
-        ("ghcr.io/trycua/xfce:latest", ("ghcr.io/trycua/xfce:latest", "")),
-        ("", ("", "")),
+        ("linux", "vm"),
+        ("linux:container", "container"),
+        ("LINUX:VM", "vm"),
+        # A registry tag is not an image flavour.
+        ("ghcr.io/trycua/xfce:latest", "vm"),
     ],
 )
-def test_split_image_kind(value, expected):
-    assert CuaBooter._split_image_kind(value) == expected
+def test_build_image_selects_the_flavour(value, expected_kind):
+    built = CuaBooter(image=value)._build_image(_FakeImage)
 
-
-def test_build_image_applies_the_requested_flavour():
-    built = CuaBooter(image="linux:container")._build_image(_FakeImage)
-
-    assert built.kwargs["kind"] == "container"
-
-
-def test_build_image_keeps_the_sdk_default_without_a_flavour():
-    built = CuaBooter(image="linux")._build_image(_FakeImage)
-
-    assert built.kwargs["kind"] == "vm"
+    assert built.kwargs["kind"] == expected_kind
 
 
 def test_build_image_ignores_a_flavour_the_sdk_does_not_support():
     built = CuaBooter(image="linux:container")._build_image(_KindlessImage)
 
     assert built == "linux-image"
+
+
+def test_build_image_passes_the_flavour_to_a_kwargs_factory():
+    built = CuaBooter(image="linux:container")._build_image(_KwargsImage)
+
+    assert built.kwargs["kind"] == "container"
+
+
+def test_build_image_ignores_a_positional_only_flavour():
+    built = CuaBooter(image="linux:container")._build_image(_PositionalOnlyImage)
+
+    assert built.kind == "vm"

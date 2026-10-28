@@ -778,47 +778,53 @@ class CuaBooter(ComputerBooter):
         )
 
     def _build_image(self, image_cls: Any) -> Any:
-        image_name, image_kind = self._split_image_kind(self.image or self.os_type)
-        factory = getattr(image_cls, image_name, None)
-        if callable(factory):
-            return self._build_image_with_kind(factory, image_name, image_kind)
-        os_name = (self.os_type or "linux").strip().lower()
-        os_factory = getattr(image_cls, os_name, None)
-        if callable(os_factory):
-            return self._build_image_with_kind(os_factory, os_name, image_kind)
-        return image_name
+        """Build the CUA image for the configured ``CUA Image`` setting.
 
-    @staticmethod
-    def _split_image_kind(image: str) -> tuple[str, str]:
-        """Split a configured image into an image name and an optional kind.
+        The setting accepts a factory name such as ``linux`` and may carry a
+        ``:container`` or ``:vm`` suffix that picks the image flavour. Registry
+        references contain a colon as well, so only a known flavour is split
+        off and anything else stays part of the image name.
 
-        The image setting accepts a factory name such as ``linux`` and may
-        carry a ``:container`` or ``:vm`` suffix to pick the image flavour.
-        Registry references contain a colon as well, so only a known kind is
-        split off and anything else is kept as the image name.
+        Args:
+            image_cls: The SDK image class that exposes the factory methods.
+
+        Returns:
+            The image built for the configured setting, or the configured name
+            when the SDK exposes no matching factory.
         """
-        value = (image or "").strip().lower()
-        name, separator, suffix = value.rpartition(":")
-        if separator and name and suffix in _CUA_IMAGE_KINDS:
-            return name, suffix
-        return value, ""
-
-    def _build_image_with_kind(self, factory: Any, name: str, kind: str) -> Any:
-        """Build an image, applying the requested flavour when it is supported."""
-        if not kind:
+        configured = (self.image or self.os_type or "linux").strip().lower()
+        image_name, separator, flavour = configured.rpartition(":")
+        if not (separator and image_name and flavour in _CUA_IMAGE_KINDS):
+            image_name, flavour = configured, ""
+        factory = getattr(image_cls, image_name, None)
+        if not callable(factory):
+            image_name = (self.os_type or "linux").strip().lower()
+            factory = getattr(image_cls, image_name, None)
+            if not callable(factory):
+                return configured
+        if not flavour:
             return factory()
         try:
             parameters = inspect.signature(factory).parameters
         except (TypeError, ValueError):
             parameters = {}
-        if "kind" not in parameters:
+        kind_parameter = parameters.get("kind")
+        accepts_kwargs = any(
+            parameter.kind is inspect.Parameter.VAR_KEYWORD
+            for parameter in parameters.values()
+        )
+        positional_only = (
+            kind_parameter is not None
+            and kind_parameter.kind is inspect.Parameter.POSITIONAL_ONLY
+        )
+        if positional_only or (kind_parameter is None and not accepts_kwargs):
             logger.warning(
                 "[Computer] CUA image %s does not support the %s flavour, ignoring it.",
-                name,
-                kind,
+                image_name,
+                flavour,
             )
             return factory()
-        return factory(kind=kind)
+        return factory(kind=flavour)
 
     def _build_ephemeral_kwargs(self, ephemeral: Any) -> dict[str, Any]:
         try:
