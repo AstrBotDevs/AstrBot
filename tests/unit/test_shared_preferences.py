@@ -1,5 +1,6 @@
 import asyncio
 import json
+import locale
 import time
 
 import pytest
@@ -300,3 +301,58 @@ def test_legacy_put_preserves_the_file_when_a_value_is_unencodable(tmp_path):
         "keep": "value",
         "extra": "☃ snowman",
     }
+
+
+@pytest.mark.parametrize(
+    ("encoding", "greeting"), [("gbk", "旧版偏好"), ("cp1252", "café")]
+)
+def test_legacy_preferences_preserve_locale_encoded_values(
+    tmp_path, monkeypatch, encoding, greeting
+):
+    """Load files written by v3 before explicit UTF-8 persistence was introduced."""
+    from astrbot.core.db.migration.shared_preferences_v3 import SharedPreferences
+
+    path = tmp_path / "shared_preferences.json"
+    original = json.dumps({"greeting": greeting}, ensure_ascii=False).encode(encoding)
+    path.write_bytes(original)
+    monkeypatch.setattr(locale, "getencoding", lambda: encoding)
+
+    store = SharedPreferences(path)
+
+    assert store.get("greeting") == greeting
+    assert path.read_bytes() == original
+    store.put("extra", "☃")
+    assert json.loads(path.read_text(encoding="utf-8")) == {
+        "greeting": greeting,
+        "extra": "☃",
+    }
+
+
+def test_legacy_preferences_preserve_undecodable_file(tmp_path, monkeypatch):
+    """A failed charset fallback must leave the original file available for recovery."""
+    from astrbot.core.db.migration.shared_preferences_v3 import SharedPreferences
+
+    path = tmp_path / "shared_preferences.json"
+    original = b'{"greeting": "\xff"}'
+    path.write_bytes(original)
+    monkeypatch.setattr(locale, "getencoding", lambda: "utf-8")
+
+    with pytest.raises(UnicodeDecodeError):
+        SharedPreferences(path)
+
+    assert path.read_bytes() == original
+
+
+def test_legacy_preferences_preserve_invalid_json_after_fallback(tmp_path, monkeypatch):
+    """Do not delete a legacy file if a fallback codec does not yield valid JSON."""
+    from astrbot.core.db.migration.shared_preferences_v3 import SharedPreferences
+
+    path = tmp_path / "shared_preferences.json"
+    original = b'{"greeting": "caf\xe9"'
+    path.write_bytes(original)
+    monkeypatch.setattr(locale, "getencoding", lambda: "cp1252")
+
+    with pytest.raises(json.JSONDecodeError):
+        SharedPreferences(path)
+
+    assert path.read_bytes() == original
