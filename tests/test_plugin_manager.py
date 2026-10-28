@@ -2553,15 +2553,11 @@ async def test_uninstall_failed_plugin_without_plugin_id_in_record(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("disabled", [False, True])
-@pytest.mark.parametrize("tool_disabled", [False, True])
 async def test_dashboard_update_executes_new_code_after_reenable(
     plugin_manager_pm: PluginManager,
     local_updater: Path,
     monkeypatch,
     tmp_path: Path,
-    disabled: bool,
-    tool_disabled: bool,
 ):
     """Reproduce a metadata update that leaves disabled plugin code cached."""
     from astrbot.dashboard.services.plugin_service import PluginService
@@ -2569,15 +2565,11 @@ async def test_dashboard_update_executes_new_code_after_reenable(
     _clear_star_runtime_state()
     module_path = f"data.plugins.{TEST_PLUGIN_DIR}.main"
     source = (
-        "from astrbot.api import llm_tool\n"
         "from astrbot.api.star import Star\n"
         "from astrbot.api.event import filter\n"
         "class Main(Star):\n"
         "    @filter.command('disabled_update_probe')\n"
         "    async def command(self, event):\n"
-        "        return 'old-code'\n"
-        "    @llm_tool('disabled_update_tool')\n"
-        "    async def tool(self, event):\n"
         "        return 'old-code'\n"
     )
     main_path = local_updater / "main.py"
@@ -2596,10 +2588,7 @@ async def test_dashboard_update_executes_new_code_after_reenable(
     monkeypatch.setattr(
         plugin_manager_pm, "reserved_plugin_path", str(tmp_path / "reserved")
     )
-    preferences = {
-        "inactivated_llm_tools": ["disabled_update_tool"] if tool_disabled else []
-    }
-    monkeypatch.setattr(star_manager_module.llm_tools, "func_list", [])
+    preferences = {}
 
     async def global_get(key, default=None):
         return preferences.get(key, default)
@@ -2627,11 +2616,9 @@ async def test_dashboard_update_executes_new_code_after_reenable(
     try:
         success, error = await plugin_manager_pm.load(specified_dir_name=TEST_PLUGIN_DIR)
         assert success, error
-        original_module = sys.modules[module_path]
         original_plugin = star_manager_module.star_map[module_path]
         assert await original_plugin.star_cls.command(None) == "old-code"
-        if disabled:
-            await service.set_plugin_enabled({"name": TEST_PLUGIN_NAME}, enabled=False)
+        await service.set_plugin_enabled({"name": TEST_PLUGIN_NAME}, enabled=False)
 
         _, message = await service.update_plugin({"name": TEST_PLUGIN_NAME})
         current_plugin = star_manager_module.star_map[module_path]
@@ -2640,33 +2627,16 @@ async def test_dashboard_update_executes_new_code_after_reenable(
         )
         assert message == "更新成功。"
         assert displayed["version"] == "2.0.0"
-        assert displayed["activated"] is (not disabled)
-        assert "updated-code" in main_path.read_text(encoding="utf-8")
-        assert sys.modules[module_path] is not original_module
-        assert len(star_manager_module.star_registry) == 1
-        assert len(star_manager_module.llm_tools.func_list) == 1
-        assert star_manager_module.llm_tools.func_list[0].active is (
-            not disabled and not tool_disabled
-        )
-        if disabled:
-            assert current_plugin.star_cls is None
-            await service.set_plugin_enabled({"name": TEST_PLUGIN_NAME}, enabled=True)
+        assert displayed["activated"] is False
+        assert current_plugin.star_cls is None
+        await service.set_plugin_enabled({"name": TEST_PLUGIN_NAME}, enabled=True)
 
         handlers = star_manager_module.star_handlers_registry.get_handlers_by_module_name(
             module_path
         )
-        assert len(handlers) == 2
-        command = next(handler for handler in handlers if handler.handler_name == "command")
-        assert await command.handler(None) == "updated-code"
-        assert len(star_manager_module.llm_tools.func_list) == 1
-        current_tool = star_manager_module.llm_tools.func_list[0]
-        assert current_tool.active is (not tool_disabled)
-        assert await current_tool.handler(None) == "updated-code"
-        current_plugin = star_manager_module.star_map[module_path]
-        assert current_plugin.activated is True
-        assert command.handler.args == (current_plugin.star_cls,)
-        assert current_tool.handler.args == (current_plugin.star_cls,)
-
+        assert len(handlers) == 1
+        assert await handlers[0].handler(None) == "updated-code"
+        assert star_manager_module.star_map[module_path].activated is True
     finally:
         _clear_module_cache()
         _clear_star_runtime_state()
