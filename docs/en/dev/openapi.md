@@ -42,7 +42,7 @@ Developer API keys currently support 12 top-level scopes and two sensitive sub-s
 
 The `kb` scope grants full knowledge-base access, including reading, importing, modifying, and deleting knowledge bases, documents, and chunks. It is not a read-only permission. Grant it only to callers trusted with this data. Revoking a key prevents future requests but does not restore deleted data or undo previous access.
 
-The WebUI does not select `kb` by default. When creating a key through the API, pass an explicit `scopes` list to limit its permissions. Omitting `scopes` grants the default scopes, including `kb`. Legacy keys without a stored scope list also use those defaults, and stored wildcard (`*`) keys can access knowledge-base endpoints. Existing keys with explicit scope lists that exclude `kb` remain unable to access them.
+The WebUI does not select `kb` by default and displays a data-access warning when you select it. Creating a key requires confirming that warning. To grant knowledge-base access through the API, explicitly include `kb` in the `scopes` list. Omitting `scopes`, legacy keys without a stored scope list, and keys that only contain the wildcard (`*`) do not grant knowledge-base access. Existing keys without an explicit `kb` grant remain unable to access these endpoints. Dashboard login sessions keep their normal access.
 
 Every operation in the interactive reference also displays `Required scope: ...`; operations involving administrator capabilities additionally display `Conditional sensitive scope: ...`.
 

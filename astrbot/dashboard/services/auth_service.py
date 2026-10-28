@@ -64,7 +64,6 @@ DEFAULT_OPEN_API_SCOPES = (
     "chat",
     "data",
     "file",
-    "kb",
     "plugin",
     "mcp",
     "skill",
@@ -72,6 +71,7 @@ DEFAULT_OPEN_API_SCOPES = (
 
 ALL_OPEN_API_SCOPES = (
     *DEFAULT_OPEN_API_SCOPES,
+    "kb",
     CHAT_ADMIN_SCOPE,
     CONFIG_EDIT_ADMIN_SCOPE,
 )

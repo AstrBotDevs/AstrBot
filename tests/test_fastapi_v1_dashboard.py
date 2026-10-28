@@ -54,8 +54,10 @@ JWT_SECRET = "fastapi-v1-test-secret-with-32-bytes"
 @pytest.mark.parametrize(
     "access",
     [
+        "kb",
         *DEFAULT_OPEN_API_SCOPES,
         "wildcard",
+        "explicit_wildcard",
         "legacy",
         "jwt",
         "empty",
@@ -103,7 +105,10 @@ async def test_all_knowledge_base_routes_enforce_scope(
     asgi_app.dependency_overrides[knowledge_base_routes.get_service] = lambda: service
     key = "knowledge-base-route-test"
     scopes = {scope: [scope] for scope in DEFAULT_OPEN_API_SCOPES}
-    scopes.update({"wildcard": ["*"], "legacy": None, "empty": []})
+    scopes["kb"] = ["kb"]
+    scopes.update(
+        {"wildcard": ["*"], "explicit_wildcard": ["*", "kb"], "legacy": None, "empty": []}
+    )
     if access in scopes:
         fake_db.api_keys[ApiKeyService.hash_key(key)] = FakeApiKey(
             key_id="kb-route-key", scopes=scopes[access]
@@ -119,7 +124,7 @@ async def test_all_knowledge_base_routes_enforce_scope(
         401
         if access in {"invalid", "missing"}
         else 200
-        if access in {"kb", "wildcard", "legacy", "jwt"}
+        if access in {"kb", "explicit_wildcard", "jwt"}
         else 403
     )
     for method, path in operations:

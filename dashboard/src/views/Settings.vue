@@ -376,6 +376,16 @@
                                         {{ tm('apiKey.chatAdminWarning') }}
                                     </v-alert>
 
+                                    <v-alert
+                                        v-if="newApiKeyScopes.includes('kb')"
+                                        type="warning"
+                                        variant="tonal"
+                                        density="compact"
+                                        class="mb-3"
+                                    >
+                                        {{ tm('apiKey.kbWarning') }}
+                                    </v-alert>
+
                                     <v-alert v-if="createdApiKeyPlaintext" type="warning" variant="tonal" class="mb-4">
                                         <div class="d-flex align-center justify-space-between flex-wrap">
                                             <span>{{ tm('apiKey.plaintextHint') }}</span>
@@ -1038,13 +1048,16 @@ const createApiKey = async () => {
     const selectedSensitiveScopes = selectedScopes.filter((scope) => (
         sensitiveApiKeyScopes.includes(scope)
     ));
-    const confirmationMessage = selectedSensitiveScopes.length > 0
+    let confirmationMessage = selectedSensitiveScopes.length > 0
         ? tm('apiKey.sensitiveCreateConfirm', {
             scopes: selectedSensitiveScopes.join(', ')
         })
         : tm('apiKey.createConfirm', {
             scopes: selectedScopes.join(', ')
         });
+    if (selectedScopes.includes('kb')) {
+        confirmationMessage += '\n\n' + tm('apiKey.kbWarning');
+    }
     if (!(await askForConfirmation(confirmationMessage, confirmDialog))) {
         return;
     }

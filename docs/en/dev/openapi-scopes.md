@@ -219,7 +219,7 @@ Upload and download chat attachments.
 
 ## `kb`
 
-Manage knowledge bases, documents, chunks, imports, and retrieval.
+Full knowledge-base access, including reading, importing, modifying, deleting, and retrieval. Requires an explicit kb grant; default and wildcard-only keys are denied. Revocation cannot undo prior access or deletion.
 
 | Method | Endpoint | Conditional sensitive sub-scope |
 | --- | --- | --- |

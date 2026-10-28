@@ -2,7 +2,10 @@ import json
 import re
 from pathlib import Path
 
-from astrbot.dashboard.services.auth_service import DEFAULT_OPEN_API_SCOPES
+from astrbot.dashboard.services.auth_service import (
+    ALL_OPEN_API_SCOPES,
+    DEFAULT_OPEN_API_SCOPES,
+)
 from docs.scripts.update_openapi_json import (
     PUBLIC_OPEN_API_SCOPES,
     filter_public_openapi,
@@ -25,18 +28,20 @@ EN_REFERENCE_PATH = (
 def test_scope_registry_matches_documentation_and_dashboard() -> None:
     """Keep the grantable scopes selectable and translated in every locale."""
     root = SPEC_PATH.parents[1]
-    assert set(PUBLIC_OPEN_API_SCOPES) == set(DEFAULT_OPEN_API_SCOPES)
+    base_scopes = {scope for scope in ALL_OPEN_API_SCOPES if ":" not in scope}
+    assert set(PUBLIC_OPEN_API_SCOPES) == base_scopes
+    assert "kb" in base_scopes
+    assert "kb" not in DEFAULT_OPEN_API_SCOPES
+    assert set(DEFAULT_OPEN_API_SCOPES) < base_scopes
     settings = (root / "dashboard/src/views/Settings.vue").read_text(encoding="utf-8")
     scope_options = settings.split("const availableScopes = [", 1)[1].split("];", 1)[0]
     scopes = set(re.findall(r"value: '([^']+)'", scope_options))
-    assert {scope for scope in scopes if ":" not in scope} == set(
-        DEFAULT_OPEN_API_SCOPES
-    )
+    assert {scope for scope in scopes if ":" not in scope} == base_scopes
     for path in (root / "dashboard/src/i18n/locales").glob("*/features/settings.json"):
         translations = json.loads(path.read_text(encoding="utf-8"))["apiKey"][
             "scopeDescriptions"
         ]
-        for scope in DEFAULT_OPEN_API_SCOPES:
+        for scope in base_scopes:
             assert translations[scope].strip(), (path, scope)
 
 
