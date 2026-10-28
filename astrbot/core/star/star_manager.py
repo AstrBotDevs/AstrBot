@@ -1066,7 +1066,8 @@ class PluginManager:
                             f"Plugin {smd.name} did not terminate cleanly: {e!s}. "
                             "The plugin may not work correctly.",
                         )
-                    if smd.name and smd.activated:
+                    # Disabled plugins also retain imported code and registrations.
+                    if smd.name:
                         await self._unbind_plugin(smd.name, specified_module_path)
 
             result = await self.load(specified_module_path)
