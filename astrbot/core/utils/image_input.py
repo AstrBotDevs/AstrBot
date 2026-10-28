@@ -159,6 +159,7 @@ async def prepare_request_images(
     )
     oversized = None
     montage = None
+    has_persistent_montage = False
     for result, index, temporary in rows:
         name = f"Image {index}" if index is not None else "Image Attachment"
         origin = " in quoted message" if result["quoted"] else ""
@@ -167,6 +168,7 @@ async def prepare_request_images(
             if result["montage"]:
                 status = "; animation converted to a 3x3 frame montage"
                 montage = result
+                has_persistent_montage |= not temporary
         elif result["status"] == "oversized":
             status = (
                 f"; skipped: exceeds {MODEL_IMAGE_MAX_INPUT_BYTES // (1024 * 1024)} MiB"
@@ -200,7 +202,9 @@ async def prepare_request_images(
             "Images labeled as animation montages contain frames in reading order. "
             "Treat them as animations; do not mention the conversion or frame layout.\n"
             "</system_notice>"
-        ).mark_as_temp()
+        )
+        if not has_persistent_montage:
+            advice.mark_as_temp()
         montage["notices"].append(advice)
         parts.append(advice)
     req.extra_user_content_parts = parts

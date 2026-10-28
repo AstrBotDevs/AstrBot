@@ -17,7 +17,9 @@ from PIL import Image as PILImage
 from astrbot.core import astr_main_agent as main
 from astrbot.core.agent.message import (
     ImageURLPart,
+    Message,
     TextPart,
+    bind_checkpoint_messages,
     dump_messages_with_checkpoints,
 )
 from astrbot.core.config.default import DEFAULT_CONFIG
@@ -345,12 +347,96 @@ async def test_animation_montage_notice_reaches_model(harness, tmp_path):
         ]
         assert len(notices) == int(expected)
         if expected:
-            assert notices[0]._no_save
+            assert not notices[0]._no_save
             assert notices[0].text.startswith("<system_notice>\n")
             assert notices[0].text.endswith("\n</system_notice>")
             assert "contain frames in reading order" in notices[0].text
             assert "Treat them as animations" in notices[0].text
             assert "do not mention the conversion or frame layout" in notices[0].text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "temporary_images", [(False,), (True,), (False, True), (True, False)]
+)
+async def test_animation_notice_inherits_active_image_persistence(
+    harness, tmp_path, temporary_images
+):
+    """Animation guidance survives replay exactly when its images do."""
+    source = source_image(tmp_path)
+    parts = []
+    for index, temporary in enumerate(temporary_images):
+        image = tmp_path / f"animation-{index}.gif"
+        image.write_bytes(source.read_bytes())
+        part = ImageURLPart(image_url=ImageURLPart.ImageURL(url=str(image)))
+        parts.append(part.mark_as_temp() if temporary else part)
+    req = ProviderRequest(prompt="describe", extra_user_content_parts=parts)
+    prepared = {}
+    event = make_event()
+    for _ in range(2):
+        await image_input.prepare_request_images(
+            req, event, max_size=90, output_dir=harness.work, prepared=prepared
+        )
+        notices = [
+            part
+            for part in req.extra_user_content_parts
+            if isinstance(part, TextPart)
+            and part.text.startswith(
+                "<system_notice>\nImages labeled as animation montages"
+            )
+        ]
+        assert len(notices) == 1
+        assert notices[0]._no_save == all(temporary_images)
+
+    message = Message.model_validate(await req.assemble_context())
+    sent = Provider._ensure_message_to_dicts(harness.provider, [message])
+    saved = dump_messages_with_checkpoints([message])
+    replayed = Provider._ensure_message_to_dicts(
+        harness.provider, bind_checkpoint_messages(saved)
+    )
+    assert replayed == saved
+    if not any(temporary_images):
+        assert replayed == sent
+    else:
+        saved_notices = [
+            part
+            for part in replayed[0]["content"]
+            if part.get("text") == notices[0].text
+        ]
+        assert len(saved_notices) == int(not all(temporary_images))
+        saved_images = [
+            part for part in replayed[0]["content"] if part["type"] == "image_url"
+        ]
+        assert len(saved_images) == temporary_images.count(False)
+
+
+@pytest.mark.asyncio
+async def test_animation_notice_becomes_temporary_when_persistent_image_is_removed(
+    harness, tmp_path
+):
+    """A cached persistent reference cannot persist a temporary-only montage."""
+    source = source_image(tmp_path)
+    temporary = ImageURLPart(
+        image_url=ImageURLPart.ImageURL(url=str(source))
+    ).mark_as_temp()
+    req = ProviderRequest(
+        prompt="describe",
+        image_urls=[str(source)],
+        extra_user_content_parts=[temporary],
+    )
+    prepared = {}
+    event = make_event()
+    await image_input.prepare_request_images(
+        req, event, max_size=90, output_dir=harness.work, prepared=prepared
+    )
+    req.image_urls = []
+    await image_input.prepare_request_images(
+        req, event, max_size=90, output_dir=harness.work, prepared=prepared
+    )
+    saved = dump_messages_with_checkpoints(
+        [Message.model_validate(await req.assemble_context())]
+    )
+    assert saved[0]["content"] == [{"type": "text", "text": "describe"}]
 
 
 @pytest.mark.asyncio
