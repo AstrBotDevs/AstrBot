@@ -141,6 +141,7 @@ async def update_config_profile(
         config_id,
         _model_dict(payload),
         two_factor_code=request.headers.get("X-2FA-Code"),
+        session_id=auth.session_id,
         allow_admin_id_change=_can_edit_admin_ids(auth),
     )
     return ok(message=message or "保存成功")
@@ -205,6 +206,7 @@ async def update_system_config(
         "default",
         _model_dict(payload),
         two_factor_code=request.headers.get("X-2FA-Code"),
+        session_id=auth.session_id,
         allow_admin_id_change=_can_edit_admin_ids(auth),
     )
     return ok(message=message or "保存成功")
@@ -354,6 +356,7 @@ async def update_dashboard_alias_astrbot_config(
             str(config_id),
             config,
             two_factor_code=request.headers.get("X-2FA-Code"),
+            session_id=auth.session_id,
             allow_admin_id_change=_can_edit_admin_ids(auth),
         )
         return ok(message=message or "保存成功~")

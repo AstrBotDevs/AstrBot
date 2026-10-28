@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import datetime
 import os
+import secrets
 from dataclasses import dataclass
 
 import jwt
@@ -171,7 +172,21 @@ class AuthService:
             jwt_token=token,
         )
 
-    async def totp_setup(self, post_data: object) -> AuthServiceResult:
+    async def totp_setup(
+        self, post_data: object, *, session_id: str | None = None
+    ) -> AuthServiceResult:
+        """Verify TOTP enrollment or advance this login session's rotation.
+
+        Args:
+            post_data: Existing code, or the new secret and its verification code.
+            session_id: Unique identifier from the authenticated dashboard JWT.
+
+        Returns:
+            The next enrollment step's data, or a verification error.
+        """
+        if is_totp_enabled(self.config) and not session_id:
+            return self.error("Please log in again before rotating TOTP")
+
         if isinstance(post_data, dict) and post_data.get("secret"):
             secret = post_data["secret"]
             code = post_data.get("code")
@@ -183,10 +198,12 @@ class AuthService:
             if not await consume_totp_code(secret, code):
                 return self.error("TOTP 验证码无效")
 
-            if is_totp_enabled(self.config) and not consume_rotation_verified():
+            if is_totp_enabled(self.config) and not consume_rotation_verified(
+                session_id=session_id
+            ):
                 return self.error("需要先验证当前 TOTP")
 
-            set_pending_totp_secret(secret)
+            set_pending_totp_secret(secret, session_id=session_id)
             recovery_code, recovery_code_hash = generate_recovery_code()
             return AuthServiceResult(
                 data={
@@ -200,12 +217,12 @@ class AuthService:
             if not isinstance(post_data, dict):
                 return self.error("Invalid request payload")
 
-            set_rotation_verified(False)
+            set_rotation_verified(False, session_id=session_id)
 
             code = post_data.get("code")
             if isinstance(code, str) and code.strip():
                 if await consume_configured_totp_code(self.config, code):
-                    set_rotation_verified(True)
+                    set_rotation_verified(True, session_id=session_id)
                     return AuthServiceResult(data={"secret": pyotp.random_base32()})
                 return self.error("当前 TOTP 验证码无效")
 
@@ -447,6 +464,7 @@ class AuthService:
     def generate_jwt(self, username: str, *, auth_source: str = "password"):
         payload = {
             "username": username,
+            "jti": secrets.token_urlsafe(32),
             "exp": datetime.datetime.now(datetime.timezone.utc)
             + datetime.timedelta(days=7),
         }
