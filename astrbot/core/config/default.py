@@ -1749,6 +1749,18 @@ CONFIG_METADATA_2 = {
                         "model": "tiny",
                         "whisper_device": "cpu",
                     },
+                    "MiniMax STT(API)": {
+                        "id": "minimax_stt",
+                        "provider": "minimax",
+                        "type": "minimax_stt_api",
+                        "provider_type": "speech_to_text",
+                        "enable": False,
+                        "api_key": "",
+                        "api_base": "https://api.minimaxi.com/v1",
+                        "model": "asr-1.0",
+                        "timeout": 120,
+                        "proxy": "",
+                    },
                     "SenseVoice(Local)": {
                         "type": "sensevoice_stt_selfhost",
                         "provider": "sensevoice",

@@ -525,6 +525,10 @@ class ProviderManager:
                 from .sources.whisper_api_source import (
                     ProviderOpenAIWhisperAPI as ProviderOpenAIWhisperAPI,
                 )
+            case "minimax_stt_api":
+                from .sources.minimax_stt_api_source import (
+                    ProviderMiniMaxSTTAPI as ProviderMiniMaxSTTAPI,
+                )
             case "mimo_stt_api":
                 from .sources.mimo_stt_api_source import (
                     ProviderMiMoSTTAPI as ProviderMiMoSTTAPI,
