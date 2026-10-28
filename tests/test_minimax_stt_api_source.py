@@ -22,32 +22,58 @@ def _make_provider(overrides: dict | None = None) -> ProviderMiniMaxSTTAPI:
     return ProviderMiniMaxSTTAPI(provider_config=provider_config, provider_settings={})
 
 
-def test_transcription_url_appends_path_suffix():
+@pytest.mark.asyncio
+async def test_transcription_url_appends_path_suffix(tmp_path: Path):
     provider = _make_provider({"api_base": "https://api.minimaxi.com/v1"})
-    try:
-        assert (
-            provider._build_transcription_url()
-            == "https://api.minimaxi.com/v1/speech_to_text"
-        )
-    finally:
-        import asyncio
+    audio_path = tmp_path / "voice.wav"
+    audio_path.write_bytes(b"RIFF\x24\x08\x00\x00WAVEfmt ")
 
-        asyncio.run(provider.terminate())
+    captured: dict = {}
+
+    class _Response:
+        status_code = 200
+        text = '{"text": "hello"}'
+
+        def json(self):
+            return {"text": "hello"}
+
+    async def fake_post(url, **kwargs):
+        captured["url"] = url
+        return _Response()
+
+    provider.client = SimpleNamespace(post=fake_post, aclose=None)
+
+    await provider.get_text(str(audio_path))
+
+    assert captured["url"] == "https://api.minimaxi.com/v1/speech_to_text"
 
 
-def test_transcription_url_keeps_explicit_endpoint():
+@pytest.mark.asyncio
+async def test_transcription_url_keeps_explicit_endpoint(tmp_path: Path):
     provider = _make_provider(
         {"api_base": "https://api.minimaxi.com/v1/speech_to_text"}
     )
-    try:
-        assert (
-            provider._build_transcription_url()
-            == "https://api.minimaxi.com/v1/speech_to_text"
-        )
-    finally:
-        import asyncio
+    audio_path = tmp_path / "voice.wav"
+    audio_path.write_bytes(b"RIFF\x24\x08\x00\x00WAVEfmt ")
 
-        asyncio.run(provider.terminate())
+    captured: dict = {}
+
+    class _Response:
+        status_code = 200
+        text = '{"text": "hello"}'
+
+        def json(self):
+            return {"text": "hello"}
+
+    async def fake_post(url, **kwargs):
+        captured["url"] = url
+        return _Response()
+
+    provider.client = SimpleNamespace(post=fake_post, aclose=None)
+
+    await provider.get_text(str(audio_path))
+
+    assert captured["url"] == "https://api.minimaxi.com/v1/speech_to_text"
 
 
 @pytest.mark.asyncio

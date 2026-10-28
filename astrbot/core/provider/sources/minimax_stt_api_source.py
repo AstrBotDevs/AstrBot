@@ -39,21 +39,6 @@ class ProviderMiniMaxSTTAPI(STTProvider):
             client_kwargs["proxy"] = self.proxy
         self.client = httpx.AsyncClient(**client_kwargs)
 
-    def _build_transcription_url(self) -> str:
-        """Build the full transcription endpoint URL.
-
-        The API base may be given either as the platform root
-        (``https://api.minimaxi.com/v1``) or as the complete endpoint, so the
-        path suffix is only appended when it is missing.
-
-        Returns:
-            The URL to POST the audio file to.
-        """
-        normalized = self.api_base.rstrip("/")
-        if normalized.endswith("/speech_to_text"):
-            return normalized
-        return f"{normalized}/speech_to_text"
-
     async def get_text(self, audio_url: str) -> str:
         """Transcribe an audio file with the MiniMax speech-to-text API.
 
@@ -84,11 +69,18 @@ class ProviderMiniMaxSTTAPI(STTProvider):
                 f"got {len(audio_bytes) // (1024 * 1024)} MB"
             )
 
+        # The API base may be given either as the platform root
+        # (https://api.minimaxi.com/v1) or as the complete endpoint, so the
+        # path suffix is only appended when it is missing.
+        url = self.api_base.rstrip("/")
+        if not url.endswith("/speech_to_text"):
+            url = f"{url}/speech_to_text"
+
         headers = {"Authorization": f"Bearer {self.chosen_api_key}"}
         headers.update(self.request_headers)
 
         response = await self.client.post(
-            self._build_transcription_url(),
+            url,
             headers=headers,
             data={
                 "model": self.model_name,
