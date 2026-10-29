@@ -1,7 +1,10 @@
 import asyncio
+import contextlib
 import os
 import re
 import shutil
+import signal
+import sys
 import tempfile
 import zipfile
 from copy import copy
@@ -30,6 +33,13 @@ PLUGIN_METADATA_REQUIRED_FIELDS = ("name", "desc", "version", "author")
 PLUGIN_METADATA_MAX_BYTES = 1024 * 1024
 PLUGIN_REPOSITORY_TIMEOUT_SECONDS = 15
 PLUGIN_GIT_CLONE_TIMEOUT_SECONDS = 180
+PLUGIN_GIT_CLONE_KILL_TIMEOUT_SECONDS = 5
+
+# Reapers for killed clones. Awaiting `process.wait()` in the timeout path would
+# reintroduce the unbounded wait that path exists to avoid, but dropping the process
+# makes the interpreter report a still-running subprocess, so the wait runs in the
+# background. The set holds a strong reference until the task finishes.
+_CLONE_REAPERS: set[asyncio.Task] = set()
 
 __all__ = ["PLUGIN_METADATA_FILENAMES"]
 
@@ -101,6 +111,10 @@ class _PluginUpdater(_RepoZipUpdater):
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=process_env,
+            # Give the clone its own session/process group so the timeout path can take
+            # down every helper it spawned in one signal. Windows ignores this and uses
+            # `taskkill /T` instead.
+            start_new_session=True,
         )
         try:
             _, stderr = await asyncio.wait_for(
@@ -108,11 +122,21 @@ class _PluginUpdater(_RepoZipUpdater):
                 timeout=PLUGIN_GIT_CLONE_TIMEOUT_SECONDS,
             )
         except asyncio.TimeoutError as exc:
-            # Never await the process again after killing it: communicate(), and even
-            # process.wait() on Windows, only complete once every process holding an
-            # inherited stdout/stderr handle exits, and git leaves helpers behind that
-            # outlive the clone. Waiting for them is what made this timeout unbounded.
-            process.kill()
+            # Kill the clone and its helpers, then return without awaiting any of them.
+            # communicate() only finishes once every process holding an inherited
+            # stdout/stderr handle exits, so awaiting it (or process.wait(), which on
+            # Windows also waits for the pipes) is what turned this deadline into an
+            # unbounded wait. The process is still reaped, just in the background.
+            await self._kill_clone_tree(process)
+
+            async def _reap() -> None:
+                with contextlib.suppress(Exception):
+                    await process.wait()
+
+            with contextlib.suppress(RuntimeError):
+                reaper = asyncio.create_task(_reap())
+                _CLONE_REAPERS.add(reaper)
+                reaper.add_done_callback(_CLONE_REAPERS.discard)
             if target.exists():
                 remove_dir(str(target))
             raise RuntimeError(
@@ -130,6 +154,51 @@ class _PluginUpdater(_RepoZipUpdater):
         git_metadata = target / ".git"
         if git_metadata.exists():
             remove_dir(str(git_metadata))
+
+    async def _kill_clone_tree(self, process: asyncio.subprocess.Process) -> None:
+        """Terminate a clone and every helper process it spawned.
+
+        Degrades to killing the clone process alone when the platform specific
+        mechanism is unavailable, so the caller keeps its deadline either way.
+
+        Args:
+            process: Clone process that overran the deadline.
+
+        Returns:
+            None.
+        """
+        try:
+            if sys.platform == "win32":
+                # `taskkill /T` walks the live process tree, so it has to run while the
+                # clone is still alive: once the parent exits, its helpers are
+                # reparented and the tree can no longer be found.
+                killer = await asyncio.create_subprocess_exec(
+                    "taskkill",
+                    "/T",
+                    "/F",
+                    "/PID",
+                    str(process.pid),
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL,
+                )
+                await asyncio.wait_for(
+                    killer.wait(),
+                    timeout=PLUGIN_GIT_CLONE_KILL_TIMEOUT_SECONDS,
+                )
+            else:
+                # The clone leads its own session, so its pid is also its process group
+                # id; the group kill also takes down git-remote-https and whatever
+                # credential helper it started.
+                os.killpg(process.pid, signal.SIGKILL)
+        except Exception:
+            logger.debug(
+                "Failed to kill the git clone process tree; killing the clone only.",
+                exc_info=True,
+            )
+            try:
+                process.kill()
+            except OSError:
+                pass
 
     async def inspect_repository(
         self,
