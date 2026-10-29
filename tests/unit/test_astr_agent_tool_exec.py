@@ -789,6 +789,108 @@ async def test_background_execution_lifecycle(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("is_background_task", [True, False])
+async def test_permission_guarded_plugin_tool_keeps_background_flag(
+    monkeypatch, is_background_task
+):
+    registry = ActiveEventRegistry()
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_tool_exec.active_event_registry", registry
+    )
+    wakeup = AsyncMock()
+    monkeypatch.setattr(
+        FunctionToolExecutor, "_wake_main_agent_for_background_result", wakeup
+    )
+    check = AsyncMock(return_value=None)
+    monkeypatch.setattr(FunctionToolManager, "_check_tool_permission", check)
+
+    class ReportTool(FunctionTool):
+        async def call(self, context, **kwargs):
+            return "report ready"
+
+    # Plugin tools reach the executor wrapped in a permission guard.
+    mgr = FunctionToolManager()
+    mgr.func_list.append(
+        ReportTool(
+            name="generate_report",
+            description="slow report",
+            parameters={"type": "object", "properties": {}},
+            is_background_task=is_background_task,
+        )
+    )
+    tool = mgr.get_full_tool_set().get_tool("generate_report")
+    assert isinstance(tool, _PermissionGuardedTool)
+    run_context = _build_run_context()
+    event = run_context.context.event
+    registry.register(event)
+    try:
+        results = [r async for r in FunctionToolExecutor.execute(tool, run_context)]
+        assert len(results) == 1
+        text = results[0].content[0].text
+        if is_background_task:
+            assert text.startswith("Background task submitted")
+            tasks = list(registry._background_tasks[event.unified_msg_origin])
+            await asyncio.wait_for(asyncio.gather(*tasks), timeout=1)
+            wakeup.assert_awaited_once()
+            assert wakeup.call_args.kwargs["result_text"] == "report ready\n"
+        else:
+            assert text == "report ready"
+            wakeup.assert_not_awaited()
+        assert not registry._background_tasks
+        check.assert_awaited_once_with("generate_report", run_context)
+    finally:
+        registry.unregister(event)
+
+
+@pytest.mark.asyncio
+async def test_permission_guarded_background_tool_still_checks_permission(
+    monkeypatch,
+):
+    registry = ActiveEventRegistry()
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_tool_exec.active_event_registry", registry
+    )
+    wakeup = AsyncMock()
+    monkeypatch.setattr(
+        FunctionToolExecutor, "_wake_main_agent_for_background_result", wakeup
+    )
+    monkeypatch.setattr(
+        FunctionToolManager,
+        "_check_tool_permission",
+        AsyncMock(return_value="error: Permission denied."),
+    )
+    wrapped_call = AsyncMock(return_value="report ready")
+
+    class ReportTool(FunctionTool):
+        async def call(self, context, **kwargs):
+            return await wrapped_call(context, **kwargs)
+
+    tool = _PermissionGuardedTool(
+        ReportTool(
+            name="generate_report",
+            description="slow report",
+            parameters={"type": "object", "properties": {}},
+            is_background_task=True,
+        ),
+        FunctionToolManager(),
+    )
+    run_context = _build_run_context()
+    event = run_context.context.event
+    registry.register(event)
+    try:
+        results = [r async for r in FunctionToolExecutor.execute(tool, run_context)]
+        assert len(results) == 1
+        assert results[0].content[0].text.startswith("Background task submitted")
+        tasks = list(registry._background_tasks[event.unified_msg_origin])
+        await asyncio.wait_for(asyncio.gather(*tasks), timeout=1)
+        wrapped_call.assert_not_awaited()
+        wakeup.assert_awaited_once()
+        assert "Permission denied" in wakeup.call_args.kwargs["result_text"]
+    finally:
+        registry.unregister(event)
+
+
+@pytest.mark.asyncio
 async def test_external_runner_cancel_closes_pending_tool_executor():
     runner = ToolLoopAgentRunner()
     runner._abort_signal = asyncio.Event()
