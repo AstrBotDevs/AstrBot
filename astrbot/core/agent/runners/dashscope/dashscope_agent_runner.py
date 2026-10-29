@@ -387,7 +387,9 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
             payload["incremental_output"] = False
 
         # 发起请求
-        partial = functools.partial(Application.call, **payload)
+        partial = functools.partial(
+            Application.call, request_timeout=self.timeout, **payload
+        )
         response = await asyncio.get_running_loop().run_in_executor(None, partial)
 
         async for resp in self._handle_streaming_response(response, session_id):
