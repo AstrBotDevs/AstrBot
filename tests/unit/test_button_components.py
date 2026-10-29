@@ -157,11 +157,16 @@ def test_callback_expiry_survives_cache_and_restart(tmp_path, monkeypatch, resta
     clock[0] = 160.0
     with pytest.raises(ValueError, match="expired"):
         decode_button_callback(payload)
-    assert payload.removeprefix("astrbot:") not in registry._cache
+    with pytest.raises(button_interaction.ButtonActionExpiredError):
+        decode_button_callback(payload)
+    assert decode_button_callback(payload, allow_expired=True) == (
+        "approve",
+        {"item": 42},
+    )
     with sqlite3.connect(db_path) as connection:
         assert (
             connection.execute("SELECT COUNT(*) FROM button_callbacks").fetchone()[0]
-            == 0
+            == 1
         )
 
 

@@ -107,6 +107,37 @@ async def test_slack_rejected_button_blocks_retry_readable_text(fallback_text):
 
 
 @pytest.mark.asyncio
+async def test_slack_expired_button_notifies_only_clicking_user(monkeypatch):
+    from astrbot.core.platform import button_interaction
+
+    clock = [100.0]
+    monkeypatch.setattr(button_interaction.time, "time", lambda: clock[0])
+    adapter = object.__new__(SlackAdapter)
+    adapter.web_client = AsyncMock()
+    token = encode_button_callback("approve", expires_at=160)
+    clock[0] = 160.0
+
+    for _ in range(2):
+        assert (
+            await adapter.convert_button_interaction(
+                {
+                    "actions": [{"value": token}],
+                    "user": {"id": "U1"},
+                    "channel": {"id": "C1"},
+                }
+            )
+            is None
+        )
+
+    assert adapter.web_client.chat_postEphemeral.await_count == 2
+    adapter.web_client.chat_postEphemeral.assert_awaited_with(
+        channel="C1",
+        user="U1",
+        text="按钮已过期，请重新发起操作。 / This button has expired. Please start again.",
+    )
+
+
+@pytest.mark.asyncio
 async def test_slack_block_action_converts_to_button_interaction():
     adapter = SlackAdapter.__new__(SlackAdapter)
     adapter.bot_self_id = "B1"

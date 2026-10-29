@@ -27,7 +27,11 @@ from astrbot.api.platform import (
     register_platform_adapter,
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
-from astrbot.core.platform.button_interaction import decode_button_callback
+from astrbot.core.platform.button_interaction import (
+    BUTTON_ACTION_EXPIRED_MESSAGE,
+    ButtonActionExpiredError,
+    decode_button_callback,
+)
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.star import star_map
@@ -309,6 +313,16 @@ class DiscordPlatformAdapter(Platform):
             callback_payload = str(interaction_data.get("custom_id", ""))
             try:
                 action_id, callback_data = decode_button_callback(callback_payload)
+            except ButtonActionExpiredError:
+                try:
+                    await interaction.followup.send(
+                        BUTTON_ACTION_EXPIRED_MESSAGE, ephemeral=True
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "Failed to send Discord button expiry notice: %s", exc
+                    )
+                return None
             except (TypeError, ValueError):
                 if callback_payload.startswith("astrbot:"):
                     logger.debug("Ignored an expired or invalid AstrBot button action.")
@@ -341,6 +355,9 @@ class DiscordPlatformAdapter(Platform):
                     source_message_id=(
                         str(source_message.id) if source_message is not None else None
                     ),
+                    callback_data=callback_payload
+                    if callback_payload.startswith("astrbot:")
+                    else None,
                 )
             ]
             abm.raw_message = interaction

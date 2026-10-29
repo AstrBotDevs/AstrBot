@@ -689,7 +689,7 @@ class QQOfficialPlatformAdapter(Platform):
         button_id = str(resolved.button_id or "")
         button_data = str(resolved.button_data or "")
         try:
-            action_id, data = decode_button_callback(button_data)
+            action_id, data = decode_button_callback(button_data, allow_expired=True)
         except ValueError:
             if button_data.startswith("astrbot:"):
                 raise
@@ -727,6 +727,7 @@ class QQOfficialPlatformAdapter(Platform):
             source_message_id=(
                 str(resolved.message_id) if resolved.message_id else None
             ),
+            callback_data=button_data if button_data.startswith("astrbot:") else None,
         )
         abm.sender = MessageMember(sender_id)
         abm.message = [component]

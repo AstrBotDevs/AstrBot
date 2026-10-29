@@ -1170,6 +1170,32 @@ async def test_telegram_callback_query_becomes_button_interaction():
     assert interaction.data == {"request_id": 7}
     assert interaction.interaction_id == "callback-1"
     assert interaction.source_message_id == "77"
+    assert interaction.callback_data == query.data
+
+
+@pytest.mark.asyncio
+async def test_telegram_expired_button_shows_bilingual_alert(monkeypatch):
+    from astrbot.core.platform import button_interaction
+
+    clock = [100.0]
+    monkeypatch.setattr(button_interaction.time, "time", lambda: clock[0])
+    adapter = object.__new__(_load_telegram_adapter())
+    adapter.handle_msg = AsyncMock()
+    query = MagicMock(data=encode_button_callback("approve", expires_at=160))
+    query.answer = AsyncMock()
+    clock[0] = 160.0
+
+    for _ in range(2):
+        await adapter.callback_query_handler(
+            MagicMock(callback_query=query), _build_context()
+        )
+
+    assert query.answer.await_count == 2
+    query.answer.assert_awaited_with(
+        text="按钮已过期，请重新发起操作。 / This button has expired. Please start again.",
+        show_alert=True,
+    )
+    adapter.handle_msg.assert_not_awaited()
 
 
 @pytest.mark.asyncio

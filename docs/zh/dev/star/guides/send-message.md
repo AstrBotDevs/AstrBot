@@ -129,7 +129,7 @@ async def confirm(self, event: AstrMessageEvent):
 ```
 
 - `action_timeout` 是这一行回调按钮的有效期，单位为秒，必须是有限正数；默认 `None`，表示不限时。从这行按钮首次渲染发送时开始计时，同一行共享截止时间。复用同一个 `ActionRow` 实例不会刷新有效期；要重新计时，请创建新的实例。
-- 截止时间会随回调数据持久化，重启不会重置。到期后的回调会被框架拒绝；已经受理的操作可以继续执行。按钮可能仍显示在原消息中。
+- 截止时间会随回调数据持久化，重启不会重置。到期后的点击会提示“按钮已过期，请重新发起操作。 / This button has expired. Please start again.”，不会执行插件处理器。Telegram 使用弹窗，Discord 和 Slack 使用仅点击者可见的回复，其余平台通过消息回复（企业微信 AI Bot 更新卡片）。重复点击仍会提示。已经受理的操作可以继续执行，按钮可能仍显示在原消息中。
 - `CallbackAction.data` 必须可以 JSON 序列化，点击后通过 `interaction.data` 读取；按钮 ID 对应 `interaction.action_id`。建议给 ID 加插件名前缀。
 - `UrlAction` 只打开链接，不触发插件回调，也不受 `action_timeout` 限制。`fallback_text` 用于不支持按钮的平台，不是过期提示。
 - `@filter.button_action()` 不指定 ID 时匹配所有按钮回调。此 PR 中原来的 `@filter.button_interaction(...)` 更名为 `@filter.button_action(...)`；事件类型仍为 `ButtonInteraction`，通过 `event.get_button_interaction()` 获取。

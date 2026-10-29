@@ -33,7 +33,11 @@ from astrbot.api.platform import (
     register_platform_adapter,
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
-from astrbot.core.platform.button_interaction import decode_button_callback
+from astrbot.core.platform.button_interaction import (
+    BUTTON_ACTION_EXPIRED_MESSAGE,
+    ButtonActionExpiredError,
+    decode_button_callback,
+)
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.star import star_map
@@ -470,18 +474,26 @@ class TelegramPlatformAdapter(Platform):
         if query is None:
             return
 
+        action_id = None
+        data = None
+        try:
+            if isinstance(query.data, str):
+                action_id, data = decode_button_callback(query.data)
+        except ButtonActionExpiredError:
+            try:
+                await query.answer(text=BUTTON_ACTION_EXPIRED_MESSAGE, show_alert=True)
+            except Exception as exc:
+                logger.warning("Failed to send Telegram button expiry notice: %s", exc)
+            return
+        except (TypeError, ValueError):
+            pass
+
         try:
             await query.answer()
         except Exception as exc:
             logger.warning("Failed to answer Telegram callback query: %s", exc)
 
-        if not isinstance(query.data, str):
-            logger.warning("Received a Telegram callback query without string data.")
-            return
-
-        try:
-            action_id, data = decode_button_callback(query.data)
-        except (TypeError, ValueError):
+        if action_id is None:
             logger.debug("Ignoring a Telegram callback query not created by AstrBot.")
             return
 
@@ -523,6 +535,7 @@ class TelegramPlatformAdapter(Platform):
                 data=data,
                 interaction_id=str(query.id),
                 source_message_id=source_message_id,
+                callback_data=query.data,
             )
         ]
         await self.handle_msg(message)

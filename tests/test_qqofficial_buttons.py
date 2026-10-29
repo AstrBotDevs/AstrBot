@@ -113,8 +113,11 @@ def test_qq_expired_callback_does_not_fall_back_to_button_id(monkeypatch):
         button_data=encode_button_callback("approve", expires_at=160)
     )
     clock[0] = 160.0
-    with pytest.raises(ValueError, match="expired"):
-        QQOfficialPlatformAdapter._parse_interaction_from_qqofficial(interaction)
+    message = QQOfficialPlatformAdapter._parse_interaction_from_qqofficial(interaction)
+    assert message.message[0].action_id == "approve"
+    assert message.message[0].callback_data == interaction.data.resolved.button_data
+    with pytest.raises(button_interaction.ButtonActionExpiredError):
+        button_interaction.decode_button_callback(message.message[0].callback_data)
 
 
 def test_qq_keyboard_renders_callback_and_url_buttons() -> None:

@@ -163,7 +163,9 @@ async def parse_webchat_message_parts(
                     raise ValueError("button_interaction part missing callback_data")
                 continue
             try:
-                action_id, data = decode_button_callback(callback_payload)
+                action_id, data = decode_button_callback(
+                    callback_payload, allow_expired=True
+                )
             except ValueError:
                 if strict:
                     raise
@@ -179,6 +181,7 @@ async def parse_webchat_message_parts(
                         if source_message_id is not None
                         else None
                     ),
+                    callback_data=callback_payload,
                 )
             )
             text_parts.append(action_id)
@@ -275,7 +278,7 @@ async def build_webchat_message_parts(
                     raise ValueError("button_interaction part missing callback_data")
                 continue
             try:
-                decode_button_callback(callback_payload)
+                decode_button_callback(callback_payload, allow_expired=True)
             except ValueError:
                 if strict:
                     raise

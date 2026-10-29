@@ -708,7 +708,8 @@ async def test_discord_expired_callback_does_not_fall_back_to_legacy_id(monkeypa
     monkeypatch.setattr(button_interaction.time, "time", lambda: clock[0])
     adapter = DiscordPlatformAdapter.__new__(DiscordPlatformAdapter)
     interaction = SimpleNamespace(
-        data={"custom_id": encode_button_callback("approve", expires_at=160)}
+        data={"custom_id": encode_button_callback("approve", expires_at=160)},
+        followup=SimpleNamespace(send=AsyncMock()),
     )
     clock[0] = 160.0
 
@@ -717,6 +718,9 @@ async def test_discord_expired_callback_does_not_fall_back_to_legacy_id(monkeypa
             {"type": "interaction", "interaction": interaction}
         )
         is None
+    )
+    interaction.followup.send.assert_awaited_once_with(
+        button_interaction.BUTTON_ACTION_EXPIRED_MESSAGE, ephemeral=True
     )
 
 

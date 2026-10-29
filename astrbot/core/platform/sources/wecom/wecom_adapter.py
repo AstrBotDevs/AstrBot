@@ -377,7 +377,9 @@ class WecomPlatformAdapter(Platform):
                 logger.debug("Ignored a WeCom template card callback without EventKey.")
                 return None
             try:
-                action_id, data = decode_button_callback(callback_payload)
+                action_id, data = decode_button_callback(
+                    callback_payload, allow_expired=True
+                )
             except ValueError:
                 logger.debug("Ignored a template card callback not created by AstrBot.")
                 return None
@@ -397,6 +399,7 @@ class WecomPlatformAdapter(Platform):
                     data=data,
                     interaction_id=interaction_id,
                     source_message_id=task_id or None,
+                    callback_data=callback_payload,
                 )
             ]
             abm.type = MessageType.FRIEND_MESSAGE
@@ -480,7 +483,9 @@ class WecomPlatformAdapter(Platform):
             menu_id = text_data.get("menu_id")
             if isinstance(menu_id, str) and menu_id:
                 try:
-                    action_id, data = decode_button_callback(menu_id)
+                    action_id, data = decode_button_callback(
+                        menu_id, allow_expired=True
+                    )
                 except ValueError:
                     if menu_id.startswith("astrbot:"):
                         logger.debug(
@@ -498,6 +503,7 @@ class WecomPlatformAdapter(Platform):
                             data=data,
                             interaction_id=abm.message_id,
                             source_message_id=None,
+                            callback_data=menu_id,
                         )
                     ]
                     abm.message_str = action_id

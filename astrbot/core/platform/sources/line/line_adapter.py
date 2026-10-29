@@ -273,7 +273,7 @@ class LinePlatformAdapter(Platform):
             if not isinstance(payload, str):
                 return None
             try:
-                action_id, data = decode_button_callback(payload)
+                action_id, data = decode_button_callback(payload, allow_expired=True)
             except ValueError:
                 logger.debug("[LINE] ignored unrecognized postback payload")
                 return None
@@ -283,6 +283,7 @@ class LinePlatformAdapter(Platform):
                     data=data,
                     interaction_id=str(event.get("webhookEventId") or uuid.uuid4().hex),
                     source_message_id=None,
+                    callback_data=payload,
                 )
             ]
         else:

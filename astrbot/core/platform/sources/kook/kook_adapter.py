@@ -477,7 +477,9 @@ class KookPlatformAdapter(Platform):
             logger.debug("[KOOK] Ignored a button click without a callback value.")
             return None
         try:
-            action_id, callback_data = decode_button_callback(callback_payload)
+            action_id, callback_data = decode_button_callback(
+                callback_payload, allow_expired=True
+            )
         except ValueError:
             logger.debug("[KOOK] Ignored a button click not created by AstrBot.")
             return None
@@ -524,6 +526,7 @@ class KookPlatformAdapter(Platform):
                 data=callback_data,
                 interaction_id=abm.message_id,
                 source_message_id=str(body.get("msg_id") or "") or None,
+                callback_data=callback_payload,
             )
         ]
         return abm

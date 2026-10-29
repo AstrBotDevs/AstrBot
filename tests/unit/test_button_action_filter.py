@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -9,6 +9,7 @@ from astrbot.core.pipeline.waking_check.stage import (
     WakingCheckStage,
     star_handlers_registry,
 )
+from astrbot.core.platform import button_interaction
 from astrbot.core.star.filter.button_action import ButtonActionFilter
 from astrbot.core.star.session_plugin_manager import SessionPluginManager
 
@@ -31,6 +32,36 @@ def test_button_action_filter_matches_action():
 
 def test_public_button_action_decorator_registers_filter():
     assert callable(filter.button_action("approve"))
+
+
+@pytest.mark.asyncio
+async def test_expired_button_notifies_before_any_plugin_filter(monkeypatch):
+    clock = [100.0]
+    monkeypatch.setattr(button_interaction.time, "time", lambda: clock[0])
+    registry = button_interaction._ButtonCallbackRegistry()
+    monkeypatch.setattr(button_interaction, "_button_callback_registry", registry)
+    token = button_interaction.encode_button_callback("approve", expires_at=160)
+    interaction = ButtonInteraction(
+        action_id="approve", interaction_id="click-1", callback_data=token
+    )
+    event = MagicMock()
+    event.get_button_interaction.return_value = interaction
+    event.send = AsyncMock()
+    stage = WakingCheckStage()
+    stage.ignore_bot_self_message = False
+    handlers = MagicMock()
+    monkeypatch.setattr(star_handlers_registry, "get_handlers_by_event_type", handlers)
+    clock[0] = 160.0
+
+    for _ in range(2):
+        await stage.process(event)
+
+    assert event.send.await_count == 2
+    assert event.stop_event.call_count == 2
+    assert event.send.await_args.args[0].chain[0].text == (
+        "按钮已过期，请重新发起操作。 / This button has expired. Please start again."
+    )
+    handlers.assert_not_called()
 
 
 @pytest.mark.asyncio

@@ -293,7 +293,9 @@ class MattermostPlatformAdapter(Platform):
         if not isinstance(encoded_callback, str):
             return None
         try:
-            action_id, callback_data = decode_button_callback(encoded_callback)
+            action_id, callback_data = decode_button_callback(
+                encoded_callback, allow_expired=True
+            )
         except ValueError:
             return None
 
@@ -336,6 +338,7 @@ class MattermostPlatformAdapter(Platform):
                 data=callback_data,
                 interaction_id=interaction_id,
                 source_message_id=source_message_id,
+                callback_data=encoded_callback,
             )
         ]
         abm.raw_message = payload

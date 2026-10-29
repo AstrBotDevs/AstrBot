@@ -21,7 +21,11 @@ from astrbot.api.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
-from astrbot.core.platform.button_interaction import decode_button_callback
+from astrbot.core.platform.button_interaction import (
+    BUTTON_ACTION_EXPIRED_MESSAGE,
+    ButtonActionExpiredError,
+    decode_button_callback,
+)
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from ...register import register_platform_adapter
@@ -216,6 +220,19 @@ class SlackAdapter(Platform):
             return None
         try:
             action_id, data = decode_button_callback(encoded_value)
+        except ButtonActionExpiredError:
+            user_id = (payload.get("user") or {}).get("id")
+            channel_id = (payload.get("channel") or {}).get("id")
+            if user_id and channel_id:
+                try:
+                    await self.web_client.chat_postEphemeral(
+                        channel=channel_id,
+                        user=user_id,
+                        text=BUTTON_ACTION_EXPIRED_MESSAGE,
+                    )
+                except Exception as exc:
+                    logger.warning("Failed to send Slack button expiry notice: %s", exc)
+            return None
         except ValueError:
             return None
 
@@ -255,6 +272,7 @@ class SlackAdapter(Platform):
                 data=data,
                 interaction_id=interaction_id,
                 source_message_id=source_message_id,
+                callback_data=encoded_value,
             )
         ]
         abm.raw_message = payload

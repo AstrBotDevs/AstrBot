@@ -1,5 +1,6 @@
 import asyncio
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -16,6 +17,7 @@ from astrbot.core.platform.button_interaction import (
     decode_button_callback,
     encode_button_callback,
 )
+from astrbot.core.pipeline.waking_check.stage import WakingCheckStage
 from astrbot.core.platform.sources.webchat import webchat_event
 from astrbot.core.platform.sources.webchat.message_parts_helper import (
     build_webchat_message_parts,
@@ -23,6 +25,35 @@ from astrbot.core.platform.sources.webchat.message_parts_helper import (
     message_chain_to_storage_message_parts,
     parse_webchat_message_parts,
 )
+
+
+@pytest.mark.asyncio
+async def test_webchat_expired_click_produces_bilingual_reply(monkeypatch):
+    from astrbot.core.platform import button_interaction
+
+    clock = [100.0]
+    monkeypatch.setattr(button_interaction.time, "time", lambda: clock[0])
+    token = encode_button_callback("approve", expires_at=160)
+    clock[0] = 160.0
+    parts = await build_webchat_message_parts(
+        [{"type": "button_interaction", "callback_data": token}],
+        get_attachment_by_id=AsyncMock(),
+        strict=False,
+    )
+    components, _, _ = await parse_webchat_message_parts(parts, strict=True)
+    event = MagicMock()
+    event.get_button_interaction.return_value = components[0]
+    event.send = AsyncMock()
+    stage = WakingCheckStage()
+    stage.ignore_bot_self_message = False
+
+    await stage.process(event)
+
+    assert components[0].callback_data == token
+    assert event.send.await_args.args[0].chain[0].text == (
+        "按钮已过期，请重新发起操作。 / This button has expired. Please start again."
+    )
+    event.stop_event.assert_called_once()
 
 
 @pytest.mark.asyncio

@@ -215,8 +215,9 @@ async def test_wecom_expired_menu_does_not_become_regular_message(monkeypatch):
         }
     )
 
-    assert message is None
-    adapter.handle_msg.assert_not_awaited()
+    assert isinstance(message.message[0], ButtonInteraction)
+    assert message.message[0].callback_data == callback
+    adapter.handle_msg.assert_awaited_once_with(message)
 
 
 @pytest.mark.asyncio

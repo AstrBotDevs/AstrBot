@@ -1,9 +1,14 @@
 from collections.abc import AsyncGenerator
 
 from astrbot import logger
-from astrbot.core.message.components import At, AtAll, Reply
+from astrbot.core.message.components import At, AtAll, ButtonInteraction, Reply
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.button_interaction import (
+    BUTTON_ACTION_EXPIRED_MESSAGE,
+    ButtonActionExpiredError,
+    decode_button_callback,
+)
 from astrbot.core.star.filter.button_action import ButtonActionFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.filter.permission import PermissionTypeFilter
@@ -72,6 +77,18 @@ class WakingCheckStage(Stage):
         ):
             event.stop_event()
             return
+
+        interaction = event.get_button_interaction()
+        if isinstance(interaction, ButtonInteraction) and interaction.callback_data:
+            try:
+                decode_button_callback(interaction.callback_data)
+            except ButtonActionExpiredError:
+                event.stop_event()
+                await event.send(MessageChain().message(BUTTON_ACTION_EXPIRED_MESSAGE))
+                return
+            except ValueError:
+                event.stop_event()
+                return
 
         # 设置 sender 身份
         preserve_whitespace = event.get_platform_name() == "lark" and (

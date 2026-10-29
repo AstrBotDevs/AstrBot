@@ -256,6 +256,8 @@ class ButtonInteraction(BaseMessageComponent):
     data: JSONValue | None = None
     interaction_id: str
     source_message_id: str | None = None
+    # Retain the opaque token for expiry validation before plugin dispatch.
+    callback_data: str | None = None
 
 
 class Face(BaseMessageComponent):

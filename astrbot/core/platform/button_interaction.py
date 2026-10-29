@@ -12,6 +12,13 @@ from pathlib import Path
 from astrbot.core.message.components import JSONValue
 
 BUTTON_CALLBACK_PREFIX = "astrbot:"
+BUTTON_ACTION_EXPIRED_MESSAGE = (
+    "按钮已过期，请重新发起操作。 / This button has expired. Please start again."
+)
+
+
+class ButtonActionExpiredError(ValueError):
+    """Indicate an expired callback that should receive an expiry notice."""
 
 
 class _ButtonCallbackRegistry:
@@ -82,11 +89,14 @@ class _ButtonCallbackRegistry:
                     connection.commit()
         return token
 
-    def resolve(self, token: str) -> tuple[str, JSONValue | None]:
+    def resolve(
+        self, token: str, *, allow_expired: bool = False
+    ) -> tuple[str, JSONValue | None]:
         """Resolve a callback token from memory or persistent storage.
 
         Args:
             token: Compact callback token returned by register().
+            allow_expired: Resolve routing metadata for sending an expiry notice.
 
         Returns:
             The registered action identifier and callback data.
@@ -126,15 +136,9 @@ class _ButtonCallbackRegistry:
                 cached = (decoded["i"], decoded.get("d"), expires_at)
                 self._cache[token] = cached
 
-            if cached[2] is not None and time.time() >= cached[2]:
-                self._cache.pop(token, None)
-                if self._db_path is not None:
-                    with sqlite3.connect(self._db_path, timeout=30) as connection:
-                        connection.execute(
-                            "DELETE FROM button_callbacks WHERE token = ?", (token,)
-                        )
-                        connection.commit()
-                raise ValueError("AstrBot button action has expired.")
+            if not allow_expired and cached[2] is not None and time.time() >= cached[2]:
+                # Retain expiry metadata so repeated clicks also receive a notice.
+                raise ButtonActionExpiredError("AstrBot button action has expired.")
             return cached[0], deepcopy(cached[1])
 
 
@@ -175,11 +179,15 @@ def encode_button_callback(
     return f"{BUTTON_CALLBACK_PREFIX}{token}"
 
 
-def decode_button_callback(payload: str) -> tuple[str, JSONValue | None]:
+def decode_button_callback(
+    payload: str, *, allow_expired: bool = False
+) -> tuple[str, JSONValue | None]:
     """Resolve an AstrBot button callback token.
 
     Args:
         payload: The exact callback value returned by the IM platform.
+        allow_expired: Resolve metadata only to route an expiry notice. The inbound
+            ButtonInteraction must retain callback_data for pipeline validation.
 
     Returns:
         The action identifier and its optional JSON data.
@@ -192,4 +200,4 @@ def decode_button_callback(payload: str) -> tuple[str, JSONValue | None]:
     token = payload.removeprefix(BUTTON_CALLBACK_PREFIX)
     if len(token) != 32 or any(char not in "0123456789abcdef" for char in token):
         raise ValueError("Invalid AstrBot button callback token.")
-    return _button_callback_registry.resolve(token)
+    return _button_callback_registry.resolve(token, allow_expired=allow_expired)

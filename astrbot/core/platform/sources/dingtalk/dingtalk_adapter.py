@@ -399,7 +399,9 @@ class DingtalkPlatformAdapter(Platform):
                 if not isinstance(callback_payload, str):
                     continue
                 try:
-                    decoded_callback = decode_button_callback(callback_payload)
+                    decoded_callback = decode_button_callback(
+                        callback_payload, allow_expired=True
+                    )
                     break
                 except ValueError:
                     continue
@@ -438,6 +440,7 @@ class DingtalkPlatformAdapter(Platform):
                 data=data,
                 interaction_id=interaction_id,
                 source_message_id=cast(str | None, raw_data.get("outTrackId")),
+                callback_data=callback_payload,
             )
         ]
         abm.raw_message = callback

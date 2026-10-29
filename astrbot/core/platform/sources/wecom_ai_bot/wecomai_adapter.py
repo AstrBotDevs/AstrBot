@@ -386,7 +386,7 @@ class WecomAIBotAdapter(Platform):
                     )
                     return None
                 try:
-                    decode_button_callback(event_key)
+                    decode_button_callback(event_key, allow_expired=True)
                 except ValueError as e:
                     logger.warning("Ignored unknown WeCom button callback: %s", e)
                     return None
@@ -484,7 +484,7 @@ class WecomAIBotAdapter(Platform):
                     )
                     return
                 try:
-                    decode_button_callback(event_key)
+                    decode_button_callback(event_key, allow_expired=True)
                 except ValueError as e:
                     logger.warning(
                         "[WecomAI][LongConn] Ignored unknown button callback: %s", e
@@ -642,7 +642,7 @@ class WecomAIBotAdapter(Platform):
                 event_key = native_interaction.get("event_key")
                 if not isinstance(event_key, str):
                     raise ValueError("WeCom template card event is missing event_key.")
-                action_id, data = decode_button_callback(event_key)
+                action_id, data = decode_button_callback(event_key, allow_expired=True)
                 interaction_id = str(message_data.get("msgid") or uuid.uuid4())
                 button_interaction = ButtonInteraction(
                     action_id=action_id,
@@ -650,6 +650,7 @@ class WecomAIBotAdapter(Platform):
                     interaction_id=interaction_id,
                     source_message_id=str(native_interaction.get("task_id") or "")
                     or None,
+                    callback_data=event_key,
                 )
             else:
                 content = f"[{event_type or 'event'}事件]"

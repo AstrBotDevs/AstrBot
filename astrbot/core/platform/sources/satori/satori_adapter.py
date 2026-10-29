@@ -355,7 +355,9 @@ class SatoriPlatformAdapter(Platform):
             logger.debug("[Satori] Ignored a button interaction without an id.")
             return None
         try:
-            action_id, callback_data = decode_button_callback(callback_payload)
+            action_id, callback_data = decode_button_callback(
+                callback_payload, allow_expired=True
+            )
         except ValueError:
             logger.debug("[Satori] Ignored a button not created by AstrBot.")
             return None
@@ -410,6 +412,7 @@ class SatoriPlatformAdapter(Platform):
                 data=callback_data,
                 interaction_id=interaction_id,
                 source_message_id=source_message_id,
+                callback_data=callback_payload,
             )
         ]
         return abm

@@ -802,7 +802,7 @@ class LarkPlatformAdapter(Platform):
             return
 
         try:
-            action_id, data = decode_button_callback(payload)
+            action_id, data = decode_button_callback(payload, allow_expired=True)
         except ValueError:
             logger.debug("[Lark] Ignored an invalid AstrBot card callback payload.")
             return
@@ -848,6 +848,7 @@ class LarkPlatformAdapter(Platform):
                 data=data,
                 interaction_id=event_id,
                 source_message_id=source_message_id or None,
+                callback_data=payload,
             )
         ]
 
