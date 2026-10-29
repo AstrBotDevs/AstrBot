@@ -18,6 +18,7 @@ from tests.fixtures.helpers import (
 )
 from tests.fixtures.mocks.telegram import (
     MockTelegramBuilder,
+    MockTelegramForbidden,
     MockTelegramNetworkError,
     create_mock_telegram_modules,
 )
@@ -934,13 +935,14 @@ async def test_telegram_voice_message_creates_record_component(tmp_path):
     )
     wav_path = tmp_path / "voice.oga.wav"
     convert_message_globals = adapter.convert_message.__func__.__globals__
+    download_file = AsyncMock()
 
     with (
         patch.dict(
             convert_message_globals,
             {
                 "get_astrbot_temp_path": MagicMock(return_value=str(tmp_path)),
-                "download_file": AsyncMock(),
+                "download_file": download_file,
             },
         ),
         patch(
@@ -951,6 +953,10 @@ async def test_telegram_voice_message_creates_record_component(tmp_path):
         result = await adapter.convert_message(update, _build_context())
 
     assert result is not None
+    download_file.assert_awaited_once_with(
+        "https://api.telegram.org/file/test/voice.oga",
+        path=str(tmp_path / "voice.oga"),
+    )
     assert len(result.message) == 1
     assert isinstance(result.message[0], Comp.Record)
     assert result.message[0].file == str(wav_path)
@@ -974,13 +980,14 @@ async def test_telegram_audio_caption_populates_message_text_and_plain(tmp_path)
     )
     wav_path = tmp_path / "song.mp3.wav"
     convert_message_globals = adapter.convert_message.__func__.__globals__
+    download_file = AsyncMock()
 
     with (
         patch.dict(
             convert_message_globals,
             {
                 "get_astrbot_temp_path": MagicMock(return_value=str(tmp_path)),
-                "download_file": AsyncMock(),
+                "download_file": download_file,
             },
         ),
         patch(
@@ -991,6 +998,10 @@ async def test_telegram_audio_caption_populates_message_text_and_plain(tmp_path)
         result = await adapter.convert_message(update, _build_context())
 
     assert result is not None
+    download_file.assert_awaited_once_with(
+        "https://api.telegram.org/file/test/song.mp3",
+        path=str(tmp_path / "song.mp3"),
+    )
     assert result.message_str == "这首歌是什么"
     assert len(result.message) == 2
     assert isinstance(result.message[0], Comp.Record)
@@ -1212,3 +1223,181 @@ async def test_telegram_run_rebuilds_fresh_application_after_recreate_init_failu
     app_two.shutdown.assert_awaited()
     app_three.initialize.assert_awaited()
     app_three.start.assert_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("telegram_proxy", "proxy_url"),
+    [
+        ("http://127.0.0.1:7890", "http://127.0.0.1:7890"),
+        ("socks5://127.0.0.1:7891", "socks5://127.0.0.1:7891"),
+        ("127.0.0.1:7890", "http://127.0.0.1:7890"),
+    ],
+    ids=["http", "socks5", "no_scheme"],
+)
+async def test_telegram_proxy_is_applied_to_bot_api_and_polling_requests(
+    telegram_proxy, proxy_url
+):
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    module_globals = TelegramPlatformAdapter.__init__.__globals__
+
+    builder = MagicMock()
+    builder.token.return_value = builder
+    builder.base_url.return_value = builder
+    builder.base_file_url.return_value = builder
+    builder.proxy.return_value = builder
+    builder.get_updates_proxy.return_value = builder
+
+    with patch.dict(
+        module_globals,
+        {"ApplicationBuilder": MagicMock(return_value=builder)},
+    ):
+        TelegramPlatformAdapter(
+            make_platform_config("telegram", telegram_proxy=telegram_proxy),
+            {},
+            asyncio.Queue(),
+        )
+
+    builder.proxy.assert_called_once_with(proxy_url)
+    builder.get_updates_proxy.assert_called_once_with(proxy_url)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("telegram_proxy", [None, ""])
+async def test_telegram_proxy_is_skipped_when_not_configured(telegram_proxy):
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    module_globals = TelegramPlatformAdapter.__init__.__globals__
+
+    builder = MagicMock()
+    builder.token.return_value = builder
+    builder.base_url.return_value = builder
+    builder.base_file_url.return_value = builder
+
+    with patch.dict(
+        module_globals,
+        {"ApplicationBuilder": MagicMock(return_value=builder)},
+    ):
+        TelegramPlatformAdapter(
+            make_platform_config("telegram", telegram_proxy=telegram_proxy),
+            {},
+            asyncio.Queue(),
+        )
+
+    builder.proxy.assert_not_called()
+    builder.get_updates_proxy.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("media_type", "fields"),
+    [
+        ("photo", ("file", "url")),
+        ("sticker", ("file", "url")),
+        ("document", ("file_", "url")),
+        ("video", ("file", "path")),
+        ("video_note", ("file", "path")),
+    ],
+    ids=["photo", "sticker", "document", "video", "video_note"],
+)
+async def test_telegram_proxy_downloads_media_through_the_bot(
+    tmp_path, media_type, fields
+):
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram", telegram_proxy="http://127.0.0.1:7890"),
+        {},
+        asyncio.Queue(),
+    )
+    media = create_mock_file(f"https://api.telegram.org/file/test/{media_type}.bin")
+    media.file_name = "example"
+    media.is_animated = media.is_video = False
+    media.download_to_drive = AsyncMock()
+    update = create_mock_update(
+        message_text=None,
+        **{media_type: [media] if media_type == "photo" else media},
+    )
+    local_path = tmp_path / f"random_{media_type}.bin"
+
+    with patch.dict(
+        adapter.convert_message.__func__.__globals__,
+        {
+            "get_astrbot_temp_path": MagicMock(return_value=str(tmp_path)),
+            "uuid": MagicMock(**{"uuid4.return_value.hex": "random"}),
+        },
+    ):
+        result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    media.download_to_drive.assert_awaited_once_with(local_path, read_timeout=30.0)
+    for field in fields:
+        assert getattr(result.message[0], field) == str(local_path)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "error",
+    [
+        MockTelegramNetworkError("network"),
+        MockTelegramForbidden("forbidden"),
+        OSError("disk"),
+    ],
+    ids=["network", "forbidden", "disk"],
+)
+async def test_telegram_proxy_download_failure_keeps_the_url(tmp_path, error):
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram", telegram_proxy="http://127.0.0.1:7890"),
+        {},
+        asyncio.Queue(),
+    )
+    file_path = "https://api.telegram.org/file/test/photo.bin"
+    photo = create_mock_file(file_path)
+    photo.download_to_drive = AsyncMock(side_effect=error)
+    update = create_mock_update(message_text=None, photo=[photo])
+
+    with patch.dict(
+        adapter.convert_message.__func__.__globals__,
+        {"get_astrbot_temp_path": MagicMock(return_value=str(tmp_path))},
+    ):
+        result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    photo.download_to_drive.assert_awaited_once()
+    assert result.message[0].file == file_path
+    assert result.message[0].url == file_path
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("media_type", ["voice", "audio"])
+async def test_telegram_proxy_downloads_audio_through_the_bot(tmp_path, media_type):
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram", telegram_proxy="http://127.0.0.1:7890"),
+        {},
+        asyncio.Queue(),
+    )
+    media = create_mock_file(f"https://api.telegram.org/file/test/{media_type}.oga")
+    media.download_to_drive = AsyncMock()
+    update = create_mock_update(message_text=None, **{media_type: media})
+    download_file = AsyncMock()
+
+    with (
+        patch.dict(
+            adapter.convert_message.__func__.__globals__,
+            {
+                "get_astrbot_temp_path": MagicMock(return_value=str(tmp_path)),
+                "download_file": download_file,
+            },
+        ),
+        patch(
+            "astrbot.core.utils.media_utils.ensure_wav",
+            AsyncMock(return_value=str(tmp_path / f"{media_type}.wav")),
+        ),
+    ):
+        result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    media.download_to_drive.assert_awaited_once_with(
+        tmp_path / f"{media_type}.oga", read_timeout=30.0
+    )
+    download_file.assert_not_awaited()

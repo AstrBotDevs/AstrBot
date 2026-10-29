@@ -35,8 +35,9 @@ Fill in the configuration fields that appear:
 - ID: Enter any value to distinguish between different messaging platform instances.
 - Enable: Check this option.
 - Bot Token: Your Telegram bot's `token`.
+- Telegram Proxy URL: Optional, e.g. `http://ip:port` or `socks5://ip:port`.
 
-Please ensure your network environment can access Telegram. You may need to configure a proxy using `Settings → Network → Proxy & Dependency Sources → HTTP Proxy`.
+Please ensure your network environment can access Telegram. You can set a separate proxy for this bot in `Telegram Proxy URL`, or a global proxy in `Settings → Network → Proxy & Dependency Sources → HTTP Proxy`.
 
 ## Streaming Output
 
