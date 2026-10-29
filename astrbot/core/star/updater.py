@@ -73,9 +73,21 @@ class _PluginUpdater(_RepoZipUpdater):
             raise RuntimeError(f"Git clone target already exists: {target}")
         target.parent.mkdir(parents=True, exist_ok=True)
         process_env = os.environ.copy()
+        # Keep the clone non-interactive on every supported transport.
+        # GIT_TERMINAL_PROMPT only silences git's own prompt: credential helpers (Git
+        # Credential Manager, IDE askpass bridges) are separate programs that can wait
+        # for a GUI dialog to be dismissed. An empty credential.helper resets the helper
+        # list and, as command-line config, it wins over system/global/local config; the
+        # empty askpass variables and a closed stdin remove the remaining prompt
+        # sources.
         process_env["GIT_TERMINAL_PROMPT"] = "0"
+        process_env["GIT_ASKPASS"] = ""
+        process_env["SSH_ASKPASS"] = ""
+        process_env.setdefault("GIT_SSH_COMMAND", "ssh -oBatchMode=yes")
         process = await asyncio.create_subprocess_exec(
             git_executable,
+            "-c",
+            "credential.helper=",
             "clone",
             "--depth",
             "1",
@@ -84,6 +96,7 @@ class _PluginUpdater(_RepoZipUpdater):
             "--",
             repo_url,
             str(target),
+            stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=process_env,
@@ -94,11 +107,18 @@ class _PluginUpdater(_RepoZipUpdater):
                 timeout=PLUGIN_GIT_CLONE_TIMEOUT_SECONDS,
             )
         except asyncio.TimeoutError as exc:
+            # Never await the process again after killing it: communicate(), and even
+            # process.wait() on Windows, only complete once every process holding an
+            # inherited stdout/stderr handle exits, and git leaves helpers behind that
+            # outlive the clone. Waiting for them is what made this timeout unbounded.
             process.kill()
-            await process.communicate()
             if target.exists():
                 remove_dir(str(target))
-            raise RuntimeError("Git clone timed out.") from exc
+            raise RuntimeError(
+                f"Git clone timed out after {PLUGIN_GIT_CLONE_TIMEOUT_SECONDS}s. "
+                "Check that the repository is reachable and cloneable without "
+                "credentials."
+            ) from exc
 
         if process.returncode != 0:
             if target.exists():
