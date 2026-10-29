@@ -701,6 +701,26 @@ async def test_discord_converts_component_interaction_to_common_event():
 
 
 @pytest.mark.asyncio
+async def test_discord_expired_callback_does_not_fall_back_to_legacy_id(monkeypatch):
+    from astrbot.core.platform import button_interaction
+
+    clock = [100.0]
+    monkeypatch.setattr(button_interaction.time, "time", lambda: clock[0])
+    adapter = DiscordPlatformAdapter.__new__(DiscordPlatformAdapter)
+    interaction = SimpleNamespace(
+        data={"custom_id": encode_button_callback("approve", expires_at=160)}
+    )
+    clock[0] = 160.0
+
+    assert (
+        await adapter.convert_message(
+            {"type": "interaction", "interaction": interaction}
+        )
+        is None
+    )
+
+
+@pytest.mark.asyncio
 async def test_discord_client_acknowledges_component_before_dispatch(monkeypatch):
     process_application_commands = AsyncMock()
     monkeypatch.setattr(

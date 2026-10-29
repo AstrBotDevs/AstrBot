@@ -37,14 +37,14 @@ def build_wecom_button_card(
     Raises:
         ValueError: More than six buttons were supplied for one card.
     """
-    buttons = [button for row in rows for button in row.buttons]
+    buttons = [(row, button) for row in rows for button in row.buttons]
     if not buttons:
         return None
     if len(buttons) > 6:
         raise ValueError("WeCom AI Bot supports at most 6 buttons per card.")
 
     native_buttons = []
-    for button in buttons:
+    for row, button in buttons:
         native_button = {
             "text": (button.label or button.id)[:10],
             "style": _BUTTON_STYLE_MAP[button.style],
@@ -53,7 +53,9 @@ def build_wecom_button_card(
             native_button.update(
                 {
                     "type": 0,
-                    "key": encode_button_callback(button.id, button.action.data),
+                    "key": encode_button_callback(
+                        button.id, button.action.data, expires_at=row.action_expires_at
+                    ),
                 }
             )
         elif isinstance(button.action, UrlAction):

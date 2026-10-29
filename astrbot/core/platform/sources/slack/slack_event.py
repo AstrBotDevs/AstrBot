@@ -128,7 +128,11 @@ class SlackMessageEvent(AstrMessageEvent):
                     "action_id": button.id,
                 }
                 if isinstance(button.action, CallbackAction):
-                    value = encode_button_callback(button.id, button.action.data)
+                    value = encode_button_callback(
+                        button.id,
+                        button.action.data,
+                        expires_at=segment.action_expires_at,
+                    )
                     if len(value.encode("utf-8")) > 2000:
                         raise ValueError(
                             "Slack callback payloads cannot exceed 2000 bytes"

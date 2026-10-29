@@ -525,6 +525,7 @@ class LarkMessageEvent(AstrMessageEvent):
                     callback = encode_button_callback(
                         button.id,
                         button.action.data,
+                        expires_at=component.action_expires_at,
                     )
                     callback_value = {"astrbot_callback": callback}
                     if message_type:

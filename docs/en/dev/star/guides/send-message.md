@@ -89,6 +89,53 @@ Comp.Video.fromFileSystem(path=path)
 Comp.Video.fromURL(url="https://example.com/video.mp4")
 ```
 
+## Interactive Buttons
+
+Wrap `Button` components in an `ActionRow` and handle clicks with `@filter.button_action("button ID")`. Add these methods to an existing `Star` plugin class.
+
+```python
+from astrbot.api.event import AstrMessageEvent, filter
+import astrbot.api.message_components as Comp
+
+
+@filter.command("buttons")
+async def buttons(self, event: AstrMessageEvent):
+    yield event.chain_result([
+        Comp.Plain("Choose an action:"),
+        Comp.ActionRow(
+            buttons=[
+                Comp.Button(
+                    id="my_plugin:confirm",
+                    label="Confirm",
+                    action=Comp.CallbackAction(data={"item_id": 42}),
+                    style=Comp.ButtonStyle.PRIMARY,
+                ),
+                Comp.Button(
+                    id="my_plugin:docs",
+                    label="Docs",
+                    action=Comp.UrlAction(url="https://docs.astrbot.app"),
+                ),
+            ],
+            action_timeout=60,
+            fallback_text="Buttons are unavailable here. Use text commands instead.",
+        ),
+    ])
+
+
+@filter.button_action("my_plugin:confirm")
+async def confirm(self, event: AstrMessageEvent):
+    interaction = event.get_button_interaction()
+    if interaction is None:
+        return
+    yield event.plain_result(f"Confirmed item: {interaction.data['item_id']}")
+```
+
+- `action_timeout` is the lifetime of the row's callback buttons in seconds. It must be a finite positive number; the default `None` means unlimited. The shared deadline starts when the row is first rendered for sending. Reusing the same `ActionRow` instance preserves its deadline; create a new instance to start a new lifetime.
+- The deadline is persisted with the callback data and survives restarts. The framework rejects clicks after expiry; operations already accepted can finish. Buttons may remain visible in the original message.
+- `CallbackAction.data` must be JSON-compatible and is returned as `interaction.data`. The button ID becomes `interaction.action_id`; prefix IDs with your plugin name to avoid collisions.
+- `UrlAction` opens a link without invoking a plugin callback and is unaffected by `action_timeout`. `fallback_text` is used on platforms without button support, rather than as an expiry notice.
+- `@filter.button_action()` without an ID matches all button callbacks. In this PR, `@filter.button_interaction(...)` is renamed to `@filter.button_action(...)`. The event component remains `ButtonInteraction`, accessible through `event.get_button_interaction()`.
+
 ## Sending Video Messages
 
 ```python

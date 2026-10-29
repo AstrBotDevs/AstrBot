@@ -4,7 +4,7 @@ from astrbot import logger
 from astrbot.core.message.components import At, AtAll, Reply
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.star.filter.button_interaction import ButtonInteractionFilter
+from astrbot.core.star.filter.button_action import ButtonActionFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.filter.permission import PermissionTypeFilter
 from astrbot.core.star.session_plugin_manager import SessionPluginManager
@@ -165,7 +165,7 @@ class WakingCheckStage(Stage):
             plugins_name=event.plugins_name,
         ):
             if event.is_button_interaction() and not any(
-                isinstance(handler_filter, ButtonInteractionFilter)
+                isinstance(handler_filter, ButtonActionFilter)
                 for handler_filter in handler.event_filters
             ):
                 continue

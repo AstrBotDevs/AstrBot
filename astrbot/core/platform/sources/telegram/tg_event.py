@@ -168,8 +168,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 if not isinstance(button.action, CallbackAction):
                     continue
                 callback_data = encode_button_callback(
-                    button.id,
-                    button.action.data,
+                    button.id, button.action.data, expires_at=row.action_expires_at
                 )
                 if len(callback_data.encode("utf-8")) > 64:
                     logger.warning(

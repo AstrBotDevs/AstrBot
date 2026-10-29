@@ -48,7 +48,11 @@ def action_rows_to_discord_view(
                     row=row_index,
                 )
             elif isinstance(button.action, CallbackAction):
-                custom_id = encode_button_callback(button.id, button.action.data)
+                custom_id = encode_button_callback(
+                    button.id,
+                    button.action.data,
+                    expires_at=action_row.action_expires_at,
+                )
                 if len(custom_id) > 100:
                     raise ValueError(
                         f"Discord button callback payload exceeds 100 characters: {button.id}"

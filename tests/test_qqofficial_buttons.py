@@ -104,6 +104,19 @@ def _make_group_event() -> QQOfficialMessageEvent:
     )
 
 
+def test_qq_expired_callback_does_not_fall_back_to_button_id(monkeypatch):
+    from astrbot.core.platform import button_interaction
+
+    clock = [100.0]
+    monkeypatch.setattr(button_interaction.time, "time", lambda: clock[0])
+    interaction = _make_interaction(
+        button_data=encode_button_callback("approve", expires_at=160)
+    )
+    clock[0] = 160.0
+    with pytest.raises(ValueError, match="expired"):
+        QQOfficialPlatformAdapter._parse_interaction_from_qqofficial(interaction)
+
+
 def test_qq_keyboard_renders_callback_and_url_buttons() -> None:
     chain = MessageChain(
         chain=[

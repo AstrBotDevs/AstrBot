@@ -4,7 +4,7 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from . import HandlerFilter
 
 
-class ButtonInteractionFilter(HandlerFilter):
+class ButtonActionFilter(HandlerFilter):
     """Match portable button interactions, optionally by action ID."""
 
     def __init__(self, action_id: str | None = None) -> None:

@@ -167,6 +167,9 @@ class KookEvent(AstrMessageEvent):
                         value = encode_button_callback(
                             button.id,
                             button.action.data,
+                            expires_at=message_component.action_expires_at
+                            if isinstance(message_component, ActionRow)
+                            else None,
                         )
                     elif isinstance(button.action, UrlAction):
                         click = "link"

@@ -15,7 +15,7 @@ from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.provider.func_tool_manager import PY_TO_JSON_TYPE, SUPPORTED_TYPES
 from astrbot.core.provider.register import llm_tools
 
-from ..filter.button_interaction import ButtonInteractionFilter
+from ..filter.button_action import ButtonActionFilter
 from ..filter.command import CommandFilter
 from ..filter.command_group import CommandGroupFilter
 from ..filter.custom_filter import CustomFilterAnd, CustomFilterOr
@@ -275,7 +275,7 @@ def register_event_message_type(event_message_type: EventMessageType, **kwargs):
     return decorator
 
 
-def register_button_interaction(action_id: str | None = None, **kwargs):
+def register_button_action(action_id: str | None = None, **kwargs):
     """Register a handler for portable button interactions.
 
     Args:
@@ -292,7 +292,7 @@ def register_button_interaction(action_id: str | None = None, **kwargs):
             EventType.AdapterMessageEvent,
             **kwargs,
         )
-        handler_md.event_filters.append(ButtonInteractionFilter(action_id))
+        handler_md.event_filters.append(ButtonActionFilter(action_id))
         return awaitable
 
     return decorator

@@ -1,3 +1,5 @@
+import sqlite3
+
 import pytest
 
 from astrbot.core.message.components import (
@@ -114,3 +116,67 @@ def test_callback_registry_survives_process_restart(tmp_path, monkeypatch):
 def test_callback_codec_rejects_invalid_payload(payload):
     with pytest.raises(ValueError):
         decode_button_callback(payload)
+
+
+@pytest.mark.parametrize("timeout", [0, -1, float("inf"), float("nan")])
+def test_action_timeout_requires_positive_finite_seconds(timeout):
+    with pytest.raises(ValueError):
+        ActionRow(buttons=[], action_timeout=timeout)
+
+
+def test_action_row_starts_shared_deadline_on_first_render(monkeypatch):
+    clock = [100.0]
+    monkeypatch.setattr(button_interaction.time, "time", lambda: clock[0])
+    row = ActionRow(buttons=[], action_timeout=60)
+    clock[0] = 200.0
+    assert row.toDict()["data"]["action_timeout"] == 60
+    assert row.action_expires_at == 260
+    clock[0] = 220.0
+    assert row.action_expires_at == 260
+    assert ActionRow(buttons=[]).action_expires_at is None
+
+
+@pytest.mark.parametrize("restart", [False, True])
+def test_callback_expiry_survives_cache_and_restart(tmp_path, monkeypatch, restart):
+    clock = [100.0]
+    monkeypatch.setattr(button_interaction.time, "time", lambda: clock[0])
+    registry = button_interaction._ButtonCallbackRegistry()
+    db_path = tmp_path / "callbacks.db"
+    registry.configure(db_path)
+    monkeypatch.setattr(button_interaction, "_button_callback_registry", registry)
+    payload = encode_button_callback("approve", {"item": 42}, expires_at=160)
+    assert decode_button_callback(payload) == ("approve", {"item": 42})
+
+    if restart:
+        registry = button_interaction._ButtonCallbackRegistry()
+        registry.configure(db_path)
+        monkeypatch.setattr(button_interaction, "_button_callback_registry", registry)
+
+    clock[0] = 159.0
+    assert decode_button_callback(payload) == ("approve", {"item": 42})
+    clock[0] = 160.0
+    with pytest.raises(ValueError, match="expired"):
+        decode_button_callback(payload)
+    assert payload.removeprefix("astrbot:") not in registry._cache
+    with sqlite3.connect(db_path) as connection:
+        assert (
+            connection.execute("SELECT COUNT(*) FROM button_callbacks").fetchone()[0]
+            == 0
+        )
+
+
+def test_new_deadline_does_not_renew_old_callback(monkeypatch):
+    clock = [100.0]
+    monkeypatch.setattr(button_interaction.time, "time", lambda: clock[0])
+    registry = button_interaction._ButtonCallbackRegistry()
+    monkeypatch.setattr(button_interaction, "_button_callback_registry", registry)
+    old = encode_button_callback("approve", {"item": 42}, expires_at=160)
+    new = encode_button_callback("approve", {"item": 42}, expires_at=220)
+    unlimited = encode_button_callback("approve", {"item": 42})
+    assert len({old, new, unlimited}) == 3
+    clock[0] = 160.0
+    with pytest.raises(ValueError, match="expired"):
+        decode_button_callback(old)
+    assert decode_button_callback(new) == ("approve", {"item": 42})
+    clock[0] = 10_000.0
+    assert decode_button_callback(unlimited) == ("approve", {"item": 42})

@@ -215,6 +215,7 @@ class WecomPlatformEvent(AstrMessageEvent):
                             callback_id = encode_button_callback(
                                 button.id,
                                 button.action.data,
+                                expires_at=comp.action_expires_at,
                             )
                             if len(callback_id.encode("utf-8")) > 64:
                                 raise ValueError(
@@ -370,6 +371,7 @@ class WecomPlatformEvent(AstrMessageEvent):
                             item["key"] = encode_button_callback(
                                 button.id,
                                 button.action.data,
+                                expires_at=comp.action_expires_at,
                             )
                         elif isinstance(button.action, UrlAction):
                             item["type"] = 1

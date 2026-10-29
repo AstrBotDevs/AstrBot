@@ -1067,8 +1067,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 if isinstance(button.action, CallbackAction):
                     action_type = 1
                     action_data = encode_button_callback(
-                        button.id,
-                        button.action.data,
+                        button.id, button.action.data, expires_at=row.action_expires_at
                     )
                 elif isinstance(button.action, UrlAction):
                     action_type = 0

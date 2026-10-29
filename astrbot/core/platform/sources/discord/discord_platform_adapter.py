@@ -138,6 +138,8 @@ class DiscordPlatformAdapter(Platform):
             if self.bot_self_id is None:
                 self.bot_self_id = message_data.get("bot_id")
             abm = await self.convert_message(data=message_data)
+            if abm is None:
+                return
             interaction = message_data.get("interaction")
             followup_webhook = interaction.followup if interaction is not None else None
             await self.handle_msg(abm, followup_webhook)
@@ -299,7 +301,7 @@ class DiscordPlatformAdapter(Platform):
         abm.message_id = str(message.id)
         return abm
 
-    async def convert_message(self, data: dict) -> AstrBotMessage:
+    async def convert_message(self, data: dict) -> AstrBotMessage | None:
         """将平台消息转换成 AstrBotMessage"""
         if data.get("type") == "interaction":
             interaction = cast(discord.Interaction, data["interaction"])
@@ -308,6 +310,9 @@ class DiscordPlatformAdapter(Platform):
             try:
                 action_id, callback_data = decode_button_callback(callback_payload)
             except (TypeError, ValueError):
+                if callback_payload.startswith("astrbot:"):
+                    logger.debug("Ignored an expired or invalid AstrBot button action.")
+                    return None
                 # Legacy DiscordButton custom IDs were sent without an AstrBot envelope.
                 action_id, callback_data = callback_payload, None
 

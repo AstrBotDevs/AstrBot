@@ -9,11 +9,11 @@ from astrbot.core.pipeline.waking_check.stage import (
     WakingCheckStage,
     star_handlers_registry,
 )
-from astrbot.core.star.filter.button_interaction import ButtonInteractionFilter
+from astrbot.core.star.filter.button_action import ButtonActionFilter
 from astrbot.core.star.session_plugin_manager import SessionPluginManager
 
 
-def test_button_interaction_filter_matches_action():
+def test_button_action_filter_matches_action():
     interaction = ButtonInteraction(
         action_id="approve",
         interaction_id="interaction-1",
@@ -24,13 +24,13 @@ def test_button_interaction_filter_matches_action():
             return interaction
 
     event = Event()
-    assert ButtonInteractionFilter().filter(event, {})
-    assert ButtonInteractionFilter("approve").filter(event, {})
-    assert not ButtonInteractionFilter("reject").filter(event, {})
+    assert ButtonActionFilter().filter(event, {})
+    assert ButtonActionFilter("approve").filter(event, {})
+    assert not ButtonActionFilter("reject").filter(event, {})
 
 
-def test_public_button_interaction_decorator_registers_filter():
-    assert callable(filter.button_interaction("approve"))
+def test_public_button_action_decorator_registers_filter():
+    assert callable(filter.button_action("approve"))
 
 
 @pytest.mark.asyncio
@@ -59,7 +59,7 @@ async def test_button_click_only_activates_button_handlers(monkeypatch):
         handler_full_name="test.ordinary.handler",
     )
     button_handler = SimpleNamespace(
-        event_filters=[ButtonInteractionFilter("approve")],
+        event_filters=[ButtonActionFilter("approve")],
         handler_module_path="test.button",
         handler_full_name="test.button.handler",
     )

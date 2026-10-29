@@ -356,6 +356,7 @@ class MattermostClient:
                             "astrbot_callback": encode_button_callback(
                                 button.id,
                                 button.action.data,
+                                expires_at=row.action_expires_at,
                             ),
                         },
                     },

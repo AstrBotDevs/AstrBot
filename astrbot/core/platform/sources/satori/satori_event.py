@@ -437,7 +437,13 @@ class SatoriPlatformEvent(AstrMessageEvent):
                     theme = theme_map[button.style]
                     if isinstance(button.action, CallbackAction):
                         callback_id = html.escape(
-                            encode_button_callback(button.id, button.action.data),
+                            encode_button_callback(
+                                button.id,
+                                button.action.data,
+                                expires_at=component.action_expires_at
+                                if isinstance(component, ActionRow)
+                                else None,
+                            ),
                             quote=True,
                         )
                         button_elements.append(
@@ -571,7 +577,13 @@ class SatoriPlatformEvent(AstrMessageEvent):
                     theme = theme_map[button.style]
                     if isinstance(button.action, CallbackAction):
                         callback_id = html.escape(
-                            encode_button_callback(button.id, button.action.data),
+                            encode_button_callback(
+                                button.id,
+                                button.action.data,
+                                expires_at=component.action_expires_at
+                                if isinstance(component, ActionRow)
+                                else None,
+                            ),
                             quote=True,
                         )
                         button_elements.append(

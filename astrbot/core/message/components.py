@@ -26,6 +26,7 @@ import base64
 import json
 import os
 import sys
+import time
 import uuid
 from enum import Enum
 from pathlib import Path, PurePosixPath
@@ -34,11 +35,20 @@ from typing import Any, Literal, TypeAlias
 from deprecated import deprecated
 
 if sys.version_info >= (3, 14):
-    from pydantic import BaseModel, Field, StrictBool, StrictFloat, StrictInt, StrictStr
+    from pydantic import (
+        BaseModel,
+        Field,
+        PrivateAttr,
+        StrictBool,
+        StrictFloat,
+        StrictInt,
+        StrictStr,
+    )
 else:
     from pydantic.v1 import (
         BaseModel,
         Field,
+        PrivateAttr,
         StrictBool,
         StrictFloat,
         StrictInt,
@@ -212,6 +222,19 @@ class ActionRow(BaseMessageComponent):
     type: ComponentType = ComponentType.ActionRow
     buttons: list[Button]
     fallback_text: str | None = None
+    action_timeout: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    _action_expires_at: float | None = PrivateAttr(default=None)
+
+    @property
+    def action_expires_at(self) -> float | None:
+        """Get the shared callback deadline, starting on first rendering.
+
+        Returns:
+            Unix timestamp for this row's callback expiry, or None if unlimited.
+        """
+        if self.action_timeout is not None and self._action_expires_at is None:
+            self._action_expires_at = time.time() + self.action_timeout
+        return self._action_expires_at
 
     def toDict(self) -> dict:
         """Serialize the row using the public message component format."""
@@ -220,6 +243,8 @@ class ActionRow(BaseMessageComponent):
         }
         if self.fallback_text is not None:
             data["fallback_text"] = self.fallback_text
+        if self.action_timeout is not None:
+            data["action_timeout"] = self.action_timeout
         return {"type": "actionrow", "data": data}
 
 

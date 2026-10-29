@@ -482,6 +482,11 @@ class WecomPlatformAdapter(Platform):
                 try:
                     action_id, data = decode_button_callback(menu_id)
                 except ValueError:
+                    if menu_id.startswith("astrbot:"):
+                        logger.debug(
+                            "Ignored an expired or invalid AstrBot menu action."
+                        )
+                        return None
                     logger.debug(
                         "Treating an unrecognized WeCom customer-service menu "
                         "callback as a regular text message."

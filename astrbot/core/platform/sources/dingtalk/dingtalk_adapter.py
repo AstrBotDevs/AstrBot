@@ -668,6 +668,7 @@ class DingtalkPlatformAdapter(Platform):
                         item["id"] = encode_button_callback(
                             button.id,
                             button.action.data,
+                            expires_at=row.action_expires_at,
                         )
                     except ValueError as exc:
                         logger.warning(f"钉钉按钮卡片编码失败: {exc}")

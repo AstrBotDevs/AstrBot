@@ -119,6 +119,7 @@ class LineMessageEvent(AstrMessageEvent):
                     callback_data = encode_button_callback(
                         button.id,
                         button.action.data,
+                        expires_at=segment.action_expires_at,
                     )
                     if (
                         len(callback_data.encode("utf-8"))

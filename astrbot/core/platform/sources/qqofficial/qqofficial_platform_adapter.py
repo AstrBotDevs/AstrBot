@@ -691,6 +691,8 @@ class QQOfficialPlatformAdapter(Platform):
         try:
             action_id, data = decode_button_callback(button_data)
         except ValueError:
+            if button_data.startswith("astrbot:"):
+                raise
             action_id = button_id or button_data
             data = button_data or None
         if not action_id:

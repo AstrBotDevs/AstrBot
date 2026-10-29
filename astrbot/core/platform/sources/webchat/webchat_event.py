@@ -93,7 +93,11 @@ class WebChatMessageEvent(AstrMessageEvent):
                 ):
                     if isinstance(button.action, CallbackAction):
                         serialized_button["action"]["callback_data"] = (
-                            encode_button_callback(button.id, button.action.data)
+                            encode_button_callback(
+                                button.id,
+                                button.action.data,
+                                expires_at=comp.action_expires_at,
+                            )
                         )
                         serialized_button["action"].pop("data", None)
                 accepted = await webchat_queue_mgr.put_back_queue(
