@@ -1,3 +1,4 @@
+import asyncio
 import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -5,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from astrbot.api.message_components import Json, Plain
-from astrbot.api.provider import LLMResponse
+from astrbot.api.provider import LLMResponse, ProviderRequest
 from astrbot.builtin_stars.astrbot.group_chat_context import GroupChatContext
 from astrbot.builtin_stars.astrbot.main import Main
 from astrbot.core.message.message_event_result import MessageChain
@@ -202,6 +203,152 @@ async def test_on_message_skips_recording_when_command_handler_matched():
 
     main.group_chat_context.need_active_reply.assert_awaited_once_with(event)
     main.group_chat_context.handle_message.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_on_message_propagates_group_context_cancellation():
+    """Cancellation while recording group context must stop the callback."""
+    main = Main.__new__(Main)
+    main.context = MagicMock()
+    main.context.get_config.return_value = {
+        "provider_ltm_settings": {
+            "group_icl_enable": True,
+            "active_reply": {"enable": False},
+        },
+    }
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def blocking_handle_message(event):
+        entered.set()
+        await release.wait()
+
+    main.group_chat_context = SimpleNamespace(
+        need_active_reply=AsyncMock(return_value=False),
+        handle_message=blocking_handle_message,
+    )
+    event = make_event()
+    task = asyncio.create_task(main.on_message(event).__anext__())
+    await asyncio.wait_for(entered.wait(), timeout=2)
+    task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+
+@pytest.mark.asyncio
+async def test_on_message_isolates_group_context_errors():
+    """Ordinary group-context failures remain isolated from message handling."""
+    main = Main.__new__(Main)
+    main.context = MagicMock()
+    main.context.get_config.return_value = {
+        "provider_ltm_settings": {
+            "group_icl_enable": True,
+            "active_reply": {"enable": False},
+        },
+    }
+    main.group_chat_context = SimpleNamespace(
+        need_active_reply=AsyncMock(return_value=False),
+        handle_message=AsyncMock(side_effect=RuntimeError("plugin failed")),
+    )
+    event = make_event()
+
+    results = [item async for item in main.on_message(event)]
+
+    assert results == []
+    main.group_chat_context.handle_message.assert_awaited_once_with(event)
+
+
+@pytest.mark.asyncio
+async def test_on_message_propagates_active_reply_cancellation():
+    """Cancellation while loading the active-reply conversation must propagate."""
+    main = make_main_with_conversation_manager(
+        SimpleNamespace(
+            get_curr_conversation_id=AsyncMock(),
+            get_conversation=AsyncMock(),
+        )
+    )
+    main.context.get_config.return_value = {
+        "provider_ltm_settings": {
+            "group_icl_enable": False,
+            "active_reply": {"enable": True},
+        },
+    }
+    main.context.get_using_provider.return_value = object()
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def blocking_conversation_lookup(umo):
+        entered.set()
+        await release.wait()
+
+    main.context.conversation_manager.get_curr_conversation_id = AsyncMock(
+        side_effect=blocking_conversation_lookup
+    )
+    main.group_chat_context = SimpleNamespace(
+        need_active_reply=AsyncMock(return_value=True),
+    )
+    event = make_event()
+    task = asyncio.create_task(main.on_message(event).__anext__())
+    await asyncio.wait_for(entered.wait(), timeout=2)
+    task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    event.request_llm.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_decorate_llm_req_propagates_group_context_cancellation():
+    """Cancellation while decorating an LLM request must propagate."""
+    main = Main.__new__(Main)
+    main.context = MagicMock()
+    main.context.get_config.return_value = {
+        "provider_ltm_settings": {
+            "group_icl_enable": False,
+            "active_reply": {"enable": True},
+        },
+    }
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def blocking_decorator(event, req):
+        entered.set()
+        await release.wait()
+
+    main.group_chat_context = SimpleNamespace(
+        on_req_llm=blocking_decorator,
+    )
+    event = make_event()
+    request = ProviderRequest(prompt="hello")
+    task = asyncio.create_task(main.decorate_llm_req(event, request))
+    await asyncio.wait_for(entered.wait(), timeout=2)
+    task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+
+@pytest.mark.asyncio
+async def test_decorate_llm_req_isolates_group_context_errors():
+    """Ordinary pre-LLM group-context failures remain isolated."""
+    main = Main.__new__(Main)
+    main.context = MagicMock()
+    main.context.get_config.return_value = {
+        "provider_ltm_settings": {
+            "group_icl_enable": False,
+            "active_reply": {"enable": True},
+        },
+    }
+    main.group_chat_context = SimpleNamespace(
+        on_req_llm=AsyncMock(side_effect=RuntimeError("plugin failed")),
+    )
+    event = make_event()
+
+    await main.decorate_llm_req(event, ProviderRequest(prompt="hello"))
+
+    main.group_chat_context.on_req_llm.assert_awaited_once()
 
 
 @pytest.mark.asyncio
