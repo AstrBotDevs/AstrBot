@@ -178,6 +178,53 @@ def test_build_handoff_toolset_warns_for_unavailable_requested_tools(caplog):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("selection", ["name", "object"])
+async def test_handoff_preserves_selected_tool_when_runtime_name_collides(selection):
+    mgr = FunctionToolManager()
+    selected_tool = FunctionTool(
+        name="astrbot_file_read_tool",
+        description="Selected plugin implementation",
+        parameters={"type": "object", "properties": {}},
+    )
+    mgr.func_list = [selected_tool]
+    captured = {}
+
+    async def run_subagent(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(completion_text="done")
+
+    context = SimpleNamespace(
+        get_config=lambda **_kwargs: {
+            "provider_settings": {"computer_use_runtime": "local"}
+        },
+        get_llm_tool_manager=lambda: mgr,
+        tool_loop_agent=run_subagent,
+    )
+    run_context = ContextWrapper(
+        context=SimpleNamespace(event=_DummyEvent(), context=context)
+    )
+    tool = HandoffTool(
+        Agent(
+            name="child",
+            tools=[selected_tool.name if selection == "name" else selected_tool],
+        )
+    )
+    tool.provider_id = "test-provider"
+
+    results = [
+        result
+        async for result in FunctionToolExecutor.execute(
+            tool, run_context, input="hello"
+        )
+    ]
+
+    assert results[0].content[0].text == "done"
+    tools = captured["tools"]
+    assert tools.get_tool(selected_tool.name).description == selected_tool.description
+    assert tools.get_tool("astrbot_execute_shell") is not None
+
+
+@pytest.mark.asyncio
 async def test_collect_handoff_image_urls_normalizes_filters_and_appends_event_image(
     monkeypatch: pytest.MonkeyPatch,
 ):

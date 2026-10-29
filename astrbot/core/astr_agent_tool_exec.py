@@ -319,7 +319,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         # Explicit persona selections only describe plugin/MCP tools in the
         # dashboard. Keep enabled runtime tools available for the subagent.
         for runtime_tool in runtime_computer_tools.values():
-            toolset.add_tool(runtime_tool)
+            if toolset.get_tool(runtime_tool.name) is None:
+                toolset.add_tool(runtime_tool)
 
         return None if toolset.empty() else toolset
 
