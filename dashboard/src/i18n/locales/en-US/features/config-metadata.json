@@ -1012,7 +1012,7 @@
       },
       "wake_prefix": {
         "description": "Wake Word",
-        "hint": "A list of message prefixes that wake the bot. You can also wake it by mentioning it."
+        "hint": "A list of message prefixes that wake the bot. You can also wake it by mentioning it.\n\nBuilt-in commands such as `/help` and `/sid` also rely on a wake word. If you remove the default `/`, typing these commands directly will no longer trigger them."
       },
       "disable_builtin_commands": {
         "description": "Disable Built-in Commands",

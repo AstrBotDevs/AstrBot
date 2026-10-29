@@ -4419,7 +4419,7 @@ CONFIG_METADATA_3 = {
                     },
                     "wake_prefix": {
                         "description": "唤醒词",
-                        "hint": "唤醒机器人的消息前缀的列表。也可以通过 @ 机器人来唤醒。",
+                        "hint": "唤醒机器人的消息前缀的列表。也可以通过 @ 机器人来唤醒。\n\n内置指令（如 `/help`、`/sid`）也依赖唤醒词；删除默认的 `/` 后，直接输入这些指令将无法触发。",
                         "type": "list",
                         "items": {"type": "string"},
                     },
