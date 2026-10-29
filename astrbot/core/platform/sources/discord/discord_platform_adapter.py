@@ -22,7 +22,7 @@ from astrbot.api.platform import (
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
-from astrbot.core.star.star import star_map
+from astrbot.core.star.star import StarMetadata, star_map
 from astrbot.core.star.star_handler import StarHandlerMetadata, star_handlers_registry
 from astrbot.core.utils.media_utils import MediaResolver
 
@@ -466,13 +466,54 @@ class DiscordPlatformAdapter(Platform):
         """注册处理器信息"""
         self.registered_handlers.append(handler_info)
 
+    @staticmethod
+    def _plugin_for_handler_module(handler_module_path: str) -> StarMetadata | None:
+        """Resolve the plugin that owns a handler module.
+
+        ``star_map`` is keyed by the plugin entry module
+        (``data.plugins.<plugin>.main``), so a handler defined in a submodule
+        (e.g. a mixin in ``data.plugins.<plugin>.foo``) never matches exactly.
+        Fall back to the plugin package root and return ``None`` only for
+        orphan modules that no plugin owns.
+
+        Args:
+            handler_module_path: Module path recorded on the handler metadata.
+
+        Returns:
+            The metadata of the owning plugin, or ``None`` if no plugin owns
+            the module.
+        """
+        plugin = star_map.get(handler_module_path)
+        if plugin is not None:
+            return plugin
+        for metadata in star_map.values():
+            if not metadata.root_dir_name:
+                continue
+            package_root = (
+                "astrbot.builtin_stars." if metadata.reserved else "data.plugins."
+            ) + metadata.root_dir_name
+            # Exact match covers handlers defined in the plugin's __init__.py,
+            # prefix match covers helper submodules.
+            if handler_module_path == package_root or handler_module_path.startswith(
+                package_root + "."
+            ):
+                return metadata
+        return None
+
     async def _collect_and_register_commands(self) -> None:
         """收集所有指令并注册到Discord"""
         logger.info("[Discord] Collecting and registering slash commands...")
         registered_commands = []
 
         for handler_md in star_handlers_registry:
-            if not star_map[handler_md.handler_module_path].activated:
+            # A handler may live in a plugin submodule (e.g. a mixin in
+            # `plugin/foo.py`). Resolve its owning plugin by package root
+            # instead of requiring an exact star_map key, so that activated
+            # plugins keep their slash commands. Skip only orphan handlers
+            # that no plugin owns, otherwise one unbound handler aborts the
+            # whole sync loop and no slash commands get registered at all.
+            plugin = self._plugin_for_handler_module(handler_md.handler_module_path)
+            if plugin is None or not plugin.activated:
                 continue
             if not handler_md.enabled:
                 continue
