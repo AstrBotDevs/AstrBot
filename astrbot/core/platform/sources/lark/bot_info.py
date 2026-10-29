@@ -48,8 +48,8 @@ async def _request_json(
         The decoded JSON object of a response whose business ``code`` is 0.
 
     Raises:
-        RuntimeError: If the response is not a JSON object or has a non-zero
-            ``code``. The message keeps the HTTP status, ``code``, ``msg`` and
+        RuntimeError: If the response body is not valid JSON, is not a JSON
+            object, or has a non-zero ``code``. The message keeps the HTTP status, ``code``, ``msg`` and
             the ``x-tt-logid`` header so the request can be traced with Lark
             support. Request payloads and headers are never included.
     """
@@ -58,7 +58,13 @@ async def _request_json(
         async with session.request(method, endpoint, **kwargs) as response:
             status = response.status
             log_id = response.headers.get("x-tt-logid") or "n/a"
-            data = await response.json(content_type=None)
+            try:
+                data = await response.json(content_type=None)
+            except ValueError as exc:
+                raise RuntimeError(
+                    f"Failed to {action}: response is not valid JSON "
+                    f"(HTTP {status}, log_id={log_id})"
+                ) from exc
     if not isinstance(data, dict):
         raise RuntimeError(
             f"Failed to {action}: unexpected response format "

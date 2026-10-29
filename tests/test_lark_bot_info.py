@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from astrbot.core.platform.sources.lark import bot_info
@@ -19,6 +21,8 @@ class _FakeResponse:
         self._data = data
 
     async def json(self, content_type=None):
+        if isinstance(self._data, Exception):
+            raise self._data
         return self._data
 
     async def __aenter__(self):
@@ -151,3 +155,22 @@ async def test_bot_info_error_names_the_failed_call(monkeypatch):
     assert "code=99991663" in message
     assert "log_id=bot-logid" in message
     assert "t-token" not in message
+
+
+@pytest.mark.asyncio
+async def test_non_json_response_keeps_status_and_log_id(monkeypatch):
+    decode_error = json.JSONDecodeError("Expecting value", "<html>502</html>", 0)
+    _patch_sessions(
+        monkeypatch,
+        [_FakeResponse(decode_error, status=502, log_id="proxy-logid")],
+    )
+
+    with pytest.raises(RuntimeError) as exc_info:
+        await _request_bot_info()
+
+    message = str(exc_info.value)
+    assert "obtain Lark tenant access token" in message
+    assert "not valid JSON" in message
+    assert "HTTP 502" in message
+    assert "log_id=proxy-logid" in message
+    assert exc_info.value.__cause__ is decode_error
