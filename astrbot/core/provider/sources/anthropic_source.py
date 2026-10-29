@@ -433,6 +433,12 @@ class ProviderAnthropic(Provider):
                 tool_results: list[Any] = []
                 other_blocks: list[Any] = []
                 for block in content:
+                    if (
+                        isinstance(block, dict)
+                        and block.get("type") == "text"
+                        and block.get("text") == ""
+                    ):
+                        continue
                     if isinstance(block, dict) and block.get("type") == "tool_result":
                         tool_use_id = block.get("tool_use_id")
                         if tool_use_id in pending_tool_use_ids:

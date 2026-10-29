@@ -494,14 +494,17 @@ def test_prepare_payload_does_not_merge_non_consecutive_tool_results():
     ]
 
 
-def test_sanitize_assistant_messages_removes_empty_user_message_and_merges():
+@pytest.mark.parametrize("empty_content", ["", [], [{"type": "text", "text": ""}]])
+def test_sanitize_assistant_messages_removes_empty_user_message_and_merges(
+    empty_content,
+):
     payloads = {
         "messages": [
             {
                 "role": "assistant",
                 "content": [{"type": "text", "text": "First answer."}],
             },
-            {"role": "user", "content": ""},
+            {"role": "user", "content": empty_content},
             {
                 "role": "assistant",
                 "content": [{"type": "text", "text": "Second answer."}],
@@ -522,6 +525,36 @@ def test_sanitize_assistant_messages_removes_empty_user_message_and_merges():
         },
         {"role": "user", "content": "Continue."},
     ]
+
+
+@pytest.mark.parametrize(
+    "valid_block",
+    [
+        {"type": "text", "text": "Keep this text."},
+        {"type": "text", "text": " "},
+        {
+            "type": "image",
+            "source": {"type": "url", "url": "https://example.com/image.png"},
+        },
+    ],
+)
+def test_sanitize_assistant_messages_removes_empty_text_blocks_only(valid_block):
+    payloads = {
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": ""},
+                    valid_block,
+                    {"type": "text", "text": ""},
+                ],
+            }
+        ]
+    }
+
+    anthropic_source.ProviderAnthropic._sanitize_assistant_messages(payloads)
+
+    assert payloads["messages"] == [{"role": "user", "content": [valid_block]}]
 
 
 def test_sanitize_assistant_messages_removes_orphaned_tool_results_and_merges():
@@ -561,7 +594,7 @@ def test_sanitize_assistant_messages_removes_orphaned_tool_results_and_merges():
     ]
 
 
-@pytest.mark.parametrize("tool_result", ["one", ""])
+@pytest.mark.parametrize("tool_result", ["one", "", [{"type": "text", "text": ""}]])
 def test_sanitize_assistant_messages_keeps_valid_tool_results_only(tool_result):
     payloads = {
         "messages": [
@@ -590,6 +623,7 @@ def test_sanitize_assistant_messages_keeps_valid_tool_results_only(tool_result):
                         "tool_use_id": "call_00",
                         "content": tool_result,
                     },
+                    {"type": "text", "text": ""},
                     {
                         "type": "tool_result",
                         "tool_use_id": "",
@@ -777,7 +811,10 @@ def _setup_provider_with_mock_client(monkeypatch) -> anthropic_source.ProviderAn
 
 
 @pytest.mark.asyncio
-async def test_text_chat_omits_empty_user_history_at_client_boundary(monkeypatch):
+@pytest.mark.parametrize("empty_content", ["", [], [{"type": "text", "text": ""}]])
+async def test_text_chat_omits_empty_user_history_at_client_boundary(
+    monkeypatch, empty_content
+):
     provider = _setup_provider_with_mock_client(monkeypatch)
 
     try:
@@ -785,7 +822,7 @@ async def test_text_chat_omits_empty_user_history_at_client_boundary(monkeypatch
             prompt="Continue.",
             contexts=[
                 {"role": "assistant", "content": "First answer."},
-                {"role": "user", "content": ""},
+                {"role": "user", "content": empty_content},
                 {"role": "assistant", "content": "Second answer."},
             ],
         )
