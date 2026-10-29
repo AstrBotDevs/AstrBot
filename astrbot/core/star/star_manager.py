@@ -171,7 +171,9 @@ async def _install_requirements_with_precheck(
         )
         await pip_installer.install(
             requirements_path=requirements_path,
-            allow_target_upgrade=bool(install_plan.version_mismatch_names),
+            allow_target_upgrade=bool(
+                install_plan.version_mismatch_names or install_plan.extras_names
+            ),
         )
         return
 
@@ -186,7 +188,10 @@ async def _install_requirements_with_precheck(
     ) as filtered_requirements_path:
         await pip_installer.install(
             requirements_path=filtered_requirements_path,
-            allow_target_upgrade=bool(install_plan.version_mismatch_names),
+            # Extras may require replacing an already installed transitive dependency.
+            allow_target_upgrade=bool(
+                install_plan.version_mismatch_names or install_plan.extras_names
+            ),
         )
 
 

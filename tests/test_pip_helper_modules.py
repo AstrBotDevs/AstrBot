@@ -476,3 +476,60 @@ def test_parse_requirement_name_and_spec_handles_plain_requirement_token():
         "demo-package",
         requirements_utils.Requirement("demo-package>=1.0").specifier,
     )
+
+
+@pytest.mark.parametrize(
+    "requirement",
+    [
+        "demo[socks]>=1.0",
+        "demo[socks,security]>=1.0",
+        'demo[socks]>=1.0; python_version >= "3.0"',
+        "Demo_Package[socks]>=1.0",
+    ],
+)
+def test_precheck_defers_active_extras_to_the_installer(
+    monkeypatch, tmp_path, requirement
+):
+    monkeypatch.setattr(
+        requirements_utils,
+        "collect_installed_distribution_versions",
+        lambda paths: {"demo": "2.0", "demo-package": "2.0", "unrelated": "1.0"},
+    )
+    requirements_path = tmp_path / "requirements.txt"
+    requirements_path.write_text(requirement + "\nunrelated>=1.0\n", encoding="utf-8")
+    name = requirements_utils.canonicalize_distribution_name(
+        requirements_utils.Requirement(requirement).name
+    )
+    analysis = requirements_utils.classify_missing_requirements_from_lines(
+        [requirement]
+    )
+    assert analysis is not None
+    assert analysis.missing_names == frozenset({name})
+    assert analysis.version_mismatch_names == frozenset()
+    assert analysis.extras_names == frozenset({name})
+    assert requirements_utils.find_missing_requirements(str(requirements_path)) == {
+        name
+    }
+    plan = requirements_utils.plan_missing_requirements_install(str(requirements_path))
+    assert plan is not None
+    assert plan.install_lines == (requirement,)
+    assert plan.version_mismatch_names == frozenset()
+    assert plan.extras_names == frozenset({name})
+
+
+def test_precheck_does_not_install_extras_with_inactive_markers(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        requirements_utils,
+        "collect_installed_distribution_versions",
+        lambda paths: {"demo": "2.0"},
+    )
+    requirements_path = tmp_path / "requirements.txt"
+    requirements_path.write_text(
+        'demo[socks]>=1.0; python_version < "2.0"\ndemo>=1.0\n',
+        encoding="utf-8",
+    )
+
+    plan = requirements_utils.plan_missing_requirements_install(str(requirements_path))
+    assert plan is not None
+    assert plan.missing_names == frozenset()
+    assert plan.install_lines == ()
