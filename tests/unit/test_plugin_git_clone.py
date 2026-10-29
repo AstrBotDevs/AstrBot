@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 import time
 from pathlib import Path
@@ -64,6 +65,9 @@ async def test_clone_invokes_git_without_any_interactive_prompt_path(
         captured["kwargs"] = kwargs
         return fake_process
 
+    # An IDE shell commonly exports these; they must not reach the clone.
+    monkeypatch.setenv("GIT_ASKPASS", "/opt/ide/askpass")
+    monkeypatch.setenv("SSH_ASKPASS", "/opt/ide/askpass")
     monkeypatch.setattr(plugin_updater.shutil, "which", lambda _name: "git")
     monkeypatch.setattr(
         plugin_updater.asyncio, "create_subprocess_exec", fake_create_subprocess_exec
@@ -82,8 +86,12 @@ async def test_clone_invokes_git_without_any_interactive_prompt_path(
     assert args.index("-c") < args.index("clone")
     env = kwargs["env"]
     assert env["GIT_TERMINAL_PROMPT"] == "0"
-    assert env["GIT_ASKPASS"] == ""
-    assert env["SSH_ASKPASS"] == ""
+    # Both askpass hooks are neutralised with a real path that is not a program, and
+    # the inherited values are gone; an empty value is interpreted inconsistently by
+    # different git versions, so the null device is used instead.
+    assert env["GIT_ASKPASS"] == os.devnull
+    assert env["SSH_ASKPASS"] == os.devnull
+    assert env["GIT_ASKPASS"] != "/opt/ide/askpass"
     assert "BatchMode=yes" in env["GIT_SSH_COMMAND"]
     assert kwargs["stdin"] is asyncio.subprocess.DEVNULL
     # Git metadata must not survive a successful clone.

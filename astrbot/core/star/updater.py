@@ -77,12 +77,13 @@ class _PluginUpdater(_RepoZipUpdater):
         # GIT_TERMINAL_PROMPT only silences git's own prompt: credential helpers (Git
         # Credential Manager, IDE askpass bridges) are separate programs that can wait
         # for a GUI dialog to be dismissed. An empty credential.helper resets the helper
-        # list and, as command-line config, it wins over system/global/local config; the
-        # empty askpass variables and a closed stdin remove the remaining prompt
-        # sources.
+        # list and, as command-line config, wins over system/global/local config. The
+        # askpass hooks point at the null device: it exists everywhere but is not an
+        # executable program, so an inherited askpass fails instead of prompting and no
+        # git version has to interpret an empty value.
         process_env["GIT_TERMINAL_PROMPT"] = "0"
-        process_env["GIT_ASKPASS"] = ""
-        process_env["SSH_ASKPASS"] = ""
+        process_env["GIT_ASKPASS"] = os.devnull
+        process_env["SSH_ASKPASS"] = os.devnull
         process_env.setdefault("GIT_SSH_COMMAND", "ssh -oBatchMode=yes")
         process = await asyncio.create_subprocess_exec(
             git_executable,
