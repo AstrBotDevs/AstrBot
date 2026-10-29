@@ -5015,7 +5015,6 @@ async def test_v1_persistent_trace_routes(asgi_client, asgi_app, monkeypatch, tm
         )
         headers = {"Authorization": f"Bearer {token}"}
         trace_second = int(stamp) // 1_000_000_000
-        trace_end_second = (int(stamp) + 999_999_999) // 1_000_000_000
         response = await asgi_client.get(
             "/api/v1/trace/history",
             params={
@@ -5027,7 +5026,7 @@ async def test_v1_persistent_trace_routes(asgi_client, asgi_app, monkeypatch, tm
                 "umo": "qq:FriendMessage:session:user",
                 "commands": True,
                 "start_time": trace_second,
-                "end_time": trace_end_second,
+                "end_time": trace_second,
             },
             headers=headers,
         )

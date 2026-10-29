@@ -5217,7 +5217,7 @@ paths:
           schema: {type: integer, minimum: 0}
         - name: end_time
           in: query
-          description: Inclusive maximum trace start time, in Unix seconds. Must not be before start_time.
+          description: Inclusive maximum trace start time, in Unix seconds. The whole final second is included. Must not be before start_time.
           schema: {type: integer, minimum: 0}
       responses:
         "200":

@@ -529,7 +529,8 @@ class TraceStore:
             message_types: Accepted message type names.
             umo: Exact unified message origin.
             start_time: Inclusive minimum trace start time, in Unix seconds.
-            end_time: Inclusive maximum trace start time, in Unix seconds.
+            end_time: Inclusive maximum trace start time, in Unix seconds. The
+                whole final second is included.
 
         Returns:
             Summaries, filtered count, next cursor, and storage health.
@@ -553,7 +554,7 @@ class TraceStore:
             values.append(start_time * 1_000_000_000)
         if end_time is not None:
             conditions.append("start_ns <= ?")
-            values.append(end_time * 1_000_000_000)
+            values.append(end_time * 1_000_000_000 + 999_999_999)
         if status == "running":
             conditions.append("state='running'")
         elif status == "completed":

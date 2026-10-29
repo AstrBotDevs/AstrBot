@@ -3802,7 +3802,7 @@ export type ListTracesData = {
          */
         cursor?: string;
         /**
-         * Inclusive maximum trace start time, in Unix seconds. Must not be before start_time.
+         * Inclusive maximum trace start time, in Unix seconds. The whole final second is included. Must not be before start_time.
          */
         end_time?: number;
         errors?: boolean;
