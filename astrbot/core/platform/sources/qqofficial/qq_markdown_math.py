@@ -11,6 +11,8 @@ _LIST_MARKER = re.compile(r"^[ \t]*(?P<marker>[-+*]|\d{1,9}[.)])[ \t]+")
 _MATH_START = re.compile(
     r"^[ \t]*(?:(?:[-+*]|\d{1,9}[.)])[ \t]+)?(?P<delimiter>\$\$|\\\[)"
 )
+_INLINE_MATH = re.compile(r"(?<![\\$])\$(?!\$)([^$\r\n]+?)(?<!\\)\$(?!\$)")
+_LONG_INLINE_MATH_LENGTH = 48
 _PARSER = MarkdownIt("commonmark")
 
 
@@ -31,6 +33,7 @@ class _MathBlock:
     prefix: int
     quote: str
     ancestors: tuple[_ListItem, ...]
+    replacement: str | None = None
 
 
 def _find_closing(text: str, delimiter: str, start: int, end: int) -> int:
@@ -82,7 +85,7 @@ def _reopen_containers(line: str, items: list[_ListItem]) -> str | None:
 
 
 def normalize_qq_list_math(text: str) -> str:
-    """Lift standalone display math out of lists without rewriting its TeX.
+    """Lift display math and long inline equations out of lists.
 
     QQ can stop scrolling a list's equation before its right edge. Blank
     lines and removal of the list container's indentation make the equation
@@ -91,7 +94,7 @@ def normalize_qq_list_math(text: str) -> str:
     nested lists and sibling items keep their original nesting depth. Parse
     the original containers to protect code blocks.
     """
-    if "$$" not in text and "\\[" not in text:
+    if "$" not in text and "\\[" not in text:
         return text
 
     lines = text.splitlines(keepends=True)
@@ -106,7 +109,7 @@ def normalize_qq_list_math(text: str) -> str:
             protected.update(range(start, end))
         elif token.type == "inline" and any(
             child.type == "code_inline"
-            and ("$$" in child.content or "\\[" in child.content)
+            and ("$" in child.content or "\\[" in child.content)
             for child in token.children or []
         ):
             # Inline-code source spans have no line maps. Leave ambiguous
@@ -134,6 +137,7 @@ def normalize_qq_list_math(text: str) -> str:
     for line in lines:
         offsets.append(offsets[-1] + len(line))
     blocks: list[_MathBlock] = []
+    newline = "\r\n" if "\r\n" in text else "\n"
     line_number = 0
     while line_number < len(lines):
         quote, rest = _split_quote(lines[line_number])
@@ -144,7 +148,43 @@ def normalize_qq_list_math(text: str) -> str:
             if item.start <= line_number < item.end
             and item.quote_depth == quote.count(">")
         )
-        if line_number in protected or not opening or not ancestors:
+        if line_number in protected or not ancestors:
+            line_number += 1
+            continue
+        if not opening:
+            # Display delimiters belong to the existing display-math path.
+            if "$$" not in rest and "\\[" not in rest and "\\]" not in rest:
+                matches = [
+                    match
+                    for match in _INLINE_MATH.finditer(rest)
+                    if len(match[1].strip()) >= _LONG_INLINE_MATH_LENGTH
+                ]
+                if matches:
+                    marker = _LIST_MARKER.match(rest)
+                    cursor = (
+                        marker.end()
+                        if marker
+                        else len(rest) - len(rest.lstrip(" \t"))
+                    )
+                    fragments: list[str] = []
+                    for match in matches:
+                        before = rest[cursor : match.start()].strip()
+                        if before:
+                            fragments.append(before)
+                        fragments.append("$$" + match[1] + "$$")
+                        cursor = match.end()
+                    after = rest[cursor:].strip()
+                    if after:
+                        fragments.append(after)
+                    replacement = (newline * 2).join(fragments)
+                    if rest.endswith("\n"):
+                        replacement += newline
+                    replacement = "".join(
+                        quote + line for line in replacement.splitlines(keepends=True)
+                    )
+                    blocks.append(
+                        _MathBlock(line_number, line_number, 0, quote, ancestors, replacement)
+                    )
             line_number += 1
             continue
         delimiter = opening["delimiter"]
@@ -198,14 +238,17 @@ def normalize_qq_list_math(text: str) -> str:
         if line is not None:
             reopened[following] = line
 
-    newline = "\r\n" if "\r\n" in text else "\n"
     output: list[str] = []
     for index, line in enumerate(lines):
         block = starts.get(index)
         if block is not None:
             if output and _split_quote(output[-1])[1].strip():
                 output.append(block.quote.rstrip() + newline)
-            line = block.quote + line[block.prefix :]
+            line = (
+                block.replacement
+                if block.replacement is not None
+                else block.quote + line[block.prefix :]
+            )
         output.append(reopened.get(index, line))
         ending = next((b for b in blocks if b.end == index), None)
         if (

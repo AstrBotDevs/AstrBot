@@ -255,3 +255,70 @@ def test_list_math_inside_blockquote_is_lifted(quote):
     assert block.level == quote.count(">")
     assert sum(t.type == "blockquote_open" for t in tokens) == quote.count(">")
     assert outline(result) == [(1, "Equation:"), (1, "Next")]
+
+
+INLINE_FORMULA = (
+    r"(b_{2m-1} - a_{2m-1}) + (b_{2m} - a_{2m}) = -6 + a_{2m} = 4m - 3"
+)
+INLINE_REPORTED = (
+    "- Pair adjacent terms:\n"
+    f"  Each pair gives ${INLINE_FORMULA}$.\n"
+    "  Sum the pairs.\n"
+    "  - Nested follow-up\n"
+    "- Next item\n"
+)
+
+
+@pytest.mark.parametrize("quote", ["", "> ", "> > "])
+@pytest.mark.parametrize("newline", ["\n", "\r\n"])
+def test_long_inline_equation_leaves_list_and_preserves_tex(quote, newline):
+    source = "".join(quote + line for line in INLINE_REPORTED.splitlines(keepends=True))
+    source = source.replace("\n", newline)
+    result = normalize_qq_list_math(source)
+    blocks = math_blocks(result)
+    assert len(blocks) == 1
+    assert blocks[0].level == quote.count(">")
+    assert blocks[0].content.strip() == INLINE_FORMULA
+    assert "Each pair gives" in result
+    assert "Sum the pairs." in result
+    assert (2, "Nested follow-up") in outline(result)
+    assert (1, "Next item") in outline(result)
+    assert normalize_qq_list_math(result) == result
+    if newline == "\r\n":
+        assert re.search(r"(?<!\r)\n", result) is None
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "- Short $x + y = z$.\n",
+        f"Outside a list ${INLINE_FORMULA}$.\n",
+        f"- Code `${INLINE_FORMULA}$`.\n",
+        f"- Code\n\n  ```tex\n  ${INLINE_FORMULA}$\n  ```\n",
+        f"- Escaped \\${INLINE_FORMULA}\\$.\n",
+        f"- Incomplete ${INLINE_FORMULA}\n",
+    ],
+)
+def test_inline_math_protects_short_unrelated_and_literal_content(source):
+    assert normalize_qq_list_math(source) == source
+
+
+def test_multiple_long_inline_equations_in_nested_item():
+    source = f"1. Outer\n   - Before ${INLINE_FORMULA}$ and ${INLINE_FORMULA}$ after.\n"
+    blocks = math_blocks(normalize_qq_list_math(source))
+    assert len(blocks) == 2
+    assert all(block.level == 0 for block in blocks)
+    assert all(block.content.strip() == INLINE_FORMULA for block in blocks)
+
+
+@pytest.mark.parametrize("boundary", range(1, len(INLINE_REPORTED)))
+def test_long_inline_math_stream_boundaries(boundary):
+    state = QQMarkdownMathState()
+    prefix, suffix = INLINE_REPORTED[:boundary], INLINE_REPORTED[boundary:]
+    first = {"state": 1, "index": 0, "reset": False}
+    assert state.prepare(prefix, first) == (prefix, first)
+    final = {"state": 10, "index": 1, "id": "test-stream", "reset": False}
+    content, stream = state.prepare(suffix, final)
+    assert stream["reset"] is True
+    assert stream["index"] == 1
+    assert content == normalize_qq_list_math(INLINE_REPORTED)
