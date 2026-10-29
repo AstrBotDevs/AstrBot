@@ -206,12 +206,12 @@ const coerceBridgeUploadFile = async (
   );
 };
 
-const sendBridgeResponse = (requestId, ok, payload) => {
+const sendBridgeResponse = (requestId, ok, payload, errorFields) => {
   postToIframe({
     kind: "response",
     requestId,
     ok,
-    ...(ok ? { data: payload } : { error: payload }),
+    ...(ok ? { data: payload } : { error: payload, ...errorFields }),
   });
 };
 
@@ -226,6 +226,20 @@ const getBridgeErrorMessage = (error, fallback) => {
     }
   }
   return error?.message || fallback;
+};
+
+const getBridgeErrorFields = (error) => {
+  const fields = {};
+  if (typeof error?.code === "string" && error.code) {
+    fields.errorCode = error.code;
+  }
+  if (typeof error?.reason === "string" && error.reason) {
+    fields.errorReason = error.reason;
+  }
+  if (typeof error?.confirmed === "boolean") {
+    fields.errorConfirmed = error.confirmed;
+  }
+  return Object.keys(fields).length > 0 ? fields : undefined;
 };
 
 const closeSSEConnection = (subscriptionId) => {
@@ -384,7 +398,11 @@ const handleBridgeRequest = async (message) => {
         params: message.params || {},
       });
       if (response.data?.status === "error") {
-        throw new Error(response.data.message || "Plugin GET request failed.");
+        const err = new Error(response.data.message || "Plugin GET request failed.");
+        err.code = response.data.data?.code ?? response.data.message;
+        err.reason = response.data.reason;
+        err.confirmed = response.data.data?.confirmed ?? response.data.confirmed;
+        throw err;
       }
       sendBridgeResponse(requestId, true, response.data?.data ?? response.data);
       return;
@@ -396,7 +414,11 @@ const handleBridgeRequest = async (message) => {
         message.body || {},
       );
       if (response.data?.status === "error") {
-        throw new Error(response.data.message || "Plugin POST request failed.");
+        const err = new Error(response.data.message || "Plugin POST request failed.");
+        err.code = response.data.data?.code ?? response.data.message;
+        err.reason = response.data.reason;
+        err.confirmed = response.data.data?.confirmed ?? response.data.confirmed;
+        throw err;
       }
       sendBridgeResponse(requestId, true, response.data?.data ?? response.data);
       return;
@@ -515,6 +537,7 @@ const handleBridgeRequest = async (message) => {
       requestId,
       false,
       getBridgeErrorMessage(error, "Plugin bridge request failed."),
+      getBridgeErrorFields(error),
     );
   }
 };
