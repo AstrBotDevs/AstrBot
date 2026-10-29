@@ -1,6 +1,7 @@
+import datetime
 import json
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -300,3 +301,41 @@ async def test_format_message_truncates_long_json_card_fields():
     formatted = await context._format_message(event, {})
 
     assert f"Description: {'a' * 200}...]" in formatted
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("timezone", "timestamp", "expected"),
+    [
+        ("UTC", 1798733223, "2026-12-31 16:07:03"),
+        ("Asia/Shanghai", 1798733223, "2027-01-01 00:07:03"),
+        ("UTC", None, "2026-10-30 12:00:00"),
+        ("UTC", 0, "2026-10-30 12:00:00"),
+        ("UTC", 10**30, "2026-10-30 12:00:00"),
+    ],
+)
+async def test_group_context_formats_sent_time_or_falls_back(timezone, timestamp, expected):
+    context = GroupChatContext(MagicMock(), MagicMock())
+    context.context.get_config.return_value = {
+        "timezone": timezone,
+        "provider_settings": {"image_caption_prompt": ""},
+        "provider_ltm_settings": {
+            "image_caption": False,
+            "active_reply": {"method": "possibility_reply", "possibility_reply": 0},
+        },
+    }
+    event = make_event()
+    event.get_message_type.return_value = MessageType.GROUP_MESSAGE
+    event.message_obj.sender = SimpleNamespace(nickname="Alice")
+    event.message_obj.timestamp = timestamp
+    event.get_messages.return_value = [Plain("hello")]
+    with patch(
+        "astrbot.builtin_stars.astrbot.group_chat_context.datetime.datetime",
+        wraps=datetime.datetime,
+    ) as clock:
+        clock.now.return_value = datetime.datetime(2026, 10, 30, 12, 0)
+        await context.handle_message(event)
+
+    assert list(context.raw_records[event.unified_msg_origin]) == [
+        f"[Alice/{expected}]:  hello"
+    ]

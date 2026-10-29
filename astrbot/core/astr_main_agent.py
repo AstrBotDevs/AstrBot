@@ -1013,17 +1013,34 @@ def _append_system_reminders(
                 system_parts.append(f"Group name: {group_name}")
 
     if cfg.get("datetime_system_prompt"):
-        now = None
+        tz = None
         if timezone:
             try:
-                now = datetime.datetime.now(zoneinfo.ZoneInfo(timezone))
+                tz = zoneinfo.ZoneInfo(timezone)
             except Exception as exc:  # noqa: BLE001
                 logger.error("时区设置错误: %s, 使用本地时区", exc)
-        if now is None:
-            now = datetime.datetime.now().astimezone()
+        now = datetime.datetime.now(tz)
+        if tz is None:
+            now = now.astimezone()
         current_time = now.strftime("%Y-%m-%d %H:%M (%Z)")
         weekday = WEEKDAY_NAMES[now.weekday()]
         system_parts.append(f"Current datetime: {current_time}, Weekday: {weekday}")
+        timestamp = getattr(event.message_obj, "timestamp", None)
+        if isinstance(timestamp, (int, float)) and timestamp > 0:
+            try:
+                sent_at = datetime.datetime.fromtimestamp(timestamp, tz=tz)
+                if tz is None:
+                    # Resolve the local UTC offset at send time, including DST.
+                    sent_at = sent_at.astimezone()
+            except (ValueError, OverflowError, OSError):
+                sent_at = None
+            if sent_at is not None:
+                delay_sec = now.timestamp() - timestamp
+                if delay_sec >= 60:
+                    system_parts.append(
+                        f"This message was sent at {sent_at:%Y-%m-%d %H:%M:%S %Z} "
+                        f"({int(delay_sec // 60)} min ago); you may be replying late."
+                    )
 
     if system_parts:
         system_content = (

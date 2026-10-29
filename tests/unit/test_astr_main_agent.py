@@ -3,6 +3,7 @@
 import asyncio
 import datetime
 import os
+import time
 from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
@@ -364,37 +365,98 @@ async def test_proactive_agent_respects_runtime_and_safety_settings(
     assert (ama.LLM_SAFETY_MODE_SYSTEM_PROMPT in request.system_prompt) == safety_mode
 
 
-def test_append_system_reminders_includes_weekday(mock_event):
-    """Test datetime reminder includes weekday information."""
+@pytest.mark.parametrize(
+    ("enabled", "delay_seconds"),
+    [(True, -60), (True, 59), (True, 60), (True, 300), (False, 300)],
+)
+def test_datetime_reminder_distinguishes_sent_time_from_now(
+    mock_event, enabled, delay_seconds
+):
+    fixed_now = datetime.datetime(2026, 12, 31, 16, 0, 30, tzinfo=datetime.timezone.utc)
+    mock_event.message_obj.timestamp = fixed_now.timestamp() - delay_seconds
     req = ProviderRequest(prompt="Hello")
-    fixed_now = datetime.datetime(
-        2026,
-        6,
-        8,
-        12,
-        34,
-        tzinfo=datetime.timezone.utc,
-    )
-
-    class FixedDateTime(datetime.datetime):
-        @classmethod
-        def now(cls, tz=None):
-            if tz:
-                return fixed_now.astimezone(tz)
-            return fixed_now
-
-    with patch("astrbot.core.astr_main_agent.datetime.datetime", FixedDateTime):
+    with patch(
+        "astrbot.core.astr_main_agent.datetime.datetime", wraps=datetime.datetime
+    ) as clock:
+        clock.now.side_effect = lambda tz=None: fixed_now.astimezone(tz)
         ama._append_system_reminders(
-            mock_event,
-            req,
-            {"datetime_system_prompt": True},
-            "UTC",
+            mock_event, req, {"datetime_system_prompt": enabled}, "Asia/Shanghai"
         )
 
+    if not enabled:
+        assert req.extra_user_content_parts == []
+        return
+    text = req.extra_user_content_parts[0].text
+    assert "Current datetime: 2027-01-01 00:00 (CST), Weekday: Friday" in text
+    if delay_seconds >= 60:
+        expected_time = "23:59:30" if delay_seconds == 60 else "23:55:30"
+        assert (
+            f"This message was sent at 2026-12-31 {expected_time} CST "
+            f"({delay_seconds // 60} min ago); you may be replying late."
+        ) in text
+    else:
+        assert "This message was sent at" not in text
+
+
+@pytest.mark.skipif(not hasattr(time, "tzset"), reason="Requires POSIX timezone control")
+@pytest.mark.parametrize("timezone", [None, "Invalid/Timezone", "America/New_York"])
+@pytest.mark.parametrize(
+    ("now_utc", "current_time", "sent_time"),
+    [
+        (
+            "2026-03-08T07:02:00+00:00",
+            "2026-03-08 03:02 (EDT)",
+            "2026-03-08 01:58:00 EST",
+        ),
+        (
+            "2026-11-01T06:02:00+00:00",
+            "2026-11-01 01:02 (EST)",
+            "2026-11-01 01:58:00 EDT",
+        ),
+    ],
+)
+def test_datetime_reminder_across_daylight_saving_transition(
+    mock_event, timezone, now_utc, current_time, sent_time
+):
+    real_datetime = datetime.datetime
+    fixed_now = real_datetime.fromisoformat(now_utc)
+    mock_event.message_obj.timestamp = fixed_now.timestamp() - 240
+    req = ProviderRequest(prompt="Hello")
+
+    try:
+        with patch.dict(os.environ, {"TZ": "America/New_York"}):
+            time.tzset()
+            with patch(
+                "astrbot.core.astr_main_agent.datetime.datetime", wraps=real_datetime
+            ) as clock:
+                clock.now.side_effect = lambda tz=None: real_datetime.fromtimestamp(
+                    fixed_now.timestamp(), tz=tz
+                )
+                ama._append_system_reminders(
+                    mock_event, req, {"datetime_system_prompt": True}, timezone
+                )
+    finally:
+        time.tzset()
+
     assert [part.text for part in req.extra_user_content_parts] == [
-        "<system_reminder>Current datetime: "
-        "2026-06-08 12:34 (UTC), Weekday: Monday</system_reminder>"
+        f"<system_reminder>Current datetime: {current_time}, Weekday: Sunday\n"
+        f"This message was sent at {sent_time} "
+        "(4 min ago); you may be replying late.</system_reminder>"
     ]
+
+
+@pytest.mark.parametrize("timestamp", [None, 0, 10**30])
+def test_datetime_reminder_ignores_invalid_message_timestamp(mock_event, timestamp):
+    mock_event.message_obj.timestamp = timestamp
+    req = ProviderRequest(prompt="Hello")
+
+    ama._append_system_reminders(
+        mock_event, req, {"datetime_system_prompt": True}, "UTC"
+    )
+
+    text = req.extra_user_content_parts[0].text
+    assert "Current datetime:" in text
+    assert "This message was sent at" not in text
 
 
 def test_local_mode_prompt_uses_windows_powershell_51():

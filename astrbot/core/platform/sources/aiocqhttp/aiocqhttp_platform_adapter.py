@@ -418,8 +418,14 @@ class AiocqhttpAdapter(Platform):
                         )
                         continue
 
-        abm.timestamp = int(time.time())
         abm.message_str = message_str
+        # Preserve the protocol timestamp even when message conversion is delayed.
+        try:
+            timestamp = int(event.get("time") or 0)
+            if timestamp > 0:
+                abm.timestamp = timestamp
+        except (TypeError, ValueError, OverflowError):
+            pass
         abm.raw_message = event
 
         return abm

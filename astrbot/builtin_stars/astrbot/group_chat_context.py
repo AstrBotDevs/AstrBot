@@ -3,6 +3,7 @@ import datetime
 import json
 import random
 import uuid
+import zoneinfo
 from collections import defaultdict, deque
 
 from astrbot import logger
@@ -70,6 +71,7 @@ class GroupChatContext:
         ar_prompt = active_reply.get("prompt", "")
         ar_whitelist = active_reply.get("whitelist", [])
         return {
+            "timezone": self.context.get_config().get("timezone"),
             "group_message_max_cnt": _positive_int(
                 group_context_cfg.get(
                     "group_message_max_cnt",
@@ -197,7 +199,23 @@ class GroupChatContext:
             )
 
     async def _format_message(self, event: AstrMessageEvent, cfg: dict) -> str:
-        datetime_str = datetime.datetime.now().strftime("%H:%M:%S")
+        tz = None
+        if timezone := cfg.get("timezone"):
+            try:
+                tz = zoneinfo.ZoneInfo(timezone)
+            except (KeyError, ValueError, TypeError) as exc:
+                logger.error("Invalid timezone: %s; using local timezone", exc)
+
+        sent_at = None
+        timestamp = getattr(event.message_obj, "timestamp", None)
+        if isinstance(timestamp, (int, float)) and timestamp > 0:
+            try:
+                sent_at = datetime.datetime.fromtimestamp(timestamp, tz=tz)
+            except (ValueError, OverflowError, OSError):
+                pass
+        if sent_at is None:
+            sent_at = datetime.datetime.now(tz)
+        datetime_str = sent_at.strftime("%Y-%m-%d %H:%M:%S")
         parts = [f"[{event.message_obj.sender.nickname}/{datetime_str}]: "]
 
         for comp in event.get_messages():
