@@ -10,7 +10,7 @@ import pytest
 from botpy import ConnectionSession
 
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import At, Image, Plain, Reply
+from astrbot.api.message_components import At, AtAll, Image, Plain, Reply
 from astrbot.api.platform import Group
 from astrbot.core.message.message_event_result import (
     MessageEventResult,
@@ -987,6 +987,82 @@ def test_split_message_chain_by_media_preserves_use_markdown():
     assert len(chunks) == 2
     assert chunks[0].chain[0].text == "text before"
     assert all(chunk.use_markdown_ is False for chunk in chunks)
+
+
+def test_split_message_chain_by_media_keeps_at_out_of_media_chunk():
+    # QQ sends media chunks as msg_type=7 plain text, which does not parse
+    # `<qqbot-at-user>` tags. An At component must therefore be split into its
+    # own text chunk so the mention is delivered instead of leaking markup.
+    chain = MessageChain(
+        chain=[
+            At(qq="user-openid"),
+            Plain(" daily report"),
+            Image(file="https://example.com/1.png"),
+            Image(file="https://example.com/2.png"),
+        ]
+    )
+
+    chunks = QQOfficialMessageEvent._split_message_chain_by_media(chain)
+
+    assert [
+        [type(component).__name__ for component in chunk.chain] for chunk in chunks
+    ] == [
+        ["At", "Plain"],
+        ["Image"],
+        ["Image"],
+    ]
+
+
+@pytest.mark.parametrize(
+    "mention",
+    [
+        pytest.param(AtAll(), id="at-all"),
+        pytest.param(At(qq=""), id="empty-at"),
+    ],
+)
+def test_split_message_chain_by_media_ignores_unsupported_mentions(mention):
+    # `_parse_to_qqofficial` drops AtAll and empty-ID At components, so they must
+    # not split a caption away from the media that follows it.
+    chain = MessageChain(
+        chain=[
+            Plain("caption"),
+            mention,
+            Image(file="https://example.com/1.png"),
+        ]
+    )
+
+    chunks = QQOfficialMessageEvent._split_message_chain_by_media(chain)
+
+    assert len(chunks) == 1
+    assert len(chunks[0].chain) == 3
+
+
+def test_split_message_chain_by_media_keeps_at_after_media_separate():
+    chain = MessageChain(
+        chain=[
+            Image(file="https://example.com/1.png"),
+            At(qq="user-openid"),
+            Plain(" hi"),
+        ]
+    )
+
+    chunks = QQOfficialMessageEvent._split_message_chain_by_media(chain)
+
+    assert [
+        [type(component).__name__ for component in chunk.chain] for chunk in chunks
+    ] == [["Image"], ["At", "Plain"]]
+
+
+def test_split_message_chain_by_media_keeps_text_only_chain_whole():
+    chain = MessageChain(chain=[At(qq="user-openid"), Plain(" hi")])
+
+    chunks = QQOfficialMessageEvent._split_message_chain_by_media(chain)
+
+    assert len(chunks) == 1
+    assert [type(component).__name__ for component in chunks[0].chain] == [
+        "At",
+        "Plain",
+    ]
 
 
 @pytest.mark.asyncio

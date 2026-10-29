@@ -341,16 +341,33 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         chunks: list[MessageChain] = []
         current_chain = []
         current_has_media = False
+        current_has_at = False
 
         for component in message.chain:
             is_media = isinstance(component, Image | Record | Video | File)
-            if is_media and current_has_media:
+            # `_parse_to_qqofficial` drops AtAll (`qq="all"`) and empty-ID At
+            # components, so only mentions that are actually serialized as
+            # `<qqbot-at-user>` should split a chunk; otherwise a caption before
+            # an unsupported mention would be separated from its media.
+            mention_id = (
+                str(component.qq) if isinstance(component, At) and component.qq else ""
+            )
+            is_mention = bool(mention_id) and mention_id != "all"
+            # Media chunks are sent as msg_type=7 with a plain-text content, where
+            # `<qqbot-at-user>` tags are not parsed. Keep mentions out of media
+            # chunks so they are delivered through a Markdown/text payload.
+            if current_chain and (
+                (is_media and (current_has_media or current_has_at))
+                or (is_mention and current_has_media)
+            ):
                 chunks.append(message.derive(current_chain))
                 current_chain = []
                 current_has_media = False
+                current_has_at = False
 
             current_chain.append(component)
             current_has_media = current_has_media or is_media
+            current_has_at = current_has_at or is_mention
 
         if current_chain or not message.chain:
             chunks.append(message.derive(current_chain))
