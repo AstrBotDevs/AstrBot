@@ -505,3 +505,36 @@ async def test_malformed_custom_tools_reach_api_validation(
     assert captured[0]["tools"][0]["name"] == "get_time"
     assert captured[0]["tools"][1:] == custom_tools
     assert provider.provider_config["custom_extra_body"]["tools"] == custom_tools
+
+
+def test_empty_user_content_is_filtered():
+    """Anthropic rejects user messages with empty content; filter them out (#10852)."""
+    provider = _provider()
+    provider.provider_config = {"model": "claude-test", "api_base": "https://api.anthropic.com"}
+    messages = [
+        {"role": "user", "content": "hello"},
+        {"role": "user", "content": ""},
+        {"role": "user", "content": "  "},
+        {"role": "user", "content": []},
+        {"role": "assistant", "content": "hi"},
+        {"role": "user", "content": "world"},
+    ]
+    _, converted = provider._prepare_payload(messages)
+    user_messages = [m for m in converted if m.get("role") == "user"]
+    # Only non-empty user messages survive.
+    assert len(user_messages) == 2
+    assert user_messages[0]["content"] == "hello"
+    assert user_messages[1]["content"] == "world"
+
+
+def test_non_empty_user_content_is_preserved():
+    provider = _provider()
+    provider.provider_config = {"model": "claude-test", "api_base": "https://api.anthropic.com"}
+    messages = [
+        {"role": "user", "content": "hello"},
+        {"role": "user", "content": [{"type": "text", "text": "hi"}]},
+    ]
+    _, converted = provider._prepare_payload(messages)
+    assert len(converted) == 2
+    assert converted[0]["content"] == "hello"
+    assert converted[1]["content"] == [{"type": "text", "text": "hi"}]

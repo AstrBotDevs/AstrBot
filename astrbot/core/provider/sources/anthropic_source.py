@@ -313,13 +313,14 @@ class ProviderAnthropic(Provider):
                             )
                         else:
                             converted_content.append(part)
-                    new_messages.append(
-                        {
-                            "role": "user",
-                            "content": converted_content,
-                        }
-                    )
-                else:
+                    if converted_content:
+                        new_messages.append(
+                            {
+                                "role": "user",
+                                "content": converted_content,
+                            }
+                        )
+                elif isinstance(message.get("content"), str) and message["content"].strip():
                     new_messages.append(message)
             else:
                 new_messages.append(message)
