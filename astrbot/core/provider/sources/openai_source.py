@@ -1,5 +1,4 @@
 import asyncio
-import copy
 import inspect
 import json
 import random
@@ -976,7 +975,13 @@ class ProviderOpenAIOfficial(Provider):
                 audio_urls,
                 extra_user_content_parts,
             )
-        context_query = copy.deepcopy(self._ensure_message_to_dicts(contexts))
+        # Copy only the message dicts, not their nested content. Everything
+        # below touches top-level keys only: `_no_save` is deleted, `content`
+        # is replaced wholesale by `_materialize_context_image_parts` /
+        # `_remove_image_from_context`, and `reasoning_content` is added by
+        # `_finally_convert_payload`. A deep copy of the whole transcript on
+        # every request costs ~100x more for no extra isolation.
+        context_query = [dict(m) for m in self._ensure_message_to_dicts(contexts)]
         if new_record:
             context_query.append(new_record)
         if system_prompt:
