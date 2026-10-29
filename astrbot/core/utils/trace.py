@@ -146,11 +146,16 @@ class TraceSpan:
             event: Standard event associated with a span.
             closing: Whether completion must survive the trace payload limit.
         """
+        # Preserve snapshot order on coarse clocks and across wall-clock corrections.
+        updated_ns = max(
+            time.time_ns(),
+            int(self._summary.get("updated_time_unix_nano", self._start_ns)) + 1,
+        )
         payload = {
             "type": "trace",
             "schema_version": 3,
             "trace": self._summary,
-            "time_unix_nano": str(time.time_ns()),
+            "time_unix_nano": str(updated_ns),
         }
         self._summary["updated_time_unix_nano"] = payload["time_unix_nano"]
         if span is not None:

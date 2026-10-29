@@ -10,6 +10,7 @@ import sqlite3
 import threading
 import time
 import weakref
+from itertools import count
 from pathlib import Path
 
 import pytest
@@ -578,6 +579,41 @@ def test_stale_updates_do_not_reopen_completed_trace(
     assert detail["spans"][0]["end_time_unix_nano"]
     assert persisted.list_traces(query="% _")["total"] == 1
     assert persisted.list_traces(query="other%")["total"] == 0
+
+
+@pytest.mark.parametrize("clock_step", [0, -1], ids=["frozen", "backward"])
+@pytest.mark.parametrize("reverse", [False, True], ids=["ordered", "reversed"])
+@pytest.mark.parametrize("completed", [False, True], ids=["running", "completed"])
+def test_trace_updates_survive_clock_corrections(
+    persisted, capture, monkeypatch, clock_step, reverse, completed
+):
+    """Persist the latest summary even when wall-clock readings stop increasing.
+
+    Args:
+        persisted: Isolated trace database.
+        capture: Immutable trace snapshots.
+        monkeypatch: Pytest patch manager.
+        clock_step: Nanoseconds per clock read.
+        reverse: Whether to enqueue snapshots in reverse order.
+        completed: Whether the trace finishes before persistence.
+    """
+    clock = count(time.time_ns(), clock_step)
+    monkeypatch.setattr(time, "time_ns", clock.__next__)
+    trace = TraceSpan("message")
+    with trace.context():
+        trace.record("event_received")
+        trace.record("agent_start")
+        trace.record("agent_end", status="success")
+        if completed:
+            trace.record("pipeline_end", status="success")
+    for frame in reversed(capture) if reverse else capture:
+        assert persisted.append(frame, owner=trace)
+    assert persisted.flush()
+    detail = persisted.get_trace(trace.trace_id)
+    assert detail["trace"]["state"] == ("completed" if completed else "running")
+    assert detail["trace"]["span_count"] == 2
+    assert detail["trace"]["has_models"] is True
+    assert detail["trace"] == capture[-1]["trace"]
 
 
 def test_capacity_prunes_complete_traces_with_cascade(persisted, capture):
