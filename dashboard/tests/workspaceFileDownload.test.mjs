@@ -5,42 +5,43 @@ import vm from "node:vm";
 import ts from "typescript";
 import { effectScope, nextTick, reactive, ref, watch } from "vue";
 
+const source = readFileSync(
+  new URL("../src/components/chat/WorkspaceFilesPanel.vue", import.meta.url),
+  "utf8",
+)
+  .split('<script setup lang="ts">')[1]
+  .split("</script>")[0];
+const ast = ts.createSourceFile(
+  "panel.ts",
+  source,
+  ts.ScriptTarget.Latest,
+  true,
+);
+const names = new Set([
+  "close",
+  "resetPanel",
+  "clearPreview",
+  "refreshTree",
+  "downloadSelectedFile",
+]);
+const handlers = ast.statements.filter(
+  (node) => ts.isFunctionDeclaration(node) && names.has(node.name?.text),
+);
+const watcher = ast.statements.find(
+  (node) =>
+    ts.isExpressionStatement(node) &&
+    node.getText(ast).startsWith("watch(") &&
+    node.getText(ast).includes("props.modelValue"),
+);
+assert.equal(handlers.length, names.size);
+assert.ok(watcher);
+const compiledScript = ts.transpile(
+  [...handlers, watcher].map((node) => node.getText(ast)).join("\n"),
+  { target: ts.ScriptTarget.ES2022 },
+);
+
 for (const action of ["close", "refresh", "switch session", "late failure"]) {
   test(`pending workspace download survives ${action} without changing newer UI state`, async (t) => {
-    const source = readFileSync(
-      new URL(
-        "../src/components/chat/WorkspaceFilesPanel.vue",
-        import.meta.url,
-      ),
-      "utf8",
-    )
-      .split('<script setup lang="ts">')[1]
-      .split("</script>")[0];
-    const ast = ts.createSourceFile(
-      "panel.ts",
-      source,
-      ts.ScriptTarget.Latest,
-      true,
-    );
-    const names = new Set([
-      "close",
-      "resetPanel",
-      "clearPreview",
-      "refreshTree",
-      "downloadSelectedFile",
-    ]);
-    const handlers = ast.statements.filter(
-      (node) => ts.isFunctionDeclaration(node) && names.has(node.name?.text),
-    );
-    const watcher = ast.statements.find(
-      (node) =>
-        ts.isExpressionStatement(node) &&
-        node.getText(ast).startsWith("watch(") &&
-        node.getText(ast).includes("props.modelValue"),
-    );
-    assert.equal(handlers.length, names.size);
-    assert.ok(watcher);
-
     const props = reactive({
       modelValue: true,
       projectId: "project",
@@ -101,15 +102,7 @@ for (const action of ["close", "refresh", "switch session", "late failure"]) {
 
     const scope = effectScope();
     t.after(() => scope.stop());
-    scope.run(() =>
-      vm.runInContext(
-        ts.transpile(
-          [...handlers, watcher].map((node) => node.getText(ast)).join("\n"),
-          { target: ts.ScriptTarget.ES2022 },
-        ),
-        context,
-      ),
-    );
+    scope.run(() => vm.runInContext(compiledScript, context));
     await nextTick();
     context.selectedFilePath.value = "reports/original.zip";
     const first = context.downloadSelectedFile();
@@ -160,15 +153,12 @@ for (const action of ["close", "refresh", "switch session", "late failure"]) {
         false,
         "the first download finishes while closed",
       );
-      props.modelValue = true;
-      await nextTick();
-      context.selectedFilePath.value = "new.zip";
-      second = context.downloadSelectedFile();
+    } else {
+      requests[1].resolve({ data: "new bytes" });
+      await second;
+      assert.deepEqual(saved.at(-1), { name: "new.zip", data: "new bytes" });
+      assert.equal(context.fileDownloading.value, false);
     }
-    requests[1].resolve({ data: "new bytes" });
-    await second;
-    assert.deepEqual(saved.at(-1), { name: "new.zip", data: "new bytes" });
-    assert.equal(context.fileDownloading.value, false);
     assert.equal(blobs.size, 0, "download object URLs must be released");
   });
 }

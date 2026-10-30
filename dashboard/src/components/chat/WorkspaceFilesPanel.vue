@@ -249,7 +249,6 @@ interface WorkspaceEntry {
 const props = defineProps<{
   modelValue: boolean;
   projectId: string;
-  projectTitle?: string;
   workspaceType?: "session" | "project" | "custom";
   sessionId?: string;
 }>();
