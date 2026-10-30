@@ -196,19 +196,21 @@ class ChatUIProjectService:
             ChatUIProjectServiceError: If the path is invalid or unreadable.
         """
         project = await self._get_owned_project(username, project_id)
+        workspace_session_id = "default"
         if (
             session_id
             and normalize_project_workspace_type(project.workspace_type)
             == WORKSPACE_TYPE_SESSION
         ):
-            await self._get_owned_session(username, session_id)
+            session = await self._get_owned_session(username, session_id)
             session_project = await self.db.get_project_by_session(session_id, username)
             if not session_project or session_project.project_id != project_id:
                 raise ChatUIProjectServiceError(
                     "Session does not belong to this project"
                 )
+            workspace_session_id = session.session_id
         fallback_umo = (
-            f"webchat:FriendMessage:webchat!{project.creator}!{session_id or 'default'}"
+            f"webchat:FriendMessage:webchat!{project.creator}!{workspace_session_id}"
         )
         try:
             resolved_workspace_root = resolve_project_workspace_root(
@@ -352,19 +354,21 @@ class ChatUIProjectService:
             ChatUIProjectServiceError: If the file path is invalid or missing.
         """
         project = await self._get_owned_project(username, project_id)
+        workspace_session_id = "default"
         if (
             session_id
             and normalize_project_workspace_type(project.workspace_type)
             == WORKSPACE_TYPE_SESSION
         ):
-            await self._get_owned_session(username, session_id)
+            session = await self._get_owned_session(username, session_id)
             session_project = await self.db.get_project_by_session(session_id, username)
             if not session_project or session_project.project_id != project_id:
                 raise ChatUIProjectServiceError(
                     "Session does not belong to this project"
                 )
+            workspace_session_id = session.session_id
         fallback_umo = (
-            f"webchat:FriendMessage:webchat!{project.creator}!{session_id or 'default'}"
+            f"webchat:FriendMessage:webchat!{project.creator}!{workspace_session_id}"
         )
         try:
             resolved_workspace_root = resolve_project_workspace_root(

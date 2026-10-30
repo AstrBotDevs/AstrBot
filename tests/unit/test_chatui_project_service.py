@@ -522,6 +522,53 @@ async def test_workspace_routes_use_session_query(session_workspace_service, ses
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
+    ("workspace_type", "workspace_path"),
+    [("project", None), ("custom", "configured"), ("custom", None)],
+)
+async def test_non_session_workspace_ignores_session_query(
+    session_workspace_service, workspace_type, workspace_path
+):
+    """Session parameters must not redirect non-session workspace file operations.
+
+    Args:
+        session_workspace_service: Service with owned sessions in another project.
+        workspace_type: Shared or custom project workspace mode.
+        workspace_path: Custom directory, or None to cover legacy missing paths.
+    """
+    service, _ = session_workspace_service
+    project = await service.db.create_chatui_project(
+        creator="alice",
+        title="Non-session files",
+        workspace_type=workspace_type,
+        workspace_path=workspace_path,
+    )
+    root = resolve_project_workspace_root(
+        project, fallback_umo="webchat:FriendMessage:webchat!alice!default"
+    )
+    root.mkdir()
+    (root / "output.txt").write_text("project content", encoding="utf-8")
+    session_root = default_workspace_root("webchat:FriendMessage:webchat!alice!session-a")
+    session_root.mkdir()
+    (session_root / "other-session.txt").write_text("private content", encoding="utf-8")
+
+    for session_id in (None, "", "session-a", "missing-session"):
+        listing = await service.list_workspace_files(
+            "alice", project.project_id, session_id=session_id
+        )
+        assert [entry["name"] for entry in listing["entries"]] == ["output.txt"]
+        preview = await service.get_workspace_file(
+            "alice", project.project_id, "output.txt", session_id=session_id
+        )
+        assert preview["content"] == "project content"
+        workspace_root, download = await service.get_workspace_file_location(
+            "alice", project.project_id, "output.txt", session_id=session_id
+        )
+        assert workspace_root == root
+        assert download.read_text(encoding="utf-8") == "project content"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
     "method",
     ["list_workspace_files", "get_workspace_file", "get_workspace_file_location"],
 )
