@@ -92,17 +92,20 @@ class _KeyRotator:
     index: int = 0
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
-    async def get(self, provider_settings: dict) -> str:
+    async def get(
+        self, provider_settings: dict, tried_keys: set[str] | None = None
+    ) -> str:
         """Return the current key and advance the round-robin index.
 
         Args:
             provider_settings: Provider settings containing API key lists.
+            tried_keys: Request-local keys to skip and update when a key is selected.
 
         Returns:
             The API key selected for this call.
 
         Raises:
-            ValueError: If the configured key list is empty or missing.
+            ValueError: If no configured, untried key is available.
         """
         keys = provider_settings.get(self.setting_name, [])
         if not keys:
@@ -113,9 +116,15 @@ class _KeyRotator:
         async with self.lock:
             # Keep the index valid if runtime config reloads shrink the key list.
             self.index = self.index % len(keys)
-            key = keys[self.index]
-            self.index = (self.index + 1) % len(keys)
-            return key
+            for _ in range(len(keys)):
+                key = keys[self.index]
+                self.index = (self.index + 1) % len(keys)
+                if tried_keys is None or key not in tried_keys:
+                    if tried_keys is not None:
+                        tried_keys.add(key)
+                    return key
+
+        raise ValueError(f"Error: No untried {self.provider_name} API keys remain.")
 
 
 # Retry with the next API key when these HTTP statuses indicate key-specific
@@ -230,8 +239,9 @@ async def _tavily_search(
     # Retry key-specific failures with the next key, but fail fast for
     # non-retryable errors such as server-side 5xx responses.
     last_error = None
-    for _ in range(len(keys)):
-        tavily_key = await _TAVILY_KEY_ROTATOR.get(provider_settings)
+    tried_keys: set[str] = set()
+    for _ in range(len(set(keys))):
+        tavily_key = await _TAVILY_KEY_ROTATOR.get(provider_settings, tried_keys)
         header = {
             "Authorization": f"Bearer {tavily_key}",
             "Content-Type": "application/json",
@@ -290,8 +300,9 @@ async def _tavily_extract(provider_settings: dict, payload: dict) -> list[dict]:
         raise ValueError("Error: Tavily API key is not configured in AstrBot.")
 
     last_error = None
-    for _ in range(len(keys)):
-        tavily_key = await _TAVILY_KEY_ROTATOR.get(provider_settings)
+    tried_keys: set[str] = set()
+    for _ in range(len(set(keys))):
+        tavily_key = await _TAVILY_KEY_ROTATOR.get(provider_settings, tried_keys)
         header = {
             "Authorization": f"Bearer {tavily_key}",
             "Content-Type": "application/json",
@@ -414,8 +425,9 @@ async def _brave_search(
         raise ValueError("Error: Brave API key is not configured in AstrBot.")
 
     last_error = None
-    for _ in range(len(keys)):
-        brave_key = await _BRAVE_KEY_ROTATOR.get(provider_settings)
+    tried_keys: set[str] = set()
+    for _ in range(len(set(keys))):
+        brave_key = await _BRAVE_KEY_ROTATOR.get(provider_settings, tried_keys)
         header = {
             "Accept": "application/json",
             "X-Subscription-Token": brave_key,
@@ -1034,8 +1046,9 @@ async def _firecrawl_search(
         raise ValueError("Error: Firecrawl API key is not configured in AstrBot.")
 
     last_error = None
-    for _ in range(len(keys)):
-        firecrawl_key = await _FIRECRAWL_KEY_ROTATOR.get(provider_settings)
+    tried_keys: set[str] = set()
+    for _ in range(len(set(keys))):
+        firecrawl_key = await _FIRECRAWL_KEY_ROTATOR.get(provider_settings, tried_keys)
         header = {
             "Authorization": f"Bearer {firecrawl_key}",
             "Content-Type": "application/json",
@@ -1101,8 +1114,9 @@ async def _firecrawl_scrape(provider_settings: dict, payload: dict) -> dict:
         raise ValueError("Error: Firecrawl API key is not configured in AstrBot.")
 
     last_error = None
-    for _ in range(len(keys)):
-        firecrawl_key = await _FIRECRAWL_KEY_ROTATOR.get(provider_settings)
+    tried_keys: set[str] = set()
+    for _ in range(len(set(keys))):
+        firecrawl_key = await _FIRECRAWL_KEY_ROTATOR.get(provider_settings, tried_keys)
         header = {
             "Authorization": f"Bearer {firecrawl_key}",
             "Content-Type": "application/json",
@@ -1633,8 +1647,9 @@ async def _exa_search(
         raise ValueError("Error: Exa API key is not configured in AstrBot.")
 
     last_error = None
-    for _ in range(len(keys)):
-        exa_key = await _EXA_KEY_ROTATOR.get(provider_settings)
+    tried_keys: set[str] = set()
+    for _ in range(len(set(keys))):
+        exa_key = await _EXA_KEY_ROTATOR.get(provider_settings, tried_keys)
         headers = {
             "x-api-key": exa_key,
             "Content-Type": "application/json",
@@ -1695,8 +1710,9 @@ async def _exa_get_contents(
         raise ValueError("Error: Exa API key is not configured in AstrBot.")
 
     last_error = None
-    for _ in range(len(keys)):
-        exa_key = await _EXA_KEY_ROTATOR.get(provider_settings)
+    tried_keys: set[str] = set()
+    for _ in range(len(set(keys))):
+        exa_key = await _EXA_KEY_ROTATOR.get(provider_settings, tried_keys)
         headers = {
             "x-api-key": exa_key,
             "Content-Type": "application/json",
@@ -2169,8 +2185,9 @@ class DeepSeekWebSearchTool(FunctionTool[AstrAgentContext]):
         if ori_question is not None:
             payload["ori_question"] = ori_question
         last_error = None
-        for _ in range(len(keys)):
-            key = await _DEEPSEEK_KEY_ROTATOR.get(provider_settings)
+        tried_keys: set[str] = set()
+        for _ in range(len(set(keys))):
+            key = await _DEEPSEEK_KEY_ROTATOR.get(provider_settings, tried_keys)
             headers = {
                 "Authorization": f"Bearer {key}",
                 "Content-Type": "application/json",
@@ -2275,8 +2292,9 @@ class DeepSeekFetchWebPageTool(FunctionTool[AstrAgentContext]):
             return "Error: url must be an HTTP or HTTPS URL with a host and no embedded credentials."
 
         last_error = None
-        for _ in range(len(keys)):
-            key = await _DEEPSEEK_KEY_ROTATOR.get(provider_settings)
+        tried_keys: set[str] = set()
+        for _ in range(len(set(keys))):
+            key = await _DEEPSEEK_KEY_ROTATOR.get(provider_settings, tried_keys)
             headers = {
                 "Authorization": f"Bearer {key}",
                 "Content-Type": "application/json",
