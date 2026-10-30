@@ -1592,7 +1592,7 @@ paths:
         - name: session_id
           in: query
           required: false
-          description: Required for per-session workspaces; must belong to this project and user.
+          description: Optional for per-session workspaces; must belong to this project and user when provided. Omitted or empty values use the legacy default workspace.
           schema:
             type: string
       responses:
@@ -1619,7 +1619,7 @@ paths:
         - name: session_id
           in: query
           required: false
-          description: Required for per-session workspaces; must belong to this project and user.
+          description: Optional for per-session workspaces; must belong to this project and user when provided. Omitted or empty values use the legacy default workspace.
           schema:
             type: string
       responses:
@@ -1646,7 +1646,7 @@ paths:
         - name: session_id
           in: query
           required: false
-          description: Required for per-session workspaces; must belong to this project and user.
+          description: Optional for per-session workspaces; must belong to this project and user when provided. Omitted or empty values use the legacy default workspace.
           schema:
             type: string
       responses:

@@ -477,11 +477,13 @@ async def test_session_workspace_files_follow_session_context(session_workspace_
 
 
 @pytest.mark.asyncio
-async def test_workspace_routes_use_session_query(session_workspace_service):
-    """Exercise session selection through the real list, preview and download routes.
+@pytest.mark.parametrize("session_id", [None, "", "session-a", "session-b"])
+async def test_workspace_routes_use_session_query(session_workspace_service, session_id):
+    """Keep legacy defaults and select explicit sessions through all file routes.
 
     Args:
         session_workspace_service: Service backed by actual session associations.
+        session_id: Optional session query; omitted or empty uses the legacy root.
     """
     service, project = session_workspace_service
     app = FastAPI()
@@ -490,27 +492,32 @@ async def test_workspace_routes_use_session_query(session_workspace_service):
     app.dependency_overrides[chat_projects.require_chat_scope] = lambda: AuthContext(
         username="alice", scopes=["chat"]
     )
+    for workspace_session in ("default", "session-a", "session-b"):
+        root = default_workspace_root(
+            f"webchat:FriendMessage:webchat!alice!{workspace_session}"
+        )
+        root.mkdir()
+        (root / "output.txt").write_text(workspace_session, encoding="utf-8")
+        (root / f"{workspace_session}-only.txt").write_text("marker", encoding="utf-8")
+
+    expected_session = session_id or "default"
+    query = {} if session_id is None else {"session_id": session_id}
+    base = f"/api/v1/chat/projects/{project.project_id}/workspace"
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        for session_id in ("session-a", "session-b"):
-            root = await resolve_workspace_root_for_umo(
-                f"webchat:FriendMessage:webchat!alice!{session_id}", service.db
-            )
-            root.mkdir()
-            (root / "output.txt").write_text(session_id, encoding="utf-8")
-            base = f"/api/v1/chat/projects/{project.project_id}/workspace"
-            query = {"session_id": session_id, "path": "output.txt"}
-            listing = await client.get(f"{base}/files", params={"session_id": session_id})
-            assert listing.status_code == 200
-            assert [entry["name"] for entry in listing.json()["data"]["entries"]] == [
-                "output.txt"
-            ]
-            preview = await client.get(f"{base}/file", params=query)
-            assert preview.status_code == 200
-            assert preview.json()["data"]["content"] == session_id
-            download = await client.get(f"{base}/file/download", params=query)
-            assert download.status_code == 200
-            assert download.text == session_id
+        listing = await client.get(f"{base}/files", params=query)
+        assert listing.status_code == 200
+        assert {entry["name"] for entry in listing.json()["data"]["entries"]} == {
+            "output.txt",
+            f"{expected_session}-only.txt",
+        }
+        query["path"] = "output.txt"
+        preview = await client.get(f"{base}/file", params=query)
+        assert preview.status_code == 200
+        assert preview.json()["data"]["content"] == expected_session
+        download = await client.get(f"{base}/file/download", params=query)
+        assert download.status_code == 200
+        assert download.text == expected_session
 
 
 @pytest.mark.asyncio
@@ -521,7 +528,6 @@ async def test_workspace_routes_use_session_query(session_workspace_service):
 @pytest.mark.parametrize(
     ("session_id", "error"),
     [
-        (None, "Missing key: session_id"),
         ("bob-session", "Permission denied"),
         ("other-project-session", "Session does not belong to this project"),
         ("unassigned-session", "Session does not belong to this project"),
@@ -531,12 +537,12 @@ async def test_workspace_routes_use_session_query(session_workspace_service):
 async def test_session_workspace_requires_owned_project_session(
     session_workspace_service, method, session_id, error
 ):
-    """File APIs must reject missing, foreign and unrelated session contexts.
+    """File APIs must reject nonexistent, foreign and unrelated explicit sessions.
 
     Args:
         session_workspace_service: Service with owned and unrelated sessions.
         method: Workspace operation to exercise.
-        session_id: Missing or unauthorized session context.
+        session_id: Nonexistent or unauthorized explicit session context.
         error: Expected validation message.
     """
     service, project = session_workspace_service

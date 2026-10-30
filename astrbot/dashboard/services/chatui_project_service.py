@@ -186,7 +186,8 @@ class ChatUIProjectService:
             username: Dashboard username.
             project_id: ChatUI project ID.
             relative_path: Directory path relative to the workspace root.
-            session_id: Owned project session, required for per-session workspaces.
+            session_id: Optional owned project session for per-session workspaces.
+                Omitted or empty values retain the legacy default workspace.
 
         Returns:
             Directory metadata and its direct child entries.
@@ -196,11 +197,10 @@ class ChatUIProjectService:
         """
         project = await self._get_owned_project(username, project_id)
         if (
-            normalize_project_workspace_type(project.workspace_type)
+            session_id
+            and normalize_project_workspace_type(project.workspace_type)
             == WORKSPACE_TYPE_SESSION
         ):
-            if not session_id:
-                raise ChatUIProjectServiceError("Missing key: session_id")
             await self._get_owned_session(username, session_id)
             session_project = await self.db.get_project_by_session(session_id, username)
             if not session_project or session_project.project_id != project_id:
@@ -293,7 +293,8 @@ class ChatUIProjectService:
             username: Dashboard username.
             project_id: ChatUI project ID.
             relative_path: File path relative to the workspace root.
-            session_id: Owned project session, required for per-session workspaces.
+            session_id: Optional owned project session for per-session workspaces.
+                Omitted or empty values retain the legacy default workspace.
 
         Returns:
             Relative path, UTF-8 content, and byte size.
@@ -341,7 +342,8 @@ class ChatUIProjectService:
             username: Dashboard username.
             project_id: ChatUI project ID.
             relative_path: File path relative to the workspace root.
-            session_id: Owned project session, required for per-session workspaces.
+            session_id: Optional owned project session for per-session workspaces.
+                Omitted or empty values retain the legacy default workspace.
 
         Returns:
             Validated workspace root and absolute path to the workspace file.
@@ -351,11 +353,10 @@ class ChatUIProjectService:
         """
         project = await self._get_owned_project(username, project_id)
         if (
-            normalize_project_workspace_type(project.workspace_type)
+            session_id
+            and normalize_project_workspace_type(project.workspace_type)
             == WORKSPACE_TYPE_SESSION
         ):
-            if not session_id:
-                raise ChatUIProjectServiceError("Missing key: session_id")
             await self._get_owned_session(username, session_id)
             session_project = await self.db.get_project_by_session(session_id, username)
             if not session_project or session_project.project_id != project_id:
