@@ -37,6 +37,7 @@ LLM compression adds a model request, which takes time and may incur a charge. S
 | Compression Model | Leave empty to use the current session's chat model, or choose a configured chat model. Its context window must be large enough for the material being summarized. |
 | Recent Context Token Ratio to Keep | Defaults to `0.15`: a budget of 15% of the current context's tokens is used to retain recent content unchanged. The range is `0–0.3`. AstrBot keeps whole turns rather than cutting at an exact token boundary; a positive ratio keeps at least the latest turn. |
 | Context Compression Instruction | Leave empty for the default prompt. A custom prompt can ask the summary to preserve the task goal, completed steps, key conclusions, file paths, and next actions. |
+| Include Tool Definitions During Compression | Disabled by default. Includes the current conversation's effective tool definitions in summary requests, which may improve prefix cache hits. It does not change the compression model or execute tool calls returned in the summary response. Requests without a valid text summary use the existing failure fallback. Cache savings depend on the model and server rules. |
 
 The default summary focuses on the user's goal, task progress, conclusions, useful tool results, and materials already read so work can continue. If the selected compression model is unavailable, AstrBot tries the current chat model. If it cannot generate a summary, it falls back to removing older turns.
 

@@ -4197,6 +4197,15 @@ CONFIG_METADATA_3 = {
                             "agent_runner.runner_type": "local",
                         },
                     },
+                    "agent_runner.config.compression.reuse_tools": {
+                        "description": "压缩时附带工具定义列表",
+                        "type": "bool",
+                        "hint": "生成摘要时，同时提供当前对话可用的工具定义列表，可能提高前缀缓存命中率。摘要响应中的工具调用不会执行。默认关闭，实际效果取决于模型和服务端的缓存支持。",
+                        "condition": {
+                            "agent_runner.config.compression.overflow_strategy": "llm_compress",
+                            "agent_runner.runner_type": "local",
+                        },
+                    },
                     "agent_runner.config.compression.provider_id": {
                         "description": "压缩模型",
                         "type": "string",

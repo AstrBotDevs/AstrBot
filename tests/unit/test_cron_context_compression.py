@@ -54,6 +54,7 @@ def test_explicit_build_settings_and_per_request_overrides_are_preserved():
                 "overflow_strategy": "llm_compress",
                 "instruction": "Keep decisions and unfinished tasks.",
                 "keep_recent_ratio": 0.3,
+                "reuse_tools": True,
                 "provider_id": "summary-model",
                 "max_turns": 12,
                 "trim_turns": 3,
@@ -203,6 +204,13 @@ async def test_wakeup_uses_same_compression_settings_as_chat(
     )
     assert tuple(getattr(wakeup_config, name) for name in fields) == expected
     assert tuple(getattr(stage.main_agent_cfg, name) for name in fields) == expected
+    assert wakeup_config.llm_compress_reuse_tools is bool(
+        compression and compression.get("reuse_tools", False)
+    )
+    assert (
+        stage.main_agent_cfg.llm_compress_reuse_tools
+        is wakeup_config.llm_compress_reuse_tools
+    )
     assert wakeup_config.streaming_response is False
     request = build.await_args.kwargs["req"]
     assert request.contexts == history
