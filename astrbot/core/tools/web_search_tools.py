@@ -92,17 +92,20 @@ class _KeyRotator:
     index: int = 0
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
-    async def get(self, provider_settings: dict) -> str:
+    async def get(
+        self, provider_settings: dict, tried_keys: set[str] | None = None
+    ) -> str:
         """Return the current key and advance the round-robin index.
 
         Args:
             provider_settings: Provider settings containing API key lists.
+            tried_keys: Request-local keys to skip and update when a key is selected.
 
         Returns:
             The API key selected for this call.
 
         Raises:
-            ValueError: If the configured key list is empty or missing.
+            ValueError: If no configured, untried key is available.
         """
         keys = provider_settings.get(self.setting_name, [])
         if not keys:
@@ -113,9 +116,15 @@ class _KeyRotator:
         async with self.lock:
             # Keep the index valid if runtime config reloads shrink the key list.
             self.index = self.index % len(keys)
-            key = keys[self.index]
-            self.index = (self.index + 1) % len(keys)
-            return key
+            for _ in range(len(keys)):
+                key = keys[self.index]
+                self.index = (self.index + 1) % len(keys)
+                if tried_keys is None or key not in tried_keys:
+                    if tried_keys is not None:
+                        tried_keys.add(key)
+                    return key
+
+        raise ValueError(f"Error: No untried {self.provider_name} API keys remain.")
 
 
 # Retry with the next API key when these HTTP statuses indicate key-specific
@@ -126,6 +135,10 @@ class _KeyRotator:
 # 432 - Tavily quota exceeded.
 _RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({401, 403, 429, 432})
 _ANYSEARCH_RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({401, 402, 403, 429})
+_TAVILY_RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({401, 403, 429, 432, 433})
+_FIRECRAWL_RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({401, 402, 403, 429})
+_EXA_RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({401, 402, 429})
+_DEEPSEEK_RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({401, 402, 429})
 
 _TAVILY_KEY_ROTATOR = _KeyRotator("websearch_tavily_key", "Tavily")
 _BOCHA_KEY_ROTATOR = _KeyRotator("websearch_bocha_key", "BoCha")
@@ -226,8 +239,9 @@ async def _tavily_search(
     # Retry key-specific failures with the next key, but fail fast for
     # non-retryable errors such as server-side 5xx responses.
     last_error = None
-    for _ in range(len(keys)):
-        tavily_key = await _TAVILY_KEY_ROTATOR.get(provider_settings)
+    tried_keys: set[str] = set()
+    for _ in range(len(set(keys))):
+        tavily_key = await _TAVILY_KEY_ROTATOR.get(provider_settings, tried_keys)
         header = {
             "Authorization": f"Bearer {tavily_key}",
             "Content-Type": "application/json",
@@ -251,7 +265,7 @@ async def _tavily_search(
                     ]
                 reason = await response.text()
                 # Retryable errors are saved so the final failure is meaningful.
-                if response.status in _RETRYABLE_HTTP_STATUSES:
+                if response.status in _TAVILY_RETRYABLE_HTTP_STATUSES:
                     last_error = Exception(
                         f"Tavily web search failed: {reason}, status: {response.status}",
                     )
@@ -286,8 +300,9 @@ async def _tavily_extract(provider_settings: dict, payload: dict) -> list[dict]:
         raise ValueError("Error: Tavily API key is not configured in AstrBot.")
 
     last_error = None
-    for _ in range(len(keys)):
-        tavily_key = await _TAVILY_KEY_ROTATOR.get(provider_settings)
+    tried_keys: set[str] = set()
+    for _ in range(len(set(keys))):
+        tavily_key = await _TAVILY_KEY_ROTATOR.get(provider_settings, tried_keys)
         header = {
             "Authorization": f"Bearer {tavily_key}",
             "Content-Type": "application/json",
@@ -307,7 +322,7 @@ async def _tavily_extract(provider_settings: dict, payload: dict) -> list[dict]:
                         )
                     return results
                 reason = await response.text()
-                if response.status in _RETRYABLE_HTTP_STATUSES:
+                if response.status in _TAVILY_RETRYABLE_HTTP_STATUSES:
                     last_error = Exception(
                         f"Tavily web search failed: {reason}, status: {response.status}",
                     )
@@ -410,8 +425,9 @@ async def _brave_search(
         raise ValueError("Error: Brave API key is not configured in AstrBot.")
 
     last_error = None
-    for _ in range(len(keys)):
-        brave_key = await _BRAVE_KEY_ROTATOR.get(provider_settings)
+    tried_keys: set[str] = set()
+    for _ in range(len(set(keys))):
+        brave_key = await _BRAVE_KEY_ROTATOR.get(provider_settings, tried_keys)
         header = {
             "Accept": "application/json",
             "X-Subscription-Token": brave_key,
@@ -434,7 +450,19 @@ async def _brave_search(
                         for item in rows
                     ]
                 reason = await response.text()
-                if response.status in _RETRYABLE_HTTP_STATUSES:
+                retryable = response.status in _RETRYABLE_HTTP_STATUSES
+                if response.status == 422:
+                    # Brave also uses 422 for validation errors; only invalid
+                    # subscription tokens can be resolved by switching keys.
+                    try:
+                        error = json.loads(reason).get("error", {})
+                    except (json.JSONDecodeError, AttributeError):
+                        error = {}
+                    retryable = (
+                        isinstance(error, dict)
+                        and error.get("code") == "SUBSCRIPTION_TOKEN_INVALID"
+                    )
+                if retryable:
                     last_error = Exception(
                         f"Brave web search failed: {reason}, status: {response.status}",
                     )
@@ -1018,8 +1046,9 @@ async def _firecrawl_search(
         raise ValueError("Error: Firecrawl API key is not configured in AstrBot.")
 
     last_error = None
-    for _ in range(len(keys)):
-        firecrawl_key = await _FIRECRAWL_KEY_ROTATOR.get(provider_settings)
+    tried_keys: set[str] = set()
+    for _ in range(len(set(keys))):
+        firecrawl_key = await _FIRECRAWL_KEY_ROTATOR.get(provider_settings, tried_keys)
         header = {
             "Authorization": f"Bearer {firecrawl_key}",
             "Content-Type": "application/json",
@@ -1050,7 +1079,7 @@ async def _firecrawl_search(
                         if item.get("url")
                     ]
                 reason = await response.text()
-                if response.status in _RETRYABLE_HTTP_STATUSES:
+                if response.status in _FIRECRAWL_RETRYABLE_HTTP_STATUSES:
                     last_error = Exception(
                         f"Firecrawl web search failed: {reason}, status: {response.status}",
                     )
@@ -1085,8 +1114,9 @@ async def _firecrawl_scrape(provider_settings: dict, payload: dict) -> dict:
         raise ValueError("Error: Firecrawl API key is not configured in AstrBot.")
 
     last_error = None
-    for _ in range(len(keys)):
-        firecrawl_key = await _FIRECRAWL_KEY_ROTATOR.get(provider_settings)
+    tried_keys: set[str] = set()
+    for _ in range(len(set(keys))):
+        firecrawl_key = await _FIRECRAWL_KEY_ROTATOR.get(provider_settings, tried_keys)
         header = {
             "Authorization": f"Bearer {firecrawl_key}",
             "Content-Type": "application/json",
@@ -1106,7 +1136,7 @@ async def _firecrawl_scrape(provider_settings: dict, payload: dict) -> dict:
                         )
                     return result
                 reason = await response.text()
-                if response.status in _RETRYABLE_HTTP_STATUSES:
+                if response.status in _FIRECRAWL_RETRYABLE_HTTP_STATUSES:
                     last_error = Exception(
                         f"Firecrawl web scraper failed: {reason}, status: {response.status}",
                     )
@@ -1599,62 +1629,114 @@ async def _exa_search(
     provider_settings: dict,
     payload: dict,
 ) -> list[SearchResult]:
-    """Call the Exa /search endpoint and return normalized results."""
-    exa_key = await _EXA_KEY_ROTATOR.get(provider_settings)
-    headers = {
-        "x-api-key": exa_key,
-        "Content-Type": "application/json",
-    }
-    async with aiohttp.ClientSession(trust_env=True) as session:
-        async with session.post(
-            "https://api.exa.ai/search",
-            json=payload,
-            headers=headers,
-        ) as response:
-            if response.status != 200:
-                reason = await response.text()
-                raise Exception(
-                    f"Exa web search failed: {reason}, status: {response.status}",
-                )
-            data = await response.json()
-            return [
-                SearchResult(
-                    title=item.get("title", ""),
-                    url=item.get("url", ""),
-                    snippet=(
-                        item.get("text")
-                        or (item.get("highlights") or [""])[0]
-                        or item.get("summary", "")
-                    ),
-                )
-                for item in data.get("results", [])
-                if item.get("url")
-            ]
+    """Call the Exa /search endpoint with API key failover.
+
+    Args:
+        provider_settings: Provider settings containing Exa API keys.
+        payload: Request payload for the Exa endpoint.
+
+    Returns:
+        Normalized search results.
+
+    Raises:
+        ValueError: If Exa API keys are not configured.
+        Exception: If all keys fail or a non-retryable HTTP error is returned.
+    """
+    keys = provider_settings.get("websearch_exa_key", [])
+    if not keys:
+        raise ValueError("Error: Exa API key is not configured in AstrBot.")
+
+    last_error = None
+    tried_keys: set[str] = set()
+    for _ in range(len(set(keys))):
+        exa_key = await _EXA_KEY_ROTATOR.get(provider_settings, tried_keys)
+        headers = {
+            "x-api-key": exa_key,
+            "Content-Type": "application/json",
+        }
+        async with aiohttp.ClientSession(trust_env=True) as session:
+            async with session.post(
+                "https://api.exa.ai/search",
+                json=payload,
+                headers=headers,
+            ) as response:
+                if response.status != 200:
+                    reason = await response.text()
+                    last_error = Exception(
+                        f"Exa web search failed: {reason}, status: {response.status}",
+                    )
+                    if response.status in _EXA_RETRYABLE_HTTP_STATUSES:
+                        continue
+                    raise last_error
+                data = await response.json()
+                return [
+                    SearchResult(
+                        title=item.get("title", ""),
+                        url=item.get("url", ""),
+                        snippet=(
+                            item.get("text")
+                            or (item.get("highlights") or [""])[0]
+                            or item.get("summary", "")
+                        ),
+                    )
+                    for item in data.get("results", [])
+                    if item.get("url")
+                ]
+
+    if last_error is not None:
+        raise last_error
+    raise Exception("Exa web search failed with all configured keys.")
 
 
 async def _exa_get_contents(
     provider_settings: dict,
     payload: dict,
 ) -> list[dict]:
-    """Call the Exa /contents endpoint and return raw result dicts."""
-    exa_key = await _EXA_KEY_ROTATOR.get(provider_settings)
-    headers = {
-        "x-api-key": exa_key,
-        "Content-Type": "application/json",
-    }
-    async with aiohttp.ClientSession(trust_env=True) as session:
-        async with session.post(
-            "https://api.exa.ai/contents",
-            json=payload,
-            headers=headers,
-        ) as response:
-            if response.status != 200:
-                reason = await response.text()
-                raise Exception(
-                    f"Exa get contents failed: {reason}, status: {response.status}",
-                )
-            data = await response.json()
-            return data.get("results", [])
+    """Call the Exa /contents endpoint with API key failover.
+
+    Args:
+        provider_settings: Provider settings containing Exa API keys.
+        payload: Request payload for the Exa endpoint.
+
+    Returns:
+        Raw content result dictionaries.
+
+    Raises:
+        ValueError: If Exa API keys are not configured.
+        Exception: If all keys fail or a non-retryable HTTP error is returned.
+    """
+    keys = provider_settings.get("websearch_exa_key", [])
+    if not keys:
+        raise ValueError("Error: Exa API key is not configured in AstrBot.")
+
+    last_error = None
+    tried_keys: set[str] = set()
+    for _ in range(len(set(keys))):
+        exa_key = await _EXA_KEY_ROTATOR.get(provider_settings, tried_keys)
+        headers = {
+            "x-api-key": exa_key,
+            "Content-Type": "application/json",
+        }
+        async with aiohttp.ClientSession(trust_env=True) as session:
+            async with session.post(
+                "https://api.exa.ai/contents",
+                json=payload,
+                headers=headers,
+            ) as response:
+                if response.status != 200:
+                    reason = await response.text()
+                    last_error = Exception(
+                        f"Exa get contents failed: {reason}, status: {response.status}",
+                    )
+                    if response.status in _EXA_RETRYABLE_HTTP_STATUSES:
+                        continue
+                    raise last_error
+                data = await response.json()
+                return data.get("results", [])
+
+    if last_error is not None:
+        raise last_error
+    raise Exception("Exa get contents failed with all configured keys.")
 
 
 @builtin_tool(config=_EXA_WEB_SEARCH_TOOL_CONFIG)
@@ -2071,10 +2153,11 @@ class DeepSeekWebSearchTool(FunctionTool[AstrAgentContext]):
             Search results with citation indices, or an input/configuration error.
 
         Raises:
-            RuntimeError: If the DeepSeek API returns an HTTP error.
+            RuntimeError: If all keys fail or a non-retryable HTTP error is returned.
         """
         _, provider_settings, _ = _get_runtime(context)
-        if not provider_settings.get("websearch_deepseek_key", []):
+        keys = provider_settings.get("websearch_deepseek_key", [])
+        if not keys:
             return "Error: DeepSeek API key is not configured in AstrBot."
 
         query = kwargs.get("query")
@@ -2101,24 +2184,34 @@ class DeepSeekWebSearchTool(FunctionTool[AstrAgentContext]):
         payload = {"query": query, "count": count, "need_content": need_content}
         if ori_question is not None:
             payload["ori_question"] = ori_question
-        key = await _DEEPSEEK_KEY_ROTATOR.get(provider_settings)
-        headers = {
-            "Authorization": f"Bearer {key}",
-            "Content-Type": "application/json",
-        }
-        # Account-level limits and safety refusals cannot be resolved by rotating keys.
-        async with aiohttp.ClientSession(trust_env=True) as session:
-            async with session.post(
-                "https://api.deepseek.com/v1/tools/search",
-                json=payload,
-                headers=headers,
-            ) as response:
-                if response.status != 200:
-                    reason = await response.text()
-                    raise RuntimeError(
-                        f"DeepSeek web search failed: {reason}, status: {response.status}"
-                    )
-                data = await response.json()
+        last_error = None
+        tried_keys: set[str] = set()
+        for _ in range(len(set(keys))):
+            key = await _DEEPSEEK_KEY_ROTATOR.get(provider_settings, tried_keys)
+            headers = {
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json",
+            }
+            async with aiohttp.ClientSession(trust_env=True) as session:
+                async with session.post(
+                    "https://api.deepseek.com/v1/tools/search",
+                    json=payload,
+                    headers=headers,
+                ) as response:
+                    if response.status != 200:
+                        reason = await response.text()
+                        last_error = RuntimeError(
+                            f"DeepSeek web search failed: {reason}, status: {response.status}"
+                        )
+                        if response.status in _DEEPSEEK_RETRYABLE_HTTP_STATUSES:
+                            continue
+                        raise last_error
+                    data = await response.json()
+            break
+        else:
+            if last_error is not None:
+                raise last_error
+            raise RuntimeError("DeepSeek web search failed with all configured keys.")
 
         results = []
         for item in data.get("results", []):
@@ -2172,10 +2265,11 @@ class DeepSeekFetchWebPageTool(FunctionTool[AstrAgentContext]):
             The page URL, title and Markdown content, or an input/configuration error.
 
         Raises:
-            RuntimeError: If the DeepSeek API returns an HTTP error.
+            RuntimeError: If all keys fail or a non-retryable HTTP error is returned.
         """
         _, provider_settings, _ = _get_runtime(context)
-        if not provider_settings.get("websearch_deepseek_key", []):
+        keys = provider_settings.get("websearch_deepseek_key", [])
+        if not keys:
             return "Error: DeepSeek API key is not configured in AstrBot."
 
         url = kwargs.get("url")
@@ -2197,23 +2291,34 @@ class DeepSeekFetchWebPageTool(FunctionTool[AstrAgentContext]):
         if not valid_url:
             return "Error: url must be an HTTP or HTTPS URL with a host and no embedded credentials."
 
-        key = await _DEEPSEEK_KEY_ROTATOR.get(provider_settings)
-        headers = {
-            "Authorization": f"Bearer {key}",
-            "Content-Type": "application/json",
-        }
-        async with aiohttp.ClientSession(trust_env=True) as session:
-            async with session.post(
-                "https://api.deepseek.com/v1/tools/fetch",
-                json={"url": url},
-                headers=headers,
-            ) as response:
-                if response.status != 200:
-                    reason = await response.text()
-                    raise RuntimeError(
-                        f"DeepSeek fetch failed: {reason}, status: {response.status}"
-                    )
-                data = await response.json()
+        last_error = None
+        tried_keys: set[str] = set()
+        for _ in range(len(set(keys))):
+            key = await _DEEPSEEK_KEY_ROTATOR.get(provider_settings, tried_keys)
+            headers = {
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json",
+            }
+            async with aiohttp.ClientSession(trust_env=True) as session:
+                async with session.post(
+                    "https://api.deepseek.com/v1/tools/fetch",
+                    json={"url": url},
+                    headers=headers,
+                ) as response:
+                    if response.status != 200:
+                        reason = await response.text()
+                        last_error = RuntimeError(
+                            f"DeepSeek fetch failed: {reason}, status: {response.status}"
+                        )
+                        if response.status in _DEEPSEEK_RETRYABLE_HTTP_STATUSES:
+                            continue
+                        raise last_error
+                    data = await response.json()
+            break
+        else:
+            if last_error is not None:
+                raise last_error
+            raise RuntimeError("DeepSeek fetch failed with all configured keys.")
 
         if not data.get("content"):
             return "Error: DeepSeek fetch does not return any content."
