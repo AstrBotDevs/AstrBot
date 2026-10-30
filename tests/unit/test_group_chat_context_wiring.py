@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from astrbot.api.message_components import Json, Plain
-from astrbot.api.provider import LLMResponse
+from astrbot.api.provider import LLMResponse, Provider
 from astrbot.builtin_stars.astrbot.group_chat_context import GroupChatContext
 from astrbot.builtin_stars.astrbot.main import Main
 from astrbot.core.message.message_event_result import MessageChain
@@ -300,3 +300,153 @@ async def test_format_message_truncates_long_json_card_fields():
     formatted = await context._format_message(event, {})
 
     assert f"Description: {'a' * 200}...]" in formatted
+
+
+def _caption_context(provider, *, max_size=1280):
+    """Build a context whose config derives the caption limits via cfg()."""
+    provider_settings = {
+        "image_caption_prompt": "describe",
+        "image_compress_options": {"max_size": max_size},
+    }
+    config = {
+        "provider_ltm_settings": {
+            "group_message_max_cnt": 1000,
+            "image_caption": True,
+            "image_caption_provider_id": "ollama/vision",
+            "active_reply": {
+                "enable": False,
+                "method": "possibility_reply",
+                "possibility_reply": 0.0,
+                "whitelist": [],
+            },
+        },
+        "provider_settings": provider_settings,
+    }
+    context = MagicMock()
+    context.get_config.return_value = config
+    context.get_provider_by_id.return_value = provider
+    return context
+
+
+def _caption_provider(caption: str):
+    provider = MagicMock(spec=Provider)
+    provider.text_chat = AsyncMock(
+        return_value=SimpleNamespace(completion_text=caption),
+    )
+    return provider
+
+
+@pytest.mark.asyncio
+async def test_image_caption_uses_normalized_image(monkeypatch, tmp_path):
+    """Animated images are prepared (montage JPEG) before captioning."""
+    from astrbot.api.message_components import Image
+    from astrbot.builtin_stars.astrbot import group_chat_context as gcc_module
+
+    prepared = tmp_path / "model_image_montage.jpg"
+    prepared.write_bytes(b"\xff\xd8fake-jpeg")
+    seen: dict[str, object] = {}
+
+    async def fake_prepare_model_image(image_ref, *, max_size, output_dir):
+        seen.update(ref=image_ref, max_size=max_size)
+        return str(prepared), True, True, "/tmp/original.gif"
+
+    monkeypatch.setattr(gcc_module, "prepare_model_image", fake_prepare_model_image)
+
+    provider = _caption_provider("a red square")
+    gcc = gcc_module.GroupChatContext(
+        MagicMock(), _caption_context(provider, max_size=640)
+    )
+    event = make_event()
+    event.message_obj = SimpleNamespace(sender=SimpleNamespace(nickname="Alice"))
+    event.get_messages.return_value = [
+        Image(file="anim.jpg", url="https://example.com/anim"),
+    ]
+
+    cfg = gcc.cfg(event)
+    assert cfg["image_max_size"] == 640
+    formatted = await gcc._format_message(event, cfg)
+
+    assert "[Image: a red square]" in formatted
+    assert seen == {"ref": "https://example.com/anim", "max_size": 640}
+    prompt = provider.text_chat.await_args.kwargs["prompt"]
+    assert "montage of evenly sampled frames" in prompt
+    assert provider.text_chat.await_args.kwargs["image_urls"] == [str(prepared)]
+    assert not prepared.exists(), "temporary prepared image must be cleaned up"
+
+
+@pytest.mark.asyncio
+async def test_image_caption_skips_oversized_and_bomb_images(monkeypatch):
+    """Oversized or decompression-bomb images are skipped, never forwarded."""
+    from astrbot.api.message_components import Image
+    from astrbot.builtin_stars.astrbot import group_chat_context as gcc_module
+
+    provider = _caption_provider("never")
+    gcc = gcc_module.GroupChatContext(MagicMock(), _caption_context(provider))
+    event = make_event()
+    event.message_obj = SimpleNamespace(sender=SimpleNamespace(nickname="Alice"))
+    event.get_messages.return_value = [Image(file="big.png", url="https://x/big.png")]
+    cfg = gcc.cfg(event)
+
+    for error in (
+        gcc_module.ImageInputTooLargeError("/tmp/big.png"),
+        gcc_module.DecompressionBombError("too many pixels"),
+    ):
+
+        async def boom(*args, _error=error, **kwargs):
+            raise _error
+
+        monkeypatch.setattr(gcc_module, "prepare_model_image", boom)
+        formatted = await gcc._format_message(event, cfg)
+
+        assert gcc_module.IMAGE_CAPTION_SKIPPED in formatted
+        provider.text_chat.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_image_caption_removes_downloaded_source(monkeypatch, tmp_path):
+    """A detached download under the temp dir is removed after captioning."""
+    from astrbot.api.message_components import Image
+    from astrbot.builtin_stars.astrbot import group_chat_context as gcc_module
+
+    monkeypatch.setattr(gcc_module, "get_astrbot_temp_path", lambda: str(tmp_path))
+    downloaded = tmp_path / "downloaded.png"
+    downloaded.write_bytes(b"png")
+
+    async def fake_prepare_model_image(image_ref, *, max_size, output_dir):
+        return str(downloaded), False, False, str(downloaded)
+
+    monkeypatch.setattr(gcc_module, "prepare_model_image", fake_prepare_model_image)
+
+    provider = _caption_provider("a download")
+    gcc = gcc_module.GroupChatContext(MagicMock(), _caption_context(provider))
+    event = make_event()
+    event.message_obj = SimpleNamespace(sender=SimpleNamespace(nickname="Alice"))
+    event.get_messages.return_value = [Image(file="d.png", url="https://x/d.png")]
+
+    formatted = await gcc._format_message(event, gcc.cfg(event))
+
+    assert "[Image: a download]" in formatted
+    assert not downloaded.exists(), "detached download must be cleaned up"
+
+
+@pytest.mark.asyncio
+async def test_image_caption_falls_back_to_original_ref(monkeypatch):
+    """A preparation failure keeps the previous behaviour (raw reference)."""
+    from astrbot.api.message_components import Image
+    from astrbot.builtin_stars.astrbot import group_chat_context as gcc_module
+
+    async def boom(*args, **kwargs):
+        raise RuntimeError("download failed")
+
+    monkeypatch.setattr(gcc_module, "prepare_model_image", boom)
+
+    provider = _caption_provider("fallback")
+    gcc = gcc_module.GroupChatContext(MagicMock(), _caption_context(provider))
+    event = make_event()
+    event.message_obj = SimpleNamespace(sender=SimpleNamespace(nickname="Alice"))
+    event.get_messages.return_value = [Image(file="anim.jpg", url="https://x/anim")]
+
+    formatted = await gcc._format_message(event, gcc.cfg(event))
+
+    assert "[Image: fallback]" in formatted
+    assert provider.text_chat.await_args.kwargs["image_urls"] == ["https://x/anim"]
