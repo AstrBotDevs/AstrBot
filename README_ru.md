@@ -151,6 +151,7 @@ uv tool upgrade astrbot --python 3.12
 | Ollama (Самостоятельное размещение) | Сервисы LLM |
 | LM Studio (Самостоятельное размещение) | Сервисы LLM |
 | [MiraRouter](https://mirarouter.com/) | Сервисы LLM (API-шлюз, поддерживает все модели) |
+| [ShengSuanYun](https://www.shengsuanyun.com/?from=CH_T70U2X9L) | Сервисы LLM |
 | [AIHubMix](https://aihubmix.com/?aff=4bfH) | Сервисы LLM (API-шлюз, поддерживает все модели) |
 | [CompShare](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74) | Сервисы LLM |
 | [302.AI](https://share.302.ai/rr1M3l) | Сервисы LLM |
@@ -210,7 +211,7 @@ pre-commit install
 Особая благодарность всем контрибьюторам и разработчикам плагинов за их вклад в AstrBot ❤️
 
 <a href="https://github.com/AstrBotDevs/AstrBot/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=AstrBotDevs/AstrBot&max=300&columns=15" />
+  <img src="https://contrib.rocks/image?repo=AstrBotDevs/AstrBot&max=500&columns=17" />
 </a>
 
 Друзья из мира открытого исходного кода ❤️

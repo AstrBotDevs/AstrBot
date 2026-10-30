@@ -1779,6 +1779,82 @@ async def test_v1_active_umos_uses_session_service(
 
 
 @pytest.mark.asyncio
+async def test_v1_active_umos_filters_by_exact_platform_instance(
+    asgi_client: httpx.AsyncClient, fake_db: FakeDb,
+):
+    """Return only the requested instance's sessions to platform editors."""
+    fake_db.umo_ids = ["qq:GroupMessage:1", "qq-2:GroupMessage:2"]
+    response = await asgi_client.get(
+        "/api/v1/sessions/active-umos", params={"platform_id": "qq"}, headers=_jwt_headers(),
+    )
+    assert response.status_code == 200
+    assert response.json()["data"]["umos"] == ["qq:GroupMessage:1"]
+
+
+@pytest.mark.asyncio
+async def test_v1_sender_lookup_requires_auth_and_returns_source(
+    asgi_client: httpx.AsyncClient, fake_db: FakeDb,
+):
+    """Expose source session names without allowing unauthenticated lookup."""
+    fake_db.get_umo_senders = AsyncMock(return_value=[(
+        SimpleNamespace(umo="qq:GroupMessage:1000", sender_id="123", sender_name="Alice"),
+        None,
+    )])
+    assert (await asgi_client.get("/api/v1/sessions/senders")).status_code == 401
+    response = await asgi_client.get(
+        "/api/v1/sessions/senders", params={"search": " Alice ", "limit": 10},
+        headers=_jwt_headers(),
+    )
+    assert response.status_code == 200
+    sender = response.json()["data"]["senders"][0]
+    assert sender["sender_id"] == "123"
+    assert sender["sender_name"] == "Alice"
+    assert sender["platform"] == "qq"
+    assert sender["display_name"] == "qq:GroupMessage:1000"
+    assert response.json()["data"]["page"] == 1
+    assert response.json()["data"]["has_more"] is False
+    fake_db.get_umo_senders.assert_awaited_once_with("Alice", 11, None, offset=0)
+    fake_db.get_umo_senders.reset_mock()
+    response = await asgi_client.get(
+        "/api/v1/sessions/senders",
+        params=[("sender_ids", "123"), ("sender_ids", "456"), ("limit", "100")],
+        headers=_jwt_headers(),
+    )
+    assert response.status_code == 200
+    fake_db.get_umo_senders.assert_awaited_once_with("", 101, ["123", "456"], offset=0)
+    for limit in (0, 101):
+        response = await asgi_client.get(
+            "/api/v1/sessions/senders", params={"limit": limit}, headers=_jwt_headers(),
+        )
+        assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_v1_sender_lookup_pages_results_and_validates_page(
+    asgi_client: httpx.AsyncClient, fake_db: FakeDb,
+):
+    """Pass page offsets through and hide the extra row used to detect the next page."""
+    fake_db.get_umo_senders = AsyncMock(return_value=[
+        (SimpleNamespace(umo="qq:GroupMessage:room", sender_id=str(index), sender_name=f"User {index}"), None)
+        for index in range(3)
+    ])
+    response = await asgi_client.get(
+        "/api/v1/sessions/senders", params={"page": 2, "limit": 2}, headers=_jwt_headers(),
+    )
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["page"] == 2
+    assert data["has_more"] is True
+    assert [sender["sender_id"] for sender in data["senders"]] == ["0", "1"]
+    fake_db.get_umo_senders.assert_awaited_once_with("", 3, None, offset=2)
+    for page in (0, -1):
+        response = await asgi_client.get(
+            "/api/v1/sessions/senders", params={"page": page}, headers=_jwt_headers(),
+        )
+        assert response.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_v1_system_config_update_preserves_independent_bot_provider_sections(
     asgi_client: httpx.AsyncClient,
     fake_core_lifecycle,
@@ -2216,6 +2292,40 @@ async def test_v1_create_standalone_provider_matches_dashboard_alias_capability(
         "enable": True,
         "reasoning": True,
     }
+
+
+@pytest.mark.asyncio
+async def test_v1_decision_provider_capability_maps_and_filters(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    response = await asgi_client.post(
+        "/api/v1/providers",
+        json={
+            "capability": "decision",
+            "config": {
+                "id": "decision-main",
+                "type": "system_one_decision",
+                "api_base": "https://api.example.test/v1/systemone",
+                "model": "jev-latest",
+                "enable": True,
+            },
+        },
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+    provider = fake_core_lifecycle.astrbot_config["provider"][-1]
+    assert provider["provider_type"] == "decision"
+
+    list_response = await asgi_client.get(
+        "/api/v1/providers?capability=decision",
+        headers=_jwt_headers(),
+    )
+    assert list_response.status_code == 200
+    providers = list_response.json()["data"]["providers"]
+    assert [item["id"] for item in providers] == ["decision-main"]
 
 
 @pytest.mark.asyncio
@@ -3465,6 +3575,70 @@ async def test_multipart_parts_preserves_duplicate_form_values():
 
     assert form.getlist("tag") == ["one", "two"]
     assert not files
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("reload_result", "expected_status", "expected_detail"),
+    [
+        ((True, None), 200, None),
+        ((False, "Invalid endpoint"), 400, "Invalid endpoint"),
+        ((False, None), 400, "未知错误"),
+        (RuntimeError("Initialization failed"), 400, "Initialization failed"),
+        (TimeoutError(), 400, "未知错误，请查看日志"),
+    ],
+)
+async def test_v1_plugin_config_save_reports_reload_failure(
+    asgi_client,
+    fake_core_lifecycle,
+    monkeypatch,
+    tmp_path,
+    reload_result,
+    expected_status,
+    expected_detail,
+):
+    """Report reload failures without claiming the saved configuration was reverted."""
+    config_path = tmp_path / "plugin.json"
+    plugin_config = config_service.AstrBotConfig(
+        str(config_path),
+        schema={"endpoint": {"type": "string", "default": "old"}},
+    )
+    monkeypatch.setattr(
+        config_service,
+        "star_registry",
+        [SimpleNamespace(name="demo", config=plugin_config)],
+    )
+
+    async def reload_plugin(plugin_name):
+        assert plugin_name == "demo"
+        assert json.loads(config_path.read_text(encoding="utf-8-sig")) == {
+            "endpoint": "new"
+        }
+        if isinstance(reload_result, Exception):
+            raise reload_result
+        return reload_result
+
+    monkeypatch.setattr(fake_core_lifecycle.plugin_manager, "reload", reload_plugin)
+    response = await asgi_client.put(
+        "/api/v1/plugins/demo/config",
+        json={"config": {"endpoint": "new"}},
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == expected_status
+    payload = response.json()
+    assert json.loads(config_path.read_text(encoding="utf-8-sig")) == {
+        "endpoint": "new"
+    }
+    if expected_status == 200:
+        assert payload["status"] == "ok"
+    else:
+        assert payload["status"] == "error"
+        assert "demo" in payload["message"]
+        assert "配置已保存" in payload["message"]
+        assert "重载失败" in payload["message"]
+        if expected_detail:
+            assert expected_detail in payload["message"]
 
 
 @pytest.mark.asyncio
@@ -5021,3 +5195,18 @@ async def test_v1_trace_storage_cleanup_target(asgi_client, monkeypatch):
             "/api/v1/stats/storage/cleanup", json={"target": "invalid"}, headers=headers
         )
     ).status_code == 422
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("route", ["/api/v1/bots/by-id", "/api/v1/bots/bot"])
+async def test_bot_delete_cleanup_query_is_validated(asgi_app, asgi_client, route):
+    """Forward repeated cleanup categories and reject unknown destructive options."""
+    delete_bot = AsyncMock()
+    asgi_app.state.services.bots.delete_bot = delete_bot
+    params = [("bot_id", "bot"), ("cleanup", "custom_rules"), ("cleanup", "traces")]
+    response = await asgi_client.delete(route, params=params, headers=_jwt_headers())
+    assert response.status_code == 200
+    delete_bot.assert_awaited_once_with("bot", cleanup=["custom_rules", "traces"])
+    invalid = await asgi_client.delete(route, params={"bot_id": "bot", "cleanup": "unknown"}, headers=_jwt_headers())
+    assert invalid.status_code == 422
+    assert delete_bot.await_count == 1

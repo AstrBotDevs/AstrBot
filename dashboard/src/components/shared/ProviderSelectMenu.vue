@@ -425,7 +425,7 @@
       <v-card-title class="text-h3 pa-4 pb-0 pl-6">
         {{ providerEditDialogTitle }}
       </v-card-title>
-      <v-card-text class="py-4">
+      <v-card-text class="py-4 config-form">
         <AstrBotConfig
           v-if="providerEditData"
           :iterable="providerEditData"
@@ -1316,3 +1316,5 @@ defineExpose({ getCurrentSelection });
   }
 }
 </style>
+
+<style scoped src="@/styles/config-form.css"></style>
