@@ -230,14 +230,22 @@ const getBridgeErrorMessage = (error, fallback) => {
 
 const getBridgeErrorFields = (error) => {
   const fields = {};
-  if (typeof error?.code === "string" && error.code) {
-    fields.errorCode = error.code;
+  // A rejected request carries the structured envelope on the response body,
+  // while the GET/POST/upload paths attach the fields to the thrown error.
+  // Read the response envelope first, then fall back to the top-level fields.
+  const envelope = error?.response?.data;
+  const code = error?.code ?? envelope?.data?.code ?? envelope?.code;
+  const reason = error?.reason ?? envelope?.reason;
+  const confirmed =
+    error?.confirmed ?? envelope?.data?.confirmed ?? envelope?.confirmed;
+  if (typeof code === "string" && code) {
+    fields.errorCode = code;
   }
-  if (typeof error?.reason === "string" && error.reason) {
-    fields.errorReason = error.reason;
+  if (typeof reason === "string" && reason) {
+    fields.errorReason = reason;
   }
-  if (typeof error?.confirmed === "boolean") {
-    fields.errorConfirmed = error.confirmed;
+  if (typeof confirmed === "boolean") {
+    fields.errorConfirmed = confirmed;
   }
   return Object.keys(fields).length > 0 ? fields : undefined;
 };
@@ -447,9 +455,13 @@ const handleBridgeRequest = async (message) => {
         },
       );
       if (response.data?.status === "error") {
-        throw new Error(
+        const err = new Error(
           response.data.message || "Plugin upload request failed.",
         );
+        err.code = response.data.data?.code ?? response.data.message;
+        err.reason = response.data.reason;
+        err.confirmed = response.data.data?.confirmed ?? response.data.confirmed;
+        throw err;
       }
       sendBridgeResponse(requestId, true, response.data?.data ?? response.data);
       return;
