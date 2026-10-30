@@ -1790,6 +1790,9 @@
             "dashscope_embedding": {
                 "hint": "Embedding Aliyun DashScope. URL по умолчанию: https://dashscope.aliyuncs.com/api/v1."
             },
+            "volcengine_embedding": {
+              "hint": "Volcengine Embedding, адрес по умолчанию — https://ark.cn-beijing.volces.com/api/v3. Agent Plan — https://ark.cn-beijing.volces.com/api/plan/v3."
+            },
             "volcengine_cluster": {
                 "description": "Кластер Volcengine",
                 "hint": "Для моделей клонирования голоса выберите volcano_icl или volcano_icl_concurr; по умолчанию volcano_tts."

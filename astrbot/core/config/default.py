@@ -2043,6 +2043,22 @@ CONFIG_METADATA_2 = {
                         "timeout": 60,
                         "proxy": "",
                     },
+                    "Volcengine Embedding": {
+                        "id": "volcengine_embedding",
+                        "type": "volcengine_embedding",
+                        "provider": "volcengine",
+                        "provider_type": "embedding",
+                        "hint": "provider_group.provider.volcengine_embedding.hint",
+                        "enable": True,
+                        "embedding_api_key": "",
+                        # Agent Plan: https://ark.cn-beijing.volces.com/api/plan/v3
+                        # Use its dedicated API key and doubao-embedding-vision model.
+                        "embedding_api_base": "https://ark.cn-beijing.volces.com/api/v3",
+                        "embedding_model": "doubao-embedding-vision-251215",
+                        "embedding_dimensions": 1024,
+                        "timeout": 60,
+                        "proxy": "",
+                    },
                     "vLLM Rerank": {
                         "id": "vllm_rerank",
                         "type": "vllm_rerank",

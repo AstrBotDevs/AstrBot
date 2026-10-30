@@ -1707,6 +1707,9 @@
       "dashscope_embedding": {
         "hint": "阿里云百炼 Embedding，默认地址为 https://dashscope.aliyuncs.com/api/v1。"
       },
+      "volcengine_embedding": {
+        "hint": "火山引擎 Embedding，默认地址为 https://ark.cn-beijing.volces.com/api/v3。Agent Plan 为 https://ark.cn-beijing.volces.com/api/plan/v3。"
+      },
       "volcengine_cluster": {
         "description": "火山引擎集群",
         "hint": "若使用语音复刻大模型，可选volcano_icl或volcano_icl_concurr，默认使用volcano_tts"
