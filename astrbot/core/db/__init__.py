@@ -890,6 +890,18 @@ class BaseDatabase(abc.ABC):
         ...
 
     @abc.abstractmethod
+    async def delete_umo_alias(self, umo: str) -> bool:
+        """Delete alias metadata for one UMO.
+
+        Args:
+            umo: Unified message origin whose alias metadata should be deleted.
+
+        Returns:
+            True when an alias was deleted, False when none matched.
+        """
+        ...
+
+    @abc.abstractmethod
     async def get_umo_aliases(self, umos: list[str] | None = None) -> list[UmoAlias]:
         """Get alias metadata, optionally restricted to the given UMO list."""
         ...
