@@ -64,6 +64,18 @@ def test_responses_provider_templates_are_independent_and_stateless():
     assert "xai_native_search" not in templates["xAI"]
 
 
+def test_xai_responses_exposes_native_search_option():
+    xai_native_search = CONFIG_METADATA_2["provider_group"]["metadata"]["provider"][
+        "items"
+    ]["xai_native_search"]
+
+    assert xai_native_search["condition"]["provider"] == "xai"
+    assert xai_native_search["condition"]["type"] == [
+        "xai_chat_completion",
+        "openai_responses",
+    ]
+
+
 def test_convert_chat_history_preserves_response_items_and_function_calls():
     provider = _make_provider()
     reasoning_item = {
@@ -289,6 +301,109 @@ async def test_query_flattens_tools_and_enforces_stateless_body(monkeypatch):
     assert result.tools_call_name == ["weather"]
     assert result.tools_call_args == [{"city": "SZ"}]
     assert result.tools_call_ids == ["call_1"]
+
+
+@pytest.mark.asyncio
+async def test_query_adds_xai_native_search_tool(monkeypatch):
+    provider = _make_provider(
+        {
+            "provider": "xai",
+            "model": "grok-test",
+            "xai_native_search": True,
+        }
+    )
+    captured: dict = {}
+
+    async def fake_create(**kwargs):
+        captured.update(kwargs)
+        return _make_response(
+            [
+                {
+                    "type": "message",
+                    "id": "msg_1",
+                    "status": "completed",
+                    "role": "assistant",
+                    "content": [
+                        {"type": "output_text", "text": "answer", "annotations": []},
+                    ],
+                }
+            ]
+        )
+
+    monkeypatch.setattr(provider.client.responses, "create", fake_create)
+    tools = SimpleNamespace(
+        openai_schema=lambda: [
+            {
+                "type": "function",
+                "function": {"name": "weather", "parameters": {}},
+            }
+        ]
+    )
+
+    await provider._query(
+        {"model": "grok-test", "input": "latest news", "store": False},
+        tools,
+    )
+
+    assert captured["tools"] == [
+        {
+            "type": "function",
+            "name": "weather",
+            "parameters": {},
+        },
+        {"type": "web_search"},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_query_stream_adds_xai_native_search_tool(monkeypatch):
+    provider = _make_provider(
+        {
+            "provider": "xai",
+            "model": "grok-test",
+            "xai_native_search": True,
+        }
+    )
+    final_response = _make_response(
+        [
+            {
+                "type": "message",
+                "id": "msg_1",
+                "status": "completed",
+                "role": "assistant",
+                "content": [
+                    {"type": "output_text", "text": "answer", "annotations": []},
+                ],
+            }
+        ]
+    )
+    captured: dict = {}
+
+    async def fake_stream():
+        yield SimpleNamespace(
+            type="response.created",
+            response=SimpleNamespace(id="resp_1"),
+        )
+        yield SimpleNamespace(
+            type="response.completed",
+            response=final_response,
+        )
+
+    async def fake_create(**kwargs):
+        captured.update(kwargs)
+        return fake_stream()
+
+    monkeypatch.setattr(provider.client.responses, "create", fake_create)
+
+    _ = [
+        result
+        async for result in provider._query_stream(
+            {"model": "grok-test", "input": "latest news", "store": False},
+            tools=None,
+        )
+    ]
+
+    assert captured["tools"] == [{"type": "web_search"}]
 
 
 @pytest.mark.asyncio
