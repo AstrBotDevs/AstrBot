@@ -1012,7 +1012,7 @@
       },
       "wake_prefix": {
         "description": "Wake Word",
-        "hint": "A list of message prefixes that wake the bot. You can also wake it by mentioning it.\n\nBuilt-in commands such as `/help` and `/sid` also rely on a wake word. If you remove the default `/`, typing these commands directly will no longer trigger them."
+        "hint": "A list of message prefixes that wake the bot. You can also wake it by mentioning it.\n\nBuilt-in commands such as `/help` and `/sid` also depend on the wake word: in group chats they do not trigger unless the message starts with a wake word; in private chats they trigger without a prefix unless \"Private Messages Require Wake Word\" is enabled."
       },
       "disable_builtin_commands": {
         "description": "Disable Built-in Commands",
