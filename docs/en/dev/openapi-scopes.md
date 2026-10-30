@@ -237,6 +237,7 @@ Manage plugins, plugin configuration, plugin sources, and marketplace data.
 | `GET` | `/api/v1/plugins/config-files` | — |
 | `POST` | `/api/v1/plugins/config-files` | — |
 | `DELETE` | `/api/v1/plugins/config-files` | — |
+| `GET` | `/api/v1/plugins/config-files/preview` | — |
 | `GET` | `/api/v1/plugins/config/schema` | — |
 | `PATCH` | `/api/v1/plugins/enabled` | — |
 | `GET` | `/api/v1/plugins/extensions/{plugin_path}` | — |

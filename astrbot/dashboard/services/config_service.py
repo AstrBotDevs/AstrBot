@@ -3,12 +3,15 @@ from __future__ import annotations
 import asyncio
 import copy
 import inspect
+import io
 import os
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, get_args
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from PIL import Image, ImageOps
 
 from astrbot.core import file_token_service, logger
 from astrbot.core.computer import computer_client
@@ -49,6 +52,8 @@ PROTECTED_2FA_CONFIG_PATHS = (
     ("dashboard", "totp", "recovery_code_hash"),
 )
 MAX_FILE_BYTES = 500 * 1024 * 1024
+MAX_PREVIEW_FILE_BYTES = 10 * 1024 * 1024
+MAX_PREVIEW_PIXELS = 20_000_000
 
 
 def try_cast(value: Any, type_: str):
@@ -1337,6 +1342,93 @@ class ConfigFileService:
             name=args.get("name"),
             key_path=args.get("key"),
         )
+
+    def preview_config_image(self, *, name: str, key_path: str, rel_path: str) -> bytes:
+        """Render a bounded, metadata-free preview of a file field's image.
+
+        Args:
+            name: Registered plugin name.
+            key_path: File configuration field in the plugin's schema.
+            rel_path: Uploaded file path relative to the plugin data directory.
+
+        Returns:
+            A PNG thumbnail with a maximum edge of 1024 pixels.
+
+        Raises:
+            ValueError: The plugin, field, or path is invalid.
+            ApiError: The file is missing, too large, or not a supported image.
+        """
+        _, name, key_path, _, config = self.resolve_config_file_scope(
+            scope="plugin", name=name, key_path=key_path
+        )
+        meta = _get_schema_item(getattr(config, "schema", None), key_path)
+        if not meta or meta.get("type") != "file":
+            raise ValueError("Config item not found or not file type")
+
+        normalized = _normalize_rel_path(rel_path)
+        folder = f"files/{_config_key_to_folder(key_path)}"
+        if (
+            rel_path.startswith(("/", "\\"))
+            or not normalized
+            or not normalized.startswith(f"{folder}/")
+        ):
+            raise ValueError("Invalid path parameter")
+
+        try:
+            plugin_root = self._plugin_root_path(name)
+            target = self._safe_plugin_path(plugin_root, normalized)
+            if target is None:
+                raise ValueError("Invalid path parameter")
+            # Keep this boundary unresolved: a symlink for the field directory
+            # must not grant access to another field's files.
+            target.relative_to(plugin_root / folder)
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise ValueError("Invalid path parameter") from exc
+
+        try:
+            if not target.exists():
+                raise ApiError("Image file not found", status_code=404)
+            if not target.is_file():
+                raise ValueError("Invalid path parameter")
+            with target.open("rb") as source:
+                data = source.read(MAX_PREVIEW_FILE_BYTES + 1)
+        except FileNotFoundError as exc:
+            raise ApiError("Image file not found", status_code=404) from exc
+        except OSError as exc:
+            raise ApiError("Image file cannot be read", status_code=503) from exc
+        if len(data) > MAX_PREVIEW_FILE_BYTES:
+            raise ApiError("Image file is too large to preview", status_code=413)
+        try:
+            with Image.open(io.BytesIO(data)) as image:
+                if image.format not in {
+                    "PNG",
+                    "JPEG",
+                    "WEBP",
+                    "GIF",
+                    "BMP",
+                    "DIB",
+                    "TIFF",
+                    "ICO",
+                }:
+                    raise ApiError("Unsupported image format", status_code=415)
+                if image.width * image.height > MAX_PREVIEW_PIXELS:
+                    raise ApiError("Image dimensions are too large", status_code=413)
+                # Animated images intentionally preview only the first frame.
+                preview = ImageOps.exif_transpose(image)
+                preview.thumbnail((1024, 1024))
+                preview = preview.convert(
+                    "RGBA"
+                    if "A" in preview.getbands() or "transparency" in preview.info
+                    else "RGB"
+                )
+                preview.info.clear()
+                output = io.BytesIO()
+                preview.save(output, format="PNG")
+                return output.getvalue()
+        except Image.DecompressionBombError as exc:
+            raise ApiError("Image dimensions are too large", status_code=413) from exc
+        except (OSError, SyntaxError, EOFError) as exc:
+            raise ApiError("Image preview is unavailable", status_code=415) from exc
 
     @staticmethod
     def _allowed_file_extensions(meta: dict) -> list[str]:

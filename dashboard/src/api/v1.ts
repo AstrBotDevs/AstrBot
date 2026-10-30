@@ -1364,6 +1364,13 @@ export const pluginApi = {
       }),
     );
   },
+  previewConfigImage(pluginId: string, configKey: string, path: string, signal: AbortSignal) {
+    return openApiV1.previewPluginConfigImageById({
+      query: { plugin_id: pluginId, config_key: configKey, path },
+      responseType: 'blob',
+      signal,
+    }) as Promise<AxiosResponse<Blob>>;
+  },
   uploadConfigFiles(pluginId: string, configKey: string, formData: FormData) {
     return typed<any>(
       openApiV1.uploadPluginConfigFilesById({
