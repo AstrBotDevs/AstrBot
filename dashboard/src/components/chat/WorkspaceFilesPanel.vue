@@ -497,7 +497,7 @@ async function downloadSelectedFile() {
       path,
       props.sessionId,
     );
-    if (generation !== treeGeneration.value) return;
+    // Finish requested downloads even when the panel changes or closes.
     const url = URL.createObjectURL(response.data);
     const anchor = document.createElement("a");
     anchor.href = url;
