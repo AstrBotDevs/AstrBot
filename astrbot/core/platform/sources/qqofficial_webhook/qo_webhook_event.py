@@ -13,5 +13,13 @@ class QQOfficialWebhookMessageEvent(QQOfficialMessageEvent):
         platform_meta: PlatformMetadata,
         session_id: str,
         bot: Client,
+        use_markdown_default: bool = True,
     ) -> None:
-        super().__init__(message_str, message_obj, platform_meta, session_id, bot)
+        super().__init__(
+            message_str,
+            message_obj,
+            platform_meta,
+            session_id,
+            bot,
+            use_markdown_default=use_markdown_default,
+        )

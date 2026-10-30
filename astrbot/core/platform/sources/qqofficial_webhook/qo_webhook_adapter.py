@@ -182,6 +182,7 @@ class QQOfficialWebhookPlatformAdapter(Platform):
             self.meta(),
             message.session_id,
             self.client,
+            use_markdown_default=self.use_markdown_default,
         )
         webhook_helper = getattr(self, "webhook_helper", None)
         if webhook_helper and message.message_id:

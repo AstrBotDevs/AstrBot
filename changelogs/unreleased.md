@@ -1,5 +1,7 @@
 # Unreleased
 
+- QQ Official: **Use Markdown for Proactive Messages → Use Markdown by default** (主动消息使用 Markdown → 默认使用 Markdown). Regular replies and proactive messages now share the `use_markdown` default in both WebSocket and Webhook adapters; explicit message-level settings take precedence. The default remains `true`. Existing `false` configurations now also send regular replies as plain text. Plain-text C2C streaming output is buffered for normal delivery. (#10832)
+
 - Fix plugin installation failing with `FileExistsError` in NAS and similar environments where cross-device (`EXDEV`) errors make system temporary directories unusable and Python falls back to the working directory. Use `.astrbot-tmp` when the temporary path conflicts with the `.astrbot` initialization marker file. ([#10784](https://github.com/AstrBotDevs/AstrBot/pull/10784))
 
 - Simplify Context Management Strategy settings: Handling for History Limits or Context Window Pressure → Compression Strategy; Model Provider ID for Context Compression → Compression Model. Move maximum turns, discarded turns, compression instruction, recent-context ratio and fallback context window size under the collapsed More Settings section. Preserve existing configuration keys, defaults and runtime behavior.

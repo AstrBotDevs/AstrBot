@@ -953,9 +953,9 @@ CONFIG_METADATA_2 = {
                         "hint": "启用后，机器人可以接收到频道的私聊消息。",
                     },
                     "use_markdown": {
-                        "description": "主动消息使用 Markdown",
+                        "description": "默认使用 Markdown",
                         "type": "bool",
-                        "hint": "启用后，机器人主动发送消息默认以 Markdown 模式发送；插件显式调用 use_markdown() 指定行为时不受此配置影响。",
+                        "hint": "控制普通回复和主动消息的默认格式：开启为 Markdown，关闭为纯文本。插件显式调用 use_markdown(True/False) 时优先使用消息级设置。纯文本 C2C 流式回复会累积后普通发送。",
                     },
                     "ws_reverse_host": {
                         "description": "反向 Websocket 主机",

@@ -940,8 +940,8 @@
         "hint": "Webhook モードで AstrBot の統合 Webhook エントリーポイントを使用し、個別のポートを開く必要をなくします。コールバックアドレスは /api/v1/webhooks/platforms/{webhook_uuid} です。"
       },
       "use_markdown": {
-        "description": "プロアクティブメッセージで Markdown を使用",
-        "hint": "有効にすると、Bot が自発的に送信するメッセージは既定で Markdown モードで送信されます。プラグインが use_markdown() を明示的に呼び出して指定した場合は、この設定の影響を受けません。"
+        "description": "既定で Markdown を使用",
+        "hint": "通常の返信と自発的なメッセージの既定形式を設定します。有効時は Markdown、無効時はプレーンテキストです。use_markdown(True/False) の明示的な指定が優先されます。プレーンテキストの C2C ストリーミング返信は蓄積して通常送信します。"
       },
       "webhook_uuid": {
         "description": "Webhook UUID",
