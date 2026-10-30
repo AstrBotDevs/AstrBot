@@ -503,23 +503,26 @@ async def _materialize_media_ref(
         cleanup_paths.append(target_path)
         try:
             await download_file(media_ref, str(target_path))
+            mime_type = _guess_mime_type(target_path)
+            if media_type == "image":
+                detected_mime_type = await detect_image_mime_type_async(
+                    target_path,
+                    default_mime_type=None,
+                )
+                if detected_mime_type:
+                    mime_type = detected_mime_type
+                    detected_suffix = _extension_from_mime_type(detected_mime_type)
+                    if (
+                        detected_suffix
+                        and target_path.suffix.lower() != detected_suffix
+                    ):
+                        detected_path = _temp_media_path("image", detected_suffix)
+                        cleanup_paths.append(detected_path)
+                        await asyncio.to_thread(target_path.rename, detected_path)
+                        target_path = detected_path
         except (Exception, asyncio.CancelledError):
             _cleanup_paths(cleanup_paths)
             raise
-        mime_type = _guess_mime_type(target_path)
-        if media_type == "image":
-            detected_mime_type = await detect_image_mime_type_async(
-                target_path,
-                default_mime_type=None,
-            )
-            if detected_mime_type:
-                mime_type = detected_mime_type
-                detected_suffix = _extension_from_mime_type(detected_mime_type)
-                if detected_suffix and target_path.suffix.lower() != detected_suffix:
-                    detected_path = _temp_media_path("image", detected_suffix)
-                    await asyncio.to_thread(target_path.rename, detected_path)
-                    cleanup_paths[-1] = detected_path
-                    target_path = detected_path
         return _LocalMediaFile(
             path=target_path,
             mime_type=mime_type,
