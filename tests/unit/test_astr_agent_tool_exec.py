@@ -126,6 +126,104 @@ def test_build_handoff_toolset_keeps_permission_guards_for_default_tools(runtime
     )
 
 
+def test_build_handoff_toolset_keeps_runtime_tools_with_explicit_plugin_selection():
+    mgr = FunctionToolManager()
+    plugin_tool = FunctionTool(
+        name="plugin_tool",
+        description="plugin tool",
+        parameters={"type": "object", "properties": {}},
+    )
+    mgr.func_list = [plugin_tool]
+
+    event = _DummyEvent()
+    context = SimpleNamespace(
+        get_config=lambda **_kwargs: {
+            "provider_settings": {"computer_use_runtime": "local"}
+        },
+        get_llm_tool_manager=lambda: mgr,
+    )
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
+
+    toolset = FunctionToolExecutor._build_handoff_toolset(
+        run_context, tools=["plugin_tool"]
+    )
+
+    assert toolset is not None
+    assert toolset.get_tool("plugin_tool") is not None
+    assert toolset.get_tool("astrbot_execute_shell") is not None
+    assert toolset.get_tool("astrbot_execute_python") is not None
+    assert toolset.get_tool("astrbot_file_read_tool") is not None
+    assert toolset.get_tool("astrbot_file_write_tool") is not None
+    assert toolset.get_tool("astrbot_grep_tool") is not None
+
+
+def test_build_handoff_toolset_warns_for_unavailable_requested_tools(caplog):
+    mgr = FunctionToolManager()
+    event = _DummyEvent()
+    context = SimpleNamespace(
+        get_config=lambda **_kwargs: {
+            "provider_settings": {"computer_use_runtime": "none"}
+        },
+        get_llm_tool_manager=lambda: mgr,
+    )
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
+
+    with caplog.at_level("WARNING", logger="astrbot"):
+        toolset = FunctionToolExecutor._build_handoff_toolset(
+            run_context, tools=["missing_tool"]
+        )
+
+    assert toolset is None
+    assert "missing_tool" in caplog.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("selection", ["name", "object"])
+async def test_handoff_preserves_selected_tool_when_runtime_name_collides(selection):
+    mgr = FunctionToolManager()
+    selected_tool = FunctionTool(
+        name="astrbot_file_read_tool",
+        description="Selected plugin implementation",
+        parameters={"type": "object", "properties": {}},
+    )
+    mgr.func_list = [selected_tool]
+    captured = {}
+
+    async def run_subagent(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(completion_text="done")
+
+    context = SimpleNamespace(
+        get_config=lambda **_kwargs: {
+            "provider_settings": {"computer_use_runtime": "local"}
+        },
+        get_llm_tool_manager=lambda: mgr,
+        tool_loop_agent=run_subagent,
+    )
+    run_context = ContextWrapper(
+        context=SimpleNamespace(event=_DummyEvent(), context=context)
+    )
+    tool = HandoffTool(
+        Agent(
+            name="child",
+            tools=[selected_tool.name if selection == "name" else selected_tool],
+        )
+    )
+    tool.provider_id = "test-provider"
+
+    results = [
+        result
+        async for result in FunctionToolExecutor.execute(
+            tool, run_context, input="hello"
+        )
+    ]
+
+    assert results[0].content[0].text == "done"
+    tools = captured["tools"]
+    assert tools.get_tool(selected_tool.name).description == selected_tool.description
+    assert tools.get_tool("astrbot_execute_shell") is not None
+
+
 @pytest.mark.asyncio
 async def test_collect_handoff_image_urls_normalizes_filters_and_appends_event_image(
     monkeypatch: pytest.MonkeyPatch,
