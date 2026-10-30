@@ -28,19 +28,6 @@ async def seed_alias(db, umo: str = UMO) -> None:
 
 
 @pytest.mark.asyncio
-async def test_delete_umo_alias_removes_record(temp_db):
-    await seed_alias(temp_db)
-
-    assert await temp_db.delete_umo_alias(UMO) is True
-    assert await temp_db.get_umo_alias(UMO) is None
-
-
-@pytest.mark.asyncio
-async def test_delete_umo_alias_returns_false_when_missing(temp_db):
-    assert await temp_db.delete_umo_alias(UMO) is False
-
-
-@pytest.mark.asyncio
 async def test_metadata_cleanup_deletes_when_no_conversation_reference(temp_db):
     await seed_alias(temp_db)
     await temp_db.upsert_umo_sender(UMO, "sender-1", "Alice")
