@@ -15,6 +15,11 @@
       </v-icon>
     </button>
 
+    <McpAppCard v-if="toolCall.mcp_app && sessionId && messageId != null"
+      :key="`${sessionId}:${messageId}:${toolCall.id}`"
+      :session-id="sessionId" :message-id="messageId" :tool-call="toolCall"
+      :is-dark="isDark" :disabled="appDisabled" @draft="$emit('app-draft', $event)" />
+
     <div v-if="isExpanded" class="tool-call-details">
       <div v-if="toolCall.id" class="tool-call-detail-row">
         <span class="detail-label">ID:</span>
@@ -44,7 +49,13 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 
+import McpAppCard from "./McpAppCard.vue";
+
+defineEmits(["app-draft"]);
 const props = defineProps({
+  sessionId: String,
+  messageId: [String, Number],
+  appDisabled: Boolean,
   toolCall: {
     type: Object,
     required: true,

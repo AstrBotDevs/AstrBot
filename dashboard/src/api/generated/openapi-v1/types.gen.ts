@@ -765,6 +765,30 @@ export type UpdateRequest = {
     progress_id?: string;
 };
 
+export type GetChatMcpAppData = {
+    path: {
+        message_id: string;
+        session_id: string;
+        tool_call_id: string;
+    };
+};
+
+export type GetChatMcpAppResponse = ({
+    status?: string;
+    message?: string;
+    data?: {
+        html?: string;
+        arguments?: {
+            [key: string]: unknown;
+        };
+        result?: {
+            [key: string]: unknown;
+        };
+    };
+});
+
+export type GetChatMcpAppError = unknown;
+
 export type LoginData = {
     body: LoginRequest;
 };

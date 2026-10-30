@@ -158,3 +158,24 @@ docker exec astrbot python -m pip install uv
 - [官方 MCP 服务器示例](https://github.com/modelcontextprotocol/servers)
 - [awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers/blob/main/README-zh.md)
 - [ModelScope MCP 广场](https://www.modelscope.cn/mcp)
+
+
+## 在 WebChat 中使用交互式 MCP Apps
+
+WebChat 可以从已完成的工具调用中打开交互应用。首版支持内嵌显示、工具输入和结果通知、调整高度，以及纯文本 `ui/message` 请求，协议版本为 `2026-01-26`。应用不能直接调用工具、读取其他资源、修改模型上下文、打开外部链接或申请设备权限。原有文本结果保持可用，IM 平台也可继续使用文本结果。
+
+1. 添加声明了 `_meta.ui.resourceUri` 的 MCP 工具，其值为 `ui://` 地址；对应资源须返回 MIME 类型为 `text/html;profile=mcp-app` 的单文件 HTML。
+2. 在 WebChat 中让助手调用该工具，等待本轮回复结束。必要时重新加载对话，确保助手消息已保存。
+3. 在调用完成后的 15 分钟内点击工具调用下方的 **打开交互应用**。当前用户必须拥有该会话，原工具及当时的 MCP 连接必须仍然有效。引用过期、MCP 重连或 AstrBot 重启后，需要重新调用工具生成新视图。
+4. 在应用中选择后，检查应用提出的文字，点击 **添加到消息**。已有草稿会保留；再通过聊天输入框正常发送，继续对话。
+5. **忽略** 会拒绝本次文字提议，**关闭** 会移除应用视图。
+
+应用使用不透明来源的沙箱（`sandbox="allow-scripts"`），并通过 CSP 限制资源加载：支持内联脚本、样式和 data 图片；阻止网络连接、外部脚本、内嵌网页和表单。资源需要打包在单个 HTML 中，大小上限为 1 MiB。应用无法读取宿主页面或本地存储，只接收该工具已记录的参数和结果，不会获得控制台凭据。
+
+工具执行时由服务端生成随机引用，绑定用户、会话/UMO、请求、检查点、已保存的助手消息、工具调用、MCP 原始工具名、声明的资源地址和当时的 ClientSession 连接。历史中只增加引用；应用结构化数据保存在有上限的内存注册表中（256 条，每条参数与结果合计最多 1 MiB）。刷新可重新打开尚未失效的引用；引用被淘汰、过期或重启后需再次调用工具。显示名、清理后的工具名和历史中自行提供的资源地址都不能作为授权依据。外层可信沙箱用每次打开独有的随机值中转应用的标准 MCP 消息，宿主核对来源窗口、随机值和消息结构后才接受文字提议。内层应用不能读取中转层或跳转父页面。
+
+### 本地选择器示例
+
+可通过 MCP stdio 配置运行 `uv run examples/mcp_apps/photo_picker.py`。将本仓库 Python 解释器的绝对路径作为 `command`，将 `examples/mcp_apps/photo_picker.py` 的绝对路径放入 `args`。让助手调用 `show_photo_picker` 即可看到三张彩色示例插画，无需外部账号或图片服务。在 IM 平台可直接回复编号。
+
+开发验证：运行 `node --test dashboard/tests/mcpAppHost.test.mjs` 和 `uv run pytest tests/unit/test_mcp_apps.py`。启动 dashboard 开发服务并安装 Playwright/Chromium 后，运行 `python scripts/check_mcp_app_ui.py`。该浏览器检查挂载实际工具卡片，连接真实 stdio MCP 服务；对话历史接口使用测试数据，不调用付费模型。

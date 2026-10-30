@@ -811,6 +811,22 @@ class MCPTool(FunctionTool, Generic[TContext]):
         self.mcp_client = mcp_client
         self.mcp_server_name = mcp_server_name
 
+    @property
+    def ui_resource_uri(self) -> str | None:
+        """Return the declared MCP Apps resource, if valid.
+
+        Returns:
+            A ui:// URI, or None for ordinary tools.
+        """
+        meta = getattr(self.mcp_tool, "meta", None)
+        if not isinstance(meta, dict):
+            return None
+        ui = meta.get("ui")
+        uri = ui.get("resourceUri") if isinstance(ui, dict) else None
+        if uri is None:
+            uri = meta.get("ui/resourceUri")
+        return uri if isinstance(uri, str) and uri.startswith("ui://") else None
+
     async def call(
         self, context: ContextWrapper[TContext], **kwargs
     ) -> mcp.types.CallToolResult:

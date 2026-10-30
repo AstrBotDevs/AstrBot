@@ -309,6 +309,10 @@
                           </ToolCallItem>
                           <ToolCallCard
                             v-else
+                            :session-id="sessionId"
+                            :message-id="msg.id"
+                            :app-disabled="isStreaming"
+                            @app-draft="emit('appDraft', $event)"
                             :tool-call="normalizeToolCall(tool)"
                             :is-dark="isDark"
                           />
@@ -515,6 +519,7 @@ import { copyToClipboard } from "@/utils/clipboard";
 const props = withDefaults(
   defineProps<{
     messages: ChatRecord[];
+    sessionId?: string;
     isDark?: boolean;
     isStreaming?: boolean;
     variant?: "main" | "thread";
@@ -556,6 +561,7 @@ const emit = defineEmits<{
   openThread: [thread: ChatThread];
   openReasoning: [payload: { message: ChatRecord; blockIndex: number }];
   openRefs: [refs: unknown];
+  appDraft: [text: string];
 }>();
 
 registerChatMarkdownComponents();

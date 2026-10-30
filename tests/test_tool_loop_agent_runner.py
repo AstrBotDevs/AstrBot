@@ -913,6 +913,86 @@ async def test_hooks_called_with_max_step(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("webchat", [True, False])
+async def test_mcp_app_reference_is_issued_only_for_actual_webchat_invocations(
+    runner, mock_provider, provider_request, mock_hooks, webchat
+):
+    from mcp.types import Tool
+
+    from astrbot.core.agent.mcp_app_registry import mcp_apps
+    from astrbot.core.agent.mcp_client import MCPTool
+    from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
+    from astrbot.core.platform.message_type import MessageType
+    from astrbot.core.platform.platform_metadata import PlatformMetadata
+    from astrbot.core.platform.sources.webchat.webchat_event import WebChatMessageEvent
+
+    message = AstrBotMessage()
+    message.type = MessageType.FRIEND_MESSAGE
+    message.sender = MessageMember("alice", "alice")
+    message.raw_message = (
+        "alice",
+        "session",
+        {"message_id": "run", "llm_checkpoint_id": "checkpoint"},
+    )
+    event = (
+        WebChatMessageEvent(
+            "",
+            message,
+            PlatformMetadata(name="webchat", description="webchat", id="webchat"),
+            "webchat!alice!session",
+        )
+        if webchat
+        else SimpleNamespace()
+    )
+    connection = object()
+    tool = MCPTool(
+        Tool(
+            name="test_tool",
+            inputSchema={"type": "object", "properties": {"query": {"type": "string"}}},
+            _meta={"ui": {"resourceUri": "ui://picker"}},
+        ),
+        SimpleNamespace(active=True, session=connection),
+        "photos",
+    )
+    provider_request.func_tool = ToolSet(tools=[tool])
+    mock_provider.max_calls_before_normal_response = 1
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=SimpleNamespace(event=event)),
+        tool_executor=MockToolExecutor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+    original_refs = set(mcp_apps.entries)
+    try:
+        results = [result async for result in runner.step_until_done(3)]
+        tool_result = next(
+            result for result in results if result.type == "tool_call_result"
+        )
+        payload = tool_result.data["chain"].chain[0].data
+        if webchat:
+            ref = payload["mcp_app"]["app_ref"]
+            cap = mcp_apps.entries[ref]
+            assert cap.tool is tool and cap.connection is connection
+            assert (cap.username, cap.session_id, cap.run_id, cap.checkpoint_id) == (
+                "alice",
+                "session",
+                "run",
+                "checkpoint",
+            )
+            assert cap.call_id == "call_123"
+            assert cap.arguments == {"query": "test"}
+            assert ref not in str(runner.run_context.messages)
+        else:
+            assert "mcp_app" not in payload
+            assert set(mcp_apps.entries) == original_refs
+    finally:
+        for ref in set(mcp_apps.entries) - original_refs:
+            del mcp_apps.entries[ref]
+
+
+@pytest.mark.asyncio
 async def test_tool_result_includes_all_calltoolresult_content(
     runner, mock_provider, provider_request, mock_hooks, monkeypatch
 ):

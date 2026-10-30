@@ -1661,6 +1661,7 @@ export function finishToolCall(record: ChatRecord, result: any) {
     const tool = part.tool_calls.find((item) => item.id === targetId);
     if (tool) {
       tool.result = result.result;
+      if (result.mcp_app) tool.mcp_app = result.mcp_app;
       tool.finished_ts = result.ts || Date.now() / 1000;
       return;
     }
@@ -1671,6 +1672,7 @@ export function finishToolCall(record: ChatRecord, result: any) {
       {
         id: targetId,
         result: result.result,
+        ...(result.mcp_app ? { mcp_app: result.mcp_app } : {}),
         finished_ts: result.ts || Date.now() / 1000,
       },
     ],

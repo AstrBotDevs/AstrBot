@@ -21,6 +21,7 @@ from astrbot.dashboard.services.chat_service import (
     ChatService,
     ChatServiceError,
 )
+from astrbot.dashboard.services.mcp_app_service import read_chat_mcp_app
 
 from .auth import AuthContext, ScopeDependency, require_dashboard_user
 from .multipart import single_upload
@@ -38,6 +39,21 @@ def get_service(request: Request) -> ChatService:
 
 
 require_chat_scope = ScopeDependency("chat")
+
+
+@router.get("/chat/sessions/{session_id}/messages/{message_id}/mcp-app/{tool_call_id}")
+async def get_mcp_app(
+    session_id: str,
+    message_id: str,
+    tool_call_id: str,
+    auth: AuthContext = Depends(require_chat_scope),
+    service: ChatService = Depends(get_service),
+):
+    return await _run(
+        lambda: read_chat_mcp_app(
+            service, auth.username, session_id, message_id, tool_call_id
+        )
+    )
 
 
 async def _json_or_empty(request: Request) -> dict[str, Any]:

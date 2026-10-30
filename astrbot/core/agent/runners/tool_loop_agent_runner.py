@@ -25,6 +25,7 @@ from tenacity import (
 )
 
 from astrbot import logger
+from astrbot.core.agent.mcp_app_registry import mcp_apps
 from astrbot.core.agent.message import ImageURLPart, TextPart, ThinkPart
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_image_cache import tool_image_cache
@@ -1200,6 +1201,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             llm_response.tools_call_ids,
         ):
             tool_result_blocks_start = len(tool_call_result_blocks)
+            mcp_app = None
             tool_call_streak = self._track_tool_call_streak(
                 func_tool_name,
                 func_tool_args,
@@ -1285,6 +1287,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 except Exception as e:
                     logger.error(f"Error in on_tool_start hook: {e}", exc_info=True)
 
+                app_invocation = mcp_apps.capture(
+                    func_tool,
+                    getattr(self.run_context.context, "event", None),
+                    func_tool_id,
+                    valid_params,
+                )
                 executor = self.tool_executor.execute(
                     tool=func_tool,
                     run_context=self.run_context,
@@ -1296,6 +1304,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     if isinstance(resp, CallToolResult):
                         res = resp
                         _final_resp = resp
+                        if app_invocation is not None:
+                            app_ref = mcp_apps.issue(
+                                app_invocation,
+                                resp.model_dump(by_alias=True, exclude_none=True),
+                            )
+                            if app_ref:
+                                mcp_app = {"app_ref": app_ref}
                         if not res.content:
                             _append_tool_call_result(
                                 func_tool_id,
@@ -1430,6 +1445,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                     "id": func_tool_id,
                                     "ts": time.time(),
                                     "result": tool_result_content,
+                                    **({"mcp_app": mcp_app} if mcp_app else {}),
                                 }
                             )
                         ],

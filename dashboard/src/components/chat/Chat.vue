@@ -352,6 +352,8 @@
             <ChatMessageList
               v-model:edit-draft="messageEditDraft"
               :messages="activeMessages"
+              :session-id="currSessionId || undefined"
+              @app-draft="appendAppDraft"
               :is-dark="isDark"
               :is-streaming="
                 Boolean(currSessionId && isSessionRunning(currSessionId))
@@ -1512,6 +1514,11 @@ async function selectSession(sessionId: string, pushRoute = true) {
   );
   scrollToBottom(true);
   await focusChatInput();
+}
+
+function appendAppDraft(text: string) {
+  draft.value = draft.value ? `${draft.value}\n\n${text}` : text;
+  void focusChatInput();
 }
 
 async function sendCurrentMessage() {
