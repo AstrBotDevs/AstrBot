@@ -2,7 +2,7 @@ import asyncio
 import json
 import re
 from collections.abc import Awaitable, Callable
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
 
@@ -208,25 +208,59 @@ class CronJobManager:
             run_once=run_once,
         )
         if enabled:
-            self._schedule_job(job)
+            try:
+                self._schedule_job(job)
+            except CronJobSchedulingError:
+                await self.db.update_cron_job(job.job_id, enabled=False)
+                raise
         return job
 
-    async def update_job(self, job_id: str, **kwargs) -> CronJob | None:
-        current_job = await self.db.get_cron_job(job_id)
-        if not current_job:
-            return None
-        candidate = current_job.model_copy(update=kwargs)
-        if candidate.enabled:
-            # Invalid edits must not overwrite the durable job or remove its
-            # working schedule. Disabled legacy jobs can still be corrected.
-            self._build_trigger(candidate)
-        job = await self.db.update_cron_job(job_id, **kwargs)
-        if not job:
-            return None
-        self._remove_scheduled(job_id)
-        if job.enabled:
-            self._schedule_job(job)
-        return job
+    async def update_job(
+        self, job_id: str, *, payload_patch: dict | None = None, **kwargs
+    ) -> CronJob | None:
+        """Update a job against the latest stored state and preserve its schedule.
+
+        Args:
+            job_id: Identifier of the existing job.
+            payload_patch: Only payload fields explicitly supplied by a caller.
+            **kwargs: Replacement values for the job's other editable fields.
+
+        Returns:
+            The updated job, or None if it no longer exists.
+
+        Raises:
+            CronJobSchedulingError: If the effective schedule is invalid or expired.
+        """
+        # Serialize read/merge/write/schedule so overlapping edits cannot restore
+        # stale payload fields after another edit has changed the deadline.
+        async with self._lock:
+            current_job = await self.db.get_cron_job(job_id)
+            if not current_job:
+                return None
+            if payload_patch is not None:
+                kwargs["payload"] = {**(current_job.payload or {}), **payload_patch}
+                if kwargs.get("run_once") is False:
+                    kwargs["payload"].pop("run_at", None)
+            candidate = current_job.model_copy(update=kwargs)
+            if candidate.enabled:
+                self._build_trigger(candidate)
+            job = await self.db.update_cron_job(job_id, **kwargs)
+            if not job:
+                return None
+            if job.enabled:
+                try:
+                    # The durable write may have awaited long enough to expire
+                    # a one-time deadline. Keep the original schedule on failure.
+                    self._build_trigger(job)
+                except CronJobSchedulingError:
+                    await self.db.update_cron_job(
+                        job_id, **{key: getattr(current_job, key) for key in kwargs}
+                    )
+                    raise
+                self._schedule_job(job)
+            else:
+                self._remove_scheduled(job_id)
+            return job
 
     async def delete_job(self, job_id: str) -> None:
         """Remove a schedule and drain its active runs before deleting its row.
@@ -298,6 +332,8 @@ class CronJobManager:
                 if run_at.tzinfo is None and tzinfo is not None:
                     run_at = run_at.replace(tzinfo=tzinfo)
                 trigger = DateTrigger(run_date=run_at, timezone=tzinfo)
+                if trigger.run_date < datetime.now(timezone.utc) - timedelta(minutes=1):
+                    raise ValueError("run_at is in the past; use a future timestamp")
             else:
                 if not job.cron_expression:
                     raise ValueError("recurring job missing cron_expression")
