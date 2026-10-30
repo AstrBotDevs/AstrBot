@@ -22,7 +22,8 @@ The default AstrBot configuration is as follows:
         "rate_limit": {
             "time": 60,
             "count": 30,
-            "strategy": "stall",  # stall, discard
+            "strategy": "discard",  # stall, discard
+            "max_pending": 1,
         },
         "reply_prefix": "",
         "forward_threshold": 1500,
@@ -167,7 +168,12 @@ Whether to enable **Isolate Conversation**. Defaults to `false`. On supported pl
 
 #### `platform_settings.rate_limit`
 
-Strategy when message rate exceeds limits. `time` is the window, `count` is the number of messages, and `strategy` is the limit strategy. `stall` means wait, `discard` means drop.
+Controls admission when the message rate exceeds the limit. `time` is the window, `count` is the number of messages admitted by this stage, and `strategy` selects the behavior.
+
+- `discard`: drop excess messages immediately without waiting for the rate-limit lock. This is the default for new configurations and is recommended for time-sensitive live chat.
+- `stall`: wait for capacity before continuing. Each session can have at most `max_pending` pending tasks, including the task sleeping with the lock and tasks waiting to acquire that lock. Additional messages are dropped. `max_pending` defaults to `1`; `0` disables waiting.
+
+Existing explicit strategy choices are not rewritten, but existing `stall` configurations without `max_pending` also receive the default bound of `1`. Set it explicitly if a larger waiting budget is required. Waiting tasks may be processed after a conversation has moved on, so prefer `discard` for live chat. This bounds only this limiter, not the global task population.
 
 #### `platform_settings.reply_prefix`
 

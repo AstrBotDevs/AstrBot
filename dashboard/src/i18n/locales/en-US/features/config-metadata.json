@@ -1031,6 +1031,10 @@
           },
           "strategy": {
             "description": "Rate Limit Strategy"
+          },
+          "max_pending": {
+            "description": "Maximum Rate-limit Waiters",
+            "hint": "Maximum pending rate-limit tasks per session under stall, including the sleeping lock holder and lock waiters. Use 0 to disable waiting; excess tasks are dropped. Prefer discard for live chat."
           }
         }
       }
