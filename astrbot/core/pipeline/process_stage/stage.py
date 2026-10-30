@@ -43,11 +43,13 @@ class ProcessStage(Stage):
         activated_handlers: list[StarHandlerMetadata] = event.get_extra(
             "activated_handlers",
         )
+        has_explicit_request = False
         # 有插件 Handler 被激活
         if activated_handlers:
             async for resp in self.star_request_sub_stage.process(event):
                 # 生成器返回值处理
                 if isinstance(resp, ProviderRequest):
+                    has_explicit_request = True
                     # Handler 的 LLM 请求
                     event.set_extra("provider_request", resp)
                     _t = False
@@ -59,18 +61,23 @@ class ProcessStage(Stage):
                 else:
                     yield
 
+        # Consume the deferred reply only after every message listener has run.
+        active_reply_request = event.get_extra().pop("_active_reply_request", None)
+        if active_reply_request is not None and has_explicit_request:
+            # An explicit request takes precedence even when it sends nothing.
+            return
+
         # 调用 LLM 相关请求
         if not self.ctx.astrbot_config["provider_settings"].get("enable", True):
             return
 
         if (
             not event._has_send_oper
-            and event.is_at_or_wake_command
+            and (event.is_at_or_wake_command or active_reply_request is not None)
             and not event.call_llm
+            and not event.is_stopped()
         ):
-            # 是否有过发送操作 and 是否是被 @ 或者通过唤醒前缀
-            if (
-                event.get_result() and not event.is_stopped()
-            ) or not event.get_result():
-                async for _ in self.agent_sub_stage.process(event):
-                    yield
+            if active_reply_request is not None:
+                event.set_extra("provider_request", active_reply_request)
+            async for _ in self.agent_sub_stage.process(event):
+                yield

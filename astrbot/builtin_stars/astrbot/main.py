@@ -1,6 +1,6 @@
 import copy
 import traceback
-from collections.abc import Iterable
+from collections.abc import AsyncGenerator, Iterable
 from sys import maxsize
 
 import astrbot.api.message_components as Comp
@@ -185,8 +185,15 @@ class Main(star.Star):
         filter.EventMessageType.GROUP_MESSAGE,
         priority=maxsize - 2,
     )
-    async def on_message(self, event: AstrMessageEvent):
-        """群聊上下文感知"""
+    async def on_message(self, event: AstrMessageEvent) -> AsyncGenerator[None, None]:
+        """Record group context and defer proactive replies until after listeners.
+
+        Args:
+            event: Incoming group message.
+
+        Yields:
+            None after queuing a proactive reply without starting an LLM request.
+        """
         message_components = _iter_message_components(event)
         has_context_content = False
         for comp in message_components:
@@ -255,12 +262,18 @@ class Main(star.Star):
                             except Exception:
                                 logger.exception("主动回复处理图片失败")
 
-                    yield event.request_llm(
-                        prompt=prompt,
-                        session_id=event.session_id,
-                        image_urls=image_urls,
-                        conversation=conv,
+                    # Message listeners must prepare context or handle the event
+                    # before the pipeline starts this default reply.
+                    event.set_extra(
+                        "_active_reply_request",
+                        event.request_llm(
+                            prompt=prompt,
+                            session_id=event.session_id,
+                            image_urls=image_urls,
+                            conversation=conv,
+                        ),
                     )
+                    yield
                 except BaseException as e:
                     logger.error(traceback.format_exc())
                     logger.error(f"主动回复失败: {e}")
