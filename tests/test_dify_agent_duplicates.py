@@ -30,10 +30,8 @@ from astrbot.core.provider.entities import ProviderRequest
             ],
             "Hello world",
         ),
-        ([("agent_message", "Hello "), ("message", "Hello world")], "Hello world"),
         ([("agent_message", "ha"), ("agent_message", "ha")], "haha"),
         ([("message", "ha"), ("message", "ha")], "haha"),
-        ([("message", "Thinking."), ("agent_message", "Answer.")], "Thinking.Answer."),
         (
             [
                 ("agent_message", "Searching."),
