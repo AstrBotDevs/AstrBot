@@ -1,12 +1,12 @@
 # SerpApi
 
-[SerpApi](https://serpapi.com/?utm_source=astrbot_github) 提供来自 Google、Bing、百度等搜索引擎的结构化实时搜索数据，帮助 AI 智能体获取实时信息，无需自行管理网页抓取基础设施。
+[SerpApi](https://serpapi.com/astrbot-github) 提供来自 Google、Bing、百度等搜索引擎的结构化实时搜索数据，帮助 AI 智能体获取实时信息，无需自行管理网页抓取基础设施。
 
 本页介绍 SerpApi 的配置与使用。网页搜索的通用准备条件、提供商对比和排错方法，请参见 [网页搜索](../websearch.md)。
 
 ## 获取 API Key
 
-1. 打开 [SerpApi](https://serpapi.com/)，注册或登录账号。
+1. 打开 [SerpApi](https://serpapi.com/astrbot-github)，注册或登录账号。
 2. 进入 [API Key 页面](https://serpapi.com/manage-api-key)，复制自己的 API Key。
 3. 在 SerpApi 账号中确认有可用的搜索额度。当前额度、计费和服务权限以 SerpApi 官网及账号信息为准。
 

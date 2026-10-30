@@ -1,12 +1,12 @@
 # SerpApi
 
-[SerpApi](https://serpapi.com/?utm_source=astrbot_github) provides structured, real-time search data from Google, Bing, Baidu and other search engines, helping AI agents access real-time information without managing web scraping infrastructure.
+[SerpApi](https://serpapi.com/astrbot-github) provides structured, real-time search data from Google, Bing, Baidu and other search engines, helping AI agents access real-time information without managing web scraping infrastructure.
 
 This page covers SerpApi setup and usage. See [Web Search](../websearch.md) for general prerequisites, provider comparisons, and troubleshooting.
 
 ## Get an API key
 
-1. Open [SerpApi](https://serpapi.com/) and create an account or sign in.
+1. Open [SerpApi](https://serpapi.com/astrbot-github) and create an account or sign in.
 2. Open the [API key page](https://serpapi.com/manage-api-key) and copy your key.
 3. Check that your SerpApi account has search quota available. Refer to SerpApi's website and your account for current quotas, billing, and service access.
 
