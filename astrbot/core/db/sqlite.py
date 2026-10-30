@@ -2332,29 +2332,12 @@ class SQLiteDatabase(BaseDatabase):
             result = await session.execute(query)
             return list(result.scalars().all())
 
-    async def delete_umo_alias(self, umo: str) -> bool:
-        """Delete alias metadata for one UMO.
-
-        Args:
-            umo: Unified message origin whose alias metadata should be deleted.
-
-        Returns:
-            True when an alias was deleted, False when none matched.
-        """
-        async with self.get_db() as session:
-            session: AsyncSession
-            async with session.begin():
-                result = await session.execute(
-                    delete(UmoAlias).where(col(UmoAlias.umo) == umo)
-                )
-                return result.rowcount > 0
-
     async def delete_umo_metadata_if_unreferenced(self, umo: str) -> dict:
         """Delete alias and sender metadata for a UMO without conversations.
 
         Both deletions carry the NOT EXISTS guard in the statement itself, so
-        the check and the removal cannot interleave with a concurrent
-        conversation insert on SQLite's single-writer transaction.
+        within a single process the check and the removal cannot interleave
+        with a concurrently committed conversation insert.
 
         Args:
             umo: Unified message origin whose orphaned metadata should be deleted.

@@ -210,7 +210,7 @@ class ConversationService:
                     [user_id]
                 )
             except Exception as exc:
-                logger.warning(f"清理会话元数据失败: {exc!s}")
+                logger.warning(f"清理会话元数据失败: {exc!s}", exc_info=True)
                 result["metadata_cleanup"] = {
                     "deleted_aliases": 0,
                     "deleted_senders": 0,
@@ -355,7 +355,7 @@ class ConversationService:
                     sorted(deleted_umos)
                 )
             except Exception as exc:
-                logger.warning(f"清理会话元数据失败: {exc!s}")
+                logger.warning(f"清理会话元数据失败: {exc!s}", exc_info=True)
                 result["metadata_cleanup"] = {
                     "deleted_aliases": 0,
                     "deleted_senders": 0,
