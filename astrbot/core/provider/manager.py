@@ -609,6 +609,10 @@ class ProviderManager:
                 from .sources.dashscope_embedding_source import (
                     DashScopeEmbeddingProvider as DashScopeEmbeddingProvider,
                 )
+            case "volcengine_embedding":
+                from .sources.volcengine_embedding_source import (
+                    VolcengineEmbeddingProvider as VolcengineEmbeddingProvider,
+                )
             case "vllm_rerank":
                 from .sources.vllm_rerank_source import (
                     VLLMRerankProvider as VLLMRerankProvider,
