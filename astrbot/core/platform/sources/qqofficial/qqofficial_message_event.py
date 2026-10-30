@@ -112,22 +112,6 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         self.use_markdown_default = use_markdown_default
         self.send_buffer = None
 
-    @staticmethod
-    def _should_use_markdown(
-        message_chain: MessageChain, platform_default: bool
-    ) -> bool:
-        """Resolve message-level overrides before the platform default.
-
-        Args:
-            message_chain: Message whose format is being resolved.
-            platform_default: Format used when the message has no override.
-
-        Returns:
-            Whether to send the message as Markdown.
-        """
-        explicit = message_chain.use_markdown_
-        return platform_default if explicit is None else explicit
-
     async def get_group(self, group_id: str | None = None, **kwargs) -> Group | None:
         """Get QQ group or guild-channel information for this event.
 
@@ -211,15 +195,6 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         中间分片已把全文发完、结尾没有剩余内容时也必须补一个 "\n" 收尾帧，
         否则客户端等不到结束帧，最终只显示首包几个字。
         """
-        if self.send_buffer and not self._should_use_markdown(
-            self.send_buffer, self.use_markdown_default
-        ):
-            # Buffer plain text instead of depending on content-mode streaming.
-            logger.debug(
-                "[QQOfficial] Sending buffered plain-text C2C output without streaming."
-            )
-            return await self._post_send()
-
         stream_payload["state"] = 10
         has_content = self.send_buffer is not None and any(
             (isinstance(c, Plain) and c.text) or not isinstance(c, Plain)
@@ -231,10 +206,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             if stream_payload.get("id") is None:
                 # 从未发出任何分片，无流可收
                 return None
-            # An open native stream is Markdown even if the platform default is not.
-            self.send_buffer = MessageChain(
-                chain=[Plain(text="\n")], use_markdown_=True
-            )
+            self.send_buffer = MessageChain(chain=[Plain(text="\n")])
         return await self._post_send(stream=stream_payload)
 
     @staticmethod
@@ -304,29 +276,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     last_edit_time = 0
                     continue
 
-                use_md = self._should_use_markdown(chain, self.use_markdown_default)
-                if (
-                    self.send_buffer
-                    and self._should_use_markdown(
-                        self.send_buffer, self.use_markdown_default
-                    )
-                    != use_md
-                ) or (stream_payload.get("id") is not None and not use_md):
-                    # Finish the previous format before starting a new segment.
-                    await self._close_stream_segment(stream_payload)
-                    stream_payload = {
-                        "state": 1,
-                        "id": None,
-                        "index": 0,
-                        "reset": False,
-                    }
-                    last_edit_time = 0
-
                 # 累积内容（拷贝，避免上游复用 MessageChain 改写 buffer）
                 self._append_stream_delta(chain)
-
-                if not use_md:
-                    continue
 
                 # 节流：按时间间隔发送中间分片
                 current_time = asyncio.get_running_loop().time()
@@ -481,8 +432,9 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         ):
             plain_text = plain_text + "\n"
 
-        use_md = self._should_use_markdown(message_to_send, self.use_markdown_default)
-        if not use_md:
+        # 根据消息链的 use_markdown_ 标记决定发送模式
+        use_md = getattr(self.send_buffer, "use_markdown_", None)
+        if use_md is False or (use_md is None and not self.use_markdown_default):
             payload: dict = {
                 "content": plain_text,
                 "msg_type": 0,

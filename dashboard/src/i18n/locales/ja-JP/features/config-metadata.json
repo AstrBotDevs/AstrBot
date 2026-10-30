@@ -941,7 +941,7 @@
       },
       "use_markdown": {
         "description": "既定で Markdown を使用",
-        "hint": "通常の返信と自発的なメッセージの既定形式を設定します。有効時は Markdown、無効時はプレーンテキストです。use_markdown(True/False) の明示的な指定が優先されます。プレーンテキストの C2C ストリーミング返信は蓄積して通常送信します。"
+        "hint": "通常の返信と自発的なメッセージの既定形式を設定します。有効時は Markdown、無効時はプレーンテキストです。use_markdown(True/False) の明示的な指定が優先されます。"
       },
       "webhook_uuid": {
         "description": "Webhook UUID",

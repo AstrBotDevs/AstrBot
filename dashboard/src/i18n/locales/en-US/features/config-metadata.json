@@ -840,7 +840,7 @@
       },
       "use_markdown": {
         "description": "Use Markdown by default",
-        "hint": "Set the default format for replies and proactive messages: Markdown when enabled, plain text when disabled. Explicit use_markdown(True/False) calls take precedence. Plain-text C2C streaming replies are buffered and sent normally."
+        "hint": "Set the default format for replies and proactive messages: Markdown when enabled, plain text when disabled. Explicit use_markdown(True/False) calls take precedence."
       },
       "webhook_uuid": {
         "description": "Webhook UUID",

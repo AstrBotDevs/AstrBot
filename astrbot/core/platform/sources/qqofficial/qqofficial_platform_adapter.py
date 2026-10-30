@@ -402,10 +402,8 @@ class QQOfficialPlatformAdapter(Platform):
             )
             return
 
-        use_md = QQOfficialMessageEvent._should_use_markdown(
-            message_chain, self.use_markdown_default
-        )
-        if not use_md:
+        use_md = getattr(message_chain, "use_markdown_", None)
+        if use_md is False or (use_md is None and not self.use_markdown_default):
             payload: dict[str, Any] = {"content": plain_text}
         else:
             payload = {
