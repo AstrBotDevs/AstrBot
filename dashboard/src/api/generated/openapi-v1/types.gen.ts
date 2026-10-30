@@ -1647,6 +1647,10 @@ export type ListChatProjectWorkspaceFilesData = {
     };
     query?: {
         path?: string;
+        /**
+         * Required for per-session workspaces; must belong to this project and user.
+         */
+        session_id?: string;
     };
 };
 
@@ -1660,6 +1664,10 @@ export type GetChatProjectWorkspaceFileData = {
     };
     query: {
         path: string;
+        /**
+         * Required for per-session workspaces; must belong to this project and user.
+         */
+        session_id?: string;
     };
 };
 
@@ -1673,6 +1681,10 @@ export type DownloadChatProjectWorkspaceFileData = {
     };
     query: {
         path: string;
+        /**
+         * Required for per-session workspaces; must belong to this project and user.
+         */
+        session_id?: string;
     };
 };
 

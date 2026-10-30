@@ -1589,6 +1589,12 @@ paths:
           schema:
             type: string
             default: ""
+        - name: session_id
+          in: query
+          required: false
+          description: Required for per-session workspaces; must belong to this project and user.
+          schema:
+            type: string
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -1610,6 +1616,12 @@ paths:
           required: true
           schema:
             type: string
+        - name: session_id
+          in: query
+          required: false
+          description: Required for per-session workspaces; must belong to this project and user.
+          schema:
+            type: string
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -1629,6 +1641,12 @@ paths:
         - name: path
           in: query
           required: true
+          schema:
+            type: string
+        - name: session_id
+          in: query
+          required: false
+          description: Required for per-session workspaces; must belong to this project and user.
           schema:
             type: string
       responses:

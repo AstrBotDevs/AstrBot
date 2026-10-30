@@ -2382,6 +2382,15 @@
               "type": "string",
               "default": ""
             }
+          },
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "description": "Required for per-session workspaces; must belong to this project and user.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -2416,6 +2425,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "description": "Required for per-session workspaces; must belong to this project and user.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -2447,6 +2465,15 @@
             "name": "path",
             "in": "query",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "description": "Required for per-session workspaces; must belong to this project and user.",
             "schema": {
               "type": "string"
             }
