@@ -149,6 +149,130 @@ class TestStarBase:
         )
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "callback_base",
+        [
+            "https://files.example",
+            "https://files.example/",
+            "https://files.example/proxy/",
+            "https://files.example/proxy%3Fname%23image/",
+        ],
+    )
+    async def test_text_to_image_local_fallback_returns_reusable_url(
+        self, tmp_path, monkeypatch, callback_base
+    ):
+        """Register local output only at the public URL-request boundary."""
+        from urllib.parse import urlsplit
+
+        import astrbot.core.star.base as star_base
+        from astrbot.core.file_token_service import FileTokenService
+
+        service = FileTokenService()
+        monkeypatch.setattr(star_base, "file_token_service", service, raising=False)
+        image_file = tmp_path / "rendered.jpg"
+        image_file.write_bytes(b"fixture image bytes")
+        context = MagicMock()
+        context.get_config.return_value = {
+            "callback_api_base": callback_base,
+            "t2i_endpoint": "https://render.example",
+        }
+        context.html_renderer.render_t2i = AsyncMock(return_value=str(image_file))
+        result = await star_base.Star(context).text_to_image(
+            "fixture", return_url=True, umo="qq:group:10388"
+        )
+        assert result.startswith(f"{callback_base.rstrip('/')}/api/file/")
+        token = urlsplit(result).path.rsplit("/", 1)[-1]
+        assert await service.handle_file(token) == str(image_file)
+        assert await service.handle_file(token) == str(image_file)
+        assert service.staged_files[token][2] is False
+        assert service.default_timeout == 300
+        context.get_config.assert_called_once_with("qq:group:10388")
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "callback_base",
+        [
+            None,
+            "",
+            "files.example",
+            "file:///tmp",
+            "https://",
+            "https://[invalid",
+            "https://files.example?key=private",
+            "https://files.example/#fragment",
+            "https://files.example?",
+            "https://files.example#",
+            "https://files.example?#",
+            "https://files.example/proxy/?",
+            "https://files.example/proxy/#",
+            "https://files.example/proxy/?#",
+            "https://files.example:bad",
+            "https://files.example:0",
+            "https://files.example:65536",
+            "https://files. example",
+            42,
+        ],
+    )
+    async def test_text_to_image_local_url_requires_valid_callback_base(
+        self, tmp_path, monkeypatch, callback_base
+    ):
+        """Explain a missing or invalid public base instead of returning a path."""
+        import astrbot.core.star.base as star_base
+        from astrbot.core.file_token_service import FileTokenService
+
+        service = FileTokenService()
+        monkeypatch.setattr(star_base, "file_token_service", service, raising=False)
+        image_file = tmp_path / "rendered.jpg"
+        image_file.write_bytes(b"fixture image bytes")
+        context = MagicMock()
+        context.get_config.return_value = {"callback_api_base": callback_base}
+        context.html_renderer.render_t2i = AsyncMock(return_value=str(image_file))
+        with pytest.raises(
+            RuntimeError, match="callback_api_base.*return_url=False"
+        ) as exc_info:
+            await star_base.Star(context).text_to_image("fixture", return_url=True)
+        assert "private" not in str(exc_info.value)
+        assert not service.staged_files
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("result", ["https://render.example/image.jpg", "/tmp/local.jpg"])
+    async def test_text_to_image_preserves_remote_urls_and_path_requests(
+        self, monkeypatch, result
+    ):
+        """Avoid file registration for remote success or explicit path requests."""
+        import astrbot.core.star.base as star_base
+
+        service = MagicMock()
+        service.register_file = AsyncMock()
+        monkeypatch.setattr(star_base, "file_token_service", service, raising=False)
+        context = MagicMock()
+        context.get_config.return_value = None
+        context.html_renderer.render_t2i = AsyncMock(return_value=result)
+        return_url = result.startswith("https://")
+        assert (
+            await star_base.Star(context).text_to_image("fixture", return_url=return_url)
+            == result
+        )
+        service.register_file.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_text_to_image_local_url_missing_file_fails(self, tmp_path, monkeypatch):
+        """Do not construct a broken capability URL for a missing rendered file."""
+        import astrbot.core.star.base as star_base
+        from astrbot.core.file_token_service import FileTokenService
+
+        service = FileTokenService()
+        monkeypatch.setattr(star_base, "file_token_service", service, raising=False)
+        context = MagicMock()
+        context.get_config.return_value = {"callback_api_base": "https://files.example"}
+        context.html_renderer.render_t2i = AsyncMock(
+            return_value=str(tmp_path / "missing.jpg")
+        )
+        with pytest.raises(FileNotFoundError):
+            await star_base.Star(context).text_to_image("fixture", return_url=True)
+        assert not service.staged_files
+
+    @pytest.mark.asyncio
     async def test_html_render(self):
         """Test html_render passes the config endpoint to the renderer."""
         from astrbot.core.star import Star
