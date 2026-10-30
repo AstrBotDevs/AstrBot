@@ -1,5 +1,7 @@
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from astrbot.core.agent.mcp_client import MCPTool, _normalize_mcp_input_schema
 
@@ -130,3 +132,71 @@ class TestMCPToolSchemaNormalization:
         # actual MCP call.
         assert tool.name == "t_drive_create_doc"
         assert tool.mcp_tool.name == "t_drive.create_doc"
+
+
+class TestMCPToolArgumentForwarding:
+    """Empty placeholders for optional slots must not reach the MCP server (#7116)."""
+
+    @staticmethod
+    def _tool(client):
+        mcp_tool = SimpleNamespace(
+            name="HassTurnOn",
+            description="Turn on a device",
+            inputSchema={
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                    "name": {"type": "string"},
+                    "area": {"type": "string"},
+                    "floor": {"type": "string"},
+                    "domain": {"type": "array"},
+                    "device_class": {"type": "array"},
+                },
+            },
+        )
+        return MCPTool(mcp_tool, client, "home-assistant")
+
+    @pytest.mark.asyncio
+    async def test_drops_empty_optional_arguments(self):
+        client = MagicMock()
+        client.call_tool_with_reconnect = AsyncMock(return_value="ok")
+        tool = self._tool(client)
+
+        await tool.call(
+            SimpleNamespace(tool_call_timeout=30),
+            name="Demo Light",
+            area="",
+            floor="",
+            domain=[],
+            device_class=[],
+        )
+
+        forwarded = client.call_tool_with_reconnect.await_args.kwargs["arguments"]
+        assert forwarded == {"name": "Demo Light"}
+
+    @pytest.mark.asyncio
+    async def test_keeps_empty_required_arguments(self):
+        client = MagicMock()
+        client.call_tool_with_reconnect = AsyncMock(return_value="ok")
+        tool = self._tool(client)
+
+        await tool.call(SimpleNamespace(tool_call_timeout=30), name="", area="")
+
+        forwarded = client.call_tool_with_reconnect.await_args.kwargs["arguments"]
+        assert forwarded == {"name": ""}
+
+    @pytest.mark.asyncio
+    async def test_keeps_falsy_values_that_are_not_empty(self):
+        client = MagicMock()
+        client.call_tool_with_reconnect = AsyncMock(return_value="ok")
+        tool = self._tool(client)
+
+        await tool.call(
+            SimpleNamespace(tool_call_timeout=30),
+            name="Demo Light",
+            area=0,
+            floor=False,
+        )
+
+        forwarded = client.call_tool_with_reconnect.await_args.kwargs["arguments"]
+        assert forwarded == {"name": "Demo Light", "area": 0, "floor": False}

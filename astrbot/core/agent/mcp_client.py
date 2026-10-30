@@ -390,6 +390,34 @@ def _normalize_mcp_input_schema(schema: dict[str, Any]) -> dict[str, Any]:
     return _normalize(copy.deepcopy(schema))
 
 
+def _is_empty_optional_value(value: Any) -> bool:
+    """Whether ``value`` is an empty placeholder for an unused optional slot."""
+    if value is None or value == "":
+        return True
+    return isinstance(value, (list, dict)) and not value
+
+
+def _drop_empty_optional_arguments(
+    arguments: dict[str, Any], schema: dict[str, Any]
+) -> dict[str, Any]:
+    """Drop empty values for optional properties before forwarding them.
+
+    Some models fill unused optional parameters with empty placeholders
+    (``""``, ``[]``, ``{}`` or ``null``). MCP servers that validate their input
+    reject those slots even though the parameter is optional, which makes the
+    whole tool call fail (see #7116). Send only the values that were actually
+    set. Required properties are always forwarded so an empty value the caller
+    really meant to send survives.
+    """
+    required = schema.get("required")
+    required_names = set(required) if isinstance(required, list) else set()
+    return {
+        name: value
+        for name, value in arguments.items()
+        if name in required_names or not _is_empty_optional_value(value)
+    }
+
+
 class MCPClient:
     def __init__(self) -> None:
         self.session: mcp.ClientSession | None = None
@@ -816,6 +844,6 @@ class MCPTool(FunctionTool, Generic[TContext]):
     ) -> mcp.types.CallToolResult:
         return await self.mcp_client.call_tool_with_reconnect(
             tool_name=self.mcp_tool.name,
-            arguments=kwargs,
+            arguments=_drop_empty_optional_arguments(kwargs, self.parameters),
             read_timeout_seconds=timedelta(seconds=context.tool_call_timeout),
         )
