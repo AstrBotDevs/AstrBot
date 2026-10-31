@@ -383,13 +383,82 @@ async def test(self, event: AstrMessageEvent):
 
 ## 对话管理器
 
+统一使用 `self.context.conversations` 操作对话，已有的 `new_conversation`、
+`get_conversation`、切换、更新和删除方法继续可用。
+`self.context.conversation_manager` 保留为兼容别名。原有的
+`event.conversation_events` 和 `get_conversation_events()` 入口已移除，
+插件通过 `conversations.append_message()` 和 `conversations.append_plugin_event()`
+写入，不再直接操作 writer。
+
+### 追加模型消息 `append_message`
+
+```py
+conversations = self.context.conversations
+message_id = await conversations.append_message(
+    "用户偏好简洁的回答。",
+)
+```
+
+`content` 接受文本或 AstrBot 的 `ContentPart` 对象列表：
+
+```py
+from astrbot.core.agent.message import ImageURLPart, TextPart
+
+await conversations.append_message(
+    [
+        TextPart(text="请描述这张图片。"),
+        ImageURLPart(
+            image_url=ImageURLPart.ImageURL(url="https://example.com/image.png")
+        ),
+    ],
+)
+```
+
+Core 固定补上 `role="user"`，
+插件不需要提交角色或完整消息对象。消息会持久化并追加到对话上下文。
+在绑定对话的 hook 中调用时，也会同步本次运行的工作上下文。
+接口在数据库事务提交后返回字符串 ID；可通过可选的 `message_id` 标识同一次提交的重试。
+
+### 追加插件自定义事件 `append_plugin_event`
+
+```py
+event_id = await conversations.append_plugin_event(
+    event_type="my_plugin.retrieval_completed",
+    data={"document_ids": ["document-1"]},
+)
+```
+
+该接口保存关联当前对话的自定义事件，不改变本次或后续模型上下文。
+`event_type` 使用插件名称前缀，`data` 为可 JSON 序列化的对象。
+内部事件命名空间、版本、序号和创建时间由 Core 填充。
+接口返回已保存的事件 ID；可通过可选的 `event_id` 标识同一次提交的重试。
+
+插件自己的可变状态，如果不需要保留对话事件历史，继续使用
+[插件 KV 存储](./storage.md)，例如 `await self.put_kv_data(f"retrieval:{cid}", data)`。
+KV 按插件隔离；需要按对话区分时，由插件把 `cid` 放入 key。
+
+这两个追加接口都不会启动 Agent，也不会安排 follow-up。
+目标对话必须已存在。两个接口都支持可选的关键字参数 `cid`。
+省略时优先使用当前 Agent 运行绑定的对话，即使运行期间切换了选中的对话，也不会改变写入目标。
+没有运行绑定时，通过当前有效消息事件的 UMO 查找选中的对话。
+如果没有有效上下文或选中的对话，接口抛出 `ValueError`，不会自动创建对话。
+
+后台任务或需要指定写入目标时，只传 `cid` 即可，Core 会从对话记录取得 UMO：
+
+```py
+await conversations.append_message("补充上下文", cid=target_cid)
+await conversations.append_plugin_event(
+    "my_plugin.retrieval_completed", {"document_ids": ["document-1"]}, cid=target_cid
+)
+```
+
 ### 获取会话当前的 LLM 对话历史 `get_conversation`
 
 ```py
 from astrbot.core.conversation_mgr import Conversation
 
 uid = event.unified_msg_origin
-conv_mgr = self.context.conversation_manager
+conv_mgr = self.context.conversations
 curr_cid = await conv_mgr.get_curr_conversation_id(uid)
 conversation = await conv_mgr.get_conversation(uid, curr_cid)  # Conversation
 ```
@@ -430,7 +499,7 @@ from astrbot.core.agent.message import (
     TextPart,
 )
 
-conv_mgr = self.context.conversation_manager
+conv_mgr = self.context.conversations
 provider_id = await self.context.get_current_chat_provider_id(event.unified_msg_origin)
 curr_cid = await conv_mgr.get_curr_conversation_id(event.unified_msg_origin)
 user_msg = UserMessageSegment(content=[TextPart(text="hi")])

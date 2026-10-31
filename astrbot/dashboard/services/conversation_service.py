@@ -218,7 +218,7 @@ class ConversationService:
         if not conversation:
             raise ConversationServiceError("对话不存在")
 
-        writer = await self.conv_mgr.event_writer(
+        writer = await self.conv_mgr._event_writer(
             unified_msg_origin=user_id,
             conversation_id=cid,
             expected_revision=conversation.revision,

@@ -99,7 +99,7 @@ async def call_event_hook(
     )
     # Snapshot once around the hook group: only mutations during plugin execution
     # get plugin retention. Earlier framework/custom-runner mutations stay unknown.
-    writer = event.conversation_events
+    writer = event._conversation_writer
     if handlers and writer is not None and not writer.closed:
         if writer.runtime_context is not None:
             history = dump_messages_with_checkpoints(
@@ -144,7 +144,9 @@ async def call_event_hook(
                 logger.debug(
                     f"hook({hook_type.name}) -> {plugin_name} - {handler.handler_name}",
                 )
-                writer_token = active_conversation_writer.set(event.conversation_events)
+                writer_token = active_conversation_writer.set(
+                    event._conversation_writer
+                )
                 plugin_token = active_plugin_id.set(plugin_name)
                 try:
                     await handler.handler(event, *args, **kwargs)

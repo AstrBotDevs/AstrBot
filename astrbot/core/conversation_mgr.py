@@ -12,11 +12,15 @@ from deprecated import deprecated
 from astrbot.core import sp
 from astrbot.core.agent.conversation_events import (
     ConversationEventWriter,
-    PluginConversationEvents,
     active_conversation_writer,
     active_plugin_id,
 )
-from astrbot.core.agent.message import AssistantMessageSegment, UserMessageSegment
+from astrbot.core.agent.message import (
+    AssistantMessageSegment,
+    ContentPart,
+    UserMessageSegment,
+    dump_messages_with_checkpoints,
+)
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.conversation import ConversationConflictError, ConversationStore
 from astrbot.core.db.po import (
@@ -39,54 +43,70 @@ class ConversationManager:
         # 会话删除回调函数列表（用于级联清理，如知识库配置）
         self._on_session_deleted_callbacks: list[Callable[[str], Awaitable[None]]] = []
 
-    def get_conversation_events(self) -> PluginConversationEvents:
-        """Access context writes and private events for the current plugin hook.
-
-        Returns:
-            Plugin facade bound to the current conversation and plugin identity.
-
-        Raises:
-            RuntimeError: No conversation-bound plugin hook is running.
-        """
-        writer = active_conversation_writer.get()
-        plugin_id = active_plugin_id.get()
-        if writer is None or plugin_id is None:
-            raise RuntimeError(
-                "Conversation events require an active conversation hook"
-            )
-        return writer.plugin(plugin_id)
-
-    async def event_writer(
+    async def _event_writer(
         self,
-        unified_msg_origin: str,
-        conversation_id: str,
+        unified_msg_origin: str | None = None,
+        conversation_id: str | None = None,
         *,
         expected_revision: ConversationRevision | None = None,
     ) -> ConversationEventWriter:
-        """Bind custom runners or plugins to an owned conversation revision.
+        """Bind the host to an owned conversation revision.
 
         Args:
-            unified_msg_origin: Owner UMO resolved by the host.
-            conversation_id: Public conversation identity.
+            unified_msg_origin: Optional explicit owner UMO for host access checks.
+            conversation_id: Public identity. When omitted, use the current run's
+                conversation, then the active message's selected conversation.
             expected_revision: Revision of the context used to prepare this request.
 
         Returns:
             A branch-bound writer implementing the common event protocol.
 
         Raises:
-            ValueError: The conversation is missing or belongs to another UMO.
+            ValueError: No current conversation exists, or an explicitly owned
+                conversation is missing or belongs to another UMO.
             ConversationConflictError: Context or branch changed during preparation.
         """
         active = active_conversation_writer.get()
+        if active is not None and active.closed:
+            active = None
+        if active is None:
+            from astrbot.core.platform.astr_message_event import current_message_event
+
+            event = current_message_event.get()
+            if event is not None and event._execution_active:
+                bound = event._conversation_writer
+                if bound is not None and not bound.closed:
+                    active = bound
+                if (
+                    active is None
+                    and conversation_id is None
+                    and unified_msg_origin is None
+                ):
+                    unified_msg_origin = event.unified_msg_origin
+        if conversation_id is None:
+            if active is not None and (
+                unified_msg_origin is None or active.umo == unified_msg_origin
+            ):
+                unified_msg_origin = active.umo
+                conversation_id = active.cid
+            elif unified_msg_origin is not None:
+                conversation_id = await self.get_curr_conversation_id(
+                    unified_msg_origin
+                )
+            if conversation_id is None:
+                raise ValueError("No current conversation; provide cid explicitly")
         if (
             active
             and active.cid == conversation_id
-            and active.umo == unified_msg_origin
+            and (unified_msg_origin is None or active.umo == unified_msg_origin)
         ):
             writer = active
         else:
             snapshot = await self.db.conversation_store.read(conversation_id)
-            if snapshot is None or snapshot.conversation.umo != unified_msg_origin:
+            if snapshot is None or (
+                unified_msg_origin is not None
+                and snapshot.conversation.umo != unified_msg_origin
+            ):
                 raise ValueError("Conversation is not accessible")
             writer = ConversationEventWriter(self.db.conversation_store, snapshot)
         if expected_revision is not None and (
@@ -97,6 +117,84 @@ class ConversationManager:
                 "Conversation changed while preparing the request"
             )
         return writer
+
+    async def append_message(
+        self,
+        content: str | list[ContentPart | dict],
+        *,
+        cid: str | None = None,
+        message_id: str | None = None,
+    ) -> str:
+        """Append plugin-supplied content as a user message.
+
+        Args:
+            content: Text or AstrBot content parts. The host supplies the user role.
+            cid: Target conversation, or the current conversation when omitted.
+                Required outside an active message or agent run.
+            message_id: Optional stable identity for idempotent submission retries.
+
+        Returns:
+            Identity of the committed message.
+
+        Raises:
+            ValueError: The conversation is inaccessible or the input is invalid.
+            ConversationConflictError: The conversation changed before the write.
+            ConversationPersistenceError: The write could not be acknowledged.
+        """
+        if message_id is not None and (
+            not isinstance(message_id, str) or not message_id
+        ):
+            raise ValueError("message_id must be a nonempty string")
+        if not isinstance(content, (str, list)):
+            raise ValueError("content must be text or a list of content parts")
+        message = UserMessageSegment(content=content)
+        serialized = dump_messages_with_checkpoints([message], include_temporary=True)[
+            0
+        ]
+        writer = await self._event_writer(conversation_id=cid)
+        saved = await writer.append_message(serialized, event_id=message_id)
+        return saved.event_id
+
+    async def append_plugin_event(
+        self,
+        event_type: str,
+        data: dict,
+        *,
+        cid: str | None = None,
+        event_id: str | None = None,
+    ) -> str:
+        """Persist a custom conversation record without changing model context.
+
+        Args:
+            event_type: Plugin-prefixed name, such as ``my_plugin.retrieval_completed``.
+            data: JSON-serializable object containing the plugin's event data.
+            cid: Target conversation, or the current conversation when omitted.
+                Required outside an active message or agent run.
+            event_id: Optional stable identity for idempotent submission retries.
+
+        Returns:
+            Identity of the committed plugin event.
+
+        Raises:
+            ValueError: The conversation is inaccessible or the input is invalid.
+            ConversationConflictError: The conversation changed before the write.
+            ConversationPersistenceError: The write could not be acknowledged.
+        """
+        if (
+            not isinstance(event_type, str)
+            or not event_type
+            or any(
+                not (c.isascii() and (c.isalnum() or c in "_.-")) for c in event_type
+            )
+        ):
+            raise ValueError("event_type must be a nonempty plugin-prefixed name")
+        if not isinstance(data, dict):
+            raise ValueError("data must be a JSON object")
+        if event_id is not None and (not isinstance(event_id, str) or not event_id):
+            raise ValueError("event_id must be a nonempty string")
+        writer = await self._event_writer(conversation_id=cid)
+        saved = await writer.append(f"plugin.{event_type}", data, event_id=event_id)
+        return saved.event_id
 
     async def fork_conversation(
         self, unified_msg_origin: str, source_event_id: str
@@ -414,7 +512,7 @@ class ConversationManager:
                 and isinstance(self.db.conversation_store, ConversationStore)
             ):
                 # A hook may explicitly update another conversation it owns.
-                target_writer = await self.event_writer(
+                target_writer = await self._event_writer(
                     unified_msg_origin, conversation_id
                 )
                 await target_writer.save_history(history, origin="plugin")

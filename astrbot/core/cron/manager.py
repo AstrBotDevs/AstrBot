@@ -648,7 +648,7 @@ class CronJobManager:
                     if event_writer is not None:
                         await event_writer.finish_turn(status)
                 finally:
-                    cron_event.conversation_events = None
+                    cron_event._conversation_writer = None
 
 
 __all__ = ["CronJobManager"]

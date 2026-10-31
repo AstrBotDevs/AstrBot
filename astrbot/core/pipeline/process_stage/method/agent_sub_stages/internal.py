@@ -496,7 +496,7 @@ class InternalAgentSubStage(Stage):
                                 status = "cancelled"
                             await event_writer.finish_turn(status)
                     finally:
-                        event.conversation_events = None
+                        event._conversation_writer = None
                         if reset_coro:
                             reset_coro.close()
                         if runner_registered and agent_runner is not None:

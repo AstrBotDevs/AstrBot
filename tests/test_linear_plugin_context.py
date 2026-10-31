@@ -72,7 +72,7 @@ async def test_iris_clear_is_plugin_reset_and_previous_body_is_reclaimed(
         writer = ConversationEventWriter(store, snapshot)
         writer.request = SimpleNamespace(contexts=snapshot.messages, conversation=conv)
         event = SimpleNamespace(
-            conversation_events=writer,
+            _conversation_writer=writer,
             plugins_name=None,
             is_stopped=lambda: False,
             trace=MagicMock(),
@@ -127,7 +127,7 @@ async def test_pre_hook_changes_stay_unknown_and_done_hook_changes_are_plugin(
         messages=[Message(role="user", content="custom runner changed history")]
     )
     event = SimpleNamespace(
-        conversation_events=writer,
+        _conversation_writer=writer,
         plugins_name=None,
         is_stopped=lambda: False,
         trace=MagicMock(),
@@ -198,7 +198,7 @@ async def test_manager_uses_invocation_identity_without_guessing_external_caller
     finally:
         active_plugin_id.reset(plugin_token)
     assert (await store.events(conv.conversation_id))[-1].payload["origin"] == "plugin"
-    writer = await manager.event_writer("umo", conv.conversation_id)
+    writer = await manager._event_writer("umo", conv.conversation_id)
     writer_token = active_conversation_writer.set(writer)
     try:
         await writer.append_message({"role": "user", "content": "restore"})
@@ -217,7 +217,7 @@ async def test_runner_context_source_is_explicit_and_linear_fork_is_independent(
     conv = await store.create(
         umo="umo", platform_id="p", content=[{"role": "user", "content": "old"}]
     )
-    writer = await manager.event_writer("umo", conv.conversation_id)
+    writer = await manager._event_writer("umo", conv.conversation_id)
     await writer.consume(
         AgentResponse(
             "context.updated",
@@ -248,7 +248,7 @@ async def test_transcript_only_runner_does_not_clear_history_on_request_hook(
     writer = ConversationEventWriter(store, await store.read(conv.conversation_id))
     writer.request = SimpleNamespace(contexts=[], conversation=None)
     event = SimpleNamespace(
-        conversation_events=writer,
+        _conversation_writer=writer,
         plugins_name=None,
         is_stopped=lambda: False,
         trace=MagicMock(),
@@ -288,7 +288,7 @@ async def test_dashboard_history_edit_is_user_owned_and_survives_plugin_cleanup(
     user_baseline = (await store.events(conv.conversation_id))[-1]
     assert user_baseline.type == "context.rebased"
     assert user_baseline.payload["origin"] == "user"
-    writer = await manager.event_writer("umo", conv.conversation_id)
+    writer = await manager._event_writer("umo", conv.conversation_id)
     await writer.save_history(
         [{"role": "user", "content": "memory 1"}], origin="plugin"
     )

@@ -527,7 +527,7 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
     writer.consume.assert_awaited_once_with(started)
     writer.finish_turn.assert_awaited_once_with("completed")
     assert writer.runtime_context is EventRunner.run_context
-    assert captured["event"].conversation_events is None
+    assert captured["event"]._conversation_writer is None
 
 
 @pytest.mark.asyncio

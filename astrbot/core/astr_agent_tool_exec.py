@@ -689,7 +689,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 if event_writer is not None:
                     await event_writer.finish_turn(status)
             finally:
-                cron_event.conversation_events = None
+                cron_event._conversation_writer = None
         # Set once anything reaches this session, e.g. via send_message_to_user.
         if not cron_event._has_send_oper:
             logger.warning(

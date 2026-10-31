@@ -338,9 +338,9 @@ class ThirdPartyAgentSubStage(Stage):
                 cid = await manager.new_conversation(
                     event.unified_msg_origin, event.get_platform_id()
                 )
-            event_writer = await manager.event_writer(event.unified_msg_origin, cid)
+            event_writer = await manager._event_writer(event.unified_msg_origin, cid)
             event_writer.request = req
-            event.conversation_events = event_writer
+            event._conversation_writer = event_writer
 
         # call event hook
         if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
@@ -401,7 +401,7 @@ class ThirdPartyAgentSubStage(Stage):
                         await event_writer.save_history(history)
                     await event_writer.finish_turn(status)
             finally:
-                event.conversation_events = None
+                event._conversation_writer = None
                 await _close_runner_if_supported(runner)
 
         def mark_stream_consumed() -> None:

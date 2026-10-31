@@ -2005,13 +2005,13 @@ async def build_main_agent(
     if req.conversation and isinstance(
         plugin_context.conversation_manager, ConversationManager
     ):
-        event_writer = await plugin_context.conversation_manager.event_writer(
+        event_writer = await plugin_context.conversation_manager._event_writer(
             event.unified_msg_origin,
             req.conversation.cid,
             expected_revision=req.conversation.revision,
         )
         event_writer.request = req
-        event.conversation_events = event_writer
+        event._conversation_writer = event_writer
 
     reset_coro = agent_runner.reset(
         turn_id=event.get_extra("turn_id"),

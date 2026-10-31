@@ -385,13 +385,87 @@ async def test(self, event: AstrMessageEvent):
 
 ## Conversation Manager
 
+Use `self.context.conversations` for conversation operations. It provides the existing
+`new_conversation`, `get_conversation`, selection, update, and deletion methods.
+`self.context.conversation_manager` remains a compatibility alias. The previous
+`event.conversation_events` and `get_conversation_events()` entry points have been
+removed; plugins use `conversations.append_message()` and
+`conversations.append_plugin_event()` instead of accessing a writer.
+
+### Appending Model Messages
+
+```py
+conversations = self.context.conversations
+message_id = await conversations.append_message(
+    "The user prefers concise answers.",
+)
+```
+
+`content` accepts text or a list of AstrBot `ContentPart` objects:
+
+```py
+from astrbot.core.agent.message import ImageURLPart, TextPart
+
+await conversations.append_message(
+    [
+        TextPart(text="Describe this image."),
+        ImageURLPart(
+            image_url=ImageURLPart.ImageURL(url="https://example.com/image.png")
+        ),
+    ],
+)
+```
+
+The host supplies `role="user"`;
+plugins do not submit a role or a complete message object. The message is persisted
+and appended to conversation context, including the working context when called
+from a conversation-bound hook. The call returns a string ID after the database
+transaction commits. An optional `message_id` can identify retries of the same submission.
+
+### Appending Plugin Events
+
+```py
+event_id = await conversations.append_plugin_event(
+    event_type="my_plugin.retrieval_completed",
+    data={"document_ids": ["document-1"]},
+)
+```
+
+This stores a custom event associated with the conversation, without changing
+working or future model context. `event_type` is a plugin-prefixed name and `data`
+is a JSON-serializable object. The host supplies the internal event namespace,
+version, sequence, and creation time. The call returns the committed event ID;
+an optional `event_id` identifies retries of the same submission.
+
+Use [plugin KV storage](./storage.md) for mutable plugin state that does not need
+a conversation event history, for example `await self.put_kv_data(f"retrieval:{cid}", data)`.
+KV storage is isolated by plugin. Include `cid` in the key when state belongs to
+one conversation.
+
+Neither append method starts an agent run or schedules a follow-up. The conversation
+must already exist. Both methods take an optional keyword-only `cid`. Without it,
+the host first uses the current agent run's bound conversation, even if the selected
+conversation changes during the run. Otherwise it uses the active message's UMO
+to look up its selected conversation. With no valid current context or selected
+conversation, the call raises `ValueError` instead of creating a conversation.
+
+For background work or an explicitly targeted conversation, pass only its ID;
+the host reads its UMO from the stored conversation:
+
+```py
+await conversations.append_message("Additional context", cid=target_cid)
+await conversations.append_plugin_event(
+    "my_plugin.retrieval_completed", {"document_ids": ["document-1"]}, cid=target_cid
+)
+```
+
 ### Getting the Current LLM Conversation History for a Session
 
 ```py
 from astrbot.core.conversation_mgr import Conversation
 
 uid = event.unified_msg_origin
-conv_mgr = self.context.conversation_manager
+conv_mgr = self.context.conversations
 curr_cid = await conv_mgr.get_curr_conversation_id(uid)
 conversation = await conv_mgr.get_conversation(uid, curr_cid)  # Conversation
 ```
@@ -432,7 +506,7 @@ from astrbot.core.agent.message import (
     TextPart,
 )
 
-conv_mgr = self.context.conversation_manager
+conv_mgr = self.context.conversations
 provider_id = await self.context.get_current_chat_provider_id(event.unified_msg_origin)
 curr_cid = await conv_mgr.get_curr_conversation_id(event.unified_msg_origin)
 user_msg = UserMessageSegment(content=[TextPart(text="hi")])
