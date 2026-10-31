@@ -153,6 +153,12 @@
                         </template>
                       </div>
 
+                      <ButtonActionRow
+                        v-else-if="part.type === 'actionrow'"
+                        :part="part"
+                        @callback="handleButtonClick(msg, $event)"
+                      />
+
                       <pre v-else class="unknown-part">{{
                         formatJson(part)
                       }}</pre>
@@ -235,6 +241,7 @@ import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMe
 import ReasoningBlock from "@/components/chat/message_list_comps/ReasoningBlock.vue";
 import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue";
 import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
+import ButtonActionRow from "@/components/chat/ButtonActionRow.vue";
 import {
   attachmentName,
   attachmentPresentation,
@@ -304,6 +311,7 @@ const {
   messageContent,
   createLocalExchange,
   sendMessageStream,
+  sendButtonInteraction,
   stopSession,
 } = useMessages({
   currentSessionId: currSessionId,
@@ -313,6 +321,15 @@ const {
     }
   },
 });
+
+function handleButtonClick(message: ChatRecord, callbackData: string) {
+  if (!currSessionId.value) return;
+  sendButtonInteraction({
+    sessionId: currSessionId.value,
+    sourceMessageId: message.id,
+    callbackData,
+  });
+}
 
 const transportMode = ref<TransportMode>(
   (localStorage.getItem("chat.transportMode") as TransportMode) === "websocket"

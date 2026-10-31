@@ -499,7 +499,7 @@ class OpenApiService:
                         filename,
                         msg_type,
                     )
-                    message_accumulator.add_attachment(part)
+                    message_accumulator.add_part(part)
 
                 should_save = False
                 if msg_type == "end":

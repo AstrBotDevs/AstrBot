@@ -84,6 +84,7 @@ WEBHOOK_SUPPORTED_PLATFORMS = [
     "slack",
     "lark",
     "line",
+    "mattermost",
 ]
 
 # 默认配置
@@ -553,6 +554,8 @@ CONFIG_METADATA_2 = {
                         "mattermost_url": "https://chat.example.com",
                         "mattermost_bot_token": "",
                         "mattermost_reconnect_delay": 5.0,
+                        "unified_webhook_mode": True,
+                        "webhook_uuid": "",
                     },
                     # "WebChat": {
                     #     "id": "webchat",

@@ -4,6 +4,7 @@ import hmac
 import json
 from collections.abc import Callable
 from typing import cast
+from urllib.parse import parse_qs
 
 from fastapi.responses import Response
 from slack_sdk.socket_mode.aiohttp import SocketModeClient
@@ -65,7 +66,16 @@ class SlackWebhookClient:
         try:
             # 获取请求体和头部
             body = cast(bytes, await req.get_data())
-            event_data = json.loads(body.decode("utf-8"))
+            body_text = body.decode("utf-8")
+            content_type = req.headers.get("Content-Type", "")
+            if "application/x-www-form-urlencoded" in content_type:
+                form_data = parse_qs(body_text)
+                payload = form_data.get("payload", [None])[0]
+                if not payload:
+                    return Response("Missing payload", status_code=400)
+                event_data = json.loads(payload)
+            else:
+                event_data = json.loads(body_text)
 
             # Verify Slack request signature
             timestamp = req.headers.get("X-Slack-Request-Timestamp")
@@ -73,7 +83,7 @@ class SlackWebhookClient:
             if not timestamp or not signature:
                 return Response("Missing headers", status_code=400)
             # Calculate the HMAC signature
-            sig_basestring = f"v0:{timestamp}:{body.decode('utf-8')}"
+            sig_basestring = f"v0:{timestamp}:{body_text}"
             my_signature = (
                 "v0="
                 + hmac.new(
@@ -91,6 +101,20 @@ class SlackWebhookClient:
             # 处理 URL 验证事件
             if event_data.get("type") == "url_verification":
                 return {"challenge": event_data.get("challenge")}
+            if self.event_handler and event_data.get("type") == "block_actions":
+                # Slack requires interactive callbacks to be acknowledged within
+                # three seconds, so processing continues after the HTTP response.
+                task = asyncio.create_task(self.event_handler(event_data))
+                task.add_done_callback(
+                    lambda done: (
+                        logger.error(
+                            f"Slack interactive event failed: {done.exception()}"
+                        )
+                        if not done.cancelled() and done.exception()
+                        else None
+                    )
+                )
+                return Response("", status_code=200)
             # 处理事件
             if self.event_handler and event_data.get("type") == "event_callback":
                 await self.event_handler(event_data)

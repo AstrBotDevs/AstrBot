@@ -373,6 +373,7 @@
               @open-thread="openThreadPanel"
               @open-reasoning="openReasoningPanel"
               @open-refs="openRefsSidebar"
+              @button-click="handleButtonClick"
             />
           </div>
         </section>
@@ -803,6 +804,7 @@ const {
   loadEarlierMessages,
   createLocalExchange,
   sendMessageStream,
+  sendButtonInteraction,
   editMessage,
   continueEditedMessage,
   regenerateMessage,
@@ -816,6 +818,18 @@ const {
     }
   },
 });
+
+function handleButtonClick(payload: {
+  message: ChatRecord;
+  callbackData: string;
+}) {
+  if (!currSessionId.value) return;
+  sendButtonInteraction({
+    sessionId: currSessionId.value,
+    sourceMessageId: payload.message.id,
+    callbackData: payload.callbackData,
+  });
+}
 
 const activeSessionPagination = computed(() =>
   currSessionId.value ? paginationBySession[currSessionId.value] : undefined,
