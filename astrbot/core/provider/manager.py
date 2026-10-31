@@ -80,6 +80,9 @@ class ProviderManager:
         """Provider instance map. Key: provider_id; value: Provider instance."""
         self.llm_tools = llm_tools
 
+        self._startup_provider_types: set[str] = set()
+        """Adapter types registered when the startup Provider pass finished."""
+
         self.curr_provider_inst: Provider | None = None
         """Default Provider instance. Deprecated; use get_using_provider()."""
         self.curr_stt_provider_inst: STTProvider | None = None
@@ -372,6 +375,11 @@ class ProviderManager:
                 logger.error(traceback.format_exc())
                 logger.error(e)
 
+        # Snapshot the adapter types this pass already considered. The
+        # post-activation pass only loads adapters registered after this point,
+        # so a Provider that failed here is not retried during startup.
+        self._startup_provider_types = set(provider_cls_map)
+
         selected_provider_id = await sp.get_async(
             key="curr_provider",
             default=self.default_chat_provider_id,
@@ -452,6 +460,113 @@ class ProviderManager:
                 _init_mcp_clients_bg(),
                 name="provider-manager:mcp-init",
             )
+
+    async def initialize_pending_registered_providers(self) -> None:
+        """Load configured Providers whose adapters were registered after startup.
+
+        This pass only considers adapter types that were absent when the
+        startup Provider pass finished, so a Provider that failed there is not
+        retried during the same startup. Existing Provider instances are never
+        reloaded or initialized twice, and a failure in one pending Provider
+        does not prevent the others from loading. The pass is called once after
+        plugin activation.
+
+        Returns:
+            None.
+        """
+        loaded_provider_ids = []
+        for provider_config in self.providers_config:
+            # A Provider entry may keep its adapter type and capability on the
+            # referenced provider source, so inspect the merged configuration
+            # that load_provider instantiates from.
+            provider_config = self.get_merged_provider_config(provider_config)
+            provider_id = provider_config.get("id")
+            provider_type = provider_config.get("type")
+            if (
+                not provider_config.get("enable", False)
+                or not isinstance(provider_id, str)
+                or not provider_id
+                or provider_id in self.inst_map
+                or not isinstance(provider_type, str)
+                or provider_type not in provider_cls_map
+                or provider_type in self._startup_provider_types
+                or provider_config.get("provider_type") == "agent_runner"
+            ):
+                continue
+
+            try:
+                await self.load_provider(provider_config)
+            except Exception as e:
+                logger.error(traceback.format_exc())
+                logger.error(e)
+                continue
+            if provider_id in self.inst_map:
+                loaded_provider_ids.append(provider_id)
+
+        if not loaded_provider_ids:
+            return
+
+        selected_provider_id = await sp.get_async(
+            key="curr_provider",
+            default=self.default_chat_provider_id,
+            scope="global",
+            scope_id="global",
+        )
+        selected_stt_provider_id = await sp.get_async(
+            key="curr_provider_stt",
+            default=self.provider_stt_settings.get("provider_id"),
+            scope="global",
+            scope_id="global",
+        )
+        selected_tts_provider_id = await sp.get_async(
+            key="curr_provider_tts",
+            default=self.provider_tts_settings.get("provider_id"),
+            scope="global",
+            scope_id="global",
+        )
+        selected_decision_provider_id = await sp.get_async(
+            key="curr_provider_decision",
+            default=None,
+            scope="global",
+            scope_id="global",
+        )
+
+        selected_provider = (
+            self.inst_map.get(selected_provider_id)
+            if isinstance(selected_provider_id, str)
+            else None
+        )
+        if isinstance(selected_provider, Provider):
+            self.curr_provider_inst = selected_provider
+
+        selected_stt_provider = (
+            self.inst_map.get(selected_stt_provider_id)
+            if isinstance(selected_stt_provider_id, str)
+            else None
+        )
+        if isinstance(selected_stt_provider, STTProvider):
+            self.curr_stt_provider_inst = selected_stt_provider
+
+        selected_tts_provider = (
+            self.inst_map.get(selected_tts_provider_id)
+            if isinstance(selected_tts_provider_id, str)
+            else None
+        )
+        if isinstance(selected_tts_provider, TTSProvider):
+            self.curr_tts_provider_inst = selected_tts_provider
+
+        selected_decision_provider = (
+            self.inst_map.get(selected_decision_provider_id)
+            if isinstance(selected_decision_provider_id, str)
+            else None
+        )
+        if isinstance(selected_decision_provider, DecisionProvider):
+            self.curr_decision_provider_inst = selected_decision_provider
+
+        logger.info(
+            "Initialized Providers registered during plugin activation: %s",
+            loaded_provider_ids,
+        )
 
     def dynamic_import_provider(self, type: str) -> None:
         """动态导入提供商适配器模块
@@ -943,6 +1058,97 @@ class ProviderManager:
 
     def get_insts(self):
         return self.provider_insts
+
+    @staticmethod
+    def _provider_adapter_type(provider_inst: Providers) -> str | None:
+        """Return the configured adapter type for a Provider instance.
+
+        Args:
+            provider_inst: Provider instance whose configuration is inspected.
+
+        Returns:
+            Configured adapter type, or ``None`` when unavailable.
+        """
+        provider_config = getattr(provider_inst, "provider_config", None)
+        provider_type = (
+            provider_config.get("type") if isinstance(provider_config, dict) else None
+        )
+        return provider_type if isinstance(provider_type, str) else None
+
+    def _restore_current_provider_fallbacks(self) -> None:
+        """Select available current Providers after stale instances are removed.
+
+        Returns:
+            None.
+        """
+        if self.curr_provider_inst not in self.provider_insts:
+            self.curr_provider_inst = (
+                self.provider_insts[0] if self.provider_insts else None
+            )
+        if self.curr_stt_provider_inst not in self.stt_provider_insts:
+            self.curr_stt_provider_inst = (
+                self.stt_provider_insts[0] if self.stt_provider_insts else None
+            )
+        if self.curr_tts_provider_inst not in self.tts_provider_insts:
+            self.curr_tts_provider_inst = (
+                self.tts_provider_insts[0] if self.tts_provider_insts else None
+            )
+        if self.curr_decision_provider_inst not in self.decision_provider_insts:
+            self.curr_decision_provider_inst = (
+                self.decision_provider_insts[0]
+                if self.decision_provider_insts
+                else None
+            )
+
+    async def terminate_unregistered_providers(self) -> list[str]:
+        """Terminate instances whose adapter registration was rolled back.
+
+        Returns:
+            IDs of Provider instances removed from the runtime.
+        """
+        stale_provider_ids = [
+            provider_id
+            for provider_id, provider_inst in list(self.inst_map.items())
+            if (
+                (provider_type := self._provider_adapter_type(provider_inst))
+                is not None
+                and provider_type not in provider_cls_map
+            )
+        ]
+
+        for provider_id in stale_provider_ids:
+            provider_inst = self.inst_map.get(provider_id)
+            try:
+                await self.terminate_provider(provider_id)
+            except Exception:
+                logger.exception(
+                    "Failed to terminate rolled-back Provider adapter %s cleanly.",
+                    provider_id,
+                )
+            finally:
+                if provider_inst is not None:
+                    for provider_instances in (
+                        self.provider_insts,
+                        self.stt_provider_insts,
+                        self.tts_provider_insts,
+                        self.embedding_provider_insts,
+                        self.rerank_provider_insts,
+                        self.decision_provider_insts,
+                    ):
+                        if provider_inst in provider_instances:
+                            provider_instances.remove(provider_inst)
+                    if provider_inst == self.curr_provider_inst:
+                        self.curr_provider_inst = None
+                    if provider_inst == self.curr_stt_provider_inst:
+                        self.curr_stt_provider_inst = None
+                    if provider_inst == self.curr_tts_provider_inst:
+                        self.curr_tts_provider_inst = None
+                    if provider_inst == self.curr_decision_provider_inst:
+                        self.curr_decision_provider_inst = None
+                self.inst_map.pop(provider_id, None)
+
+        self._restore_current_provider_fallbacks()
+        return stale_provider_ids
 
     async def terminate_provider(self, provider_id: str) -> None:
         prov_inst = self.inst_map.get(provider_id)
