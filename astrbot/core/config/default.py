@@ -84,6 +84,7 @@ WEBHOOK_SUPPORTED_PLATFORMS = [
     "slack",
     "lark",
     "line",
+    "mattermost",
 ]
 
 # 默认配置
@@ -553,6 +554,8 @@ CONFIG_METADATA_2 = {
                         "mattermost_url": "https://chat.example.com",
                         "mattermost_bot_token": "",
                         "mattermost_reconnect_delay": 5.0,
+                        "unified_webhook_mode": True,
+                        "webhook_uuid": "",
                     },
                     # "WebChat": {
                     #     "id": "webchat",
@@ -2620,17 +2623,17 @@ CONFIG_METADATA_2 = {
                     "gm_native_search": {
                         "description": "启用原生搜索功能",
                         "type": "bool",
-                        "hint": "启用后所有函数工具将全部失效，免费次数限制请查阅官方文档",
+                        "hint": "仅 Gemini 3 及以上模型支持与函数工具同时使用；Gemini 3 及以上模型的原生搜索仅限付费层级，计费规则请查阅官方文档",
                     },
                     "gm_native_coderunner": {
                         "description": "启用原生代码执行器",
                         "type": "bool",
-                        "hint": "启用后所有函数工具将全部失效",
+                        "hint": "仅 Gemini 3 及以上模型支持与函数工具同时使用",
                     },
                     "gm_url_context": {
                         "description": "启用URL上下文功能",
                         "type": "bool",
-                        "hint": "启用后所有函数工具将全部失效",
+                        "hint": "仅 Gemini 3 及以上模型支持与函数工具同时使用",
                     },
                     "gm_safety_settings": {
                         "description": "安全过滤器",
