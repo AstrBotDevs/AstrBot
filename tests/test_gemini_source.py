@@ -192,7 +192,11 @@ async def test_gemini_prepare_conversation_resolves_url_history_audio(monkeypatc
 async def test_gemini_prepare_conversation_skips_history_image_download_failure(
     tmp_path, monkeypatch, caplog
 ):
-    """One undownloadable history image must not fail the whole replayed turn."""
+    """One undownloadable image must not fail the whole replayed conversation.
+
+    The warning must also carry the cause, so the log distinguishes a failed
+    download from a corrupt payload.
+    """
     url = "https://example.com/expired-history.png"
 
     monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
@@ -234,6 +238,7 @@ async def test_gemini_prepare_conversation_skips_history_image_download_failure(
     assert len(contents[-1].parts) == 1
     assert contents[-1].parts[0].text == "what is in this image?"
     assert "expired-history.png" in caplog.text
+    assert "DownloadFileHTTPError" in caplog.text
 
 
 @pytest.mark.asyncio
