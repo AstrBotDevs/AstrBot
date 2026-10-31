@@ -308,6 +308,48 @@ async def test_send_message_empty_messages_returns_error():
 
 
 @pytest.mark.asyncio
+async def test_send_message_accepts_json_encoded_messages_string():
+    """A JSON-encoded messages array is decoded instead of rejected."""
+    tool = SendMessageToUserTool()
+    ctx = _make_context(current_session="feishu:GroupMessage:oc_xxx")
+    result = await tool.call(
+        ctx,
+        messages='[{"type": "plain", "text": "line 1\\n\\nline \\"2\\""}]',
+    )
+    assert "Message sent to session" in result
+    chain = ctx.context.context.send_message.call_args[0][1]
+    assert chain.chain[0].text == 'line 1\n\nline "2"'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "messages",
+    ["[" * 10000 + "]" * 10000, "[" + "1" * 10000 + "]"],
+    ids=["deep-nesting", "oversized-integer"],
+)
+async def test_send_message_rejects_json_decoder_resource_limits(messages):
+    """Decoder limits return a validation error before any message is sent.
+
+    Args:
+        messages: JSON exceeding the nesting or integer-conversion limit.
+    """
+    tool = SendMessageToUserTool()
+    ctx = _make_context()
+    result = await tool.call(ctx, messages=messages)
+    assert result == "error: messages parameter is empty or invalid."
+    ctx.context.context.send_message.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_send_message_rejects_non_json_messages_string():
+    tool = SendMessageToUserTool()
+    ctx = _make_context()
+    result = await tool.call(ctx, messages="hello")
+    assert result == "error: messages parameter is empty or invalid."
+    ctx.context.context.send_message.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_send_message_missing_image_path_stops_before_send(tmp_path, monkeypatch):
     """Missing image paths fail before sending any message components."""
     tool = SendMessageToUserTool()
@@ -356,7 +398,9 @@ async def test_restricted_role_cannot_send_arbitrary_local_absolute_file(
     tool = SendMessageToUserTool()
     ctx = _make_context(
         role=role,
-        local_permissions={role: {"filesystem_scope": scope, "allow_execution": False}} if scope else None,
+        local_permissions={role: {"filesystem_scope": scope, "allow_execution": False}}
+        if scope
+        else None,
     )
     secret_path = tmp_path / "secret.txt"
     secret_path.write_text("secret", encoding="utf-8")
