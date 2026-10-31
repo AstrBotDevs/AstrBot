@@ -96,6 +96,12 @@ class ProviderManager:
             Callable[[str, ProviderType, str | None], None]
         ] = []
         self._mcp_init_task: asyncio.Task | None = None
+        self._fallback_warned: set[tuple[str, str, str]] = set()
+        """Deduplicates the "configured provider unavailable" warning.
+
+        Keyed by (provider_type, configured_id, fallback_id) so a recurring
+        request does not flood the log while the situation persists.
+        """
 
     def set_provider_change_callback(
         self,
@@ -261,6 +267,7 @@ class ProviderManager:
         Raises:
             ValueError: If provider_type is unsupported.
         """
+        fell_back = False
         provider = self.inst_map.get(provider_id) if provider_id else None
         if not provider:
             # default setting
@@ -275,6 +282,7 @@ class ProviderManager:
                 provider = self.inst_map.get(provider_id)
                 if not provider:
                     provider = self.provider_insts[0] if self.provider_insts else None
+                    fell_back = provider is not None
             elif provider_type == ProviderType.SPEECH_TO_TEXT:
                 provider_id = config["provider_stt_settings"].get("provider_id")
                 if not config["provider_stt_settings"].get("enable"):
@@ -286,6 +294,7 @@ class ProviderManager:
                     provider = (
                         self.stt_provider_insts[0] if self.stt_provider_insts else None
                     )
+                    fell_back = provider is not None
             elif provider_type == ProviderType.TEXT_TO_SPEECH:
                 provider_id = config["provider_tts_settings"].get("provider_id")
                 if not config["provider_tts_settings"].get("enable"):
@@ -297,6 +306,7 @@ class ProviderManager:
                     provider = (
                         self.tts_provider_insts[0] if self.tts_provider_insts else None
                     )
+                    fell_back = provider is not None
             elif provider_type == ProviderType.DECISION:
                 provider = self.curr_decision_provider_inst or (
                     self.decision_provider_insts[0]
@@ -311,6 +321,26 @@ class ProviderManager:
                 f"Provider {provider_id} was not found. Its provider or model ID "
                 "may have been changed."
             )
+        elif fell_back and provider_id:
+            # Substituting a provider keeps AstrBot responsive, but the substitute
+            # may have completely different capabilities (for example a vision-only
+            # chat model answering plain text), so the user needs to know. Warn once
+            # per distinct substitution instead of flooding the log.
+            fallback_config = getattr(provider, "provider_config", None) or {}
+            fallback_id = fallback_config.get("id") or "unknown"
+            key = (provider_type.value, str(provider_id), str(fallback_id))
+            if key not in self._fallback_warned:
+                self._fallback_warned.add(key)
+                logger.warning(
+                    "Configured %s provider `%s` is not available; falling back to "
+                    "`%s`. This can happen while providers are still loading at "
+                    "startup, or when the configured provider was renamed, disabled "
+                    "or removed. The fallback may behave differently from the "
+                    "provider you selected.",
+                    provider_type.value,
+                    provider_id,
+                    fallback_id,
+                )
 
         return provider
 
@@ -948,6 +978,14 @@ class ProviderManager:
         prov_inst = self.inst_map.get(provider_id)
         if prov_inst is None:
             return
+
+        # Keys are (provider_type, configured_id, fallback_id). Removing a provider
+        # invalidates the substitutions it took part in -- it may be the configured
+        # provider that is gone, or the fallback that a later provider now replaces
+        # -- so only those records are dropped. Unrelated teardowns keep deduping.
+        self._fallback_warned = {
+            key for key in self._fallback_warned if provider_id not in key[1:]
+        }
 
         logger.info(
             f"Terminating provider adapter {provider_id} "
