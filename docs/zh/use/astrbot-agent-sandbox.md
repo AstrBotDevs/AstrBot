@@ -490,19 +490,25 @@ Agent 可以在 CUA sandbox 中使用多种能力，请见下表：
 
 #### 安装 CUA 依赖
 
-您可以在 WebUI 的 “数据与日志” 页的 “日志” 中点击 “安装 Pip 库” 按钮，输入 `cua` 以安装 CUA 依赖。也可以按照下面的方式在 AstrBot 的 Python 环境中安装 CUA。
+您可以在 WebUI 的 “数据与日志” 页的 “日志” 中点击 “安装 Pip 库” 按钮，输入 `cua cua-sandbox` 以安装 CUA 依赖。也可以按照下面的方式在 AstrBot 的 Python 环境中安装 CUA。
+
+> [!WARNING]
+> 只安装 `cua` 是不够的。`cua` 提供的是底层 SDK，而 AstrBot 使用的 `Sandbox.ephemeral` 等接口来自 `cua-sandbox` 包。缺少 `cua-sandbox` 时，启动沙盒会报 `AttributeError: type object 'Sandbox' has no attribute 'ephemeral'`。
 
 - 如果您通过源码或虚拟环境运行 AstrBot，请在 AstrBot 使用的 Python 环境中安装 CUA：
 
   ```bash
-  pip install cua
+  pip install cua cua-sandbox
   ```
 
 - 如果您使用 `uv` 管理 AstrBot 环境，可在 AstrBot 项目目录中执行：
 
   ```bash
-  uv pip install cua
+  uv pip install cua cua-sandbox
   ```
+
+> [!TIP]
+> 如果启动沙盒时报 `TypeError: embedded() got an unexpected keyword argument 'fleet_from_env'`，说明 `cua` 与 `cua-sandbox` 的版本不匹配。请安装一对彼此兼容的版本（例如 `pip install "cua" "cua-sandbox==0.8.0"`），然后重启 AstrBot。
 
 CUA 本身还依赖具体运行方式：
 

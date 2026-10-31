@@ -742,6 +742,7 @@ class CuaBooter(ComputerBooter):
         self.local = local
         self.api_key = api_key
         self._runtime: _CuaRuntime | None = None
+        self._sandbox_cm: Any = None
 
     async def boot(self, session_id: str) -> None:
         _ = session_id
@@ -749,14 +750,47 @@ class CuaBooter(ComputerBooter):
             from cua import Image, Sandbox
         except ImportError as exc:
             raise RuntimeError(
-                "CUA sandbox support requires the optional `cua` package. "
-                "Install it with `pip install cua` in the AstrBot environment."
+                "CUA sandbox support requires the optional `cua` and `cua-sandbox` "
+                "packages. Install them with `pip install cua cua-sandbox` in the "
+                "AstrBot environment."
             ) from exc
 
+        ephemeral = getattr(Sandbox, "ephemeral", None)
+        if ephemeral is None:
+            raise RuntimeError(
+                "The installed `cua` package does not provide the sandbox facade "
+                "(`Sandbox.ephemeral`). Install the facade with "
+                "`pip install cua-sandbox` and restart AstrBot."
+            )
+
         image_obj = self._build_image(Image)
-        ephemeral_kwargs = self._build_ephemeral_kwargs(Sandbox.ephemeral)
-        sandbox_cm = Sandbox.ephemeral(image_obj, **ephemeral_kwargs)
-        sandbox = await sandbox_cm.__aenter__()
+        ephemeral_kwargs = self._build_ephemeral_kwargs(ephemeral)
+        sandbox_cm = ephemeral(image_obj, **ephemeral_kwargs)
+        # Keep the handle so that a failed boot can still release the sandbox.
+        self._sandbox_cm = sandbox_cm
+        try:
+            sandbox = await sandbox_cm.__aenter__()
+        except TypeError as exc:
+            # A mismatched `cua`/`cua-sandbox` pair fails deep inside the SDK
+            # with a bare TypeError that tells the user nothing. Only a
+            # TypeError raised by the SDK itself can be a version mismatch, so
+            # keep the package advice for that case only.
+            message = str(exc)
+            traceback = exc.__traceback__
+            raised_by_sdk = False
+            while traceback is not None:
+                module = traceback.tb_frame.f_globals.get("__name__", "")
+                if module.split(".")[0] in ("cua", "cua_sandbox"):
+                    raised_by_sdk = True
+                    break
+                traceback = traceback.tb_next
+            if raised_by_sdk and "unexpected keyword argument" in message:
+                raise RuntimeError(
+                    "The installed `cua` and `cua-sandbox` versions are incompatible "
+                    f"({message}). Install a matching pair of the two packages and "
+                    "restart AstrBot."
+                ) from exc
+            raise RuntimeError(f"CUA sandbox failed to start: {message}") from exc
         try:
             self._runtime = _CuaRuntime(
                 sandbox_cm=sandbox_cm,
@@ -768,8 +802,10 @@ class CuaBooter(ComputerBooter):
             )
         except Exception:
             await sandbox_cm.__aexit__(None, None, None)
+            self._sandbox_cm = None
             self._runtime = None
             raise
+        self._sandbox_cm = None
         logger.info(
             "[Computer] CUA sandbox booted: image=%s, os_type=%s",
             self.image,
@@ -806,6 +842,17 @@ class CuaBooter(ComputerBooter):
         if self._runtime is not None:
             await self._runtime.sandbox_cm.__aexit__(None, None, None)
             self._runtime = None
+        elif self._sandbox_cm is not None:
+            # The sandbox never started, but the context manager may still own
+            # resources, so release it instead of leaving them behind.
+            try:
+                await self._sandbox_cm.__aexit__(None, None, None)
+            except Exception as exc:
+                logger.warning(
+                    "[Computer] Failed to release the CUA sandbox after a failed boot: %s",
+                    exc,
+                )
+            self._sandbox_cm = None
 
     @property
     def capabilities(self) -> tuple[str, ...] | None:

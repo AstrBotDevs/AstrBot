@@ -503,19 +503,25 @@ If you only need a reliable Python/Shell/filesystem sandbox without desktop GUI 
 
 #### Install CUA dependencies
 
-In the WebUI, open **Data & Logs → Logs**, click **Install Pip Package**, and enter `cua` to install the dependency. You can also install it directly in AstrBot's Python environment:
+In the WebUI, open **Data & Logs → Logs**, click **Install Pip Package**, and enter `cua cua-sandbox` to install the dependency. You can also install it directly in AstrBot's Python environment:
+
+> [!WARNING]
+> Installing `cua` alone is not enough. `cua` ships the low-level SDK, while the `Sandbox.ephemeral` API AstrBot uses comes from the `cua-sandbox` package. Without `cua-sandbox`, booting the sandbox fails with `AttributeError: type object 'Sandbox' has no attribute 'ephemeral'`.
 
 - For source or virtual-environment deployments:
 
   ```bash
-  pip install cua
+  pip install cua cua-sandbox
   ```
 
 - For AstrBot environments managed with `uv`, run this in the project directory:
 
   ```bash
-  uv pip install cua
+  uv pip install cua cua-sandbox
   ```
+
+> [!TIP]
+> If booting the sandbox fails with `TypeError: embedded() got an unexpected keyword argument 'fleet_from_env'`, the installed `cua` and `cua-sandbox` versions do not match. Install a compatible pair (for example `pip install "cua" "cua-sandbox==0.8.0"`) and restart AstrBot.
 
 CUA also has requirements specific to its runtime:
 
