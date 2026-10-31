@@ -5,6 +5,8 @@ import os
 import shutil
 import socket
 import ssl
+import stat
+import tempfile
 import time
 import uuid
 from pathlib import Path
@@ -273,6 +275,88 @@ async def _download_response_to_file(
     )
 
 
+def _publish_download(
+    staging_path: Path, target_path: Path, original_stat: os.stat_result | None
+) -> None:
+    """Publish a completed download without silently changing destination access.
+
+    Args:
+        staging_path: Complete file on the destination filesystem.
+        target_path: Resolved destination path.
+        original_stat: Destination metadata observed before downloading, if present.
+
+    Raises:
+        FileExistsError: Another writer changed the destination during the download.
+        OSError: Authorization, metadata preservation or replacement failed.
+    """
+    try:
+        current_stat = target_path.stat()
+    except FileNotFoundError:
+        current_stat = None
+    # Ignore atime: another reader must not invalidate this download. The publish
+    # section has no awaits, so concurrent tasks cannot race the check and replace.
+    if (original_stat is None) != (current_stat is None) or (
+        original_stat is not None
+        and current_stat is not None
+        and any(
+            getattr(original_stat, field) != getattr(current_stat, field)
+            for field in ("st_dev", "st_ino", "st_size", "st_mtime_ns", "st_ctime_ns")
+        )
+    ):
+        raise FileExistsError("Download destination changed while downloading")
+    if current_stat is not None:
+        # Unlike rename, opening without truncation enforces file-level write
+        # authorization, including ACLs. Close before replacing on Windows.
+        descriptor = os.open(target_path, os.O_WRONLY)
+        os.close(descriptor)
+        if os.name == "nt":
+            import ctypes
+            from ctypes import wintypes
+
+            # ReplaceFileW preserves the destination DACL and alternate streams.
+            # Do not use the flags that ignore ACL/attribute merge failures.
+            replace_file = ctypes.WinDLL("kernel32", use_last_error=True).ReplaceFileW
+            replace_file.argtypes = (
+                wintypes.LPCWSTR,
+                wintypes.LPCWSTR,
+                wintypes.LPCWSTR,
+                wintypes.DWORD,
+                wintypes.LPVOID,
+                wintypes.LPVOID,
+            )
+            replace_file.restype = wintypes.BOOL
+            if not replace_file(
+                str(target_path), str(staging_path), None, 0, None, None
+            ):
+                raise ctypes.WinError(ctypes.get_last_error())
+            return
+
+        staged_stat = staging_path.stat()
+        if (staged_stat.st_uid, staged_stat.st_gid) != (
+            current_stat.st_uid,
+            current_stat.st_gid,
+        ):
+            os.chown(staging_path, current_stat.st_uid, current_stat.st_gid)
+        if hasattr(os, "listxattr"):
+            # Preserve ACLs and other xattrs strictly; capability and integrity
+            # attributes authenticate the old bytes and must never be inherited.
+            attributes = set(os.listxattr(target_path)) - {
+                "security.capability",
+                "security.ima",
+                "security.evm",
+            }
+            for attribute in set(os.listxattr(staging_path)) - attributes:
+                os.removexattr(staging_path, attribute)
+            for attribute in attributes:
+                os.setxattr(
+                    staging_path, attribute, os.getxattr(target_path, attribute)
+                )
+        staging_path.chmod(
+            stat.S_IMODE(current_stat.st_mode) & ~(stat.S_ISUID | stat.S_ISGID)
+        )
+    staging_path.replace(target_path)
+
+
 async def download_file(
     url: str,
     path: str,
@@ -280,7 +364,14 @@ async def download_file(
     progress_callback=None,
     allow_insecure_ssl_fallback: bool = True,
 ) -> None:
-    """Download a remote file to a local path.
+    """Download a remote file and replace the destination on success.
+
+    Keep the destination intact until the response and progress callbacks have
+    completed. Failed or cancelled downloads leave no partial file behind.
+    Atomic publication requires write access to the parent directory. A changed
+    destination is rejected rather than overwriting a concurrent writer's result.
+    Existing ownership and available extended attributes are preserved; POSIX
+    privilege/integrity attributes are not transferred to downloaded bytes.
 
     Args:
         url: Remote URL to download.
@@ -292,56 +383,80 @@ async def download_file(
 
     Returns:
         None.
+
+    Raises:
+        OSError: The destination changed or cannot be safely replaced. Native
+            metadata not exposed by the platform APIs is outside this contract.
     """
 
+    # Resolve symlinks as open(path, "wb") does, and stage on the same filesystem
+    # so replacement is atomic. Each call owns its own temporary directory.
+    target_path = Path(path).resolve()
     try:
-        ssl_context = ssl.create_default_context(
-            cafile=certifi.where(),
-        )  # 使用 certifi 提供的 CA 证书
-        connector = aiohttp.TCPConnector(ssl=ssl_context)
-        async with aiohttp.ClientSession(
-            trust_env=True,
-            connector=connector,
-        ) as session:
-            async with session.get(url, timeout=1800) as resp:
-                _raise_for_download_status(resp, url)
-                with open(path, "wb") as f:
-                    await _download_response_to_file(
-                        resp,
-                        f,
-                        url,
-                        show_progress,
-                        progress_callback,
-                    )
-    except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
-        if not allow_insecure_ssl_fallback:
-            raise
-        # 关闭SSL验证（仅在证书验证失败时作为fallback）
-        logger.warning(
-            f"SSL certificate verification failed for {_safe_url_for_log(url)}. "
-            "Falling back to unverified connection (CERT_NONE). "
-        )
-        logger.warning(
-            f"SSL certificate verification failed for {_safe_url_for_log(url)}. "
-            "Falling back to unverified connection (CERT_NONE). "
-            "This is insecure and exposes the application to man-in-the-middle attacks. "
-            "Please investigate certificate issues with the remote server."
-        )
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, ssl=ssl_context, timeout=120) as resp:
-                _raise_for_download_status(resp, url)
-                with open(path, "wb") as f:
-                    await _download_response_to_file(
-                        resp,
-                        f,
-                        url,
-                        show_progress,
-                        progress_callback,
-                        show_downloading_label=False,
-                    )
+        original_stat = target_path.stat()
+    except FileNotFoundError:
+        original_stat = None
+    if original_stat is not None:
+        if not stat.S_ISREG(original_stat.st_mode):
+            raise ValueError("Download destination must be a regular file")
+        descriptor = os.open(target_path, os.O_WRONLY)
+        os.close(descriptor)
+    with tempfile.TemporaryDirectory(
+        prefix=".astrbot-download-", dir=target_path.parent
+    ) as staging_dir:
+        staging_path = Path(staging_dir) / "download.part"
+        try:
+            ssl_context = ssl.create_default_context(
+                cafile=certifi.where(),
+            )  # Use certifi's CA certificates.
+            connector = aiohttp.TCPConnector(ssl=ssl_context)
+            async with aiohttp.ClientSession(
+                trust_env=True,
+                connector=connector,
+            ) as session:
+                async with session.get(url, timeout=1800) as resp:
+                    _raise_for_download_status(resp, url)
+                    with staging_path.open("wb") as f:
+                        await _download_response_to_file(
+                            resp,
+                            f,
+                            url,
+                            show_progress,
+                            progress_callback,
+                        )
+        except (
+            aiohttp.ClientConnectorSSLError,
+            aiohttp.ClientConnectorCertificateError,
+        ):
+            if not allow_insecure_ssl_fallback:
+                raise
+            # Retry without verification only after certificate failures.
+            logger.warning(
+                f"SSL certificate verification failed for {_safe_url_for_log(url)}. "
+                "Falling back to unverified connection (CERT_NONE). "
+            )
+            logger.warning(
+                f"SSL certificate verification failed for {_safe_url_for_log(url)}. "
+                "Falling back to unverified connection (CERT_NONE). "
+                "This is insecure and exposes the application to man-in-the-middle attacks. "
+                "Please investigate certificate issues with the remote server."
+            )
+            ssl_context = ssl.create_default_context()
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, ssl=ssl_context, timeout=120) as resp:
+                    _raise_for_download_status(resp, url)
+                    with staging_path.open("wb") as f:
+                        await _download_response_to_file(
+                            resp,
+                            f,
+                            url,
+                            show_progress,
+                            progress_callback,
+                            show_downloading_label=False,
+                        )
+        _publish_download(staging_path, target_path, original_stat)
     if show_progress:
         print()
 
