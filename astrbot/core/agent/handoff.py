@@ -48,6 +48,11 @@ class HandoffTool(FunctionTool, Generic[TContext]):
                     "items": {"type": "string"},
                     "description": "Optional: An array of image sources (public HTTP URLs or local file paths) used as references in multimodal tasks such as video generation.",
                 },
+                "audio_urls": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional: An array of audio URLs or local file paths to pass to the subagent.",
+                },
                 "background_task": {
                     "type": "boolean",
                     "description": (
