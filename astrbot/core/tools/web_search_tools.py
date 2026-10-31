@@ -32,6 +32,7 @@ WEB_SEARCH_TOOL_NAMES = [
     "scholar_search_serpapi",
     "web_search_deepseek",
     "deepseek_fetch_web_page",
+    "web_search_yuanbao",
 ]
 _TAVILY_WEB_SEARCH_TOOL_CONFIG = {
     "provider_settings.web_search": True,
@@ -64,6 +65,10 @@ _ANYSEARCH_WEB_SEARCH_TOOL_CONFIG = {
 _DEEPSEEK_WEB_SEARCH_TOOL_CONFIG = {
     "provider_settings.web_search": True,
     "provider_settings.websearch_provider": "deepseek",
+}
+_YUANBAO_WEB_SEARCH_TOOL_CONFIG = {
+    "provider_settings.web_search": True,
+    "provider_settings.websearch_provider": "yuanbao",
 }
 _SERPAPI_WEB_SEARCH_TOOL_CONFIG = {
     "provider_settings.web_search": True,
@@ -134,7 +139,11 @@ _FIRECRAWL_KEY_ROTATOR = _KeyRotator("websearch_firecrawl_key", "Firecrawl")
 _EXA_KEY_ROTATOR = _KeyRotator("websearch_exa_key", "Exa")
 _ANYSEARCH_KEY_ROTATOR = _KeyRotator("websearch_anysearch_key", "AnySearch")
 _DEEPSEEK_KEY_ROTATOR = _KeyRotator("websearch_deepseek_key", "DeepSeek")
+_YUANBAO_KEY_ROTATOR = _KeyRotator("websearch_yuanbao_key", "Yuanbao")
 _SERPAPI_KEY_ROTATOR = _KeyRotator("websearch_serpapi_key", "SerpApi")
+_YUANBAO_RETRYABLE_ERROR_CODES = frozenset(
+    {"RequestLimitExceeded", "UnauthorizedOperation", "ResourceUnavailable"}
+)
 
 
 def normalize_legacy_web_search_config(cfg) -> None:
@@ -160,6 +169,7 @@ def normalize_legacy_web_search_config(cfg) -> None:
         "websearch_firecrawl_key",
         "websearch_exa_key",
         "websearch_anysearch_key",
+        "websearch_yuanbao_key",
         "websearch_serpapi_key",
     ):
         value = provider_settings.get(setting_name)
@@ -319,6 +329,134 @@ async def _tavily_extract(provider_settings: dict, payload: dict) -> list[dict]:
     if last_error is not None:
         raise last_error
     raise Exception("Tavily web extract failed with all configured keys.")
+
+
+async def _yuanbao_search(
+    provider_settings: dict,
+    payload: dict,
+) -> list[SearchResult]:
+    """Call Tencent Yuanbao SearchPro and normalize its JSON-string pages.
+
+    Args:
+        provider_settings: Provider settings containing Yuanbao API keys.
+        payload: Request payload for the Yuanbao SearchPro endpoint.
+
+    Returns:
+        Normalized search results.
+
+    Raises:
+        ValueError: If Yuanbao API keys are not configured.
+        RuntimeError: If the request fails after all retryable keys are exhausted,
+            or if a non-retryable HTTP or business error is returned.
+    """
+    keys = provider_settings.get("websearch_yuanbao_key", [])
+    if not keys:
+        raise ValueError("Error: Yuanbao API key is not configured in AstrBot.")
+
+    last_error = None
+    for _ in range(len(keys)):
+        key = await _YUANBAO_KEY_ROTATOR.get(provider_settings)
+        headers = {
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+        }
+        async with aiohttp.ClientSession(trust_env=True) as session:
+            async with session.post(
+                "https://api.wsa.cloud.tencent.com/v1/SearchPro",
+                json=payload,
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=60),
+            ) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    error = data.get("Response", {}).get("Error") or data.get("Error")
+                    if error:
+                        code = error.get("Code") if isinstance(error, dict) else None
+                        message = (
+                            error.get("Message")
+                            if isinstance(error, dict)
+                            else str(error)
+                        )
+                        if code in _YUANBAO_RETRYABLE_ERROR_CODES:
+                            last_error = RuntimeError(
+                                f"Yuanbao web search failed: {message or code}"
+                            )
+                            continue
+                        raise RuntimeError(
+                            f"Yuanbao web search failed: {message or code or error}"
+                        )
+                    pages = data.get("Response", {}).get("Pages", [])
+                    results = []
+                    for raw in pages:
+                        try:
+                            item = json.loads(raw) if isinstance(raw, str) else raw
+                        except (TypeError, json.JSONDecodeError):
+                            continue
+                        if not isinstance(item, dict) or not item.get("url"):
+                            continue
+                        results.append(
+                            SearchResult(
+                                title=str(item.get("title") or ""),
+                                url=str(item["url"]),
+                                snippet=str(
+                                    item.get("passage") or item.get("content") or ""
+                                ),
+                                favicon=item.get("favicon"),
+                            )
+                        )
+                    return results
+                reason = await response.text()
+                if response.status in _RETRYABLE_HTTP_STATUSES:
+                    last_error = RuntimeError(
+                        f"Yuanbao web search failed: {reason}, status: {response.status}"
+                    )
+                    continue
+                raise RuntimeError(
+                    f"Yuanbao web search failed: {reason}, status: {response.status}"
+                )
+
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("Yuanbao web search failed with all configured keys.")
+
+
+@builtin_tool(config=_YUANBAO_WEB_SEARCH_TOOL_CONFIG)
+@pydantic_dataclass
+class YuanbaoWebSearchTool(FunctionTool[AstrAgentContext]):
+    name: str = "web_search_yuanbao"
+    description: str = "Search the web using Tencent Yuanbao Search and return titles, URLs, and snippets."
+    parameters: dict = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Required. Search query."},
+                "max_results": {
+                    "type": "integer",
+                    "description": "Maximum results to return, 1-10. Default is 5.",
+                },
+            },
+            "required": ["query"],
+        }
+    )
+
+    async def call(self, context, **kwargs) -> ToolExecResult:
+        _, provider_settings, _ = _get_runtime(context)
+        if not provider_settings.get("websearch_yuanbao_key", []):
+            return "Error: Yuanbao API key is not configured in AstrBot."
+        query = kwargs.get("query")
+        if not isinstance(query, str) or not query.strip():
+            return "Error: query must be a non-blank string."
+        try:
+            max_results = max(1, min(int(kwargs.get("max_results", 5)), 10))
+        except (TypeError, ValueError):
+            max_results = 5
+        results = await _yuanbao_search(
+            provider_settings,
+            {"Query": query, "Cnt": max_results},
+        )
+        if not results:
+            return "Error: Yuanbao web search does not return any results."
+        return _search_result_payload(results[:max_results])
 
 
 async def _bocha_search(
@@ -2227,6 +2365,7 @@ __all__ = [
     "BraveWebSearchTool",
     "DeepSeekFetchWebPageTool",
     "DeepSeekWebSearchTool",
+    "YuanbaoWebSearchTool",
     "ExaGetContentsTool",
     "ExaWebSearchTool",
     "SerpApiFinanceSearchTool",

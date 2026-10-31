@@ -13,6 +13,7 @@ from astrbot.core.tools.web_search_tools import (
 
 class _FakeAnysearchResponse:
     """Fake HTTP response for AnySearch API tests."""
+
     def __init__(self, status=200, json_data=None, text_data=""):
         self.status = status
         self.json_data = json_data or {}
@@ -33,6 +34,7 @@ class _FakeAnysearchResponse:
 
 class _FakeAnysearchSession:
     """Fake ClientSession for AnySearch API tests."""
+
     def __init__(self, response):
         self.response = response
         self.trust_env = None
@@ -55,6 +57,7 @@ class _FakeAnysearchSession:
 
 class _FakeAnysearchCycleSession:
     """Return the next response for each post() call in key rotation tests."""
+
     def __init__(self, responses: list):
         self.responses = responses
         self.cursor = 0
@@ -76,6 +79,7 @@ class _FakeAnysearchCycleSession:
         self.cursor = (self.cursor + 1) % len(self.responses)
         self.calls.append({"url": url, "json": json, "headers": headers})
         return resp
+
 
 class _FakeConfig(dict):
     def __init__(self, *args, **kwargs):
@@ -496,11 +500,13 @@ def _resetKeyRotators():
     tools._BOCHA_KEY_ROTATOR.index = 0
     tools._BRAVE_KEY_ROTATOR.index = 0
     tools._FIRECRAWL_KEY_ROTATOR.index = 0
+    tools._YUANBAO_KEY_ROTATOR.index = 0
     yield
     tools._TAVILY_KEY_ROTATOR.index = 0
     tools._BOCHA_KEY_ROTATOR.index = 0
     tools._BRAVE_KEY_ROTATOR.index = 0
     tools._FIRECRAWL_KEY_ROTATOR.index = 0
+    tools._YUANBAO_KEY_ROTATOR.index = 0
 
 
 # ---------------------------------------------------------------------------
@@ -533,7 +539,11 @@ async def test_tavily_search_key_failover_on_quota_exceeded_432(
                 status=200,
                 jsonData={
                     "results": [
-                        {"title": "AstrBot", "url": "https://example.com", "content": "OK"}
+                        {
+                            "title": "AstrBot",
+                            "url": "https://example.com",
+                            "content": "OK",
+                        }
                     ]
                 },
             ),
@@ -571,7 +581,11 @@ async def test_tavily_search_key_failover_on_rate_limited_429(
                 status=200,
                 jsonData={
                     "results": [
-                        {"title": "RateLimitOK", "url": "https://example2.com", "content": "OK"}
+                        {
+                            "title": "RateLimitOK",
+                            "url": "https://example2.com",
+                            "content": "OK",
+                        }
                     ]
                 },
             ),
@@ -878,10 +892,10 @@ async def test_exa_get_contents_raises_on_http_error(monkeypatch):
         )
 
 
-
 # ============================================================================
 # AnySearch provider tests
 # ============================================================================
+
 
 @pytest.mark.asyncio
 async def test_anysearch_search_maps_results(monkeypatch):
@@ -899,21 +913,18 @@ async def test_anysearch_search_maps_results(monkeypatch):
                             "title": "AstrBot - AI Chatbot Framework",
                             "url": "https://github.com/AstrBotDevs/AstrBot",
                             "snippet": "A powerful AI chatbot framework for Python",
-                            "content": "AstrBot is a flexible AI chatbot framework..."
+                            "content": "AstrBot is a flexible AI chatbot framework...",
                         },
                         {
                             "title": "AstrBot Documentation",
                             "url": "https://astrbot.dev/docs",
                             "snippet": "Official documentation for AstrBot",
-                            "content": "Getting started with AstrBot..."
-                        }
+                            "content": "Getting started with AstrBot...",
+                        },
                     ],
-                    "metadata": {
-                        "total_results": 100,
-                        "search_time_ms": 150
-                    }
-                }
-            }
+                    "metadata": {"total_results": 100, "search_time_ms": 150},
+                },
+            },
         )
     )
 
@@ -963,10 +974,12 @@ async def test_anysearch_search_supports_anonymous_mode(monkeypatch):
 @pytest.mark.asyncio
 async def test_anysearch_search_key_failover_on_quota_exhausted_402(monkeypatch):
     """A 402 response retries with the next configured key."""
-    session = _FakeAnysearchCycleSession([
-        _FakeAnysearchResponse(status=402, text_data="quota exhausted"),
-        _FakeAnysearchResponse(status=200, json_data={"data": {"results": []}}),
-    ])
+    session = _FakeAnysearchCycleSession(
+        [
+            _FakeAnysearchResponse(status=402, text_data="quota exhausted"),
+            _FakeAnysearchResponse(status=200, json_data={"data": {"results": []}}),
+        ]
+    )
 
     def fake_client_session(*, trust_env):
         session.trust_env = trust_env
@@ -983,10 +996,12 @@ async def test_anysearch_search_key_failover_on_quota_exhausted_402(monkeypatch)
 @pytest.mark.asyncio
 async def test_anysearch_search_does_not_failover_on_server_error_500(monkeypatch):
     """A 500 response fails fast instead of burning through keys."""
-    session = _FakeAnysearchCycleSession([
-        _FakeAnysearchResponse(status=500, text_data="internal server error"),
-        _FakeAnysearchResponse(status=200, json_data={"data": {"results": []}}),
-    ])
+    session = _FakeAnysearchCycleSession(
+        [
+            _FakeAnysearchResponse(status=500, text_data="internal server error"),
+            _FakeAnysearchResponse(status=200, json_data={"data": {"results": []}}),
+        ]
+    )
 
     def fake_client_session(*, trust_env):
         session.trust_env = trust_env
@@ -1032,7 +1047,9 @@ async def test_anysearch_search_tool_clamps_max_results(monkeypatch):
 
 def test_normalize_legacy_config_converts_anysearch_string_key():
     """A legacy string key is migrated to a single-element list."""
-    config = _FakeConfig({"provider_settings": {"websearch_anysearch_key": "old-string-key"}})
+    config = _FakeConfig(
+        {"provider_settings": {"websearch_anysearch_key": "old-string-key"}}
+    )
     normalize_legacy_web_search_config(config)  # ֱ�ӵ��ã������շ���ֵ
     assert config["provider_settings"]["websearch_anysearch_key"] == ["old-string-key"]
 
@@ -1049,12 +1066,12 @@ async def test_anysearch_search_falls_back_to_content_for_snippet(monkeypatch):
                         {
                             "title": "Test Title",
                             "url": "https://example.com",
-                            "content": "Full content text here"
+                            "content": "Full content text here",
                             # ע�⣺û�� snippet �ֶ�
                         }
                     ]
                 }
-            }
+            },
         )
     )
 
@@ -1785,3 +1802,175 @@ async def test_deepseek_fetch_reports_empty_content(deepseek_session):
     )
 
     assert result == "Error: DeepSeek fetch does not return any content."
+
+
+class _FakeYuanbaoResponse:
+    def __init__(self, status=200, json_data=None, text_data=""):
+        self.status = status
+        self.json_data = json_data or {}
+        self.text_data = text_data
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return None
+
+    async def json(self):
+        return self.json_data
+
+    async def text(self):
+        return self.text_data
+
+
+class _FakeYuanbaoSession:
+    def __init__(self, responses):
+        self.responses = responses
+        self.calls = []
+        self.cursor = 0
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return None
+
+    def post(self, url, json, headers, timeout):
+        self.calls.append(
+            {"url": url, "json": json, "headers": headers, "timeout": timeout}
+        )
+        response = self.responses[min(self.cursor, len(self.responses) - 1)]
+        self.cursor += 1
+        return response
+
+
+@pytest.mark.asyncio
+async def test_yuanbao_search_parses_json_string_pages(monkeypatch):
+    session = _FakeYuanbaoSession(
+        [
+            _FakeYuanbaoResponse(
+                json_data={
+                    "Response": {
+                        "Pages": [
+                            json.dumps(
+                                {
+                                    "title": "Example",
+                                    "url": "https://example.com",
+                                    "passage": "Summary",
+                                    "favicon": "https://example.com/favicon.ico",
+                                }
+                            ),
+                            "not-json",
+                            json.dumps({"title": "Missing URL"}),
+                        ]
+                    }
+                }
+            )
+        ]
+    )
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", lambda **_: session)
+
+    results = await tools._yuanbao_search(
+        {"websearch_yuanbao_key": ["yuanbao-key"]}, {"Query": "AstrBot"}
+    )
+
+    assert results == [
+        tools.SearchResult(
+            title="Example",
+            url="https://example.com",
+            snippet="Summary",
+            favicon="https://example.com/favicon.ico",
+        )
+    ]
+    assert session.calls[0]["url"] == "https://api.wsa.cloud.tencent.com/v1/SearchPro"
+    assert session.calls[0]["json"] == {"Query": "AstrBot"}
+    assert session.calls[0]["headers"]["Authorization"] == "Bearer yuanbao-key"
+    assert session.calls[0]["json"] == {"Query": "AstrBot"}
+
+
+@pytest.mark.asyncio
+async def test_yuanbao_search_retries_auth_errors_without_leaking_key(monkeypatch):
+    session = _FakeYuanbaoSession(
+        [
+            _FakeYuanbaoResponse(status=401, text_data="unauthorized"),
+            _FakeYuanbaoResponse(
+                json_data={
+                    "Response": {"Pages": [json.dumps({"url": "https://example.com"})]}
+                }
+            ),
+        ]
+    )
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", lambda **_: session)
+
+    results = await tools._yuanbao_search(
+        {"websearch_yuanbao_key": ["first-key", "second-key"]}, {"Query": "x"}
+    )
+
+    assert results[0].url == "https://example.com"
+    assert [call["headers"]["Authorization"] for call in session.calls] == [
+        "Bearer first-key",
+        "Bearer second-key",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_yuanbao_search_surfaces_business_errors(monkeypatch):
+    session = _FakeYuanbaoSession(
+        [
+            _FakeYuanbaoResponse(
+                json_data={
+                    "Response": {
+                        "Error": {"Code": "RequestLimitExceeded", "Message": "limited"}
+                    }
+                }
+            )
+        ]
+    )
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", lambda **_: session)
+
+    with pytest.raises(RuntimeError, match="limited"):
+        await tools._yuanbao_search(
+            {"websearch_yuanbao_key": ["secret-key"]}, {"Query": "x"}
+        )
+
+    assert len(session.calls) == 1
+    assert "secret-key" in session.calls[0]["headers"]["Authorization"]
+
+
+@pytest.mark.asyncio
+async def test_yuanbao_search_retries_business_quota_errors(monkeypatch):
+    session = _FakeYuanbaoSession(
+        [
+            _FakeYuanbaoResponse(
+                json_data={
+                    "Response": {
+                        "Error": {
+                            "Code": "RequestLimitExceeded",
+                            "Message": "limited",
+                        }
+                    }
+                }
+            ),
+            _FakeYuanbaoResponse(
+                json_data={
+                    "Response": {"Pages": [json.dumps({"url": "https://example.com"})]}
+                }
+            ),
+        ]
+    )
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", lambda **_: session)
+
+    results = await tools._yuanbao_search(
+        {"websearch_yuanbao_key": ["first-key", "second-key"]}, {"Query": "x"}
+    )
+
+    assert results[0].url == "https://example.com"
+    assert [call["headers"]["Authorization"] for call in session.calls] == [
+        "Bearer first-key",
+        "Bearer second-key",
+    ]
+
+
+def test_yuanbao_tool_is_exported_and_listed():
+    assert tools.YuanbaoWebSearchTool().name in tools.WEB_SEARCH_TOOL_NAMES
+    assert "YuanbaoWebSearchTool" in tools.__all__

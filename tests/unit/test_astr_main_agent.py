@@ -27,6 +27,7 @@ from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider import Provider
 from astrbot.core.provider import manager as provider_manager_module
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, ProviderType
+from astrbot.core.provider.func_tool_manager import FunctionToolManager
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.skills.skill_manager import SkillInfo
 from astrbot.core.star.context import Context
@@ -812,6 +813,23 @@ class TestBuiltinToolInjection:
         )
 
     @pytest.mark.asyncio
+    async def test_yuanbao_injects_search_tool(self, mock_event, mock_context):
+        """Verify the registered Yuanbao tool reaches the model request."""
+        req = ProviderRequest()
+        mock_context.get_config.return_value = {
+            "provider_settings": {"web_search": True, "websearch_provider": "yuanbao"}
+        }
+        tool_mgr = FunctionToolManager()
+        mock_context.get_llm_tool_manager.return_value = tool_mgr
+
+        await ama._apply_web_search_tools(mock_event, req, mock_context)
+
+        assert req.func_tool.names() == ["web_search_yuanbao"]
+        assert isinstance(
+            req.func_tool.get_tool("web_search_yuanbao"), ama.YuanbaoWebSearchTool
+        )
+
+    @pytest.mark.asyncio
     async def test_apply_web_search_tools_uses_builtin_tool_manager(
         self, mock_event, mock_context
     ):
@@ -903,6 +921,7 @@ class TestBuiltinToolInjection:
             "image_search_serpapi",
             "finance_search_serpapi",
             "scholar_search_serpapi",
+            "web_search_yuanbao",
         ],
     )
     def test_apply_web_search_citation_prompt_for_webchat(self, mock_event, tool_name):
@@ -1646,7 +1665,9 @@ class TestEnsurePersonaAndSkills:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("role", ["admin", "member"])
-    @pytest.mark.parametrize("isolation_status", ["detected", "missing", "unavailable", "unsupported"])
+    @pytest.mark.parametrize(
+        "isolation_status", ["detected", "missing", "unavailable", "unsupported"]
+    )
     @pytest.mark.parametrize(
         ("allow_execution", "allow_network"),
         [(True, False), (True, True), (False, False)],
@@ -1727,9 +1748,17 @@ class TestEnsurePersonaAndSkills:
             assert "yield_time_ms" in shell_tool.parameters["properties"]
             assert result.provider_request.system_prompt.count(
                 module.LOCAL_NETWORK_POLICY_NOTICE
-            ) == int(allow_execution and not allow_network and isolation_status == "detected")
-            assert "The Agent Computer Use runtime is the local environment" not in result.provider_request.system_prompt
-            assert "These restrictions require Local process isolation" not in result.provider_request.system_prompt
+            ) == int(
+                allow_execution and not allow_network and isolation_status == "detected"
+            )
+            assert (
+                "The Agent Computer Use runtime is the local environment"
+                not in result.provider_request.system_prompt
+            )
+            assert (
+                "These restrictions require Local process isolation"
+                not in result.provider_request.system_prompt
+            )
         finally:
             if result.reset_coro:
                 result.reset_coro.close()
