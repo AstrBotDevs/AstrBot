@@ -906,6 +906,10 @@ class ProviderManager:
         Args:
             provider_config: Configuration of the provider whose instance is reloaded.
         """
+        # Resolve the effective config first, like load_provider() does, so fields
+        # inherited from the provider_source (enable, provider_type, ...) count
+        # here too.
+        provider_config = self.get_merged_provider_config(provider_config)
         await self.terminate_provider(provider_config["id"])
         if provider_config["enable"]:
             await self.load_provider(provider_config)
@@ -928,12 +932,15 @@ class ProviderManager:
             provider_id = config_entry.get("id")
             if not provider_id or provider_id in self.inst_map:
                 continue
-            if not config_entry.get("enable", False):
+            # Judge eligibility on the same merged config load_provider() resolves,
+            # so fields inherited from the provider_source count here too.
+            effective_config = self.get_merged_provider_config(config_entry)
+            if not effective_config.get("enable", False):
                 continue
-            if config_entry.get("provider_type", "") == "agent_runner":
+            if effective_config.get("provider_type", "") == "agent_runner":
                 continue
             try:
-                await self.load_provider(config_entry)
+                await self.load_provider(effective_config)
             except Exception as e:
                 # Contain a single broken provider, like initialize() does.
                 logger.error(traceback.format_exc())

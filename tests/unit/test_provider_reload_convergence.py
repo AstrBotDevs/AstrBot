@@ -39,11 +39,13 @@ async def make_manager():
     """Build a ProviderManager backed by an isolated default config."""
     managers: list[ProviderManager] = []
 
-    def _make(providers: list[dict]) -> ProviderManager:
+    def _make(
+        providers: list[dict], provider_sources: list[dict] | None = None
+    ) -> ProviderManager:
         config = _Config(
             {
                 "provider": providers,
-                "provider_sources": [],
+                "provider_sources": provider_sources or [],
                 "provider_settings": {},
             }
         )
@@ -105,6 +107,56 @@ async def test_reload_skips_disabled_and_agent_runner_providers(make_manager):
     assert "added_provider" in manager.inst_map
     assert "disabled_provider" not in manager.inst_map
     assert "agent_runner_provider" not in manager.inst_map
+
+
+@pytest.mark.asyncio
+async def test_reload_loads_provider_that_inherits_enable_from_source(make_manager):
+    source = _decision_provider("decision_source")
+    # The entry only references the source; enable and provider_type come from it.
+    inherited = {"id": "inherited_provider", "provider_source_id": "decision_source"}
+    anchor = _decision_provider("anchor_provider")
+    manager = make_manager([inherited, anchor], provider_sources=[source])
+    await manager.load_provider(anchor)
+
+    await manager.reload(anchor)
+
+    assert "inherited_provider" in manager.inst_map
+    assert manager.inst_map["inherited_provider"] in manager.decision_provider_insts
+
+
+@pytest.mark.asyncio
+async def test_reload_of_configured_entry_that_inherits_enable_from_source(make_manager):
+    source = _decision_provider("decision_source")
+    inherited = {"id": "inherited_provider", "provider_source_id": "decision_source"}
+    manager = make_manager([inherited], provider_sources=[source])
+
+    # The provider-source upsert path reloads each entry with its raw config.
+    await manager.reload(inherited)
+
+    assert "inherited_provider" in manager.inst_map
+
+
+@pytest.mark.asyncio
+async def test_reload_skips_provider_whose_source_is_disabled(make_manager):
+    source = _decision_provider("decision_source", enable=False)
+    inherited = {"id": "inherited_provider", "provider_source_id": "decision_source"}
+    anchor = _decision_provider("anchor_provider")
+    manager = make_manager([inherited, anchor], provider_sources=[source])
+    await manager.load_provider(anchor)
+
+    loaded_ids: list[str] = []
+    original_load_provider = manager.load_provider
+
+    async def record_load_provider(provider_config: dict) -> None:
+        loaded_ids.append(provider_config["id"])
+        await original_load_provider(provider_config)
+
+    manager.load_provider = record_load_provider
+
+    await manager.reload(anchor)
+
+    assert loaded_ids == ["anchor_provider"]
+    assert "inherited_provider" not in manager.inst_map
 
 
 @pytest.mark.asyncio
