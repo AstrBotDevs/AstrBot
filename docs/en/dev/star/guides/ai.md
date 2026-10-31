@@ -392,6 +392,11 @@ Use `self.context.conversations` for conversation operations. It provides the ex
 removed; plugins use `conversations.append_message()` and
 `conversations.append_plugin_event()` instead of accessing a writer.
 
+The deprecated `update_conversation_title()` and
+`update_conversation_persona_id()` methods have been removed. Use
+`update_conversation(..., title=...)` or
+`update_conversation(..., persona_id=...)` instead.
+
 ### Appending Model Messages
 
 ```py
@@ -432,8 +437,9 @@ event_id = await conversations.append_plugin_event(
 ```
 
 This stores a custom event associated with the conversation, without changing
-working or future model context. `event_type` is a plugin-prefixed name and `data`
-is a JSON-serializable object. The host supplies the internal event namespace,
+working or future model context. Use a plugin-prefixed `event_type` to avoid name
+collisions; the host does not infer or enforce plugin identity from this name.
+`data` is a JSON-serializable object. The host supplies the internal event namespace,
 version, sequence, and creation time. The call returns the committed event ID;
 an optional `event_id` identifies retries of the same submission.
 

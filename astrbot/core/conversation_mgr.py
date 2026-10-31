@@ -7,8 +7,6 @@
 import json
 from collections.abc import Awaitable, Callable
 
-from deprecated import deprecated
-
 from astrbot.core import sp
 from astrbot.core.agent.conversation_events import (
     ConversationEventWriter,
@@ -517,54 +515,6 @@ class ConversationManager:
                 content=history,
                 token_usage=token_usage,
             )
-
-    @deprecated(reason="Use update_conversation() with the title parameter instead.")
-    async def update_conversation_title(
-        self,
-        unified_msg_origin: str,
-        title: str,
-        conversation_id: str | None = None,
-    ) -> None:
-        """更新会话的对话标题.
-
-        Args:
-            unified_msg_origin (str): 统一的消息来源字符串。格式为 platform_name:message_type:session_id
-            title (str): 对话标题
-            conversation_id (str): 对话 ID, 是 uuid 格式的字符串
-        Deprecated:
-            Use `update_conversation` with `title` parameter instead.
-
-        """
-        await self.update_conversation(
-            unified_msg_origin=unified_msg_origin,
-            conversation_id=conversation_id,
-            title=title,
-        )
-
-    @deprecated(
-        reason="Use update_conversation() with the persona_id parameter instead."
-    )
-    async def update_conversation_persona_id(
-        self,
-        unified_msg_origin: str,
-        persona_id: str,
-        conversation_id: str | None = None,
-    ) -> None:
-        """更新会话的对话 Persona ID.
-
-        Args:
-            unified_msg_origin (str): 统一的消息来源字符串。格式为 platform_name:message_type:session_id
-            persona_id (str): 对话 Persona ID
-            conversation_id (str): 对话 ID, 是 uuid 格式的字符串
-        Deprecated:
-            Use `update_conversation` with `persona_id` parameter instead.
-
-        """
-        await self.update_conversation(
-            unified_msg_origin=unified_msg_origin,
-            conversation_id=conversation_id,
-            persona_id=persona_id,
-        )
 
     async def add_message_pair(
         self,

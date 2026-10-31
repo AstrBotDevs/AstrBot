@@ -390,6 +390,10 @@ async def test(self, event: AstrMessageEvent):
 插件通过 `conversations.append_message()` 和 `conversations.append_plugin_event()`
 写入，不再直接操作 writer。
 
+已移除过时的 `update_conversation_title()` 和 `update_conversation_persona_id()`。
+请分别改用 `update_conversation(..., title=...)` 和
+`update_conversation(..., persona_id=...)`。
+
 ### 追加模型消息 `append_message`
 
 ```py
@@ -429,7 +433,8 @@ event_id = await conversations.append_plugin_event(
 ```
 
 该接口保存关联当前对话的自定义事件，不改变本次或后续模型上下文。
-`event_type` 使用插件名称前缀，`data` 为可 JSON 序列化的对象。
+建议 `event_type` 使用插件名称前缀以避免重名；Core 不会自动推断或校验名称中的插件身份。
+`data` 为可 JSON 序列化的对象。
 内部事件命名空间、版本、序号和创建时间由 Core 填充。
 接口返回已保存的事件 ID；可通过可选的 `event_id` 标识同一次提交的重试。
 

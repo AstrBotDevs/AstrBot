@@ -596,14 +596,16 @@ class AstrBotImporter:
 
         from sqlalchemy import text
 
+        from astrbot.core.db.migration.migra_conversation_events import (
+            linearize_legacy_events,
+            migrate_conversations,
+        )
         from astrbot.core.db.po import ConversationV2
 
         if data.get("conversations") and data.get("conversations_v3"):
             raise ValueError("Backup contains ambiguous V2 and V3 conversations")
 
         if any("parent_event_id" in row for row in data.get("conversation_events", [])):
-            from astrbot.core.db.conversation import linearize_legacy_events
-
             conversations, events = linearize_legacy_events(
                 data.get("conversations_v3", []), data["conversation_events"]
             )
@@ -716,7 +718,9 @@ class AstrBotImporter:
                     logger.debug(f"导入表 {table_name}: {count} 条记录")
                 await session.flush()
                 if "conversations" in data:
-                    await self.main_db.conversation_store.migrate(session=session)
+                    await migrate_conversations(
+                        self.main_db.conversation_store, session=session
+                    )
 
         return imported
 

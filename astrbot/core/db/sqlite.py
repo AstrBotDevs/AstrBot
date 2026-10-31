@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, delete, desc, func, or_, select, text, update
 
 from astrbot.core.db import BaseDatabase
+from astrbot.core.db.migration.migra_conversation_events import migrate_conversations
 from astrbot.core.db.po import (
     ApiKey,
     Attachment,
@@ -158,7 +159,7 @@ class SQLiteDatabase(BaseDatabase):
             # lookups. Older schemas also created this redundant explicit index.
             await conn.execute(text("DROP INDEX IF EXISTS ix_umo_aliases_umo"))
             await conn.commit()
-        await self.conversation_store.migrate()
+        await migrate_conversations(self.conversation_store)
         self.inited = True
 
     async def _ensure_persona_folder_columns(self, conn) -> None:

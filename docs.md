@@ -1,8 +1,8 @@
 # 新的 Agent 上下文存储架构
 
-## 现状
+## 重构前的存储方式
 
-AstrBot 默认使用 SQLite（`data_v4.db`），通过 SQLModel / SQLAlchemy 和 aiosqlite 访问，启用 WAL。
+以下描述迁移前的实现；本分支的运行时存储见后续章节。AstrBot 默认使用 SQLite（`data_v4.db`），通过 SQLModel / SQLAlchemy 和 aiosqlite 访问，启用 WAL。
 
 - 一个 UMO（`platform_name:message_type:session_id`）可以对应多个 Conversation，并选择当前对话。
 
@@ -21,6 +21,20 @@ AstrBot 默认使用 SQLite（`data_v4.db`），通过 SQLModel / SQLAlchemy 和
 以线性事件记录保存消息与执行过程，按完整基线与后续事件投影模型上下文。支持长期不切换对话的大事件量、消息编辑、侧边对话，以及旧插件兼容。
 
 **正常写入只追加事件；旧插件 rebase 可按保留策略将整份 payload 置为 null。ConversationV3 的当前指针和元数据可以更新。** 上下文恢复不重新调用模型、工具或插件，也不等于自动恢复外部工具执行。
+
+## 实现职责与事务边界
+
+- `ConversationManager` 通过 `ctx.conversations` 提供插件业务接口，负责解析目标对话和复用当前运行的 writer。`ctx.conversation_manager` 保留为兼容别名。
+- `ConversationEventWriter` 管理一次 Agent 执行的事件和工作上下文；`active_conversation_writer` 在执行上下文中绑定，退出时恢复。`AstrMessageEvent` 不再携带 writer 字段。
+- `db/conversation.py` 的 `ConversationStore` 负责事件校验、幂等与版本冲突、上下文投影、快照和保留策略。它仍是 SQLite 实现，不代表已经支持 PostgreSQL / MySQL。
+- `db/migration/migra_conversation_events.py` 负责旧整份历史、旧树状事件和旧展示关联的迁移。启动初始化和旧备份导入显式调用迁移；正常事件追加不经过迁移代码。
+- `db/webchat_projection.py` 维护追加事件对应的展示消息位置，以及自动快照产生的等价位置映射。它接收已校验、有序的事件和现有数据库 session，不创建或提交事务。
+
+`ConversationStore.append()` 持有唯一写入事务：取得写锁并读取版本 → 校验幂等与并发条件 → 转换兼容历史并校验、插入事件 → 更新上下文位置和必要的快照 → 更新 WebChat 展示关联 → 回收符合条件的旧插件基线 → 提交。任何一步失败，事件、会话指针和展示关联一起回滚。WebChat 编辑与历史位置切换仍由各自的存储操作持有完整事务，不通过提交后的异步监听器维护关联。
+
+迁移单独持有事务，转换并校验全部旧对话、更新关联后，才删除旧 `conversations` 表并提交。失败时旧表和数据保留，初始化失败，系统不会自动切回旧实现运行；修复原因后可重启重试。启动阶段较早执行的建表和补列有独立提交，因此数据迁移回滚不等于整个数据库恢复为升级前的 schema。备份导入则传入已有 session，由外层导入事务统一提交或回滚。
+
+本次不实现新旧存储热切换、持久化 steer/follow-up 队列、外部工具副作用恢复，也不增加插件通用事件检索 API。
 
 ## 表结构
 
@@ -113,7 +127,7 @@ ChatUI 展示历史仍独立保存。fork 查询消息后的上下文位置；�
 |`request.finished`|请求结束，记录状态、usage、输出引用或错误|
 |`tool.started`|工具准备执行，记录实际参数|
 |`tool.finished`|工具执行结束，记录结果引用或错误|
-|`plugin.<plugin_id>.<event_type>`|插件私有记录，默认不参与模型上下文投影|
+|`plugin.<event_type>`|插件自定义记录，不参与模型上下文投影；建议 event_type 自带插件前缀|
 
 一轮 turn 可以包含多次 request 和工具执行。turn、request、工具执行实例分别使用其 started 事件的 `event_id` 作为身份。重试创建新的请求或执行实例。
 
@@ -297,6 +311,8 @@ ChatUI 展示历史仍独立保存。fork 查询消息后的上下文位置；�
 
 ## 插件接口与兼容
 
+已移除过时的 `update_conversation_title()` 和 `update_conversation_persona_id()`；调用它们的插件需要分别改用 `update_conversation(..., title=...)` 和 `update_conversation(..., persona_id=...)`。
+
 旧插件继续使用原有的可变 `ProviderRequest.contexts`、运行时消息对象和 ConversationManager 接口。业务写入保持追加，插件拿到与持久化状态隔离的工作副本；同一阶段的插件按顺序看到前面插件的修改。
 
 兼容层在原有保存边界比较阶段输入与最终输出，不对每个插件复制整份历史：
@@ -307,29 +323,37 @@ ChatUI 展示历史仍独立保存。fork 查询消息后的上下文位置；�
 
 - 删除、重排、嵌套修改或整体替换：生成 `context.rebased(reason=legacy_replace)`。
 
-插件在已绑定会话的 hook 中，通过 ConversationManager 获取统一接口：
+插件通过 `ctx.conversations` 操作上下文，不直接访问 writer：
 
-```Python
-events = ctx.conversation_manager.get_conversation_events()
-await events.append_message({"role": "user", "content": "补充上下文"})
-await events.append(
-    name="retrieval_completed",
-    payload={"document_ids": ["doc_12", "doc_35"]},
+```python
+from astrbot.core.agent.message import TextPart
+
+message_id = await ctx.conversations.append_message(
+    [TextPart(text="补充上下文")],
 )
-previous = await events.latest(name="retrieval_completed")
-page = await events.list(name="retrieval_completed", after_seq=last_seq, limit=100)
+event_id = await ctx.conversations.append_plugin_event(
+    event_type="astrbot_plugin_memory.retrieval_completed",
+    data={"document_ids": ["doc_12", "doc_35"]},
+)
 ```
 
-框架绑定插件身份与会话、分配 ID 和 seq、校验 JSON 并落库，生成例如：
+`append_message(content, *, cid=None, message_id=None)` 接受字符串或 AstrBot 内容块列表（也接受内容块字典），由宿主补上 `role="user"`。插件不传完整的 role/content 消息对象。写入提交后返回事件 ID，并同步当前运行的工作上下文；`_no_save` 内容仍按临时内容规则排除未来上下文。可指定稳定的 `message_id` 重试相同提交。
 
-```JSON
+`append_plugin_event(event_type, data, *, cid=None, event_id=None)` 只保存 JSON 对象，不进入模型上下文。框架加上 `plugin.` 命名空间，分配版本、ID、seq 和时间；`event_type` 由调用者提供，建议包含插件前缀，框架不会自动补上插件身份或 turn_id。可指定稳定的 `event_id` 重试相同提交，例如：
+
+```json
 {
   "event_id": "p1",
   "type": "plugin.astrbot_plugin_memory.retrieval_completed",
-  "payload": {"turn_id": "t1", "document_ids": ["doc_12", "doc_35"], "scores": [0.91, 0.86]}
+  "version": 1,
+  "payload": {"document_ids": ["doc_12", "doc_35"]}
 }
 ```
 
-插件日志默认按当前 Conversation 和插件身份查询，不自动继承来源分支的插件状态；分支相关记录显式关联上下文事件 ID。插件私有记录不驱动核心消息投影，卸载插件不会改变已经保留的核心上下文，也不会恢复已经回收的旧基线。
+两个追加接口都不启动 Agent 或调度后续轮次。省略 `cid` 时，优先使用当前运行绑定的对话，否则通过活动消息的 UMO 查找选中的对话；没有有效目标则抛出 `ValueError`。后台任务可以显式传 `cid`，宿主从存储记录取得 UMO。无效 CID 会报错，不会自动创建对话。此简化仅适用于新增追加接口，现有 `get_conversation(umo, cid)` 等方法保留原参数。
 
-想永久改变上下文，应调用核心追加消息或替换上下文接口；只给当前请求提供检索内容，则用现有临时内容标记排除后续上下文投影。恢复时读取已记录的结果，不重新执行插件业务逻辑。
+本 PR 早期草案里的 `event.conversation_events`、`get_conversation_events()`、`latest()`、`list()` 已移除，不属于当前插件 API。底层 `ConversationStore.events()` 用于内部事件读取，不是插件查询接口；普通可变插件状态使用插件 KV 存储。插件自定义事件不驱动消息投影，卸载插件不会改变已保留的核心上下文，也不会恢复已回收的旧基线。
+
+永久追加上下文使用 `append_message()`；旧插件通过原有 `update_conversation()` 或 hook 修改历史的行为仍由兼容层记录。临时检索内容使用现有临时标记排除未来投影，但标记不保证原始事件正文不落盘。恢复上下文读取已记录的数据，不重新执行插件逻辑。
+
+完整用法见 [插件开发文档](docs/zh/dev/star/guides/ai.md#对话管理器)。
