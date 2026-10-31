@@ -2039,6 +2039,7 @@ class TestBuildMainAgent:
                             "provider_id": "summary-model",
                             "instruction": "Keep unfinished tasks.",
                             "keep_recent_ratio": 0.3,
+                            "trigger_ratio": 0.7,
                             "max_turns": 12,
                             "trim_turns": 3,
                             "fallback_max_tokens": 16384,
@@ -2053,6 +2054,7 @@ class TestBuildMainAgent:
         assert kwargs["llm_compress_provider"] is compressor
         assert kwargs["llm_compress_instruction"] == "Keep unfinished tasks."
         assert kwargs["llm_compress_keep_recent_ratio"] == 0.3
+        assert kwargs["context_compression_threshold"] == 0.7
         assert kwargs["enforce_max_turns"] == 12
         assert kwargs["truncate_turns"] == 3
         assert kwargs["provider"].provider_config["max_context_tokens"] == 16384

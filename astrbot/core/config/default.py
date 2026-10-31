@@ -4179,6 +4179,15 @@ CONFIG_METADATA_3 = {
                         },
                         "hint": "模型上下文超限时的处理策略。",
                     },
+                    "agent_runner.config.compression.trigger_ratio": {
+                        "description": "触发压缩的上下文占用比例",
+                        "type": "float",
+                        "slider": {"min": 0.1, "max": 0.95, "step": 0.01},
+                        "hint": "请求前上下文 token 超过模型上下文窗口的该比例时，执行上面的处理方式。范围 0.1-0.95，默认 0.82；调低可提前压缩，但会更频繁地调用压缩。",
+                        "condition": {
+                            "agent_runner.runner_type": "local",
+                        },
+                    },
                     "agent_runner.config.compression.instruction": {
                         "description": "上下文压缩提示词",
                         "type": "text",
