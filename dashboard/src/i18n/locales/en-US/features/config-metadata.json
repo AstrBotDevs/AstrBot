@@ -839,8 +839,8 @@
         "hint": "When enabled, use AstrBot unified webhook entry without opening a separate port. Callback URL is /api/v1/webhooks/platforms/{webhook_uuid}."
       },
       "use_markdown": {
-        "description": "Use Markdown for Proactive Messages",
-        "hint": "When enabled, proactive messages are sent in Markdown mode by default; an explicit use_markdown() call from a plugin takes precedence over this option."
+        "description": "Use Markdown by default",
+        "hint": "Set the default format for replies and proactive messages: Markdown when enabled, plain text when disabled. Explicit use_markdown(True/False) calls take precedence."
       },
       "webhook_uuid": {
         "description": "Webhook UUID",

@@ -121,9 +121,11 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         platform_meta: PlatformMetadata,
         session_id: str,
         bot: Client,
+        use_markdown_default: bool = True,
     ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.bot = bot
+        self.use_markdown_default = use_markdown_default
         self.send_buffer = None
 
     async def get_group(self, group_id: str | None = None, **kwargs) -> Group | None:
@@ -465,7 +467,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         # 根据消息链的 use_markdown_ 标记决定发送模式
         use_md = getattr(self.send_buffer, "use_markdown_", None)
-        if use_md is False:
+        if use_md is False or (use_md is None and not self.use_markdown_default):
             payload: dict = {
                 "content": plain_text,
                 "msg_type": 0,

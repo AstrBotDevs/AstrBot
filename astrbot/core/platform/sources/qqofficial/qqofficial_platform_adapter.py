@@ -668,6 +668,7 @@ class QQOfficialPlatformAdapter(Platform):
             self.meta(),
             message.session_id,
             self.client,
+            use_markdown_default=self.use_markdown_default,
         )
 
     @staticmethod
