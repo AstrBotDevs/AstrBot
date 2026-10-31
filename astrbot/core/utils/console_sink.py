@@ -1,8 +1,8 @@
 """Keep console backpressure away from the application event loop."""
 
 import atexit
-import io
 import queue
+import sys
 import threading
 from typing import TextIO
 
@@ -22,12 +22,19 @@ class BoundedConsoleSink:
         """
         if capacity <= 0:
             raise ValueError("Console queue capacity must be positive")
+        self._original_stream = stream
         self._stream = stream
-        self._raw_stream = None
-        if isinstance(stream, io.TextIOWrapper):
-            # Bypass buffered stdout locks: a blocked daemon must not hold one
-            # during interpreter shutdown. Raw console IO also handles Windows.
-            self._raw_stream = getattr(stream.buffer, "raw", stream.buffer)
+        self.encoding = getattr(stream, "encoding", None)
+        if sys.platform == "win32" and (
+            stream is sys.__stdout__ or stream is sys.__stderr__
+        ):
+            from colorama import AnsiToWin32
+
+            # Enable native VT or convert ANSI on legacy consoles in the writer
+            # thread. Preserve forced colors when stdout is redirected to a pipe.
+            converter = AnsiToWin32(stream, strip=False)
+            if converter.should_wrap():
+                self._stream = converter.stream
         self._queue: queue.Queue[str | None] = queue.Queue(maxsize=capacity)
         self._lock = threading.Lock()
         self._closed = False
@@ -36,7 +43,7 @@ class BoundedConsoleSink:
             target=self._drain, name="astrbot_console_writer", daemon=True
         )
         self._thread.start()
-        atexit.register(self.close)
+        atexit.register(self._shutdown)
 
     def write(self, message: str) -> None:
         """Queue a record, dropping only its console copy when full.
@@ -67,21 +74,8 @@ class BoundedConsoleSink:
                         f"[AstrBot] Skipped {dropped - reported_dropped} console log "
                         "records because the console queue was full.\n"
                     )
-                if self._raw_stream is None:
-                    self._stream.write(message)
-                    self._stream.flush()
-                else:
-                    data = memoryview(
-                        message.encode(
-                            self._stream.encoding or "utf-8",
-                            self._stream.errors or "backslashreplace",
-                        )
-                    )
-                    while data:
-                        written = self._raw_stream.write(data)
-                        if not written:
-                            raise OSError("Console write made no progress")
-                        data = data[written:]
+                self._stream.write(message)
+                self._stream.flush()
                 reported_dropped = dropped
             except Exception:
                 # Reporting via the logger would recurse into this sink.
@@ -97,19 +91,31 @@ class BoundedConsoleSink:
         writer is shared across console log-level changes.
         """
         with self._lock:
-            if self._closed:
-                return
-            self._closed = True
-            while True:
-                try:
-                    self._queue.put_nowait(None)
-                    break
-                except queue.Full:
+            if not self._closed:
+                self._closed = True
+                while True:
                     try:
-                        self._queue.get_nowait()
-                        self._queue.task_done()
-                        self.dropped += 1
-                    except queue.Empty:
-                        pass
+                        self._queue.put_nowait(None)
+                        break
+                    except queue.Full:
+                        try:
+                            self._queue.get_nowait()
+                            self._queue.task_done()
+                            self.dropped += 1
+                        except queue.Empty:
+                            pass
         self._thread.join(timeout=0.2)
-        atexit.unregister(self.close)
+        if not self._thread.is_alive():
+            atexit.unregister(self._shutdown)
+
+    def _shutdown(self) -> None:
+        """Avoid a second blocking flush of a stalled standard stream at exit."""
+        self.close()
+        if self._thread.is_alive():
+            # CPython flushes both standard streams after atexit. A daemon may
+            # still hold the TextIO buffer lock, so skip only references to that
+            # exact stream. Keep its object alive in the writer; do not close it.
+            if sys.stdout is self._original_stream:
+                sys.stdout = None
+            if sys.stderr is self._original_stream:
+                sys.stderr = None

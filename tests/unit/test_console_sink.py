@@ -11,6 +11,7 @@ import textwrap
 import threading
 import time
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -111,7 +112,9 @@ def test_raw_output_handles_partial_writes_and_unicode():
             return length
 
     raw = PartialRawStream()
-    with io.TextIOWrapper(io.BufferedWriter(raw), encoding="utf-8") as stream:
+    with io.TextIOWrapper(
+        io.BufferedWriter(raw), encoding="utf-8", newline="\n"
+    ) as stream:
         sink = BoundedConsoleSink(stream)
         try:
             sink.write("你好 🌟\none\n")
@@ -121,6 +124,125 @@ def test_raw_output_handles_partial_writes_and_unicode():
         finally:
             sink.close()
         assert not stream.closed
+
+
+@pytest.mark.parametrize("encoding", ["utf-8", "utf-8-sig", "utf-16", "iso2022_jp"])
+@pytest.mark.parametrize("newline", [None, "\n", "\r\n", "\r"])
+def test_console_preserves_text_stream_state(encoding, newline):
+    """Match direct writes, including an encoder already used before logging."""
+    expected = io.BytesIO()
+    actual = io.BytesIO()
+    with (
+        io.TextIOWrapper(expected, encoding=encoding, newline=newline) as reference,
+        io.TextIOWrapper(actual, encoding=encoding, newline=newline) as stream,
+    ):
+        reference.write("prefix\n")
+        reference.flush()
+        stream.write("prefix\n")
+        stream.flush()
+        sink = BoundedConsoleSink(stream)
+        try:
+            for message in ("日本語\n", "two\r\n", "three\n"):
+                reference.write(message)
+                reference.flush()
+                sink.write(message)
+            sink._queue.join()
+            assert actual.getvalue() == expected.getvalue()
+            assert sink.encoding == stream.encoding
+        finally:
+            sink.close()
+
+
+@pytest.mark.parametrize("errors", ["replace", "backslashreplace", "ignore"])
+def test_console_preserves_encoding_error_policy(errors):
+    """Retain the configured text stream's treatment of unencodable content."""
+    data = io.BytesIO()
+    with io.TextIOWrapper(
+        data, encoding="ascii", errors=errors, newline="\n"
+    ) as stream:
+        sink = BoundedConsoleSink(stream)
+        try:
+            sink.write("你好\n")
+            sink._queue.join()
+            assert data.getvalue() == "你好\n".encode("ascii", errors)
+        finally:
+            sink.close()
+
+
+@pytest.mark.parametrize(
+    ("native_ansi", "tty"), [(True, True), (False, True), (False, False)]
+)
+def test_windows_console_adaptation(monkeypatch, native_ansi, tty):
+    """Enable VT, convert legacy console colors, and preserve pipe colors."""
+    colorama = pytest.importorskip("colorama.ansitowin32")
+    monkeypatch.setattr(colorama, "os", SimpleNamespace(name="nt", environ={}))
+    monkeypatch.setattr(colorama, "winapi_test", lambda: True)
+    enable_vt = MagicMock(return_value=native_ansi)
+    monkeypatch.setattr(colorama, "enable_vt_processing", enable_vt)
+    monkeypatch.setattr(colorama, "winterm", None)
+
+    class Console(io.StringIO):
+        def fileno(self):
+            return 17
+
+        def isatty(self):
+            return tty
+
+    stream = Console()
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(sys, "__stdout__", stream)
+    sink = BoundedConsoleSink(stream)
+    try:
+        sink.write("\x1b[32mgreen\x1b[0m\n")
+        sink._queue.join()
+        assert stream.getvalue() == (
+            "green\n" if tty and not native_ansi else "\x1b[32mgreen\x1b[0m\n"
+        )
+        enable_vt.assert_called_once_with(17)
+    finally:
+        sink.close()
+
+
+def test_regular_close_keeps_standard_streams(monkeypatch):
+    """Restrict standard-stream isolation to process shutdown under backpressure."""
+    entered = threading.Event()
+    release = threading.Event()
+
+    class BlockedStream(io.StringIO):
+        def write(self, text):
+            entered.set()
+            release.wait(5)
+            return super().write(text)
+
+    stream = BlockedStream()
+    sink = BoundedConsoleSink(stream)
+    monkeypatch.setattr(sys, "stdout", stream)
+    monkeypatch.setattr(sys, "stderr", stream)
+    try:
+        sink.write("blocked\n")
+        assert entered.wait(1)
+        sink.close()
+        assert sys.stdout is stream
+        assert sys.stderr is stream
+        assert sink._thread.is_alive()
+    finally:
+        release.set()
+        sink.close()
+    assert not sink._thread.is_alive()
+
+
+def test_clean_shutdown_keeps_standard_streams(monkeypatch):
+    """Leave healthy output available to later atexit callbacks."""
+    stream = io.StringIO()
+    sink = BoundedConsoleSink(stream)
+    monkeypatch.setattr(sys, "stdout", stream)
+    monkeypatch.setattr(sys, "stderr", stream)
+    sink.write("last record\n")
+    sink._shutdown()
+    assert not sink._thread.is_alive()
+    assert stream.getvalue() == "last record\n"
+    assert sys.stdout is stream
+    assert sys.stderr is stream
 
 
 @pytest.mark.parametrize("capacity", [0, -1])
@@ -157,21 +279,57 @@ def test_log_level_reconfiguration_reuses_console_writer(monkeypatch):
 
 
 @pytest.mark.parametrize("unbuffered", [False, True])
-def test_exit_with_unread_stdout_pipe(unbuffered):
+@pytest.mark.parametrize("stderr_alias", [False, True])
+@pytest.mark.parametrize("close_first", [False, True])
+def test_exit_with_unread_stdout_pipe(unbuffered, stderr_alias, close_first):
     """A blocked daemon must not hold stdout's buffer lock during shutdown."""
     source_path = Path(__file__).parents[2] / "astrbot/core/utils/console_sink.py"
     source = textwrap.dedent(f"""
         import importlib.util
         import os
         import sys
+        import asyncio
+        import io
+        import threading
         import time
         spec = importlib.util.spec_from_file_location('console_sink', {str(source_path)!r})
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
+        entered = threading.Event()
+        completed = threading.Event()
+        original = sys.stdout
+        raw = getattr(original.buffer, 'raw', original.buffer)
+        class ObservedRaw(io.RawIOBase):
+            def writable(self):
+                return True
+            def write(self, data):
+                entered.set()
+                result = raw.write(data)
+                completed.set()
+                return result
+
+        observed = ObservedRaw()
+        output = observed if {unbuffered!r} else io.BufferedWriter(observed)
+        sys.stdout = io.TextIOWrapper(output, encoding=original.encoding,
+                                     errors=original.errors, write_through={unbuffered!r})
+        if {stderr_alias!r}:
+            sys.stderr = sys.stdout
         sink = module.BoundedConsoleSink(sys.stdout, capacity=2)
-        for _ in range(10):
-            sink.write('x' * 1000000)
-        time.sleep(0.2)
+        sink.write('x' * 1000000)
+        assert entered.wait(2), 'writer did not enter raw pipe IO'
+
+        async def probe():
+            started = time.monotonic()
+            for index in range(500):
+                sink.write('record ' + str(index) + '\\n')
+            await asyncio.sleep(0)
+            assert time.monotonic() - started < 1, 'producer blocked'
+        asyncio.run(probe())
+        assert sink.dropped == 498
+        assert not completed.is_set(), 'pipe write unexpectedly completed'
+        if {close_first!r}:
+            sink.close()
+            assert sys.stdout is sink._original_stream
         os.write(2, b'ready\\n')
     """)
     command = [sys.executable]
