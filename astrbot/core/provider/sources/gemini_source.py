@@ -472,17 +472,20 @@ class ProviderGoogleGenAI(Provider):
                 logger.warning("Text content is empty, added a space as placeholder.")
             return types.Part.from_text(text=content_a)
 
-        async def resolve_image_url(image_url_dict: dict) -> tuple[bytes, str]:
+        async def resolve_image_url(image_url_dict: dict) -> tuple[bytes, str] | None:
             url = image_url_dict["url"]
             image_data = await resolve_media_ref_to_base64_data(
                 url,
                 media_type="image",
-                strict=True,
             )
             if image_data is None:
-                raise ValueError(
-                    f"Failed to resolve Gemini history image: {describe_media_ref(url)}"
+                # A history image that cannot be materialized is skipped so one
+                # stale reference does not fail the whole replayed turn.
+                logger.warning(
+                    "Skipping Gemini history image that could not be resolved: %s",
+                    describe_media_ref(url),
                 )
+                return None
             return base64.b64decode(image_data.base64_data), image_data.mime_type
 
         async def process_audio_url(audio_url_dict: dict) -> types.Part:
@@ -532,7 +535,10 @@ class ProviderGoogleGenAI(Provider):
                             parts.append(types.Part.from_text(text=item["text"] or " "))
                         elif item["type"] == "image_url":
                             image_url = item["image_url"]
-                            data, mime_type = await resolve_image_url(image_url)
+                            resolved_image = await resolve_image_url(image_url)
+                            if resolved_image is None:
+                                continue
+                            data, mime_type = resolved_image
                             response = tool_responses.get(
                                 image_url.get("tool_result_index")
                             )
@@ -556,6 +562,14 @@ class ProviderGoogleGenAI(Provider):
                                 )
                         elif item["type"] == "audio_url":
                             parts.append(await process_audio_url(item["audio_url"]))
+                    if not parts and not (
+                        gemini_contents
+                        and isinstance(gemini_contents[-1], types.UserContent)
+                        and gemini_contents[-1].parts
+                    ):
+                        # An image-only turn whose image was skipped still needs
+                        # a non-empty UserContent for a valid request.
+                        parts = [types.Part.from_text(text=" ")]
                 else:
                     parts = [create_text_part(content)]
                 append_or_extend(gemini_contents, parts, types.UserContent)
