@@ -4,7 +4,7 @@ import asyncio
 import json
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -680,7 +680,7 @@ class TestRunActiveAgentJob:
     ):
         """Apply the session plugin policy to cron response hooks and tools."""
         from astrbot.core.agent.tool import FunctionTool, ToolSet
-        from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
+        from astrbot.core.astr_agent_hooks import MainAgentHooks
         from astrbot.core.astr_main_agent import _plugin_tool_fix
         from astrbot.core.pipeline import context_utils
         from astrbot.core.star.star import StarMetadata, star_map
@@ -728,6 +728,7 @@ class TestRunActiveAgentJob:
 
         runner = MagicMock(state=AgentState.DONE)
         runner.step_until_done.return_value.__aiter__.return_value = []
+        runner.step_until_done.return_value.aclose = AsyncMock()
         runner.get_final_llm_resp.return_value = None
         with (
             patch(
@@ -736,7 +737,11 @@ class TestRunActiveAgentJob:
             ),
             patch(
                 "astrbot.core.astr_main_agent.build_main_agent",
-                AsyncMock(return_value=SimpleNamespace(agent_runner=runner)),
+                AsyncMock(
+                    return_value=SimpleNamespace(
+                        agent_runner=runner, conversation_events=None, reset_coro=None
+                    )
+                ),
             ) as build_agent,
             patch("astrbot.core.cron.manager.persist_agent_history", AsyncMock()),
         ):
@@ -751,7 +756,7 @@ class TestRunActiveAgentJob:
         req = build_agent.call_args.kwargs["req"]
         req.func_tool = tools
         _plugin_tool_fix(event, req)
-        await MAIN_AGENT_HOOKS.on_agent_done(
+        await MainAgentHooks(None).on_agent_done(
             SimpleNamespace(context=SimpleNamespace(event=event)),
             SimpleNamespace(reasoning_content=""),
         )
@@ -786,13 +791,19 @@ class TestRunActiveAgentJob:
         conv = MagicMock()
         conv.history = json.dumps(history)
 
+        from astrbot.core.agent.response import AgentResponse
+
+        started = AgentResponse("turn.started", {}, "turn")
+        writer = MagicMock(consume=AsyncMock(), finish_turn=AsyncMock())
+
         class FakeRunner:
+            run_context = MagicMock()
+
             state = AgentState.DONE
 
             def step_until_done(self, max_step):
                 async def gen():
-                    if False:
-                        yield None
+                    yield started
 
                 return gen()
 
@@ -805,11 +816,11 @@ class TestRunActiveAgentJob:
             "2026-10-13T01:00:00+00:00",
         )
 
-        async def fake_build_main_agent(*, event, plugin_context, config, req):
+        async def fake_build_main_agent(*, event, plugin_context, config, req, apply_reset):
             captured["config"] = config
             captured["req"] = req
             captured["requests"].append(req)
-            return MagicMock(agent_runner=FakeRunner())
+            return MagicMock(agent_runner=FakeRunner(), conversation_events=writer, reset_coro=None)
 
         async def fake_persist_agent_history(*args, **kwargs):
             return None
@@ -850,6 +861,9 @@ class TestRunActiveAgentJob:
         assert "old question" not in request.system_prompt
         assert "old answer" not in request.system_prompt
         assert request.contexts == history
+        assert writer.consume.await_args_list == [call(started), call(started)]
+        assert writer.finish_turn.await_args_list == [call("failed"), call("failed")]
+        assert writer.runtime_context is FakeRunner.run_context
         first, second = captured["requests"]
         assert first.system_prompt == second.system_prompt
         assert first.contexts == second.contexts == history
@@ -920,8 +934,8 @@ class TestRunActiveAgentJob:
         conv.history = "[]"
         runner = _StepCapturingRunner()
 
-        async def fake_build_main_agent(*, event, plugin_context, config, req):
-            return MagicMock(agent_runner=runner)
+        async def fake_build_main_agent(*, event, plugin_context, config, req, apply_reset):
+            return MagicMock(agent_runner=runner, conversation_events=None, reset_coro=None)
 
         with (
             patch(
@@ -975,7 +989,7 @@ class TestRunActiveAgentJob:
                 resp.completion_text = "malformed_function_call"
                 return resp
 
-        fake_result = SimpleNamespace(agent_runner=FakeRunner())
+        fake_result = SimpleNamespace(agent_runner=FakeRunner(), conversation_events=None, reset_coro=None)
         with (
             patch(
                 "astrbot.core.astr_main_agent.build_main_agent",

@@ -2,6 +2,7 @@ from typing import Any
 
 from mcp.types import CallToolResult
 
+from astrbot.core.agent.conversation_events import ConversationEventWriter
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool
@@ -11,6 +12,16 @@ from astrbot.core.star.star_handler import EventType
 
 
 class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
+    """Dispatch hooks for one execution using its explicitly owned writer."""
+
+    def __init__(self, writer: ConversationEventWriter | None) -> None:
+        """Associate hook dispatch with one execution.
+
+        Args:
+            writer: Host-owned writer, or None for runs without persistence.
+        """
+        self._writer = writer
+
     async def on_agent_begin(
         self, run_context: ContextWrapper[AstrAgentContext]
     ) -> None:
@@ -18,6 +29,7 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
             run_context.context.event,
             EventType.OnAgentBeginEvent,
             run_context,
+            writer=self._writer,
         )
 
     async def on_agent_done(self, run_context, llm_response) -> None:
@@ -32,12 +44,14 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
             run_context.context.event,
             EventType.OnLLMResponseEvent,
             llm_response,
+            writer=self._writer,
         )
         await call_event_hook(
             run_context.context.event,
             EventType.OnAgentDoneEvent,
             run_context,
             llm_response,
+            writer=self._writer,
         )
 
     async def on_tool_start(
@@ -51,6 +65,7 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
             EventType.OnUsingLLMToolEvent,
             tool,
             tool_args,
+            writer=self._writer,
         )
 
     async def on_tool_end(
@@ -67,11 +82,9 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
             tool,
             tool_args,
             tool_result,
+            writer=self._writer,
         )
 
 
 class EmptyAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
     pass
-
-
-MAIN_AGENT_HOOKS = MainAgentHooks()

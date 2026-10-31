@@ -169,7 +169,7 @@ export type ChatRequest = {
     /**
      * Internal WebUI checkpoint override.
      */
-    _llm_checkpoint_id?: string;
+    _turn_id?: string;
     /**
      * Internal WebUI platform history override.
      */

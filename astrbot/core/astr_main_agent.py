@@ -12,12 +12,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from astrbot.core import logger
+from astrbot.core.agent.conversation_events import ConversationEventWriter
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import TextPart
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.astr_agent_context import AgentContextWrapper, AstrAgentContext
-from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
+from astrbot.core.astr_agent_hooks import MainAgentHooks
 from astrbot.core.astr_agent_run_util import AgentRunner
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.astr_main_agent_resources import (
@@ -30,7 +31,7 @@ from astrbot.core.astr_main_agent_resources import (
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
 )
 from astrbot.core.computer.booters.local import resolve_windows_shell
-from astrbot.core.conversation_mgr import Conversation
+from astrbot.core.conversation_mgr import Conversation, ConversationManager
 from astrbot.core.db import BaseDatabase
 from astrbot.core.llm_error_messages import LLM_ERROR_MESSAGES
 from astrbot.core.message.components import File, Image, Record, Reply, Video
@@ -253,6 +254,7 @@ class MainAgentBuildResult:
     provider_request: ProviderRequest
     provider: Provider
     reset_coro: Coroutine | None = None
+    conversation_events: ConversationEventWriter | None = None
 
 
 def _set_llm_error_message(event: AstrMessageEvent, key: str, **params: str) -> None:
@@ -1999,7 +2001,19 @@ async def build_main_agent(
         supports_image=_provider_supports_modality(provider, "image"),
     )
 
+    event_writer = None
+    if req.conversation and isinstance(
+        plugin_context.conversation_manager, ConversationManager
+    ):
+        event_writer = await plugin_context.conversation_manager._event_writer(
+            req.conversation.cid,
+            unified_msg_origin=event.unified_msg_origin,
+            expected_revision=req.conversation.revision,
+        )
+        event_writer.request = req
+
     reset_coro = agent_runner.reset(
+        turn_id=event.get_extra("turn_id"),
         provider=provider,
         request=req,
         run_context=AgentContextWrapper(
@@ -2007,7 +2021,7 @@ async def build_main_agent(
             tool_call_timeout=config.tool_call_timeout,
         ),
         tool_executor=FunctionToolExecutor(),
-        agent_hooks=MAIN_AGENT_HOOKS,
+        agent_hooks=MainAgentHooks(event_writer),
         streaming=config.streaming_response,
         llm_compress_instruction=config.llm_compress_instruction,
         llm_compress_keep_recent_ratio=config.llm_compress_keep_recent_ratio,
@@ -2039,4 +2053,5 @@ async def build_main_agent(
         provider_request=req,
         provider=provider,
         reset_coro=reset_coro if not apply_reset else None,
+        conversation_events=event_writer,
     )

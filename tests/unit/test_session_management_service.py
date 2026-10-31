@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from astrbot.core import sp
-from astrbot.core.db.po import ConversationV2, UmoAlias, UmoSender
+from astrbot.core.db.po import ConversationV3, UmoAlias, UmoSender
 from astrbot.dashboard.services.session_management_service import (
     SessionManagementService,
 )
@@ -60,16 +60,16 @@ async def test_known_umos_sort_by_latest_update_across_all_sources(temp_db):
     """Aggregate duplicates, preserve source-only UMOs and break equal timestamps stably."""
     start = datetime(2026, 1, 1)
     records = [
-        ConversationV2(
+        ConversationV3(
             platform_id="qq",
-            user_id="qq:GroupMessage:combined",
+            umo="qq:GroupMessage:combined",
             updated_at=start + timedelta(seconds=4),
         ),
-        ConversationV2(
-            platform_id="qq", user_id="qq:GroupMessage:old", updated_at=start
+        ConversationV3(
+            platform_id="qq", umo="qq:GroupMessage:old", updated_at=start
         ),
-        ConversationV2(
-            platform_id="qq", user_id="", updated_at=start + timedelta(seconds=99)
+        ConversationV3(
+            platform_id="qq", umo="", updated_at=start + timedelta(seconds=99)
         ),
         UmoAlias(
             umo="qq:GroupMessage:combined",

@@ -1,6 +1,8 @@
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from ..response import AgentResponse
 from .compressor import ContextCompressor
 from .token_counter import TokenCounter
 
@@ -33,3 +35,7 @@ class ContextConfig:
     """Custom token counting method. If None, the default method is used."""
     custom_compressor: ContextCompressor | None = None
     """Custom context compression method. If None, the default method is used."""
+    request_event_emitter: Callable[[AgentResponse], Awaitable[None]] | None = None
+    """Optional runtime event sink for summary model requests."""
+    turn_id: str | None = None
+    """Runner turn identity for summary request events."""

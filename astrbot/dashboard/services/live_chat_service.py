@@ -343,7 +343,7 @@ class LiveChatService:
         message_parts: list[dict],
         agent_stats: dict,
         refs: dict,
-        llm_checkpoint_id: str | None = None,
+        turn_id: str | None = None,
     ):
         new_his = build_bot_history_content(
             message_parts,
@@ -357,7 +357,7 @@ class LiveChatService:
             content=new_his,
             sender_id="bot",
             sender_name="bot",
-            llm_checkpoint_id=llm_checkpoint_id,
+            turn_id=turn_id,
         )
 
     async def send_chat_payload(
@@ -562,7 +562,7 @@ class LiveChatService:
         await self.ensure_chat_subscription(session, session_id, send_json)
 
         back_queue = webchat_queue_mgr.get_or_create_back_queue(message_id, session_id)
-        llm_checkpoint_id = str(uuid.uuid4())
+        turn_id = str(uuid.uuid4())
 
         pending_bot_message_flusher = None
         try:
@@ -582,7 +582,7 @@ class LiveChatService:
                         "flags": flags,
                         "locale": message.get("locale"),
                         "message_id": message_id,
-                        "llm_checkpoint_id": llm_checkpoint_id,
+                        "turn_id": turn_id,
                     },
                 ),
             )
@@ -594,7 +594,7 @@ class LiveChatService:
                 content={"type": "user", "message": message_parts_for_storage},
                 sender_id=session.username,
                 sender_name=session.username,
-                llm_checkpoint_id=llm_checkpoint_id,
+                turn_id=turn_id,
             )
             await self.send_chat_payload(
                 session,
@@ -604,7 +604,7 @@ class LiveChatService:
                     "data": {
                         "id": saved_user_record.id,
                         "created_at": to_utc_isoformat(saved_user_record.created_at),
-                        "llm_checkpoint_id": llm_checkpoint_id,
+                        "turn_id": turn_id,
                     },
                     **request_metadata,
                 },
@@ -643,7 +643,7 @@ class LiveChatService:
                     message_parts_to_save,
                     agent_stats,
                     extracted_refs,
-                    llm_checkpoint_id,
+                    turn_id,
                 )
                 message_accumulator = BotMessageAccumulator()
                 agent_stats = {}
@@ -780,7 +780,7 @@ class LiveChatService:
                                     "created_at": to_utc_isoformat(
                                         saved_record.created_at
                                     ),
-                                    "llm_checkpoint_id": llm_checkpoint_id,
+                                    "turn_id": turn_id,
                                 },
                                 **request_metadata,
                             },

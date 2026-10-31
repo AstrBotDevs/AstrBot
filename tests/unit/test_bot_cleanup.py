@@ -11,7 +11,7 @@ from sqlmodel import select
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.cron.manager import CronJobManager
 from astrbot.core.db.po import (
-    ConversationV2,
+    ConversationV3,
     CronJob,
     PlatformMessageHistory,
     PlatformStat,
@@ -69,14 +69,14 @@ async def test_cleanup_is_selective_and_matches_exact_platform(
             core.conversation_manager.session_conversations[umo] = platform
             groups["shared"]["umos"].append(umo)
             routes[f"{platform}::"] = "shared"
+            await temp_db.create_conversation(
+                user_id=umo,
+                platform_id=platform,
+                cid=platform,
+                content=[{"role": "user", "content": "Keep me"}],
+            )
             records.extend(
                 [
-                    ConversationV2(
-                        conversation_id=platform,
-                        platform_id=platform,
-                        user_id=umo,
-                        content=[{"role": "user", "content": "Keep me"}],
-                    ),
                     PlatformMessageHistory(
                         platform_id=platform, user_id="room", content={}
                     ),
@@ -133,7 +133,7 @@ async def test_cleanup_is_selective_and_matches_exact_platform(
 
         async with temp_db.get_db() as session:
             for model, category, field in [
-                (ConversationV2, "conversations", "platform_id"),
+                (ConversationV3, "conversations", "platform_id"),
                 (PlatformMessageHistory, "message_history", "platform_id"),
                 (UmoAlias, "message_history", "umo"),
                 (UmoSender, "message_history", "umo"),

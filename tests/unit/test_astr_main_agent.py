@@ -202,7 +202,7 @@ async def test_proactive_agent_uses_session_fallback_models(
         ),
         patch.object(ama, "_decorate_llm_request", AsyncMock()),
         patch.object(ama, "_apply_kb", AsyncMock()),
-        patch.object(ama, "MAIN_AGENT_HOOKS", BaseAgentRunHooks()),
+        patch.object(ama, "MainAgentHooks", return_value=BaseAgentRunHooks()),
         patch.object(ama, "AgentRunner", return_value=runner),
         patch("astrbot.core.cron.manager.persist_agent_history", AsyncMock()),
         patch("astrbot.core.astr_agent_tool_exec.persist_agent_history", AsyncMock()),
@@ -323,6 +323,7 @@ async def test_proactive_agent_respects_runtime_and_safety_settings(
         runner = runner_cls.return_value
         runner.reset = AsyncMock()
         runner.step_until_done.return_value.__aiter__.return_value = []
+        runner.step_until_done.return_value.aclose = AsyncMock()
         runner.get_final_llm_resp.return_value = None
 
         if entrypoint == "cron":

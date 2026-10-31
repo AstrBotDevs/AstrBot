@@ -385,13 +385,103 @@ async def test(self, event: AstrMessageEvent):
 
 ## Conversation Manager
 
+Use `self.context.conversations` for conversation operations. It provides the existing
+`new_conversation`, `get_conversation`, selection, update, and deletion methods.
+`self.context.conversation_manager` remains a compatibility alias. The previous
+`event.conversation_events` and `get_conversation_events()` entry points have been
+removed; plugins use `conversations.append_message()` and
+`conversations.append_plugin_event()` instead of accessing a writer.
+
+The deprecated `update_conversation_title()` and
+`update_conversation_persona_id()` methods have been removed. Use
+`update_conversation(..., title=...)` or
+`update_conversation(..., persona_id=...)` instead.
+
+### Appending Model Messages
+
+```py
+conversations = self.context.conversations
+message_id = await conversations.append_message(
+    "The user prefers concise answers.",
+    cid=target_cid,
+)
+```
+
+`content` accepts text or a list of AstrBot `ContentPart` objects:
+
+```py
+from astrbot.core.agent.message import ImageURLPart, TextPart
+
+await conversations.append_message(
+    [
+        TextPart(text="Describe this image."),
+        ImageURLPart(
+            image_url=ImageURLPart.ImageURL(url="https://example.com/image.png")
+        ),
+    ],
+    cid=target_cid,
+)
+```
+
+The host supplies `role="user"`;
+plugins do not submit a role or a complete message object. The message is persisted
+and appended to the stored conversation. It does not change a running agent's
+working context, including when called from a hook or tool. The call returns a
+string ID after the database transaction commits. An optional `message_id` can identify retries of the same submission.
+
+### Appending Plugin Events
+
+```py
+event_id = await conversations.append_plugin_event(
+    event_type="my_plugin.retrieval_completed",
+    data={"document_ids": ["document-1"]},
+    cid=target_cid,
+)
+```
+
+This stores a custom event associated with the conversation, without changing
+working or future model context. Use a plugin-prefixed `event_type` to avoid name
+collisions; the host does not infer or enforce plugin identity from this name.
+`data` is a JSON-serializable object. The host supplies the internal event namespace,
+version, sequence, and creation time. The call returns the committed event ID;
+an optional `event_id` identifies retries of the same submission.
+
+Use [plugin KV storage](./storage.md) for mutable plugin state that does not need
+a conversation event history, for example `await self.put_kv_data(f"retrieval:{cid}", data)`.
+KV storage is isolated by plugin. Include `cid` in the key when state belongs to
+one conversation.
+
+Both append methods require an explicit keyword-only `cid` identifying an existing
+conversation. The host reads its UMO from storage. Missing or invalid conversations
+raise `ValueError`; omitting `cid` raises `TypeError`. These operations do not infer
+a target from the active message, selected conversation, or calling task. Neither
+method starts an agent run or schedules a follow-up.
+
+To modify the current execution, edit the `ProviderRequest.contexts` or runtime
+messages supplied to the relevant hook. The host records those changes through the
+writer owned by that execution. Hook signatures are unchanged; plugins do not
+receive the writer. Each execution has its own hooks instance, and background or
+cron executions do not inherit a conversation writer or plugin identity through
+`ContextVar`.
+
+Direct service calls such as `update_conversation()` and `add_message_pair()` are
+independent persistence operations, even inside a hook. They do not synchronize an
+active execution's working context. If an independent write changes the stored
+revision, the running execution's next write can raise `ConversationConflictError`
+instead of overwriting that change. Use hook inputs for in-run changes; do not
+retry side-effecting tools to resolve a revision conflict.
+
+Only working-context changes captured at the plugin hook boundary are attributed
+to plugins for baseline retention. Direct service calls keep unknown attribution
+and are conservatively retained.
+
 ### Getting the Current LLM Conversation History for a Session
 
 ```py
 from astrbot.core.conversation_mgr import Conversation
 
 uid = event.unified_msg_origin
-conv_mgr = self.context.conversation_manager
+conv_mgr = self.context.conversations
 curr_cid = await conv_mgr.get_curr_conversation_id(uid)
 conversation = await conv_mgr.get_conversation(uid, curr_cid)  # Conversation
 ```
@@ -432,7 +522,7 @@ from astrbot.core.agent.message import (
     TextPart,
 )
 
-conv_mgr = self.context.conversation_manager
+conv_mgr = self.context.conversations
 provider_id = await self.context.get_current_chat_provider_id(event.unified_msg_origin)
 curr_cid = await conv_mgr.get_curr_conversation_id(event.unified_msg_origin)
 user_msg = UserMessageSegment(content=[TextPart(text="hi")])
