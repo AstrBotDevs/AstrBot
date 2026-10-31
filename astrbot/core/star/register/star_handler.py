@@ -476,6 +476,36 @@ def register_on_llm_response(**kwargs):
     return decorator
 
 
+def register_on_llm_response_intermediate(**kwargs):
+    """当 LLM 在中间轮次返回响应、且该响应同时要求调用工具时的事件
+
+    每个请求了工具调用的轮次触发一次，触发时机在该轮响应文本发送给用户之前、
+    工具执行之前。可以使用 `on_llm_response` 监听最终响应。
+
+    Examples:
+    ```py
+    from astrbot.api.provider import LLMResponse
+
+    @on_llm_response_intermediate()
+    async def test(self, event: AstrMessageEvent, response: LLMResponse) -> None:
+        ...
+    ```
+
+    请务必接收两个参数：event, response
+
+    """
+
+    def decorator(awaitable):
+        _ = get_handler_or_create(
+            awaitable,
+            EventType.OnLLMResponseIntermediateEvent,
+            **kwargs,
+        )
+        return awaitable
+
+    return decorator
+
+
 def register_on_agent_begin(**kwargs):
     """当 Agent 开始运行时的事件
 

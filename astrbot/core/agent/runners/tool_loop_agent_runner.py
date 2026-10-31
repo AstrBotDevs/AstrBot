@@ -923,6 +923,30 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         if not llm_resp.tools_call_name:
             await self._complete_with_assistant_response(llm_resp)
+        else:
+            # Intermediate round: its text is emitted as llm_result below and its
+            # tools run afterwards. Restore the tool-call payload after the hook so
+            # that a handler may rewrite the text but cannot change whether or which
+            # tools run, and cannot turn this round into a final one.
+            tool_call_snapshot = (
+                llm_resp.tools_call_name,
+                llm_resp.tools_call_args,
+                llm_resp.tools_call_ids,
+            )
+            try:
+                await self.agent_hooks.on_llm_response_intermediate(
+                    self.run_context, llm_resp
+                )
+            except Exception as e:
+                logger.error(
+                    f"Error in on_llm_response_intermediate hook: {e}",
+                    exc_info=True,
+                )
+            (
+                llm_resp.tools_call_name,
+                llm_resp.tools_call_args,
+                llm_resp.tools_call_ids,
+            ) = tool_call_snapshot
 
         # 返回 LLM 结果
         if llm_resp.reasoning_content:
