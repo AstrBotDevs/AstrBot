@@ -105,24 +105,24 @@ class _RecordEnricherFilter(logging.Filter):
             record.source = "plugin"
             record.plugin_name = plugin_name
         else:
-            # Framework code sometimes reports on behalf of a plugin: for
-            # example, the plugin loader logs why a plugin failed to load.
-            # Such call sites pass ``extra={"plugin_name": ...}`` so the WebUI
-            # can list the plugin in the log filter and tag the line with it.
-            explicit_plugin_name = getattr(record, "plugin_name", None)
-            if explicit_plugin_name:
-                record.plugin_tag = f"[{explicit_plugin_name}]"
-                record.source = "plugin"
-                record.plugin_name = explicit_plugin_name
+            # Core code can log on behalf of a plugin (the plugin loader reports
+            # load failures), in which case it stamps the plugin name on the
+            # record. Other records are attributed to a plugin by their source
+            # file. Both have to yield the same identifier: the Dashboard log
+            # page builds its plugin filter from the distinct ``plugin_name``
+            # values of the retained records.
+            stamped_plugin_name = getattr(record, "plugin_name", None)
+            plugin_name = stamped_plugin_name or _plugin_name_from_path(record.pathname)
+            if plugin_name:
+                plugin_name = _plugin_name_aliases.get(plugin_name, plugin_name)
+            if not plugin_name:
+                record.plugin_tag = "[Core]"
+            elif stamped_plugin_name:
+                record.plugin_tag = f"[{plugin_name}]"
             else:
-                # Records from other loggers are attributed to a plugin by their
-                # source file, so the plugin name must come from the same source
-                # file: the Dashboard log page builds its plugin filter from the
-                # distinct ``plugin_name`` values of the retained records.
-                plugin_name = _plugin_name_from_path(record.pathname)
-                record.plugin_tag = "[Plug]" if plugin_name else "[Core]"
-                record.source = "plugin" if plugin_name else "core"
-                record.plugin_name = plugin_name
+                record.plugin_tag = "[Plug]"
+            record.source = "plugin" if plugin_name else "core"
+            record.plugin_name = plugin_name
         record.short_levelname = _get_short_level_name(record.levelname)
         record.astrbot_version_tag = (
             f" [v{VERSION}]" if record.levelno >= logging.WARNING else ""
@@ -165,6 +165,16 @@ class _QueueAnsiColorFilter(logging.Filter):
         return True
 
 
+_plugin_name_aliases: dict[str, str] = {}
+"""Plugin directory names mapped to the name their records are attributed to.
+
+A plugin directory does not have to match the name in the plugin's metadata, so
+the loader registers the mapping once a plugin loads. Records emitted through
+the plugin's dedicated logger and records whose source file is inside the plugin
+directory then share a single identifier in the Dashboard log filter.
+"""
+
+
 def _plugin_name_from_path(pathname: str | None) -> str | None:
     """Return the plugin directory that contains a log record's source file.
 
@@ -175,9 +185,9 @@ def _plugin_name_from_path(pathname: str | None) -> str | None:
         pathname: Source file path of the log record.
 
     Returns:
-        The name of the plugin directory, or None if the file is not part of a
-        plugin. For a plugin that did not load, this is the directory name that
-        the plugin list reports for it.
+        The plugin directory name, or None if the file is not part of a plugin.
+        The directory name is the plugin identifier for a plugin that never
+        loaded; loaded plugins are resolved through ``_plugin_name_aliases``.
     """
     if not pathname:
         return None
@@ -611,6 +621,22 @@ class LogManager:
             return logging.getLevelName(override)
         base_level = logging.getLogger("astrbot").level
         return base_level if base_level > 0 else logging.INFO
+
+    @classmethod
+    def register_plugin_name_alias(
+        cls,
+        dir_name: str | None,
+        plugin_name: str | None,
+    ) -> None:
+        """Attribute a plugin directory to the plugin name used by its logger.
+
+        Args:
+            dir_name: Directory name of the plugin inside the plugin store.
+            plugin_name: Plugin name from the plugin metadata; ignored when
+                empty, in which case the directory name stays the identifier.
+        """
+        if dir_name and plugin_name:
+            _plugin_name_aliases[dir_name] = plugin_name
 
     @classmethod
     def get_plugin_logger(cls, plugin_name: str) -> logging.Logger:
