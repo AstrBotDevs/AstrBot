@@ -341,7 +341,7 @@ async def my_custom_hook_1(
 
 #### LLM 请求完成时
 
-在 LLM 请求完成后，会触发 `on_llm_response` 钩子。
+在 LLM 请求完成后，会触发 `on_llm_response` 钩子。该钩子只在最终响应时触发一次：某一轮响应如果同时要求调用工具，这一轮的文本由下文的 `on_llm_response_intermediate` 钩子负责。
 
 可以获取到 `ProviderResponse` 对象，可以对其进行修改。
 
@@ -356,6 +356,36 @@ async def on_llm_resp(
 ):  # 请注意有三个参数
     print(resp)
 ```
+
+> [!NOTE]
+> 在正常的最终回复中，该钩子在 assistant 消息写入运行上下文之后触发，因此它的修改会体现在随后的 `llm_result` 中，但不会改写已经写入上下文的这条消息。在流式输出下，已经发送给用户的文本片段无法撤回或修改。
+
+> 这里不能使用 yield 来发送消息。如需发送，请直接使用 `event.send()` 方法。
+
+#### 中间轮次 LLM 响应时
+
+> 适用于 AstrBot 版本 >= v4.30.0
+
+当 LLM 的某一轮响应要求调用工具时，会在该轮文本（如果有）发送给用户之前、工具执行之前触发一次 `on_llm_response_intermediate` 钩子。
+
+每个请求了工具调用的轮次触发一次；不请求工具调用的最终响应只触发 `on_llm_response` 钩子。
+
+可以获取到 `LLMResponse` 对象，可以修改其中的文本。工具调用的名称、参数等信息由 AstrBot 管理，这里对它们的修改不会生效。
+
+```python
+from astrbot.api.event import filter, AstrMessageEvent
+from astrbot.api.provider import LLMResponse
+
+
+@filter.on_llm_response_intermediate()
+async def on_llm_resp_intermediate(
+    self, event: AstrMessageEvent, resp: LLMResponse
+):  # 请注意有三个参数
+    print(resp)
+```
+
+> [!NOTE]
+> 该钩子在这一轮文本发送和写入上下文之前触发，因此文本修改会同时体现在发送给用户的内容和后续请求的历史中。在流式输出下，这一轮的文本片段可能已经先发送给了用户，此时钩子无法撤回或修改这些片段。
 
 > 这里不能使用 yield 来发送消息。如需发送，请直接使用 `event.send()` 方法。
 
