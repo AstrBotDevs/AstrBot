@@ -5078,8 +5078,13 @@ async def test_v1_persistent_trace_routes(asgi_client, asgi_app, monkeypatch, tm
         "has_errors": False,
         "has_models": False,
         "has_plugins": False,
+        "has_commands": True,
         "span_count": 1,
-        "attributes": {"astrbot.message_outline": "Hello"},
+        "attributes": {
+            "astrbot.umo": "qq:FriendMessage:session:user",
+            "astrbot.platform_id": "qq",
+            "astrbot.message_outline": "Hello",
+        },
     }
     try:
         assert store.append(
@@ -5107,9 +5112,20 @@ async def test_v1_persistent_trace_routes(asgi_client, asgi_app, monkeypatch, tm
             algorithm="HS256",
         )
         headers = {"Authorization": f"Bearer {token}"}
+        trace_second = int(stamp) // 1_000_000_000
         response = await asgi_client.get(
             "/api/v1/trace/history",
-            params={"limit": 1, "query": "Hello"},
+            params={
+                "limit": 1,
+                "query": "Hello",
+                "status": "completed",
+                "platforms": "qq,telegram",
+                "message_types": "FriendMessage",
+                "umo": "qq:FriendMessage:session:user",
+                "commands": True,
+                "start_time": trace_second,
+                "end_time": trace_second,
+            },
             headers=headers,
         )
         assert response.status_code == 200
@@ -5127,6 +5143,12 @@ async def test_v1_persistent_trace_routes(asgi_client, asgi_app, monkeypatch, tm
         assert response.json()["data"]["spans"][0]["span_id"] == span_id
         assert (
             await asgi_client.get("/api/v1/trace/history?limit=101", headers=headers)
+        ).status_code == 422
+        assert (
+            await asgi_client.get(
+                "/api/v1/trace/history?start_time=2&end_time=1",
+                headers=headers,
+            )
         ).status_code == 422
         assert (
             await asgi_client.get("/api/v1/trace/invalid", headers=headers)

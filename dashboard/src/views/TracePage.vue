@@ -68,7 +68,7 @@ onMounted(fetchTraceSettings);
   max-width: 1560px;
   min-height: 0;
   overflow: hidden;
-  padding: 0 12px 8px;
+  padding: 0 12px max(8px, env(safe-area-inset-bottom));
   width: 100%;
 }
 
@@ -79,7 +79,7 @@ onMounted(fetchTraceSettings);
 
 @media (max-width: 800px) {
   .trace-page {
-    padding: 0 4px 6px;
+    padding: 0 4px max(6px, env(safe-area-inset-bottom));
   }
 }
 </style>
