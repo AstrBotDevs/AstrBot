@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import copy
 import importlib.util
 import sys
 import types
 from pathlib import Path
 from typing import Generic, TypeVar
 
+import jsonschema
+import pytest
 from google.genai import types as genai_types
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -155,3 +158,123 @@ def test_openai_schema_sorts_tools_by_name_without_mutating_toolset_order():
         "zebra",
     ]
     assert [tool.name for tool in toolset.tools] == ["zebra", "alpha", "middle"]
+
+
+@pytest.mark.parametrize("value", ["unknown", 0, False, None, {"const": "data"}])
+def test_openai_schema_converts_nested_const_without_mutating_parameters(value):
+    tool_module = load_tool_module()
+    parameters = {
+        "type": "object",
+        "properties": {
+            "const": {"type": "string"},
+            "time": {
+                "oneOf": [
+                    {
+                        "type": "object",
+                        "properties": {"kind": {"const": value}},
+                    }
+                ]
+            },
+            "items": {"type": "array", "items": {"const": value}},
+        },
+        "$defs": {"kind": {"const": value}},
+        "default": {"const": "literal default"},
+        "examples": [{"const": "literal example"}],
+    }
+    original = copy.deepcopy(parameters)
+    tool = tool_module.FunctionTool(
+        name="query", description="Query records.", parameters=parameters
+    )
+
+    result = tool_module.ToolSet([tool]).openai_schema()[0]["function"]["parameters"]
+
+    assert result["properties"]["time"]["oneOf"][0]["properties"]["kind"] == {
+        "enum": [value]
+    }
+    assert result["properties"]["items"]["items"] == {"enum": [value]}
+    assert result["$defs"]["kind"] == {"enum": [value]}
+    assert result["properties"]["const"] == {"type": "string"}
+    assert result["default"] == original["default"]
+    assert result["examples"] == original["examples"]
+    assert tool.parameters == original
+    jsonschema.Draft202012Validator.check_schema(result)
+
+
+@pytest.mark.parametrize(
+    ("constant", "enum"),
+    [("a", ["a", "b"]), ("a", ["b"]), (True, [True, 1]), (1, [True, 1])],
+)
+def test_openai_schema_preserves_const_and_enum_intersection(constant, enum):
+    tool_module = load_tool_module()
+    tool = tool_module.FunctionTool(
+        name="query",
+        description="Query records.",
+        parameters={
+            "type": "object",
+            "properties": {"kind": {"const": constant, "enum": enum}},
+        },
+    )
+
+    original = copy.deepcopy(tool.parameters)
+    result = tool_module.ToolSet([tool]).openai_schema()[0]["function"]["parameters"]
+
+    assert tool.parameters == original
+    assert "const" not in result["properties"]["kind"]
+    for value in ("a", "b", True, 1, None):
+        instance = {"kind": value}
+        assert jsonschema.Draft202012Validator(result).is_valid(instance) == (
+            jsonschema.Draft202012Validator(original).is_valid(instance)
+        )
+
+
+@pytest.mark.parametrize(
+    "keyword",
+    [
+        "allOf",
+        "anyOf",
+        "oneOf",
+        "prefixItems",
+        "items",
+        "additionalProperties",
+        "not",
+        "if",
+        "then",
+        "else",
+    ],
+)
+def test_openai_schema_converts_const_in_schema_keywords(keyword):
+    tool_module = load_tool_module()
+    child = {"const": "a"}
+    nested = [child] if keyword in {"allOf", "anyOf", "oneOf", "prefixItems"} else child
+    parameters = {"type": "object", "properties": {"value": {keyword: nested}}}
+    original = copy.deepcopy(parameters)
+    tool = tool_module.FunctionTool(
+        name="query", description="Query records.", parameters=parameters
+    )
+
+    result = tool_module.ToolSet([tool]).openai_schema()[0]["function"]["parameters"]
+
+    expected = [{"enum": ["a"]}] if isinstance(nested, list) else {"enum": ["a"]}
+    assert result["properties"]["value"][keyword] == expected
+    assert tool.parameters == original
+
+
+def test_openai_schema_keeps_other_provider_constraints_and_empty_parameter_option():
+    tool_module = load_tool_module()
+    tool = tool_module.FunctionTool(
+        name="query",
+        description="Query records.",
+        parameters={"type": "object", "properties": {"kind": {"const": "a"}}},
+    )
+    toolset = tool_module.ToolSet([tool])
+    toolset.openai_schema()
+    assert toolset.anthropic_schema()[0]["input_schema"]["properties"]["kind"] == {
+        "const": "a"
+    }
+
+    empty_tool = tool_module.FunctionTool(
+        name="empty", description="No parameters.", parameters={}
+    )
+    empty_toolset = tool_module.ToolSet([empty_tool])
+    assert "parameters" not in empty_toolset.openai_schema(True)[0]["function"]
+    assert empty_toolset.openai_schema()[0]["function"]["parameters"] == {}
