@@ -1156,6 +1156,58 @@ async def test_reload_all_unbinds_every_registered_plugin(
 
 
 @pytest.mark.asyncio
+async def test_reload_unknown_plugin_name_does_not_reload_all(
+    plugin_manager_pm: PluginManager, monkeypatch
+):
+    """An explicit unknown name must report the mistake, not reload every plugin."""
+    _clear_star_runtime_state()
+    for plugin_name in ("plugin_one", "plugin_two"):
+        module_path = f"data.plugins.{plugin_name}.main"
+        metadata = star_manager_module.StarMetadata(
+            name=plugin_name,
+            root_dir_name=plugin_name,
+            module_path=module_path,
+        )
+        star_manager_module.star_map[module_path] = metadata
+        star_manager_module.star_registry.append(metadata)
+
+    terminated = []
+    unbound = []
+    loaded = []
+
+    async def mock_terminate(plugin):
+        terminated.append(plugin.name)
+
+    async def mock_unbind(plugin_name, plugin_module_path):
+        unbound.append(plugin_name)
+
+    async def mock_load(
+        specified_module_path=None,
+        specified_dir_name=None,
+        ignore_version_check=False,
+    ):
+        del specified_dir_name, ignore_version_check
+        loaded.append(specified_module_path)
+        return True, None
+
+    monkeypatch.setattr(plugin_manager_pm, "_terminate_plugin", mock_terminate)
+    monkeypatch.setattr(plugin_manager_pm, "_unbind_plugin", mock_unbind)
+    monkeypatch.setattr(plugin_manager_pm, "load", mock_load)
+
+    try:
+        success, error = await plugin_manager_pm.reload("plugin_that_does_not_exist")
+    finally:
+        _clear_star_runtime_state()
+
+    assert success is False
+    assert error is not None
+    assert "plugin_that_does_not_exist" in error
+    assert terminated == []
+    assert unbound == []
+    assert loaded == []
+
+
+@pytest.mark.asyncio
 async def test_turn_plugin_toggles_llm_tools_from_plugin_child_module(
     plugin_manager_pm: PluginManager,
     monkeypatch,

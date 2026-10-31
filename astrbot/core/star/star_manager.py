@@ -1035,6 +1035,11 @@ class PluginManager:
                     if smd.name == specified_plugin_name:
                         specified_module_path = smd.module_path
                         break
+                if not specified_module_path:
+                    # An unknown explicit name must not degrade into a full reload: that
+                    # terminates and re-imports every plugin and blocks the caller for
+                    # tens of seconds instead of reporting the mistake.
+                    return False, f"插件 {specified_plugin_name} 不存在。"
 
             # 终止插件
             if not specified_module_path:
