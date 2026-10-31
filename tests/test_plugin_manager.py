@@ -1852,6 +1852,7 @@ class Main(Star):
     provider_manager.provider_stt_settings = {}
     provider_manager.provider_tts_settings = {}
     provider_manager.default_chat_provider_id = ""
+    provider_manager._startup_provider_types = set()
     provider_manager.provider_insts = [fallback_provider]
     provider_manager.stt_provider_insts = []
     provider_manager.tts_provider_insts = []
@@ -1909,6 +1910,177 @@ class Main(Star):
         assert failing_provider_cls.creation_attempts == 2
         assert provider_cls.creation_count == 1
         assert provider_cls.initialization_count == 1
+    finally:
+        plugin_manager_pm._cleanup_plugin_state(plugin_name)
+        provider_registry[:] = registry_before
+        provider_cls_map.clear()
+        provider_cls_map.update(map_before)
+        _clear_star_runtime_state()
+
+
+@pytest.mark.asyncio
+async def test_pending_provider_pass_skips_provider_that_failed_at_startup(
+    plugin_manager_pm: PluginManager,
+    monkeypatch,
+):
+    """A Provider failing the startup pass is not constructed again after activation."""
+    from astrbot.core.provider import manager as provider_manager_module
+    from astrbot.core.provider.manager import ProviderManager
+    from astrbot.core.provider.register import provider_cls_map, provider_registry
+
+    _clear_star_runtime_state()
+    registry_before = list(provider_registry)
+    map_before = dict(provider_cls_map)
+    plugin_name = "startup_failed_provider_plugin"
+    failing_provider_type = "startup_failed_provider"
+    late_provider_type = "startup_provider_after_failure"
+    failing_provider_id = "provider-startup-failed"
+    late_provider_id = "provider-after-failure"
+    _write_startup_test_plugin(
+        plugin_manager_pm,
+        plugin_name,
+        f"""from astrbot.api.star import Star
+from astrbot.core.provider.provider import Provider
+from astrbot.core.provider.register import register_provider_adapter
+
+
+@register_provider_adapter("{failing_provider_type}", "Failing startup provider")
+class FailingStartupProvider(Provider):
+    creation_attempts = 0
+
+    def __init__(self, provider_config, provider_settings):
+        super().__init__(provider_config, provider_settings)
+        type(self).creation_attempts += 1
+
+    async def initialize(self):
+        raise RuntimeError("provider initialization failed")
+
+    def get_current_key(self):
+        return ""
+
+    def set_key(self, key):
+        pass
+
+    async def get_models(self):
+        return []
+
+    async def text_chat(self, *args, **kwargs):
+        raise NotImplementedError
+
+
+class LateProvider(Provider):
+    creation_count = 0
+    initialization_count = 0
+
+    def __init__(self, provider_config, provider_settings):
+        super().__init__(provider_config, provider_settings)
+        type(self).creation_count += 1
+
+    async def initialize(self):
+        type(self).initialization_count += 1
+
+    def get_current_key(self):
+        return ""
+
+    def set_key(self, key):
+        pass
+
+    async def get_models(self):
+        return []
+
+    async def text_chat(self, *args, **kwargs):
+        raise NotImplementedError
+
+
+class Main(Star):
+    async def initialize(self):
+        register_provider_adapter(
+            "{late_provider_type}",
+            "Late provider registered after a startup failure",
+        )(LateProvider)
+""",
+    )
+    preferences = {
+        "inactivated_plugins": [],
+        "inactivated_llm_tools": [],
+        "alter_cmd": {},
+        star_manager_module.PLUGIN_TOOL_STATE_MIGRATION_KEY: True,
+    }
+    _mock_plugin_preferences(monkeypatch, preferences)
+    monkeypatch.syspath_prepend(
+        str(Path(plugin_manager_pm.plugin_store_path).parents[1])
+    )
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_get_plugin_modules",
+        lambda: [{"pname": plugin_name, "module": "main"}],
+    )
+
+    async def get_provider_selection(scope, scope_id, key, default=None):
+        return default
+
+    monkeypatch.setattr(
+        provider_manager_module.sp,
+        "get_async",
+        get_provider_selection,
+    )
+
+    provider_manager = ProviderManager.__new__(ProviderManager)
+    provider_manager.providers_config = [
+        {
+            "id": failing_provider_id,
+            "type": failing_provider_type,
+            "provider_type": "chat_completion",
+            "enable": True,
+            "key": [],
+        },
+        {
+            "id": late_provider_id,
+            "type": late_provider_type,
+            "provider_type": "chat_completion",
+            "enable": True,
+            "key": [],
+        },
+    ]
+    provider_manager.provider_sources_config = []
+    provider_manager.provider_settings = {}
+    provider_manager.provider_stt_settings = {}
+    provider_manager.provider_tts_settings = {}
+    provider_manager.default_chat_provider_id = ""
+    provider_manager.provider_insts = []
+    provider_manager.stt_provider_insts = []
+    provider_manager.tts_provider_insts = []
+    provider_manager.embedding_provider_insts = []
+    provider_manager.rerank_provider_insts = []
+    provider_manager.decision_provider_insts = []
+    provider_manager.curr_decision_provider_inst = None
+    provider_manager.inst_map = {}
+    provider_manager.curr_provider_inst = None
+    provider_manager.curr_stt_provider_inst = None
+    provider_manager.curr_tts_provider_inst = None
+    # Avoid scheduling the MCP background task from the startup pass.
+    provider_manager._mcp_init_task = SimpleNamespace(done=lambda: False)
+
+    try:
+        success, error = await plugin_manager_pm.initialize_plugins(
+            before_plugin_activation=provider_manager.initialize,
+            after_plugin_activation=(
+                provider_manager.initialize_pending_registered_providers
+            ),
+        )
+
+        assert success is True
+        assert error is None
+        failing_provider_cls = provider_cls_map[failing_provider_type].cls_type
+        late_provider_cls = provider_cls_map[late_provider_type].cls_type
+        assert failing_provider_id not in provider_manager.inst_map
+        assert late_provider_id in provider_manager.inst_map
+        assert failing_provider_cls.creation_attempts == 1, (
+            "A Provider that failed the startup pass must not be constructed again "
+            "by the post-activation pass."
+        )
+        assert late_provider_cls.creation_count == 1
+        assert late_provider_cls.initialization_count == 1
     finally:
         plugin_manager_pm._cleanup_plugin_state(plugin_name)
         provider_registry[:] = registry_before
@@ -1980,6 +2152,7 @@ async def test_pending_provider_pass_merges_provider_source_config(monkeypatch):
     provider_manager.provider_stt_settings = {}
     provider_manager.provider_tts_settings = {}
     provider_manager.default_chat_provider_id = ""
+    provider_manager._startup_provider_types = set()
     provider_manager.provider_insts = []
     provider_manager.stt_provider_insts = []
     provider_manager.tts_provider_insts = []

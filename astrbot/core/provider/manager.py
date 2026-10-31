@@ -80,6 +80,9 @@ class ProviderManager:
         """Provider instance map. Key: provider_id; value: Provider instance."""
         self.llm_tools = llm_tools
 
+        self._startup_provider_types: set[str] = set()
+        """Adapter types registered when the startup Provider pass finished."""
+
         self.curr_provider_inst: Provider | None = None
         """Default Provider instance. Deprecated; use get_using_provider()."""
         self.curr_stt_provider_inst: STTProvider | None = None
@@ -372,6 +375,11 @@ class ProviderManager:
                 logger.error(traceback.format_exc())
                 logger.error(e)
 
+        # Snapshot the adapter types this pass already considered. The
+        # post-activation pass only loads adapters registered after this point,
+        # so a Provider that failed here is not retried during startup.
+        self._startup_provider_types = set(provider_cls_map)
+
         selected_provider_id = await sp.get_async(
             key="curr_provider",
             default=self.default_chat_provider_id,
@@ -454,11 +462,14 @@ class ProviderManager:
             )
 
     async def initialize_pending_registered_providers(self) -> None:
-        """Load configured Providers registered during plugin activation.
+        """Load configured Providers whose adapters were registered after startup.
 
-        This pass is intentionally incremental: an existing Provider instance is
-        never reloaded or initialized twice. A failure in one newly registered
-        adapter does not prevent other pending Providers from loading.
+        This pass only considers adapter types that were absent when the
+        startup Provider pass finished, so a Provider that failed there is not
+        retried during the same startup. Existing Provider instances are never
+        reloaded or initialized twice, and a failure in one pending Provider
+        does not prevent the others from loading. The pass is called once after
+        plugin activation.
 
         Returns:
             None.
@@ -478,6 +489,7 @@ class ProviderManager:
                 or provider_id in self.inst_map
                 or not isinstance(provider_type, str)
                 or provider_type not in provider_cls_map
+                or provider_type in self._startup_provider_types
                 or provider_config.get("provider_type") == "agent_runner"
             ):
                 continue
