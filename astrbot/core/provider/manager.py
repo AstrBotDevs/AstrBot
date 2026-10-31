@@ -465,6 +465,10 @@ class ProviderManager:
         """
         loaded_provider_ids = []
         for provider_config in self.providers_config:
+            # A Provider entry may keep its adapter type and capability on the
+            # referenced provider source, so inspect the merged configuration
+            # that load_provider instantiates from.
+            provider_config = self.get_merged_provider_config(provider_config)
             provider_id = provider_config.get("id")
             provider_type = provider_config.get("type")
             if (

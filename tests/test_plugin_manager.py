@@ -1918,6 +1918,97 @@ class Main(Star):
 
 
 @pytest.mark.asyncio
+async def test_pending_provider_pass_merges_provider_source_config(monkeypatch):
+    """Provider entries that keep the adapter type on a source still load late."""
+    from astrbot.core.provider import manager as provider_manager_module
+    from astrbot.core.provider.manager import ProviderManager
+    from astrbot.core.provider.provider import Provider
+    from astrbot.core.provider.register import (
+        provider_cls_map,
+        provider_registry,
+        register_provider_adapter,
+    )
+
+    registry_before = list(provider_registry)
+    map_before = dict(provider_cls_map)
+    provider_type = "merged_source_provider"
+    provider_id = "provider-merged-source"
+
+    class MergedSourceProvider(Provider):
+        def get_current_key(self):
+            return ""
+
+        def set_key(self, key):
+            pass
+
+        async def get_models(self):
+            return []
+
+        async def text_chat(self, *args, **kwargs):
+            raise NotImplementedError
+
+    async def get_provider_selection(scope, scope_id, key, default=None):
+        return default
+
+    monkeypatch.setattr(
+        provider_manager_module.sp,
+        "get_async",
+        get_provider_selection,
+    )
+    register_provider_adapter(provider_type, "Merged source test provider")(
+        MergedSourceProvider
+    )
+
+    provider_manager = ProviderManager.__new__(ProviderManager)
+    provider_manager.providers_config = [
+        {
+            "id": provider_id,
+            "provider_source_id": "merged-source",
+            "enable": True,
+            "model": "test-model",
+        },
+    ]
+    provider_manager.provider_sources_config = [
+        {
+            "id": "merged-source",
+            "type": provider_type,
+            "provider_type": "chat_completion",
+            "key": [],
+        },
+    ]
+    provider_manager.provider_settings = {}
+    provider_manager.provider_stt_settings = {}
+    provider_manager.provider_tts_settings = {}
+    provider_manager.default_chat_provider_id = ""
+    provider_manager.provider_insts = []
+    provider_manager.stt_provider_insts = []
+    provider_manager.tts_provider_insts = []
+    provider_manager.embedding_provider_insts = []
+    provider_manager.rerank_provider_insts = []
+    provider_manager.decision_provider_insts = []
+    provider_manager.inst_map = {}
+    provider_manager.curr_provider_inst = None
+    provider_manager.curr_stt_provider_inst = None
+    provider_manager.curr_tts_provider_inst = None
+    provider_manager.curr_decision_provider_inst = None
+
+    try:
+        await provider_manager.initialize_pending_registered_providers()
+
+        assert provider_id in provider_manager.inst_map, (
+            "Provider entries that store their adapter type on a provider source "
+            "must still load once the adapter is registered."
+        )
+        provider = provider_manager.inst_map[provider_id]
+        assert provider_manager.provider_insts == [provider]
+        assert provider_manager.curr_provider_inst is provider
+    finally:
+        provider_registry[:] = registry_before
+        provider_cls_map.clear()
+        provider_cls_map.update(map_before)
+
+
+@pytest.mark.asyncio
 async def test_startup_isolates_incompatible_plugin_before_provider_callback(
     plugin_manager_pm: PluginManager,
     monkeypatch,
