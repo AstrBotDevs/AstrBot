@@ -74,7 +74,9 @@
       "title": "确认删除",
       "message": "确定要删除对话 {title} 吗？此操作不可恢复。",
       "cancel": "取消",
-      "confirm": "删除"
+      "confirm": "删除",
+      "cleanupMetadata": "同时清理会话元数据（别名等）",
+      "cleanupMetadataHint": "仅当该会话已没有其他对话时才会清理，默认不勾选。"
     },
     "batchDelete": {
       "title": "批量删除确认",
@@ -82,7 +84,9 @@
       "andMore": "等 {count} 个",
       "cancel": "取消",
       "confirm": "批量删除",
-      "warning": "警告：此操作不可撤销！"
+      "warning": "警告：此操作不可撤销！",
+      "cleanupMetadata": "同时清理无对话引用的会话元数据（别名等）",
+      "cleanupMetadataHint": "仅清理删除后已无任何对话的会话元数据，仍有其他对话的会话保留名称。"
     }
   },
   "messages": {

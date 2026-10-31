@@ -32,10 +32,6 @@ import ConversationHistoryPreview from "@/components/conversation/ConversationHi
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
 import { copyToClipboard } from "@/utils/clipboard";
-import {
-  askForConfirmation as askForConfirmationDialog,
-  useConfirmDialog,
-} from "@/utils/confirmDialog";
 import { getPlatformIcon } from "@/utils/platformUtils";
 
 type UmoInfo = {
@@ -85,7 +81,8 @@ const { tm } = useModuleI18n("features/conversation");
 const route = useRoute();
 const router = useRouter();
 const customizerStore = useCustomizerStore();
-const confirmDialog = useConfirmDialog();
+const batchDeleteDialog = ref(false);
+const batchDeleteCleanup = ref(false);
 
 const initialUmoQuery = Array.isArray(route.query.umo)
   ? route.query.umo[0]
@@ -592,13 +589,14 @@ async function exportSelected() {
   }
 }
 
+function openDeleteSelectedDialog() {
+  if (!selectedItems.value.length) return;
+  batchDeleteCleanup.value = false;
+  batchDeleteDialog.value = true;
+}
+
 async function deleteSelected() {
   if (!selectedItems.value.length) return;
-  const confirmed = await askForConfirmationDialog(
-    tm("dialogs.batchDelete.message", { count: selectedItems.value.length }),
-    confirmDialog,
-  );
-  if (!confirmed) return;
 
   actionLoading.value = true;
   const selectedCount = selectedItems.value.length;
@@ -609,6 +607,7 @@ async function deleteSelected() {
         user_id: item.user_id,
         cid: item.cid,
       })),
+      cleanup_metadata: batchDeleteCleanup.value,
     });
     if (response.data.status !== "ok") {
       throw new Error(response.data.message || tm("messages.batchDeleteError"));
@@ -625,6 +624,7 @@ async function deleteSelected() {
       page.value -= 1;
     }
     await fetchConversations();
+    batchDeleteDialog.value = false;
     if (result.failed_count) {
       notify(
         tm("messages.batchDeletePartial", {
@@ -941,7 +941,7 @@ function changePage(nextPage: number) {
                 variant="text"
                 :disabled="actionLoading"
                 :aria-label="tm('workspace.actions.delete')"
-                @click="deleteSelected"
+                @click="openDeleteSelectedDialog"
               >
                 <Trash2 :size="17" aria-hidden="true" />
                 <v-tooltip activator="parent" location="top">
@@ -1342,6 +1342,49 @@ function changePage(nextPage: number) {
             @click="saveTitle"
           >
             {{ tm("dialogs.edit.save") }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog v-model="batchDeleteDialog" max-width="520">
+      <v-card>
+        <v-card-title class="d-flex align-center gap-2 pa-4 pb-2">
+          <Trash2 :size="18" class="text-error" aria-hidden="true" />
+          <span>{{ tm("dialogs.batchDelete.title") }}</span>
+        </v-card-title>
+        <v-card-text class="pt-2">
+          <p class="mb-3">
+            {{ tm("dialogs.batchDelete.message", { count: selectedItems.length }) }}
+          </p>
+          <v-alert type="warning" variant="tonal" density="compact" class="mb-3">
+            {{ tm("dialogs.batchDelete.warning") }}
+          </v-alert>
+          <v-checkbox
+            v-model="batchDeleteCleanup"
+            :label="tm('dialogs.batchDelete.cleanupMetadata')"
+            :hint="tm('dialogs.batchDelete.cleanupMetadataHint')"
+            persistent-hint
+            density="compact"
+            :disabled="actionLoading"
+          />
+        </v-card-text>
+        <v-card-actions class="px-4 pb-4">
+          <v-spacer />
+          <v-btn
+            variant="text"
+            :disabled="actionLoading"
+            @click="batchDeleteDialog = false"
+          >
+            {{ tm("dialogs.batchDelete.cancel") }}
+          </v-btn>
+          <v-btn
+            color="error"
+            variant="tonal"
+            :loading="actionLoading"
+            @click="deleteSelected"
+          >
+            {{ tm("dialogs.batchDelete.confirm") }}
           </v-btn>
         </v-card-actions>
       </v-card>

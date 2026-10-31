@@ -2,6 +2,8 @@
 
 - Fix plugin installation failing with `FileExistsError` in NAS and similar environments where cross-device (`EXDEV`) errors make system temporary directories unusable and Python falls back to the working directory. Use `.astrbot-tmp` when the temporary path conflicts with the `.astrbot` initialization marker file. ([#10784](https://github.com/AstrBotDevs/AstrBot/pull/10784))
 
+- Add an optional cleanup checkbox to the single and batch conversation deletion dialogs in Data & Logs → Conversations. When selected, alias and sender metadata is removed only for sessions with no remaining conversations; off by default, and metadata is retained while other conversations still reference the session. Expose the same choice through `cleanup_metadata` on the delete APIs.
+
 - Simplify Context Management Strategy settings: Handling for History Limits or Context Window Pressure → Compression Strategy; Model Provider ID for Context Compression → Compression Model. Move maximum turns, discarded turns, compression instruction, recent-context ratio and fallback context window size under the collapsed More Settings section. Preserve existing configuration keys, defaults and runtime behavior.
 
 - Add SerpApi Google News search with publisher, author, publication time, and WebUI citation support.

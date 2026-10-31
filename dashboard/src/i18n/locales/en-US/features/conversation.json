@@ -74,7 +74,9 @@
       "title": "Confirm Delete",
       "message": "Are you sure you want to delete conversation {title}? This action cannot be undone.",
       "cancel": "Cancel",
-      "confirm": "Delete"
+      "confirm": "Delete",
+      "cleanupMetadata": "Also delete session metadata (aliases, etc.)",
+      "cleanupMetadataHint": "Only removes metadata when the session has no remaining conversations. Off by default."
     },
     "batchDelete": {
       "title": "Batch Delete Confirmation",
@@ -82,7 +84,9 @@
       "andMore": "and {count} more",
       "cancel": "Cancel",
       "confirm": "Batch Delete",
-      "warning": "Warning: This action cannot be undone!"
+      "warning": "Warning: This action cannot be undone!",
+      "cleanupMetadata": "Also delete session metadata without remaining conversations (aliases, etc.)",
+      "cleanupMetadataHint": "Metadata is kept when the session still has other conversations."
     }
   },
   "messages": {

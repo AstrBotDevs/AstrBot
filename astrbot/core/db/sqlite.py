@@ -2332,6 +2332,85 @@ class SQLiteDatabase(BaseDatabase):
             result = await session.execute(query)
             return list(result.scalars().all())
 
+    async def delete_umo_alias(self, umo: str) -> bool:
+        """Delete alias metadata for one UMO.
+
+        Args:
+            umo: Unified message origin whose alias metadata should be deleted.
+
+        Returns:
+            True when an alias was deleted, False when none matched.
+        """
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                result = await session.execute(
+                    delete(UmoAlias).where(col(UmoAlias.umo) == umo)
+                )
+                return result.rowcount > 0
+
+    async def delete_umo_metadata_if_unreferenced(self, umo: str) -> dict:
+        """Delete alias and sender metadata for a UMO without conversations.
+
+        Both deletions carry the NOT EXISTS guard in the statement itself, so
+        the check and the removal cannot interleave with a concurrent
+        conversation insert on SQLite's single-writer transaction.
+
+        Args:
+            umo: Unified message origin whose orphaned metadata should be deleted.
+
+        Returns:
+            Mapping with ``alias_deleted``, ``senders_deleted`` and
+            ``retained`` (True when metadata still exists for the UMO but a
+            conversation references it, so nothing was deleted).
+        """
+        referenced = select(ConversationV2.inner_conversation_id).where(
+            col(ConversationV2.user_id) == umo
+        )
+
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                alias_result = await session.execute(
+                    delete(UmoAlias)
+                    .where(col(UmoAlias.umo) == umo)
+                    .where(~referenced.exists())
+                )
+                senders_result = await session.execute(
+                    delete(UmoSender)
+                    .where(col(UmoSender.umo) == umo)
+                    .where(~referenced.exists())
+                )
+                alias_deleted = alias_result.rowcount > 0
+                senders_deleted = int(senders_result.rowcount or 0)
+                retained = False
+                if not alias_deleted and not senders_deleted:
+                    # Distinguish "kept because still referenced" from
+                    # "there was nothing to clean up".
+                    has_reference = bool(
+                        (await session.execute(select(referenced.exists()))).scalar()
+                    )
+                    if has_reference:
+                        retained = await self._umo_metadata_exists(session, umo)
+                return {
+                    "alias_deleted": alias_deleted,
+                    "senders_deleted": senders_deleted,
+                    "retained": retained,
+                }
+
+    @staticmethod
+    async def _umo_metadata_exists(session: AsyncSession, umo: str) -> bool:
+        """Return whether any alias or sender row exists for the UMO."""
+        alias_row = await session.execute(
+            select(UmoAlias.id).where(col(UmoAlias.umo) == umo).limit(1)
+        )
+        if alias_row.first() is not None:
+            return True
+        sender_row = await session.execute(
+            select(UmoSender.id).where(col(UmoSender.umo) == umo).limit(1)
+        )
+        return sender_row.first() is not None
+
     # ====
     # UMO Sender Management
     # ====
