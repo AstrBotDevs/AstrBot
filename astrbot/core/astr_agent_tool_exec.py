@@ -15,6 +15,7 @@ from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.runners.base import AgentState
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
 from astrbot.core.astr_agent_context import AstrAgentContext
@@ -654,6 +655,19 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             # agent will send message to user via using tools
             pass
         llm_resp = runner.get_final_llm_resp()
+        if runner.state == AgentState.ERROR:
+            # The result run failed (e.g. malformed function call at max steps)
+            # but no exception escapes the runner; without this the failure was
+            # persisted as a normal "finished" note and never surfaced, same as
+            # the cron path before (#9980).
+            detail = (
+                f": {llm_resp.completion_text}"
+                if llm_resp and llm_resp.completion_text
+                else ""
+            )
+            raise RuntimeError(
+                f"Background result agent run ended in ERROR state{detail}"
+            )
         task_meta = extras.get("background_task_result", {})
         summary_note = (
             f"[BackgroundTask] {summary_name} "
