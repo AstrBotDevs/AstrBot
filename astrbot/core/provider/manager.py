@@ -322,7 +322,25 @@ class ProviderManager:
                 "may have been changed."
             )
         elif fell_back and provider_id:
-            self._warn_provider_fallback(provider_type, provider_id, provider)
+            # Substituting a provider keeps AstrBot responsive, but the substitute
+            # may have completely different capabilities (for example a vision-only
+            # chat model answering plain text), so the user needs to know. Warn once
+            # per distinct substitution instead of flooding the log.
+            fallback_config = getattr(provider, "provider_config", None) or {}
+            fallback_id = fallback_config.get("id") or "unknown"
+            key = (provider_type.value, str(provider_id), str(fallback_id))
+            if key not in self._fallback_warned:
+                self._fallback_warned.add(key)
+                logger.warning(
+                    "Configured %s provider `%s` is not available; falling back to "
+                    "`%s`. This can happen while providers are still loading at "
+                    "startup, or when the configured provider was renamed, disabled "
+                    "or removed. The fallback may behave differently from the "
+                    "provider you selected.",
+                    provider_type.value,
+                    provider_id,
+                    fallback_id,
+                )
 
         return provider
 
@@ -374,36 +392,6 @@ class ProviderManager:
                 None,
             )
         return self._resolve_using_provider(provider_type, umo, provider_id)
-
-    def _warn_provider_fallback(
-        self,
-        provider_type: ProviderType,
-        configured_id: str,
-        fallback: Providers,
-    ) -> None:
-        """Warn that a configured provider was silently replaced.
-
-        Substituting a different provider keeps AstrBot responsive, but the
-        replacement may have completely different capabilities (for example a
-        vision-only chat model answering plain text), so the user needs to know
-        it happened. The warning is emitted once per distinct situation to avoid
-        flooding the log while the condition persists.
-        """
-        fallback_config = getattr(fallback, "provider_config", None) or {}
-        fallback_id = fallback_config.get("id") or "unknown"
-        key = (provider_type.value, str(configured_id), str(fallback_id))
-        if key in self._fallback_warned:
-            return
-        self._fallback_warned.add(key)
-        logger.warning(
-            "Configured %s provider `%s` is not available; falling back to `%s`. "
-            "This can happen while providers are still loading at startup, or "
-            "when the configured provider was renamed, disabled or removed. "
-            "The fallback may behave differently from the provider you selected.",
-            provider_type.value,
-            configured_id,
-            fallback_id,
-        )
 
     async def initialize(self) -> None:
         # 逐个初始化提供商
@@ -991,9 +979,13 @@ class ProviderManager:
         if prov_inst is None:
             return
 
-        # Removing a provider is what starts a substitution, so a warning that
-        # was already reported no longer describes the current provider set.
-        self._fallback_warned.clear()
+        # Keys are (provider_type, configured_id, fallback_id). Removing a provider
+        # invalidates the substitutions it took part in -- it may be the configured
+        # provider that is gone, or the fallback that a later provider now replaces
+        # -- so only those records are dropped. Unrelated teardowns keep deduping.
+        self._fallback_warned = {
+            key for key in self._fallback_warned if provider_id not in key[1:]
+        }
 
         logger.info(
             f"Terminating provider adapter {provider_id} "
