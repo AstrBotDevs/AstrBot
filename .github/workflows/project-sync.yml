@@ -1,0 +1,70 @@
+name: Sync GitHub Project
+
+on:
+  issues:
+    types: [opened, reopened, closed, labeled, unlabeled, edited]
+  pull_request_target:
+    types: [opened, reopened, closed, edited, synchronize, ready_for_review, converted_to_draft]
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: 'Apply the change plan (false previews without writing)'
+        type: boolean
+        default: false
+        required: true
+
+permissions:
+  contents: read
+
+# Every run reconciles the whole project; serialize snapshots, not just items.
+# Pending runs can be replaced; full scans recover items closed since project creation.
+concurrency:
+  group: project-sync-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.repository == 'AstrBotDevs/AstrBot' && vars.ASTRBOT_PROJECT_ID != ''
+    # Configure this environment to allow only the default branch before adding secrets.
+    environment: project-sync
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Validate manual branch
+        if: github.event_name == 'workflow_dispatch' && github.ref != format('refs/heads/{0}', github.event.repository.default_branch)
+        run: |
+          echo 'Manual sync must run from the default branch.'
+          exit 1
+      # Never check out the PR head or a PR-controlled base branch with this token.
+      - name: Check out trusted default branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.repository.default_branch || github.ref_name }}
+          persist-credentials: false
+          fetch-depth: 0
+          fetch-tags: true
+          sparse-checkout: scripts/sync_github_project.py
+          sparse-checkout-cone-mode: false
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+
+      - name: Synchronize current item state
+        env:
+          ASTRBOT_PROJECT_ID: ${{ vars.ASTRBOT_PROJECT_ID }}
+          ASTRBOT_PROJECT_STATUS_OPEN: ${{ vars.ASTRBOT_PROJECT_STATUS_OPEN }}
+          ASTRBOT_PROJECT_STATUS_DONE: ${{ vars.ASTRBOT_PROJECT_STATUS_DONE }}
+          ASTRBOT_PROJECT_STATUS_MAP: ${{ vars.ASTRBOT_PROJECT_STATUS_MAP }}
+          ASTRBOT_PROJECT_TOKEN: ${{ secrets.ASTRBOT_PROJECT_ENV_TOKEN }}
+          ASTRBOT_DEFAULT_BRANCH: ${{ github.event.repository.default_branch || github.ref_name }}
+          APPLY_CHANGES: ${{ github.event_name != 'workflow_dispatch' || inputs.apply }}
+        run: |
+          if [ "$APPLY_CHANGES" = 'true' ]; then
+            python -I scripts/sync_github_project.py --apply
+          else
+            python -I scripts/sync_github_project.py
+          fi
