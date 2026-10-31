@@ -385,17 +385,20 @@ class ProviderGoogleGenAI(Provider):
                 logger.warning("Text content is empty, added a space as placeholder.")
             return types.Part.from_text(text=content_a)
 
-        async def process_image_url(image_url_dict: dict) -> types.Part:
+        async def process_image_url(image_url_dict: dict) -> types.Part | None:
             url = image_url_dict["url"]
             image_data = await resolve_media_ref_to_base64_data(
                 url,
                 media_type="image",
-                strict=True,
             )
             if image_data is None:
-                raise ValueError(
-                    f"Failed to resolve Gemini history image: {describe_media_ref(url)}"
+                # A history image that cannot be materialized is skipped so one
+                # stale reference does not fail the whole replayed turn.
+                logger.warning(
+                    "Skipping Gemini history image that could not be resolved: %s",
+                    describe_media_ref(url),
                 )
+                return None
             return types.Part.from_bytes(
                 data=base64.b64decode(image_data.base64_data),
                 mime_type=image_data.mime_type,
@@ -429,9 +432,15 @@ class ProviderGoogleGenAI(Provider):
                         if item["type"] == "text":
                             parts.append(types.Part.from_text(text=item["text"] or " "))
                         elif item["type"] == "image_url":
-                            parts.append(await process_image_url(item["image_url"]))
+                            image_part = await process_image_url(item["image_url"])
+                            if image_part is not None:
+                                parts.append(image_part)
                         else:
                             parts.append(process_audio_url(item["audio_url"]))
+                    if not parts:
+                        # An image-only turn whose image was skipped still needs
+                        # a non-empty UserContent for a valid request.
+                        parts = [types.Part.from_text(text=" ")]
                 else:
                     parts = [create_text_part(content)]
                 append_or_extend(gemini_contents, parts, types.UserContent)

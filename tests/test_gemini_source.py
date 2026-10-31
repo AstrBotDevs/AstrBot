@@ -1,3 +1,4 @@
+import logging
 from types import SimpleNamespace
 
 import httpx
@@ -10,6 +11,8 @@ import astrbot.core.provider.sources.request_retry as request_retry
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.sources.gemini_source import ProviderGoogleGenAI
+from astrbot.core.utils import media_utils
+from astrbot.core.utils.io import DownloadFileHTTPError
 
 
 @pytest.mark.asyncio
@@ -146,6 +149,91 @@ async def test_gemini_prepare_conversation_resolves_local_history_image(tmp_path
     assert image_part.inline_data is not None
     assert image_part.inline_data.mime_type == "image/webp"
     assert image_part.inline_data.data == image_bytes
+
+
+@pytest.mark.asyncio
+async def test_gemini_prepare_conversation_skips_history_image_download_failure(
+    tmp_path, monkeypatch, caplog
+):
+    """One undownloadable history image must not fail the whole replayed turn."""
+    url = "https://example.com/expired-history.png"
+
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+
+    async def fail_download(media_ref: str, target_path: str) -> None:
+        raise DownloadFileHTTPError(
+            f"Failed to download file from {media_ref}. HTTP status code: 404"
+        )
+
+    monkeypatch.setattr(media_utils, "download_file", fail_download)
+
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    with caplog.at_level(logging.WARNING):
+        contents = await provider._prepare_conversation(
+            {
+                "messages": [
+                    {"role": "user", "content": "first user turn"},
+                    {"role": "assistant", "content": "assistant turn"},
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "what is in this image?"},
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": url},
+                            },
+                        ],
+                    },
+                ]
+            }
+        )
+
+    assert [type(content) for content in contents] == [
+        types.UserContent,
+        types.ModelContent,
+        types.UserContent,
+    ]
+    assert contents[-1].parts is not None
+    assert len(contents[-1].parts) == 1
+    assert contents[-1].parts[0].text == "what is in this image?"
+    assert "expired-history.png" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_gemini_prepare_conversation_keeps_non_empty_user_turn_for_failed_image(
+    tmp_path, monkeypatch
+):
+    """A turn made only of an undownloadable image must still be valid content."""
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+
+    async def fail_download(media_ref: str, target_path: str) -> None:
+        raise DownloadFileHTTPError(
+            f"Failed to download file from {media_ref}. HTTP status code: 404"
+        )
+
+    monkeypatch.setattr(media_utils, "download_file", fail_download)
+
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    contents = await provider._prepare_conversation(
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": "https://example.com/expired.png"},
+                        }
+                    ],
+                }
+            ]
+        }
+    )
+
+    assert len(contents) == 1
+    assert isinstance(contents[0], types.UserContent)
+    assert contents[0].parts
+    assert contents[0].parts[0].text == " "
 
 
 def test_gemini_empty_output_raises_empty_model_output_error():
