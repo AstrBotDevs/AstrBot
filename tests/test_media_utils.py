@@ -15,6 +15,7 @@ import astrbot.core.utils.media_utils as media_utils
 from astrbot.core.file_token_service import FileTokenService
 from astrbot.core.message.components import File, Image, Record, Video
 from astrbot.core.provider.entities import ProviderRequest
+from astrbot.core.utils.io import DownloadFileHTTPError
 from astrbot.core.utils.path_util import path_Mapping
 from astrbot.core.utils.tencent_record_helper import wav_to_tencent_silk
 
@@ -604,6 +605,29 @@ async def test_media_resolver_cleans_http_target_when_download_fails(
         ).to_base64_data(strict=True)
 
     assert not list(tmp_path.iterdir())
+
+
+@pytest.mark.asyncio
+async def test_image_base64_data_degrades_for_download_http_error_when_not_strict(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    url = "https://example.com/expired.png"
+
+    async def fail_download(media_ref: str, target_path: str) -> None:
+        # DownloadFileHTTPError subclasses RuntimeError, not OSError.
+        Path(target_path).write_bytes(b"partial")
+        raise DownloadFileHTTPError(
+            f"Failed to download file from {media_ref}. HTTP status code: 400"
+        )
+
+    monkeypatch.setattr(media_utils, "download_file", fail_download)
+
+    assert await media_utils.resolve_image_ref_to_base64_data(url) is None
+    assert not list(tmp_path.iterdir())
+
+    with pytest.raises(DownloadFileHTTPError):
+        await media_utils.resolve_image_ref_to_base64_data(url, strict=True)
 
 
 @pytest.mark.asyncio
