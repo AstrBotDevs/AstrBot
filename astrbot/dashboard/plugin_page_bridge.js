@@ -173,9 +173,17 @@
       if (message.ok) {
         pending.resolve(message.data);
       } else {
-        pending.reject(
-          new Error(message.error || "Plugin bridge request failed."),
-        );
+        const err = new Error(message.error || "Plugin bridge request failed.");
+        if (typeof message.errorCode === "string" && message.errorCode) {
+          err.code = message.errorCode;
+        }
+        if (typeof message.errorReason === "string" && message.errorReason) {
+          err.reason = message.errorReason;
+        }
+        if (typeof message.errorConfirmed === "boolean") {
+          err.confirmed = message.errorConfirmed;
+        }
+        pending.reject(err);
       }
       return;
     }
