@@ -1,9 +1,11 @@
+import asyncio
 import csv
 import io
 import json
 import os
 import shlex
 import uuid
+from contextlib import nullcontext
 from pathlib import Path
 
 from pydantic import Field
@@ -31,6 +33,11 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_system_tmp_path,
     get_astrbot_temp_path,
 )
+from astrbot.core.utils.history_saver import (
+    PROACTIVE_CONVERSATION_ID_KEY,
+    persist_agent_message,
+)
+from astrbot.core.utils.session_lock import session_lock_manager
 
 
 def _file_send_allowed_roots(
@@ -209,6 +216,15 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
     async def call(
         self, context: ContextWrapper[AstrAgentContext], **kwargs
     ) -> ToolExecResult:
+        """Send a message and immediately record current-session proactive text.
+
+        Args:
+            context: Agent context containing the event and application services.
+            **kwargs: Message components and optional destination session.
+
+        Returns:
+            Delivery confirmation or a description of the send failure.
+        """
         # Security: only AstrBot admins can send messages to other sessions.
         # Non-admin users are always restricted to their own session.
         # See https://github.com/AstrBotDevs/AstrBot/issues/7822
@@ -337,30 +353,73 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                 return f"error: invalid session: {session}"
 
         message_chain = MessageChain(chain=components)
-        try:
-            sent = await context.context.context.send_message(
-                target_session,
-                message_chain,
-            )
-        except Exception as exc:
-            return f"error: failed to send message to session {target_session}: {exc}"
-        if not sent:
-            return f"error: failed to find platform for session {target_session}."
-        if str(target_session) == current_session:
-            context.context.event._has_send_oper = True
-            sent_plain_text = message_chain.get_plain_text().strip()
-            if sent_plain_text:
-                sent_plain_texts = context.context.event.get_extra(
-                    "_send_message_to_user_current_session_plain_texts",
-                    [],
+        event = context.context.event
+        sent_plain_text = message_chain.get_plain_text().strip()
+        conversation_id = event.get_extra(PROACTIVE_CONVERSATION_ID_KEY)
+        persist_delivery = (
+            str(target_session) == current_session
+            and isinstance(conversation_id, str)
+            and bool(conversation_id)
+            and bool(sent_plain_text)
+        )
+        # Ordinary agent runs already own this lock. Only proactive runs bind
+        # this ID, and they release the lock between deliveries.
+        async with (
+            session_lock_manager.acquire_lock(current_session)
+            if persist_delivery
+            else nullcontext()
+        ):
+            try:
+                sent = await context.context.context.send_message(
+                    target_session,
+                    message_chain,
                 )
-                if not isinstance(sent_plain_texts, list):
-                    sent_plain_texts = []
-                sent_plain_texts.append(sent_plain_text)
-                context.context.event.set_extra(
-                    "_send_message_to_user_current_session_plain_texts",
-                    sent_plain_texts,
+            except Exception as exc:
+                return (
+                    f"error: failed to send message to session {target_session}: {exc}"
                 )
+            if not sent:
+                return f"error: failed to find platform for session {target_session}."
+            if str(target_session) == current_session:
+                event._has_send_oper = True
+                if sent_plain_text:
+                    sent_plain_texts = event.get_extra(
+                        "_send_message_to_user_current_session_plain_texts",
+                        [],
+                    )
+                    if not isinstance(sent_plain_texts, list):
+                        sent_plain_texts = []
+                    sent_plain_texts.append(sent_plain_text)
+                    event.set_extra(
+                        "_send_message_to_user_current_session_plain_texts",
+                        sent_plain_texts,
+                    )
+            if persist_delivery:
+                save_task = asyncio.create_task(
+                    persist_agent_message(
+                        context.context.context.conversation_manager,
+                        event=event,
+                        conversation_id=conversation_id,
+                        text=sent_plain_text,
+                    )
+                )
+                cancelled = False
+                try:
+                    # Keep the lock until the confirmed delivery is recorded,
+                    # even if a timeout or repeated stop requests cancel us.
+                    while not save_task.done():
+                        try:
+                            await asyncio.shield(save_task)
+                        except asyncio.CancelledError:
+                            cancelled = True
+                    save_task.result()
+                except Exception:
+                    # Delivery succeeded; reporting a send failure could cause
+                    # the model to retry and send the same message again.
+                    logger.exception("Failed to save delivered proactive message")
+                finally:
+                    if cancelled:
+                        raise asyncio.CancelledError
         return f"Message sent to session {target_session}"
 
 

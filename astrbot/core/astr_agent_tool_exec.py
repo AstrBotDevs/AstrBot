@@ -53,7 +53,11 @@ from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.async_generator import iterate_in_task
 from astrbot.core.utils.config_number import coerce_int_config
-from astrbot.core.utils.history_saver import persist_agent_history
+from astrbot.core.utils.history_saver import (
+    PROACTIVE_CONVERSATION_ID_KEY,
+    PROACTIVE_SAVED_TEXTS_KEY,
+    persist_agent_history,
+)
 from astrbot.core.utils.image_ref_utils import is_supported_image_ref
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
@@ -620,6 +624,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         if stop_signal.is_set():
             return
         req.conversation = conv
+        cron_event.set_extra(PROACTIVE_CONVERSATION_ID_KEY, conv.cid)
         req.contexts = json.loads(conv.history)
 
         bg = json.dumps(extras["background_task_result"], ensure_ascii=False)
@@ -658,9 +663,16 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         summary_note = (
             f"[BackgroundTask] {summary_name} "
             f"(task_id={task_meta.get('task_id', task_id)}) finished. "
-            f"Result: {task_meta.get('result') or result_text or 'no content'}"
         )
-        if llm_resp and llm_resp.completion_text:
+        saved_texts = cron_event.get_extra(PROACTIVE_SAVED_TEXTS_KEY, [])
+        task_result_text = task_meta.get("result") or result_text or "no content"
+        if task_result_text.strip() not in saved_texts:
+            summary_note += f"Result: {task_result_text}"
+        if (
+            llm_resp
+            and llm_resp.completion_text
+            and llm_resp.completion_text.strip() not in saved_texts
+        ):
             summary_note += (
                 f"I finished the task, here is the result: {llm_resp.completion_text}"
             )

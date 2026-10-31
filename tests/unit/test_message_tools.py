@@ -9,6 +9,7 @@ from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.pipeline.respond.stage import RespondStage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.tools.message_tools import SendMessageToUserTool
+from astrbot.core.utils.history_saver import PROACTIVE_CONVERSATION_ID_KEY
 
 
 def _make_context(
@@ -44,6 +45,9 @@ def _make_context(
             context=SimpleNamespace(
                 get_config=lambda umo: cfg,
                 send_message=AsyncMock(),
+                conversation_manager=SimpleNamespace(
+                    get_conversation=AsyncMock(), update_conversation=AsyncMock()
+                ),
             ),
         )
     )
@@ -166,6 +170,7 @@ async def test_send_message_returns_platform_error_to_tool_result():
     """Platform send failures are returned to the agent as tool errors."""
     tool = SendMessageToUserTool()
     ctx = _make_context(current_session="qq_official:GroupMessage:group-1")
+    ctx.context.event.set_extra(PROACTIVE_CONVERSATION_ID_KEY, "conversation-1")
     ctx.context.context.send_message.side_effect = RuntimeError(
         "413 Request Entity Too Large"
     )
@@ -181,12 +186,15 @@ async def test_send_message_returns_platform_error_to_tool_result():
     )
     assert ctx.context.event._has_send_oper is False
     ctx.context.event.trace.record.assert_not_called()
+    ctx.context.context.conversation_manager.get_conversation.assert_not_awaited()
+    ctx.context.context.conversation_manager.update_conversation.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 async def test_send_message_missing_platform_does_not_record_delivery():
     """Keep missing-platform failures out of delivered-response traces."""
     ctx = _make_context()
+    ctx.context.event.set_extra(PROACTIVE_CONVERSATION_ID_KEY, "conversation-1")
     ctx.context.context.send_message.return_value = False
     result = await SendMessageToUserTool().call(
         ctx, messages=[{"type": "plain", "text": "hello"}]
@@ -194,6 +202,8 @@ async def test_send_message_missing_platform_does_not_record_delivery():
     assert result.startswith("error: failed to find platform")
     ctx.context.event.trace.record.assert_not_called()
     assert ctx.context.event._has_send_oper is False
+    ctx.context.context.conversation_manager.get_conversation.assert_not_awaited()
+    ctx.context.context.conversation_manager.update_conversation.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -201,6 +211,7 @@ async def test_send_message_other_session_does_not_record_current_text():
     """Messages sent to another session do not affect current-session dedupe."""
     tool = SendMessageToUserTool()
     ctx = _make_context(current_session="feishu:GroupMessage:oc_xxx")
+    ctx.context.event.set_extra(PROACTIVE_CONVERSATION_ID_KEY, "conversation-1")
     result = await tool.call(
         ctx,
         messages=[{"type": "plain", "text": "hello"}],
@@ -209,6 +220,8 @@ async def test_send_message_other_session_does_not_record_current_text():
     assert "Message sent to session" in result
     assert ctx.context.event._has_send_oper is False
     ctx.context.event.trace.record.assert_not_called()
+    ctx.context.context.conversation_manager.get_conversation.assert_not_awaited()
+    ctx.context.context.conversation_manager.update_conversation.assert_not_awaited()
     assert (
         ctx.context.event.get_extra(
             "_send_message_to_user_current_session_plain_texts",
@@ -356,7 +369,9 @@ async def test_restricted_role_cannot_send_arbitrary_local_absolute_file(
     tool = SendMessageToUserTool()
     ctx = _make_context(
         role=role,
-        local_permissions={role: {"filesystem_scope": scope, "allow_execution": False}} if scope else None,
+        local_permissions={role: {"filesystem_scope": scope, "allow_execution": False}}
+        if scope
+        else None,
     )
     secret_path = tmp_path / "secret.txt"
     secret_path.write_text("secret", encoding="utf-8")
