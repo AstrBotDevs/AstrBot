@@ -9,7 +9,18 @@ from .run_context import ContextWrapper, TContext
 
 
 class BaseAgentRunHooks(Generic[TContext]):
+    def should_buffer_streaming_response(
+        self, run_context: ContextWrapper[TContext]
+    ) -> bool:
+        """Whether response hooks may modify streamed response content."""
+        return False
+
     async def on_agent_begin(self, run_context: ContextWrapper[TContext]) -> None: ...
+    async def on_agent_response(
+        self,
+        run_context: ContextWrapper[TContext],
+        llm_response: LLMResponse,
+    ) -> None: ...
     async def on_tool_start(
         self,
         run_context: ContextWrapper[TContext],

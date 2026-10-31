@@ -838,14 +838,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             return
         self.run_context.messages = processed_messages
         self._simple_print_message_role("[AftCompact]", self.run_context.messages)
+        buffer_streaming_response = self.streaming and bool(
+            self.agent_hooks.should_buffer_streaming_response(self.run_context)
+        )
+        buffered_streaming_responses: list[AgentResponse] = []
 
         async for llm_response in self._iter_llm_responses_with_fallback():
             if llm_response.is_chunk:
                 if self.stats.time_to_first_token == 0:
                     self.stats.time_to_first_token = time.time() - self.stats.start_time
-
                 if llm_response.reasoning_content:
-                    yield AgentResponse(
+                    response = AgentResponse(
                         type="streaming_delta",
                         data=AgentResponseData(
                             chain=MessageChain(type="reasoning").message(
@@ -853,18 +856,30 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             ),
                         ),
                     )
+                    if buffer_streaming_response:
+                        buffered_streaming_responses.append(response)
+                    else:
+                        yield response
                 if llm_response.result_chain:
-                    yield AgentResponse(
+                    response = AgentResponse(
                         type="streaming_delta",
                         data=AgentResponseData(chain=llm_response.result_chain),
                     )
+                    if buffer_streaming_response:
+                        buffered_streaming_responses.append(response)
+                    else:
+                        yield response
                 elif llm_response.completion_text:
-                    yield AgentResponse(
+                    response = AgentResponse(
                         type="streaming_delta",
                         data=AgentResponseData(
                             chain=MessageChain().message(llm_response.completion_text),
                         ),
                     )
+                    if buffer_streaming_response:
+                        buffered_streaming_responses.append(response)
+                    else:
+                        yield response
                 if self._is_stop_requested():
                     break
                 continue
@@ -894,16 +909,22 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             break  # got final response
 
         if self._is_stop_requested():
+            for response in buffered_streaming_responses:
+                yield response
             yield await self._finalize_aborted_step()
             return
 
         if not llm_resp_result:
+            for response in buffered_streaming_responses:
+                yield response
             return
 
         # 处理 LLM 响应
         llm_resp = llm_resp_result
 
         if llm_resp.role == "err":
+            for response in buffered_streaming_responses:
+                yield response
             # 如果 LLM 响应错误，转换到错误状态
             self.final_llm_resp = llm_resp
             self.stats.end_time = time.time()
@@ -923,6 +944,38 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         if not llm_resp.tools_call_name:
             await self._complete_with_assistant_response(llm_resp)
+        else:
+            try:
+                await self.agent_hooks.on_agent_response(self.run_context, llm_resp)
+            except Exception as e:
+                logger.error(f"Error in on_agent_response hook: {e}", exc_info=True)
+            if not llm_resp.tools_call_name:
+                await self._complete_with_assistant_response(llm_resp)
+
+        # Response hooks can modify the complete response. Emit streaming deltas
+        # only after they run so clients never receive content the hook changed.
+        if buffer_streaming_response:
+            if llm_resp.reasoning_content:
+                yield AgentResponse(
+                    type="streaming_delta",
+                    data=AgentResponseData(
+                        chain=MessageChain(type="reasoning").message(
+                            llm_resp.reasoning_content,
+                        ),
+                    ),
+                )
+            if llm_resp.result_chain:
+                yield AgentResponse(
+                    type="streaming_delta",
+                    data=AgentResponseData(chain=llm_resp.result_chain),
+                )
+            elif llm_resp.completion_text:
+                yield AgentResponse(
+                    type="streaming_delta",
+                    data=AgentResponseData(
+                        chain=MessageChain().message(llm_resp.completion_text),
+                    ),
+                )
 
         # 返回 LLM 结果
         if llm_resp.reasoning_content:
