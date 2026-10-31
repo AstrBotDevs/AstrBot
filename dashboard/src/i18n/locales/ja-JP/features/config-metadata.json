@@ -1224,7 +1224,7 @@
       "description": "管理者",
       "admins_id": {
         "description": "管理者 ID",
-        "hint": "ボットに /sid コマンドを送信して ID を取得します。"
+        "hint": "ボットに /sid コマンドを送信して ID を取得します。Lark の user_id / union_id などのプラットフォーム送信者 ID も入力できます。"
       }
     },
     "whitelist": {
@@ -1236,7 +1236,7 @@
         },
         "id_whitelist": {
           "description": "ホワイトリスト ID 一覧",
-          "hint": "ボットに /sid コマンドを送信して ID を取得します。空の場合、ホワイトリスト機能は無効になります。"
+          "hint": "ボットに /sid コマンドを送信してセッション ID を取得します。グループ ID や Lark の user_id / union_id などのプラットフォーム送信者 ID も入力できます。空の場合、ホワイトリスト機能は無効になります。"
         },
         "id_whitelist_log": {
           "description": "ブロックしたメッセージをログに出力",

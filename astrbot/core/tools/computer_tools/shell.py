@@ -159,9 +159,16 @@ class ExecuteShellTool(FunctionTool):
                         and (
                             not creator_is_admin
                             or str(creator_id)
-                            in context.context.context.get_config(
-                                umo=context.context.event.unified_msg_origin
-                            ).get("admins_id", [])
+                            in (
+                                current_admin_ids := context.context.context.get_config(
+                                    umo=context.context.event.unified_msg_origin
+                                ).get("admins_id", [])
+                            )
+                            or bool(
+                                set(
+                                    context.context.event.get_sender_aliases()
+                                ).intersection(current_admin_ids)
+                            )
                         )
                     ),
                     allow_network=(

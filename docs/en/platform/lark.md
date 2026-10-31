@@ -42,7 +42,7 @@ Under `Creation Method`, select `One-click QR Creation`, choose the China or int
 > To find the App ID, go back to AstrBot's `Platforms` page, select the Lark bot you just created, and check `app_id` under `Connection settings`.
 >
 > ```text
-> https://open.feishu.cn/app/<APP_ID>/auth?q=contact:contact.base:readonly,contact:user.base:readonly,im:message,im:message.p2p_msg:readonly,im:message.group_at_msg:readonly,im:message.group_msg,im:message:send_as_bot,im:resource,cardkit:card:write&op_from=openapi&token_type=tenant
+> https://open.feishu.cn/app/<APP_ID>/auth?q=contact:contact.base:readonly,contact:user.base:readonly,contact:user.employee_id:readonly,im:message,im:message.p2p_msg:readonly,im:message.group_at_msg:readonly,im:message.group_msg,im:message:send_as_bot,im:resource,cardkit:card:write&op_from=openapi&token_type=tenant
 > ```
 
 After QR creation succeeds, continue checking the event subscription, permissions, version release, and group installation steps below.
@@ -121,6 +121,13 @@ Enter `im:resource` to enable uploading and downloading images, files, and other
 
 Enable `contact:contact.base:readonly` and `contact:user.base:readonly` so private-message senders can be shown by their display names.
 
+Enable `contact:user.employee_id:readonly` (Get user ID) so message events include the sender's `user_id`. Without this scope, `user_id` is empty in events and only `open_id` is available.
+
+> [!TIP]
+> `open_id` is app-scoped and changes if the app is rebuilt, `user_id` is tenant-scoped and stable (commonly the employee number in enterprise tenants), and `union_id` is developer-account-scoped. After enabling the scope and releasing an app version, you can enter `user_id` or `union_id` directly under `Access Control -> Whitelist -> Whitelist ID List` and `Access Control -> Administrators -> Administrator IDs` in the WebUI. In group chats, whitelisting a member's `user_id` admits that member without whitelisting the entire group.
+>
+> `/sid` still reports the UID and session ID based on `open_id`; `user_id` and `union_id` can be found in the user details in the Lark admin console.
+
 If you want to use the bot in group chats, additionally enable `im:message.group_at_msg:readonly` and `im:message.group_msg`.
 
 > [!TIP]
@@ -128,7 +135,7 @@ If you want to use the bot in group chats, additionally enable `im:message.group
 
 If you want to use streaming output, additionally enable `Create and update cards (cardkit:card:write)`.
 
-The final set of permissions should look like this:
+The final set of permissions should look like this (the screenshot may predate `contact:user.employee_id:readonly`; use the permission list above as the source of truth):
 
 ![Final Permissions](https://files.astrbot.app/docs/source/images/lark/image-11.png)
 

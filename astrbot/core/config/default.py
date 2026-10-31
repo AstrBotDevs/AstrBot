@@ -4601,7 +4601,7 @@ CONFIG_METADATA_3 = {
                         "type": "list",
                         "_special": "sender_id",
                         "items": {"type": "string"},
-                        "hint": "给机器人发送 /sid 指令以获取 ID。",
+                        "hint": "给机器人发送 /sid 指令以获取 ID，也可填写平台发送者 ID（如飞书的 user_id、union_id）。",
                     },
                 },
             },
@@ -4619,7 +4619,7 @@ CONFIG_METADATA_3 = {
                         "type": "list",
                         "_special": "umo",
                         "items": {"type": "string"},
-                        "hint": "给机器人发送 /sid 指令以获取 ID。为空时代表不启用白名单功能。",
+                        "hint": "给机器人发送 /sid 指令以获取会话 ID，也可填写群 ID 或平台发送者 ID（如飞书的 user_id、union_id）。为空时代表不启用白名单功能。",
                     },
                     "platform_settings.id_whitelist_log": {
                         "description": "输出拦截日志",
