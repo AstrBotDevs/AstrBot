@@ -613,6 +613,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             computer_use_runtime=provider_settings.get("computer_use_runtime", "none"),
             sandbox_cfg=provider_settings.get("sandbox", {}),
             provider_settings=provider_settings,
+            proactive=True,
         )
 
         req = ProviderRequest()

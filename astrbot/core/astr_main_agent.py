@@ -42,6 +42,7 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import ProviderRequest
+from astrbot.core.provider.func_tool_manager import FunctionToolManager
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.skills.skill_manager import (
     SkillInfo,
@@ -238,6 +239,8 @@ class MainAgentBuildConfig:
     sandbox_cfg: dict = field(default_factory=dict)
     add_cron_tools: bool = True
     """This will add cron job management tools to the main agent for proactive cron job execution."""
+    proactive: bool = False
+    """Whether this build serves a proactive cron/background wake request."""
     provider_settings: dict = field(default_factory=dict)
     fallback_provider_ids: list[str] = field(default_factory=list)
     request_max_retries: int = 5
@@ -655,10 +658,7 @@ async def _ensure_persona_and_skills(
 
     # inject toolset in the persona
     if (persona and persona.get("tools") is None) or not persona:
-        persona_toolset = tmgr.get_full_tool_set()
-        for tool in list(persona_toolset):
-            if not tool.active:
-                persona_toolset.remove_tool(tool.name)
+        persona_toolset = _active_registered_tool_set(tmgr)
     else:
         persona_toolset = ToolSet()
         if persona["tools"]:
@@ -1113,6 +1113,32 @@ def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
             if plugin.name in event.plugins_name or plugin.reserved:
                 new_tool_set.add_tool(tool)
         req.func_tool = new_tool_set
+
+
+def _active_registered_tool_set(tool_mgr: FunctionToolManager) -> ToolSet:
+    """Return the registered plugin/MCP tools that are currently active."""
+    tool_set = tool_mgr.get_full_tool_set()
+    for tool in list(tool_set):
+        if not tool.active:
+            tool_set.remove_tool(tool.name)
+    return tool_set
+
+
+def _apply_proactive_registered_tools(
+    req: ProviderRequest,
+    plugin_context: Context,
+) -> None:
+    """Give proactive runs the plugin tools registered for this session.
+
+    Cron and background wakes build their own ``ProviderRequest`` instead of
+    starting from a user message, so their tool set can miss tools registered
+    through ``@llm_tool`` and the model may print raw tool-call text instead.
+    """
+    if req.func_tool is None:
+        req.func_tool = ToolSet()
+    req.func_tool.merge(
+        _active_registered_tool_set(plugin_context.get_llm_tool_manager())
+    )
 
 
 async def _handle_webchat(
@@ -1863,6 +1889,10 @@ async def build_main_agent(
         )
         if captioned_ref:
             captioned_refs.add(captioned_ref)
+
+    if config.proactive:
+        _apply_proactive_registered_tools(req, plugin_context)
+
     captioned_refs.update(
         await _decorate_llm_request(
             event,
