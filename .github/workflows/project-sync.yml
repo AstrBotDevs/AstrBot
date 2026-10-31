@@ -26,7 +26,11 @@ concurrency:
 
 jobs:
   sync:
-    if: github.repository == 'AstrBotDevs/AstrBot' && vars.ASTRBOT_PROJECT_ID != ''
+    if: >-
+      github.repository == 'AstrBotDevs/AstrBot' &&
+      vars.ASTRBOT_PROJECT_ID != '' &&
+      (github.event_name != 'pull_request_target' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
     # Configure this environment to allow only the default branch before adding secrets.
     environment: project-sync
     runs-on: ubuntu-latest
