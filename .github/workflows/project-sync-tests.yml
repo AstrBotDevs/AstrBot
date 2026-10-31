@@ -1,0 +1,36 @@
+name: Test GitHub Project Sync
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/project-sync*.yml'
+      - 'scripts/sync_github_project.py'
+      - 'tests/test_sync_github_project.py'
+      - 'tests/test_project_delivery.py'
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/project-sync*.yml'
+      - 'scripts/sync_github_project.py'
+      - 'tests/test_sync_github_project.py'
+      - 'tests/test_project_delivery.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Run network-free regression tests
+        run: |
+          python -I tests/test_sync_github_project.py -v
+          python -I tests/test_project_delivery.py -v
