@@ -62,14 +62,39 @@ Example map when an existing Project uses translated Status labels:
 {"In progress":"进行中","Needs verification":"待验证","Cancelled":"已取消","Closed unmerged":"已关闭未合入"}
 ```
 
-Set the Actions secret `ASTRBOT_PROJECT_TOKEN` to a credential with project write
-access and read access to this repository's issues and pull requests.
+Before enabling synchronization, create the `project-sync` GitHub Environment
+under repository Settings → Environments. Select **Selected branches and tags**
+and add exactly one **branch** rule for the default branch (`master` currently).
+Do not allow tags, wildcard branches, or all protected branches. Use required
+reviewers where available and limit who can change environment protection rules.
+The workflow's inline branch check is defense in depth, not the credential boundary.
+
+Only after those rules are configured, add the **environment secret**
+`ASTRBOT_PROJECT_ENV_TOKEN` with project write access and repository Issue/PR read
+access. Never define this secret at repository or organization scope; remove any
+old repository/organization `ASTRBOT_PROJECT_TOKEN` used for this integration.
+The workflow maps the environment secret to the script's `ASTRBOT_PROJECT_TOKEN`
+process variable; local runs continue using that process variable. No fallback to
+the old secret exists. YAML cannot create or enforce these server-side rules.
+If environment protection is unavailable, leave synchronization disabled.
+
 For example, use a classic personal access token with the `project` scope,
 owned by an account that can edit the destination project. Honor any organization
 SSO authorization and token restrictions. The repository `GITHUB_TOKEN` is not
 used for project mutations.
 The Project must contain all five fields and options listed above. Do not use this
 credential in ordinary pull request test jobs.
+
+Branch protection evaluates the triggering workflow ref, not the checked-out ref.
+Release events use tag refs, and PR-target events against non-default branches may
+therefore be rejected by this default-branch-only Environment. Do not add tag or
+branch exceptions to bypass that restriction: the next default-branch push,
+six-hour scheduled run, or default-branch manual dispatch reconciles their state.
+Test that a non-default dispatch is denied before using a live credential.
+
+Both workflows pin checkout/setup-python to full commit SHAs verified against
+their official repositories. Existing weekly Dependabot updates propose SHA
+changes for review; keep the immutable pins when updating Actions.
 
 To resolve an organization project's node ID, replace `PROJECT_NUMBER` with the
 number from its GitHub URL (not its node ID):
