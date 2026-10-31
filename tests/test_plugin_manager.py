@@ -2,6 +2,7 @@ import asyncio
 import errno
 import functools
 import json
+import logging
 import os
 import sys
 import tempfile
@@ -14,6 +15,11 @@ from unittest.mock import AsyncMock
 import pytest
 import yaml
 
+from astrbot.core.log import (
+    PLUGIN_LOGGER_PREFIX,
+    LogBroker,
+    LogManager,
+)
 from astrbot.core.star import star_manager as star_manager_module
 from astrbot.core.star.star_handler import EventType, StarHandlerMetadata
 from astrbot.core.star.star_manager import PluginDependencyInstallError, PluginManager
@@ -1522,6 +1528,79 @@ async def test_load_reports_unregistered_plugin_without_index_error(
     assert "未通过 Star 注册" in error
     assert "list index out of range" not in error
     assert plugin_name in plugin_manager_pm.failed_plugin_dict
+
+
+@pytest.mark.asyncio
+async def test_load_failure_logs_are_attributed_to_the_plugin(
+    plugin_manager_pm: PluginManager, monkeypatch
+):
+    """Load failures reach the log stream with the plugin name.
+
+    The WebUI plugin filter builds its options from the plugin names carried by
+    the logs, so a plugin that fails to load must be attributed to itself.
+    """
+    _clear_star_runtime_state()
+    plugin_name = "broken_plugin"
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_get_plugin_modules",
+        lambda: [{"pname": plugin_name, "module": "main"}],
+    )
+
+    async def mock_import_plugin(*args, **kwargs):
+        del args, kwargs
+        raise RuntimeError("boom")
+
+    async def mock_global_get(key, default=None):
+        del key
+        return default
+
+    async def mock_sync_command_configs():
+        return None
+
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_import_plugin_with_dependency_recovery",
+        mock_import_plugin,
+    )
+    monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
+    monkeypatch.setattr(
+        star_manager_module,
+        "sync_command_configs",
+        mock_sync_command_configs,
+    )
+
+    broker = LogBroker()
+    previous_broker = LogManager._log_broker  # noqa: SLF001
+    core_handlers_before = list(star_manager_module.logger.handlers)
+    plugin_logger = logging.getLogger(f"{PLUGIN_LOGGER_PREFIX}{plugin_name}")
+    plugin_handlers_before = list(plugin_logger.handlers)
+    LogManager.set_queue_handler(star_manager_module.logger, broker)
+    try:
+        success, error = await plugin_manager_pm.load(
+            specified_dir_name=plugin_name,
+        )
+    finally:
+        for handler in list(star_manager_module.logger.handlers):
+            if handler not in core_handlers_before:
+                star_manager_module.logger.removeHandler(handler)
+        for handler in list(plugin_logger.handlers):
+            if handler not in plugin_handlers_before:
+                plugin_logger.removeHandler(handler)
+        LogManager._log_broker = previous_broker  # noqa: SLF001
+        LogManager._plugin_logger_names.discard(plugin_name)  # noqa: SLF001
+        _clear_star_runtime_state()
+
+    assert success is False
+    assert error is not None
+    assert plugin_name in plugin_manager_pm.failed_plugin_dict
+
+    attributed_logs = [
+        entry for entry in broker.log_cache if entry.get("plugin_name") == plugin_name
+    ]
+    assert attributed_logs, "plugin load failures must be attributed to the plugin"
+    assert all(entry["source"] == "plugin" for entry in attributed_logs)
+    assert any("Failed to import plugin" in entry["data"] for entry in attributed_logs)
 
 
 @pytest.mark.asyncio
