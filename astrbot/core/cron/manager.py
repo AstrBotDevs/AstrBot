@@ -566,6 +566,7 @@ class CronJobManager:
                 ),
                 sandbox_cfg=provider_settings.get("sandbox", {}),
                 provider_settings=provider_settings,
+                proactive=True,
             )
             req = ProviderRequest()
             conv = await _get_session_conv(event=cron_event, plugin_context=self.ctx)
