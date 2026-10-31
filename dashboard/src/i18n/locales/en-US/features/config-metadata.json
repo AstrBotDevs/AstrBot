@@ -1749,6 +1749,22 @@
         "description": "Enable URL context",
         "hint": "When enabled, all function tools are disabled."
       },
+      "gm_vertexai": {
+        "description": "Enable Vertex AI",
+        "hint": "Send requests to Google Cloud Vertex AI instead of the Gemini API (AI Studio). Authenticate with an API key (an express-mode key, or a key bound to a service account together with a project ID); without one, the service account file or Application Default Credentials are used."
+      },
+      "gm_vertex_project": {
+        "description": "Vertex AI project ID",
+        "hint": "Google Cloud project ID. Set it for API keys bound to a service account; leave it empty for express-mode keys. Without an API key, it is read from the service account file or the environment when empty."
+      },
+      "gm_vertex_location": {
+        "description": "Vertex AI location",
+        "hint": "Region such as global, us-central1 or europe-west4. Used when a project ID is set or no API key is set. Defaults to global."
+      },
+      "gm_vertex_credentials_file": {
+        "description": "Service account key file",
+        "hint": "Path to a Google Cloud service account JSON key file. Used only when no API key is set. Leave empty to use Application Default Credentials (e.g. GOOGLE_APPLICATION_CREDENTIALS)."
+      },
       "gm_safety_settings": {
         "description": "Safety filters",
         "hint": "Set the safety filtering level for model input. Levels: NONE (no blocking), HIGH (block high risk), MEDIUM_AND_ABOVE (block medium risk and above), LOW_AND_ABOVE (block low risk and above). See Gemini API docs.",
