@@ -1739,15 +1739,15 @@
       },
       "gm_native_search": {
         "description": "Enable native search",
-        "hint": "When enabled, all function tools are disabled. Check official docs for free quota limits."
+        "hint": "Only Gemini 3 and later models support using this together with function tools. For Gemini 3 and later, native search is only available on the paid tier; see the official docs for pricing."
       },
       "gm_native_coderunner": {
         "description": "Enable native code runner",
-        "hint": "When enabled, all function tools are disabled."
+        "hint": "Only Gemini 3 and later models support using this together with function tools."
       },
       "gm_url_context": {
         "description": "Enable URL context",
-        "hint": "When enabled, all function tools are disabled."
+        "hint": "Only Gemini 3 and later models support using this together with function tools."
       },
       "gm_safety_settings": {
         "description": "Safety filters",
