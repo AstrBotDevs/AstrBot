@@ -502,6 +502,33 @@ async def test_telegram_reply_without_quote_text_uses_full_message(quote_text):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("username", "full_name", "expected"),
+    [
+        ("alice", "Alice Smith", "alice"),
+        (None, "Alice Smith", "Alice Smith"),
+        (None, "", "Unknown"),
+    ],
+)
+async def test_telegram_sender_nickname_falls_back_to_full_name(
+    username, full_name, expected
+):
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    update = create_mock_update(message_text="hello", username=username)
+    update.message.from_user.full_name = full_name
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    assert result.sender.nickname == expected
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("in_caption", [False, True], ids=["text", "caption"])
 async def test_telegram_hidden_links_survive_conversion_and_reply(in_caption):
     """Preserve linked text and URLs in messages and full replies.
