@@ -1,3 +1,5 @@
+import base64
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -11,6 +13,8 @@ from astrbot.api.message_components import (
     ActionRow,
     Button,
     ButtonInteraction,
+    File,
+    Image,
     Plain,
 )
 from astrbot.api.platform import (
@@ -230,6 +234,177 @@ async def test_qq_interaction_reply_uses_gateway_event_id() -> None:
     kwargs = event.post_c2c_message.await_args.kwargs
     assert kwargs["event_id"] == "gateway-event-1"
     assert kwargs["event_id"] != "interaction-1"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scene", ["group", "c2c"])
+@pytest.mark.parametrize("media_type", ["image", "file"])
+@pytest.mark.parametrize("source_type", ["message", "button"])
+@pytest.mark.parametrize("use_markdown", [False, True])
+@pytest.mark.parametrize("with_text", [False, True])
+async def test_qq_reply_uploads_media(
+    scene: str,
+    media_type: str,
+    source_type: str,
+    use_markdown: bool,
+    with_text: bool,
+    tmp_path: Path,
+) -> None:
+    """Compare ordinary and button replies through the real media parser.
+
+    Args:
+        scene: QQ group or C2C conversation.
+        media_type: Image or file attachment to include with the text.
+        source_type: Ordinary message or button interaction event.
+        use_markdown: Whether the reply starts with a Markdown payload.
+        with_text: Whether the attachment is accompanied by text.
+        tmp_path: Temporary directory for local attachment fixtures.
+    """
+    interaction = _make_interaction(scene=scene)
+    abm = QQOfficialPlatformAdapter._parse_interaction_from_qqofficial(interaction)
+    if source_type == "message":
+        raw_data = {
+            "id": "msg-1",
+            "author": {"member_openid": "member-1", "user_openid": "user-1"},
+            "group_openid": "group-1",
+            "content": "ping",
+            "timestamp": "0",
+        }
+        message_class = (
+            botpy.message.GroupMessage if scene == "group" else botpy.message.C2CMessage
+        )
+        abm.raw_message = message_class(
+            api=None, event_id="gateway-event-1", data=raw_data
+        )
+        abm.message_id = "msg-1"
+
+    event = QQOfficialMessageEvent(
+        message_str="",
+        message_obj=abm,
+        platform_meta=PlatformMetadata(name="qq_official", description="test", id="test"),
+        session_id=abm.session_id,
+        bot=SimpleNamespace(api=SimpleNamespace(post_group_message=AsyncMock())),
+    )
+    event.post_c2c_message = AsyncMock()
+    media = {"file_info": "uploaded-media"}
+    event.upload_group_and_c2c_image = AsyncMock(return_value=media)
+    event.upload_group_and_c2c_media = AsyncMock(return_value=media)
+    if media_type == "image":
+        path = tmp_path / "pixel.png"
+        path.write_bytes(
+            base64.b64decode(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aHosAAAAASUVORK5CYII="
+            )
+        )
+        attachment = Image.fromFileSystem(str(path))
+        upload = event.upload_group_and_c2c_image
+    else:
+        path = tmp_path / "attachment.txt"
+        path.write_text("QQ media reproduction", encoding="utf-8")
+        attachment = File(name=path.name, file=str(path))
+        upload = event.upload_group_and_c2c_media
+
+    await event.send(
+        MessageChain(
+            chain=([Plain("Media reply")] if with_text else []) + [attachment],
+            use_markdown_=use_markdown,
+        )
+    )
+
+    send = (
+        event.bot.api.post_group_message if scene == "group" else event.post_c2c_message
+    )
+    send.assert_awaited_once()
+    payload = send.await_args.kwargs
+    assert payload["content"] == ("Media reply" if with_text else None)
+    assert payload["group_openid" if scene == "group" else "openid"] == (
+        "group-1" if scene == "group" else "user-1"
+    )
+    if source_type == "button":
+        assert payload["event_id"] == "gateway-event-1"
+        assert "msg_id" not in payload
+    upload.assert_awaited_once()
+    assert upload.await_args.kwargs[
+        "group_openid" if scene == "group" else "openid"
+    ] == ("group-1" if scene == "group" else "user-1")
+    assert payload["media"] == media
+    assert payload["msg_type"] == 7
+    assert "markdown" not in payload
+
+
+@pytest.mark.asyncio
+async def test_qq_guild_button_reply_attaches_local_image(tmp_path: Path) -> None:
+    """Keep guild button images on the ordinary channel upload path.
+
+    Args:
+        tmp_path: Temporary directory for the local image fixture.
+    """
+    abm = QQOfficialPlatformAdapter._parse_interaction_from_qqofficial(
+        _make_interaction(scene="guild")
+    )
+    event = QQOfficialMessageEvent(
+        message_str="",
+        message_obj=abm,
+        platform_meta=PlatformMetadata(name="qq_official", description="test", id="test"),
+        session_id=abm.session_id,
+        bot=SimpleNamespace(api=SimpleNamespace(post_message=AsyncMock())),
+    )
+    path = tmp_path / "pixel.png"
+    path.write_bytes(
+        base64.b64decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aHosAAAAASUVORK5CYII="
+        )
+    )
+
+    await event.send(
+        MessageChain(
+            chain=[Plain("Image reply"), Image.fromFileSystem(str(path))],
+            use_markdown_=False,
+        )
+    )
+
+    event.bot.api.post_message.assert_awaited_once()
+    payload = event.bot.api.post_message.await_args.kwargs
+    assert payload["channel_id"] == "channel-1"
+    assert payload["event_id"] == "gateway-event-1"
+    assert payload["file_image"] == str(path.resolve())
+    assert payload["content"] == "Image reply"
+    assert "msg_type" not in payload
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("with_keyboard", [False, True])
+async def test_qq_c2c_request_omits_unset_optional_fields(with_keyboard: bool) -> None:
+    """Validate the wire payload rather than replacing the C2C send method.
+
+    Args:
+        with_keyboard: Whether an explicitly supplied keyboard must be retained.
+    """
+    event = _make_group_event()
+    event.bot.api._http = SimpleNamespace(
+        request=AsyncMock(return_value={"id": "reply-1"})
+    )
+    keyboard = {"id": "keyboard-template"} if with_keyboard else None
+
+    await event.post_c2c_message(
+        openid="user-1",
+        msg_type=2 if with_keyboard else 7,
+        markdown={"content": "Choose"} if with_keyboard else None,
+        media=None if with_keyboard else {"file_info": "uploaded-media"},
+        keyboard=keyboard,
+        event_id="gateway-event-1",
+    )
+
+    payload = event.bot.api._http.request.await_args.kwargs["json"]
+    assert all(value is not None for value in payload.values())
+    assert payload["event_id"] == "gateway-event-1"
+    assert "msg_id" not in payload
+    if with_keyboard:
+        assert payload["keyboard"] == keyboard
+        assert "media" not in payload
+    else:
+        assert payload["media"] == {"file_info": "uploaded-media"}
+        assert "keyboard" not in payload
 
 
 @pytest.mark.asyncio
