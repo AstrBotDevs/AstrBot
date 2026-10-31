@@ -340,7 +340,7 @@ async def my_custom_hook_1(
 
 #### On LLM Response Complete
 
-After the LLM request completes, the `on_llm_response` hook is triggered.
+After the LLM request completes, the `on_llm_response` hook is triggered. This hook fires once, for the final response only: when a round also requests tool calls, that round's text is handled by the `on_llm_response_intermediate` hook described below.
 
 You can obtain the `ProviderResponse` object and modify it.
 
@@ -355,6 +355,36 @@ async def on_llm_resp(
 ):  # Note there are three parameters
     print(resp)
 ```
+
+> [!NOTE]
+> For a normal final response, this hook fires after the assistant message has been written to the run context, so its edits show up in the following `llm_result` but do not rewrite that stored message. With streaming, text chunks that were already sent to the user cannot be retracted or modified.
+
+> You cannot use yield to send messages here. If you need to send, please use the `event.send()` method directly.
+
+#### On Intermediate LLM Response
+
+> Requires AstrBot version >= v4.30.0
+
+When an LLM round requests tool calls, the `on_llm_response_intermediate` hook is triggered once, before that round's text (if any) is sent to the user and before the tools run.
+
+It fires once for every round that requests tool calls. A final round that requests no tool calls only triggers `on_llm_response`.
+
+You can obtain the `LLMResponse` object and modify its text. Tool call names, arguments and ids are managed by AstrBot, so edits to them have no effect.
+
+```python
+from astrbot.api.event import filter, AstrMessageEvent
+from astrbot.api.provider import LLMResponse
+
+
+@filter.on_llm_response_intermediate()
+async def on_llm_resp_intermediate(
+    self, event: AstrMessageEvent, resp: LLMResponse
+):  # Note there are three parameters
+    print(resp)
+```
+
+> [!NOTE]
+> This hook fires before the round text is sent and written to the run context, so its text edits apply both to what the user receives and to the history of the following requests. With streaming, the chunks of this round may already have reached the user, and the hook cannot retract or modify them.
 
 > You cannot use yield to send messages here. If you need to send, please use the `event.send()` method directly.
 
