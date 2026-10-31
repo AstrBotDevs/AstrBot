@@ -390,11 +390,37 @@ def _normalize_mcp_input_schema(schema: dict[str, Any]) -> dict[str, Any]:
     return _normalize(copy.deepcopy(schema))
 
 
+_CONDITIONAL_REQUIREMENT_KEYWORDS = (
+    "if",
+    "then",
+    "else",
+    "dependentRequired",
+    "dependentSchemas",
+    "dependencies",
+    "allOf",
+    "anyOf",
+    "oneOf",
+    "$ref",
+)
+
+
 def _is_empty_optional_value(value: Any) -> bool:
     """Whether ``value`` is an empty placeholder for an unused optional slot."""
     if value is None or value == "":
         return True
     return isinstance(value, (list, dict)) and not value
+
+
+def _clean_argument_value(value: Any, schema: Any) -> Any:
+    """Drop empty optional properties inside a nested object or array."""
+    if not isinstance(schema, dict):
+        return value
+    if isinstance(value, dict) and isinstance(schema.get("properties"), dict):
+        return _drop_empty_optional_arguments(value, schema)
+    items = schema.get("items")
+    if isinstance(value, list) and isinstance(items, dict):
+        return [_clean_argument_value(item, items) for item in value]
+    return value
 
 
 def _drop_empty_optional_arguments(
@@ -408,14 +434,27 @@ def _drop_empty_optional_arguments(
     whole tool call fail (see #7116). Send only the values that were actually
     set. Required properties are always forwarded so an empty value the caller
     really meant to send survives.
+
+    A schema whose required set depends on the other arguments (``if``/``then``,
+    ``dependentRequired``, or a composition) is returned untouched: dropping a
+    value there could remove something the server then requires.
     """
+    if not isinstance(schema, dict) or any(
+        keyword in schema for keyword in _CONDITIONAL_REQUIREMENT_KEYWORDS
+    ):
+        return arguments
+
+    properties = schema.get("properties")
+    properties = properties if isinstance(properties, dict) else {}
     required = schema.get("required")
     required_names = set(required) if isinstance(required, list) else set()
-    return {
-        name: value
-        for name, value in arguments.items()
-        if name in required_names or not _is_empty_optional_value(value)
-    }
+
+    cleaned: dict[str, Any] = {}
+    for name, value in arguments.items():
+        if name not in required_names and _is_empty_optional_value(value):
+            continue
+        cleaned[name] = _clean_argument_value(value, properties.get(name))
+    return cleaned
 
 
 class MCPClient:

@@ -137,22 +137,24 @@ class TestMCPToolSchemaNormalization:
 class TestMCPToolArgumentForwarding:
     """Empty placeholders for optional slots must not reach the MCP server (#7116)."""
 
-    @staticmethod
-    def _tool(client):
+    DEFAULT_SCHEMA = {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+            "name": {"type": "string"},
+            "area": {"type": "string"},
+            "floor": {"type": "string"},
+            "domain": {"type": "array"},
+            "device_class": {"type": "array"},
+        },
+    }
+
+    @classmethod
+    def _tool(cls, client, input_schema=None):
         mcp_tool = SimpleNamespace(
             name="HassTurnOn",
             description="Turn on a device",
-            inputSchema={
-                "type": "object",
-                "required": ["name"],
-                "properties": {
-                    "name": {"type": "string"},
-                    "area": {"type": "string"},
-                    "floor": {"type": "string"},
-                    "domain": {"type": "array"},
-                    "device_class": {"type": "array"},
-                },
-            },
+            inputSchema=input_schema or cls.DEFAULT_SCHEMA,
         )
         return MCPTool(mcp_tool, client, "home-assistant")
 
@@ -200,3 +202,60 @@ class TestMCPToolArgumentForwarding:
 
         forwarded = client.call_tool_with_reconnect.await_args.kwargs["arguments"]
         assert forwarded == {"name": "Demo Light", "area": 0, "floor": False}
+
+    @pytest.mark.asyncio
+    async def test_drops_empty_optional_arguments_in_nested_objects(self):
+        client = MagicMock()
+        client.call_tool_with_reconnect = AsyncMock(return_value="ok")
+        tool = self._tool(
+            client,
+            {
+                "type": "object",
+                "required": ["scene"],
+                "properties": {
+                    "scene": {"type": "string"},
+                    "options": {
+                        "type": "object",
+                        "required": ["mode"],
+                        "properties": {
+                            "mode": {"type": "string"},
+                            "note": {"type": "string"},
+                        },
+                    },
+                },
+            },
+        )
+
+        await tool.call(
+            SimpleNamespace(tool_call_timeout=30),
+            scene="movie",
+            options={"mode": "dim", "note": ""},
+        )
+
+        forwarded = client.call_tool_with_reconnect.await_args.kwargs["arguments"]
+        assert forwarded == {"scene": "movie", "options": {"mode": "dim"}}
+
+    @pytest.mark.asyncio
+    async def test_keeps_values_when_requiredness_is_conditional(self):
+        client = MagicMock()
+        client.call_tool_with_reconnect = AsyncMock(return_value="ok")
+        tool = self._tool(
+            client,
+            {
+                "type": "object",
+                "dependentRequired": {"mode": ["note"]},
+                "properties": {
+                    "mode": {"type": "string"},
+                    "note": {"type": "string"},
+                },
+            },
+        )
+
+        await tool.call(
+            SimpleNamespace(tool_call_timeout=30),
+            mode="dim",
+            note="",
+        )
+
+        forwarded = client.call_tool_with_reconnect.await_args.kwargs["arguments"]
+        assert forwarded == {"mode": "dim", "note": ""}
