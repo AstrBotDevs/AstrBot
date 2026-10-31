@@ -25,8 +25,11 @@ must be explicitly selected. Sync never edits or deletes source Issues/PRs.
   to be contained in the earliest published stable release. Drafts/prereleases do
   not count. Populate PR links and actual release tag/URL, never guess a version.
 - Scan all open issues and all PRs. Also reconcile tracked closed items, linked
-  closed issues, and the current event subject; do not import unrelated closed
-  history. Skip archived items and draft issues.
+  closed issues, the current event subject, and all items closed on or after the
+  Project's creation time. This durable boundary recovers replaced/failed event
+  runs without importing unrelated items closed before the Project existed. For
+  an older Project, preview this catch-up set before enabling writes. Skip
+  archived items and draft issues.
 - Validate the Project schema/options and calculate all changes before writing;
   skip unchanged values and clear stale text. Paginate every GraphQL connection,
   reject stalled cursors, and serialize whole-project runs.
@@ -92,7 +95,7 @@ next schedule reconciles current state. Remove `ASTRBOT_PROJECT_ID` to disable.
 - Never: commit secrets, check out PR head code in the privileged workflow,
   modify issue/PR state, delete project items, commit or push without permission.
 
-Historical unrelated closed issues are intentionally not imported. Coordinate any
+Unrelated items closed before Project creation are intentionally not imported. Coordinate any
 native Project automation that writes these same fields. GitHub Actions and live
 API validation require maintainer configuration after merge.
 

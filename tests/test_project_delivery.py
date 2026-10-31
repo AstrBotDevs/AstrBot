@@ -15,6 +15,10 @@ SPEC.loader.exec_module(sync)
 
 class DeliveryTests(unittest.TestCase):
     def setUp(self):
+        self.metadata = {"node": {"createdAt": "2026-10-01T00:00:00Z"}}
+        api = patch.object(sync, "graphql", return_value=self.metadata)
+        api.start()
+        self.addCleanup(api.stop)
         self.fields = [
             {
                 "name": name,
@@ -53,14 +57,18 @@ class DeliveryTests(unittest.TestCase):
                 patch.object(
                     sync,
                     "graphql",
-                    return_value={"addProjectV2ItemById": {"item": {"id": "I"}}},
+                    return_value={
+                        **self.metadata,
+                        "addProjectV2ItemById": {"item": {"id": "I"}},
+                    },
                 ) as api,
             ):
                 plan = sync.reconcile("P", "AstrBotDevs/AstrBot", apply=apply)
                 self.assertEqual(
                     plan[0]["changes"], {"Status": "Todo", "交付进度": "未关联实现"}
                 )
-                self.assertEqual(api.call_count, 3 if apply else 0)
+                self.assertEqual(api.call_count, 4 if apply else 1)
+                self.assertTrue(api.call_args_list[0].args[0].startswith("query"))
         item = {
             "id": "I",
             "content": self.issue,
@@ -86,10 +94,11 @@ class DeliveryTests(unittest.TestCase):
                 ],
             ),
             patch.object(sync.subprocess, "run", return_value=Mock(stdout="a" * 40)),
-            patch.object(sync, "graphql") as api,
+            patch.object(sync, "graphql", return_value=self.metadata) as api,
         ):
             self.assertEqual(sync.reconcile("P", "AstrBotDevs/AstrBot", apply=True), [])
-            api.assert_not_called()
+            api.assert_called_once()
+            self.assertTrue(api.call_args.args[0].startswith("query"))
 
     def test_snapshot_skips_archived_draft_foreign_and_old_closed(self):
         archived = {"id": "I", "content": self.issue, "isArchived": True}
@@ -103,7 +112,13 @@ class DeliveryTests(unittest.TestCase):
             "content": {"__typename": "DraftIssue", "id": "DRAFT"},
             "isArchived": False,
         }
-        closed = {**self.issue, "id": "OLD", "number": 2, "state": "CLOSED"}
+        closed = {
+            **self.issue,
+            "id": "OLD",
+            "number": 2,
+            "state": "CLOSED",
+            "closedAt": "2026-09-30T23:59:59Z",
+        }
         with (
             patch.object(
                 sync,
@@ -117,10 +132,11 @@ class DeliveryTests(unittest.TestCase):
                 ],
             ),
             patch.object(sync.subprocess, "run", return_value=Mock(stdout="a" * 40)),
-            patch.object(sync, "graphql") as api,
+            patch.object(sync, "graphql", return_value=self.metadata) as api,
         ):
             self.assertEqual(sync.reconcile("P", "AstrBotDevs/AstrBot", apply=True), [])
-            api.assert_not_called()
+            api.assert_called_once()
+            self.assertTrue(api.call_args.args[0].startswith("query"))
 
     def test_reconciliation_explicitly_scans_closed_issues_and_merged_prs(self):
         with (
@@ -169,11 +185,12 @@ class DeliveryTests(unittest.TestCase):
                 ],
             ),
             patch.object(sync.subprocess, "run", return_value=Mock(stdout="a" * 40)),
-            patch.object(sync, "graphql") as api,
+            patch.object(sync, "graphql", return_value=self.metadata) as api,
         ):
             with self.assertRaisesRegex(RuntimeError, "read failed"):
                 sync.reconcile("P", "AstrBotDevs/AstrBot", apply=True)
-            api.assert_not_called()
+            api.assert_called_once()
+            self.assertTrue(api.call_args.args[0].startswith("query"))
 
     def test_closed_subject_is_added_using_current_state(self):
         closed = {**self.issue, "state": "CLOSED", "stateReason": "NOT_PLANNED"}
@@ -280,6 +297,42 @@ class DeliveryTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             sync.ancestor("--bad-option", "refs/tags/v1")
 
+    def test_missing_recovery_boundary_fails_before_mutations(self):
+        for metadata in (
+            {"node": None},
+            {"node": {}},
+            {"node": {"createdAt": "invalid"}},
+        ):
+            with (
+                self.subTest(metadata=metadata),
+                patch.object(sync, "connection", return_value=self.fields) as read,
+                patch.object(sync, "graphql", return_value=metadata) as api,
+            ):
+                with self.assertRaisesRegex(ValueError, "creation time"):
+                    sync.reconcile("P", "AstrBotDevs/AstrBot", apply=True)
+                self.assertEqual(read.call_count, 1)
+                api.assert_called_once()
+                self.assertTrue(api.call_args.args[0].startswith("query"))
+
+    def test_closed_recovery_includes_exact_boundary_but_excludes_older_items(self):
+        for closed_at, expected in [
+            ("2026-10-01T00:00:00Z", {1}),
+            ("2026-09-30T23:59:59Z", set()),
+        ]:
+            issue = {**self.issue, "state": "CLOSED", "closedAt": closed_at}
+            pages = [self.fields, [], [issue], [], []]
+            if expected:
+                pages.append([])
+            with (
+                self.subTest(closed_at=closed_at),
+                patch.object(sync, "connection", side_effect=pages),
+                patch.object(
+                    sync.subprocess, "run", return_value=Mock(stdout="a" * 40)
+                ),
+            ):
+                plan = sync.reconcile("P", "AstrBotDevs/AstrBot")
+            self.assertEqual({entry["number"] for entry in plan}, expected)
+
     def test_reference_lines_ignore_incidental_and_foreign_mentions(self):
         body = (
             "Mention #9 in passing\nRefs #12, #13\nFixes: AstrBotDevs/AstrBot#14\n"
@@ -307,6 +360,50 @@ class DeliveryTests(unittest.TestCase):
         self.assertEqual(sync.decide(issue, {}, [])["Status"], "Cancelled")
         issue["stateReason"] = "COMPLETED"
         self.assertEqual(sync.decide(issue, {}, [])["Status"], "Done")
+
+    def test_reopened_terminal_issues_reset_before_linked_pr_inference(self):
+        issue = {"__typename": "Issue", "state": "OPEN", "labels": []}
+        for terminal in ("Done", "Cancelled", "Closed unmerged"):
+            for state in ("OPEN", "MERGED"):
+                with self.subTest(terminal=terminal, state=state):
+                    self.assertEqual(
+                        sync.decide(issue, {"Status": terminal}, [{"state": state}])[
+                            "Status"
+                        ],
+                        "Todo",
+                    )
+
+    def test_full_scan_recovers_closed_items_without_their_event_subject(self):
+        issue = {
+            **self.issue,
+            "state": "CLOSED",
+            "closedAt": "2026-10-02T00:00:00Z",
+            "stateReason": "COMPLETED",
+        }
+        pr = {
+            "__typename": "PullRequest",
+            "id": "PR",
+            "number": 2,
+            "state": "CLOSED",
+            "closedAt": "2026-10-02T00:00:00Z",
+            "url": "pr",
+        }
+        for subject in (None, 999):
+            with (
+                self.subTest(subject=subject),
+                patch.object(
+                    sync,
+                    "connection",
+                    side_effect=[self.fields, [], [dict(issue)], [pr], [], []],
+                ),
+                patch.object(
+                    sync.subprocess, "run", return_value=Mock(stdout="a" * 40)
+                ),
+            ):
+                plan = sync.reconcile("P", "AstrBotDevs/AstrBot", subject=subject)
+            self.assertEqual({entry["number"] for entry in plan}, {1, 2})
+            self.assertEqual(plan[0]["changes"]["Status"], "Done")
+            self.assertEqual(plan[1]["changes"]["Status"], "Closed unmerged")
 
     def test_explicit_labels_and_unmerged_pr(self):
         issue = {

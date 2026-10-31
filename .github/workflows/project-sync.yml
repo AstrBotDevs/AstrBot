@@ -23,6 +23,7 @@ permissions:
   contents: read
 
 # Every run reconciles the whole project; serialize snapshots, not just items.
+# Pending runs can be replaced; full scans recover items closed since project creation.
 concurrency:
   group: project-sync-${{ github.repository }}
   cancel-in-progress: false

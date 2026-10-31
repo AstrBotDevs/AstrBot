@@ -123,6 +123,8 @@ def decide(content, current, linked):
         ]
     elif state == "CLOSED":
         status = "Cancelled" if content.get("stateReason") == "NOT_PLANNED" else "Done"
+    elif status in {"Done", "Cancelled", "Closed unmerged"}:
+        status = "Todo"
     elif "status:needs-verification" in content.get("labels", []):
         status = "Needs verification"
     elif "status:needs-info" in content.get("labels", []):
@@ -131,11 +133,7 @@ def decide(content, current, linked):
         status = "Needs verification"
     elif linked:
         status = "In progress"
-    elif status not in STATUS_OPTIONS or status in {
-        "Done",
-        "Cancelled",
-        "Closed unmerged",
-    }:
+    elif status not in STATUS_OPTIONS:
         status = "Todo"
     return {"Status": status}
 
@@ -374,6 +372,15 @@ def reconcile(project, repository, *, subject=None, apply=False, status_names=No
     for name in ("实现关联", "发布版本", "发布说明"):
         if fields.get(name, {}).get("dataType") != "TEXT":
             raise ValueError(f"Project {name} must be a text field")
+    metadata = graphql(
+        """query($project:ID!){node(id:$project){... on ProjectV2{createdAt}}}""",
+        {"project": project},
+    )
+    since = (metadata.get("node") or {}).get("createdAt")
+    if not isinstance(since, str) or not re.fullmatch(
+        r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", since
+    ):
+        raise ValueError("Project creation time is required for closed-item recovery")
     items = connection(
         """query($project:ID!,$cursor:String){node(id:$project){... on ProjectV2{
           items(first:100,after:$cursor,archivedStates:[ARCHIVED,NOT_ARCHIVED]){nodes{
@@ -396,7 +403,7 @@ def reconcile(project, repository, *, subject=None, apply=False, status_names=No
     variables = {"owner": owner, "name": name}
     issues = connection(
         """query($owner:String!,$name:String!,$states:[IssueState!],$cursor:String){repository(owner:$owner,name:$name){
-          issues(first:100,after:$cursor,states:$states){nodes{__typename id number state stateReason
+          issues(first:100,after:$cursor,states:$states){nodes{__typename id number state stateReason closedAt
             labels(first:100){nodes{name}pageInfo{hasNextPage endCursor}}}
           pageInfo{hasNextPage endCursor}}}}""",
         ("repository", "issues"),
@@ -405,7 +412,7 @@ def reconcile(project, repository, *, subject=None, apply=False, status_names=No
     )
     prs = connection(
         """query($owner:String!,$name:String!,$states:[PullRequestState!],$cursor:String){repository(owner:$owner,name:$name){
-          pullRequests(first:100,after:$cursor,states:$states){nodes{__typename id number state body url
+          pullRequests(first:100,after:$cursor,states:$states){nodes{__typename id number state body url closedAt
             mergeCommit{oid}
             closingIssuesReferences(first:100){nodes{number repository{nameWithOwner}}
               pageInfo{hasNextPage endCursor}}
@@ -443,6 +450,7 @@ def reconcile(project, repository, *, subject=None, apply=False, status_names=No
         or i["id"] in tracked
         or i["number"] == subject
         or i["number"] in linked
+        or (i.get("closedAt") or "") >= since
     ]
     issue_numbers = {i["number"] for i in candidates}
     associated_ids = {
@@ -455,6 +463,7 @@ def reconcile(project, repository, *, subject=None, apply=False, status_names=No
         or pr["id"] in tracked
         or pr["number"] == subject
         or pr["id"] in associated_ids
+        or (pr.get("closedAt") or "") >= since
     )
     releases = connection(
         """query($owner:String!,$name:String!,$cursor:String){repository(owner:$owner,name:$name){
