@@ -1,4 +1,5 @@
 import base64
+import errno
 import math
 import os
 import struct
@@ -10,6 +11,7 @@ from types import SimpleNamespace
 from urllib.parse import quote
 
 import pytest
+from aiohttp import ClientError
 
 import astrbot.core.utils.media_utils as media_utils
 from astrbot.core.file_token_service import FileTokenService
@@ -628,6 +630,65 @@ async def test_image_base64_data_degrades_for_download_http_error_when_not_stric
 
     with pytest.raises(DownloadFileHTTPError):
         await media_utils.resolve_image_ref_to_base64_data(url, strict=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "error",
+    [
+        pytest.param(ClientError("connection reset"), id="client-error"),
+        pytest.param(SyntaxError("invalid image header"), id="syntax-error"),
+        pytest.param(EOFError("truncated image"), id="eof-error"),
+        pytest.param(struct.error("unpack requires a buffer"), id="struct-error"),
+    ],
+)
+async def test_image_base64_data_degrades_declared_recoverable_errors(
+    tmp_path, monkeypatch, error
+):
+    """Declared-recoverable errors are not only DownloadFileHTTPError."""
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+
+    async def fail_download(media_ref: str, target_path: str) -> None:
+        Path(target_path).write_bytes(b"partial")
+        raise error
+
+    monkeypatch.setattr(media_utils, "download_file", fail_download)
+
+    assert (
+        await media_utils.resolve_image_ref_to_base64_data(
+            "https://example.com/expired.png"
+        )
+        is None
+    )
+    assert not list(tmp_path.iterdir())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "error",
+    [
+        pytest.param(
+            OSError(errno.ENOMEM, "Cannot allocate memory"), id="out-of-memory"
+        ),
+        pytest.param(RuntimeError("unexpected failure"), id="runtime-error"),
+    ],
+)
+async def test_image_base64_data_propagates_undeclared_errors(
+    tmp_path, monkeypatch, error
+):
+    """Non-strict mode must not swallow errors outside the declared set."""
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+
+    async def fail_download(media_ref: str, target_path: str) -> None:
+        raise error
+
+    monkeypatch.setattr(media_utils, "download_file", fail_download)
+
+    with pytest.raises(type(error)) as excinfo:
+        await media_utils.resolve_image_ref_to_base64_data(
+            "https://example.com/expired.png"
+        )
+    assert excinfo.value is error
 
 
 @pytest.mark.asyncio
