@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import sys
 from pathlib import Path
@@ -400,9 +401,29 @@ class MockHooks(BaseAgentRunHooks):
         self.agent_done_called = False
         self.tool_start_called = False
         self.tool_end_called = False
+        self.events: list[str] = []
+        self.intermediate_responses: list[LLMResponse] = []
+        self.final_responses: list[LLMResponse] = []
+        self.intermediate_error: Exception | None = None
+        self.rewrite_prefix: str | None = None
+        self.clear_tool_calls = False
 
     async def on_agent_begin(self, run_context):
         self.agent_begin_called = True
+
+    async def on_llm_response_intermediate(self, run_context, llm_response):
+        self.events.append("intermediate")
+        self.intermediate_responses.append(llm_response)
+        if self.rewrite_prefix:
+            llm_response.completion_text = (
+                f"{self.rewrite_prefix}{llm_response.completion_text}"
+            )
+        if self.clear_tool_calls:
+            llm_response.tools_call_name = []
+            llm_response.tools_call_args = []
+            llm_response.tools_call_ids = []
+        if self.intermediate_error:
+            raise self.intermediate_error
 
     async def on_tool_start(self, run_context, tool, tool_args):
         self.tool_start_called = True
@@ -412,6 +433,12 @@ class MockHooks(BaseAgentRunHooks):
 
     async def on_agent_done(self, run_context, llm_response):
         self.agent_done_called = True
+        self.events.append("done")
+        self.final_responses.append(llm_response)
+        if self.rewrite_prefix:
+            llm_response.completion_text = (
+                f"{self.rewrite_prefix}{llm_response.completion_text}"
+            )
 
 
 class ClearingAgentBeginHooks(MockHooks):
@@ -2398,3 +2425,550 @@ async def test_small_step_budgets_and_reset(
     )
     assert runner._step_budget_used == 0
     assert runner._step_budget_notified == set()
+
+
+class GatedStreamingProvider(MockProvider):
+    """Stream one chunk, then wait for the test before finishing the tool round."""
+
+    def __init__(self):
+        super().__init__()
+        self.gate = asyncio.Event()
+
+    async def text_chat_stream(self, **kwargs):
+        self.call_count += 1
+        if self.call_count > 1:
+            yield LLMResponse(
+                role="assistant",
+                completion_text="最终回复",
+                is_chunk=True,
+            )
+            yield LLMResponse(
+                role="assistant",
+                completion_text="最终回复",
+                usage=TokenUsage(input_other=10, output=5),
+            )
+            return
+
+        yield LLMResponse(
+            role="assistant",
+            completion_text="CHUNK-1",
+            is_chunk=True,
+        )
+        await self.gate.wait()
+        yield LLMResponse(
+            role="assistant",
+            completion_text="CHUNK-1",
+            tools_call_name=["test_tool"],
+            tools_call_args=[{"query": "test"}],
+            tools_call_ids=["call_gated"],
+            usage=TokenUsage(input_other=10, output=5),
+        )
+
+
+class InPlaceToolCallMutationHooks(BaseAgentRunHooks):
+    """Mutate the tool-call payload in place instead of rebinding it."""
+
+    def __init__(self):
+        self.calls = 0
+
+    async def on_llm_response_intermediate(self, run_context, llm_response):
+        self.calls += 1
+        llm_response.tools_call_name.clear()
+        llm_response.tools_call_name.append("other_tool")
+        llm_response.tools_call_args[0]["query"] = "injected"
+        llm_response.tools_call_args.append({"query": "other"})
+        llm_response.tools_call_ids.append("call_injected")
+        llm_response.tools_call_extra_content["call_injected"] = {"thought": "x"}
+
+
+class FinalOnlyHooks(BaseAgentRunHooks):
+    """Hooks object that only implements the pre-existing final-response hook."""
+
+    def __init__(self):
+        self.done_calls = 0
+
+    async def on_agent_done(self, run_context, llm_response):
+        self.done_calls += 1
+
+
+@pytest.mark.asyncio
+async def test_intermediate_hook_fires_once_before_tool_round_text(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+):
+    """One tool round fires exactly one intermediate and one final response hook."""
+    tool_round_text = "我需要使用工具来帮助您"
+    final_text = "这是我的最终回答"
+    mock_provider.max_calls_before_normal_response = 1
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    original_step = runner.step
+    intermediate_calls_at_tool_text: list[int] = []
+    done_called_at_final_text: list[bool] = []
+
+    async def recorded_step():
+        async for response in original_step():
+            text = response.data["chain"].get_plain_text()
+            if text == tool_round_text:
+                intermediate_calls_at_tool_text.append(
+                    len(mock_hooks.intermediate_responses)
+                )
+            elif text == final_text:
+                done_called_at_final_text.append(mock_hooks.agent_done_called)
+            yield response
+
+    runner.step = recorded_step
+    async for _ in runner.step_until_done(3):
+        pass
+
+    assert mock_hooks.events == ["intermediate", "done"]
+    assert len(mock_hooks.intermediate_responses) == 1
+    assert mock_hooks.intermediate_responses[0].tools_call_name == ["test_tool"]
+    assert len(mock_hooks.final_responses) == 1
+    assert mock_hooks.final_responses[0].completion_text == final_text
+    # The intermediate hook ran before its round text was emitted, and the final
+    # hook ran before the final text was emitted.
+    assert intermediate_calls_at_tool_text == [1]
+    assert done_called_at_final_text == [True]
+
+
+@pytest.mark.asyncio
+async def test_intermediate_hook_fires_once_per_tool_round(
+    runner, provider_request, mock_tool_executor, mock_hooks
+):
+    """Every tool round fires the intermediate hook; the final round does not."""
+    provider = SequentialToolProvider(["test_tool", "test_tool"])
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(4):
+        pass
+
+    assert mock_hooks.events == ["intermediate", "intermediate", "done"]
+    assert [resp.tools_call_name for resp in mock_hooks.intermediate_responses] == [
+        ["test_tool"],
+        ["test_tool"],
+    ]
+    assert len(mock_hooks.final_responses) == 1
+    assert mock_hooks.final_responses[0].completion_text == "这是我的最终回答"
+    assert runner.done()
+    assert runner.run_context.messages[-1].content[-1].text == "这是我的最终回答"
+
+
+@pytest.mark.asyncio
+async def test_intermediate_hook_does_not_buffer_streaming(
+    runner, provider_request, mock_tool_executor, mock_hooks
+):
+    """A registered intermediate handler must not delay the first streamed chunk."""
+    provider = GatedStreamingProvider()
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=True,
+    )
+
+    step = runner.step()
+    first = await asyncio.wait_for(anext(step), timeout=5)
+    # The first chunk reaches the consumer while the provider is still suspended,
+    # and the intermediate hook has not run yet.
+    assert first.type == "streaming_delta"
+    assert first.data["chain"].get_plain_text() == "CHUNK-1"
+    assert not provider.gate.is_set()
+    assert mock_hooks.intermediate_responses == []
+
+    provider.gate.set()
+    async for _ in step:
+        pass
+    while not runner.done():
+        async for _ in runner.step():
+            pass
+
+    assert mock_hooks.events == ["intermediate", "done"]
+    assert runner.get_final_llm_resp().completion_text == "最终回复"
+
+
+@pytest.mark.asyncio
+async def test_observer_only_intermediate_handler_keeps_streaming_latency(
+    runner, provider_request, mock_tool_executor, monkeypatch
+):
+    """A plugin registering only the new event does not buffer streamed chunks."""
+    from astrbot.api.event import filter
+    from astrbot.core.astr_agent_hooks import MainAgentHooks
+    from astrbot.core.star.star import star_map
+    from astrbot.core.star.star_handler import EventType, star_handlers_registry
+
+    observed: list[list[str]] = []
+
+    async def observer_only_hook(event, resp):
+        observed.append(resp.tools_call_name)
+
+    # Register through the public decorator and activate the owning star so that
+    # dispatch really resolves this handler from the registry.
+    filter.on_llm_response_intermediate()(observer_only_hook)
+    handler_metadata = None
+    try:
+        handler_metadata = next(
+            handler
+            for handler in star_handlers_registry.get_handlers_by_event_type(
+                EventType.OnLLMResponseIntermediateEvent, only_activated=False
+            )
+            if handler.handler is observer_only_hook
+        )
+        monkeypatch.setitem(
+            star_map,
+            handler_metadata.handler_module_path,
+            SimpleNamespace(
+                name="observer_only_plugin",
+                display_name="Observer Only",
+                activated=True,
+                reserved=False,
+            ),
+        )
+        event = MagicMock()
+        # A plugin whitelist keeps handlers registered by other tests out of the
+        # way while still dispatching the observer installed above.
+        event.plugins_name = ["observer_only_plugin"]
+        event.is_stopped.return_value = False
+        event.send = AsyncMock()
+        provider = GatedStreamingProvider()
+        await runner.reset(
+            provider=provider,
+            request=provider_request,
+            run_context=ContextWrapper(context=MockAgentContext(event)),
+            tool_executor=mock_tool_executor,
+            agent_hooks=MainAgentHooks(),
+            streaming=True,
+        )
+
+        step = runner.step()
+        first = await asyncio.wait_for(anext(step), timeout=5)
+        assert first.type == "streaming_delta"
+        assert first.data["chain"].get_plain_text() == "CHUNK-1"
+        assert not provider.gate.is_set()
+        assert observed == []
+
+        provider.gate.set()
+        async for _ in step:
+            pass
+        while not runner.done():
+            async for _ in runner.step():
+                pass
+
+        assert observed == [["test_tool"]]
+        assert runner.get_final_llm_resp().completion_text == "最终回复"
+    finally:
+        if handler_metadata is not None:
+            star_handlers_registry.remove(handler_metadata)
+
+
+@pytest.mark.asyncio
+async def test_intermediate_hook_cannot_mutate_tool_calls_in_place(
+    runner, mock_provider, provider_request, mock_tool_executor
+):
+    """In-place edits of the tool-call payload do not change the executed tools."""
+    hooks = InPlaceToolCallMutationHooks()
+    mock_provider.max_calls_before_normal_response = 1
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=hooks,
+        streaming=False,
+    )
+
+    responses = [resp async for resp in runner.step_until_done(3)]
+
+    assert hooks.calls == 1
+    assert [
+        resp.data["chain"].get_plain_text()
+        for resp in responses
+        if resp.type == "llm_result"
+    ] == ["我需要使用工具来帮助您", "这是我的最终回答"]
+    assert sum(resp.type == "tool_call_result" for resp in responses) == 1
+    assistant_tool_calls = [
+        message
+        for message in runner.run_context.messages
+        if message.role == "assistant" and message.tool_calls
+    ]
+    assert len(assistant_tool_calls) == 1
+    assert [
+        (call.function.name, json.loads(call.function.arguments))
+        for call in assistant_tool_calls[0].tool_calls
+    ] == [("test_tool", {"query": "test"})]
+
+
+@pytest.mark.asyncio
+async def test_intermediate_hook_fires_for_tool_round_without_text(
+    runner, provider_request, mock_tool_executor, mock_hooks
+):
+    """A tool round without text still fires the hook and still runs the tool."""
+    provider = MockToolCallProvider("test_tool")
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    responses = [resp async for resp in runner.step()]
+
+    assert mock_hooks.events == ["intermediate"]
+    assert len(mock_hooks.intermediate_responses) == 1
+    assert mock_hooks.intermediate_responses[0].completion_text == ""
+    assert not mock_hooks.agent_done_called
+    assert [
+        resp.data["chain"].get_plain_text()
+        for resp in responses
+        if resp.type == "llm_result"
+    ] == []
+    assert mock_hooks.tool_start_called
+    assert sum(resp.type == "tool_call_result" for resp in responses) == 1
+
+
+@pytest.mark.asyncio
+async def test_intermediate_hook_not_fired_for_error_round(
+    runner, provider_request, mock_tool_executor, mock_hooks
+):
+    """An error round is not a tool round and must not fire the hook."""
+    await runner.reset(
+        provider=MockErrProvider(),
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    responses = [resp async for resp in runner.step()]
+
+    assert [resp.type for resp in responses] == ["agent_stats", "err"]
+    assert mock_hooks.events == []
+
+
+@pytest.mark.asyncio
+async def test_intermediate_hook_exception_does_not_break_the_round(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+):
+    """A raising intermediate handler is logged and the round continues."""
+    mock_provider.max_calls_before_normal_response = 1
+    mock_hooks.intermediate_error = RuntimeError("boom")
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async def drain():
+        return [resp async for resp in runner.step_until_done(3)]
+
+    responses = await asyncio.wait_for(drain(), timeout=5)
+
+    assert [
+        resp.data["chain"].get_plain_text()
+        for resp in responses
+        if resp.type == "llm_result"
+    ] == ["我需要使用工具来帮助您", "这是我的最终回答"]
+    assert mock_hooks.events == ["intermediate", "done"]
+    assert mock_hooks.tool_start_called
+    assert runner.done()
+    assert runner.get_final_llm_resp().completion_text == "这是我的最终回答"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("streaming", "stream_to_general"),
+    [(False, False), (True, False), (True, True)],
+)
+async def test_intermediate_hook_round_counts_and_output_through_run_agent(
+    runner,
+    mock_provider,
+    provider_request,
+    mock_tool_executor,
+    mock_hooks,
+    streaming,
+    stream_to_general,
+):
+    """Each round fires one callback and its text reaches the user exactly once."""
+    mock_provider.max_calls_before_normal_response = 1
+    event = MagicMock()
+    event.is_stopped.return_value = False
+    event.get_extra.return_value = None
+    event.get_platform_name.return_value = "lark"
+    event.send = AsyncMock()
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=MockAgentContext(event)),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=streaming,
+    )
+
+    chains = [
+        chain
+        async for chain in run_agent(runner, stream_to_general=stream_to_general)
+    ]
+
+    texts = [chain.get_plain_text() for chain in chains]
+    assert texts.count("我需要使用工具来帮助您") == 1
+    assert texts.count("这是我的最终回答") == 1
+    assert mock_hooks.events == ["intermediate", "done"]
+    assert mock_provider.call_count == 2
+    assert runner.done()
+
+
+@pytest.mark.asyncio
+async def test_final_only_hook_keeps_today_call_count_and_streaming(
+    runner, provider_request, mock_tool_executor
+):
+    """A plugin that only registers on_llm_response keeps today's behaviour."""
+    provider = GatedStreamingProvider()
+    hooks = FinalOnlyHooks()
+    event = MagicMock()
+    event.is_stopped.return_value = False
+    event.get_extra.return_value = None
+    event.get_platform_name.return_value = "lark"
+    event.send = AsyncMock()
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=MockAgentContext(event)),
+        tool_executor=mock_tool_executor,
+        agent_hooks=hooks,
+        streaming=True,
+    )
+
+    chains = run_agent(runner)
+    first = await asyncio.wait_for(anext(chains), timeout=5)
+    assert first.get_plain_text() == "CHUNK-1"
+    assert not provider.gate.is_set()
+    assert hooks.done_calls == 0
+
+    provider.gate.set()
+    rest = [chain async for chain in chains]
+
+    texts = [first.get_plain_text(), *(chain.get_plain_text() for chain in rest)]
+    assert texts.count("CHUNK-1") == 1
+    assert texts.count("最终回复") == 1
+    assert hooks.done_calls == 1
+    assert runner.done()
+
+
+@pytest.mark.asyncio
+async def test_intermediate_and_final_hook_persistence_contract(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+):
+    """Intermediate edits persist into history; final edits only reach llm_result."""
+    mock_provider.max_calls_before_normal_response = 1
+    mock_hooks.rewrite_prefix = "REWRITTEN:"
+    # The runner restores the tool-call payload, so clearing it changes nothing.
+    mock_hooks.clear_tool_calls = True
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    responses = [resp async for resp in runner.step_until_done(3)]
+
+    assert [
+        resp.data["chain"].get_plain_text()
+        for resp in responses
+        if resp.type == "llm_result"
+    ] == ["REWRITTEN:我需要使用工具来帮助您", "REWRITTEN:这是我的最终回答"]
+    assert mock_hooks.events == ["intermediate", "done"]
+    assert mock_hooks.tool_start_called
+    assert runner.run_context.messages[-1].content[-1].text == "这是我的最终回答"
+    assistant_texts = [
+        part.text
+        for message in runner.run_context.messages
+        if message.role == "assistant"
+        for part in (message.content if isinstance(message.content, list) else [])
+        if isinstance(part, TextPart)
+    ]
+    assert assistant_texts == ["REWRITTEN:我需要使用工具来帮助您", "这是我的最终回答"]
+
+
+@pytest.mark.asyncio
+async def test_main_agent_hooks_dispatch_intermediate_and_final_events(monkeypatch):
+    """The bridge maps the new hook method onto the new event type only."""
+    from astrbot.core import astr_agent_hooks as hooks_module
+    from astrbot.core.astr_agent_hooks import MainAgentHooks
+    from astrbot.core.star.star_handler import EventType
+
+    dispatched = []
+
+    async def fake_call_event_hook(event, hook_type, *args, **kwargs):
+        dispatched.append((hook_type, args))
+
+    monkeypatch.setattr(hooks_module, "call_event_hook", fake_call_event_hook)
+    hooks = MainAgentHooks()
+    run_context = ContextWrapper(context=MockAgentContext(MagicMock()))
+    response = LLMResponse(role="assistant", completion_text="text")
+
+    await hooks.on_llm_response_intermediate(run_context, response)
+    assert dispatched == [(EventType.OnLLMResponseIntermediateEvent, (response,))]
+
+    dispatched.clear()
+    await hooks.on_agent_done(run_context, response)
+    assert dispatched == [
+        (EventType.OnLLMResponseEvent, (response,)),
+        (EventType.OnAgentDoneEvent, (run_context, response)),
+    ]
+
+
+def test_filter_decorator_registers_intermediate_event():
+    """@filter.on_llm_response_intermediate registers its own event type."""
+    from astrbot.api.event import filter
+    from astrbot.core.star.star_handler import EventType, star_handlers_registry
+
+    async def unique_intermediate_hook(self, event, resp):
+        pass
+
+    wrapped = filter.on_llm_response_intermediate()(unique_intermediate_hook)
+    assert wrapped is unique_intermediate_hook
+    handler_metadata = None
+    try:
+        handler_metadata = next(
+            handler
+            for handler in star_handlers_registry.get_handlers_by_event_type(
+                EventType.OnLLMResponseIntermediateEvent, only_activated=False
+            )
+            if handler.handler is unique_intermediate_hook
+        )
+        assert handler_metadata.event_type is (
+            EventType.OnLLMResponseIntermediateEvent
+        )
+        assert not any(
+            handler.handler is unique_intermediate_hook
+            for handler in star_handlers_registry.get_handlers_by_event_type(
+                EventType.OnLLMResponseEvent, only_activated=False
+            )
+        )
+    finally:
+        if handler_metadata is not None:
+            star_handlers_registry.remove(handler_metadata)

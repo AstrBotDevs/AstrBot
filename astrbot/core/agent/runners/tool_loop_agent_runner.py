@@ -921,8 +921,40 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
             return
 
-        if not llm_resp.tools_call_name:
+        # Classify the round before the hook runs, and drive the tool branch below
+        # from this flag rather than from the mutable response, so a handler cannot
+        # turn a tool round into a final one.
+        has_tool_calls = bool(llm_resp.tools_call_name)
+        if not has_tool_calls:
             await self._complete_with_assistant_response(llm_resp)
+        else:
+            # Intermediate round: its text is emitted as llm_result below and its
+            # tools run afterwards. Snapshot the tool-call payload by value so a
+            # handler may rewrite the text but cannot change whether or which tools
+            # run, neither by rebinding these attributes nor by mutating them.
+            tool_calls_snapshot = copy.deepcopy(
+                (
+                    llm_resp.tools_call_name,
+                    llm_resp.tools_call_args,
+                    llm_resp.tools_call_ids,
+                    llm_resp.tools_call_extra_content,
+                )
+            )
+            try:
+                await self.agent_hooks.on_llm_response_intermediate(
+                    self.run_context, llm_resp
+                )
+            except Exception as e:
+                logger.error(
+                    f"Error in on_llm_response_intermediate hook: {e}",
+                    exc_info=True,
+                )
+            (
+                llm_resp.tools_call_name,
+                llm_resp.tools_call_args,
+                llm_resp.tools_call_ids,
+                llm_resp.tools_call_extra_content,
+            ) = tool_calls_snapshot
 
         # 返回 LLM 结果
         if llm_resp.reasoning_content:
@@ -948,7 +980,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
 
         # 如果有工具调用，还需处理工具调用
-        if llm_resp.tools_call_name:
+        if has_tool_calls:
             if self.tool_schema_mode == "skills_like":
                 requery_resp, _ = await self._resolve_tool_exec(llm_resp)
                 if self._is_stop_requested():

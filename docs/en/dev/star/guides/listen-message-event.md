@@ -340,7 +340,7 @@ async def my_custom_hook_1(
 
 #### On LLM Response Complete
 
-After the LLM request completes, the `on_llm_response` hook is triggered.
+After the LLM request completes, the `on_llm_response` hook is triggered. This hook is the final-response hook: it fires once for the turn's final response, and once with a synthetic stop response when the turn is stopped. A turn that ends with an LLM error response does not trigger it. A round that also requests tool calls does not trigger it either; that round's text is handled by the `on_llm_response_intermediate` hook described below.
 
 You can obtain the `ProviderResponse` object and modify it.
 
@@ -355,6 +355,36 @@ async def on_llm_resp(
 ):  # Note there are three parameters
     print(resp)
 ```
+
+> [!NOTE]
+> For a normal final response, this hook fires after the assistant message has been written to the run context, so its edits show up in the following `llm_result` but do not rewrite that stored message. With streaming, text chunks that were already sent to the user cannot be retracted or modified.
+
+> You cannot use yield to send messages here. If you need to send, please use the `event.send()` method directly.
+
+#### On Intermediate LLM Response
+
+> Requires AstrBot version > v4.29.3
+
+When an LLM round requests tool calls, the `on_llm_response_intermediate` hook is triggered once, on that completed round response, before its `llm_result` is delivered and before the tools run. With streaming, the text chunks of that round were already streamed as `streaming_delta` while the response was being generated, so they may have reached the user before this hook runs.
+
+The hook fires once for each round that requests tool calls. A final round that requests no tool calls only triggers `on_llm_response`. Internal rounds that are not delivered, such as the tool re-query in the `skills_like` tool schema mode, do not trigger it, and a turn can end with an intermediate event and no `on_llm_response` at all, for example when a tool returns its result directly. The hook is dispatched by AstrBot's built-in tool-loop agent only: the Dify, Coze, DashScope and DeerFlow agent runners never trigger it.
+
+You can obtain the `LLMResponse` object and modify its text. Tool call names, arguments, ids and extra content are managed by AstrBot: they are restored after the hook, so edits to them never change whether or which tools run.
+
+```python
+from astrbot.api.event import filter, AstrMessageEvent
+from astrbot.api.provider import LLMResponse
+
+
+@filter.on_llm_response_intermediate()
+async def on_llm_resp_intermediate(
+    self, event: AstrMessageEvent, resp: LLMResponse
+):  # Note there are three parameters
+    print(resp)
+```
+
+> [!NOTE]
+> This hook runs before the round text is emitted and before the round is written to the run context, so its text edits apply both to what the user receives and to the history of the following requests. With streaming, the chunks of this round may already have been sent to the user: the hook can change the follow-up `llm_result` and the history, but it cannot retract or modify those chunks.
 
 > You cannot use yield to send messages here. If you need to send, please use the `event.send()` method directly.
 
