@@ -115,6 +115,80 @@ async def test_gemini_prepare_conversation_preserves_user_model_history():
 
 
 @pytest.mark.asyncio
+async def test_gemini_prepare_conversation_skips_unsigned_empty_assistant_text():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+
+    contents = await provider._prepare_conversation(
+        {
+            "messages": [
+                {"role": "user", "content": "search the weather"},
+                {
+                    "role": "assistant",
+                    "content": [{"type": "think", "think": "Let me search."}],
+                    "tool_calls": [
+                        {
+                            "id": "call_1",
+                            "type": "function",
+                            "function": {
+                                "name": "web_search",
+                                "arguments": '{"q": "weather"}',
+                            },
+                        }
+                    ],
+                },
+                {
+                    "role": "tool",
+                    "tool_call_id": "call_1",
+                    "name": "web_search",
+                    "content": "sunny",
+                },
+                {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "call_2",
+                            "type": "function",
+                            "function": {"name": "web_search", "arguments": "{}"},
+                        }
+                    ],
+                },
+            ]
+        }
+    )
+
+    model_parts = [
+        part
+        for content in contents
+        if isinstance(content, types.ModelContent)
+        for part in content.parts or []
+    ]
+    assert [part.function_call.name for part in model_parts] == [
+        "web_search",
+        "web_search",
+    ]
+    assert all(part.text is None for part in model_parts)
+
+
+@pytest.mark.asyncio
+async def test_gemini_prepare_conversation_keeps_placeholder_for_empty_assistant():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+
+    contents = await provider._prepare_conversation(
+        {
+            "messages": [
+                {"role": "user", "content": "user turn"},
+                {"role": "assistant", "content": ""},
+                {"role": "user", "content": "current user turn"},
+            ]
+        }
+    )
+
+    assert contents[1].parts is not None
+    assert [part.text for part in contents[1].parts] == [" "]
+
+
+@pytest.mark.asyncio
 async def test_gemini_prepare_conversation_resolves_local_history_image(tmp_path):
     image_path = tmp_path / "history.webp"
     image_bytes = (
