@@ -42,7 +42,7 @@ class botClient(Client):
         )
         abm.group_id = cast(str, message.group_openid)
         abm.session_id = abm.group_id
-        self.platform.remember_session_scene(abm.session_id, "group")
+        await self.platform.remember_session_scene(abm.session_id, "group")
         self._commit(abm)
 
     async def on_group_message_create(
@@ -55,7 +55,7 @@ class botClient(Client):
         )
         abm.group_id = cast(str, message.group_openid)
         abm.session_id = abm.group_id
-        self.platform.remember_session_scene(abm.session_id, "group")
+        await self.platform.remember_session_scene(abm.session_id, "group")
         self._commit(abm)
 
     # 收到频道消息
@@ -66,7 +66,7 @@ class botClient(Client):
         )
         abm.group_id = message.channel_id
         abm.session_id = abm.group_id
-        self.platform.remember_session_scene(abm.session_id, "channel")
+        await self.platform.remember_session_scene(abm.session_id, "channel")
         self._commit(abm)
 
     # 收到私聊消息
@@ -78,7 +78,7 @@ class botClient(Client):
             MessageType.FRIEND_MESSAGE,
         )
         abm.session_id = abm.sender.user_id
-        self.platform.remember_session_scene(abm.session_id, "friend")
+        await self.platform.remember_session_scene(abm.session_id, "friend")
         self._commit(abm)
 
     # 收到 C2C 消息
@@ -88,7 +88,7 @@ class botClient(Client):
             MessageType.FRIEND_MESSAGE,
         )
         abm.session_id = abm.sender.user_id
-        self.platform.remember_session_scene(abm.session_id, "friend")
+        await self.platform.remember_session_scene(abm.session_id, "friend")
         self._commit(abm)
 
     def _commit(self, abm: AstrBotMessage) -> None:
@@ -127,7 +127,6 @@ class QQOfficialWebhookPlatformAdapter(Platform):
         self.webhook_helper = None
         self._session_last_message_id: dict[str, str] = {}
         self._session_scene: dict[str, str] = {}
-        self._allow_group_proactive_send = True
 
     async def send_by_session(
         self,
@@ -145,10 +144,16 @@ class QQOfficialWebhookPlatformAdapter(Platform):
             return
         self._session_last_message_id[session_id] = message_id
 
-    def remember_session_scene(self, session_id: str, scene: str) -> None:
-        if not session_id or not scene:
-            return
-        self._session_scene[session_id] = scene
+    async def remember_session_scene(self, session_id: str, scene: str) -> None:
+        """Persist a delivery route using the shared QQ Official implementation.
+
+        Args:
+            session_id: Raw destination ID reported by QQ.
+            scene: Delivery scene reported by the incoming event.
+        """
+        await QQOfficialPlatformAdapter.remember_session_scene(
+            cast(Any, self), session_id, scene
+        )
 
     def _extract_message_id(self, ret: Any) -> str | None:
         if isinstance(ret, dict):
