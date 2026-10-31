@@ -7,6 +7,7 @@ from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from google.genai import types
 
 # 将项目根目录添加到 sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -24,6 +25,10 @@ from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
 from astrbot.core.provider.provider import Provider
+from astrbot.core.provider.sources import gemini_source
+from astrbot.core.provider.sources.gemini_source import ProviderGoogleGenAI
+from astrbot.core.utils import media_utils
+from astrbot.core.utils.io import DownloadFileHTTPError
 
 
 class MockProvider(Provider):
@@ -1308,6 +1313,91 @@ async def test_fallback_provider_used_when_primary_returns_err(
     assert final_resp.completion_text == "这是我的最终回答"
     assert primary_provider.call_count == 1
     assert fallback_provider.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_degraded_history_image_does_not_switch_to_fallback_provider(
+    runner, mock_tool_executor, mock_hooks, tmp_path, monkeypatch
+):
+    """A skipped history image must not be classified as a provider failure."""
+    url = "https://example.com/expired-history.png"
+    generate_calls: list[dict] = []
+
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+
+    async def fail_download(media_ref: str, target_path: str) -> None:
+        raise DownloadFileHTTPError(
+            f"Failed to download file from {media_ref}. HTTP status code: 404"
+        )
+
+    async def generate_content(**kwargs):
+        generate_calls.append(kwargs)
+        return SimpleNamespace(
+            candidates=[
+                SimpleNamespace(
+                    content=SimpleNamespace(
+                        parts=[types.Part.from_text(text="primary answer")]
+                    ),
+                    finish_reason=types.FinishReason.STOP,
+                )
+            ],
+            response_id="resp-primary",
+            usage_metadata=None,
+        )
+
+    async def passthrough_retry(_provider_name, request_factory, max_attempts=None):
+        return await request_factory()
+
+    monkeypatch.setattr(media_utils, "download_file", fail_download)
+    monkeypatch.setattr(gemini_source, "retry_provider_request", passthrough_retry)
+
+    primary_provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    primary_provider.provider_config = {"id": "gemini-primary", "model": "gemini-stub"}
+    primary_provider.provider_settings = {}
+    primary_provider.model_name = "gemini-stub"
+    primary_provider.safety_settings = []
+    primary_provider.api_keys = ["stub-key"]
+    primary_provider.client = SimpleNamespace(
+        models=SimpleNamespace(generate_content=generate_content)
+    )
+    fallback_provider = MockProvider()
+    fallback_provider.should_call_tools = False
+
+    request = ProviderRequest(
+        prompt=None,
+        func_tool=None,
+        contexts=[
+            {"role": "user", "content": "first user turn"},
+            {"role": "assistant", "content": "assistant turn"},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "what is in this image?"},
+                    {"type": "image_url", "image_url": {"url": url}},
+                ],
+            },
+        ],
+    )
+
+    await runner.reset(
+        provider=primary_provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        fallback_providers=[fallback_provider],
+    )
+
+    async for _ in runner.step_until_done(5):
+        pass
+
+    final_resp = runner.get_final_llm_resp()
+    assert final_resp is not None
+    assert final_resp.role == "assistant"
+    assert final_resp.completion_text == "primary answer"
+    assert len(generate_calls) == 1
+    assert fallback_provider.call_count == 0
 
 
 @pytest.mark.asyncio
