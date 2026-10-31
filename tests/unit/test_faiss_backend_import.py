@@ -72,9 +72,28 @@ def test_broken_faiss_import_raises_actionable_error(embedding_storage, monkeypa
 
 def test_missing_faiss_keeps_the_install_hint(embedding_storage, monkeypatch):
     """faiss 确实没装时，仍然抛出带安装提示的 ImportError。"""
-    _fail_faiss_import(monkeypatch, ImportError("No module named 'faiss'"))
+    _fail_faiss_import(
+        monkeypatch,
+        ModuleNotFoundError("No module named 'faiss'", name="faiss"),
+    )
 
     with pytest.raises(ImportError) as exc_info:
         embedding_storage(dimension=8)
 
     assert "faiss 未安装" in str(exc_info.value)
+
+
+def test_a_broken_faiss_import_is_not_reported_as_missing(embedding_storage, monkeypatch):
+    """faiss 存在但内部依赖/原生库导入失败时，不能误报成未安装。"""
+    _fail_faiss_import(
+        monkeypatch,
+        ImportError("libfaiss.so: cannot open shared object file"),
+    )
+
+    with pytest.raises(RuntimeError) as exc_info:
+        embedding_storage(dimension=8)
+
+    message = str(exc_info.value)
+    assert "faiss 后端初始化失败" in message
+    assert "faiss 未安装" not in message
+    assert "libfaiss.so" in message

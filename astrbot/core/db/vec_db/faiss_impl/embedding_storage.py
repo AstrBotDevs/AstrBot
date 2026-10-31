@@ -63,15 +63,15 @@ class EmbeddingStorage:
     def __init__(self, dimension: int, path: str | None = None) -> None:
         try:
             import faiss
-        except ImportError:
-            raise ImportError(
-                "faiss 未安装。请使用 'pip install faiss-cpu' 或 'pip install faiss-gpu' 安装。",
-            )
         except Exception as exc:
-            # 安装损坏或 wheel 与当前 Python/平台不匹配时，faiss 在自己的
-            # __init__.py 里抛出的不一定是 ImportError（例如 1.14 的
-            # NameError: name 'SuperKMeans' is not defined，见 #9392）。
-            # 原样上抛会让用户无从判断问题出在 faiss 后端。
+            # 只有 faiss 模块本身缺失才是“未安装”。模块存在但导入失败
+            # （缺依赖、原生库不匹配，或 1.14 的
+            # NameError: name 'SuperKMeans' is not defined，见 #9392）
+            # 属于后端损坏，必须给出重装指引，不能误报成未安装。
+            if isinstance(exc, ModuleNotFoundError) and exc.name == "faiss":
+                raise ImportError(
+                    "faiss 未安装。请使用 'pip install faiss-cpu' 或 'pip install faiss-gpu' 安装。",
+                ) from exc
             raise RuntimeError(
                 "faiss 后端初始化失败：faiss 已安装，但导入时出错。"
                 "常见原因是 wheel 与当前 Python/平台不匹配，或安装损坏"
