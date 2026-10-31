@@ -1,5 +1,7 @@
 # Unreleased
 
+- Allow choosing the CUA image flavour in the `CUA Image` setting by appending a `:container` or `:vm` suffix, for example `linux:container` to run a local Linux sandbox in a Docker container instead of a virtual machine. Update the CUA documentation and the WebUI hints accordingly.
+
 - Fix plugin installation failing with `FileExistsError` in NAS and similar environments where cross-device (`EXDEV`) errors make system temporary directories unusable and Python falls back to the working directory. Use `.astrbot-tmp` when the temporary path conflicts with the `.astrbot` initialization marker file. ([#10784](https://github.com/AstrBotDevs/AstrBot/pull/10784))
 
 - Simplify Context Management Strategy settings: Handling for History Limits or Context Window Pressure → Compression Strategy; Model Provider ID for Context Compression → Compression Model. Move maximum turns, discarded turns, compression instruction, recent-context ratio and fallback context window size under the collapsed More Settings section. Preserve existing configuration keys, defaults and runtime behavior.

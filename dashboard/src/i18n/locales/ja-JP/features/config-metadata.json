@@ -382,7 +382,7 @@
           },
           "cua_image": {
             "description": "CUA イメージ",
-            "hint": "CUA サンドボックスのイメージまたは OS 種類です。デフォルトは linux です。linux、macos、windows、android を指定できますが、利用可能な値は CUA SDK の対応状況によります。"
+            "hint": "CUA サンドボックスのイメージまたは OS 種類です。デフォルトは linux です。linux、macos、windows、android を指定できますが、利用可能な値は CUA SDK の対応状況によります。`:container` または `:vm` のサフィックスを付けるとイメージの形態を選択できます。"
           },
           "cua_os_type": {
             "description": "CUA OS の種類",

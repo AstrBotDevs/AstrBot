@@ -526,7 +526,7 @@ CUA 本身还依赖具体运行方式：
 
 CUA 相关配置项包括：
 
-- `CUA Image`：要启动的 CUA 镜像。常见值为 `linux`、`macos`、`windows`、`android`。默认 `linux`。
+- `CUA Image`：要启动的 CUA 镜像。常见值为 `linux`、`macos`、`windows`、`android`。默认 `linux`。可追加 `:container` 或 `:vm` 后缀来指定镜像形态，例如 `linux:container` 使用 Docker 容器运行，`linux:vm` 使用虚拟机运行（需要宿主机安装 QEMU）。
 - `CUA OS Type`：镜像的操作系统类型。默认 `linux`。它会影响 AstrBot 对 POSIX Shell fallback 的判断。
 - `CUA Sandbox TTL`：沙盒生命周期，单位为秒。默认 `3600`。
 - `CUA Telemetry Enabled`：是否启用 CUA 侧遥测。默认关闭。
@@ -538,7 +538,7 @@ CUA 相关配置项包括：
 ```text
 Computer Use Runtime = sandbox
 沙箱环境驱动器 = CUA
-CUA Image = linux
+CUA Image = linux:container
 CUA OS Type = linux
 CUA Local Runtime = true
 CUA Sandbox TTL = 3600

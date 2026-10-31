@@ -535,7 +535,7 @@ Open **Config → AI → Capabilities → Agent Computer Use**, then set:
 
 CUA settings include:
 
-- `CUA Image`: The image to launch, commonly `linux`, `macos`, `windows`, or `android`. Default: `linux`.
+- `CUA Image`: The image to launch, commonly `linux`, `macos`, `windows`, or `android`. Default: `linux`. Append a `:container` or `:vm` suffix to pick the image flavour, for example `linux:container` runs the sandbox in a Docker container while `linux:vm` runs it in a virtual machine.
 - `CUA OS Type`: The image's operating system. Default: `linux`. This determines whether AstrBot can use POSIX Shell fallbacks.
 - `CUA Sandbox TTL`: Sandbox lifetime in seconds. Default: `3600`.
 - `CUA Telemetry Enabled`: Whether CUA telemetry is enabled. Disabled by default.
@@ -547,7 +547,7 @@ A minimal local Linux container configuration is:
 ```text
 Computer Use Runtime = sandbox
 Sandbox Driver = CUA
-CUA Image = linux
+CUA Image = linux:container
 CUA OS Type = linux
 CUA Local Runtime = true
 CUA Sandbox TTL = 3600

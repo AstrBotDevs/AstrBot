@@ -16,6 +16,7 @@ from .cua_defaults import CUA_CONFIG_KEYS, CUA_DEFAULT_CONFIG
 from .shipyard_search_file_util import search_files_via_shell
 
 _POSIX_OS_TYPES = {"linux", "darwin", "macos"}
+_CUA_IMAGE_KINDS = ("container", "vm")
 _CUA_SANDBOX_HEALTH_PROBE = "_astrbot_cua_ok_"
 
 _CUA_BACKGROUND_LAUNCHER = """
@@ -777,14 +778,53 @@ class CuaBooter(ComputerBooter):
         )
 
     def _build_image(self, image_cls: Any) -> Any:
-        image_name = (self.image or self.os_type or "linux").strip().lower()
+        """Build the CUA image for the configured ``CUA Image`` setting.
+
+        The setting accepts a factory name such as ``linux`` and may carry a
+        ``:container`` or ``:vm`` suffix that picks the image flavour. Registry
+        references contain a colon as well, so only a known flavour is split
+        off and anything else stays part of the image name.
+
+        Args:
+            image_cls: The SDK image class that exposes the factory methods.
+
+        Returns:
+            The image built for the configured setting, or the configured name
+            when the SDK exposes no matching factory.
+        """
+        configured = (self.image or self.os_type or "linux").strip().lower()
+        image_name, separator, flavour = configured.rpartition(":")
+        if not (separator and image_name and flavour in _CUA_IMAGE_KINDS):
+            image_name, flavour = configured, ""
         factory = getattr(image_cls, image_name, None)
-        if callable(factory):
+        if not callable(factory):
+            image_name = (self.os_type or "linux").strip().lower()
+            factory = getattr(image_cls, image_name, None)
+            if not callable(factory):
+                return configured
+        if not flavour:
             return factory()
-        os_factory = getattr(image_cls, (self.os_type or "linux").strip().lower(), None)
-        if callable(os_factory):
-            return os_factory()
-        return image_name
+        try:
+            parameters = inspect.signature(factory).parameters
+        except (TypeError, ValueError):
+            parameters = {}
+        kind_parameter = parameters.get("kind")
+        accepts_kwargs = any(
+            parameter.kind is inspect.Parameter.VAR_KEYWORD
+            for parameter in parameters.values()
+        )
+        positional_only = (
+            kind_parameter is not None
+            and kind_parameter.kind is inspect.Parameter.POSITIONAL_ONLY
+        )
+        if positional_only or (kind_parameter is None and not accepts_kwargs):
+            logger.warning(
+                "[Computer] CUA image %s does not support the %s flavour, ignoring it.",
+                image_name,
+                flavour,
+            )
+            return factory()
+        return factory(kind=flavour)
 
     def _build_ephemeral_kwargs(self, ephemeral: Any) -> dict[str, Any]:
         try:

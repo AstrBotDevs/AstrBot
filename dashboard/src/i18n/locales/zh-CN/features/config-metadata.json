@@ -310,7 +310,7 @@
           },
           "cua_image": {
             "description": "CUA 镜像",
-            "hint": "CUA 沙箱镜像/系统类型，默认 linux。可填写 linux、macos、windows、android，具体取决于 CUA SDK 支持。"
+            "hint": "CUA 沙箱镜像/系统类型，默认 linux。可填写 linux、macos、windows、android，具体取决于 CUA SDK 支持。可追加 :container 或 :vm 后缀指定镜像形态。"
           },
           "cua_os_type": {
             "description": "CUA 操作系统类型",
