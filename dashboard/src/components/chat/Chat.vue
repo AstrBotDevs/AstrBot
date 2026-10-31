@@ -513,7 +513,12 @@
     <WorkspaceFilesPanel
       :model-value="chatHeader.workspaceFilesOpen"
       :project-id="activeProject?.project_id || ''"
-      :project-title="activeProject?.title || ''"
+      :workspace-type="activeProject?.workspace_type || 'session'"
+      :session-id="
+        sessionProject?.project_id === activeProject?.project_id
+          ? currSessionId || undefined
+          : undefined
+      "
       @update:model-value="chatHeader.SET_WORKSPACE_FILES_OPEN"
     />
   </div>

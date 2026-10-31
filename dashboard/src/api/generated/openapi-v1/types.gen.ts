@@ -1647,6 +1647,10 @@ export type ListChatProjectWorkspaceFilesData = {
     };
     query?: {
         path?: string;
+        /**
+         * Optional for per-session workspaces; must belong to this project and user when provided. Omitted or empty values use the legacy default workspace.
+         */
+        session_id?: string;
     };
 };
 
@@ -1660,6 +1664,10 @@ export type GetChatProjectWorkspaceFileData = {
     };
     query: {
         path: string;
+        /**
+         * Optional for per-session workspaces; must belong to this project and user when provided. Omitted or empty values use the legacy default workspace.
+         */
+        session_id?: string;
     };
 };
 
@@ -1673,6 +1681,10 @@ export type DownloadChatProjectWorkspaceFileData = {
     };
     query: {
         path: string;
+        /**
+         * Optional for per-session workspaces; must belong to this project and user when provided. Omitted or empty values use the legacy default workspace.
+         */
+        session_id?: string;
     };
 };
 
