@@ -91,7 +91,7 @@ Comp.Video.fromURL(url="https://example.com/video.mp4")
 
 ## Interactive Buttons
 
-Create button actions and styles with `Button.CallbackAction`, `Button.UrlAction`, and `Button.Style`. `ActionRow` remains a separate message component.
+Create button actions and styles with `Button.CallbackAction`, `Button.UrlAction`, and `Button.Style`. `ActionRow` is a separate message component.
 
 Wrap `Button` components in an `ActionRow` and handle clicks with `@filter.button_action("button ID")`. Add these methods to an existing `Star` plugin class.
 
@@ -136,7 +136,7 @@ async def confirm(self, event: AstrMessageEvent):
 - The deadline is persisted with the callback data and survives restarts. Expired clicks receive “按钮已过期，请重新发起操作。 / This button has expired. Please start again.” without running plugin handlers. Telegram uses an alert; Discord and Slack use replies visible only to the clicking user. Other platforms send a message, with WeCom AI Bot updating its card. Repeated expired clicks also receive the notice. Operations already accepted can finish, and buttons may remain visible in the original message.
 - `Button.CallbackAction.data` must be JSON-compatible and is returned as `interaction.data`. The button ID becomes `interaction.action_id`; prefix IDs with your plugin name to avoid collisions.
 - `Button.UrlAction` opens a link without invoking a plugin callback and is unaffected by `action_timeout`. `fallback_text` is used on platforms without button support, rather than as an expiry notice.
-- `@filter.button_action()` without an ID matches all button callbacks. In this PR, `@filter.button_interaction(...)` is renamed to `@filter.button_action(...)`. The event component remains `ButtonInteraction`, accessible through `event.get_button_interaction()`.
+- `@filter.button_action()` without an ID matches all button callbacks. Use `event.get_button_interaction()` to access the `ButtonInteraction` event component.
 
 ## Sending Video Messages
 
