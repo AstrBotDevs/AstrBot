@@ -63,6 +63,7 @@ DEFAULT_OPEN_API_SCOPES = (
     "config",
     "chat",
     "data",
+    "kb",
     "file",
     "plugin",
     "mcp",
