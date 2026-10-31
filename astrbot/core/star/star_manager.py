@@ -32,7 +32,11 @@ from astrbot.core.agent.handoff import FunctionTool, HandoffTool
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import VERSION
 from astrbot.core.platform.register import unregister_platform_adapters_by_module
-from astrbot.core.provider.register import llm_tools
+from astrbot.core.provider.register import (
+    llm_tools,
+    provider_cls_map,
+    provider_registry,
+)
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_config_path,
     get_astrbot_path,
@@ -1850,6 +1854,29 @@ class PluginManager:
             for adapter_name in unregistered_adapters:
                 logger.info(
                     f"Removed platform adapter {adapter_name} from plugin {plugin_name}",
+                )
+
+        # Unregister model provider adapters registered by this plugin. The
+        # registry cleanup is performed inline here and would move to a shared
+        # helper once one exists. Ownership comes from the adapter class module
+        # path, matched with the same plugin module prefix as above, so adapters
+        # registered by core or by another plugin are never removed.
+        if module_prefix:
+            provider_entries = [
+                metadata
+                for metadata in list(provider_registry)
+                if self._is_plugin_module_path(
+                    getattr(metadata.cls_type, "__module__", None),
+                    module_prefix,
+                )
+            ]
+            for metadata in provider_entries:
+                provider_registry.remove(metadata)
+                if provider_cls_map.get(metadata.type) is metadata:
+                    del provider_cls_map[metadata.type]
+                logger.info(
+                    f"Removed model provider adapter {metadata.type} from plugin "
+                    f"{plugin_name}",
                 )
 
         if plugin is None:
