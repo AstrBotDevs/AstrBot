@@ -137,6 +137,12 @@ On the **Installed** page, you can:
 
 Pay attention to the options for deleting plugin configuration files and persistent data. Leave the corresponding option unchecked if you want to retain settings or business data.
 
+### Repository version indicators
+
+For a plugin installed directly from a repository, open its card menu under **Extensions → Plugins → Installed**, choose **Change Plugin Source**, select **Use Repository URL Directly**, wait for validation, and confirm **Use This Source**. The validated remote version is saved with the source record. A newer saved version displays the existing update indicator; equal or older versions do not.
+
+The card shows **Last validated: version**, or **Repository version not checked** when no version has been saved. Hover over this label to see when the observation was recorded. This is a snapshot from the last confirmed validation, so it may be outdated. Repeat the source-selection steps to refresh it. Refreshing the plugin list does not fetch repository versions, and no background polling is added. Updating the plugin compares its new local version against the saved observation.
+
 ## Plugins, MCP, and Skills
 
 | Extension | Main purpose | Learn more |

@@ -1443,6 +1443,12 @@ class PluginService:
                 "installed_at": installed_at,
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }
+            # Advisory metadata from the repository validation already performed
+            # by the source picker; binding must not fetch the repository again.
+            repository_version = payload.get("repository_version")
+            if isinstance(repository_version, str) and repository_version.strip():
+                record["repository_version"] = repository_version.strip()
+                record["repository_version_recorded_at"] = record["updated_at"]
             plugin_name_value = str(plugin.name or "").strip()
             if plugin_name_value:
                 record["name"] = plugin_name_value
