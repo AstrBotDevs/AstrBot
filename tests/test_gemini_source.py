@@ -152,6 +152,48 @@ async def test_gemini_prepare_conversation_resolves_local_history_image(tmp_path
 
 
 @pytest.mark.asyncio
+async def test_gemini_prepare_conversation_skips_image_resolved_to_no_data(
+    monkeypatch, caplog
+):
+    """A None result must skip the image instead of being dereferenced.
+
+    Strict resolution raises rather than returning None today; this pins the
+    skip so a future contract change cannot turn it into an AttributeError.
+    """
+
+    async def resolve_to_none(*args, **kwargs) -> None:
+        return None
+
+    monkeypatch.setattr(
+        gemini_source, "resolve_media_ref_to_base64_data", resolve_to_none
+    )
+
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    with caplog.at_level(logging.WARNING):
+        contents = await provider._prepare_conversation(
+            {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "what is in this image?"},
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": "https://example.com/no-data.png"},
+                            },
+                        ],
+                    }
+                ]
+            }
+        )
+
+    assert len(contents) == 1
+    assert contents[0].parts is not None
+    assert [part.text for part in contents[0].parts] == ["what is in this image?"]
+    assert "no-data.png" in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_gemini_prepare_conversation_skips_history_image_download_failure(
     tmp_path, monkeypatch, caplog
 ):
