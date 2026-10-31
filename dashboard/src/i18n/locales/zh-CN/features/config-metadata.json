@@ -1770,6 +1770,22 @@
         "description": "启用URL上下文功能",
         "hint": "启用后所有函数工具将全部失效"
       },
+      "gm_vertexai": {
+        "description": "启用 Vertex AI",
+        "hint": "将请求发送到 Google Cloud Vertex AI，而不是 Gemini API (AI Studio)。可使用 API Key 认证（express 模式 Key，或绑定服务账号的 Key 并填写项目 ID）；未填写时使用服务账号密钥文件或应用默认凭据 (ADC)。"
+      },
+      "gm_vertex_project": {
+        "description": "Vertex AI 项目 ID",
+        "hint": "Google Cloud 项目 ID。使用绑定服务账号的 API Key 时需填写；express 模式 Key 请留空。未填写 API Key 且此项留空时，从服务账号密钥文件或环境变量读取。"
+      },
+      "gm_vertex_location": {
+        "description": "Vertex AI 区域",
+        "hint": "区域，如 global、us-central1、europe-west4，在填写项目 ID 或未填写 API Key 时使用。默认为 global。"
+      },
+      "gm_vertex_credentials_file": {
+        "description": "服务账号密钥文件",
+        "hint": "Google Cloud 服务账号 JSON 密钥文件路径，仅在未填写 API Key 时使用。留空则使用应用默认凭据（如 GOOGLE_APPLICATION_CREDENTIALS）。"
+      },
       "gm_safety_settings": {
         "description": "安全过滤器",
         "hint": "设置模型输入的内容安全过滤级别。过滤级别分类为NONE(不屏蔽)、HIGH(高风险时屏蔽)、MEDIUM_AND_ABOVE(中等风险及以上屏蔽)、LOW_AND_ABOVE(低风险及以上时屏蔽)，具体参见Gemini API文档。",

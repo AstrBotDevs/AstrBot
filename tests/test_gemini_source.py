@@ -234,6 +234,7 @@ async def test_gemini_get_models_retries_transient_request_error(monkeypatch):
 
     models = FakeModels()
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.vertexai = False
     provider.client = SimpleNamespace(models=models)
 
     assert await provider.get_models() == ["gemini-a"]
@@ -407,3 +408,138 @@ async def test_gemini_stream_keeps_reasoning_from_tool_call_chunk(monkeypatch):
 
     final = responses[-1]
     assert final.reasoning_content == "weighing optionsdeciding to call"
+
+
+@pytest.fixture
+def genai_client_calls(monkeypatch) -> list[dict]:
+    """Replace genai.Client with a stub that records its init kwargs.
+
+    Args:
+        monkeypatch: Pytest monkeypatch fixture.
+
+    Returns:
+        A list that receives the kwargs of every client construction.
+    """
+    calls = []
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            calls.append(kwargs)
+
+            async def aclose():
+                return None
+
+            self.aio = SimpleNamespace(
+                _api_client=SimpleNamespace(_http_options=SimpleNamespace(headers={})),
+                aclose=aclose,
+            )
+
+    monkeypatch.setattr(gemini_source.genai, "Client", FakeClient)
+    return calls
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("project", "expected_scope"),
+    [
+        ("", {}),
+        ("bound-project", {"project": "bound-project", "location": "us-central1"}),
+    ],
+)
+async def test_vertex_with_api_key(genai_client_calls, project, expected_scope):
+    calls = genai_client_calls
+    provider = ProviderGoogleGenAI(
+        {
+            "id": "vertex",
+            "model": "gemini-x",
+            "key": ["vertex-key"],
+            "api_base": "",
+            "gm_vertexai": True,
+            "gm_vertex_project": project,
+            "gm_vertex_location": "us-central1",
+        },
+        {},
+    )
+    try:
+        kwargs = dict(calls[-1])
+        assert kwargs.pop("http_options").base_url is None
+        assert kwargs == {"vertexai": True, "api_key": "vertex-key", **expected_scope}
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_vertex_without_api_key_uses_service_account(
+    genai_client_calls, monkeypatch, tmp_path
+):
+    calls = genai_client_calls
+    credentials = SimpleNamespace(project_id="sa-project")
+    loaded = []
+
+    def fake_from_file(path, scopes):
+        loaded.append((path, scopes))
+        return credentials
+
+    monkeypatch.setattr(
+        gemini_source.service_account.Credentials,
+        "from_service_account_file",
+        fake_from_file,
+    )
+    key_file = tmp_path / "sa.json"
+    provider = ProviderGoogleGenAI(
+        {
+            "id": "vertex",
+            "model": "gemini-x",
+            "key": [],
+            "api_base": "",
+            "gm_vertexai": True,
+            "gm_vertex_project": "",
+            "gm_vertex_location": "",
+            "gm_vertex_credentials_file": str(key_file),
+        },
+        {},
+    )
+    try:
+        assert loaded == [
+            (str(key_file), ["https://www.googleapis.com/auth/cloud-platform"])
+        ]
+        assert calls[-1]["vertexai"] is True
+        assert calls[-1]["credentials"] is credentials
+        assert calls[-1]["project"] == "sa-project"
+        assert calls[-1]["location"] == "global"
+        assert "api_key" not in calls[-1]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_vertex_get_models_strips_publisher_prefix():
+    async def list_models():
+        return [
+            SimpleNamespace(
+                name="publishers/google/models/gemini-a", supported_actions=None
+            ),
+            SimpleNamespace(name=None, supported_actions=None),
+        ]
+
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.vertexai = True
+    provider.client = SimpleNamespace(models=SimpleNamespace(list=list_models))
+
+    assert await provider.get_models() == ["gemini-a"]
+
+
+@pytest.mark.asyncio
+async def test_vertex_get_models_with_api_key_explains_manual_model_entry():
+    async def list_models():
+        raise gemini_source.APIError(
+            401, {"error": {"message": "API keys are not supported by this API."}}
+        )
+
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.vertexai = True
+    provider.chosen_api_key = "vertex-key"
+    provider.client = SimpleNamespace(models=SimpleNamespace(list=list_models))
+
+    with pytest.raises(Exception, match="Add the model ID manually"):
+        await provider.get_models()

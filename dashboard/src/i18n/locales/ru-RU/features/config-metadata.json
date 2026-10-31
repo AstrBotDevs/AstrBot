@@ -1853,6 +1853,22 @@
                 "description": "Включить контекст URL",
                 "hint": "Если включено, инструменты функций отключаются."
             },
+            "gm_vertexai": {
+                "description": "Включить Vertex AI",
+                "hint": "Отправлять запросы в Google Cloud Vertex AI вместо Gemini API (AI Studio). Можно использовать API-ключ (ключ режима express или ключ, привязанный к сервисному аккаунту, вместе с ID проекта); без ключа — файл сервисного аккаунта или учётные данные по умолчанию (ADC)."
+            },
+            "gm_vertex_project": {
+                "description": "ID проекта Vertex AI",
+                "hint": "ID проекта Google Cloud. Укажите для API-ключа, привязанного к сервисному аккаунту; для ключа режима express оставьте пустым. Без API-ключа пустое значение берётся из файла сервисного аккаунта или окружения."
+            },
+            "gm_vertex_location": {
+                "description": "Регион Vertex AI",
+                "hint": "Регион, например global, us-central1 или europe-west4. Используется, если указан ID проекта или нет API-ключа. По умолчанию global."
+            },
+            "gm_vertex_credentials_file": {
+                "description": "Файл ключа сервисного аккаунта",
+                "hint": "Путь к JSON-ключу сервисного аккаунта Google Cloud. Используется только без API-ключа. Оставьте пустым для учётных данных по умолчанию (например, GOOGLE_APPLICATION_CREDENTIALS)."
+            },
             "gm_safety_settings": {
                 "description": "Фильтры безопасности",
                 "hint": "Настройка уровня фильтрации контента. См. документацию Gemini API.",

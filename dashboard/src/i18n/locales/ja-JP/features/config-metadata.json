@@ -1850,6 +1850,22 @@
         "description": "URL コンテキスト機能を有効化",
         "hint": "有効にすると、すべての関数ツールが無効になります。"
       },
+      "gm_vertexai": {
+        "description": "Vertex AI を有効化",
+        "hint": "Gemini API (AI Studio) の代わりに Google Cloud Vertex AI にリクエストを送信します。API キー（express モードのキー、またはサービスアカウントに紐付けたキーとプロジェクト ID）で認証できます。未設定の場合はサービスアカウントキーファイルまたはアプリケーションのデフォルト認証情報を使用します。"
+      },
+      "gm_vertex_project": {
+        "description": "Vertex AI プロジェクト ID",
+        "hint": "Google Cloud プロジェクト ID。サービスアカウントに紐付けた API キーを使う場合は設定し、express モードのキーでは空欄にします。API キー未設定で空欄の場合は、サービスアカウントファイルまたは環境変数から取得します。"
+      },
+      "gm_vertex_location": {
+        "description": "Vertex AI ロケーション",
+        "hint": "global、us-central1、europe-west4 などのリージョン。プロジェクト ID 設定時または API キー未設定時に使用されます。既定値は global です。"
+      },
+      "gm_vertex_credentials_file": {
+        "description": "サービスアカウントキーファイル",
+        "hint": "Google Cloud サービスアカウントの JSON キーファイルのパス。API キー未設定時のみ使用されます。空欄の場合はアプリケーションのデフォルト認証情報（GOOGLE_APPLICATION_CREDENTIALS など）を使用します。"
+      },
       "gm_safety_settings": {
         "description": "セーフティフィルター",
         "hint": "モデル入力のコンテンツセーフティフィルターレベルを設定します。レベルは NONE（ブロックしない）、HIGH（高リスク時にブロック）、MEDIUM_AND_ABOVE（中リスク以上をブロック）、LOW_AND_ABOVE（低リスク以上をブロック）です。詳細は Gemini API ドキュメントを参照してください。",
