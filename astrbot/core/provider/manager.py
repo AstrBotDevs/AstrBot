@@ -927,9 +927,6 @@ class ProviderManager:
 
     async def reload(self, provider_config: dict) -> None:
         async with self.reload_lock:
-            # The available providers change here, so a previously reported
-            # fallback may be resolved (or start happening again).
-            self._fallback_warned.clear()
             await self.terminate_provider(provider_config["id"])
             if provider_config["enable"]:
                 await self.load_provider(provider_config)
@@ -993,6 +990,10 @@ class ProviderManager:
         prov_inst = self.inst_map.get(provider_id)
         if prov_inst is None:
             return
+
+        # Removing a provider is what starts a substitution, so a warning that
+        # was already reported no longer describes the current provider set.
+        self._fallback_warned.clear()
 
         logger.info(
             f"Terminating provider adapter {provider_id} "

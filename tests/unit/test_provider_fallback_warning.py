@@ -1,6 +1,5 @@
 """Tests for the warning emitted when a configured provider is substituted."""
 
-import asyncio
 import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -19,41 +18,28 @@ FALLBACK_MESSAGE = "is not available; falling back to"
 def _make_provider(provider_id: str) -> MagicMock:
     provider = MagicMock()
     provider.provider_config = {"id": provider_id}
+    provider.terminate = AsyncMock()
     return provider
 
 
-class _BareProvider:
-    """A provider stub without auto-created attributes.
+def _openai_config(provider_id: str) -> dict:
+    """Chat completion provider config that loads without network access.
 
-    MagicMock would synthesise `provider_config` on access, which hides the
-    branch that reports an unidentifiable fallback as `unknown`.
+    Args:
+        provider_id: Provider ID to register.
+
+    Returns:
+        A configuration accepted by ``ProviderManager.load_provider``.
     """
-
-    def __init__(self, provider_config=None):
-        if provider_config is not None:
-            self.provider_config = provider_config
-
-    def meta(self):
-        return MagicMock()
-
-
-@pytest.fixture
-def manager() -> ProviderManager:
-    """Build a ProviderManager without running its heavy __init__."""
-    mgr = ProviderManager.__new__(ProviderManager)
-    mgr.inst_map = {}
-    mgr.provider_insts = []
-    mgr.stt_provider_insts = []
-    mgr.tts_provider_insts = []
-    mgr.decision_provider_insts = []
-    mgr.curr_decision_provider_inst = None
-    mgr._fallback_warned = set()
-    mgr.acm = MagicMock()
-    return mgr
-
-
-def _set_conf(manager: ProviderManager, conf: dict) -> None:
-    manager.acm.get_conf = MagicMock(return_value=conf)
+    return {
+        "id": provider_id,
+        "type": "openai_chat_completion",
+        "provider_type": "chat_completion",
+        "api_base": "https://example.invalid/v1",
+        "key": ["sk-not-a-real-key"],
+        "model": "test-model",
+        "enable": True,
+    }
 
 
 def _chat_conf(provider_id: str) -> dict:
@@ -77,12 +63,53 @@ def _chat_conf(provider_id: str) -> dict:
     }
 
 
+def _build_manager(conf: dict) -> ProviderManager:
+    """Build a manager through the real constructor.
+
+    The fallback warning bookkeeping is initialised in ``ProviderManager.__init__``,
+    so a manager assembled field by field would hide a missing initialisation.
+
+    Args:
+        conf: Configuration keys layered over an otherwise empty configuration.
+
+    Returns:
+        A manager that resolves providers from ``conf``.
+    """
+    config = {
+        "provider": [],
+        "provider_sources": [],
+        "provider_settings": {},
+    }
+    config.update(conf)
+    acm = MagicMock()
+    acm.confs = {"default": config}
+    acm.get_conf.return_value = config
+    persona_mgr = MagicMock()
+    persona_mgr.default_persona = ""
+    return ProviderManager(acm, MagicMock(), persona_mgr)
+
+
+class _BareProvider:
+    """A provider stub without auto-created attributes.
+
+    MagicMock would synthesise `provider_config` on access, which hides the
+    branch that reports an unidentifiable fallback as `unknown`.
+    """
+
+    def __init__(self, provider_config=None):
+        if provider_config is not None:
+            self.provider_config = provider_config
+
+    def meta(self):
+        return MagicMock()
+
+
 class TestChatProviderFallbackWarning:
-    def test_warns_when_configured_provider_is_substituted(self, manager, caplog):
+    def test_warns_when_configured_provider_is_substituted(self, caplog):
         """A configured-but-missing provider must not be replaced silently."""
         fallback = _make_provider("vision-only-model")
+        manager = _build_manager(_chat_conf("my-chat"))
         manager.provider_insts = [fallback]
-        _set_conf(manager, _chat_conf("my-chat"))
 
         with caplog.at_level(logging.WARNING):
             provider = manager.get_using_provider(ProviderType.CHAT_COMPLETION)
@@ -91,23 +118,39 @@ class TestChatProviderFallbackWarning:
         assert "my-chat" in caplog.text
         assert "vision-only-model" in caplog.text
 
-    def test_warning_is_emitted_only_once(self, manager, caplog):
+    def test_warning_is_emitted_only_once(self, caplog):
         """Repeated lookups must not flood the log."""
+        manager = _build_manager(_chat_conf("my-chat"))
         manager.provider_insts = [_make_provider("other")]
-        _set_conf(manager, _chat_conf("my-chat"))
 
         with caplog.at_level(logging.WARNING):
             for _ in range(5):
                 manager.get_using_provider(ProviderType.CHAT_COMPLETION)
 
-        assert caplog.text.count("is not available; falling back to") == 1
+        assert caplog.text.count(FALLBACK_MESSAGE) == 1
 
-    def test_no_warning_when_configured_provider_resolves(self, manager, caplog):
+    def test_distinct_substitutions_are_warned_separately(self, caplog):
+        """Deduplication is per substituted provider, not global."""
+        conf = _chat_conf("my-chat")
+        manager = _build_manager(conf)
+        manager.provider_insts = [_make_provider("other")]
+
+        with caplog.at_level(logging.WARNING):
+            manager.get_using_provider(ProviderType.CHAT_COMPLETION)
+            conf["agent_runner"]["config"]["model"]["provider_id"] = "second-chat"
+            manager.get_using_provider(ProviderType.CHAT_COMPLETION)
+            # A different fallback is a different situation as well.
+            manager.provider_insts = [_make_provider("third")]
+            manager.get_using_provider(ProviderType.CHAT_COMPLETION)
+
+        assert caplog.text.count(FALLBACK_MESSAGE) == 3
+
+    def test_no_warning_when_configured_provider_resolves(self, caplog):
         """The happy path must stay quiet."""
         configured = _make_provider("my-chat")
+        manager = _build_manager(_chat_conf("my-chat"))
         manager.inst_map = {"my-chat": configured}
         manager.provider_insts = [configured]
-        _set_conf(manager, _chat_conf("my-chat"))
 
         with caplog.at_level(logging.WARNING):
             provider = manager.get_using_provider(ProviderType.CHAT_COMPLETION)
@@ -115,11 +158,11 @@ class TestChatProviderFallbackWarning:
         assert provider is configured
         assert caplog.text == ""
 
-    def test_no_warning_when_no_default_is_configured(self, manager, caplog):
+    def test_no_warning_when_no_default_is_configured(self, caplog):
         """An unset default already has a dedicated startup warning."""
         fallback = _make_provider("first-one")
+        manager = _build_manager(_chat_conf(""))
         manager.provider_insts = [fallback]
-        _set_conf(manager, _chat_conf(""))
 
         with caplog.at_level(logging.WARNING):
             provider = manager.get_using_provider(ProviderType.CHAT_COMPLETION)
@@ -127,9 +170,9 @@ class TestChatProviderFallbackWarning:
         assert provider is fallback
         assert caplog.text == ""
 
-    def test_existing_not_found_warning_still_fires(self, manager, caplog):
+    def test_existing_not_found_warning_still_fires(self, caplog):
         """With no provider at all, the original message is kept."""
-        _set_conf(manager, _chat_conf("my-chat"))
+        manager = _build_manager(_chat_conf("my-chat"))
 
         with caplog.at_level(logging.WARNING):
             provider = manager.get_using_provider(ProviderType.CHAT_COMPLETION)
@@ -139,13 +182,12 @@ class TestChatProviderFallbackWarning:
 
 
 class TestSttTtsProviderFallbackWarning:
-    def test_stt_substitution_warns(self, manager, caplog):
+    def test_stt_substitution_warns(self, caplog):
         fallback = _make_provider("other-stt")
-        manager.stt_provider_insts = [fallback]
-        _set_conf(
-            manager,
-            {"provider_stt_settings": {"enable": True, "provider_id": "my-stt"}},
+        manager = _build_manager(
+            {"provider_stt_settings": {"enable": True, "provider_id": "my-stt"}}
         )
+        manager.stt_provider_insts = [fallback]
 
         with caplog.at_level(logging.WARNING):
             provider = manager.get_using_provider(ProviderType.SPEECH_TO_TEXT)
@@ -154,13 +196,12 @@ class TestSttTtsProviderFallbackWarning:
         assert "my-stt" in caplog.text
         assert "other-stt" in caplog.text
 
-    def test_tts_substitution_warns(self, manager, caplog):
+    def test_tts_substitution_warns(self, caplog):
         fallback = _make_provider("other-tts")
-        manager.tts_provider_insts = [fallback]
-        _set_conf(
-            manager,
-            {"provider_tts_settings": {"enable": True, "provider_id": "my-tts"}},
+        manager = _build_manager(
+            {"provider_tts_settings": {"enable": True, "provider_id": "my-tts"}}
         )
+        manager.tts_provider_insts = [fallback]
 
         with caplog.at_level(logging.WARNING):
             provider = manager.get_using_provider(ProviderType.TEXT_TO_SPEECH)
@@ -169,12 +210,11 @@ class TestSttTtsProviderFallbackWarning:
         assert "my-tts" in caplog.text
         assert "other-tts" in caplog.text
 
-    def test_disabled_stt_returns_none_without_warning(self, manager, caplog):
-        manager.stt_provider_insts = [_make_provider("other-stt")]
-        _set_conf(
-            manager,
-            {"provider_stt_settings": {"enable": False, "provider_id": "my-stt"}},
+    def test_disabled_stt_returns_none_without_warning(self, caplog):
+        manager = _build_manager(
+            {"provider_stt_settings": {"enable": False, "provider_id": "my-stt"}}
         )
+        manager.stt_provider_insts = [_make_provider("other-stt")]
 
         with caplog.at_level(logging.WARNING):
             provider = manager.get_using_provider(ProviderType.SPEECH_TO_TEXT)
@@ -193,9 +233,9 @@ class TestUnidentifiableFallback:
             pytest.param(_BareProvider({}), id="empty-provider-config"),
         ],
     )
-    def test_reported_as_unknown(self, manager, caplog, fallback):
+    def test_reported_as_unknown(self, caplog, fallback):
+        manager = _build_manager(_chat_conf("my-chat"))
         manager.provider_insts = [fallback]
-        _set_conf(manager, _chat_conf("my-chat"))
 
         with caplog.at_level(logging.WARNING):
             provider = manager.get_using_provider(ProviderType.CHAT_COMPLETION)
@@ -204,9 +244,9 @@ class TestUnidentifiableFallback:
         assert "my-chat" in caplog.text
         assert "`unknown`" in caplog.text
 
-    def test_unknown_key_still_deduplicates(self, manager, caplog):
+    def test_unknown_key_still_deduplicates(self, caplog):
+        manager = _build_manager(_chat_conf("my-chat"))
         manager.provider_insts = [_BareProvider()]
-        _set_conf(manager, _chat_conf("my-chat"))
 
         with caplog.at_level(logging.WARNING):
             for _ in range(3):
@@ -216,26 +256,23 @@ class TestUnidentifiableFallback:
 
 
 class TestFallbackWarningLifecycle:
-    """A substitution that comes back after a reload must be reported again."""
+    """A substitution that comes back after a provider change is reported again."""
 
     @pytest.mark.asyncio
-    async def test_reload_clears_the_dedup_record(self, manager, caplog):
-        manager.provider_insts = [_make_provider("other")]
-        _set_conf(manager, _chat_conf("my-chat"))
+    async def test_reload_clears_the_dedup_record(self, caplog):
+        """A reload that drops a provider must re-arm the warning."""
+        fallback = _make_provider("other")
+        manager = _build_manager(_chat_conf("my-chat"))
+        manager.inst_map = {"other": fallback}
+        manager.provider_insts = [fallback]
 
         with caplog.at_level(logging.WARNING):
             for _ in range(2):
                 manager.get_using_provider(ProviderType.CHAT_COMPLETION)
         assert caplog.text.count(FALLBACK_MESSAGE) == 1
 
-        # Drive the real reload() so removing the clear() breaks this test.
-        manager.reload_lock = asyncio.Lock()
-        manager.terminate_provider = AsyncMock()
-        manager.provider_sources_config = []
-        manager.providers_config = []
-        manager.curr_provider_inst = None
-        manager.curr_stt_provider_inst = None
-        manager.curr_tts_provider_inst = None
+        # Drive the real reload() and its provider teardown, so a missing reset
+        # in the removal path breaks this test.
         with patch.object(
             manager_module,
             "astrbot_config",
@@ -243,9 +280,57 @@ class TestFallbackWarningLifecycle:
         ):
             await manager.reload({"id": "my-chat", "enable": False})
 
-        assert manager._fallback_warned == set()
+        assert "other" not in manager.inst_map
 
         caplog.clear()
         with caplog.at_level(logging.WARNING):
             manager.get_using_provider(ProviderType.CHAT_COMPLETION)
         assert caplog.text.count(FALLBACK_MESSAGE) == 1
+
+    @pytest.mark.asyncio
+    async def test_deleted_provider_substitution_is_reported_again(self, caplog):
+        """Re-creating and deleting a provider must not silence the new fallback.
+
+        Adding a provider from the dashboard loads it without reloading the whole
+        provider set, and deleting it only terminates the instance, so the record
+        has to be reset by the provider teardown itself.
+        """
+        manager = _build_manager(_chat_conf("my-chat"))
+        await manager.load_provider(_openai_config("other"))
+
+        with caplog.at_level(logging.WARNING):
+            for _ in range(2):
+                manager.get_using_provider(ProviderType.CHAT_COMPLETION)
+        assert caplog.text.count(FALLBACK_MESSAGE) == 1
+
+        # The configured provider is created, so the substitution ends ...
+        await manager.load_provider(_openai_config("my-chat"))
+        provider = manager.get_using_provider(ProviderType.CHAT_COMPLETION)
+        assert provider.provider_config["id"] == "my-chat"
+
+        # ... and later deleted again, which starts a fresh substitution.
+        await manager.terminate_provider("my-chat")
+
+        caplog.clear()
+        with caplog.at_level(logging.WARNING):
+            provider = manager.get_using_provider(ProviderType.CHAT_COMPLETION)
+        assert provider.provider_config["id"] == "other"
+        assert caplog.text.count(FALLBACK_MESSAGE) == 1
+
+        await manager.terminate_provider("other")
+
+    @pytest.mark.asyncio
+    async def test_failed_lookup_does_not_reset_the_dedup_record(self, caplog):
+        """A no-op teardown must not turn the warning back on."""
+        manager = _build_manager(_chat_conf("my-chat"))
+        manager.provider_insts = [_make_provider("other")]
+
+        with caplog.at_level(logging.WARNING):
+            manager.get_using_provider(ProviderType.CHAT_COMPLETION)
+
+        await manager.terminate_provider("missing")
+
+        caplog.clear()
+        with caplog.at_level(logging.WARNING):
+            manager.get_using_provider(ProviderType.CHAT_COMPLETION)
+        assert caplog.text == ""
