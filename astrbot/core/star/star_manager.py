@@ -447,6 +447,13 @@ class PluginManager:
         )
 
         if recovery_state.mode is ImportDependencyRecoveryMode.PRELOAD_AND_RECOVER:
+            if (
+                recovery_state.install_plan is not None
+                and recovery_state.install_plan.missing_names
+            ):
+                await self._ensure_plugin_requirements(
+                    str(Path(requirements_path).parent), root_dir_name
+                )
             try:
                 pip_installer.prefer_installed_dependencies(
                     requirements_path=requirements_path
