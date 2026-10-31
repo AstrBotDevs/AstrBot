@@ -320,6 +320,26 @@ class TestFallbackWarningLifecycle:
         await manager.terminate_provider("other")
 
     @pytest.mark.asyncio
+    async def test_unrelated_teardown_keeps_the_dedup_record(self, caplog):
+        """Deleting another provider must not re-warn an unchanged substitution."""
+        manager = _build_manager(_chat_conf("my-chat"))
+        await manager.load_provider(_openai_config("other"))
+        await manager.load_provider(_openai_config("unrelated"))
+
+        with caplog.at_level(logging.WARNING):
+            manager.get_using_provider(ProviderType.CHAT_COMPLETION)
+
+        await manager.terminate_provider("unrelated")
+
+        caplog.clear()
+        with caplog.at_level(logging.WARNING):
+            provider = manager.get_using_provider(ProviderType.CHAT_COMPLETION)
+        assert provider.provider_config["id"] == "other"
+        assert caplog.text == ""
+
+        await manager.terminate_provider("other")
+
+    @pytest.mark.asyncio
     async def test_failed_lookup_does_not_reset_the_dedup_record(self, caplog):
         """A no-op teardown must not turn the warning back on."""
         manager = _build_manager(_chat_conf("my-chat"))
