@@ -58,8 +58,11 @@ class GroupChatContext:
     def cfg(self, event: AstrMessageEvent):
         cfg = self.context.get_config(umo=event.unified_msg_origin)
         group_context_cfg = cfg["provider_ltm_settings"]
-        image_caption_prompt = cfg["provider_settings"]["image_caption_prompt"]
-        image_caption_provider_id = group_context_cfg.get("image_caption_provider_id")
+        provider_cfg = cfg["provider_settings"]
+        image_caption_prompt = provider_cfg["image_caption_prompt"]
+        image_caption_provider_id = group_context_cfg.get(
+            "image_caption_provider_id"
+        ) or provider_cfg.get("default_image_caption_provider_id")
         image_caption = group_context_cfg["image_caption"] and bool(
             image_caption_provider_id
         )
