@@ -1,5 +1,7 @@
+import { relative } from "node:path";
 import { defineConfig } from "vitepress";
 import { head } from "./config/head";
+import { rawMarkdownPathForPage } from "../scripts/generate-llms.mjs";
 
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
@@ -17,6 +19,26 @@ export default defineConfig({
 
   lastUpdated: true,
   ignoreDeadLinks: true,
+  srcExclude: ["public/raw/**"],
+
+  transformPageData(pageData, { siteConfig }) {
+    const sourceRelativePath = relative(siteConfig.srcDir, pageData.filePath);
+    const rawMarkdownPath = rawMarkdownPathForPage(sourceRelativePath);
+    if (!rawMarkdownPath || pageData.frontmatter.layout === false) {
+      return;
+    }
+
+    // Expose the original source to discoverable AI and developer tooling.
+    pageData.frontmatter.head ??= [];
+    pageData.frontmatter.head.push([
+      "link",
+      {
+        rel: "alternate",
+        type: "text/markdown",
+        href: rawMarkdownPath,
+      },
+    ]);
+  },
 
   locales: {
     root: {
