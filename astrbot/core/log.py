@@ -36,6 +36,9 @@ CACHED_SIZE = 500
 PLUGIN_LOGGER_PREFIX = "astrbot.plugin."
 """Prefix of per-plugin logger names; full name is ``astrbot.plugin.<plugin_name>``."""
 
+PLUGIN_PATH_MARKERS = ("data/plugins/", "astrbot/builtin_stars/")
+"""Path segments (POSIX form) of the plugin store and the built-in plugins."""
+
 PLUGIN_LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 """Allowed per-plugin log levels."""
 
@@ -107,15 +110,19 @@ class _RecordEnricherFilter(logging.Filter):
             # Such call sites pass ``extra={"plugin_name": ...}`` so the WebUI
             # can list the plugin in the log filter and tag the line with it.
             explicit_plugin_name = getattr(record, "plugin_name", None)
-            is_plugin = _is_plugin_path(record.pathname)
             if explicit_plugin_name:
                 record.plugin_tag = f"[{explicit_plugin_name}]"
                 record.source = "plugin"
                 record.plugin_name = explicit_plugin_name
             else:
-                record.plugin_tag = "[Plug]" if is_plugin else "[Core]"
-                record.source = "plugin" if is_plugin else "core"
-                record.plugin_name = None
+                # Records from other loggers are attributed to a plugin by their
+                # source file, so the plugin name must come from the same source
+                # file: the Dashboard log page builds its plugin filter from the
+                # distinct ``plugin_name`` values of the retained records.
+                plugin_name = _plugin_name_from_path(record.pathname)
+                record.plugin_tag = "[Plug]" if plugin_name else "[Core]"
+                record.source = "plugin" if plugin_name else "core"
+                record.plugin_name = plugin_name
         record.short_levelname = _get_short_level_name(record.levelname)
         record.astrbot_version_tag = (
             f" [v{VERSION}]" if record.levelno >= logging.WARNING else ""
@@ -158,11 +165,31 @@ class _QueueAnsiColorFilter(logging.Filter):
         return True
 
 
-def _is_plugin_path(pathname: str | None) -> bool:
+def _plugin_name_from_path(pathname: str | None) -> str | None:
+    """Return the plugin directory that contains a log record's source file.
+
+    Paths are compared with POSIX separators so plugin attribution works on
+    every platform, not only on systems whose paths use ``/``.
+
+    Args:
+        pathname: Source file path of the log record.
+
+    Returns:
+        The name of the plugin directory, or None if the file is not part of a
+        plugin. For a plugin that did not load, this is the directory name that
+        the plugin list reports for it.
+    """
     if not pathname:
-        return False
-    norm_path = os.path.normpath(pathname)
-    return ("data/plugins" in norm_path) or ("astrbot/builtin_stars/" in norm_path)
+        return None
+    norm_path = os.path.normpath(pathname).replace("\\", "/")
+    for marker in PLUGIN_PATH_MARKERS:
+        index = norm_path.find(marker)
+        if index < 0:
+            continue
+        plugin_name = norm_path[index + len(marker) :].split("/", 1)[0]
+        if plugin_name:
+            return plugin_name
+    return None
 
 
 def _get_short_level_name(level_name: str) -> str:
