@@ -8,7 +8,10 @@ from collections.abc import AsyncGenerator, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from time import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from astrbot.core.star.star_handler import StarHandlerMetadata
 
 from deprecated import deprecated
 
@@ -95,8 +98,20 @@ class AstrMessageEvent(abc.ABC):
         """用户是否是管理员。如果是管理员，这里是 admin"""
         self.is_wake = False
         """是否唤醒(是否通过 WakingStage)"""
+        self.matched_handlers: list[StarHandlerMetadata] = []
+        """Plugin handlers that passed message filters.
+
+        Passing these filters does not mean the bot was woken.
+        """
         self.is_at_or_wake_command = False
-        """是否是 At 机器人或者带有唤醒词或者是私聊(插件注册的事件监听器会让 is_wake 设为 True, 但是不会让这个属性置为 True)"""
+        """True for a bot @mention, a wake prefix, or an allowed private chat.
+
+        Private chats set this only when prefix requirements allow it, not
+        for every private message. When friend_message_needs_wake_prefix is
+        enabled, non-webchat private messages do not set it automatically.
+        WakingCheckStage leaves it false unless the wake prefix condition is
+        met.
+        """
         self._extras: dict[str, Any] = {}
         self._force_stopped: bool = False
         """独立的停止标志，不依赖 _result，不会被 clear_result() 重置"""
