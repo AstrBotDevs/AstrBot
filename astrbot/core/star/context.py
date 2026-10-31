@@ -474,14 +474,31 @@ class Context:
             提供者实例，如果未找到则返回 None。
 
         Note:
-            如果提供者 ID 存在但未找到提供者，会记录警告日志。
+            配置中不存在该 ID 时会记录警告日志。ID 已配置但不可用时，
+            日志会说明其是被禁用还是未被加载。
         """
         prov = self.provider_manager.inst_map.get(provider_id)
         if provider_id and not prov:
-            logger.warning(
-                f"Provider {provider_id} was not found. Its provider or model ID "
-                "may have been changed."
-            )
+            configured_provider = None
+            for provider_config in self.provider_manager.providers_config:
+                if provider_config.get("id") == provider_id:
+                    configured_provider = provider_config
+                    break
+            if configured_provider is None:
+                logger.warning(
+                    f"Provider {provider_id} was not found. Its provider or model ID "
+                    "may have been changed."
+                )
+            elif not configured_provider.get("enable", False):
+                logger.warning(
+                    f"Provider {provider_id} is disabled in the configuration, so it "
+                    "cannot be used."
+                )
+            else:
+                logger.warning(
+                    f"Provider {provider_id} is configured but was not loaded, so it "
+                    "cannot be used. Check the logs for details."
+                )
         return prov
 
     def get_all_providers(self) -> list[Provider]:
