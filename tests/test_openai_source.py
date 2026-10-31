@@ -1504,7 +1504,7 @@ async def test_parse_openai_completion_raises_empty_model_output_error():
                             "refusal": None,
                             "tool_calls": None,
                         },
-                        "finish_reason": "stop",
+                        "finish_reason": "length",
                     }
                 ],
                 "usage": {
@@ -2257,5 +2257,136 @@ async def test_query_filters_empty_list_content_assistant_message(monkeypatch):
         assert len(messages) == 2
         assert messages[0] == {"role": "user", "content": "hi"}
         assert messages[1] == {"role": "user", "content": "again"}
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("content", [None, "", " \n\t"])
+@pytest.mark.parametrize("completion_tokens", [0, 86])
+@pytest.mark.parametrize("reasoning", ["missing", None, "", " \n\t"])
+async def test_parse_empty_stop_is_success(content, completion_tokens, reasoning):
+    provider = _make_provider()
+    try:
+        completion = ChatCompletion.model_validate(
+            {
+                "id": "empty-stop",
+                "object": "chat.completion",
+                "created": 0,
+                "model": "test",
+                "choices": [
+                    {
+                        "index": 0,
+                        "finish_reason": "stop",
+                        "message": {"role": "assistant", "content": content},
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": 10 + completion_tokens,
+                },
+            }
+        )
+        if reasoning != "missing":
+            completion.choices[0].message.reasoning_content = reasoning
+        response = await provider._parse_openai_completion(completion, tools=None)
+        assert response.role == "assistant"
+        assert not response.completion_text
+        assert not response.tools_call_args
+        assert response.result_chain is None
+        assert response.reasoning_content is None
+        assert response.raw_completion is completion
+        assert response.id == "empty-stop"
+        assert response.usage.output == completion_tokens
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("finish_reason", ["stop", None])
+async def test_stream_empty_response_requires_normal_finish(monkeypatch, finish_reason):
+    provider = _make_provider()
+    try:
+
+        async def fake_stream():
+            yield ChatCompletionChunk.model_validate(
+                {
+                    "id": "empty-stream",
+                    "object": "chat.completion.chunk",
+                    "created": 0,
+                    "model": "test",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "finish_reason": finish_reason,
+                            "delta": {"role": "assistant", "content": ""},
+                        }
+                    ],
+                }
+            )
+
+        async def fake_create(**kwargs):
+            return fake_stream()
+
+        monkeypatch.setattr(provider.client.chat.completions, "create", fake_create)
+        responses = [
+            r
+            async for r in provider._query_stream(
+                {"model": "test", "messages": []}, tools=None
+            )
+        ]
+        if finish_reason == "stop":
+            assert len(responses) == 1
+            assert not responses[0].is_chunk
+            assert responses[0].role == "assistant"
+            assert not responses[0].completion_text
+        else:
+            # Existing streaming error handling must not yield a successful final response.
+            assert not responses
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("legacy", [False, True])
+async def test_empty_stop_with_unparsed_tool_call_is_not_silent_success(legacy):
+    provider = _make_provider()
+    try:
+        completion = ChatCompletion.model_validate(
+            {
+                "id": "unparsed-tool",
+                "object": "chat.completion",
+                "created": 0,
+                "model": "test",
+                "choices": [
+                    {
+                        "index": 0,
+                        "finish_reason": "stop",
+                        "message": {
+                            "role": "assistant",
+                            "content": None,
+                            "tool_calls": [
+                                {
+                                    "id": "call-1",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "test_tool",
+                                        "arguments": "{}",
+                                    },
+                                }
+                            ],
+                        },
+                    }
+                ],
+            }
+        )
+        if legacy:
+            completion.choices[0].message.function_call = (
+                completion.choices[0].message.tool_calls[0].function
+            )
+            completion.choices[0].message.tool_calls = None
+        with pytest.raises(EmptyModelOutputError):
+            await provider._parse_openai_completion(completion, tools=None)
     finally:
         await provider.terminate()

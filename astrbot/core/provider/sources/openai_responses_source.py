@@ -528,16 +528,24 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         text_parts: list[str] = []
         reasoning_parts: list[str] = []
         serialized_reasoning_items: list[dict] = []
+        has_unhandled_output = False
 
         for item in self._field(response, "output", []) or []:
             item_type = self._field(item, "type")
+            if item_type not in {"message", "reasoning"} or self._field(
+                item, "status"
+            ) not in {None, "completed"}:
+                has_unhandled_output = True
             if item_type == "message":
                 for content in self._field(item, "content", []) or []:
                     content_type = self._field(content, "type")
                     if content_type == "output_text":
                         text_parts.append(str(self._field(content, "text", "")))
                     elif content_type == "refusal":
+                        has_unhandled_output = True
                         text_parts.append(str(self._field(content, "refusal", "")))
+                    else:
+                        has_unhandled_output = True
                 continue
 
             if item_type == "reasoning":
@@ -613,10 +621,21 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         has_text = bool((llm_response.completion_text or "").strip())
         has_reasoning = bool((llm_response.reasoning_content or "").strip())
         if not has_text and not has_reasoning and not llm_response.tools_call_args:
-            raise EmptyModelOutputError(
-                "Responses API returned no usable output. "
-                f"response_id={response_id}, status={status}"
-            )
+            if (
+                status == "completed"
+                and not self._field(response, "error")
+                and not incomplete_details
+                and not has_unhandled_output
+            ):
+                # A completed turn need not produce visible text. Keep encrypted
+                # reasoning state for subsequent turns, but no empty text parts.
+                llm_response.result_chain = None
+                llm_response.reasoning_content = None
+            else:
+                raise EmptyModelOutputError(
+                    "Responses API returned no usable output. "
+                    f"response_id={response_id}, status={status}"
+                )
 
         llm_response.raw_completion = response
         return llm_response
