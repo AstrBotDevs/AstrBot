@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from deprecated import deprecated
 
-from astrbot.core import astrbot_config, logger, sp
+from astrbot.core import logger, sp
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.db import BaseDatabase
 from astrbot.core.utils.error_redaction import safe_error
@@ -890,13 +890,33 @@ class ProviderManager:
                 await self.load_provider(provider_config)
 
             # 和配置文件保持同步
-            self.providers_config = astrbot_config["provider"]
-            self.provider_sources_config = astrbot_config.get("provider_sources", [])
+            # Use the config this manager was built from instead of the module-global
+            # astrbot_config, so inst_map always converges with the same source.
+            default_conf = self.acm.default_conf
+            self.providers_config = default_conf["provider"]
+            self.provider_sources_config = default_conf.get("provider_sources", [])
             config_ids = [provider["id"] for provider in self.providers_config]
             logger.info(f"providers in user's config: {config_ids}")
             for key in list(self.inst_map.keys()):
                 if key not in config_ids:
                     await self.terminate_provider(key)
+
+            # Instantiate configured providers that have no live instance yet, so a
+            # provider added to the config becomes usable without a restart.
+            for provider_config in self.providers_config:
+                provider_id = provider_config.get("id")
+                if not provider_id or provider_id in self.inst_map:
+                    continue
+                if not provider_config.get("enable", False):
+                    continue
+                if provider_config.get("provider_type", "") == "agent_runner":
+                    continue
+                try:
+                    await self.load_provider(provider_config)
+                except Exception as e:
+                    # Contain a single broken provider, like initialize() does.
+                    logger.error(traceback.format_exc())
+                    logger.error(e)
 
             if len(self.provider_insts) == 0:
                 self.curr_provider_inst = None
@@ -1055,7 +1075,7 @@ class ProviderManager:
                 raise
             config.save_config()
             # sync in-memory config for API queries (e.g., embedding provider list)
-            self.providers_config = astrbot_config["provider"]
+            self.providers_config = config["provider"]
 
     async def terminate(self) -> None:
         if self._mcp_init_task and not self._mcp_init_task.done():
