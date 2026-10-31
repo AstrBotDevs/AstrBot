@@ -1889,6 +1889,10 @@ async def build_main_agent(
         )
         if captioned_ref:
             captioned_refs.add(captioned_ref)
+
+    if config.proactive:
+        _apply_proactive_registered_tools(req, plugin_context)
+
     captioned_refs.update(
         await _decorate_llm_request(
             event,
@@ -1904,9 +1908,6 @@ async def build_main_agent(
 
     if not req.session_id:
         req.session_id = event.unified_msg_origin
-
-    if config.proactive:
-        _apply_proactive_registered_tools(req, plugin_context)
 
     _plugin_tool_fix(event, req)
     await _apply_web_search_tools(event, req, plugin_context)

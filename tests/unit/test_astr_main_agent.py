@@ -2105,6 +2105,95 @@ class TestBuildMainAgent:
                 result.reset_coro.close()
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("remove_duplicate", "proactive", "assigned_tool_present"),
+        [
+            (True, True, False),
+            (False, True, True),
+            (True, False, False),
+        ],
+    )
+    async def test_proactive_merge_respects_subagent_tool_assignment(
+        self,
+        mock_event,
+        mock_context,
+        mock_provider,
+        remove_duplicate,
+        proactive,
+        assigned_tool_present,
+    ):
+        """Proactive tool merge must not undo subagent duplicate removal."""
+        module = ama
+        plugin_tool = FunctionTool(
+            name="search_memes",
+            description="Search memes",
+            parameters={"type": "object", "properties": {}},
+        )
+        handoff_tool = FunctionTool(
+            name="transfer_to_meme_agent",
+            description="Delegate to the meme agent",
+            parameters={"type": "object", "properties": {}},
+        )
+        tool_mgr = MagicMock()
+        tool_mgr.get_full_tool_set.return_value = ToolSet([plugin_tool])
+        tool_mgr.get_builtin_tool.side_effect = lambda cls, **kwargs: cls(**kwargs)
+        mock_context.get_llm_tool_manager.return_value = tool_mgr
+        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+            return_value=(
+                "locked",
+                {"name": "locked", "prompt": "No tools.", "tools": []},
+                None,
+                False,
+            )
+        )
+        mock_context.subagent_orchestrator = SimpleNamespace(handoffs=[handoff_tool])
+        mock_context.get_config.return_value = {
+            "provider_settings": {},
+            "subagent_orchestrator": {
+                "main_enable": True,
+                "remove_main_duplicate_tools": remove_duplicate,
+                "agents": [{"tools": ["search_memes"]}],
+            },
+        }
+        mock_event.platform_meta.support_proactive_message = False
+
+        req = ProviderRequest(prompt="run scheduled task")
+        req.conversation = MagicMock(persona_id="locked", history="[]")
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            provider_settings={"web_search": False},
+            computer_use_runtime="none",
+            add_cron_tools=True,
+            proactive=proactive,
+        )
+
+        with (
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=config,
+                provider=mock_provider,
+                req=req,
+                apply_reset=False,
+            )
+
+        assert result is not None
+        try:
+            names = result.provider_request.func_tool.names()
+            assert ("search_memes" in names) is assigned_tool_present
+            assert "transfer_to_meme_agent" in names
+            assert "future_task" in names
+        finally:
+            if result.reset_coro:
+                result.reset_coro.close()
+
+    @pytest.mark.asyncio
     async def test_build_main_agent_passes_max_context_length_to_runner(
         self, mock_event, mock_context, mock_provider
     ):
