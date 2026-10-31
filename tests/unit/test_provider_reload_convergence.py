@@ -1,5 +1,6 @@
 """Tests for provider reload convergence with the configured provider list."""
 
+import asyncio
 import logging
 from unittest.mock import MagicMock
 
@@ -7,6 +8,13 @@ import pytest
 import pytest_asyncio
 
 from astrbot.core.provider.manager import ProviderManager
+
+
+class _Config(dict):
+    """Default config test double with the save hook the manager calls."""
+
+    def save_config(self) -> None:
+        """Do nothing; tests never persist the configuration."""
 
 
 def _decision_provider(
@@ -32,11 +40,13 @@ async def make_manager():
     managers: list[ProviderManager] = []
 
     def _make(providers: list[dict]) -> ProviderManager:
-        config = {
-            "provider": providers,
-            "provider_sources": [],
-            "provider_settings": {},
-        }
+        config = _Config(
+            {
+                "provider": providers,
+                "provider_sources": [],
+                "provider_settings": {},
+            }
+        )
         acm = MagicMock()
         acm.confs = {"default": config}
         acm.default_conf = config
@@ -111,3 +121,64 @@ async def test_reload_contains_provider_load_failure(make_manager, caplog):
     assert "healthy_provider" in manager.inst_map
     assert "broken_provider" not in manager.inst_map
     assert any("broken_provider" in record.getMessage() for record in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_delete_during_reload_does_not_resurrect_provider(make_manager):
+    existing = _decision_provider("existing_provider")
+    added = _decision_provider("added_provider")
+    manager = make_manager([existing, added])
+    await manager.load_provider(existing)
+
+    load_started = asyncio.Event()
+    release_load = asyncio.Event()
+    original_load_provider = manager.load_provider
+
+    async def gated_load_provider(provider_config: dict) -> None:
+        if provider_config["id"] == "added_provider":
+            # Hold the convergence load open so delete_provider() can interleave.
+            load_started.set()
+            await release_load.wait()
+        await original_load_provider(provider_config)
+
+    manager.load_provider = gated_load_provider
+
+    reload_task = asyncio.create_task(manager.reload(existing))
+    await load_started.wait()
+    delete_task = asyncio.create_task(
+        manager.delete_provider(provider_id="added_provider")
+    )
+    # Let the delete reach the manager lock before the reload resumes.
+    await asyncio.sleep(0)
+    release_load.set()
+    await asyncio.gather(reload_task, delete_task)
+
+    assert "added_provider" not in manager.inst_map
+    assert "added_provider" not in [
+        provider.get("id") for provider in manager.providers_config
+    ]
+    assert "added_provider" not in [
+        provider.get("id") for provider in manager.acm.default_conf["provider"]
+    ]
+
+
+@pytest.mark.asyncio
+async def test_update_provider_does_not_deadlock_on_the_manager_lock(make_manager):
+    existing = _decision_provider("existing_provider")
+    manager = make_manager([existing])
+    await manager.load_provider(existing)
+    original_instance = manager.inst_map["existing_provider"]
+
+    updated = _decision_provider("existing_provider")
+    updated["model"] = "new-model"
+
+    # update_provider() holds resource_lock while it reloads; a re-entrant
+    # acquisition of the same lock would block here forever.
+    await asyncio.wait_for(
+        manager.update_provider("existing_provider", updated),
+        timeout=5,
+    )
+
+    instance = manager.inst_map["existing_provider"]
+    assert instance is not original_instance
+    assert instance.provider_config["model"] == "new-model"

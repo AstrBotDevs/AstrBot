@@ -40,7 +40,8 @@ class ProviderManager:
         db_helper: BaseDatabase,
         persona_mgr: "PersonaManager",
     ) -> None:
-        self.reload_lock = asyncio.Lock()
+        # Serializes reloads with the config mutations that create, update and
+        # delete providers, so instance convergence never races a config change.
         self.resource_lock = asyncio.Lock()
         self.persona_mgr = persona_mgr
         self.acm = acm
@@ -884,82 +885,98 @@ class ProviderManager:
             )
 
     async def reload(self, provider_config: dict) -> None:
-        async with self.reload_lock:
-            await self.terminate_provider(provider_config["id"])
-            if provider_config["enable"]:
-                await self.load_provider(provider_config)
+        """Reload one provider and converge the live instances with the config.
 
-            # 和配置文件保持同步
-            # Use the config this manager was built from instead of the module-global
-            # astrbot_config, so inst_map always converges with the same source.
-            default_conf = self.acm.default_conf
-            self.providers_config = default_conf["provider"]
-            self.provider_sources_config = default_conf.get("provider_sources", [])
-            config_ids = [provider["id"] for provider in self.providers_config]
-            logger.info(f"providers in user's config: {config_ids}")
-            for key in list(self.inst_map.keys()):
-                if key not in config_ids:
-                    await self.terminate_provider(key)
+        Args:
+            provider_config: Configuration of the provider whose instance is reloaded.
 
-            # Instantiate configured providers that have no live instance yet, so a
-            # provider added to the config becomes usable without a restart.
-            for provider_config in self.providers_config:
-                provider_id = provider_config.get("id")
-                if not provider_id or provider_id in self.inst_map:
-                    continue
-                if not provider_config.get("enable", False):
-                    continue
-                if provider_config.get("provider_type", "") == "agent_runner":
-                    continue
-                try:
-                    await self.load_provider(provider_config)
-                except Exception as e:
-                    # Contain a single broken provider, like initialize() does.
-                    logger.error(traceback.format_exc())
-                    logger.error(e)
+        Raises:
+            Exception: If the reloaded provider instance cannot be created.
+        """
+        # resource_lock is the single management lock. Configuration mutations and
+        # instance convergence are one unit here, so a concurrent delete_provider()
+        # cannot be undone by the convergence pass below. update_provider() already
+        # holds this lock and calls _reload_locked() to avoid re-acquiring it.
+        async with self.resource_lock:
+            await self._reload_locked(provider_config)
 
-            if len(self.provider_insts) == 0:
-                self.curr_provider_inst = None
-            elif self.curr_provider_inst is None and len(self.provider_insts) > 0:
-                self.curr_provider_inst = self.provider_insts[0]
-                logger.info(
-                    f"Automatically selected {self.curr_provider_inst.meta().id} "
-                    "as the current provider adapter.",
-                )
+    async def _reload_locked(self, provider_config: dict) -> None:
+        """Reload one provider; the caller must hold ``resource_lock``.
 
-            if len(self.stt_provider_insts) == 0:
-                self.curr_stt_provider_inst = None
-            elif (
-                self.curr_stt_provider_inst is None and len(self.stt_provider_insts) > 0
-            ):
-                self.curr_stt_provider_inst = self.stt_provider_insts[0]
-                logger.info(
-                    f"Automatically selected {self.curr_stt_provider_inst.meta().id} "
-                    "as the current speech-to-text provider adapter.",
-                )
+        Args:
+            provider_config: Configuration of the provider whose instance is reloaded.
+        """
+        await self.terminate_provider(provider_config["id"])
+        if provider_config["enable"]:
+            await self.load_provider(provider_config)
 
-            if len(self.tts_provider_insts) == 0:
-                self.curr_tts_provider_inst = None
-            elif (
-                self.curr_tts_provider_inst is None and len(self.tts_provider_insts) > 0
-            ):
-                self.curr_tts_provider_inst = self.tts_provider_insts[0]
-                logger.info(
-                    f"Automatically selected {self.curr_tts_provider_inst.meta().id} "
-                    "as the current text-to-speech provider adapter.",
-                )
+        # 和配置文件保持同步
+        # Use the config this manager was built from instead of the module-global
+        # astrbot_config, so inst_map always converges with the same source.
+        default_conf = self.acm.default_conf
+        self.providers_config = default_conf["provider"]
+        self.provider_sources_config = default_conf.get("provider_sources", [])
+        config_ids = [provider["id"] for provider in self.providers_config]
+        logger.info(f"providers in user's config: {config_ids}")
+        for key in list(self.inst_map.keys()):
+            if key not in config_ids:
+                await self.terminate_provider(key)
 
-            if len(self.decision_provider_insts) == 0:
-                self.curr_decision_provider_inst = None
-            elif (
-                self.curr_decision_provider_inst is None
-                and len(self.decision_provider_insts) > 0
-            ):
-                self.curr_decision_provider_inst = self.decision_provider_insts[0]
-                logger.info(
-                    f"Automatically selected {self.curr_decision_provider_inst.meta().id} "
-                    "as the current decision provider adapter.",
-                )
+        # Instantiate configured providers that have no live instance yet, so a
+        # provider added to the config becomes usable without a restart.
+        for config_entry in self.providers_config:
+            provider_id = config_entry.get("id")
+            if not provider_id or provider_id in self.inst_map:
+                continue
+            if not config_entry.get("enable", False):
+                continue
+            if config_entry.get("provider_type", "") == "agent_runner":
+                continue
+            try:
+                await self.load_provider(config_entry)
+            except Exception as e:
+                # Contain a single broken provider, like initialize() does.
+                logger.error(traceback.format_exc())
+                logger.error(e)
+
+        if len(self.provider_insts) == 0:
+            self.curr_provider_inst = None
+        elif self.curr_provider_inst is None and len(self.provider_insts) > 0:
+            self.curr_provider_inst = self.provider_insts[0]
+            logger.info(
+                f"Automatically selected {self.curr_provider_inst.meta().id} "
+                "as the current provider adapter.",
+            )
+
+        if len(self.stt_provider_insts) == 0:
+            self.curr_stt_provider_inst = None
+        elif self.curr_stt_provider_inst is None and len(self.stt_provider_insts) > 0:
+            self.curr_stt_provider_inst = self.stt_provider_insts[0]
+            logger.info(
+                f"Automatically selected {self.curr_stt_provider_inst.meta().id} "
+                "as the current speech-to-text provider adapter.",
+            )
+
+        if len(self.tts_provider_insts) == 0:
+            self.curr_tts_provider_inst = None
+        elif self.curr_tts_provider_inst is None and len(self.tts_provider_insts) > 0:
+            self.curr_tts_provider_inst = self.tts_provider_insts[0]
+            logger.info(
+                f"Automatically selected {self.curr_tts_provider_inst.meta().id} "
+                "as the current text-to-speech provider adapter.",
+            )
+
+        if len(self.decision_provider_insts) == 0:
+            self.curr_decision_provider_inst = None
+        elif (
+            self.curr_decision_provider_inst is None
+            and len(self.decision_provider_insts) > 0
+        ):
+            self.curr_decision_provider_inst = self.decision_provider_insts[0]
+            logger.info(
+                f"Automatically selected {self.curr_decision_provider_inst.meta().id} "
+                "as the current decision provider adapter.",
+            )
 
     def get_insts(self):
         return self.provider_insts
@@ -1052,8 +1069,8 @@ class ProviderManager:
             else:
                 raise ValueError(f"Provider ID {origin_provider_id} not found")
             config.save_config()
-            # reload instance
-            await self.reload(new_config)
+            # reload instance; resource_lock is already held here
+            await self._reload_locked(new_config)
 
     async def create_provider(self, new_config: dict) -> None:
         """Add and load a provider, saving config only after it loads successfully."""
