@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from fastapi.responses import FileResponse
 
@@ -111,8 +113,14 @@ async def list_backups(
     _auth: AuthContext = Depends(require_system_scope),
     service: BackupService = Depends(get_service),
 ):
+    # list_backups opens every backup ZIP to read its manifest, so the call must not
+    # run on the event loop thread that also serves WebChat and the platform adapters.
+    # list_backups also schedules the expired-upload cleanup with
+    # asyncio.create_task, which only works on the event loop thread, so start it
+    # here before the ZIP scan moves to a worker.
+    service.ensure_cleanup_task_started()
     return await _run(
-        lambda: service.list_backups(page=page, page_size=page_size),
+        lambda: asyncio.to_thread(service.list_backups, page=page, page_size=page_size),
         prefix="获取备份列表失败",
     )
 
@@ -124,8 +132,12 @@ async def list_dashboard_backups(
     _username: str = Depends(require_dashboard_user),
     service: BackupService = Depends(get_service),
 ):
+    # list_backups also schedules the expired-upload cleanup with
+    # asyncio.create_task, which only works on the event loop thread, so start it
+    # here before the ZIP scan moves to a worker.
+    service.ensure_cleanup_task_started()
     return await _run(
-        lambda: service.list_backups(page=page, page_size=page_size),
+        lambda: asyncio.to_thread(service.list_backups, page=page, page_size=page_size),
         prefix="获取备份列表失败",
     )
 
