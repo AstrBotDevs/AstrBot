@@ -2,7 +2,7 @@ import asyncio
 from collections.abc import AsyncGenerator
 from io import BytesIO
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 from urllib.parse import unquote, urlparse
 
 import discord
@@ -41,9 +41,10 @@ from .components import DiscordEmbed, DiscordView, action_rows_to_discord_view
 # 自定义Discord视图组件（兼容旧版本）
 class DiscordViewComponent(BaseMessageComponent):
     type: str = "discord_view"
+    view: Any
 
     def __init__(self, view: discord.ui.View) -> None:
-        self.view = view
+        super().__init__(view=view)
 
 
 class DiscordPlatformEvent(AstrMessageEvent):
