@@ -79,11 +79,21 @@ def _install_fake_clone(
 ) -> None:
     """Route the updater's subprocess spawns to the given fakes.
 
+    The fake pid belongs to no process this test owns, so the tree kill must be
+    stubbed too: a real group signal or a real ``taskkill`` would aim at an unrelated
+    process. A stubbed ``killpg`` covers POSIX and a ``_FakeKiller(returncode=0)``
+    covers Windows.
+
     Args:
         monkeypatch: Test monkeypatch handle.
         process: Fake clone process returned for the ``git`` invocation.
         killer: Fake ``taskkill`` process for the tests that exercise that branch.
     """
+    # `killpg` only exists on POSIX; adding it on Windows simply makes the unused
+    # attribute available to the monkeypatch undo.
+    monkeypatch.setattr(
+        plugin_updater.os, "killpg", lambda *_args, **_kwargs: None, raising=False
+    )
 
     async def fake_create_subprocess_exec(*args, **_kwargs):
         if str(args[0]).lower().endswith("taskkill"):
@@ -230,12 +240,22 @@ async def test_clone_timeout_reaps_the_killed_clone_before_returning(
     monkeypatch.setattr(plugin_updater, "PLUGIN_GIT_CLONE_TIMEOUT_SECONDS", 1)
 
     real_create_subprocess_exec = asyncio.create_subprocess_exec
-    captured: dict[str, object] = {}
+    completed_waits: list[int] = []
 
     async def capture_create_subprocess_exec(*args, **kwargs):
         process = await real_create_subprocess_exec(*args, **kwargs)
         if str(args[0]) == str(shim):
-            captured["process"] = process
+            # `returncode` alone proves nothing: the child watcher fills it in as soon as
+            # the clone exits, even while a helper still holds the pipes, so a `wait()`
+            # could never finish. Only a completed wait is recorded here.
+            real_wait = process.wait
+
+            async def recorded_wait(*wait_args, **wait_kwargs):
+                returncode = await real_wait(*wait_args, **wait_kwargs)
+                completed_waits.append(returncode)
+                return returncode
+
+            process.wait = recorded_wait
         return process
 
     monkeypatch.setattr(
@@ -250,8 +270,9 @@ async def test_clone_timeout_reaps_the_killed_clone_before_returning(
             "https://example.invalid/owner/repo", tmp_path / "plugin"
         )
 
-    process = captured["process"]
-    assert process.returncode is not None, "the clone process was not reaped"
+    assert len(completed_waits) == 1, (
+        "the killed clone was not waited for before the timeout surfaced"
+    )
     # A fire-and-forget reaper would keep the subprocess transport alive past the
     # deadline, and would still be pending here.
     leftover = [
@@ -306,7 +327,9 @@ async def test_clone_timeout_removes_the_checkout_after_the_clone_stopped(
         communicate_hangs=True,
         on_communicate=lambda: target.mkdir(parents=True, exist_ok=True),
     )
-    _install_fake_clone(monkeypatch, process)
+    # The tree kill itself is covered by the tests above; this one only observes the
+    # order of the wait and the removal.
+    _install_fake_clone(monkeypatch, process, _FakeKiller(returncode=0))
     observed: list[bool] = []
     monkeypatch.setattr(
         plugin_updater, "remove_dir", lambda _path: observed.append(process.waited)
@@ -319,6 +342,7 @@ async def test_clone_timeout_removes_the_checkout_after_the_clone_stopped(
             "https://example.invalid/owner/repo", target
         )
 
+    assert not process.killed, "the tree kill degraded instead of succeeding"
     assert observed == [True], (
         "the checkout was removed without waiting for the clone to stop"
     )
@@ -334,7 +358,7 @@ async def test_clone_timeout_cleanup_failure_keeps_the_timeout_error(
         communicate_hangs=True,
         on_communicate=lambda: target.mkdir(parents=True, exist_ok=True),
     )
-    _install_fake_clone(monkeypatch, process)
+    _install_fake_clone(monkeypatch, process, _FakeKiller(returncode=0))
 
     def failing_remove_dir(_path):
         raise PermissionError("the checkout is still held open")
@@ -347,6 +371,8 @@ async def test_clone_timeout_cleanup_failure_keeps_the_timeout_error(
         await plugin_updater._PluginUpdater()._clone_repository(
             "https://example.invalid/owner/repo", target
         )
+
+    assert not process.killed, "the tree kill degraded instead of succeeding"
 
 
 @pytest.mark.asyncio
@@ -486,4 +512,3 @@ async def test_repository_inspection_keeps_the_timeout_when_teardown_fails(
             for path in tmp_path.rglob("*"):
                 if path.is_dir():
                     path.chmod(0o700)
-
