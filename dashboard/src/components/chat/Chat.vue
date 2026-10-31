@@ -373,6 +373,7 @@
               @open-thread="openThreadPanel"
               @open-reasoning="openReasoningPanel"
               @open-refs="openRefsSidebar"
+              @button-click="handleButtonClick"
             />
           </div>
         </section>
@@ -534,7 +535,12 @@
     <WorkspaceFilesPanel
       :model-value="chatHeader.workspaceFilesOpen"
       :project-id="activeProject?.project_id || ''"
-      :project-title="activeProject?.title || ''"
+      :workspace-type="activeProject?.workspace_type || 'session'"
+      :session-id="
+        sessionProject?.project_id === activeProject?.project_id
+          ? currSessionId || undefined
+          : undefined
+      "
       @update:model-value="chatHeader.SET_WORKSPACE_FILES_OPEN"
     />
   </div>
@@ -819,6 +825,7 @@ const {
   loadEarlierMessages,
   createLocalExchange,
   sendMessageStream,
+  sendButtonInteraction,
   editMessage,
   continueEditedMessage,
   regenerateMessage,
@@ -832,6 +839,18 @@ const {
     }
   },
 });
+
+function handleButtonClick(payload: {
+  message: ChatRecord;
+  callbackData: string;
+}) {
+  if (!currSessionId.value) return;
+  sendButtonInteraction({
+    sessionId: currSessionId.value,
+    sourceMessageId: payload.message.id,
+    callbackData: payload.callbackData,
+  });
+}
 
 const activeSessionPagination = computed(() =>
   currSessionId.value ? paginationBySession[currSessionId.value] : undefined,

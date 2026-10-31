@@ -667,6 +667,9 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/BotCleanup"
           }
         ],
         "responses": {
@@ -810,6 +813,9 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/BotId"
+          },
+          {
+            "$ref": "#/components/parameters/BotCleanup"
           }
         ],
         "responses": {
@@ -2376,6 +2382,15 @@
               "type": "string",
               "default": ""
             }
+          },
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "description": "Optional for per-session workspaces; must belong to this project and user when provided. Omitted or empty values use the legacy default workspace.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -2410,6 +2425,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "description": "Optional for per-session workspaces; must belong to this project and user when provided. Omitted or empty values use the legacy default workspace.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -2441,6 +2465,15 @@
             "name": "path",
             "in": "query",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "description": "Optional for per-session workspaces; must belong to this project and user when provided. Omitted or empty values use the legacy default workspace.",
             "schema": {
               "type": "string"
             }
@@ -6981,6 +7014,20 @@
       }
     },
     "parameters": {
+      "BotCleanup": {
+        "name": "cleanup",
+        "in": "query",
+        "description": "Data categories to permanently remove for this adapter. Omit to retain all associated data. Shared resources and cross-platform routing rules are preserved.",
+        "required": false,
+        "style": "form",
+        "explode": true,
+        "schema": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/BotCleanupTarget"
+          }
+        }
+      },
       "AttachmentId": {
         "name": "attachment_id",
         "in": "path",
@@ -7140,6 +7187,19 @@
       }
     },
     "schemas": {
+      "BotCleanupTarget": {
+        "type": "string",
+        "enum": [
+          "custom_rules",
+          "preferences",
+          "routing",
+          "cron_jobs",
+          "conversations",
+          "message_history",
+          "traces",
+          "stats"
+        ]
+      },
       "SuccessEnvelope": {
         "type": "object",
         "required": [
@@ -7170,7 +7230,8 @@
           "stt",
           "tts",
           "embedding",
-          "rerank"
+          "rerank",
+          "decision"
         ]
       },
       "CreateConfigProfileRequest": {

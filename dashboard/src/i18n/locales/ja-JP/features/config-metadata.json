@@ -276,7 +276,7 @@
             "AnySearch"
           ],
           "subtitles": [
-            "Google のウェブ・画像・学術・金融検索",
+            "Google のウェブ・ニュース・画像・学術・金融検索",
             "DeepSeek 公式検索 API",
             "",
             "",
@@ -320,7 +320,7 @@
         },
         "websearch_serpapi_key": {
           "description": "SerpApi API Key",
-          "hint": "Google のウェブ・画像・学術・金融検索に対応。複数の Key を追加してローテーションできます。Key の取得：[https://serpapi.com/manage-api-key](https://serpapi.com/manage-api-key)"
+          "hint": "Google のウェブ・ニュース・画像・学術・金融検索に対応。複数の Key を追加してローテーションできます。Key の取得：[https://serpapi.com/manage-api-key](https://serpapi.com/manage-api-key)"
         },
         "websearch_deepseek_key": {
           "description": "DeepSeek API Key",
@@ -1428,7 +1428,7 @@
       },
       "pip_install_arg": {
         "description": "pip インストールの追加引数",
-        "hint": "プラグインの依存関係をインストールする際は、Python の pip を使用します。`--break-system-package` などの追加引数を指定できます。"
+        "hint": "プラグインの依存関係をインストールする際は、Python の pip を使用します。`--break-system-package` などの追加引数を指定できます。PyPI インデックスの TLS 証明書は既定で検証されます。自己署名/プライベート CA のミラーを使用する場合は、`--cert <CA バンドルのパス>` を指定する(推奨)か、明示的に `--trusted-host <ホスト名>` を追加してください。"
       },
       "pypi_index_url": {
         "description": "PyPI リポジトリアドレス",
@@ -1635,7 +1635,7 @@
 
       "custom_headers": {
         "description": "カスタムリクエストヘッダー",
-        "hint": "ここで追加したキーと値のペアは、カスタム HTTP リクエストヘッダーとして OpenAI SDK の default_headers に統合されます。値は文字列である必要があります。"
+        "hint": "ここで追加したキーと値のペアは、AstrBot からプロバイダーへの HTTP リクエストにカスタムヘッダーとして付加されます。値は文字列である必要があります。"
       },
       "ollama_disable_thinking": {
         "description": "思考モードを無効化",
@@ -1659,6 +1659,11 @@
             "description": "最大トークン数",
             "hint": "生成する最大トークン数です。",
             "name": "Max Tokens"
+          },
+          "max_output_tokens": {
+            "description": "最大出力トークン数",
+            "hint": "生成する最大トークン数です。",
+            "name": "Max Output Tokens"
           },
           "reasoning_effort": {
             "description": "推論強度",
@@ -2056,6 +2061,14 @@
       },
       "api_base": {
         "description": "API Base URL"
+      },
+      "total_timeout": {
+        "description": "総タイムアウト",
+        "hint": "1 回の判定リクエストの総タイムアウト（秒）です。同時実行枠の待機、再試行、バックオフを含みます。既定値は 5 秒です。"
+      },
+      "max_concurrency": {
+        "description": "最大同時実行数",
+        "hint": "このプロバイダーで同時に実行する判定リクエストの上限です。既定値は 4 です。"
       },
       "proxy": {
         "description": "プロキシアドレス",

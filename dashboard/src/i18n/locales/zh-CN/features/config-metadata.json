@@ -204,7 +204,7 @@
             "AnySearch"
           ],
           "subtitles": [
-            "Google 网页、图片、学术和财经搜索",
+            "Google 网页、新闻、图片、学术和财经搜索",
             "DeepSeek 官方搜索接口",
             "",
             "",
@@ -248,7 +248,7 @@
         },
         "websearch_serpapi_key": {
           "description": "SerpApi API Key",
-          "hint": "支持 Google 网页、图片、学术和财经搜索。可添加多个 Key 轮询。获取 Key：[https://serpapi.com/manage-api-key](https://serpapi.com/manage-api-key)"
+          "hint": "支持 Google 网页、新闻、图片、学术和财经搜索。可添加多个 Key 轮询。获取 Key：[https://serpapi.com/manage-api-key](https://serpapi.com/manage-api-key)"
         },
         "websearch_deepseek_key": {
           "description": "DeepSeek API Key",
@@ -1348,7 +1348,7 @@
       },
       "pip_install_arg": {
         "description": "pip 安装额外参数",
-        "hint": "安装插件依赖时,会使用 Python 的 pip 工具。这里可以填写额外的参数,如 `--break-system-package` 等。"
+        "hint": "安装插件依赖时,会使用 Python 的 pip 工具。这里可以填写额外的参数,如 `--break-system-package` 等。PyPI 镜像的 TLS 证书默认会校验;若使用自签名/私有 CA 镜像,请通过 `--cert <CA 路径>` 指定信任的证书(推荐),或显式添加 `--trusted-host <主机名>`。"
       },
       "pypi_index_url": {
         "description": "PyPI 软件仓库地址",
@@ -1555,7 +1555,7 @@
 
       "custom_headers": {
         "description": "自定义请求头",
-        "hint": "此处添加的键值对将被合并到 OpenAI SDK 的 default_headers 中，用于自定义 HTTP 请求头。值必须为字符串。"
+        "hint": "此处添加的键值对将作为自定义 HTTP 请求头，附加到 AstrBot 发往模型服务商的请求中。值必须为字符串。"
       },
       "ollama_disable_thinking": {
         "description": "关闭思考模式",
@@ -1579,6 +1579,11 @@
             "description": "最大词元（Tokens）数",
             "hint": "生成的最大词元（Tokens）数。",
             "name": "Max Tokens"
+          },
+          "max_output_tokens": {
+            "description": "最大输出词元（Tokens）数",
+            "hint": "生成的最大词元（Tokens）数。",
+            "name": "Max Output Tokens"
           },
           "reasoning_effort": {
             "description": "推理强度",
@@ -1976,6 +1981,14 @@
       },
       "api_base": {
         "description": "API Base URL"
+      },
+      "total_timeout": {
+        "description": "总超时时间",
+        "hint": "单次决策请求的总超时时间（秒），包含等待并发名额、重试与退避；默认 5 秒。"
+      },
+      "max_concurrency": {
+        "description": "最大并发数",
+        "hint": "该提供商同时进行的决策请求上限；默认 4。"
       },
       "proxy": {
         "description": "代理地址",

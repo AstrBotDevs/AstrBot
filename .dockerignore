@@ -23,4 +23,5 @@ data/
 tests/
 .ruff_cache/
 .astrbot
+.astrbot-tmp
 astrbot.lock

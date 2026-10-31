@@ -800,6 +800,7 @@ class TestBuiltinToolInjection:
 
         assert req.func_tool.names() == [
             "web_search_serpapi",
+            "news_search_serpapi",
             "image_search_serpapi",
             "finance_search_serpapi",
             "scholar_search_serpapi",
@@ -899,6 +900,7 @@ class TestBuiltinToolInjection:
             "web_search_tavily",
             "web_search_deepseek",
             "web_search_serpapi",
+            "news_search_serpapi",
             "image_search_serpapi",
             "finance_search_serpapi",
             "scholar_search_serpapi",
@@ -1584,6 +1586,7 @@ class TestEnsurePersonaAndSkills:
                 "serpapi",
                 [
                     "web_search_serpapi",
+                    "news_search_serpapi",
                     "image_search_serpapi",
                     "finance_search_serpapi",
                     "scholar_search_serpapi",

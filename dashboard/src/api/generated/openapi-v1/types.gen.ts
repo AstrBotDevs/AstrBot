@@ -45,6 +45,8 @@ export type BatchSessionServiceRequest = UmoListRequest & {
     tts_enabled?: boolean;
 };
 
+export type BotCleanupTarget = 'custom_rules' | 'preferences' | 'routing' | 'cron_jobs' | 'conversations' | 'message_history' | 'traces' | 'stats';
+
 export type BotConfigRequest = {
     id?: string;
     name?: string;
@@ -432,6 +434,11 @@ export type ParameterAttachmentId = string;
 
 export type ParameterAttachmentIdQuery = string;
 
+/**
+ * Data categories to permanently remove for this adapter. Omit to retain all associated data. Shared resources and cross-platform routing rules are preserved.
+ */
+export type ParameterBotCleanup = Array<BotCleanupTarget>;
+
 export type ParameterBotId = string;
 
 export type ParameterChunkId = string;
@@ -597,7 +604,7 @@ export type PluginVersionSupportRequest = {
     astrbot_version?: string;
 };
 
-export type ProviderCapability = 'chat' | 'agent' | 'stt' | 'tts' | 'embedding' | 'rerank';
+export type ProviderCapability = 'chat' | 'agent' | 'stt' | 'tts' | 'embedding' | 'rerank' | 'decision';
 
 export type ProviderConfigRequest = {
     id?: string;
@@ -610,6 +617,10 @@ export type ProviderConfigRequest = {
 export type ProviderSourceConfigRequest = {
     id?: string;
     config: DynamicConfig;
+};
+
+export type PypiIndexTestRequest = {
+    index_url: string;
 };
 
 export type RenameRequest = {
@@ -1009,6 +1020,10 @@ export type UpdateBotByIdError = unknown;
 export type DeleteBotByIdData = {
     query: {
         bot_id: string;
+        /**
+         * Data categories to permanently remove for this adapter. Omit to retain all associated data. Shared resources and cross-platform routing rules are preserved.
+         */
+        cleanup?: Array<BotCleanupTarget>;
     };
 };
 
@@ -1061,6 +1076,12 @@ export type UpdateBotError = unknown;
 export type DeleteBotData = {
     path: {
         bot_id: string;
+    };
+    query?: {
+        /**
+         * Data categories to permanently remove for this adapter. Omit to retain all associated data. Shared resources and cross-platform routing rules are preserved.
+         */
+        cleanup?: Array<BotCleanupTarget>;
     };
 };
 
@@ -1626,6 +1647,10 @@ export type ListChatProjectWorkspaceFilesData = {
     };
     query?: {
         path?: string;
+        /**
+         * Optional for per-session workspaces; must belong to this project and user when provided. Omitted or empty values use the legacy default workspace.
+         */
+        session_id?: string;
     };
 };
 
@@ -1639,6 +1664,10 @@ export type GetChatProjectWorkspaceFileData = {
     };
     query: {
         path: string;
+        /**
+         * Optional for per-session workspaces; must belong to this project and user when provided. Omitted or empty values use the legacy default workspace.
+         */
+        session_id?: string;
     };
 };
 
@@ -1652,6 +1681,10 @@ export type DownloadChatProjectWorkspaceFileData = {
     };
     query: {
         path: string;
+        /**
+         * Optional for per-session workspaces; must belong to this project and user when provided. Omitted or empty values use the legacy default workspace.
+         */
+        session_id?: string;
     };
 };
 
@@ -3487,6 +3520,30 @@ export type TestGhproxyConnectionData = {
 export type TestGhproxyConnectionResponse = (SuccessEnvelope);
 
 export type TestGhproxyConnectionError = unknown;
+
+export type TestPypiIndexConnectionData = {
+    body: PypiIndexTestRequest;
+};
+
+export type TestPypiIndexConnectionResponse = (SuccessEnvelope);
+
+export type TestPypiIndexConnectionError = unknown;
+
+export type MeasurePypiIndexSpeedData = {
+    body: PypiIndexTestRequest;
+};
+
+export type MeasurePypiIndexSpeedResponse = (SuccessEnvelope);
+
+export type MeasurePypiIndexSpeedError = unknown;
+
+export type MeasureGhproxySpeedData = {
+    body: GhproxyTestRequest;
+};
+
+export type MeasureGhproxySpeedResponse = (SuccessEnvelope);
+
+export type MeasureGhproxySpeedError = unknown;
 
 export type ListChangelogVersionsResponse = (SuccessEnvelope);
 

@@ -112,6 +112,11 @@ class CronJobManager:
         self._started = False
         # The scheduler may start early via _schedule_job; track DB sync separately.
         self._db_synced = False
+        self._running_tasks: dict[str, set[asyncio.Task]] = {}
+        # Ref-counted deletion markers. A run must not register after deletion
+        # has started, and nested/concurrent deletes must not clear the marker
+        # before the last deletion finishes.
+        self._deleting_jobs: dict[str, int] = {}
 
     async def start(self, ctx: "Context") -> None:
         self.ctx: Context = ctx  # star context
@@ -225,9 +230,33 @@ class CronJobManager:
         return job
 
     async def delete_job(self, job_id: str) -> None:
-        self._remove_scheduled(job_id)
-        self._basic_handlers.pop(job_id, None)
-        await self.db.delete_cron_job(job_id)
+        """Remove a schedule and drain its active runs before deleting its row.
+
+        Runs that have already started are cancelled and drained. Runs that
+        start after deletion begins return without executing.
+
+        Args:
+            job_id: Job to delete, including any currently executing run.
+        """
+        self._deleting_jobs[job_id] = self._deleting_jobs.get(job_id, 0) + 1
+        try:
+            self._remove_scheduled(job_id)
+            self._basic_handlers.pop(job_id, None)
+            tasks = [
+                task
+                for task in self._running_tasks.get(job_id, set())
+                if task is not asyncio.current_task() and not task.done()
+            ]
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            await self.db.delete_cron_job(job_id)
+        finally:
+            remaining = self._deleting_jobs.get(job_id, 0) - 1
+            if remaining > 0:
+                self._deleting_jobs[job_id] = remaining
+            else:
+                self._deleting_jobs.pop(job_id, None)
 
     async def list_jobs(self, job_type: str | None = None) -> list[CronJob]:
         return await self.db.list_cron_jobs(job_type)
@@ -348,38 +377,54 @@ class CronJobManager:
         ignore_enabled: bool = False,
         delete_run_once: bool = True,
     ) -> None:
-        job = await self.db.get_cron_job(job_id)
-        if not job or (not job.enabled and not ignore_enabled):
+        task = asyncio.current_task()
+        if task is None or job_id in self._deleting_jobs:
             return
-        start_time = datetime.now(timezone.utc)
-        await self.db.update_cron_job(
-            job_id, status="running", last_run_at=start_time, last_error=None
-        )
-        status = "completed"
-        last_error = None
+        # Register before the first await so delete_job always snapshots a run
+        # that has passed the deletion-marker check.
+        self._running_tasks.setdefault(job_id, set()).add(task)
         try:
-            if job.job_type == "basic":
-                await self._run_basic_job(job)
-            elif job.job_type == "active_agent":
-                await self._run_active_agent_job(job, start_time=start_time)
-            else:
-                raise ValueError(f"Unknown cron job type: {job.job_type}")
-        except Exception as e:  # noqa: BLE001
-            status = "failed"
-            last_error = str(e)
-            logger.error(f"Cron job {job_id} failed: {e!s}", exc_info=True)
-        finally:
-            next_run = self._get_next_run_time(job_id)
+            job = await self.db.get_cron_job(job_id)
+            if not job or (not job.enabled and not ignore_enabled):
+                return
+            start_time = datetime.now(timezone.utc)
             await self.db.update_cron_job(
-                job_id,
-                status=status,
-                last_run_at=start_time,
-                last_error=last_error,
-                next_run_time=next_run,
+                job_id, status="running", last_run_at=start_time, last_error=None
             )
-            if job.run_once and delete_run_once:
-                # one-shot: remove after execution regardless of success
-                await self.delete_job(job_id)
+            status = "completed"
+            last_error = None
+            try:
+                if job.job_type == "basic":
+                    await self._run_basic_job(job)
+                elif job.job_type == "active_agent":
+                    await self._run_active_agent_job(job, start_time=start_time)
+                else:
+                    raise ValueError(f"Unknown cron job type: {job.job_type}")
+            except asyncio.CancelledError:
+                status = "cancelled"
+                raise
+            except Exception as e:  # noqa: BLE001
+                status = "failed"
+                last_error = str(e)
+                logger.error(f"Cron job {job_id} failed: {e!s}", exc_info=True)
+            finally:
+                next_run = self._get_next_run_time(job_id)
+                await self.db.update_cron_job(
+                    job_id,
+                    status=status,
+                    last_run_at=start_time,
+                    last_error=last_error,
+                    next_run_time=next_run,
+                )
+                if job.run_once and delete_run_once and status != "cancelled":
+                    # One-shot runs remove themselves, excluding their own task.
+                    await self.delete_job(job_id)
+        finally:
+            running = self._running_tasks.get(job_id)
+            if running is not None:
+                running.discard(task)
+                if not running:
+                    del self._running_tasks[job_id]
 
     async def _run_basic_job(self, job: CronJob) -> None:
         handler = self._basic_handlers.get(job.job_id)

@@ -1,5 +1,6 @@
 """Tests for CronJobManager."""
 
+import asyncio
 import json
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -73,6 +74,7 @@ class TestCronJobManagerInit:
         assert manager._basic_handlers == {}
         assert manager._started is False
         assert manager._db_synced is False
+        assert manager._deleting_jobs == {}
 
 
 class TestCronJobManagerStart:
@@ -314,6 +316,113 @@ class TestDeleteJob:
 
         mock_db.delete_cron_job.assert_called_once_with("test-job-id")
         assert "test-job-id" not in cron_manager._basic_handlers
+
+    @pytest.mark.asyncio
+    async def test_delete_job_cancels_run_blocked_in_row_lookup(
+        self, cron_manager, mock_db, sample_cron_job
+    ):
+        """A run that fetched the row must not escape deletion before registering."""
+        lookup_started = asyncio.Event()
+        allow_lookup = asyncio.Event()
+
+        async def delayed_get(job_id):
+            lookup_started.set()
+            await allow_lookup.wait()
+            return sample_cron_job
+
+        mock_db.get_cron_job.side_effect = delayed_get
+        handler = MagicMock()
+        cron_manager._basic_handlers[sample_cron_job.job_id] = handler
+
+        run_task = asyncio.create_task(cron_manager._run_job(sample_cron_job.job_id))
+        await asyncio.wait_for(lookup_started.wait(), 2)
+        await asyncio.wait_for(cron_manager.delete_job(sample_cron_job.job_id), 2)
+
+        assert run_task.cancelled()
+        allow_lookup.set()
+        handler.assert_not_called()
+        mock_db.delete_cron_job.assert_awaited_once_with(sample_cron_job.job_id)
+        assert cron_manager._running_tasks == {}
+        assert cron_manager._deleting_jobs == {}
+
+    @pytest.mark.asyncio
+    async def test_delete_job_blocks_run_starting_after_deletion_begins(
+        self, cron_manager, mock_db, sample_cron_job
+    ):
+        """A run must not start once the job deletion marker is set."""
+        delete_started = asyncio.Event()
+        allow_delete = asyncio.Event()
+
+        async def delayed_delete(job_id):
+            delete_started.set()
+            await allow_delete.wait()
+
+        mock_db.delete_cron_job.side_effect = delayed_delete
+        mock_db.get_cron_job.return_value = sample_cron_job
+        handler = MagicMock()
+        cron_manager._basic_handlers[sample_cron_job.job_id] = handler
+
+        delete_task = asyncio.create_task(
+            cron_manager.delete_job(sample_cron_job.job_id)
+        )
+        await asyncio.wait_for(delete_started.wait(), 2)
+
+        await asyncio.wait_for(cron_manager._run_job(sample_cron_job.job_id), 2)
+
+        allow_delete.set()
+        await asyncio.wait_for(delete_task, 2)
+
+        handler.assert_not_called()
+        mock_db.get_cron_job.assert_not_awaited()
+        assert cron_manager._deleting_jobs == {}
+
+    @pytest.mark.asyncio
+    async def test_concurrent_deletes_keep_marker_until_last_finishes(
+        self, cron_manager, mock_db, sample_cron_job
+    ):
+        """One deletion finishing must not unblock runs while another is pending."""
+        first_delete_started = asyncio.Event()
+        second_delete_started = asyncio.Event()
+        allow_first_delete = asyncio.Event()
+        allow_second_delete = asyncio.Event()
+        delete_calls = 0
+
+        async def delayed_delete(job_id):
+            nonlocal delete_calls
+            delete_calls += 1
+            if delete_calls == 1:
+                first_delete_started.set()
+                await allow_first_delete.wait()
+            else:
+                second_delete_started.set()
+                await allow_second_delete.wait()
+
+        mock_db.delete_cron_job.side_effect = delayed_delete
+        mock_db.get_cron_job.return_value = sample_cron_job
+        handler = MagicMock()
+        cron_manager._basic_handlers[sample_cron_job.job_id] = handler
+
+        first_delete = asyncio.create_task(
+            cron_manager.delete_job(sample_cron_job.job_id)
+        )
+        second_delete = asyncio.create_task(
+            cron_manager.delete_job(sample_cron_job.job_id)
+        )
+        await asyncio.wait_for(first_delete_started.wait(), 2)
+        await asyncio.wait_for(second_delete_started.wait(), 2)
+
+        allow_first_delete.set()
+        await asyncio.wait_for(first_delete, 2)
+        assert cron_manager._deleting_jobs == {sample_cron_job.job_id: 1}
+
+        await asyncio.wait_for(cron_manager._run_job(sample_cron_job.job_id), 2)
+
+        allow_second_delete.set()
+        await asyncio.wait_for(second_delete, 2)
+
+        handler.assert_not_called()
+        mock_db.get_cron_job.assert_not_awaited()
+        assert cron_manager._deleting_jobs == {}
 
 
 class TestListJobs:

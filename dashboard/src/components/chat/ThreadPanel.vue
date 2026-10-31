@@ -28,6 +28,7 @@
           :is-dark="isDark"
           :is-streaming="sending"
           variant="thread"
+          @button-click="handleButtonClick"
         />
       </div>
 
@@ -193,6 +194,72 @@ async function send() {
   }
 }
 
+async function handleButtonClick(payload: {
+  message: ChatRecord;
+  callbackData: string;
+}) {
+  if (!props.thread || sending.value || !payload.callbackData) return;
+  const messageId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+  const botRecord: ChatRecord = {
+    id: `local-thread-button-bot-${messageId}`,
+    created_at: new Date().toISOString(),
+    content: {
+      type: "bot",
+      message: [],
+      reasoning: "",
+      isLoading: true,
+    },
+  };
+  let visible = false;
+  const showBotRecord = () => {
+    if (visible) return;
+    messages.value.push(botRecord);
+    visible = true;
+    scrollToBottom();
+  };
+
+  sending.value = true;
+  try {
+    const response = await fetchWithAuth(
+      chatApi.sendThreadMessageUrl(props.thread.thread_id),
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: [
+            {
+              type: "button_interaction",
+              callback_data: payload.callbackData,
+              source_message_id: payload.message.id,
+            },
+          ],
+          flags: buildChatRequestFlags(),
+        }),
+      },
+    );
+    if (!response.ok || !response.body) {
+      throw new Error(`Thread button request failed: ${response.status}`);
+    }
+    await readSseStream(response.body, (streamPayload) => {
+      const type = streamPayload?.type || streamPayload?.t;
+      if (type !== "end" && type !== "user_message_saved") {
+        showBotRecord();
+      }
+      processPayload(botRecord, undefined, streamPayload);
+      scrollToBottom();
+    });
+  } catch (error) {
+    showBotRecord();
+    appendPlain(
+      botRecord,
+      `\n\n${String((error as Error)?.message || error)}`,
+    );
+    console.error("Failed to send thread button interaction:", error);
+  } finally {
+    sending.value = false;
+  }
+}
+
 function normalizeRecord(record: any): ChatRecord {
   const content = record.content || {};
   const normalizedMessage = normalizeMessageParts(
@@ -245,7 +312,7 @@ async function readSseStream(
 
 function processPayload(
   botRecord: ChatRecord,
-  userRecord: ChatRecord,
+  userRecord: ChatRecord | undefined,
   payload: any,
 ) {
   const normalized =
@@ -259,6 +326,7 @@ function processPayload(
   if (type === "session_id" || type === "session_bound") return;
 
   if (type === "user_message_saved") {
+    if (!userRecord) return;
     userRecord.id = data?.id || userRecord.id;
     userRecord.created_at = data?.created_at || userRecord.created_at;
     userRecord.turn_id =
@@ -330,6 +398,15 @@ function processPayload(
       return;
     }
     appendPlain(botRecord, payloadText(data), normalized.streaming !== false);
+    return;
+  }
+
+  if (type === "actionrow" && data && typeof data === "object") {
+    markMessageStarted(botRecord);
+    botRecord.content.message.push({
+      type: "actionrow",
+      ...(data as Record<string, unknown>),
+    });
     return;
   }
 

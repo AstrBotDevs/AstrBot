@@ -26,16 +26,34 @@ import base64
 import json
 import os
 import sys
+import time
 import uuid
 from enum import Enum
 from pathlib import Path, PurePosixPath
+from typing import Any, Literal, TypeAlias
 
 from deprecated import deprecated
 
 if sys.version_info >= (3, 14):
-    from pydantic import BaseModel
+    from pydantic import (
+        BaseModel,
+        Field,
+        PrivateAttr,
+        StrictBool,
+        StrictFloat,
+        StrictInt,
+        StrictStr,
+    )
 else:
-    from pydantic.v1 import BaseModel
+    from pydantic.v1 import (
+        BaseModel,
+        Field,
+        PrivateAttr,
+        StrictBool,
+        StrictFloat,
+        StrictInt,
+        StrictStr,
+    )
 
 from astrbot.core import astrbot_config, file_token_service, logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
@@ -50,6 +68,9 @@ class ComponentType(str, Enum):
     Record = "Record"  # audio
     Video = "Video"  # video
     File = "File"  # file attachment
+    ActionRow = "ActionRow"  # a row of interactive controls
+    Button = "Button"  # an interactive button
+    ButtonInteraction = "ButtonInteraction"  # an inbound button click
 
     # IM-specific Segment Types
     Face = "Face"  # Emoji segment for Tencent QQ platform
@@ -122,6 +143,120 @@ class Plain(BaseMessageComponent):
 
     async def to_dict(self) -> dict:
         return {"type": "text", "data": {"text": self.text}}
+
+
+JSONValue: TypeAlias = (
+    StrictStr | StrictInt | StrictFloat | StrictBool | None | list[Any] | dict[str, Any]
+)
+
+
+class Button(BaseMessageComponent):
+    """A portable interactive button."""
+
+    class Style(str, Enum):
+        """Portable visual intent for a button."""
+
+        DEFAULT = "default"
+        PRIMARY = "primary"
+        SUCCESS = "success"
+        DANGER = "danger"
+
+    class CallbackAction(BaseModel):
+        """Run bot-side logic when a button is clicked."""
+
+        type: Literal["callback"] = "callback"
+        data: JSONValue | None = None
+
+        def __init__(self, **values) -> None:
+            """Validate callback context when the component is constructed.
+
+            Args:
+                **values: Pydantic field values for the callback action.
+
+            Raises:
+                ValueError: If data is not valid JSON.
+            """
+            super().__init__(**values)
+            try:
+                json.dumps(self.data, allow_nan=False)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    "Button callback data must be JSON-compatible."
+                ) from exc
+
+    class UrlAction(BaseModel):
+        """Open a URL when a button is clicked."""
+
+        type: Literal["url"] = "url"
+        url: str = Field(min_length=1)
+
+    type: ComponentType = ComponentType.Button
+    id: str = Field(min_length=1)
+    label: str = Field(min_length=1)
+    action: CallbackAction | UrlAction = Field(discriminator="type")
+    style: Style = Style.DEFAULT
+
+    def toDict(self) -> dict:
+        """Serialize the button using the public message component format."""
+        action = {"type": self.action.type}
+        if isinstance(self.action, Button.CallbackAction):
+            if self.action.data is not None:
+                action["data"] = self.action.data
+        else:
+            action["url"] = self.action.url
+        return {
+            "type": "button",
+            "data": {
+                "id": self.id,
+                "label": self.label,
+                "action": action,
+                "style": self.style.value,
+            },
+        }
+
+
+class ActionRow(BaseMessageComponent):
+    """A group of buttons that should be displayed on one row when possible."""
+
+    type: ComponentType = ComponentType.ActionRow
+    buttons: list[Button]
+    fallback_text: str | None = None
+    action_timeout: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    _action_expires_at: float | None = PrivateAttr(default=None)
+
+    @property
+    def action_expires_at(self) -> float | None:
+        """Get the shared callback deadline, starting on first rendering.
+
+        Returns:
+            Unix timestamp for this row's callback expiry, or None if unlimited.
+        """
+        if self.action_timeout is not None and self._action_expires_at is None:
+            self._action_expires_at = time.time() + self.action_timeout
+        return self._action_expires_at
+
+    def toDict(self) -> dict:
+        """Serialize the row using the public message component format."""
+        data: dict = {
+            "buttons": [button.toDict()["data"] for button in self.buttons],
+        }
+        if self.fallback_text is not None:
+            data["fallback_text"] = self.fallback_text
+        if self.action_timeout is not None:
+            data["action_timeout"] = self.action_timeout
+        return {"type": "actionrow", "data": data}
+
+
+class ButtonInteraction(BaseMessageComponent):
+    """Normalized inbound event produced by a callback button click."""
+
+    type: ComponentType = ComponentType.ButtonInteraction
+    action_id: str
+    data: JSONValue | None = None
+    interaction_id: str
+    source_message_id: str | None = None
+    # Retain the opaque token for expiry validation before plugin dispatch.
+    callback_data: str | None = None
 
 
 class Face(BaseMessageComponent):
@@ -930,6 +1065,9 @@ ComponentTypes = {
     "record": Record,
     "video": Video,
     "file": File,
+    "actionrow": ActionRow,
+    "button": Button,
+    "buttoninteraction": ButtonInteraction,
     # IM-specific Message Segments
     "face": Face,
     "at": At,

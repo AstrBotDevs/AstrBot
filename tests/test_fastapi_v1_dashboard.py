@@ -2295,6 +2295,40 @@ async def test_v1_create_standalone_provider_matches_dashboard_alias_capability(
 
 
 @pytest.mark.asyncio
+async def test_v1_decision_provider_capability_maps_and_filters(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    response = await asgi_client.post(
+        "/api/v1/providers",
+        json={
+            "capability": "decision",
+            "config": {
+                "id": "decision-main",
+                "type": "system_one_decision",
+                "api_base": "https://api.example.test/v1/systemone",
+                "model": "jev-latest",
+                "enable": True,
+            },
+        },
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+    provider = fake_core_lifecycle.astrbot_config["provider"][-1]
+    assert provider["provider_type"] == "decision"
+
+    list_response = await asgi_client.get(
+        "/api/v1/providers?capability=decision",
+        headers=_jwt_headers(),
+    )
+    assert list_response.status_code == 200
+    providers = list_response.json()["data"]["providers"]
+    assert [item["id"] for item in providers] == ["decision-main"]
+
+
+@pytest.mark.asyncio
 async def test_v1_safe_provider_routes_accept_slash_ids(
     asgi_client: httpx.AsyncClient,
     fake_core_lifecycle,
@@ -3541,6 +3575,70 @@ async def test_multipart_parts_preserves_duplicate_form_values():
 
     assert form.getlist("tag") == ["one", "two"]
     assert not files
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("reload_result", "expected_status", "expected_detail"),
+    [
+        ((True, None), 200, None),
+        ((False, "Invalid endpoint"), 400, "Invalid endpoint"),
+        ((False, None), 400, "未知错误"),
+        (RuntimeError("Initialization failed"), 400, "Initialization failed"),
+        (TimeoutError(), 400, "未知错误，请查看日志"),
+    ],
+)
+async def test_v1_plugin_config_save_reports_reload_failure(
+    asgi_client,
+    fake_core_lifecycle,
+    monkeypatch,
+    tmp_path,
+    reload_result,
+    expected_status,
+    expected_detail,
+):
+    """Report reload failures without claiming the saved configuration was reverted."""
+    config_path = tmp_path / "plugin.json"
+    plugin_config = config_service.AstrBotConfig(
+        str(config_path),
+        schema={"endpoint": {"type": "string", "default": "old"}},
+    )
+    monkeypatch.setattr(
+        config_service,
+        "star_registry",
+        [SimpleNamespace(name="demo", config=plugin_config)],
+    )
+
+    async def reload_plugin(plugin_name):
+        assert plugin_name == "demo"
+        assert json.loads(config_path.read_text(encoding="utf-8-sig")) == {
+            "endpoint": "new"
+        }
+        if isinstance(reload_result, Exception):
+            raise reload_result
+        return reload_result
+
+    monkeypatch.setattr(fake_core_lifecycle.plugin_manager, "reload", reload_plugin)
+    response = await asgi_client.put(
+        "/api/v1/plugins/demo/config",
+        json={"config": {"endpoint": "new"}},
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == expected_status
+    payload = response.json()
+    assert json.loads(config_path.read_text(encoding="utf-8-sig")) == {
+        "endpoint": "new"
+    }
+    if expected_status == 200:
+        assert payload["status"] == "ok"
+    else:
+        assert payload["status"] == "error"
+        assert "demo" in payload["message"]
+        assert "配置已保存" in payload["message"]
+        assert "重载失败" in payload["message"]
+        if expected_detail:
+            assert expected_detail in payload["message"]
 
 
 @pytest.mark.asyncio
@@ -5097,3 +5195,18 @@ async def test_v1_trace_storage_cleanup_target(asgi_client, monkeypatch):
             "/api/v1/stats/storage/cleanup", json={"target": "invalid"}, headers=headers
         )
     ).status_code == 422
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("route", ["/api/v1/bots/by-id", "/api/v1/bots/bot"])
+async def test_bot_delete_cleanup_query_is_validated(asgi_app, asgi_client, route):
+    """Forward repeated cleanup categories and reject unknown destructive options."""
+    delete_bot = AsyncMock()
+    asgi_app.state.services.bots.delete_bot = delete_bot
+    params = [("bot_id", "bot"), ("cleanup", "custom_rules"), ("cleanup", "traces")]
+    response = await asgi_client.delete(route, params=params, headers=_jwt_headers())
+    assert response.status_code == 200
+    delete_bot.assert_awaited_once_with("bot", cleanup=["custom_rules", "traces"])
+    invalid = await asgi_client.delete(route, params={"bot_id": "bot", "cleanup": "unknown"}, headers=_jwt_headers())
+    assert invalid.status_code == 422
+    assert delete_bot.await_count == 1

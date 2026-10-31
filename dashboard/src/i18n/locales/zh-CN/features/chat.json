@@ -194,6 +194,7 @@
     "refresh": "刷新文件树",
     "filter": "筛选文件...",
     "clearFilter": "清除文件筛选",
+    "selectSession": "请先选择一个会话以浏览其工作区文件",
     "empty": "工作区暂无文件",
     "noMatches": "没有匹配的文件",
     "loadFailed": "加载工作区文件失败",
