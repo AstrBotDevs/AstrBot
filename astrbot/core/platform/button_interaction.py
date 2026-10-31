@@ -6,6 +6,7 @@ import math
 import sqlite3
 import threading
 import time
+from contextlib import closing
 from copy import deepcopy
 from pathlib import Path
 
@@ -146,12 +147,32 @@ _button_callback_registry = _ButtonCallbackRegistry()
 
 
 def configure_button_callback_registry(db_path: str | Path) -> None:
-    """Enable persistent callback tokens after the core database is initialized.
+    """Persist callbacks separately from the asynchronous application database.
+
+    Rendering buttons is synchronous. Sharing the main database can block its
+    event loop while waiting for an asynchronous transaction to release a write
+    lock. Existing tokens are copied so buttons remain valid across upgrades.
 
     Args:
         db_path: Path to AstrBot's SQLite database.
     """
-    _button_callback_registry.configure(db_path)
+    main_db_path = Path(db_path)
+    callback_db_path = main_db_path.with_name(
+        f"{main_db_path.stem}_button_callbacks.db"
+    )
+    _button_callback_registry.configure(callback_db_path)
+    with closing(sqlite3.connect(callback_db_path, timeout=30)) as connection:
+        connection.execute("ATTACH DATABASE ? AS legacy", (str(main_db_path),))
+        legacy_table = connection.execute(
+            "SELECT 1 FROM legacy.sqlite_master "
+            "WHERE type = 'table' AND name = 'button_callbacks'"
+        ).fetchone()
+        if legacy_table is not None:
+            connection.execute(
+                "INSERT OR IGNORE INTO button_callbacks(token, payload) "
+                "SELECT token, payload FROM legacy.button_callbacks"
+            )
+            connection.commit()
 
 
 def encode_button_callback(
