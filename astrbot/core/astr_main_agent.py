@@ -651,6 +651,13 @@ async def _ensure_persona_and_skills(
                     "You cannot use shell or Python to perform skills. "
                     "If you need to use these capabilities, ask the user to enable Computer Use in the AstrBot WebUI -> Config."
                 )
+    if runtime == "sandbox":
+        from astrbot.core.computer.computer_client import session_skill_names
+
+        # Sandbox file sync must follow the same allowlist as the skills prompt.
+        session_skill_names[event.unified_msg_origin] = frozenset(
+            skill.name for skill in skills
+        )
     tmgr = plugin_context.get_llm_tool_manager()
 
     # inject toolset in the persona

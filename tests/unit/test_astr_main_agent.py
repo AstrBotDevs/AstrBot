@@ -1555,6 +1555,65 @@ class TestEnsurePersonaAndSkills:
         assert "## Skills" not in req.system_prompt
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("persona_skills", "expected"),
+        [
+            (None, {"allowed-skill", "other-skill"}),
+            (["allowed-skill", "disabled-skill"], {"allowed-skill"}),
+            ([], set()),
+        ],
+    )
+    async def test_ensure_skills_records_sandbox_skill_allowlist(
+        self,
+        monkeypatch,
+        tmp_path,
+        mock_event,
+        mock_context,
+        persona_skills,
+        expected,
+    ):
+        from astrbot.core.computer import computer_client
+
+        module = ama
+        data_dir = tmp_path / "data"
+        skills_dir = tmp_path / "skills"
+        plugins_dir = tmp_path / "plugins"
+        for path in (data_dir, skills_dir, plugins_dir):
+            path.mkdir(parents=True, exist_ok=True)
+        for name in ("allowed-skill", "other-skill", "disabled-skill"):
+            (skills_dir / name).mkdir()
+            (skills_dir / name / "SKILL.md").write_text(f"# {name}", encoding="utf-8")
+        monkeypatch.setattr(
+            "astrbot.core.skills.skill_manager.get_astrbot_data_path",
+            lambda: str(data_dir),
+        )
+        monkeypatch.setattr(
+            "astrbot.core.skills.skill_manager.get_astrbot_skills_path",
+            lambda: str(skills_dir),
+        )
+        monkeypatch.setattr(
+            "astrbot.core.skills.skill_manager.get_astrbot_plugin_path",
+            lambda: str(plugins_dir),
+        )
+        module.SkillManager().set_skill_active("disabled-skill", False)
+        monkeypatch.setattr(computer_client, "session_skill_names", {})
+
+        persona = {"name": "p", "prompt": "", "skills": persona_skills}
+        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+            return_value=("p", persona, None, False)
+        )
+        req = ProviderRequest()
+        req.conversation = MagicMock(persona_id="p")
+
+        await module._ensure_persona_and_skills(
+            req, {"computer_use_runtime": "sandbox"}, mock_context, mock_event
+        )
+
+        assert computer_client.session_skill_names == {
+            mock_event.unified_msg_origin: frozenset(expected)
+        }
+
+    @pytest.mark.asyncio
     async def test_ensure_tools_from_persona(self, mock_event, mock_context):
         """Test applying tools from persona."""
         module = ama
@@ -1646,7 +1705,9 @@ class TestEnsurePersonaAndSkills:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("role", ["admin", "member"])
-    @pytest.mark.parametrize("isolation_status", ["detected", "missing", "unavailable", "unsupported"])
+    @pytest.mark.parametrize(
+        "isolation_status", ["detected", "missing", "unavailable", "unsupported"]
+    )
     @pytest.mark.parametrize(
         ("allow_execution", "allow_network"),
         [(True, False), (True, True), (False, False)],
@@ -1727,9 +1788,17 @@ class TestEnsurePersonaAndSkills:
             assert "yield_time_ms" in shell_tool.parameters["properties"]
             assert result.provider_request.system_prompt.count(
                 module.LOCAL_NETWORK_POLICY_NOTICE
-            ) == int(allow_execution and not allow_network and isolation_status == "detected")
-            assert "The Agent Computer Use runtime is the local environment" not in result.provider_request.system_prompt
-            assert "These restrictions require Local process isolation" not in result.provider_request.system_prompt
+            ) == int(
+                allow_execution and not allow_network and isolation_status == "detected"
+            )
+            assert (
+                "The Agent Computer Use runtime is the local environment"
+                not in result.provider_request.system_prompt
+            )
+            assert (
+                "These restrictions require Local process isolation"
+                not in result.provider_request.system_prompt
+            )
         finally:
             if result.reset_coro:
                 result.reset_coro.close()
