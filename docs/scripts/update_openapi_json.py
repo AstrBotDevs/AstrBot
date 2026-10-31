@@ -23,6 +23,7 @@ PUBLIC_OPEN_API_SCOPES = (
     "chat",
     "data",
     "file",
+    "kb",
     "plugin",
     "mcp",
     "skill",

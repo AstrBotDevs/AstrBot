@@ -2,6 +2,7 @@ import asyncio
 import copy
 import io
 import uuid
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock
 
 import pytest
@@ -19,8 +20,142 @@ from astrbot.dashboard.api import open_api as open_api_routes
 from astrbot.dashboard.asgi_runtime import FastAPIAppAdapter
 from astrbot.dashboard.responses import ok
 from astrbot.dashboard.server import AstrBotDashboard
+from astrbot.dashboard.services.api_key_service import ApiKeyService
 
 _TEST_DASHBOARD_PASSWORD = "AstrbotTest123"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stored_scopes", [None, ["*"], ["file"], []])
+async def test_knowledge_base_requires_explicit_grant(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    stored_scopes,
+):
+    """Reject existing keys that were never explicitly granted knowledge-base access.
+
+    Args:
+        app: Dashboard application backed by a temporary SQLite database.
+        authenticated_header: Dashboard credentials used to create a default key.
+        core_lifecycle_td: Lifecycle containing the persisted key database.
+        stored_scopes: Legacy, wildcard, unrelated, or empty stored permissions.
+    """
+    client = app.test_client()
+    default_response = await client.post(
+        "/api/v1/api-keys",
+        json={"name": "default-permissions-test"},
+        headers=authenticated_header,
+    )
+    assert default_response.status_code == 200
+    default_data = (await default_response.get_json())["data"]
+    assert "kb" not in default_data["scopes"]
+    response = await client.get(
+        "/api/v1/knowledge-bases",
+        headers={"X-API-Key": default_data["api_key"]},
+    )
+    assert response.status_code == 403
+    response = await client.get(
+        "/api/v1/im/bots", headers={"X-API-Key": default_data["api_key"]}
+    )
+    assert response.status_code == 200
+
+    raw_key = f"abk_explicit-grant-test-{uuid.uuid4().hex}"
+    await core_lifecycle_td.db.create_api_key(
+        name="stored-permissions-test",
+        key_hash=ApiKeyService.hash_key(raw_key),
+        key_prefix=raw_key[:12],
+        scopes=stored_scopes,
+        created_by="kb-test",
+    )
+    for headers in (
+        {"X-API-Key": raw_key},
+        {"Authorization": f"ApiKey {raw_key}"},
+        {"Authorization": f"Bearer {raw_key}"},
+    ):
+        response = await client.get("/api/v1/knowledge-bases", headers=headers)
+        assert response.status_code == 403
+    for parameter in ("api_key", "key"):
+        response = await client.get(f"/api/v1/knowledge-bases?{parameter}={raw_key}")
+        assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_knowledge_base_api_key_access_and_revoke(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    """Exercise knowledge-base authorization using persisted API keys.
+
+    Args:
+        app: Dashboard application backed by a temporary SQLite database.
+        authenticated_header: Dashboard login credentials for key management.
+        core_lifecycle_td: Core lifecycle used to persist an expired test key.
+    """
+    client = app.test_client()
+    response = await client.post(
+        "/api/v1/api-keys",
+        json={"name": "kb-scope-key", "scopes": ["kb"]},
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+    result = (await response.get_json())["data"]
+    assert result["scopes"] == ["kb"]
+    raw_key, key_id = result["api_key"], result["key_id"]
+    for headers in (
+        {"X-API-Key": raw_key},
+        {"Authorization": f"ApiKey {raw_key}"},
+        {"Authorization": f"Bearer {raw_key}"},
+        authenticated_header,
+    ):
+        response = await client.get("/api/v1/knowledge-bases", headers=headers)
+        assert response.status_code == 200
+        assert (await response.get_json())["status"] == "ok"
+
+    for parameter in ("api_key", "key"):
+        response = await client.get(f"/api/v1/knowledge-bases?{parameter}={raw_key}")
+        assert response.status_code == 200
+        assert (await response.get_json())["status"] == "ok"
+
+    unrelated_key, _ = await _create_api_key(
+        app, authenticated_header, scopes=["im"], name_prefix="kb-denied-key"
+    )
+    response = await client.get(
+        "/api/v1/knowledge-bases", headers={"X-API-Key": unrelated_key}
+    )
+    assert response.status_code == 403
+    response = await client.get("/api/v1/im/bots", headers={"X-API-Key": raw_key})
+    assert response.status_code == 403
+    for headers in ({}, {"X-API-Key": "invalid-key"}):
+        response = await client.get("/api/v1/knowledge-bases", headers=headers)
+        assert response.status_code == 401
+
+    response = await client.post(
+        "/api/apikey/revoke",
+        json={"key_id": key_id},
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+    assert (await response.get_json())["status"] == "ok"
+    response = await client.get(
+        "/api/v1/knowledge-bases", headers={"X-API-Key": raw_key}
+    )
+    assert response.status_code == 401
+
+    expired_key = "abk_expired-knowledge-base-test"
+    await core_lifecycle_td.db.create_api_key(
+        name="expired-kb-key",
+        key_hash=ApiKeyService.hash_key(expired_key),
+        key_prefix=expired_key[:12],
+        scopes=["kb"],
+        created_by="kb-test",
+        expires_at=datetime.now(timezone.utc) - timedelta(seconds=1),
+    )
+    response = await client.get(
+        "/api/v1/knowledge-bases", headers={"X-API-Key": expired_key}
+    )
+    assert response.status_code == 401
 
 
 async def _create_api_key(

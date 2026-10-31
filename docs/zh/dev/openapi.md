@@ -38,7 +38,11 @@ X-API-Key: abk_xxx
 - `config:edit_admin` 和 `chat:admin` 必须显式授予，不会随父 scope 隐式获得。
 - WebUI 中取消 `bot` 或 `provider` 时，会同步取消依赖它们的 `config`。
 
-当前开发者 API Key 开放 11 个顶级 scope 和 2 个敏感子权限。`tool`、`skills`、`kb`、`system` 暂不支持作为开发者 API Key scope。`/api/v1/skills/*` 接口使用单数 `skill` scope，不使用复数 `skills`。
+当前开发者 API Key 开放 12 个顶级 scope 和 2 个敏感子权限。`tool`、`skills`、`system` 暂不支持作为开发者 API Key scope。`/api/v1/skills/*` 接口使用单数 `skill` scope，不使用复数 `skills`。
+
+`kb` 授予完整的知识库访问权限，包括读取、导入、修改和删除知识库、文档及文本块，并非只读权限。请仅向可信任的数据使用方授予此权限。撤销密钥可以阻止后续请求，但无法恢复已删除的数据，也无法撤回此前的数据访问。
+
+WebUI 默认不选中 `kb`，选中后会显示数据访问风险提示，创建密钥时还需确认该提示。通过 API 授予知识库权限时，必须在 `scopes` 列表中显式包含 `kb`。省略 `scopes`、未存储权限列表的旧密钥以及仅包含通配符（`*`）的密钥，都不会获得知识库权限。没有显式授予 `kb` 的已有密钥仍不能访问这些接口。Dashboard 登录会话保留正常访问能力。
 
 交互式文档中的每个接口也会显示英文标签 `Required scope: ...`；涉及管理员能力时，还会显示 `Conditional sensitive scope: ...`。
 
