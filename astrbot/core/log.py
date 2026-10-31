@@ -25,6 +25,7 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_config_path,
     get_astrbot_data_path,
 )
+from astrbot.core.utils.console_sink import BoundedConsoleSink
 from astrbot.core.utils.telemetry import (
     bounded_attributes,
     bounded_text,
@@ -374,6 +375,7 @@ class LogManager:
 
     _configured = False
     _console_sink_id: int | None = None
+    _console_output: BoundedConsoleSink | None = None
     _file_sink_id: int | None = None
     _plugin_logger_names: set[str] = set()
     _plugin_level_overrides: dict[str, str] | None = None
@@ -406,10 +408,12 @@ class LogManager:
             return
 
         _loguru.remove()
+        if cls._console_output is None:
+            cls._console_output = BoundedConsoleSink(sys.stdout)
         cls._console_sink_id = _loguru.add(
-            sys.stdout,
+            cls._console_output,
             level="DEBUG",
-            colorize=True,
+            colorize=cls._console_output.isatty(),
             filter=lambda record: not record["extra"].get("is_trace", False),
             format=(
                 "<green>[{time:HH:mm:ss.SSS}]</green> {extra[plugin_tag]} "
@@ -418,6 +422,17 @@ class LogManager:
             ),
         )
         cls._configured = True
+
+    @classmethod
+    def get_console_status(cls) -> dict | None:
+        """Read console counters for diagnostics without logging to the console.
+
+        Returns:
+            Current console status, or None before console setup.
+        """
+        if cls._console_output is None:
+            return None
+        return cls._console_output.get_status()
 
     @classmethod
     def _setup_root_bridge(cls) -> None:
@@ -673,10 +688,12 @@ class LogManager:
             try:
                 configured_level = logging.getLevelName(logger.level)
                 if isinstance(configured_level, str):
+                    if cls._console_output is None:
+                        cls._console_output = BoundedConsoleSink(sys.stdout)
                     new_sink_id = _loguru.add(
-                        sys.stdout,
+                        cls._console_output,
                         level=configured_level,
-                        colorize=True,
+                        colorize=cls._console_output.isatty(),
                         filter=lambda record: (
                             not record["extra"].get("is_trace", False)
                         ),
