@@ -819,25 +819,6 @@ class PluginManager:
             )
         )
 
-    @staticmethod
-    def _plugin_root_module_path(plugin_module_path: str) -> str:
-        """Return the import prefix shared by every module in one plugin.
-
-        Args:
-            plugin_module_path: Plugin main or child module path.
-
-        Returns:
-            Plugin package import prefix.
-        """
-        parts = plugin_module_path.split(".")
-        for marker in ("plugins", "builtin_stars"):
-            if marker not in parts:
-                continue
-            marker_index = parts.index(marker)
-            if marker_index + 1 < len(parts):
-                return ".".join(parts[: marker_index + 2])
-        return plugin_module_path
-
     def _purge_modules(
         self,
         module_patterns: list[str] | None = None,
@@ -1055,7 +1036,18 @@ class PluginManager:
         Returns:
             None.
         """
-        module_prefix = cls._plugin_root_module_path(plugin_module_path)
+        # Tools may be registered from a plugin submodule such as
+        # ``data.plugins.foo.tools``; they belong to the whole plugin package.
+        module_prefix = plugin_module_path
+        parts = plugin_module_path.split(".")
+        for marker in ("plugins", "builtin_stars"):
+            if marker not in parts:
+                continue
+            marker_index = parts.index(marker)
+            if marker_index + 1 < len(parts):
+                module_prefix = ".".join(parts[: marker_index + 2])
+                break
+
         for func_tool in llm_tools.func_list:
             for tool in cls._iter_concrete_llm_tools(func_tool):
                 raw_handler = (
