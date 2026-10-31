@@ -118,7 +118,10 @@ async def call_event_hook(
             )
             await handler.handler(event, *args, **kwargs)
         except BaseException:
-            logger.error(traceback.format_exc())
+            logger.error(
+                traceback.format_exc(),
+                extra={"plugin_name": plugin_name},
+            )
             event.trace.record(
                 "handler_end",
                 kind="plugin_handler",

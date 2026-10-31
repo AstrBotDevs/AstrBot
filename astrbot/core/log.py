@@ -101,10 +101,20 @@ class _RecordEnricherFilter(logging.Filter):
             record.source = "plugin"
             record.plugin_name = plugin_name
         else:
+            # Framework code sometimes reports on behalf of a plugin: for
+            # example, the plugin loader logs why a plugin failed to load.
+            # Such call sites pass ``extra={"plugin_name": ...}`` so the WebUI
+            # can list the plugin in the log filter and tag the line with it.
+            explicit_plugin_name = getattr(record, "plugin_name", None)
             is_plugin = _is_plugin_path(record.pathname)
-            record.plugin_tag = "[Plug]" if is_plugin else "[Core]"
-            record.source = "plugin" if is_plugin else "core"
-            record.plugin_name = None
+            if explicit_plugin_name:
+                record.plugin_tag = f"[{explicit_plugin_name}]"
+                record.source = "plugin"
+                record.plugin_name = explicit_plugin_name
+            else:
+                record.plugin_tag = "[Plug]" if is_plugin else "[Core]"
+                record.source = "plugin" if is_plugin else "core"
+                record.plugin_name = None
         record.short_levelname = _get_short_level_name(record.levelname)
         record.astrbot_version_tag = (
             f" [v{VERSION}]" if record.levelno >= logging.WARNING else ""

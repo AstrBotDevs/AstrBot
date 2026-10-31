@@ -24,6 +24,7 @@ from packaging.version import InvalidVersion, Version
 
 from astrbot.core import (
     DependencyConflictError,
+    LogManager,
     logger,
     pip_installer,
     sp,
@@ -1104,6 +1105,9 @@ class PluginManager:
 
         # 导入插件模块，并尝试实例化插件类
         for plugin_module in plugin_modules:
+            # Fall back to the core logger if the plugin logger cannot be resolved
+            # before the plugin directory name is known.
+            plugin_logger = logger
             try:
                 module_str = plugin_module["module"]
                 # module_path = plugin_module['module_path']
@@ -1128,7 +1132,11 @@ class PluginManager:
                 if specified_dir_name and root_dir_name != specified_dir_name:
                     continue
 
-                logger.info("Loading plugin %s ...", root_dir_name)
+                # Attribute the load lifecycle to the plugin itself. Logs about a
+                # plugin that fails to load must carry its name, otherwise the
+                # WebUI plugin filter cannot list it.
+                plugin_logger = LogManager.get_plugin_logger(root_dir_name)
+                plugin_logger.info("Loading plugin %s ...", root_dir_name)
 
                 # 尝试导入模块
                 try:
@@ -1141,8 +1149,10 @@ class PluginManager:
                     )
                 except Exception as e:
                     error_trace = traceback.format_exc()
-                    logger.error(error_trace)
-                    logger.error(f"Failed to import plugin {root_dir_name}: {e!s}")
+                    plugin_logger.error(error_trace)
+                    plugin_logger.error(
+                        f"Failed to import plugin {root_dir_name}: {e!s}"
+                    )
                     has_load_error = True
                     self.failed_plugin_dict[root_dir_name] = (
                         self._build_failed_plugin_record(
@@ -1195,7 +1205,7 @@ class PluginManager:
                             metadata.views = metadata_yaml.views
                             metadata.i18n = metadata_yaml.i18n
                     except Exception as e:
-                        logger.warning(
+                        plugin_logger.warning(
                             f"Failed to load metadata for plugin {root_dir_name}: "
                             f"{e!s}. Using default metadata.",
                         )
@@ -1212,7 +1222,7 @@ class PluginManager:
                                 or "The plugin does not support the current AstrBot version."
                             )
 
-                    logger.info(metadata)
+                    plugin_logger.info(metadata)
                     metadata.config = plugin_config
                     plugin_id = metadata.plugin_id
 
@@ -1246,7 +1256,7 @@ class PluginManager:
                             setattr(metadata.star_cls, "plugin_id", plugin_id)
                     else:
                         metadata.star_cls = None
-                        logger.info("Plugin %s is disabled.", metadata.name)
+                        plugin_logger.info("Plugin %s is disabled.", metadata.name)
 
                     metadata.module = module
                     metadata.root_dir_name = root_dir_name
@@ -1312,7 +1322,7 @@ class PluginManager:
 
                 else:
                     # v3.4.0 以前的方式注册插件
-                    logger.debug(
+                    plugin_logger.debug(
                         f"Plugin {path} was not registered with the decorator; "
                         "attempting the legacy loading method.",
                     )
@@ -1412,7 +1422,7 @@ class PluginManager:
                                 ),
                             )
 
-                        logger.debug(
+                        plugin_logger.debug(
                             f"Inserted permission filter {cmd_type} into "
                             f"{metadata.name}.{handler.handler_name}.",
                         )
@@ -1429,19 +1439,21 @@ class PluginManager:
                 )
                 for handler in handlers:
                     try:
-                        logger.info(
+                        plugin_logger.info(
                             f"hook(on_plugin_loaded) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
                         )
                         await handler.handler(metadata)
                     except Exception:
-                        logger.error(traceback.format_exc())
+                        plugin_logger.error(traceback.format_exc())
 
             except BaseException as e:
-                logger.error(f"----- Failed to load plugin {root_dir_name} -----")
+                plugin_logger.error(
+                    f"----- Failed to load plugin {root_dir_name} -----"
+                )
                 errors = traceback.format_exc()
                 for line in errors.split("\n"):
-                    logger.error(f"| {line}")
-                logger.error("----------------------------------")
+                    plugin_logger.error(f"| {line}")
+                plugin_logger.error("----------------------------------")
                 has_load_error = True
                 self.failed_plugin_dict[root_dir_name] = (
                     self._build_failed_plugin_record(
