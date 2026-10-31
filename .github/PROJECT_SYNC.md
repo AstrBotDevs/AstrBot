@@ -30,6 +30,8 @@ or deletes source Issues/PRs.
   not count. Populate PR links and actual release tag/URL, never guess a version.
 - Issue/PR lifecycle events read only their subject and bounded linked issues/PRs,
   including old/new body references and previously stored implementation links.
+  Fork-origin PR events are skipped to avoid spending an Actions run per fork event;
+  the scheduled reconciliation still observes their final repository-visible state.
   They do not scan repository Issues, PRs, Project items, or releases. Six-hour
   scheduled and manual runs do full reconciliation; changes discovered only by
   broad push/release scans wait until the next scheduled or manual run.
