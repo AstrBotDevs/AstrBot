@@ -1642,8 +1642,12 @@ class PluginManager:
         async with self._pm_lock:
             temp_root = Path(get_astrbot_system_tmp_path())
             temp_root.mkdir(parents=True, exist_ok=True)
+            # A killed clone can still have files held by a surviving helper, and a
+            # staging teardown error here would replace the reason the install failed.
             with tempfile.TemporaryDirectory(
-                dir=temp_root, prefix=".plugin-install-"
+                dir=temp_root,
+                prefix=".plugin-install-",
+                ignore_cleanup_errors=True,
             ) as staging_dir:
                 plugin_path = await self._updater.install(
                     repo_url,

@@ -3,36 +3,97 @@
 from __future__ import annotations
 
 import asyncio
-import gc
 import logging
 import os
 import shutil
 import sys
 import time
-import warnings
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from astrbot.core.repository import GitCloneTimeoutError
 from astrbot.core.star import updater as plugin_updater
 
 
 class _FakeProcess:
-    """Stand-in for asyncio.subprocess.Process that never spawns anything."""
+    """Stand-in for asyncio.subprocess.Process that never spawns anything.
 
-    def __init__(self, returncode: int = 0, on_communicate=None) -> None:
-        self.returncode = returncode
+    Args:
+        communicate_hangs: Whether ``communicate`` blocks until the deadline cancels
+            it, like a clone that waits for a credential prompt.
+        wait_hangs: Whether ``wait`` never finishes, like a killed clone whose
+            inherited pipe handles are still open in a surviving helper.
+        on_communicate: Callback invoked before ``communicate`` blocks, used to
+            materialise the checkout Git would have created.
+    """
+
+    def __init__(
+        self,
+        *,
+        communicate_hangs: bool = False,
+        wait_hangs: bool = False,
+        on_communicate=None,
+    ) -> None:
+        self.pid = 4242
+        self.returncode: int | None = None
         self.killed = False
+        self.waited = False
+        self._communicate_hangs = communicate_hangs
+        self._wait_hangs = wait_hangs
         self._on_communicate = on_communicate
 
     async def communicate(self) -> tuple[bytes, bytes]:
-        # Git creates the checkout while it runs, so the stub materialises it here.
         if self._on_communicate is not None:
             self._on_communicate()
+        if self._communicate_hangs:
+            await asyncio.sleep(3600)
+        self.returncode = 0
         return b"", b""
 
     def kill(self) -> None:
         self.killed = True
+
+    async def wait(self) -> int:
+        self.waited = True
+        if self._wait_hangs:
+            await asyncio.sleep(3600)
+        return self.returncode or 0
+
+
+class _FakeKiller:
+    """Stand-in for the ``taskkill`` process used by the Windows tree kill."""
+
+    def __init__(self, returncode: int) -> None:
+        self.returncode = returncode
+
+    async def wait(self) -> int:
+        return self.returncode
+
+
+def _install_fake_clone(
+    monkeypatch: pytest.MonkeyPatch,
+    process: _FakeProcess,
+    killer: _FakeKiller | None = None,
+) -> None:
+    """Route the updater's subprocess spawns to the given fakes.
+
+    Args:
+        monkeypatch: Test monkeypatch handle.
+        process: Fake clone process returned for the ``git`` invocation.
+        killer: Fake ``taskkill`` process for the tests that exercise that branch.
+    """
+
+    async def fake_create_subprocess_exec(*args, **_kwargs):
+        if str(args[0]).lower().endswith("taskkill"):
+            assert killer is not None, "the test did not expect a taskkill spawn"
+            return killer
+        return process
+
+    monkeypatch.setattr(
+        plugin_updater.asyncio, "create_subprocess_exec", fake_create_subprocess_exec
+    )
 
 
 def _shim_path(directory: Path) -> Path:
@@ -76,14 +137,12 @@ def _write_beating_git(directory: Path) -> tuple[Path, Path]:
     shim = _shim_path(directory)
     if sys.platform == "win32":
         shim.write_text(
-            "@echo off\r\n"
-            f'"{sys.executable}" "{beater}" "{beat}"\r\n',
+            f'@echo off\r\n"{sys.executable}" "{beater}" "{beat}"\r\n',
             encoding="ascii",
         )
     else:
         shim.write_text(
-            "#!/bin/sh\n"
-            f'"{sys.executable}" "{beater}" "{beat}"\n',
+            f'#!/bin/sh\n"{sys.executable}" "{beater}" "{beat}"\n',
             encoding="utf-8",
         )
         shim.chmod(0o755)
@@ -150,7 +209,7 @@ async def test_clone_timeout_returns_within_a_hard_bound(
     monkeypatch.setattr(plugin_updater, "PLUGIN_GIT_CLONE_TIMEOUT_SECONDS", 1)
 
     started = time.monotonic()
-    with pytest.raises(RuntimeError, match="timed out"):
+    with pytest.raises(GitCloneTimeoutError, match="timed out"):
         await plugin_updater._PluginUpdater()._clone_repository(
             "https://example.invalid/owner/repo", tmp_path / "plugin"
         )
@@ -162,39 +221,45 @@ async def test_clone_timeout_returns_within_a_hard_bound(
 
 
 @pytest.mark.asyncio
-async def test_clone_timeout_reaps_the_process_without_warnings(
+async def test_clone_timeout_reaps_the_killed_clone_before_returning(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The killed clone must be reaped in the background and leave no warnings."""
+    """The killed clone must be reaped by the time the caller sees the timeout."""
     shim = _write_hanging_git(tmp_path)
     monkeypatch.setattr(plugin_updater.shutil, "which", lambda _name: str(shim))
     monkeypatch.setattr(plugin_updater, "PLUGIN_GIT_CLONE_TIMEOUT_SECONDS", 1)
 
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always", ResourceWarning)
-        with pytest.raises(RuntimeError, match="timed out"):
-            await plugin_updater._PluginUpdater()._clone_repository(
-                "https://example.invalid/owner/repo", tmp_path / "plugin"
-            )
-        # Let the background reaper finish, then collect while still recording so an
-        # unclosed transport or an un-reaped child would be caught here.
-        for _ in range(50):
-            if not plugin_updater._CLONE_REAPERS:
-                break
-            await asyncio.sleep(0.1)
-        gc.collect()
+    real_create_subprocess_exec = asyncio.create_subprocess_exec
+    captured: dict[str, object] = {}
 
-    # Only asyncio's own resource warnings are in scope. Other libraries loaded by
-    # the test session (aiosqlite, for one) can emit their own ResourceWarning while
-    # gc.collect() runs, and those say nothing about this clone.
-    resource_warnings = [
-        item
-        for item in caught
-        if item.category is ResourceWarning
-        and "asyncio" in str(item.filename).replace("\\", "/")
+    async def capture_create_subprocess_exec(*args, **kwargs):
+        process = await real_create_subprocess_exec(*args, **kwargs)
+        if str(args[0]) == str(shim):
+            captured["process"] = process
+        return process
+
+    monkeypatch.setattr(
+        plugin_updater.asyncio,
+        "create_subprocess_exec",
+        capture_create_subprocess_exec,
+    )
+
+    pending_before = asyncio.all_tasks()
+    with pytest.raises(GitCloneTimeoutError, match="timed out"):
+        await plugin_updater._PluginUpdater()._clone_repository(
+            "https://example.invalid/owner/repo", tmp_path / "plugin"
+        )
+
+    process = captured["process"]
+    assert process.returncode is not None, "the clone process was not reaped"
+    # A fire-and-forget reaper would keep the subprocess transport alive past the
+    # deadline, and would still be pending here.
+    leftover = [
+        task
+        for task in asyncio.all_tasks()
+        if task is not asyncio.current_task() and task not in pending_before
     ]
-    assert not resource_warnings, [str(item.message) for item in resource_warnings]
-    assert not plugin_updater._CLONE_REAPERS, "the reaper task was never released"
+    assert not leftover, [task.get_coro() for task in leftover]
 
 
 @pytest.mark.asyncio
@@ -210,7 +275,7 @@ async def test_clone_timeout_kills_the_helper_process_tree(
     monkeypatch.setattr(plugin_updater, "PLUGIN_GIT_CLONE_TIMEOUT_SECONDS", 1)
 
     started = time.monotonic()
-    with pytest.raises(RuntimeError, match="timed out"):
+    with pytest.raises(GitCloneTimeoutError, match="timed out"):
         await plugin_updater._PluginUpdater()._clone_repository(
             "https://example.invalid/owner/repo", tmp_path / "plugin"
         )
@@ -232,23 +297,132 @@ async def test_clone_timeout_kills_the_helper_process_tree(
 
 
 @pytest.mark.asyncio
-async def test_clone_timeout_survives_a_broken_tree_kill(
+async def test_clone_timeout_removes_the_checkout_after_the_clone_stopped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The partial checkout may only be removed once the clone is confirmed stopped."""
+    target = tmp_path / "plugin"
+    process = _FakeProcess(
+        communicate_hangs=True,
+        on_communicate=lambda: target.mkdir(parents=True, exist_ok=True),
+    )
+    _install_fake_clone(monkeypatch, process)
+    observed: list[bool] = []
+    monkeypatch.setattr(
+        plugin_updater, "remove_dir", lambda _path: observed.append(process.waited)
+    )
+    monkeypatch.setattr(plugin_updater, "PLUGIN_GIT_CLONE_TIMEOUT_SECONDS", 0.1)
+    monkeypatch.setattr(plugin_updater, "PLUGIN_GIT_CLONE_KILL_TIMEOUT_SECONDS", 1)
+
+    with pytest.raises(GitCloneTimeoutError, match="timed out"):
+        await plugin_updater._PluginUpdater()._clone_repository(
+            "https://example.invalid/owner/repo", target
+        )
+
+    assert observed == [True], (
+        "the checkout was removed without waiting for the clone to stop"
+    )
+
+
+@pytest.mark.asyncio
+async def test_clone_timeout_cleanup_failure_keeps_the_timeout_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failing checkout cleanup must not replace the timeout the caller needs."""
+    target = tmp_path / "plugin"
+    process = _FakeProcess(
+        communicate_hangs=True,
+        on_communicate=lambda: target.mkdir(parents=True, exist_ok=True),
+    )
+    _install_fake_clone(monkeypatch, process)
+
+    def failing_remove_dir(_path):
+        raise PermissionError("the checkout is still held open")
+
+    monkeypatch.setattr(plugin_updater, "remove_dir", failing_remove_dir)
+    monkeypatch.setattr(plugin_updater, "PLUGIN_GIT_CLONE_TIMEOUT_SECONDS", 0.1)
+    monkeypatch.setattr(plugin_updater, "PLUGIN_GIT_CLONE_KILL_TIMEOUT_SECONDS", 1)
+
+    with pytest.raises(GitCloneTimeoutError, match="timed out"):
+        await plugin_updater._PluginUpdater()._clone_repository(
+            "https://example.invalid/owner/repo", target
+        )
+
+
+@pytest.mark.asyncio
+async def test_clone_timeout_falls_back_when_taskkill_reports_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """A failing tree kill must degrade to the single-process kill, not raise."""
-    if sys.platform == "win32":
-        # Make `taskkill` unfindable without disturbing anything else the clone runs.
-        real_create_subprocess_exec = asyncio.create_subprocess_exec
+    """A taskkill that gives up on the tree must not end the kill attempt."""
+    target = tmp_path / "plugin"
+    process = _FakeProcess(
+        communicate_hangs=True,
+        on_communicate=lambda: target.mkdir(parents=True, exist_ok=True),
+    )
+    # Only the updater module is switched to Windows: the process tree kill has to
+    # take that branch everywhere, and no real taskkill is spawned here.
+    monkeypatch.setattr(plugin_updater, "sys", SimpleNamespace(platform="win32"))
+    _install_fake_clone(monkeypatch, process, _FakeKiller(returncode=1))
+    monkeypatch.setattr(plugin_updater, "remove_dir", lambda _path: True)
+    monkeypatch.setattr(plugin_updater, "PLUGIN_GIT_CLONE_TIMEOUT_SECONDS", 0.1)
+    monkeypatch.setattr(plugin_updater, "PLUGIN_GIT_CLONE_KILL_TIMEOUT_SECONDS", 1)
 
-        async def flaky_create_subprocess_exec(*args, **kwargs):
-            if args and str(args[0]).lower().endswith("taskkill"):
+    with caplog.at_level(logging.DEBUG, logger="astrbot"):
+        with pytest.raises(GitCloneTimeoutError, match="timed out"):
+            await plugin_updater._PluginUpdater()._clone_repository(
+                "https://example.invalid/owner/repo", target
+            )
+
+    assert process.killed, "a taskkill exit code was treated as a successful kill"
+    assert "Failed to kill the git clone process tree" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_clone_timeout_keeps_the_tree_kill_when_taskkill_succeeds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A successful taskkill is trusted, so no second kill is attempted."""
+    target = tmp_path / "plugin"
+    process = _FakeProcess(
+        communicate_hangs=True,
+        on_communicate=lambda: target.mkdir(parents=True, exist_ok=True),
+    )
+    monkeypatch.setattr(plugin_updater, "sys", SimpleNamespace(platform="win32"))
+    _install_fake_clone(monkeypatch, process, _FakeKiller(returncode=0))
+    monkeypatch.setattr(plugin_updater, "remove_dir", lambda _path: True)
+    monkeypatch.setattr(plugin_updater, "PLUGIN_GIT_CLONE_TIMEOUT_SECONDS", 0.1)
+    monkeypatch.setattr(plugin_updater, "PLUGIN_GIT_CLONE_KILL_TIMEOUT_SECONDS", 1)
+
+    with pytest.raises(GitCloneTimeoutError, match="timed out"):
+        await plugin_updater._PluginUpdater()._clone_repository(
+            "https://example.invalid/owner/repo", target
+        )
+
+    assert not process.killed
+
+
+@pytest.mark.asyncio
+async def test_clone_timeout_leaves_no_reaper_when_the_kill_degrades(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A clone stuck past the kill must not keep a background task alive forever."""
+    target = tmp_path / "plugin"
+    process = _FakeProcess(
+        communicate_hangs=True,
+        wait_hangs=True,
+        on_communicate=lambda: target.mkdir(parents=True, exist_ok=True),
+    )
+    _install_fake_clone(monkeypatch, process)
+
+    if sys.platform == "win32":
+
+        async def unavailable_taskkill(*args, **kwargs):
+            if str(args[0]).lower().endswith("taskkill"):
                 raise FileNotFoundError("taskkill is unavailable")
-            return await real_create_subprocess_exec(*args, **kwargs)
+            return process
 
         monkeypatch.setattr(
-            plugin_updater.asyncio,
-            "create_subprocess_exec",
-            flaky_create_subprocess_exec,
+            plugin_updater.asyncio, "create_subprocess_exec", unavailable_taskkill
         )
     else:
 
@@ -257,17 +431,59 @@ async def test_clone_timeout_survives_a_broken_tree_kill(
 
         monkeypatch.setattr(plugin_updater.os, "killpg", unavailable)
 
-    shim = _write_hanging_git(tmp_path)
-    monkeypatch.setattr(plugin_updater.shutil, "which", lambda _name: str(shim))
-    monkeypatch.setattr(plugin_updater, "PLUGIN_GIT_CLONE_TIMEOUT_SECONDS", 1)
+    monkeypatch.setattr(plugin_updater, "remove_dir", lambda _path: True)
+    monkeypatch.setattr(plugin_updater, "PLUGIN_GIT_CLONE_TIMEOUT_SECONDS", 0.1)
+    monkeypatch.setattr(plugin_updater, "PLUGIN_GIT_CLONE_KILL_TIMEOUT_SECONDS", 0.2)
 
+    pending_before = asyncio.all_tasks()
     started = time.monotonic()
     with caplog.at_level(logging.DEBUG, logger="astrbot"):
-        with pytest.raises(RuntimeError, match="timed out"):
+        with pytest.raises(GitCloneTimeoutError, match="timed out"):
             await plugin_updater._PluginUpdater()._clone_repository(
-                "https://example.invalid/owner/repo", tmp_path / "plugin"
+                "https://example.invalid/owner/repo", target
             )
     elapsed = time.monotonic() - started
 
-    assert elapsed < 5.0, f"the degraded kill path took {elapsed:.1f}s"
+    assert process.killed
     assert "Failed to kill the git clone process tree" in caplog.text
+    assert elapsed < 5.0, f"the degraded kill path took {elapsed:.1f}s"
+    leftover = [
+        task
+        for task in asyncio.all_tasks()
+        if task is not asyncio.current_task() and task not in pending_before
+    ]
+    assert not leftover, [task.get_coro() for task in leftover]
+
+
+@pytest.mark.asyncio
+async def test_repository_inspection_keeps_the_timeout_when_teardown_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A checkout that cannot be torn down must not report a filesystem error."""
+    updater = plugin_updater._PluginUpdater()
+    open_handles: list = []
+
+    async def failing_clone(_repo_url, target_path):
+        checkout = Path(target_path)
+        checkout.mkdir(parents=True)
+        open_handles.append((checkout / "held.txt").open("w", encoding="utf-8"))
+        if sys.platform != "win32":
+            # Unlinking an open file succeeds on POSIX, so make the directory itself
+            # refuse the removal that a surviving helper causes on Windows.
+            checkout.chmod(0o500)
+        raise GitCloneTimeoutError("Git clone timed out after 180s.")
+
+    monkeypatch.setattr(updater, "_clone_repository", failing_clone)
+    monkeypatch.setattr(plugin_updater, "get_astrbot_temp_path", lambda: str(tmp_path))
+
+    try:
+        with pytest.raises(GitCloneTimeoutError, match="timed out"):
+            await updater.inspect_repository("git@github.com:AstrBotDevs/demo.git")
+    finally:
+        for handle in open_handles:
+            handle.close()
+        if sys.platform != "win32":
+            for path in tmp_path.rglob("*"):
+                if path.is_dir():
+                    path.chmod(0o700)
+
