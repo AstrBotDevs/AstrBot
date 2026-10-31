@@ -74,14 +74,7 @@ class ConversationManager:
 
             event = current_message_event.get()
             if event is not None and event._execution_active:
-                bound = event._conversation_writer
-                if bound is not None and not bound.closed:
-                    active = bound
-                if (
-                    active is None
-                    and conversation_id is None
-                    and unified_msg_origin is None
-                ):
+                if conversation_id is None and unified_msg_origin is None:
                     unified_msg_origin = event.unified_msg_origin
         if conversation_id is None:
             if active is not None and (

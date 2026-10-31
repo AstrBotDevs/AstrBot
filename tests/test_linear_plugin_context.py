@@ -72,15 +72,18 @@ async def test_iris_clear_is_plugin_reset_and_previous_body_is_reclaimed(
         writer = ConversationEventWriter(store, snapshot)
         writer.request = SimpleNamespace(contexts=snapshot.messages, conversation=conv)
         event = SimpleNamespace(
-            _conversation_writer=writer,
             plugins_name=None,
             is_stopped=lambda: False,
             trace=MagicMock(),
         )
         await writer.start_turn({"kind": "test"})
-        await context_utils.call_event_hook(
-            event, EventType.OnLLMRequestEvent, writer.request
-        )
+        writer_token = active_conversation_writer.set(writer)
+        try:
+            await context_utils.call_event_hook(
+                event, EventType.OnLLMRequestEvent, writer.request
+            )
+        finally:
+            active_conversation_writer.reset(writer_token)
         history = [
             {"role": "user", "content": "private memory", "_no_save": True},
             {"role": "user", "content": f"question {index}"},
@@ -127,7 +130,6 @@ async def test_pre_hook_changes_stay_unknown_and_done_hook_changes_are_plugin(
         messages=[Message(role="user", content="custom runner changed history")]
     )
     event = SimpleNamespace(
-        _conversation_writer=writer,
         plugins_name=None,
         is_stopped=lambda: False,
         trace=MagicMock(),
@@ -138,9 +140,13 @@ async def test_pre_hook_changes_stay_unknown_and_done_hook_changes_are_plugin(
 
     install_hook(edit_history)
     await writer.start_turn({"kind": "test"})
-    await context_utils.call_event_hook(
-        event, EventType.OnAgentDoneEvent, writer.runtime_context
-    )
+    writer_token = active_conversation_writer.set(writer)
+    try:
+        await context_utils.call_event_hook(
+            event, EventType.OnAgentDoneEvent, writer.runtime_context
+        )
+    finally:
+        active_conversation_writer.reset(writer_token)
     await writer.save_history([{"role": "user", "content": "plugin edited history"}])
     await writer.finish_turn("completed")
     rebases = [
@@ -248,7 +254,6 @@ async def test_transcript_only_runner_does_not_clear_history_on_request_hook(
     writer = ConversationEventWriter(store, await store.read(conv.conversation_id))
     writer.request = SimpleNamespace(contexts=[], conversation=None)
     event = SimpleNamespace(
-        _conversation_writer=writer,
         plugins_name=None,
         is_stopped=lambda: False,
         trace=MagicMock(),
@@ -258,9 +263,13 @@ async def test_transcript_only_runner_does_not_clear_history_on_request_hook(
         req.contexts = [{"role": "user", "content": "remote-only memory"}]
 
     install_hook(inject_remote_context)
-    await context_utils.call_event_hook(
-        event, EventType.OnLLMRequestEvent, writer.request
-    )
+    writer_token = active_conversation_writer.set(writer)
+    try:
+        await context_utils.call_event_hook(
+            event, EventType.OnLLMRequestEvent, writer.request
+        )
+    finally:
+        active_conversation_writer.reset(writer_token)
     await writer.save_history([entry["message"] for entry in writer._entries])
     assert (await store.read(conv.conversation_id)).messages == history
 

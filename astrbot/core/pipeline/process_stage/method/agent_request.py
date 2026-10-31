@@ -1,4 +1,5 @@
 from collections.abc import AsyncGenerator
+from contextlib import aclosing
 
 from astrbot.core import logger
 from astrbot.core.config.agent_runner import normalize_agent_runner
@@ -58,10 +59,11 @@ class AgentRequestSubStage(Stage):
             provider_wake_prefix=self.prov_wake_prefix,
         )
         try:
-            async for resp in self.agent_sub_stage.process(
-                event, self.prov_wake_prefix
-            ):
-                yield resp
+            async with aclosing(
+                self.agent_sub_stage.process(event, self.prov_wake_prefix)
+            ) as responses:
+                async for resp in responses:
+                    yield resp
         except BaseException as exc:
             event.trace.record(
                 "agent_end",

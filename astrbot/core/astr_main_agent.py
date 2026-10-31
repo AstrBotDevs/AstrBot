@@ -12,7 +12,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from astrbot.core import logger
-from astrbot.core.agent.conversation_events import ConversationEventWriter
+from astrbot.core.agent.conversation_events import (
+    ConversationEventWriter,
+    active_conversation_writer,
+)
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import TextPart
@@ -2011,7 +2014,6 @@ async def build_main_agent(
             expected_revision=req.conversation.revision,
         )
         event_writer.request = req
-        event._conversation_writer = event_writer
 
     reset_coro = agent_runner.reset(
         turn_id=event.get_extra("turn_id"),
@@ -2047,7 +2049,11 @@ async def build_main_agent(
     )
 
     if apply_reset:
-        await reset_coro
+        writer_token = active_conversation_writer.set(event_writer)
+        try:
+            await reset_coro
+        finally:
+            active_conversation_writer.reset(writer_token)
 
     return MainAgentBuildResult(
         agent_runner=agent_runner,

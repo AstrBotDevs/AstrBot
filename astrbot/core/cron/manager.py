@@ -12,6 +12,7 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
 
 from astrbot import logger
+from astrbot.core.agent.conversation_events import active_conversation_writer
 from astrbot.core.agent.runners.base import AgentState
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.config.agent_runner import resolve_context_compression_config
@@ -588,17 +589,26 @@ class CronJobManager:
                 )
 
             result = await build_main_agent(
-                event=cron_event, plugin_context=self.ctx, config=config, req=req
+                event=cron_event,
+                plugin_context=self.ctx,
+                config=config,
+                req=req,
+                apply_reset=False,
             )
             if not result:
                 raise RuntimeError("Failed to build main agent for cron job.")
 
             runner = result.agent_runner
             event_writer = result.conversation_events
-            if event_writer is not None:
-                event_writer.runtime_context = runner.run_context
+            reset_coro = result.reset_coro
+            writer_token = active_conversation_writer.set(event_writer)
             status = "failed"
             try:
+                if reset_coro is not None:
+                    await reset_coro
+                    reset_coro = None
+                if event_writer is not None:
+                    event_writer.runtime_context = runner.run_context
                 async with aclosing(
                     runner.step_until_done(agent_max_step)
                 ) as responses:
@@ -648,7 +658,9 @@ class CronJobManager:
                     if event_writer is not None:
                         await event_writer.finish_turn(status)
                 finally:
-                    cron_event._conversation_writer = None
+                    active_conversation_writer.reset(writer_token)
+                    if reset_coro is not None:
+                        reset_coro.close()
 
 
 __all__ = ["CronJobManager"]

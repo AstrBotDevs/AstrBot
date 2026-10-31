@@ -456,7 +456,7 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
         captured.update(kwargs)
         if stop_phase == "build":
             stop_signal.set()
-        return SimpleNamespace(agent_runner=EventRunner(), conversation_events=writer)
+        return SimpleNamespace(agent_runner=EventRunner(), conversation_events=writer, reset_coro=None)
 
     monkeypatch.setattr(
         "astrbot.core.astr_main_agent._get_session_conv",
@@ -527,7 +527,7 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
     writer.consume.assert_awaited_once_with(started)
     writer.finish_turn.assert_awaited_once_with("completed")
     assert writer.runtime_context is EventRunner.run_context
-    assert captured["event"]._conversation_writer is None
+    assert not hasattr(captured["event"], "_conversation_writer")
 
 
 @pytest.mark.asyncio
@@ -564,7 +564,7 @@ async def test_background_wakeup_applies_max_agent_step(
         return SimpleNamespace(history="[]")
 
     async def _fake_build_main_agent(**_kwargs):
-        return SimpleNamespace(agent_runner=runner, conversation_events=None)
+        return SimpleNamespace(agent_runner=runner, conversation_events=None, reset_coro=None)
 
     monkeypatch.setattr(
         "astrbot.core.astr_main_agent._get_session_conv",
@@ -660,7 +660,7 @@ async def test_background_wakeup_warns_when_result_is_not_sent_to_user(
 
     async def _fake_build_main_agent(**kwargs):
         return SimpleNamespace(
-            agent_runner=_Runner(kwargs["event"]), conversation_events=None
+            agent_runner=_Runner(kwargs["event"]), conversation_events=None, reset_coro=None
         )
 
     monkeypatch.setattr(

@@ -6,7 +6,10 @@ from collections.abc import AsyncGenerator
 from dataclasses import replace
 
 from astrbot.core import db_helper, logger
-from astrbot.core.agent.conversation_events import ConversationEventWriter
+from astrbot.core.agent.conversation_events import (
+    ConversationEventWriter,
+    active_conversation_writer,
+)
 from astrbot.core.agent.message import (
     Message,
     dump_messages_with_checkpoints,
@@ -253,6 +256,7 @@ class InternalAgentSubStage(Stage):
                 runner_registered = False
                 reset_coro = None
                 event_writer = None
+                writer_token = None
                 try:
                     build_cfg = replace(
                         self.main_agent_cfg,
@@ -283,6 +287,7 @@ class InternalAgentSubStage(Stage):
                     agent_runner = build_result.agent_runner
                     req = build_result.provider_request
                     event_writer = build_result.conversation_events
+                    writer_token = active_conversation_writer.set(event_writer)
                     provider = build_result.provider
                     reset_coro = build_result.reset_coro
 
@@ -496,7 +501,8 @@ class InternalAgentSubStage(Stage):
                                 status = "cancelled"
                             await event_writer.finish_turn(status)
                     finally:
-                        event._conversation_writer = None
+                        if writer_token is not None:
+                            active_conversation_writer.reset(writer_token)
                         if reset_coro:
                             reset_coro.close()
                         if runner_registered and agent_runner is not None:

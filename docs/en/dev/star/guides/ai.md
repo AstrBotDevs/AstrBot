@@ -419,7 +419,7 @@ await conversations.append_message(
 The host supplies `role="user"`;
 plugins do not submit a role or a complete message object. The message is persisted
 and appended to conversation context, including the working context when called
-from a conversation-bound hook. The call returns a string ID after the database
+within the current agent run, including hooks and tools. The call returns a string ID after the database
 transaction commits. An optional `message_id` can identify retries of the same submission.
 
 ### Appending Plugin Events
@@ -448,6 +448,10 @@ the host first uses the current agent run's bound conversation, even if the sele
 conversation changes during the run. Otherwise it uses the active message's UMO
 to look up its selected conversation. With no valid current context or selected
 conversation, the call raises `ValueError` instead of creating a conversation.
+
+The current writer is bound to the agent's execution context through initialization,
+execution, and final history persistence. It is restored when the run exits, including
+on failure or cancellation. Message events do not carry a conversation writer.
 
 For background work or an explicitly targeted conversation, pass only its ID;
 the host reads its UMO from the stored conversation:

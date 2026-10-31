@@ -8,7 +8,7 @@ from collections.abc import AsyncGenerator, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from time import time
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from deprecated import deprecated
 
@@ -36,9 +36,6 @@ from astrbot.core.utils.trace import TraceSpan
 from .astrbot_message import AstrBotMessage, Group
 from .message_session import MessageSesion, MessageSession  # noqa
 from .platform_metadata import PlatformMetadata
-
-if TYPE_CHECKING:
-    from astrbot.core.agent.conversation_events import ConversationEventWriter
 
 streaming_response_event: ContextVar["AstrMessageEvent | None"] = ContextVar(
     "streaming_response_event", default=None
@@ -102,8 +99,6 @@ class AstrMessageEvent(abc.ABC):
         """是否是 At 机器人或者带有唤醒词或者是私聊(插件注册的事件监听器会让 is_wake 设为 True, 但是不会让这个属性置为 True)"""
         self._extras: dict[str, Any] = {}
         self._force_stopped: bool = False
-        self._conversation_writer: ConversationEventWriter | None = None
-        """Host-owned writer; plugins access conversation operations through Context."""
         """独立的停止标志，不依赖 _result，不会被 clear_result() 重置"""
         message_type = getattr(message_obj, "type", None)
         if not isinstance(message_type, MessageType):

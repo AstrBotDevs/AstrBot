@@ -739,7 +739,7 @@ class TestRunActiveAgentJob:
                 "astrbot.core.astr_main_agent.build_main_agent",
                 AsyncMock(
                     return_value=SimpleNamespace(
-                        agent_runner=runner, conversation_events=None
+                        agent_runner=runner, conversation_events=None, reset_coro=None
                     )
                 ),
             ) as build_agent,
@@ -816,11 +816,11 @@ class TestRunActiveAgentJob:
             "2026-10-13T01:00:00+00:00",
         )
 
-        async def fake_build_main_agent(*, event, plugin_context, config, req):
+        async def fake_build_main_agent(*, event, plugin_context, config, req, apply_reset):
             captured["config"] = config
             captured["req"] = req
             captured["requests"].append(req)
-            return MagicMock(agent_runner=FakeRunner(), conversation_events=writer)
+            return MagicMock(agent_runner=FakeRunner(), conversation_events=writer, reset_coro=None)
 
         async def fake_persist_agent_history(*args, **kwargs):
             return None
@@ -934,8 +934,8 @@ class TestRunActiveAgentJob:
         conv.history = "[]"
         runner = _StepCapturingRunner()
 
-        async def fake_build_main_agent(*, event, plugin_context, config, req):
-            return MagicMock(agent_runner=runner, conversation_events=None)
+        async def fake_build_main_agent(*, event, plugin_context, config, req, apply_reset):
+            return MagicMock(agent_runner=runner, conversation_events=None, reset_coro=None)
 
         with (
             patch(
@@ -989,7 +989,7 @@ class TestRunActiveAgentJob:
                 resp.completion_text = "malformed_function_call"
                 return resp
 
-        fake_result = SimpleNamespace(agent_runner=FakeRunner(), conversation_events=None)
+        fake_result = SimpleNamespace(agent_runner=FakeRunner(), conversation_events=None, reset_coro=None)
         with (
             patch(
                 "astrbot.core.astr_main_agent.build_main_agent",

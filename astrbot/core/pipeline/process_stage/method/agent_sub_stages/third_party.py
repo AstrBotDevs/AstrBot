@@ -4,6 +4,7 @@ from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import TYPE_CHECKING
 
 from astrbot.core import logger
+from astrbot.core.agent.conversation_events import active_conversation_writer
 from astrbot.core.agent.runners.coze.coze_agent_runner import CozeAgentRunner
 from astrbot.core.agent.runners.dashscope.dashscope_agent_runner import (
     DashscopeAgentRunner,
@@ -206,15 +207,26 @@ class ThirdPartyAgentSubStage(Stage):
         mark_stream_consumed: Callable[[], None],
     ) -> AsyncGenerator[None, None]:
         aggregator = _RunnerResultAggregator()
+        writer = active_conversation_writer.get()
 
         async def _stream_runner_chain() -> AsyncGenerator[MessageChain, None]:
-            mark_stream_consumed()
+            responses = run_third_party_agent(
+                runner,
+                stream_to_general=False,
+                custom_error_message=custom_error_message,
+            )
             try:
-                async for chain, is_error in run_third_party_agent(
-                    runner,
-                    stream_to_general=False,
-                    custom_error_message=custom_error_message,
-                ):
+                mark_stream_consumed()
+                while True:
+                    # Scope each advance so a suspended stream holds no token
+                    # that another task could later attempt to reset.
+                    writer_token = active_conversation_writer.set(writer)
+                    try:
+                        chain, is_error = await anext(responses)
+                    except StopAsyncIteration:
+                        break
+                    finally:
+                        active_conversation_writer.reset(writer_token)
                     aggregator.add_chunk(chain, is_error)
                     if is_error:
                         event.set_extra(THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY, True)
@@ -222,7 +234,14 @@ class ThirdPartyAgentSubStage(Stage):
             finally:
                 # Streaming runner cleanup must happen after consumer
                 # finishes iterating to avoid tearing down active streams.
-                await close_runner_once()
+                writer_token = active_conversation_writer.set(writer)
+                try:
+                    try:
+                        await responses.aclose()
+                    finally:
+                        await close_runner_once()
+                finally:
+                    active_conversation_writer.reset(writer_token)
 
         event.set_result(
             MessageEventResult()
@@ -340,135 +359,144 @@ class ThirdPartyAgentSubStage(Stage):
                 )
             event_writer = await manager._event_writer(event.unified_msg_origin, cid)
             event_writer.request = req
-            event._conversation_writer = event_writer
 
-        # call event hook
-        if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
-            return
-
-        if self.runner_type == "dify":
-            runner = DifyAgentRunner[AstrAgentContext]()
-        elif self.runner_type == "coze":
-            runner = CozeAgentRunner[AstrAgentContext]()
-        elif self.runner_type == "dashscope":
-            runner = DashscopeAgentRunner[AstrAgentContext]()
-        elif self.runner_type == DEERFLOW_PROVIDER_TYPE:
-            runner = DeerFlowAgentRunner[AstrAgentContext]()
-        else:
-            raise ValueError(
-                f"Unsupported third party agent runner type: {self.runner_type}",
-            )
-
-        astr_agent_ctx = AstrAgentContext(
-            context=self.ctx.plugin_manager.context,
-            event=event,
-        )
-
-        streaming_response = self.streaming_response
-        if (enable_streaming := event.get_extra("enable_streaming")) is not None:
-            streaming_response = bool(enable_streaming)
-
-        stream_to_general = (
-            self.unsupported_streaming_strategy == "turn_off"
-            and not event.platform_meta.support_streaming_message
-        )
-        streaming_used = streaming_response and not stream_to_general
-
-        runner_closed = False
-        stream_consumed = False
-        stream_watchdog_task: asyncio.Task[None] | None = None
-
-        async def close_runner_once() -> None:
-            nonlocal runner_closed
-            if runner_closed:
-                return
-            runner_closed = True
-            try:
-                if event_writer and event_writer.turn_id:
-                    final = runner.get_final_llm_resp()
-                    status = (
-                        "completed" if final and final.role == "assistant" else "failed"
-                    )
-                    if event.is_stopped() or not runner.done():
-                        status = "cancelled"
-                    if status == "completed":
-                        history = [entry["message"] for entry in event_writer._entries]
-                        history.append(await req.assemble_context())
-                        if final.completion_text:
-                            history.append(
-                                {"role": "assistant", "content": final.completion_text}
-                            )
-                        await event_writer.save_history(history)
-                    await event_writer.finish_turn(status)
-            finally:
-                event._conversation_writer = None
-                await _close_runner_if_supported(runner)
-
-        def mark_stream_consumed() -> None:
-            nonlocal stream_consumed
-            stream_consumed = True
-            if stream_watchdog_task and not stream_watchdog_task.done():
-                stream_watchdog_task.cancel()
-
+        writer_token = active_conversation_writer.set(event_writer)
         try:
-            if event_writer:
-                turn_id = event.get_extra("turn_id")
-                await event_writer.start_turn(
-                    {
-                        "kind": "im_wake",
-                        "umo": event.unified_msg_origin,
-                        "runner": self.runner_type,
-                        "context_mode": "transcript_only",
-                    },
-                    event_id=turn_id if isinstance(turn_id, str) else None,
+            # call event hook
+            if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
+                return
+
+            if self.runner_type == "dify":
+                runner = DifyAgentRunner[AstrAgentContext]()
+            elif self.runner_type == "coze":
+                runner = CozeAgentRunner[AstrAgentContext]()
+            elif self.runner_type == "dashscope":
+                runner = DashscopeAgentRunner[AstrAgentContext]()
+            elif self.runner_type == DEERFLOW_PROVIDER_TYPE:
+                runner = DeerFlowAgentRunner[AstrAgentContext]()
+            else:
+                raise ValueError(
+                    f"Unsupported third party agent runner type: {self.runner_type}",
                 )
-            await runner.reset(
-                request=req,
-                run_context=AgentContextWrapper(
-                    context=astr_agent_ctx,
-                    tool_call_timeout=120,
-                ),
-                agent_hooks=MAIN_AGENT_HOOKS,
-                provider_config=self.runner_config,
-                streaming=streaming_response,
+
+            astr_agent_ctx = AstrAgentContext(
+                context=self.ctx.plugin_manager.context,
+                event=event,
             )
 
-            if streaming_used:
-                stream_watchdog_task = _start_stream_watchdog(
-                    timeout_sec=self.stream_consumption_close_timeout_sec,
-                    is_stream_consumed=lambda: stream_consumed,
-                    close_runner_once=close_runner_once,
-                )
-                async for _ in self._handle_streaming_response(
-                    runner=runner,
-                    event=event,
-                    custom_error_message=custom_error_message,
-                    close_runner_once=close_runner_once,
-                    mark_stream_consumed=mark_stream_consumed,
-                ):
-                    yield
-            else:
-                async for _ in self._handle_non_streaming_response(
-                    runner=runner,
-                    event=event,
-                    stream_to_general=stream_to_general,
-                    custom_error_message=custom_error_message,
-                ):
-                    yield
-        finally:
-            if (
-                stream_watchdog_task
-                and not stream_watchdog_task.done()
-                and (stream_consumed or runner_closed)
-            ):
-                stream_watchdog_task.cancel()
-            if not streaming_used:
-                await close_runner_once()
+            streaming_response = self.streaming_response
+            if (enable_streaming := event.get_extra("enable_streaming")) is not None:
+                streaming_response = bool(enable_streaming)
 
-        asyncio.create_task(
-            Metric.upload(
-                llm_tick=1,
-                model_name=self.runner_type,
-                provider_type=self.runner_type,
-            ),
-        )
+            stream_to_general = (
+                self.unsupported_streaming_strategy == "turn_off"
+                and not event.platform_meta.support_streaming_message
+            )
+            streaming_used = streaming_response and not stream_to_general
+
+            runner_closed = False
+            stream_consumed = False
+            stream_watchdog_task: asyncio.Task[None] | None = None
+
+            async def close_runner_once() -> None:
+                nonlocal runner_closed
+                if runner_closed:
+                    return
+                runner_closed = True
+                try:
+                    if event_writer and event_writer.turn_id:
+                        final = runner.get_final_llm_resp()
+                        status = (
+                            "completed"
+                            if final and final.role == "assistant"
+                            else "failed"
+                        )
+                        if event.is_stopped() or not runner.done():
+                            status = "cancelled"
+                        if status == "completed":
+                            history = [
+                                entry["message"] for entry in event_writer._entries
+                            ]
+                            history.append(await req.assemble_context())
+                            if final.completion_text:
+                                history.append(
+                                    {
+                                        "role": "assistant",
+                                        "content": final.completion_text,
+                                    }
+                                )
+                            await event_writer.save_history(history)
+                        await event_writer.finish_turn(status)
+                finally:
+                    await _close_runner_if_supported(runner)
+
+            def mark_stream_consumed() -> None:
+                nonlocal stream_consumed
+                stream_consumed = True
+                if stream_watchdog_task and not stream_watchdog_task.done():
+                    stream_watchdog_task.cancel()
+
+            try:
+                if event_writer:
+                    turn_id = event.get_extra("turn_id")
+                    await event_writer.start_turn(
+                        {
+                            "kind": "im_wake",
+                            "umo": event.unified_msg_origin,
+                            "runner": self.runner_type,
+                            "context_mode": "transcript_only",
+                        },
+                        event_id=turn_id if isinstance(turn_id, str) else None,
+                    )
+                await runner.reset(
+                    request=req,
+                    run_context=AgentContextWrapper(
+                        context=astr_agent_ctx,
+                        tool_call_timeout=120,
+                    ),
+                    agent_hooks=MAIN_AGENT_HOOKS,
+                    provider_config=self.runner_config,
+                    streaming=streaming_response,
+                )
+
+                if streaming_used:
+                    stream_watchdog_task = _start_stream_watchdog(
+                        timeout_sec=self.stream_consumption_close_timeout_sec,
+                        is_stream_consumed=lambda: stream_consumed,
+                        close_runner_once=close_runner_once,
+                    )
+                    async for _ in self._handle_streaming_response(
+                        runner=runner,
+                        event=event,
+                        custom_error_message=custom_error_message,
+                        close_runner_once=close_runner_once,
+                        mark_stream_consumed=mark_stream_consumed,
+                    ):
+                        yield
+                else:
+                    async for _ in self._handle_non_streaming_response(
+                        runner=runner,
+                        event=event,
+                        stream_to_general=stream_to_general,
+                        custom_error_message=custom_error_message,
+                    ):
+                        yield
+            finally:
+                if (
+                    stream_watchdog_task
+                    and not stream_watchdog_task.done()
+                    and (stream_consumed or runner_closed)
+                ):
+                    stream_watchdog_task.cancel()
+                if not streaming_used:
+                    await close_runner_once()
+
+            asyncio.create_task(
+                Metric.upload(
+                    llm_tick=1,
+                    model_name=self.runner_type,
+                    provider_type=self.runner_type,
+                ),
+            )
+        finally:
+            active_conversation_writer.reset(writer_token)

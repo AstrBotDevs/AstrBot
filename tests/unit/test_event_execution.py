@@ -312,7 +312,7 @@ async def test_cron_uses_event_scope(frames, monkeypatch, failure_at):
         return (
             None
             if failure_at == "empty"
-            else SimpleNamespace(agent_runner=runner, conversation_events=None)
+            else SimpleNamespace(agent_runner=runner, conversation_events=None, reset_coro=None)
         )
 
     async def persist(*args, **kwargs):

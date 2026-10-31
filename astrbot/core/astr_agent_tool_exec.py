@@ -11,6 +11,7 @@ from contextlib import aclosing
 import mcp
 
 from astrbot import logger
+from astrbot.core.agent.conversation_events import active_conversation_writer
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import Message
@@ -641,20 +642,31 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         )
 
         result = await build_main_agent(
-            event=cron_event, plugin_context=ctx, config=config, req=req
+            event=cron_event,
+            plugin_context=ctx,
+            config=config,
+            req=req,
+            apply_reset=False,
         )
-        if stop_signal.is_set():
-            return
         if not result:
             logger.error(f"Failed to build main agent for background task {tool_name}.")
             return
 
         runner = result.agent_runner
         event_writer = result.conversation_events
-        if event_writer is not None:
-            event_writer.runtime_context = runner.run_context
+        reset_coro = result.reset_coro
+        if stop_signal.is_set():
+            if reset_coro is not None:
+                reset_coro.close()
+            return
+        writer_token = active_conversation_writer.set(event_writer)
         status = "failed"
         try:
+            if reset_coro is not None:
+                await reset_coro
+                reset_coro = None
+            if event_writer is not None:
+                event_writer.runtime_context = runner.run_context
             async with aclosing(runner.step_until_done(agent_max_step)) as responses:
                 async for response in responses:
                     if event_writer is not None:
@@ -689,7 +701,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 if event_writer is not None:
                     await event_writer.finish_turn(status)
             finally:
-                cron_event._conversation_writer = None
+                active_conversation_writer.reset(writer_token)
+                if reset_coro is not None:
+                    reset_coro.close()
         # Set once anything reaches this session, e.g. via send_message_to_user.
         if not cron_event._has_send_oper:
             logger.warning(
