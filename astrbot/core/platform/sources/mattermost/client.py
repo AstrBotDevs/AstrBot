@@ -11,13 +11,12 @@ from astrbot.api.event import MessageChain
 from astrbot.api.message_components import (
     ActionRow,
     At,
-    CallbackAction,
+    Button,
     File,
     Image,
     Plain,
     Record,
     Reply,
-    UrlAction,
     Video,
 )
 from astrbot.core.platform.button_interaction import encode_button_callback
@@ -336,10 +335,10 @@ class MattermostClient:
         link_parts: list[str] = []
         unavailable_callbacks: list[str] = []
         for button_index, button in enumerate(row.buttons):
-            if isinstance(button.action, UrlAction):
+            if isinstance(button.action, Button.UrlAction):
                 link_parts.append(f"[{button.label}]({button.action.url})")
                 continue
-            if not isinstance(button.action, CallbackAction):
+            if not isinstance(button.action, Button.CallbackAction):
                 continue
             if not self.action_callback_url:
                 unavailable_callbacks.append(button.label)

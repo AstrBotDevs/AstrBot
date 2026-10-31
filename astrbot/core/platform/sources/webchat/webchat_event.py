@@ -9,7 +9,7 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import (
     ActionRow,
-    CallbackAction,
+    Button,
     File,
     Image,
     Json,
@@ -91,7 +91,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                     row_data["buttons"],
                     strict=True,
                 ):
-                    if isinstance(button.action, CallbackAction):
+                    if isinstance(button.action, Button.CallbackAction):
                         serialized_button["action"]["callback_data"] = (
                             encode_button_callback(
                                 button.id,

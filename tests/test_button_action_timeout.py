@@ -5,7 +5,10 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import ActionRow, Button, CallbackAction
+from astrbot.api.message_components import (
+    ActionRow,
+    Button,
+)
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
@@ -80,7 +83,9 @@ async def test_platform_callback_honors_row_deadline(
     row = ActionRow(
         buttons=[
             Button(
-                id="approve", label="Approve", action=CallbackAction(data={"item": 42})
+                id="approve",
+                label="Approve",
+                action=Button.CallbackAction(data={"item": 42}),
             )
         ],
         action_timeout=action_timeout,

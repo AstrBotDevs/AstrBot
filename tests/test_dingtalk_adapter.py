@@ -10,10 +10,7 @@ from astrbot.api.message_components import (
     At,
     Button,
     ButtonInteraction,
-    ButtonStyle,
-    CallbackAction,
     Plain,
-    UrlAction,
 )
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.button_interaction import (
@@ -387,14 +384,14 @@ async def test_dingtalk_button_card_maps_callback_and_url_actions(monkeypatch):
                 Button(
                     id="approve",
                     label="Approve",
-                    action=CallbackAction(data={"item": 1}),
-                    style=ButtonStyle.SUCCESS,
+                    action=Button.CallbackAction(data={"item": 1}),
+                    style=Button.Style.SUCCESS,
                 ),
                 Button(
                     id="docs",
                     label="Docs",
-                    action=UrlAction(url="https://example.com/docs"),
-                    style=ButtonStyle.PRIMARY,
+                    action=Button.UrlAction(url="https://example.com/docs"),
+                    style=Button.Style.PRIMARY,
                 ),
             ]
         )
@@ -448,12 +445,12 @@ async def test_dingtalk_buttons_fall_back_to_markdown_when_card_fails():
                     Button(
                         id="approve",
                         label="Approve",
-                        action=CallbackAction(data={"item": 1}),
+                        action=Button.CallbackAction(data={"item": 1}),
                     ),
                     Button(
                         id="docs",
                         label="Docs",
-                        action=UrlAction(url="https://example.com/docs"),
+                        action=Button.UrlAction(url="https://example.com/docs"),
                     ),
                 ]
             ),

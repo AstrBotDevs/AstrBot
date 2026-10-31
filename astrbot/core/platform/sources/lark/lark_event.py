@@ -30,13 +30,11 @@ from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import (
     ActionRow,
     At,
-    ButtonStyle,
-    CallbackAction,
+    Button,
     File,
     Json,
     Plain,
     Record,
-    UrlAction,
     Video,
 )
 from astrbot.api.message_components import Image as AstrBotImage
@@ -499,10 +497,10 @@ class LarkMessageEvent(AstrMessageEvent):
             A Lark Card JSON 2.0 object.
         """
         style_map = {
-            ButtonStyle.DEFAULT: "default",
-            ButtonStyle.PRIMARY: "primary",
-            ButtonStyle.SUCCESS: "primary",
-            ButtonStyle.DANGER: "danger",
+            Button.Style.DEFAULT: "default",
+            Button.Style.PRIMARY: "primary",
+            Button.Style.SUCCESS: "primary",
+            Button.Style.DANGER: "danger",
         }
         elements: list[dict] = []
         for component in components:
@@ -521,7 +519,7 @@ class LarkMessageEvent(AstrMessageEvent):
                         "content": button.label,
                     },
                 }
-                if isinstance(button.action, CallbackAction):
+                if isinstance(button.action, Button.CallbackAction):
                     callback = encode_button_callback(
                         button.id,
                         button.action.data,
@@ -536,7 +534,7 @@ class LarkMessageEvent(AstrMessageEvent):
                             "value": callback_value,
                         }
                     ]
-                elif isinstance(button.action, UrlAction):
+                elif isinstance(button.action, Button.UrlAction):
                     lark_button["behaviors"] = [
                         {
                             "type": "open_url",

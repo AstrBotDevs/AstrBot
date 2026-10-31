@@ -9,11 +9,10 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import (
     ActionRow,
-    CallbackAction,
+    Button,
     Image,
     Plain,
     Record,
-    UrlAction,
 )
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
 from astrbot.core.utils.media_utils import convert_audio_to_amr
@@ -97,12 +96,12 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                 fallback_parts = [
                     f"{button.label}: {button.action.url}"
                     for button in comp.buttons
-                    if isinstance(button.action, UrlAction)
+                    if isinstance(button.action, Button.UrlAction)
                 ]
                 callback_labels = [
                     button.label
                     for button in comp.buttons
-                    if isinstance(button.action, CallbackAction)
+                    if isinstance(button.action, Button.CallbackAction)
                 ]
                 if callback_labels:
                     fallback_parts.append(

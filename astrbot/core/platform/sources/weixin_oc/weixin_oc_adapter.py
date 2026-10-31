@@ -19,13 +19,12 @@ from astrbot import logger
 from astrbot.api.event import MessageChain
 from astrbot.api.message_components import (
     ActionRow,
-    CallbackAction,
+    Button,
     File,
     Image,
     Plain,
     Record,
     Reply,
-    UrlAction,
     Video,
 )
 from astrbot.api.platform import (
@@ -1675,12 +1674,12 @@ class WeixinOCAdapter(Platform):
                 fallback_parts = [
                     f"{button.label}: {button.action.url}"
                     for button in segment.buttons
-                    if isinstance(button.action, UrlAction)
+                    if isinstance(button.action, Button.UrlAction)
                 ]
                 callback_labels = [
                     button.label
                     for button in segment.buttons
-                    if isinstance(button.action, CallbackAction)
+                    if isinstance(button.action, Button.CallbackAction)
                 ]
                 if callback_labels:
                     fallback_parts.append(

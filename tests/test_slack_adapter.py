@@ -11,10 +11,7 @@ from astrbot.api.message_components import (
     ActionRow,
     Button,
     ButtonInteraction,
-    ButtonStyle,
-    CallbackAction,
     Plain,
-    UrlAction,
 )
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.button_interaction import (
@@ -37,13 +34,13 @@ async def test_slack_action_row_renders_block_kit_buttons():
                         Button(
                             id="approve",
                             label="Approve",
-                            action=CallbackAction(data={"order_id": 42}),
-                            style=ButtonStyle.SUCCESS,
+                            action=Button.CallbackAction(data={"order_id": 42}),
+                            style=Button.Style.SUCCESS,
                         ),
                         Button(
                             id="docs",
                             label="Docs",
-                            action=UrlAction(url="https://example.com/docs"),
+                            action=Button.UrlAction(url="https://example.com/docs"),
                         ),
                     ],
                     fallback_text="Approve or open docs",
@@ -89,7 +86,11 @@ async def test_slack_rejected_button_blocks_retry_readable_text(fallback_text):
                 Plain("Choose: "),
                 ActionRow(
                     buttons=[
-                        Button(id="approve", label="Approve", action=CallbackAction())
+                        Button(
+                            id="approve",
+                            label="Approve",
+                            action=Button.CallbackAction(),
+                        )
                     ],
                     fallback_text=fallback_text,
                 ),

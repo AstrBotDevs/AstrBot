@@ -5,9 +5,6 @@ import pytest
 from astrbot.core.message.components import (
     ActionRow,
     Button,
-    ButtonStyle,
-    CallbackAction,
-    UrlAction,
 )
 from astrbot.core.platform import button_interaction
 from astrbot.core.platform.button_interaction import (
@@ -22,13 +19,13 @@ def test_action_row_serializes_portable_buttons():
             Button(
                 id="confirm",
                 label="Confirm",
-                action=CallbackAction(data={"order_id": 42}),
-                style=ButtonStyle.PRIMARY,
+                action=Button.CallbackAction(data={"order_id": 42}),
+                style=Button.Style.PRIMARY,
             ),
             Button(
                 id="docs",
                 label="Docs",
-                action=UrlAction(url="https://example.com/docs"),
+                action=Button.UrlAction(url="https://example.com/docs"),
             ),
         ],
         fallback_text="Choose an action",
@@ -62,6 +59,58 @@ def test_action_row_serializes_portable_buttons():
     }
 
 
+@pytest.mark.parametrize(
+    ("action", "action_type"),
+    [
+        (
+            {"type": "callback", "data": {"flags": [True, None], "count": 42}},
+            Button.CallbackAction,
+        ),
+        ({"type": "callback"}, Button.CallbackAction),
+        ({"type": "url", "url": "https://example.com/docs"}, Button.UrlAction),
+    ],
+)
+def test_button_action_round_trips_through_json(action, action_type):
+    button = Button(id="confirm", label="Confirm", action=action, style="primary")
+    restored = Button.parse_raw(button.json())
+
+    assert isinstance(restored.action, action_type)
+    assert restored.style is Button.Style.PRIMARY
+    assert restored.toDict() == {
+        "type": "button",
+        "data": {
+            "id": "confirm",
+            "label": "Confirm",
+            "action": action,
+            "style": "primary",
+        },
+    }
+
+
+@pytest.mark.parametrize(
+    "action",
+    [
+        {"type": "unknown", "url": "https://example.com/docs"},
+        {"type": "url", "data": {"item_id": 42}},
+        {"url": "https://example.com/docs"},
+    ],
+)
+def test_button_rejects_invalid_action_discriminators(action):
+    with pytest.raises(ValueError):
+        Button(id="confirm", label="Confirm", action=action)
+
+
+def test_button_schema_discriminates_nested_actions():
+    schema = Button.schema()
+    action = schema["properties"]["action"]
+
+    assert action["discriminator"]["propertyName"] == "type"
+    assert set(action["discriminator"]["mapping"]) == {"callback", "url"}
+    assert {entry["$ref"] for entry in action["oneOf"]} == set(
+        action["discriminator"]["mapping"].values()
+    )
+
+
 def test_callback_codec_round_trip():
     payload = encode_button_callback(
         "approve",
@@ -77,7 +126,7 @@ def test_callback_codec_round_trip():
 @pytest.mark.parametrize("data", [{"invalid": {1, 2}}, float("nan")])
 def test_callback_action_rejects_non_json_data(data):
     with pytest.raises(ValueError, match="JSON-compatible"):
-        CallbackAction(data=data)
+        Button.CallbackAction(data=data)
 
 
 def test_callback_codec_uses_compact_opaque_token():

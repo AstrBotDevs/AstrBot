@@ -31,14 +31,12 @@ from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import (
     ActionRow,
     At,
-    ButtonStyle,
-    CallbackAction,
+    Button,
     File,
     Image,
     Plain,
     Record,
     Reply,
-    UrlAction,
     Video,
 )
 from astrbot.api.platform import AstrBotMessage, Group, PlatformMetadata
@@ -1044,10 +1042,10 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         rows = []
         button_ids: set[str] = set()
         style_map = {
-            ButtonStyle.DEFAULT: 0,
-            ButtonStyle.PRIMARY: 3,
-            ButtonStyle.SUCCESS: 1,
-            ButtonStyle.DANGER: 0,
+            Button.Style.DEFAULT: 0,
+            Button.Style.PRIMARY: 3,
+            Button.Style.SUCCESS: 1,
+            Button.Style.DANGER: 0,
         }
         for row in action_rows:
             if len(row.buttons) > QQOfficialMessageEvent.KEYBOARD_MAX_BUTTONS_PER_ROW:
@@ -1064,12 +1062,12 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     )
                 button_ids.add(button.id)
 
-                if isinstance(button.action, CallbackAction):
+                if isinstance(button.action, Button.CallbackAction):
                     action_type = 1
                     action_data = encode_button_callback(
                         button.id, button.action.data, expires_at=row.action_expires_at
                     )
-                elif isinstance(button.action, UrlAction):
+                elif isinstance(button.action, Button.UrlAction):
                     action_type = 0
                     action_data = button.action.url
                 else:

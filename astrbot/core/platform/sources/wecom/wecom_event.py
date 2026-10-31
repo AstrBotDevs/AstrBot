@@ -9,13 +9,11 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import (
     ActionRow,
-    ButtonStyle,
-    CallbackAction,
+    Button,
     File,
     Image,
     Plain,
     Record,
-    UrlAction,
     Video,
 )
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
@@ -211,7 +209,7 @@ class WecomPlatformEvent(AstrMessageEvent):
                         continue
                     menu_list = []
                     for button in comp.buttons:
-                        if isinstance(button.action, CallbackAction):
+                        if isinstance(button.action, Button.CallbackAction):
                             callback_id = encode_button_callback(
                                 button.id,
                                 button.action.data,
@@ -231,7 +229,7 @@ class WecomPlatformEvent(AstrMessageEvent):
                                     },
                                 }
                             )
-                        elif isinstance(button.action, UrlAction):
+                        elif isinstance(button.action, Button.UrlAction):
                             menu_list.append(
                                 {
                                     "type": "view",
@@ -355,10 +353,10 @@ class WecomPlatformEvent(AstrMessageEvent):
                             "WeCom template cards support at most 6 buttons."
                         )
                     style_map = {
-                        ButtonStyle.DEFAULT: 1,
-                        ButtonStyle.PRIMARY: 2,
-                        ButtonStyle.DANGER: 3,
-                        ButtonStyle.SUCCESS: 4,
+                        Button.Style.DEFAULT: 1,
+                        Button.Style.PRIMARY: 2,
+                        Button.Style.DANGER: 3,
+                        Button.Style.SUCCESS: 4,
                     }
                     button_list = []
                     for button in comp.buttons:
@@ -366,14 +364,14 @@ class WecomPlatformEvent(AstrMessageEvent):
                             "text": button.label,
                             "style": style_map[button.style],
                         }
-                        if isinstance(button.action, CallbackAction):
+                        if isinstance(button.action, Button.CallbackAction):
                             item["type"] = 0
                             item["key"] = encode_button_callback(
                                 button.id,
                                 button.action.data,
                                 expires_at=comp.action_expires_at,
                             )
-                        elif isinstance(button.action, UrlAction):
+                        elif isinstance(button.action, Button.UrlAction):
                             item["type"] = 1
                             item["url"] = button.action.url
                         button_list.append(item)

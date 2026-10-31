@@ -13,12 +13,11 @@ from astrbot.api.message_components import (
     ActionRow,
     At,
     BaseMessageComponent,
-    CallbackAction,
+    Button,
     File,
     Image,
     Plain,
     Record,
-    UrlAction,
 )
 from astrbot.api.platform import Group, MessageMember
 from astrbot.core.platform.button_interaction import encode_button_callback
@@ -127,7 +126,7 @@ class SlackMessageEvent(AstrMessageEvent):
                     "text": {"type": "plain_text", "text": button.label},
                     "action_id": button.id,
                 }
-                if isinstance(button.action, CallbackAction):
+                if isinstance(button.action, Button.CallbackAction):
                     value = encode_button_callback(
                         button.id,
                         button.action.data,
@@ -138,7 +137,7 @@ class SlackMessageEvent(AstrMessageEvent):
                             "Slack callback payloads cannot exceed 2000 bytes"
                         )
                     element["value"] = value
-                elif isinstance(button.action, UrlAction):
+                elif isinstance(button.action, Button.UrlAction):
                     element["url"] = button.action.url
 
                 if button.style.value in {"primary", "success"}:

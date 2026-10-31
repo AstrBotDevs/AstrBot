@@ -16,14 +16,12 @@ from astrbot.api.event import MessageChain
 from astrbot.api.message_components import (
     ActionRow,
     At,
+    Button,
     ButtonInteraction,
-    ButtonStyle,
-    CallbackAction,
     File,
     Image,
     Plain,
     Record,
-    UrlAction,
     Video,
 )
 from astrbot.api.platform import (
@@ -653,10 +651,10 @@ class DingtalkPlatformAdapter(Platform):
             Whether DingTalk accepted the interactive card.
         """
         colors = {
-            ButtonStyle.DEFAULT: "gray",
-            ButtonStyle.PRIMARY: "blue",
-            ButtonStyle.SUCCESS: "green",
-            ButtonStyle.DANGER: "red",
+            Button.Style.DEFAULT: "gray",
+            Button.Style.PRIMARY: "blue",
+            Button.Style.SUCCESS: "green",
+            Button.Style.DANGER: "red",
         }
         buttons: list[dict] = []
         for row in rows:
@@ -666,7 +664,7 @@ class DingtalkPlatformAdapter(Platform):
                     "color": colors[button.style],
                     "id": button.id,
                 }
-                if isinstance(button.action, CallbackAction):
+                if isinstance(button.action, Button.CallbackAction):
                     try:
                         item["id"] = encode_button_callback(
                             button.id,
@@ -677,7 +675,7 @@ class DingtalkPlatformAdapter(Platform):
                         logger.warning(f"钉钉按钮卡片编码失败: {exc}")
                         return False
                     item["request"] = True
-                elif isinstance(button.action, UrlAction):
+                elif isinstance(button.action, Button.UrlAction):
                     item["url"] = button.action.url
                     item["iosUrl"] = button.action.url
                 buttons.append(item)
@@ -848,7 +846,7 @@ class DingtalkPlatformAdapter(Platform):
                 fallback_parts = [card_content] if card_content else []
                 for row in action_rows:
                     for button in row.buttons:
-                        if isinstance(button.action, UrlAction):
+                        if isinstance(button.action, Button.UrlAction):
                             fallback_parts.append(
                                 f"[{button.label}]({button.action.url})"
                             )

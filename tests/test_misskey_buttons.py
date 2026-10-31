@@ -11,12 +11,12 @@ def test_misskey_serializes_url_buttons_as_mfm_links():
                     Comp.Button(
                         id="docs",
                         label="Docs",
-                        action=Comp.UrlAction(url="https://example.com/docs"),
+                        action=Comp.Button.UrlAction(url="https://example.com/docs"),
                     ),
                     Comp.Button(
                         id="status",
                         label="Status",
-                        action=Comp.UrlAction(url="https://status.example.com"),
+                        action=Comp.Button.UrlAction(url="https://status.example.com"),
                     ),
                 ],
             ),
@@ -38,7 +38,7 @@ def test_misskey_callback_buttons_use_row_fallback_text():
                     Comp.Button(
                         id="confirm",
                         label="Confirm",
-                        action=Comp.CallbackAction(data={"request_id": "req-1"}),
+                        action=Comp.Button.CallbackAction(data={"request_id": "req-1"}),
                     ),
                 ],
                 fallback_text="Reply with 'confirm' to continue.",
@@ -56,7 +56,7 @@ def test_misskey_callback_buttons_fall_back_to_plain_labels():
             Comp.Button(
                 id="confirm",
                 label="Confirm",
-                action=Comp.CallbackAction(),
+                action=Comp.Button.CallbackAction(),
             ),
         ],
     )

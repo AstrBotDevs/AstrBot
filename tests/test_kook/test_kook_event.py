@@ -16,13 +16,10 @@ from astrbot.core.message.components import (
     AtAll,
     BaseMessageComponent,
     Button,
-    ButtonStyle,
-    CallbackAction,
     Image,
     Json,
     Plain,
     Reply,
-    UrlAction,
     Video,
 )
 from astrbot.core.platform.button_interaction import decode_button_callback
@@ -202,14 +199,14 @@ async def test_kook_event_renders_portable_buttons():
             Button(
                 id="approve",
                 label="Approve",
-                style=ButtonStyle.SUCCESS,
-                action=CallbackAction(data={"request_id": 42}),
+                style=Button.Style.SUCCESS,
+                action=Button.CallbackAction(data={"request_id": 42}),
             ),
             Button(
                 id="docs",
                 label="Documentation",
-                style=ButtonStyle.DANGER,
-                action=UrlAction(url="https://example.com/docs"),
+                style=Button.Style.DANGER,
+                action=Button.UrlAction(url="https://example.com/docs"),
             ),
         ]
     )
@@ -246,7 +243,9 @@ async def test_kook_event_splits_action_rows_at_four_buttons():
     )
     row = ActionRow(
         buttons=[
-            Button(id=f"button-{index}", label=str(index), action=CallbackAction())
+            Button(
+                id=f"button-{index}", label=str(index), action=Button.CallbackAction()
+            )
             for index in range(5)
         ]
     )

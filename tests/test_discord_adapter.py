@@ -12,15 +12,12 @@ from astrbot.api.message_components import (
     ActionRow,
     Button,
     ButtonInteraction,
-    ButtonStyle,
-    CallbackAction,
     File,
     Image,
     Plain,
     Record,
     Reply,
     Video,
-    UrlAction,
 )
 from astrbot.api.platform import Group, MessageType
 from astrbot.core.message.message_event_result import MessageChain
@@ -644,13 +641,13 @@ async def test_discord_renders_common_action_rows():
                         Button(
                             id="approve",
                             label="Approve",
-                            action=CallbackAction(data={"order_id": 7}),
-                            style=ButtonStyle.SUCCESS,
+                            action=Button.CallbackAction(data={"order_id": 7}),
+                            style=Button.Style.SUCCESS,
                         ),
                         Button(
                             id="docs",
                             label="Documentation",
-                            action=UrlAction(url="https://example.com/docs"),
+                            action=Button.UrlAction(url="https://example.com/docs"),
                         ),
                     ]
                 ),

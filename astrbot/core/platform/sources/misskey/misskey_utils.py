@@ -90,7 +90,7 @@ def serialize_message_chain(chain: list[Any]) -> tuple[str, bool]:
             # Misskey notes can render MFM links but do not expose a bot callback
             # channel for controls embedded in a note.
             has_callback = any(
-                isinstance(button.action, Comp.CallbackAction)
+                isinstance(button.action, Comp.Button.CallbackAction)
                 for button in component.buttons
             )
 
@@ -98,7 +98,7 @@ def serialize_message_chain(chain: list[Any]) -> tuple[str, bool]:
             if component.fallback_text and has_callback:
                 buttons.append(component.fallback_text)
             for button in component.buttons:
-                if isinstance(button.action, Comp.UrlAction):
+                if isinstance(button.action, Comp.Button.UrlAction):
                     label = button.label.replace("\\", "\\\\").replace("]", "\\]")
                     url = button.action.url.replace("\\", "%5C").replace(")", "%29")
                     buttons.append(f"[{label}]({url})")
@@ -106,7 +106,7 @@ def serialize_message_chain(chain: list[Any]) -> tuple[str, bool]:
                     buttons.append(button.label)
             return " | ".join(buttons)
         if isinstance(component, Comp.Button):
-            if isinstance(component.action, Comp.UrlAction):
+            if isinstance(component.action, Comp.Button.UrlAction):
                 label = component.label.replace("\\", "\\\\").replace("]", "\\]")
                 url = component.action.url.replace("\\", "%5C").replace(")", "%29")
                 return f"[{label}]({url})"

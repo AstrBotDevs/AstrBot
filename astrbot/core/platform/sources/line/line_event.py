@@ -11,12 +11,11 @@ from astrbot.api.message_components import (
     ActionRow,
     At,
     BaseMessageComponent,
-    CallbackAction,
+    Button,
     File,
     Image,
     Plain,
     Record,
-    UrlAction,
     Video,
 )
 from astrbot.api.platform import Group, MessageMember
@@ -115,7 +114,7 @@ class LineMessageEvent(AstrMessageEvent):
                 if not label:
                     continue
 
-                if isinstance(button.action, CallbackAction):
+                if isinstance(button.action, Button.CallbackAction):
                     callback_data = encode_button_callback(
                         button.id,
                         button.action.data,
@@ -136,7 +135,7 @@ class LineMessageEvent(AstrMessageEvent):
                             "displayText": label,
                         }
                     )
-                elif isinstance(button.action, UrlAction):
+                elif isinstance(button.action, Button.UrlAction):
                     actions.append(
                         {
                             "type": "uri",

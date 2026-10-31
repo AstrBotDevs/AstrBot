@@ -9,10 +9,7 @@ from astrbot.api.message_components import (
     ActionRow,
     Button,
     ButtonInteraction,
-    ButtonStyle,
-    CallbackAction,
     Plain,
-    UrlAction,
 )
 from astrbot.api.platform import AstrBotMessage, MessageMember, MessageType
 from astrbot.core.platform.button_interaction import decode_button_callback
@@ -41,14 +38,14 @@ def _button_row() -> ActionRow:
             Button(
                 id="approve",
                 label="Approve",
-                action=CallbackAction(data={"request_id": 42}),
-                style=ButtonStyle.SUCCESS,
+                action=Button.CallbackAction(data={"request_id": 42}),
+                style=Button.Style.SUCCESS,
             ),
             Button(
                 id="docs",
                 label="Docs",
-                action=UrlAction(url="https://example.com/docs"),
-                style=ButtonStyle.DANGER,
+                action=Button.UrlAction(url="https://example.com/docs"),
+                style=Button.Style.DANGER,
             ),
         ],
     )
@@ -150,7 +147,7 @@ def test_wecom_button_card_rejects_more_than_six_buttons():
         Button(
             id=f"action-{index}",
             label=f"Action {index}",
-            action=CallbackAction(),
+            action=Button.CallbackAction(),
         )
         for index in range(7)
     ]

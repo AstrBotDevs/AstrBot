@@ -20,13 +20,12 @@ from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import (
     ActionRow,
     At,
-    CallbackAction,
+    Button,
     File,
     Image,
     Plain,
     Record,
     Reply,
-    UrlAction,
     Video,
 )
 from astrbot.api.platform import AstrBotMessage, Group, MessageType, PlatformMetadata
@@ -159,13 +158,13 @@ class TelegramPlatformEvent(AstrMessageEvent):
         for row in rows:
             telegram_row: list[InlineKeyboardButton] = []
             for button in row.buttons:
-                if isinstance(button.action, UrlAction):
+                if isinstance(button.action, Button.UrlAction):
                     telegram_row.append(
                         InlineKeyboardButton(button.label, url=button.action.url)
                     )
                     continue
 
-                if not isinstance(button.action, CallbackAction):
+                if not isinstance(button.action, Button.CallbackAction):
                     continue
                 callback_data = encode_button_callback(
                     button.id, button.action.data, expires_at=row.action_expires_at

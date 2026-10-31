@@ -9,8 +9,8 @@ from typing import Any
 from astrbot.core.db.po import Attachment
 from astrbot.core.message.components import (
     ActionRow,
+    Button,
     ButtonInteraction,
-    CallbackAction,
     File,
     Image,
     Json,
@@ -486,7 +486,7 @@ async def message_chain_to_storage_message_parts(
                 row_data["buttons"],
                 strict=True,
             ):
-                if isinstance(button.action, CallbackAction):
+                if isinstance(button.action, Button.CallbackAction):
                     serialized_button["action"]["callback_data"] = (
                         encode_button_callback(
                             button.id,

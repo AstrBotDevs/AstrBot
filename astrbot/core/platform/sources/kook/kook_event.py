@@ -13,15 +13,12 @@ from astrbot.core.message.components import (
     AtAll,
     BaseMessageComponent,
     Button,
-    ButtonStyle,
-    CallbackAction,
     File,
     Image,
     Json,
     Plain,
     Record,
     Reply,
-    UrlAction,
     Video,
 )
 from astrbot.core.platform import MessageType
@@ -155,14 +152,14 @@ class KookEvent(AstrMessageEvent):
                     return handle_plain(index, fallback_text)
 
                 theme_map = {
-                    ButtonStyle.DEFAULT: "secondary",
-                    ButtonStyle.PRIMARY: "primary",
-                    ButtonStyle.SUCCESS: "success",
-                    ButtonStyle.DANGER: "danger",
+                    Button.Style.DEFAULT: "secondary",
+                    Button.Style.PRIMARY: "primary",
+                    Button.Style.SUCCESS: "success",
+                    Button.Style.DANGER: "danger",
                 }
                 elements = []
                 for button in buttons:
-                    if isinstance(button.action, CallbackAction):
+                    if isinstance(button.action, Button.CallbackAction):
                         click = "return-val"
                         value = encode_button_callback(
                             button.id,
@@ -171,7 +168,7 @@ class KookEvent(AstrMessageEvent):
                             if isinstance(message_component, ActionRow)
                             else None,
                         )
-                    elif isinstance(button.action, UrlAction):
+                    elif isinstance(button.action, Button.UrlAction):
                         click = "link"
                         value = button.action.url
                     else:

@@ -11,10 +11,7 @@ from astrbot.api.message_components import (
     ActionRow,
     Button,
     ButtonInteraction,
-    ButtonStyle,
-    CallbackAction,
     Plain,
-    UrlAction,
 )
 from astrbot.api.platform import MessageType
 from astrbot.core.platform.button_interaction import decode_button_callback
@@ -31,13 +28,13 @@ def test_lark_button_card_maps_callback_and_url_actions():
                     Button(
                         id="approve",
                         label="Approve",
-                        action=CallbackAction(data={"request_id": 42}),
-                        style=ButtonStyle.SUCCESS,
+                        action=Button.CallbackAction(data={"request_id": 42}),
+                        style=Button.Style.SUCCESS,
                     ),
                     Button(
                         id="docs",
                         label="Docs",
-                        action=UrlAction(url="https://example.com/docs"),
+                        action=Button.UrlAction(url="https://example.com/docs"),
                     ),
                 ]
             ),
@@ -83,7 +80,7 @@ async def test_lark_card_callback_becomes_button_interaction():
                     Button(
                         id="approve",
                         label="Approve",
-                        action=CallbackAction(data={"request_id": 42}),
+                        action=Button.CallbackAction(data={"request_id": 42}),
                     )
                 ]
             )

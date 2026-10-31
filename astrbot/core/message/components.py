@@ -150,57 +150,56 @@ JSONValue: TypeAlias = (
 )
 
 
-class ButtonStyle(str, Enum):
-    """Portable visual intent for a button."""
-
-    DEFAULT = "default"
-    PRIMARY = "primary"
-    SUCCESS = "success"
-    DANGER = "danger"
-
-
-class CallbackAction(BaseModel):
-    """Run bot-side logic when a button is clicked."""
-
-    type: Literal["callback"] = "callback"
-    data: JSONValue | None = None
-
-    def __init__(self, **values) -> None:
-        """Validate callback context when the component is constructed.
-
-        Args:
-            **values: Pydantic field values for the callback action.
-
-        Raises:
-            ValueError: If data is not valid JSON.
-        """
-        super().__init__(**values)
-        try:
-            json.dumps(self.data, allow_nan=False)
-        except (TypeError, ValueError) as exc:
-            raise ValueError("Button callback data must be JSON-compatible.") from exc
-
-
-class UrlAction(BaseModel):
-    """Open a URL when a button is clicked."""
-
-    type: Literal["url"] = "url"
-    url: str = Field(min_length=1)
-
-
 class Button(BaseMessageComponent):
     """A portable interactive button."""
+
+    class Style(str, Enum):
+        """Portable visual intent for a button."""
+
+        DEFAULT = "default"
+        PRIMARY = "primary"
+        SUCCESS = "success"
+        DANGER = "danger"
+
+    class CallbackAction(BaseModel):
+        """Run bot-side logic when a button is clicked."""
+
+        type: Literal["callback"] = "callback"
+        data: JSONValue | None = None
+
+        def __init__(self, **values) -> None:
+            """Validate callback context when the component is constructed.
+
+            Args:
+                **values: Pydantic field values for the callback action.
+
+            Raises:
+                ValueError: If data is not valid JSON.
+            """
+            super().__init__(**values)
+            try:
+                json.dumps(self.data, allow_nan=False)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    "Button callback data must be JSON-compatible."
+                ) from exc
+
+    class UrlAction(BaseModel):
+        """Open a URL when a button is clicked."""
+
+        type: Literal["url"] = "url"
+        url: str = Field(min_length=1)
 
     type: ComponentType = ComponentType.Button
     id: str = Field(min_length=1)
     label: str = Field(min_length=1)
-    action: CallbackAction | UrlAction
-    style: ButtonStyle = ButtonStyle.DEFAULT
+    action: CallbackAction | UrlAction = Field(discriminator="type")
+    style: Style = Style.DEFAULT
 
     def toDict(self) -> dict:
         """Serialize the button using the public message component format."""
         action = {"type": self.action.type}
-        if isinstance(self.action, CallbackAction):
+        if isinstance(self.action, Button.CallbackAction):
             if self.action.data is not None:
                 action["data"] = self.action.data
         else:

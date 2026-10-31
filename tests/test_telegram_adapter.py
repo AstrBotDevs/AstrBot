@@ -9,11 +9,11 @@ from telegram import Message, MessageEntity, TextQuote
 
 import astrbot.api.message_components as Comp
 from astrbot.api.event import MessageChain
+from astrbot.api.platform import Group
 from astrbot.core.platform.button_interaction import (
     decode_button_callback,
     encode_button_callback,
 )
-from astrbot.api.platform import Group
 from astrbot.core.platform.register import unregister_platform_adapters_by_module
 from tests.fixtures.helpers import (
     NoopAwaitable,
@@ -1022,12 +1022,12 @@ async def test_telegram_renders_common_buttons_as_inline_keyboard():
                     Comp.Button(
                         id="approve",
                         label="Approve",
-                        action=Comp.CallbackAction(data={"request_id": 7}),
+                        action=Comp.Button.CallbackAction(data={"request_id": 7}),
                     ),
                     Comp.Button(
                         id="docs",
                         label="Docs",
-                        action=Comp.UrlAction(url="https://example.com/docs"),
+                        action=Comp.Button.UrlAction(url="https://example.com/docs"),
                     ),
                 ]
             ),
@@ -1069,7 +1069,7 @@ async def test_telegram_callback_data_uses_compact_token_without_data_loss():
             Comp.Button(
                 id="approve",
                 label="Approve",
-                action=Comp.CallbackAction(data={"value": "x" * 100}),
+                action=Comp.Button.CallbackAction(data={"value": "x" * 100}),
             )
         ]
     )
@@ -1107,7 +1107,7 @@ async def test_telegram_button_only_message_uses_fallback_text():
                     Comp.Button(
                         id="retry",
                         label="Retry",
-                        action=Comp.CallbackAction(),
+                        action=Comp.Button.CallbackAction(),
                     )
                 ],
                 fallback_text="Try again?",

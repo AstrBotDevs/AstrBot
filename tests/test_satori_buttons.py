@@ -6,9 +6,6 @@ from astrbot.api.message_components import (
     ActionRow,
     Button,
     ButtonInteraction,
-    ButtonStyle,
-    CallbackAction,
-    UrlAction,
 )
 from astrbot.core.platform.button_interaction import decode_button_callback
 from astrbot.core.platform.sources.satori.satori_adapter import (
@@ -34,14 +31,14 @@ async def test_satori_renders_portable_callback_and_link_buttons():
                 Button(
                     id="approve",
                     label="Approve & continue",
-                    action=CallbackAction(data={"request_id": 42}),
-                    style=ButtonStyle.SUCCESS,
+                    action=Button.CallbackAction(data={"request_id": 42}),
+                    style=Button.Style.SUCCESS,
                 ),
                 Button(
                     id="docs",
                     label="Docs",
-                    action=UrlAction(url="https://example.com/?a=1&b=2"),
-                    style=ButtonStyle.PRIMARY,
+                    action=Button.UrlAction(url="https://example.com/?a=1&b=2"),
+                    style=Button.Style.PRIMARY,
                 ),
             ]
         )
@@ -68,7 +65,7 @@ def test_satori_button_interaction_enters_portable_pipeline():
             Button(
                 id="approve",
                 label="Approve",
-                action=CallbackAction(data={"request_id": 42}),
+                action=Button.CallbackAction(data={"request_id": 42}),
             )
         )
     )
@@ -108,7 +105,7 @@ async def test_satori_dispatches_button_interaction(monkeypatch):
         Button(
             id="approve",
             label="Approve",
-            action=CallbackAction(),
+            action=Button.CallbackAction(),
         )
     )
     callback_id = rendered.split('id="', 1)[1].split('"', 1)[0]

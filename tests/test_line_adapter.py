@@ -7,16 +7,14 @@ from astrbot.api.message_components import (
     ActionRow,
     Button,
     ButtonInteraction,
-    CallbackAction,
-    UrlAction,
 )
 from astrbot.core.platform.button_interaction import (
     decode_button_callback,
     encode_button_callback,
 )
 from astrbot.core.platform.sources.line.line_adapter import LinePlatformAdapter
-from astrbot.core.platform.sources.line.line_event import LineMessageEvent
 from astrbot.core.platform.sources.line.line_api import LineAPIClient
+from astrbot.core.platform.sources.line.line_event import LineMessageEvent
 from tests.fixtures.helpers import make_platform_config
 
 
@@ -45,12 +43,12 @@ async def test_line_action_row_builds_template_actions():
             Button(
                 id="approve",
                 label="Approve",
-                action=CallbackAction(data={"request_id": 42}),
+                action=Button.CallbackAction(data={"request_id": 42}),
             ),
             Button(
                 id="docs",
                 label="Documentation",
-                action=UrlAction(url="https://example.com/docs"),
+                action=Button.UrlAction(url="https://example.com/docs"),
             ),
         ],
     )
@@ -78,7 +76,7 @@ async def test_line_action_row_uses_compact_postback_token_for_large_data():
             Button(
                 id="oversized",
                 label="Oversized",
-                action=CallbackAction(data={"value": "x" * 300}),
+                action=Button.CallbackAction(data={"value": "x" * 300}),
             )
         ]
     )

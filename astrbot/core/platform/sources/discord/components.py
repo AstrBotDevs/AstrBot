@@ -3,9 +3,7 @@ import discord
 from astrbot.api.message_components import (
     ActionRow,
     BaseMessageComponent,
-    ButtonStyle,
-    CallbackAction,
-    UrlAction,
+    Button,
 )
 from astrbot.core.platform.button_interaction import encode_button_callback
 
@@ -29,10 +27,10 @@ def action_rows_to_discord_view(
 
     view = discord.ui.View(timeout=None)
     style_mapping = {
-        ButtonStyle.DEFAULT: discord.ButtonStyle.secondary,
-        ButtonStyle.PRIMARY: discord.ButtonStyle.primary,
-        ButtonStyle.SUCCESS: discord.ButtonStyle.success,
-        ButtonStyle.DANGER: discord.ButtonStyle.danger,
+        Button.Style.DEFAULT: discord.ButtonStyle.secondary,
+        Button.Style.PRIMARY: discord.ButtonStyle.primary,
+        Button.Style.SUCCESS: discord.ButtonStyle.success,
+        Button.Style.DANGER: discord.ButtonStyle.danger,
     }
 
     for row_index, action_row in enumerate(action_rows):
@@ -40,14 +38,14 @@ def action_rows_to_discord_view(
             raise ValueError("Discord action rows support at most five buttons.")
         for button in action_row.buttons:
             label = button.label[:80]
-            if isinstance(button.action, UrlAction):
+            if isinstance(button.action, Button.UrlAction):
                 item = discord.ui.Button(
                     label=label,
                     style=discord.ButtonStyle.link,
                     url=button.action.url,
                     row=row_index,
                 )
-            elif isinstance(button.action, CallbackAction):
+            elif isinstance(button.action, Button.CallbackAction):
                 custom_id = encode_button_callback(
                     button.id,
                     button.action.data,

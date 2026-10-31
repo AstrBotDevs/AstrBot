@@ -11,10 +11,7 @@ from astrbot.api.message_components import (
     ActionRow,
     Button,
     ButtonInteraction,
-    ButtonStyle,
-    CallbackAction,
     Plain,
-    UrlAction,
 )
 from astrbot.api.platform import (
     AstrBotMessage,
@@ -128,13 +125,13 @@ def test_qq_keyboard_renders_callback_and_url_buttons() -> None:
                     Button(
                         id="approve",
                         label="Approve request",
-                        action=CallbackAction(data={"request_id": "req-1"}),
-                        style=ButtonStyle.PRIMARY,
+                        action=Button.CallbackAction(data={"request_id": "req-1"}),
+                        style=Button.Style.PRIMARY,
                     ),
                     Button(
                         id="docs",
                         label="Docs",
-                        action=UrlAction(url="https://example.com/docs"),
+                        action=Button.UrlAction(url="https://example.com/docs"),
                     ),
                 ]
             )
@@ -173,7 +170,7 @@ def test_qq_keyboard_validates_platform_limits() -> None:
                     Button(
                         id=f"button-{index}",
                         label=str(index),
-                        action=CallbackAction(),
+                        action=Button.CallbackAction(),
                     )
                     for index in range(6)
                 ]
@@ -196,7 +193,7 @@ async def test_qq_group_send_includes_rendered_keyboard() -> None:
                     Button(
                         id="approve",
                         label="Approve",
-                        action=CallbackAction(data={"request_id": "req-1"}),
+                        action=Button.CallbackAction(data={"request_id": "req-1"}),
                     )
                 ]
             ),

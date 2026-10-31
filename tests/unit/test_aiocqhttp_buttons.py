@@ -17,12 +17,12 @@ async def test_aiocqhttp_action_row_degrades_to_plain_text():
             Comp.Button(
                 id="approve",
                 label="Approve",
-                action=Comp.CallbackAction(data={"request_id": 42}),
+                action=Comp.Button.CallbackAction(data={"request_id": 42}),
             ),
             Comp.Button(
                 id="docs",
                 label="Documentation",
-                action=Comp.UrlAction(url="https://example.com/docs"),
+                action=Comp.Button.UrlAction(url="https://example.com/docs"),
             ),
         ],
     )
@@ -48,7 +48,7 @@ async def test_aiocqhttp_callback_button_never_emits_nonstandard_segment():
     button = Comp.Button(
         id="retry",
         label="Retry",
-        action=Comp.CallbackAction(),
+        action=Comp.Button.CallbackAction(),
     )
 
     data = await AiocqhttpMessageEvent._parse_onebot_json(MessageChain([button]))
@@ -70,7 +70,7 @@ async def test_aiocqhttp_sends_url_button_fallback_as_text():
             Comp.Button(
                 id="website",
                 label="Website",
-                action=Comp.UrlAction(url="https://example.com"),
+                action=Comp.Button.UrlAction(url="https://example.com"),
             )
         ]
     )

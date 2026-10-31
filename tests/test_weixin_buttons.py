@@ -6,9 +6,7 @@ from astrbot.api.event import MessageChain
 from astrbot.api.message_components import (
     ActionRow,
     Button,
-    CallbackAction,
     Plain,
-    UrlAction,
 )
 from astrbot.api.platform import AstrBotMessage, MessageMember, MessageType
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -27,12 +25,12 @@ def _button_row(*, fallback_text: str | None = None) -> ActionRow:
             Button(
                 id="docs",
                 label="查看文档",
-                action=UrlAction(url="https://example.com/docs"),
+                action=Button.UrlAction(url="https://example.com/docs"),
             ),
             Button(
                 id="confirm",
                 label="确认",
-                action=CallbackAction(data={"confirmed": True}),
+                action=Button.CallbackAction(data={"confirmed": True}),
             ),
         ],
         fallback_text=fallback_text,

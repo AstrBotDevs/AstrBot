@@ -4,17 +4,15 @@ import uuid
 
 from astrbot.api.message_components import (
     ActionRow,
-    ButtonStyle,
-    CallbackAction,
-    UrlAction,
+    Button,
 )
 from astrbot.core.platform.button_interaction import encode_button_callback
 
 _BUTTON_STYLE_MAP = {
-    ButtonStyle.DEFAULT: 4,
-    ButtonStyle.PRIMARY: 1,
-    ButtonStyle.SUCCESS: 3,
-    ButtonStyle.DANGER: 2,
+    Button.Style.DEFAULT: 4,
+    Button.Style.PRIMARY: 1,
+    Button.Style.SUCCESS: 3,
+    Button.Style.DANGER: 2,
 }
 
 
@@ -49,7 +47,7 @@ def build_wecom_button_card(
             "text": (button.label or button.id)[:10],
             "style": _BUTTON_STYLE_MAP[button.style],
         }
-        if isinstance(button.action, CallbackAction):
+        if isinstance(button.action, Button.CallbackAction):
             native_button.update(
                 {
                     "type": 0,
@@ -58,7 +56,7 @@ def build_wecom_button_card(
                     ),
                 }
             )
-        elif isinstance(button.action, UrlAction):
+        elif isinstance(button.action, Button.UrlAction):
             native_button.update({"type": 1, "url": button.action.url})
         native_buttons.append(native_button)
 

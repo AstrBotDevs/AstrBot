@@ -8,10 +8,7 @@ from astrbot.api.message_components import (
     ActionRow,
     Button,
     ButtonInteraction,
-    ButtonStyle,
-    CallbackAction,
     Plain,
-    UrlAction,
 )
 from astrbot.api.platform import (
     AstrBotMessage,
@@ -59,13 +56,13 @@ def _row() -> ActionRow:
             Button(
                 id="approve",
                 label="Approve",
-                style=ButtonStyle.SUCCESS,
-                action=CallbackAction(data={"request_id": 42}),
+                style=Button.Style.SUCCESS,
+                action=Button.CallbackAction(data={"request_id": 42}),
             ),
             Button(
                 id="docs",
                 label="Documentation",
-                action=UrlAction(url="https://example.com/docs"),
+                action=Button.UrlAction(url="https://example.com/docs"),
             ),
         ],
     )

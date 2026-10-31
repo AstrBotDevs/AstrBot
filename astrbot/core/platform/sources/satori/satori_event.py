@@ -7,8 +7,6 @@ from astrbot.api.message_components import (
     ActionRow,
     At,
     Button,
-    ButtonStyle,
-    CallbackAction,
     File,
     Forward,
     Image,
@@ -17,7 +15,6 @@ from astrbot.api.message_components import (
     Plain,
     Record,
     Reply,
-    UrlAction,
     Video,
 )
 from astrbot.api.platform import AstrBotMessage, Group, MessageMember, PlatformMetadata
@@ -426,16 +423,16 @@ class SatoriPlatformEvent(AstrMessageEvent):
                     return html.escape(fallback_text or "")
 
                 theme_map = {
-                    ButtonStyle.DEFAULT: "secondary",
-                    ButtonStyle.PRIMARY: "primary",
-                    ButtonStyle.SUCCESS: "success",
-                    ButtonStyle.DANGER: "danger",
+                    Button.Style.DEFAULT: "secondary",
+                    Button.Style.PRIMARY: "primary",
+                    Button.Style.SUCCESS: "success",
+                    Button.Style.DANGER: "danger",
                 }
                 button_elements = []
                 for button in buttons:
                     label = html.escape(button.label)
                     theme = theme_map[button.style]
-                    if isinstance(button.action, CallbackAction):
+                    if isinstance(button.action, Button.CallbackAction):
                         callback_id = html.escape(
                             encode_button_callback(
                                 button.id,
@@ -450,7 +447,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
                             f'<button id="{callback_id}" type="action" '
                             f'theme="{theme}">{label}</button>'
                         )
-                    elif isinstance(button.action, UrlAction):
+                    elif isinstance(button.action, Button.UrlAction):
                         href = html.escape(button.action.url, quote=True)
                         button_elements.append(
                             f'<button type="link" href="{href}" '
@@ -566,16 +563,16 @@ class SatoriPlatformEvent(AstrMessageEvent):
                     return html.escape(fallback_text or "")
 
                 theme_map = {
-                    ButtonStyle.DEFAULT: "secondary",
-                    ButtonStyle.PRIMARY: "primary",
-                    ButtonStyle.SUCCESS: "success",
-                    ButtonStyle.DANGER: "danger",
+                    Button.Style.DEFAULT: "secondary",
+                    Button.Style.PRIMARY: "primary",
+                    Button.Style.SUCCESS: "success",
+                    Button.Style.DANGER: "danger",
                 }
                 button_elements = []
                 for button in buttons:
                     label = html.escape(button.label)
                     theme = theme_map[button.style]
-                    if isinstance(button.action, CallbackAction):
+                    if isinstance(button.action, Button.CallbackAction):
                         callback_id = html.escape(
                             encode_button_callback(
                                 button.id,
@@ -590,7 +587,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
                             f'<button id="{callback_id}" type="action" '
                             f'theme="{theme}">{label}</button>'
                         )
-                    elif isinstance(button.action, UrlAction):
+                    elif isinstance(button.action, Button.UrlAction):
                         href = html.escape(button.action.url, quote=True)
                         button_elements.append(
                             f'<button type="link" href="{href}" '

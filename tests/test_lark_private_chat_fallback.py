@@ -149,7 +149,9 @@ async def test_private_buttons_retry_open_id_with_chat_id(private_chat):
                 Comp.ActionRow(
                     buttons=[
                         Comp.Button(
-                            id="approve", label="Approve", action=Comp.CallbackAction()
+                            id="approve",
+                            label="Approve",
+                            action=Comp.Button.CallbackAction(),
                         )
                     ]
                 )

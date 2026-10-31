@@ -6,12 +6,12 @@ import pytest
 
 import astrbot.api.message_components as Comp
 from astrbot.api.event import MessageChain
+from astrbot.api.platform import Group
+from astrbot.core.pipeline.preprocess_stage import stage as preprocess_stage
 from astrbot.core.platform.button_interaction import (
     decode_button_callback,
     encode_button_callback,
 )
-from astrbot.api.platform import Group
-from astrbot.core.pipeline.preprocess_stage import stage as preprocess_stage
 from astrbot.core.platform.sources.mattermost.client import MattermostClient
 from astrbot.core.platform.sources.mattermost.mattermost_adapter import (
     MattermostPlatformAdapter,
@@ -143,14 +143,14 @@ async def test_mattermost_send_message_chain_maps_portable_buttons():
                         Comp.Button(
                             id="approve",
                             label="Approve",
-                            action=Comp.CallbackAction(data={"request_id": 42}),
-                            style=Comp.ButtonStyle.SUCCESS,
+                            action=Comp.Button.CallbackAction(data={"request_id": 42}),
+                            style=Comp.Button.Style.SUCCESS,
                         ),
                         Comp.Button(
                             id="details",
                             label="Details",
-                            action=Comp.UrlAction(url="https://example.com/42"),
-                            style=Comp.ButtonStyle.PRIMARY,
+                            action=Comp.Button.UrlAction(url="https://example.com/42"),
+                            style=Comp.Button.Style.PRIMARY,
                         ),
                     ],
                     fallback_text="Review actions",
@@ -205,7 +205,7 @@ async def test_mattermost_callback_button_degrades_without_public_callback():
                         Comp.Button(
                             id="approve",
                             label="Approve",
-                            action=Comp.CallbackAction(),
+                            action=Comp.Button.CallbackAction(),
                         )
                     ],
                     fallback_text="Choose an action",

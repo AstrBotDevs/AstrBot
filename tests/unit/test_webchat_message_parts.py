@@ -9,15 +9,13 @@ from astrbot.api.message_components import (
     ActionRow,
     Button,
     ButtonInteraction,
-    CallbackAction,
     File,
-    UrlAction,
 )
+from astrbot.core.pipeline.waking_check.stage import WakingCheckStage
 from astrbot.core.platform.button_interaction import (
     decode_button_callback,
     encode_button_callback,
 )
-from astrbot.core.pipeline.waking_check.stage import WakingCheckStage
 from astrbot.core.platform.sources.webchat import webchat_event
 from astrbot.core.platform.sources.webchat.message_parts_helper import (
     build_webchat_message_parts,
@@ -178,12 +176,12 @@ async def test_webchat_action_row_send_uses_portable_callback_payload(monkeypatc
             Button(
                 id="approve",
                 label="Approve",
-                action=CallbackAction(data={"ticket": 7}),
+                action=Button.CallbackAction(data={"ticket": 7}),
             ),
             Button(
                 id="docs",
                 label="Docs",
-                action=UrlAction(url="https://example.com/docs"),
+                action=Button.UrlAction(url="https://example.com/docs"),
             ),
         ]
     )
@@ -258,7 +256,7 @@ async def test_webchat_action_row_is_persisted_with_callback_data(tmp_path):
                         Button(
                             id="retry",
                             label="Retry",
-                            action=CallbackAction(data="request-1"),
+                            action=Button.CallbackAction(data="request-1"),
                         )
                     ],
                     fallback_text="Retry",

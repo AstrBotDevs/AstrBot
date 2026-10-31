@@ -11,14 +11,12 @@ from astrbot.api.message_components import (
     At,
     BaseMessageComponent,
     Button,
-    CallbackAction,
     File,
     Image,
     Node,
     Nodes,
     Plain,
     Record,
-    UrlAction,
     Video,
 )
 from astrbot.api.platform import Group, MessageMember
@@ -98,9 +96,9 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                     buttons = [segment]
 
                 for button in buttons:
-                    if isinstance(button.action, UrlAction):
+                    if isinstance(button.action, Button.UrlAction):
                         lines.append(f"{button.label}: {button.action.url}")
-                    elif isinstance(button.action, CallbackAction):
+                    elif isinstance(button.action, Button.CallbackAction):
                         lines.append(f"[Button unavailable] {button.label}")
 
                 if lines:
