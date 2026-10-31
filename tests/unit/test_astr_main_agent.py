@@ -202,7 +202,7 @@ async def test_proactive_agent_uses_session_fallback_models(
         ),
         patch.object(ama, "_decorate_llm_request", AsyncMock()),
         patch.object(ama, "_apply_kb", AsyncMock()),
-        patch.object(ama, "MAIN_AGENT_HOOKS", BaseAgentRunHooks()),
+        patch.object(ama, "MainAgentHooks", return_value=BaseAgentRunHooks()),
         patch.object(ama, "AgentRunner", return_value=runner),
         patch("astrbot.core.cron.manager.persist_agent_history", AsyncMock()),
         patch("astrbot.core.astr_agent_tool_exec.persist_agent_history", AsyncMock()),

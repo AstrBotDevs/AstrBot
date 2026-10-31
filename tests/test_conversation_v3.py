@@ -175,11 +175,7 @@ async def test_replay_ignores_large_execution_log_and_pages_by_cursor(database):
 
 
 @pytest.mark.asyncio
-async def test_plugin_manager_entrypoint_isolates_concurrent_hooks(database):
-    from astrbot.core.agent.conversation_events import (
-        active_conversation_writer,
-        active_plugin_id,
-    )
+async def test_plugin_manager_entrypoint_isolates_explicit_conversations(database):
     from astrbot.core.agent.run_context import ContextWrapper
     from astrbot.core.conversation_mgr import ConversationManager
 
@@ -188,62 +184,54 @@ async def test_plugin_manager_entrypoint_isolates_concurrent_hooks(database):
     writers = []
     for plugin_id in ("memory", "search"):
         conv = await database.create_conversation(plugin_id, "p")
-        writer = await manager._event_writer(plugin_id, conv.conversation_id)
+        writer = await manager._event_writer(conv.conversation_id, unified_msg_origin=plugin_id)
         writer.runtime_context = ContextWrapper(context=None, messages=[])
         writers.append(writer)
 
-    async def run_hook(writer, plugin_id):
-        writer_token = active_conversation_writer.set(writer)
-        plugin_token = active_plugin_id.set(plugin_id)
-        try:
-            await asyncio.sleep(0)
-            saved = await manager.append_message(
-                plugin_id,
-                message_id=plugin_id,
-            )
-            repeated = await manager.append_message(
-                plugin_id,
-                cid=writer.cid, message_id=plugin_id,
-            )
-            assert repeated == saved
-            records = await store.events(writer.cid, event_type="message.appended")
-            assert records[-1].event_id == saved
-            assert len(records) == 1
-            assert await store.events(writer.cid, event_type="message.appended", after_seq=records[-1].seq) == []
-            saved_event = await manager.append_plugin_event(
-                f"{plugin_id}.retrieval_completed",
-                {"document_ids": ["d1"]}, event_id=f"{plugin_id}-retrieval",
-            )
-            assert await manager.append_plugin_event(
-                f"{plugin_id}.retrieval_completed",
-                {"document_ids": ["d1"]}, cid=writer.cid, event_id=f"{plugin_id}-retrieval",
-            ) == saved_event
-            private = await store.events(writer.cid, event_type=f"plugin.{plugin_id}.retrieval_completed")
-            assert len(private) == 1
-            assert private[0].event_id == saved_event
-            assert private[0].payload == {"document_ids": ["d1"]}
-        finally:
-            active_plugin_id.reset(plugin_token)
-            active_conversation_writer.reset(writer_token)
+    async def append_records(writer, plugin_id):
+        await asyncio.sleep(0)
+        saved = await manager.append_message(
+            plugin_id, cid=writer.cid, message_id=plugin_id,
+        )
+        repeated = await manager.append_message(
+            plugin_id, cid=writer.cid, message_id=plugin_id,
+        )
+        assert repeated == saved
+        records = await store.events(writer.cid, event_type="message.appended")
+        assert records[-1].event_id == saved
+        assert len(records) == 1
+        assert await store.events(writer.cid, event_type="message.appended", after_seq=records[-1].seq) == []
+        saved_event = await manager.append_plugin_event(
+            f"{plugin_id}.retrieval_completed",
+            {"document_ids": ["d1"]}, cid=writer.cid, event_id=f"{plugin_id}-retrieval",
+        )
+        assert await manager.append_plugin_event(
+            f"{plugin_id}.retrieval_completed",
+            {"document_ids": ["d1"]}, cid=writer.cid, event_id=f"{plugin_id}-retrieval",
+        ) == saved_event
+        private = await store.events(writer.cid, event_type=f"plugin.{plugin_id}.retrieval_completed")
+        assert len(private) == 1
+        assert private[0].event_id == saved_event
+        assert private[0].payload == {"document_ids": ["d1"]}
 
     await asyncio.gather(
-        *(run_hook(writer, plugin_id) for writer, plugin_id in zip(writers, ("memory", "search")))
+        *(append_records(writer, plugin_id) for writer, plugin_id in zip(writers, ("memory", "search")))
     )
     for writer, plugin_id in zip(writers, ("memory", "search")):
         snapshot = await store.read(writer.cid)
         assert snapshot.messages == [{"role": "user", "content": plugin_id}]
-        assert writer.runtime_context.messages[0].content == plugin_id
-        assert len(writer.runtime_context.messages) == 1
+        assert writer.runtime_context.messages == []
+        with pytest.raises(ConversationConflictError):
+            await writer.save_history([{"role": "user", "content": "stale"}])
 
+    with pytest.raises(TypeError, match="cid"):
+        await manager.append_message("requires an explicit target")
+    with pytest.raises(TypeError, match="cid"):
+        await manager.append_plugin_event("memory.record", {})
     with pytest.raises(ValueError, match="content"):
         await manager.append_message({"role": "_checkpoint"}, cid=writers[0].cid)
-
-    writer_token = active_conversation_writer.set(writers[0])
-    try:
-        with pytest.raises(ValueError, match="not accessible"):
-            await manager._event_writer("other", writers[0].cid)
-    finally:
-        active_conversation_writer.reset(writer_token)
+    with pytest.raises(ValueError, match="not accessible"):
+        await manager._event_writer(writers[0].cid, unified_msg_origin="other")
 
 
 @pytest.mark.asyncio
@@ -534,7 +522,7 @@ async def test_declared_read_revision_rejects_context_changes(database, change):
     assert "revision" not in ConversationV2.__table__.columns
     with pytest.raises(FrozenInstanceError):
         conversation.revision.head_seq = 0
-    writer = await manager._event_writer("umo", created.conversation_id, expected_revision=conversation.revision)
+    writer = await manager._event_writer(created.conversation_id, unified_msg_origin="umo", expected_revision=conversation.revision)
     if change == "append":
         await writer.append("plugin.test.changed", {})
     else:
@@ -544,7 +532,7 @@ async def test_declared_read_revision_rejects_context_changes(database, change):
             expected_leaf=record.revision.leaf_event_id,
         )
     with pytest.raises(ConversationConflictError, match="preparing"):
-        await manager._event_writer("umo", created.conversation_id, expected_revision=conversation.revision)
+        await manager._event_writer(created.conversation_id, unified_msg_origin="umo", expected_revision=conversation.revision)
 
 
 @pytest.mark.asyncio

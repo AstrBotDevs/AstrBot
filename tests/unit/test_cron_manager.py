@@ -680,7 +680,7 @@ class TestRunActiveAgentJob:
     ):
         """Apply the session plugin policy to cron response hooks and tools."""
         from astrbot.core.agent.tool import FunctionTool, ToolSet
-        from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
+        from astrbot.core.astr_agent_hooks import MainAgentHooks
         from astrbot.core.astr_main_agent import _plugin_tool_fix
         from astrbot.core.pipeline import context_utils
         from astrbot.core.star.star import StarMetadata, star_map
@@ -756,7 +756,7 @@ class TestRunActiveAgentJob:
         req = build_agent.call_args.kwargs["req"]
         req.func_tool = tools
         _plugin_tool_fix(event, req)
-        await MAIN_AGENT_HOOKS.on_agent_done(
+        await MainAgentHooks(None).on_agent_done(
             SimpleNamespace(context=SimpleNamespace(event=event)),
             SimpleNamespace(reasoning_content=""),
         )

@@ -403,6 +403,7 @@ The deprecated `update_conversation_title()` and
 conversations = self.context.conversations
 message_id = await conversations.append_message(
     "The user prefers concise answers.",
+    cid=target_cid,
 )
 ```
 
@@ -418,14 +419,15 @@ await conversations.append_message(
             image_url=ImageURLPart.ImageURL(url="https://example.com/image.png")
         ),
     ],
+    cid=target_cid,
 )
 ```
 
 The host supplies `role="user"`;
 plugins do not submit a role or a complete message object. The message is persisted
-and appended to conversation context, including the working context when called
-within the current agent run, including hooks and tools. The call returns a string ID after the database
-transaction commits. An optional `message_id` can identify retries of the same submission.
+and appended to the stored conversation. It does not change a running agent's
+working context, including when called from a hook or tool. The call returns a
+string ID after the database transaction commits. An optional `message_id` can identify retries of the same submission.
 
 ### Appending Plugin Events
 
@@ -433,6 +435,7 @@ transaction commits. An optional `message_id` can identify retries of the same s
 event_id = await conversations.append_plugin_event(
     event_type="my_plugin.retrieval_completed",
     data={"document_ids": ["document-1"]},
+    cid=target_cid,
 )
 ```
 
@@ -448,26 +451,29 @@ a conversation event history, for example `await self.put_kv_data(f"retrieval:{c
 KV storage is isolated by plugin. Include `cid` in the key when state belongs to
 one conversation.
 
-Neither append method starts an agent run or schedules a follow-up. The conversation
-must already exist. Both methods take an optional keyword-only `cid`. Without it,
-the host first uses the current agent run's bound conversation, even if the selected
-conversation changes during the run. Otherwise it uses the active message's UMO
-to look up its selected conversation. With no valid current context or selected
-conversation, the call raises `ValueError` instead of creating a conversation.
+Both append methods require an explicit keyword-only `cid` identifying an existing
+conversation. The host reads its UMO from storage. Missing or invalid conversations
+raise `ValueError`; omitting `cid` raises `TypeError`. These operations do not infer
+a target from the active message, selected conversation, or calling task. Neither
+method starts an agent run or schedules a follow-up.
 
-The current writer is bound to the agent's execution context through initialization,
-execution, and final history persistence. It is restored when the run exits, including
-on failure or cancellation. Message events do not carry a conversation writer.
+To modify the current execution, edit the `ProviderRequest.contexts` or runtime
+messages supplied to the relevant hook. The host records those changes through the
+writer owned by that execution. Hook signatures are unchanged; plugins do not
+receive the writer. Each execution has its own hooks instance, and background or
+cron executions do not inherit a conversation writer or plugin identity through
+`ContextVar`.
 
-For background work or an explicitly targeted conversation, pass only its ID;
-the host reads its UMO from the stored conversation:
+Direct service calls such as `update_conversation()` and `add_message_pair()` are
+independent persistence operations, even inside a hook. They do not synchronize an
+active execution's working context. If an independent write changes the stored
+revision, the running execution's next write can raise `ConversationConflictError`
+instead of overwriting that change. Use hook inputs for in-run changes; do not
+retry side-effecting tools to resolve a revision conflict.
 
-```py
-await conversations.append_message("Additional context", cid=target_cid)
-await conversations.append_plugin_event(
-    "my_plugin.retrieval_completed", {"document_ids": ["document-1"]}, cid=target_cid
-)
-```
+Only working-context changes captured at the plugin hook boundary are attributed
+to plugins for baseline retention. Direct service calls keep unknown attribution
+and are conservatively retained.
 
 ### Getting the Current LLM Conversation History for a Session
 

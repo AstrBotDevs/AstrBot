@@ -8,12 +8,11 @@ import pytest_asyncio
 
 from astrbot.core.agent.conversation_events import (
     ConversationEventWriter,
-    active_conversation_writer,
-    active_plugin_id,
 )
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.response import AgentResponse
 from astrbot.core.conversation_mgr import ConversationManager
+from astrbot.core.db.conversation import ConversationConflictError
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.pipeline import context_utils
 from astrbot.core.star.star_handler import EventType
@@ -77,13 +76,9 @@ async def test_iris_clear_is_plugin_reset_and_previous_body_is_reclaimed(
             trace=MagicMock(),
         )
         await writer.start_turn({"kind": "test"})
-        writer_token = active_conversation_writer.set(writer)
-        try:
-            await context_utils.call_event_hook(
-                event, EventType.OnLLMRequestEvent, writer.request
-            )
-        finally:
-            active_conversation_writer.reset(writer_token)
+        await context_utils.call_event_hook(
+            event, EventType.OnLLMRequestEvent, writer.request, writer=writer
+        )
         history = [
             {"role": "user", "content": "private memory", "_no_save": True},
             {"role": "user", "content": f"question {index}"},
@@ -140,13 +135,9 @@ async def test_pre_hook_changes_stay_unknown_and_done_hook_changes_are_plugin(
 
     install_hook(edit_history)
     await writer.start_turn({"kind": "test"})
-    writer_token = active_conversation_writer.set(writer)
-    try:
-        await context_utils.call_event_hook(
-            event, EventType.OnAgentDoneEvent, writer.runtime_context
-        )
-    finally:
-        active_conversation_writer.reset(writer_token)
+    await context_utils.call_event_hook(
+        event, EventType.OnAgentDoneEvent, writer.runtime_context, writer=writer
+    )
     await writer.save_history([{"role": "user", "content": "plugin edited history"}])
     await writer.finish_turn("completed")
     rebases = [
@@ -185,7 +176,7 @@ async def test_non_plugin_rebases_survive_later_plugin_replacements(database, or
 
 
 @pytest.mark.asyncio
-async def test_manager_uses_invocation_identity_without_guessing_external_callers(
+async def test_manager_writes_are_independent_of_execution_and_keep_unknown_origin(
     database,
 ):
     store = database.conversation_store
@@ -198,20 +189,17 @@ async def test_manager_uses_invocation_identity_without_guessing_external_caller
     )
     external = (await store.events(conv.conversation_id))[-1]
     assert external.payload["origin"] == "unknown"
-    plugin_token = active_plugin_id.set("memory")
-    try:
-        await manager.update_conversation("umo", conv.conversation_id, history=[])
-    finally:
-        active_plugin_id.reset(plugin_token)
-    assert (await store.events(conv.conversation_id))[-1].payload["origin"] == "plugin"
-    writer = await manager._event_writer("umo", conv.conversation_id)
-    writer_token = active_conversation_writer.set(writer)
-    try:
-        await writer.append_message({"role": "user", "content": "restore"})
-        await manager.update_conversation("umo", conv.conversation_id, history=[])
-    finally:
-        active_conversation_writer.reset(writer_token)
+    await manager.update_conversation("umo", conv.conversation_id, history=[])
     assert (await store.events(conv.conversation_id))[-1].payload["origin"] == "unknown"
+    writer = await manager._event_writer(conv.conversation_id, unified_msg_origin="umo")
+    await writer.append_message({"role": "user", "content": "restore"})
+    await manager.update_conversation("umo", conv.conversation_id, history=[])
+    assert (await store.events(conv.conversation_id))[-1].payload["origin"] == "unknown"
+    assert [entry["message"] for entry in writer._entries] == [
+        {"role": "user", "content": "restore"}
+    ]
+    with pytest.raises(ConversationConflictError):
+        await writer.save_history([{"role": "user", "content": "stale run"}])
 
 
 @pytest.mark.asyncio
@@ -223,7 +211,7 @@ async def test_runner_context_source_is_explicit_and_linear_fork_is_independent(
     conv = await store.create(
         umo="umo", platform_id="p", content=[{"role": "user", "content": "old"}]
     )
-    writer = await manager._event_writer("umo", conv.conversation_id)
+    writer = await manager._event_writer(conv.conversation_id, unified_msg_origin="umo")
     await writer.consume(
         AgentResponse(
             "context.updated",
@@ -263,13 +251,9 @@ async def test_transcript_only_runner_does_not_clear_history_on_request_hook(
         req.contexts = [{"role": "user", "content": "remote-only memory"}]
 
     install_hook(inject_remote_context)
-    writer_token = active_conversation_writer.set(writer)
-    try:
-        await context_utils.call_event_hook(
-            event, EventType.OnLLMRequestEvent, writer.request
-        )
-    finally:
-        active_conversation_writer.reset(writer_token)
+    await context_utils.call_event_hook(
+        event, EventType.OnLLMRequestEvent, writer.request, writer=writer
+    )
     await writer.save_history([entry["message"] for entry in writer._entries])
     assert (await store.read(conv.conversation_id)).messages == history
 
@@ -297,7 +281,7 @@ async def test_dashboard_history_edit_is_user_owned_and_survives_plugin_cleanup(
     user_baseline = (await store.events(conv.conversation_id))[-1]
     assert user_baseline.type == "context.rebased"
     assert user_baseline.payload["origin"] == "user"
-    writer = await manager._event_writer("umo", conv.conversation_id)
+    writer = await manager._event_writer(conv.conversation_id, unified_msg_origin="umo")
     await writer.save_history(
         [{"role": "user", "content": "memory 1"}], origin="plugin"
     )

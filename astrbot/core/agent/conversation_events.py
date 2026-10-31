@@ -5,7 +5,6 @@ import hashlib
 import json
 import uuid
 from collections import Counter, defaultdict, deque
-from contextvars import ContextVar
 from copy import deepcopy
 
 from sqlalchemy.exc import SQLAlchemyError
@@ -15,14 +14,6 @@ from astrbot.core.db.conversation import (
     CONTEXT_TYPES,
     ConversationSnapshot,
     persistent_messages,
-)
-
-active_plugin_id: ContextVar[str | None] = ContextVar(
-    "active_conversation_plugin", default=None
-)
-
-active_conversation_writer: ContextVar["ConversationEventWriter | None"] = ContextVar(
-    "active_conversation_writer", default=None
 )
 
 

@@ -24,8 +24,8 @@
 
 ## 实现职责与事务边界
 
-- `ConversationManager` 通过 `ctx.conversations` 提供插件业务接口，负责解析目标对话和复用当前运行的 writer。`ctx.conversation_manager` 保留为兼容别名。
-- `ConversationEventWriter` 管理一次 Agent 执行的事件和工作上下文；`active_conversation_writer` 在执行上下文中绑定，退出时恢复。`AstrMessageEvent` 不再携带 writer 字段。
+- `ConversationManager` 通过 `ctx.conversations` 提供插件业务接口，按明确的对话目标执行独立持久化操作，不查找或复用正在运行的 writer。`ctx.conversation_manager` 保留为兼容别名。
+- `ConversationEventWriter` 由一次 Agent 执行明确拥有，管理本次执行的事件和工作上下文。每次执行创建 `MainAgentHooks(writer)`，通过内部参数将同一个 writer 传给 hook 调度函数；不使用共享 hooks 实例或环境变量查找 writer。插件不接收 writer，`AstrMessageEvent` 也不携带 writer 字段。
 - `db/conversation.py` 的 `ConversationStore` 负责事件校验、幂等与版本冲突、上下文投影、快照和保留策略。它仍是 SQLite 实现，不代表已经支持 PostgreSQL / MySQL。
 - `db/migration/migra_conversation_events.py` 负责旧整份历史、旧树状事件和旧展示关联的迁移。启动初始化和旧备份导入显式调用迁移；正常事件追加不经过迁移代码。
 - `db/webchat_projection.py` 维护追加事件对应的展示消息位置，以及自动快照产生的等价位置映射。它接收已校验、有序的事件和现有数据库 session，不创建或提交事务。
@@ -330,16 +330,18 @@ from astrbot.core.agent.message import TextPart
 
 message_id = await ctx.conversations.append_message(
     [TextPart(text="补充上下文")],
+    cid=target_cid,
 )
 event_id = await ctx.conversations.append_plugin_event(
     event_type="astrbot_plugin_memory.retrieval_completed",
     data={"document_ids": ["doc_12", "doc_35"]},
+    cid=target_cid,
 )
 ```
 
-`append_message(content, *, cid=None, message_id=None)` 接受字符串或 AstrBot 内容块列表（也接受内容块字典），由宿主补上 `role="user"`。插件不传完整的 role/content 消息对象。写入提交后返回事件 ID，并同步当前运行的工作上下文；`_no_save` 内容仍按临时内容规则排除未来上下文。可指定稳定的 `message_id` 重试相同提交。
+`append_message(content, *, cid, message_id=None)` 接受字符串或 AstrBot 内容块列表（也接受内容块字典），由宿主补上 `role="user"`。插件不传完整的 role/content 消息对象。写入提交后返回事件 ID，不同步任何运行中的工作上下文；`_no_save` 内容仍按临时内容规则排除未来上下文。可指定稳定的 `message_id` 重试相同提交。
 
-`append_plugin_event(event_type, data, *, cid=None, event_id=None)` 只保存 JSON 对象，不进入模型上下文。框架加上 `plugin.` 命名空间，分配版本、ID、seq 和时间；`event_type` 由调用者提供，建议包含插件前缀，框架不会自动补上插件身份或 turn_id。可指定稳定的 `event_id` 重试相同提交，例如：
+`append_plugin_event(event_type, data, *, cid, event_id=None)` 只保存 JSON 对象，不进入模型上下文。框架加上 `plugin.` 命名空间，分配版本、ID、seq 和时间；`event_type` 由调用者提供，建议包含插件前缀，框架不会自动补上插件身份或 turn_id。可指定稳定的 `event_id` 重试相同提交，例如：
 
 ```json
 {
@@ -350,7 +352,11 @@ event_id = await ctx.conversations.append_plugin_event(
 }
 ```
 
-两个追加接口都不启动 Agent 或调度后续轮次。省略 `cid` 时，优先使用当前运行绑定的对话，否则通过活动消息的 UMO 查找选中的对话；没有有效目标则抛出 `ValueError`。后台任务可以显式传 `cid`，宿主从存储记录取得 UMO。无效 CID 会报错，不会自动创建对话。此简化仅适用于新增追加接口，现有 `get_conversation(umo, cid)` 等方法保留原参数。
+两个追加接口都必须传 `cid`，不启动 Agent 或调度后续轮次。目标只能来自调用参数，宿主从记录取得 UMO；无效 CID 抛出 `ValueError`，省略参数抛出 `TypeError`。现有 `get_conversation(umo, cid)` 等接口保留原参数；按 UMO 查询选中对话的旧方法仍使用明确传入的 UMO，不读取运行环境。
+
+插件参与当前执行时，通过 hook 收到的 `ProviderRequest.contexts` 或运行消息列表修改工作上下文。调度器在插件 hook 组前后记录变化，显式标记 plugin 来源；不设置或查询 `active_plugin_id`。直接调用 `update_conversation()`、`add_message_pair()` 等对话服务是独立持久化操作，不附着到正在运行的 writer，也不隐式同步其内存状态。无法明确归因的历史替换保持 unknown 来源，保守保留。
+
+独立写入与正在执行的 Agent 存在版本冲突时，旧执行的后续提交明确失败，不覆盖新历史；插件需要修改本次执行时应使用 hook 输入。后台任务不会仅因创建于 hook 内就获得修改该执行的 writer。
 
 本 PR 早期草案里的 `event.conversation_events`、`get_conversation_events()`、`latest()`、`list()` 已移除，不属于当前插件 API。底层 `ConversationStore.events()` 用于内部事件读取，不是插件查询接口；普通可变插件状态使用插件 KV 存储。插件自定义事件不驱动消息投影，卸载插件不会改变已保留的核心上下文，也不会恢复已回收的旧基线。
 

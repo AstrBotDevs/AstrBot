@@ -12,7 +12,6 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
 
 from astrbot import logger
-from astrbot.core.agent.conversation_events import active_conversation_writer
 from astrbot.core.agent.runners.base import AgentState
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.config.agent_runner import resolve_context_compression_config
@@ -601,7 +600,6 @@ class CronJobManager:
             runner = result.agent_runner
             event_writer = result.conversation_events
             reset_coro = result.reset_coro
-            writer_token = active_conversation_writer.set(event_writer)
             status = "failed"
             try:
                 if reset_coro is not None:
@@ -658,7 +656,6 @@ class CronJobManager:
                     if event_writer is not None:
                         await event_writer.finish_turn(status)
                 finally:
-                    active_conversation_writer.reset(writer_token)
                     if reset_coro is not None:
                         reset_coro.close()
 

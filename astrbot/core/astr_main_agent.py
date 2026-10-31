@@ -12,16 +12,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from astrbot.core import logger
-from astrbot.core.agent.conversation_events import (
-    ConversationEventWriter,
-    active_conversation_writer,
-)
+from astrbot.core.agent.conversation_events import ConversationEventWriter
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import TextPart
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.astr_agent_context import AgentContextWrapper, AstrAgentContext
-from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
+from astrbot.core.astr_agent_hooks import MainAgentHooks
 from astrbot.core.astr_agent_run_util import AgentRunner
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.astr_main_agent_resources import (
@@ -2009,8 +2006,8 @@ async def build_main_agent(
         plugin_context.conversation_manager, ConversationManager
     ):
         event_writer = await plugin_context.conversation_manager._event_writer(
-            event.unified_msg_origin,
             req.conversation.cid,
+            unified_msg_origin=event.unified_msg_origin,
             expected_revision=req.conversation.revision,
         )
         event_writer.request = req
@@ -2024,7 +2021,7 @@ async def build_main_agent(
             tool_call_timeout=config.tool_call_timeout,
         ),
         tool_executor=FunctionToolExecutor(),
-        agent_hooks=MAIN_AGENT_HOOKS,
+        agent_hooks=MainAgentHooks(event_writer),
         streaming=config.streaming_response,
         llm_compress_instruction=config.llm_compress_instruction,
         llm_compress_keep_recent_ratio=config.llm_compress_keep_recent_ratio,
@@ -2049,11 +2046,7 @@ async def build_main_agent(
     )
 
     if apply_reset:
-        writer_token = active_conversation_writer.set(event_writer)
-        try:
-            await reset_coro
-        finally:
-            active_conversation_writer.reset(writer_token)
+        await reset_coro
 
     return MainAgentBuildResult(
         agent_runner=agent_runner,

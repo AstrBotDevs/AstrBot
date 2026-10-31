@@ -3,10 +3,7 @@ import traceback
 import typing as T
 
 from astrbot import logger
-from astrbot.core.agent.conversation_events import (
-    active_conversation_writer,
-    active_plugin_id,
-)
+from astrbot.core.agent.conversation_events import ConversationEventWriter
 from astrbot.core.agent.message import dump_messages_with_checkpoints
 from astrbot.core.message.message_event_result import CommandResult, MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -84,14 +81,20 @@ async def call_event_hook(
     event: AstrMessageEvent,
     hook_type: EventType,
     *args,
+    writer: ConversationEventWriter | None = None,
     **kwargs,
 ) -> bool:
-    """调用事件钩子函数
+    """Invoke plugin hooks and record changes to this execution's working context.
+
+    Args:
+        event: Message used to select eligible plugin handlers.
+        hook_type: Hook to dispatch.
+        *args: Positional arguments passed to plugin handlers.
+        writer: Explicit execution-owned writer, consumed only by the host.
+        **kwargs: Keyword arguments passed to plugin handlers.
 
     Returns:
-        bool: 如果事件被终止，返回 True
-    #
-
+        Whether a plugin stopped event propagation.
     """
     handlers = star_handlers_registry.get_handlers_by_event_type(
         hook_type,
@@ -99,7 +102,6 @@ async def call_event_hook(
     )
     # Snapshot once around the hook group: only mutations during plugin execution
     # get plugin retention. Earlier framework/custom-runner mutations stay unknown.
-    writer = active_conversation_writer.get()
     if handlers and writer is not None and not writer.closed:
         if writer.runtime_context is not None:
             history = dump_messages_with_checkpoints(
@@ -144,11 +146,7 @@ async def call_event_hook(
                 logger.debug(
                     f"hook({hook_type.name}) -> {plugin_name} - {handler.handler_name}",
                 )
-                plugin_token = active_plugin_id.set(plugin_name)
-                try:
-                    await handler.handler(event, *args, **kwargs)
-                finally:
-                    active_plugin_id.reset(plugin_token)
+                await handler.handler(event, *args, **kwargs)
             except BaseException:
                 logger.error(traceback.format_exc())
                 event.trace.record(

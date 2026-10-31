@@ -54,7 +54,7 @@ class PipelineScheduler:
             if isinstance(coroutine, AsyncGenerator):
                 # 如果返回的是异步生成器, 实现洋葱模型的核心
                 agen = cast(AsyncGenerator[None], coroutine)
-                # Close in this task so execution-scoped ContextVars unwind here.
+                # Close suspended stages here so their execution cleanup completes.
                 async with aclosing(agen):
                     async for _ in agen:
                         # 此处是前置处理完成后的暂停点(yield), 下面开始执行后续阶段

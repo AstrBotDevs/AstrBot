@@ -11,7 +11,6 @@ from contextlib import aclosing
 import mcp
 
 from astrbot import logger
-from astrbot.core.agent.conversation_events import active_conversation_writer
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import Message
@@ -659,7 +658,6 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             if reset_coro is not None:
                 reset_coro.close()
             return
-        writer_token = active_conversation_writer.set(event_writer)
         status = "failed"
         try:
             if reset_coro is not None:
@@ -701,7 +699,6 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 if event_writer is not None:
                     await event_writer.finish_turn(status)
             finally:
-                active_conversation_writer.reset(writer_token)
                 if reset_coro is not None:
                     reset_coro.close()
         # Set once anything reaches this session, e.g. via send_message_to_user.

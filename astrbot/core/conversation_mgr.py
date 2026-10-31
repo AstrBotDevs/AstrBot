@@ -8,11 +8,7 @@ import json
 from collections.abc import Awaitable, Callable
 
 from astrbot.core import sp
-from astrbot.core.agent.conversation_events import (
-    ConversationEventWriter,
-    active_conversation_writer,
-    active_plugin_id,
-)
+from astrbot.core.agent.conversation_events import ConversationEventWriter
 from astrbot.core.agent.message import (
     AssistantMessageSegment,
     ContentPart,
@@ -43,63 +39,34 @@ class ConversationManager:
 
     async def _event_writer(
         self,
-        unified_msg_origin: str | None = None,
-        conversation_id: str | None = None,
+        conversation_id: str,
         *,
+        unified_msg_origin: str | None = None,
         expected_revision: ConversationRevision | None = None,
     ) -> ConversationEventWriter:
-        """Bind the host to an owned conversation revision.
+        """Create a writer for an explicitly selected conversation revision.
 
         Args:
+            conversation_id: Public conversation identity.
             unified_msg_origin: Optional explicit owner UMO for host access checks.
-            conversation_id: Public identity. When omitted, use the current run's
-                conversation, then the active message's selected conversation.
-            expected_revision: Revision of the context used to prepare this request.
+            expected_revision: Revision used to prepare the host's request.
 
         Returns:
-            A branch-bound writer implementing the common event protocol.
+            A new writer owned by the caller, independent of other executions.
 
         Raises:
-            ValueError: No current conversation exists, or an explicitly owned
-                conversation is missing or belongs to another UMO.
-            ConversationConflictError: Context or branch changed during preparation.
+            ValueError: The identity is invalid, missing, or owned by another UMO.
+            ConversationConflictError: The prepared revision is no longer current.
         """
-        active = active_conversation_writer.get()
-        if active is not None and active.closed:
-            active = None
-        if active is None:
-            from astrbot.core.platform.astr_message_event import current_message_event
-
-            event = current_message_event.get()
-            if event is not None and event._execution_active:
-                if conversation_id is None and unified_msg_origin is None:
-                    unified_msg_origin = event.unified_msg_origin
-        if conversation_id is None:
-            if active is not None and (
-                unified_msg_origin is None or active.umo == unified_msg_origin
-            ):
-                unified_msg_origin = active.umo
-                conversation_id = active.cid
-            elif unified_msg_origin is not None:
-                conversation_id = await self.get_curr_conversation_id(
-                    unified_msg_origin
-                )
-            if conversation_id is None:
-                raise ValueError("No current conversation; provide cid explicitly")
-        if (
-            active
-            and active.cid == conversation_id
-            and (unified_msg_origin is None or active.umo == unified_msg_origin)
+        if not isinstance(conversation_id, str) or not conversation_id:
+            raise ValueError("Provide a nonempty cid explicitly")
+        snapshot = await self.db.conversation_store.read(conversation_id)
+        if snapshot is None or (
+            unified_msg_origin is not None
+            and snapshot.conversation.umo != unified_msg_origin
         ):
-            writer = active
-        else:
-            snapshot = await self.db.conversation_store.read(conversation_id)
-            if snapshot is None or (
-                unified_msg_origin is not None
-                and snapshot.conversation.umo != unified_msg_origin
-            ):
-                raise ValueError("Conversation is not accessible")
-            writer = ConversationEventWriter(self.db.conversation_store, snapshot)
+            raise ValueError("Conversation is not accessible")
+        writer = ConversationEventWriter(self.db.conversation_store, snapshot)
         if expected_revision is not None and (
             expected_revision.head_seq != writer.head_seq
             or expected_revision.leaf_event_id != writer.leaf_event_id
@@ -113,15 +80,15 @@ class ConversationManager:
         self,
         content: str | list[ContentPart | dict],
         *,
-        cid: str | None = None,
+        cid: str,
         message_id: str | None = None,
     ) -> str:
         """Append plugin-supplied content as a user message.
 
         Args:
             content: Text or AstrBot content parts. The host supplies the user role.
-            cid: Target conversation, or the current conversation when omitted.
-                Required outside an active message or agent run.
+            cid: Explicit target conversation. This operation does not modify
+                any running agent's working context.
             message_id: Optional stable identity for idempotent submission retries.
 
         Returns:
@@ -151,7 +118,7 @@ class ConversationManager:
         event_type: str,
         data: dict,
         *,
-        cid: str | None = None,
+        cid: str,
         event_id: str | None = None,
     ) -> str:
         """Persist a custom conversation record without changing model context.
@@ -159,8 +126,8 @@ class ConversationManager:
         Args:
             event_type: Plugin-prefixed name, such as ``my_plugin.retrieval_completed``.
             data: JSON-serializable object containing the plugin's event data.
-            cid: Target conversation, or the current conversation when omitted.
-                Required outside an active message or agent run.
+            cid: Explicit target conversation. This operation does not modify
+                any running agent's working context.
             event_id: Optional stable identity for idempotent submission retries.
 
         Returns:
@@ -478,36 +445,6 @@ class ConversationManager:
             # 如果没有提供 conversation_id，则获取当前的
             conversation_id = await self.get_curr_conversation_id(unified_msg_origin)
         if conversation_id:
-            writer = active_conversation_writer.get()
-            if writer and writer.cid == conversation_id:
-                if history is not None:
-                    await writer.save_history(
-                        history,
-                        token_usage=token_usage,
-                        origin="plugin" if active_plugin_id.get() else "unknown",
-                    )
-                changes = {}
-                if title is not None:
-                    changes["title"] = title
-                if persona_id is not None:
-                    changes["persona_id"] = persona_id
-                if changes or (history is None and token_usage is not None):
-                    payload = {"changes": changes}
-                    if history is None and token_usage is not None:
-                        payload["token_usage"] = token_usage
-                    await writer.append("conversation.updated", payload)
-                return
-            if (
-                history is not None
-                and active_plugin_id.get()
-                and isinstance(self.db.conversation_store, ConversationStore)
-            ):
-                # A hook may explicitly update another conversation it owns.
-                target_writer = await self._event_writer(
-                    unified_msg_origin, conversation_id
-                )
-                await target_writer.save_history(history, origin="plugin")
-                history = None
             await self.db.update_conversation(
                 cid=conversation_id,
                 title=title,
@@ -533,16 +470,6 @@ class ConversationManager:
             Exception: If the conversation with the given ID is not found
         """
         if isinstance(self.db.conversation_store, ConversationStore):
-            writer = active_conversation_writer.get()
-            if writer and writer.cid == cid:
-                messages = [
-                    m.model_dump() if hasattr(m, "model_dump") else m
-                    for m in (user_message, assistant_message)
-                ]
-                await writer.save_history(
-                    [entry["message"] for entry in writer._entries] + messages
-                )
-                return
             snapshot = await self.db.conversation_store.read(cid)
             if snapshot is None:
                 raise ValueError(f"Conversation with id {cid} not found")

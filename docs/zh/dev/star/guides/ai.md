@@ -400,6 +400,7 @@ async def test(self, event: AstrMessageEvent):
 conversations = self.context.conversations
 message_id = await conversations.append_message(
     "用户偏好简洁的回答。",
+    cid=target_cid,
 )
 ```
 
@@ -415,12 +416,13 @@ await conversations.append_message(
             image_url=ImageURLPart.ImageURL(url="https://example.com/image.png")
         ),
     ],
+    cid=target_cid,
 )
 ```
 
 Core 固定补上 `role="user"`，
 插件不需要提交角色或完整消息对象。消息会持久化并追加到对话上下文。
-在当前 Agent 运行中的 hook 或工具内调用时，也会同步本次运行的工作上下文。
+即使在 hook 或工具内调用，也不会修改正在运行的 Agent 的工作上下文。
 接口在数据库事务提交后返回字符串 ID；可通过可选的 `message_id` 标识同一次提交的重试。
 
 ### 追加插件自定义事件 `append_plugin_event`
@@ -429,6 +431,7 @@ Core 固定补上 `role="user"`，
 event_id = await conversations.append_plugin_event(
     event_type="my_plugin.retrieval_completed",
     data={"document_ids": ["document-1"]},
+    cid=target_cid,
 )
 ```
 
@@ -442,23 +445,21 @@ event_id = await conversations.append_plugin_event(
 [插件 KV 存储](./storage.md)，例如 `await self.put_kv_data(f"retrieval:{cid}", data)`。
 KV 按插件隔离；需要按对话区分时，由插件把 `cid` 放入 key。
 
-这两个追加接口都不会启动 Agent，也不会安排 follow-up。
-目标对话必须已存在。两个接口都支持可选的关键字参数 `cid`。
-省略时优先使用当前 Agent 运行绑定的对话，即使运行期间切换了选中的对话，也不会改变写入目标。
-没有运行绑定时，通过当前有效消息事件的 UMO 查找选中的对话。
-如果没有有效上下文或选中的对话，接口抛出 `ValueError`，不会自动创建对话。
+两个追加接口都必须显式传入关键字参数 `cid`，目标对话必须已存在，Core 从存储记录取得 UMO。
+无效或不存在的 CID 会抛出 `ValueError`，省略 `cid` 会抛出 `TypeError`。
+接口不会从活动消息、当前选中的对话或调用任务推断目标，也不会启动 Agent 或安排 follow-up。
 
-当前 writer 绑定在 Agent 的执行上下文中，覆盖初始化、执行和最后的历史保存。
-运行结束、失败或取消时恢复外层绑定，消息事件对象不携带 writer。
+修改当前执行的上下文，应修改相应 hook 收到的 `ProviderRequest.contexts` 或运行时消息列表。
+宿主通过本次执行拥有的 writer 记录这些修改。插件 hook 的签名不变，也不会收到 writer。
+每次执行创建自己的 hooks 实例，后台任务和 cron 不通过 `ContextVar` 继承对话 writer 或插件身份。
 
-后台任务或需要指定写入目标时，只传 `cid` 即可，Core 会从对话记录取得 UMO：
+直接调用 `update_conversation()`、`add_message_pair()` 等对话服务，即使发生在 hook 内，
+也是独立的持久化操作，不会同步当前执行的工作上下文。若独立写入改变了存储版本，
+当前执行的下一次写入可能抛出 `ConversationConflictError`，而不是覆盖新历史。
+本次执行的上下文修改应使用 hook 参数；不能通过重试有副作用的工具来解决版本冲突。
 
-```py
-await conversations.append_message("补充上下文", cid=target_cid)
-await conversations.append_plugin_event(
-    "my_plugin.retrieval_completed", {"document_ids": ["document-1"]}, cid=target_cid
-)
-```
+只有在插件 hook 边界捕获的工作上下文修改才会标记为插件来源并应用相应的基线回收策略。
+对话服务直接写入的历史修改保留 unknown 归因，采用保守的保留策略。
 
 ### 获取会话当前的 LLM 对话历史 `get_conversation`
 
