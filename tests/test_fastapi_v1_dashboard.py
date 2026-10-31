@@ -4519,6 +4519,51 @@ async def test_v1_platform_webhook_preserves_tuple_response(
 
 
 @pytest.mark.asyncio
+async def test_v1_log_export_reports_blocked_console(
+    monkeypatch, tmp_path: Path, asgi_app, asgi_client: httpx.AsyncClient
+):
+    """Export drop counters even while the console cannot write its warning."""
+    import threading
+
+    from astrbot.core.log import LogManager
+    from astrbot.core.utils.console_sink import BoundedConsoleSink
+
+    monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
+    entered = threading.Event()
+    release = threading.Event()
+
+    class BlockedStream(io.StringIO):
+        def write(self, text):
+            entered.set()
+            release.wait(10)
+            return super().write(text)
+
+    sink = BoundedConsoleSink(BlockedStream(), capacity=2)
+    monkeypatch.setattr(LogManager, "_console_output", sink)
+    try:
+        sink.write("first\n")
+        assert await asyncio.to_thread(entered.wait, 1)
+        for index in range(3):
+            sink.write(f"record {index}\n")
+        response = await asgi_client.get("/api/v1/logs/export", headers=_jwt_headers())
+        assert response.status_code == 200
+        assert not release.is_set()
+        with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+            environment = json.loads(archive.read("environment.json"))
+        assert environment["console_logging"] == {
+            "capacity": 2,
+            "queued_records": 2,
+            "unfinished_records": 3,
+            "dropped_records": 1,
+            "closed": False,
+            "writer_alive": True,
+        }
+    finally:
+        release.set()
+        await asyncio.to_thread(sink.close)
+
+
+@pytest.mark.asyncio
 async def test_v1_log_export_packs_log_files_and_memory_logs(
     monkeypatch, tmp_path: Path, asgi_app, asgi_client: httpx.AsyncClient
 ):

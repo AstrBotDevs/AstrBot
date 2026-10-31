@@ -52,13 +52,25 @@ async def test_full_console_queue_keeps_event_loop_responsive():
         assert time.monotonic() - started < 1
         assert sink.dropped == 498
         assert sink._queue.qsize() == 2
+        status = sink.get_status()
+        assert status == {
+            "capacity": 2,
+            "queued_records": 2,
+            "unfinished_records": 3,
+            "dropped_records": 498,
+            "closed": False,
+            "writer_alive": True,
+        }
+        started = time.monotonic()
+        assert not await asyncio.to_thread(sink.drain, 0.02)
+        assert time.monotonic() - started < 1
         release.set()
-        await asyncio.wait_for(asyncio.to_thread(sink._queue.join), 1)
+        assert await asyncio.to_thread(sink.drain, 1)
         assert stream.getvalue().startswith("first\nrecord 0\n")
         assert "Skipped 498 console log records" in stream.getvalue()
         assert "record 1\n" in stream.getvalue()
         sink.write("recovered\n")
-        await asyncio.wait_for(asyncio.to_thread(sink._queue.join), 1)
+        assert await asyncio.to_thread(sink.drain, 1)
         assert stream.getvalue().endswith("recovered\n")
     finally:
         failsafe.cancel()
@@ -68,6 +80,48 @@ async def test_full_console_queue_keeps_event_loop_responsive():
     sink.close()
     sink.write("ignored after close\n")
     assert sink._queue.empty()
+
+
+@pytest.mark.parametrize("timeout", [-1, float("inf"), float("nan")])
+def test_invalid_drain_timeout_is_rejected(timeout):
+    """Keep the explicit drain API bounded for every accepted argument."""
+    sink = BoundedConsoleSink(io.StringIO())
+    try:
+        with pytest.raises(ValueError, match="finite and nonnegative"):
+            sink.drain(timeout)
+    finally:
+        sink.close()
+
+
+def test_close_drains_full_queue_before_discarding():
+    """Preserve queued records if a temporarily blocked stream recovers in budget."""
+    entered = threading.Event()
+    release = threading.Event()
+
+    class SlowStream(io.StringIO):
+        def write(self, text):
+            entered.set()
+            release.wait(5)
+            return super().write(text)
+
+    stream = SlowStream()
+    sink = BoundedConsoleSink(stream, capacity=2)
+    sink.write("first\n")
+    assert entered.wait(1)
+    sink.write("second\n")
+    sink.write("third\n")
+    recovered = threading.Timer(0.02, release.set)
+    recovered.start()
+    try:
+        sink.close()
+        assert stream.getvalue() == "first\nsecond\nthird\n"
+        assert sink.get_status()["dropped_records"] == 0
+        assert sink.drain(0)
+        assert not sink._thread.is_alive()
+    finally:
+        release.set()
+        recovered.cancel()
+        sink.close()
 
 
 @pytest.mark.parametrize("failure", ["write", "flush"])
@@ -89,7 +143,7 @@ def test_broken_console_does_not_propagate_errors(failure):
     try:
         sink.write("one\n")
         sink.write("two\n")
-        sink._queue.join()
+        assert sink.drain(timeout=1)
         assert sink._thread.is_alive()
     finally:
         sink.close()
@@ -119,7 +173,7 @@ def test_raw_output_handles_partial_writes_and_unicode():
         try:
             sink.write("你好 🌟\none\n")
             sink.write("two\n")
-            sink._queue.join()
+            assert sink.drain(timeout=1)
             assert raw.data.decode("utf-8") == "你好 🌟\none\ntwo\n"
         finally:
             sink.close()
@@ -146,7 +200,7 @@ def test_console_preserves_text_stream_state(encoding, newline):
                 reference.write(message)
                 reference.flush()
                 sink.write(message)
-            sink._queue.join()
+            assert sink.drain(timeout=1)
             assert actual.getvalue() == expected.getvalue()
             assert sink.encoding == stream.encoding
         finally:
@@ -163,7 +217,7 @@ def test_console_preserves_encoding_error_policy(errors):
         sink = BoundedConsoleSink(stream)
         try:
             sink.write("你好\n")
-            sink._queue.join()
+            assert sink.drain(timeout=1)
             assert data.getvalue() == "你好\n".encode("ascii", errors)
         finally:
             sink.close()
@@ -194,7 +248,7 @@ def test_windows_console_adaptation(monkeypatch, native_ansi, tty):
     sink = BoundedConsoleSink(stream)
     try:
         sink.write("\x1b[32mgreen\x1b[0m\n")
-        sink._queue.join()
+        assert sink.drain(timeout=1)
         assert stream.getvalue() == (
             "green\n" if tty and not native_ansi else "\x1b[32mgreen\x1b[0m\n"
         )
@@ -252,10 +306,14 @@ def test_invalid_capacity_is_rejected(capacity):
         BoundedConsoleSink(io.StringIO(), capacity=capacity)
 
 
-def test_log_level_reconfiguration_reuses_console_writer(monkeypatch):
+@pytest.mark.parametrize("tty", [True, False])
+def test_log_level_reconfiguration_reuses_console_writer(monkeypatch, tty):
     """Cover both console sink registration paths without spawning new writers."""
     fake_loguru = MagicMock()
     fake_loguru.add.return_value = 7
+    stream = io.StringIO()
+    monkeypatch.setattr(stream, "isatty", lambda: tty)
+    monkeypatch.setattr(sys, "stdout", stream)
     monkeypatch.setattr("astrbot.core.log._loguru", fake_loguru)
     monkeypatch.setattr(LogManager, "_configured", False)
     monkeypatch.setattr(LogManager, "_console_output", None)
@@ -273,9 +331,19 @@ def test_log_level_reconfiguration_reuses_console_writer(monkeypatch):
         assert [call.args[0] for call in fake_loguru.add.call_args_list] == [writer] * 4
         assert writer._thread.is_alive()
         assert LogManager._console_output is writer
+        assert all(
+            call.kwargs["colorize"] is tty for call in fake_loguru.add.call_args_list
+        )
+        assert LogManager.get_console_status() == writer.get_status()
     finally:
         if LogManager._console_output is not None:
             LogManager._console_output.close()
+
+
+def test_unconfigured_console_has_no_status(monkeypatch):
+    """Allow diagnostics to run before console setup."""
+    monkeypatch.setattr(LogManager, "_console_output", None)
+    assert LogManager.get_console_status() is None
 
 
 @pytest.mark.parametrize("unbuffered", [False, True])
@@ -409,6 +477,7 @@ def test_blocked_console_preserves_file_and_dashboard_logs(tmp_path):
                 release.set()
                 _loguru.remove()
                 LogManager._console_output.close()
+            assert '\\x1b[' not in stream.getvalue()
 
         asyncio.run(main())
     """)

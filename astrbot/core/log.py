@@ -413,7 +413,7 @@ class LogManager:
         cls._console_sink_id = _loguru.add(
             cls._console_output,
             level="DEBUG",
-            colorize=True,
+            colorize=cls._console_output.isatty(),
             filter=lambda record: not record["extra"].get("is_trace", False),
             format=(
                 "<green>[{time:HH:mm:ss.SSS}]</green> {extra[plugin_tag]} "
@@ -422,6 +422,17 @@ class LogManager:
             ),
         )
         cls._configured = True
+
+    @classmethod
+    def get_console_status(cls) -> dict | None:
+        """Read console counters for diagnostics without logging to the console.
+
+        Returns:
+            Current console status, or None before console setup.
+        """
+        if cls._console_output is None:
+            return None
+        return cls._console_output.get_status()
 
     @classmethod
     def _setup_root_bridge(cls) -> None:
@@ -682,7 +693,7 @@ class LogManager:
                     new_sink_id = _loguru.add(
                         cls._console_output,
                         level=configured_level,
-                        colorize=True,
+                        colorize=cls._console_output.isatty(),
                         filter=lambda record: (
                             not record["extra"].get("is_trace", False)
                         ),

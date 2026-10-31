@@ -1,9 +1,11 @@
 """Keep console backpressure away from the application event loop."""
 
 import atexit
+import math
 import queue
 import sys
 import threading
+import time
 from typing import TextIO
 
 
@@ -30,8 +32,8 @@ class BoundedConsoleSink:
         ):
             from colorama import AnsiToWin32
 
-            # Enable native VT or convert ANSI on legacy consoles in the writer
-            # thread. Preserve forced colors when stdout is redirected to a pipe.
+            # Prepare VT or legacy conversion for output on the writer thread.
+            # LogManager controls formatted colors using the stream's isatty().
             converter = AnsiToWin32(stream, strip=False)
             if converter.should_wrap():
                 self._stream = converter.stream
@@ -44,6 +46,53 @@ class BoundedConsoleSink:
         )
         self._thread.start()
         atexit.register(self._shutdown)
+
+    def isatty(self) -> bool:
+        """Report the original stream's terminal capability without propagating errors."""
+        try:
+            return bool(self._original_stream.isatty())
+        except Exception:
+            return False
+
+    def get_status(self) -> dict:
+        """Snapshot process-lifetime counters without waiting on console IO.
+
+        Returns:
+            Queue capacity, queued and unfinished records, cumulative drops,
+            and writer lifecycle state. Unfinished records include in-flight IO.
+            Closed queues may also contain the shutdown marker.
+        """
+        with self._lock, self._queue.all_tasks_done:
+            return {
+                "capacity": self._queue.maxsize,
+                "queued_records": len(self._queue.queue),
+                "unfinished_records": self._queue.unfinished_tasks,
+                "dropped_records": self.dropped,
+                "closed": self._closed,
+                "writer_alive": self._thread.is_alive(),
+            }
+
+    def drain(self, timeout: float = 1.0) -> bool:
+        """Wait for queued write attempts within a fixed budget.
+
+        Call this outside the event loop. This method is deliberately not named
+        ``flush``, which Loguru would invoke synchronously after every record.
+
+        Args:
+            timeout: Maximum seconds to wait; zero only checks completion.
+
+        Returns:
+            Whether all queued write attempts finished, irrespective of IO errors.
+
+        Raises:
+            ValueError: If timeout is negative or not finite.
+        """
+        if not math.isfinite(timeout) or timeout < 0:
+            raise ValueError("Console drain timeout must be finite and nonnegative")
+        with self._queue.all_tasks_done:
+            return self._queue.all_tasks_done.wait_for(
+                lambda: self._queue.unfinished_tasks == 0, timeout=timeout
+            )
 
     def write(self, message: str) -> None:
         """Queue a record, dropping only its console copy when full.
@@ -90,21 +139,27 @@ class BoundedConsoleSink:
         those synchronously when removing a sink or logging a record. The same
         writer is shared across console log-level changes.
         """
+        deadline = time.monotonic() + 0.2
         with self._lock:
-            if not self._closed:
+            first_close = not self._closed
+            if first_close:
                 self._closed = True
-                while True:
+        if first_close:
+            self.drain(max(0.0, deadline - time.monotonic()))
+            with self._lock:
+                try:
+                    self._queue.put_nowait(None)
+                except queue.Full:
+                    # Admission is closed; only the consumer can change queue
+                    # size. Removing at most one record guarantees room to stop.
                     try:
-                        self._queue.put_nowait(None)
-                        break
-                    except queue.Full:
-                        try:
-                            self._queue.get_nowait()
-                            self._queue.task_done()
-                            self.dropped += 1
-                        except queue.Empty:
-                            pass
-        self._thread.join(timeout=0.2)
+                        self._queue.get_nowait()
+                        self._queue.task_done()
+                        self.dropped += 1
+                    except queue.Empty:
+                        pass
+                    self._queue.put_nowait(None)
+        self._thread.join(timeout=max(0.0, deadline - time.monotonic()))
         if not self._thread.is_alive():
             atexit.unregister(self._shutdown)
 
