@@ -2,10 +2,10 @@
 
 ## Behavior
 
-This follows Peach's event-driven plus periodic reconciliation approach. Every run
-builds a read-only snapshot and full diff first. Events and the six-hour schedule
-apply changes; manual dispatch and local runs preview by default. Manual `apply`
-must be explicitly selected. Sync never edits or deletes source Issues/PRs.
+Each run builds a read-only plan first. Issue/PR events reconcile only their direct
+associations; six-hour schedule and manual dispatch run full scans. Manual dispatch
+and local runs preview by default; manual `apply` must be selected. Sync never edits
+or deletes source Issues/PRs.
 
 - Required single-select `Status`: `Todo`, `In progress`, `Needs verification`,
   `Done`, `Cancelled`, `Closed unmerged`. Required single-select `交付进度`:
@@ -16,23 +16,35 @@ must be explicitly selected. Sync never edits or deletes source Issues/PRs.
   reason is NOT_PLANNED (Cancelled). Closed unmerged PRs are not Done. Reopened
   terminal items return to Todo. Preserve manually selected nonterminal status
   without implementation. Optional labels `status:needs-info` and
-  `status:needs-verification` override inferred open-issue progress.
+  `status:needs-verification` override inferred open-issue progress. `needs-info`
+  intentionally wins in Status even with a merged PR (Todo + 已合入待发布); the
+  fields represent acceptance and delivery separately.
 - Associate same-repository issues using closing references or standalone
   `Ref(s)`, `Fix(es/ed)`, `Close(d)`, or `Resolve(s/d)` lines. Incidental mentions,
-  code fences, and cross-repository references do not establish a link.
+  code fences, and cross-repository references do not establish a link. A reference
+  line containing `Fixes #12, and see #99 for context` links both same-repo issues;
+  keep unrelated numbers off reference lines to avoid unintended associations.
 - Delivery requires every associated implementation PR to be merged, every merge
   commit to be reachable from the trusted default branch, and every such commit
   to be contained in the earliest published stable release. Drafts/prereleases do
   not count. Populate PR links and actual release tag/URL, never guess a version.
-- Scan all open issues and all PRs. Also reconcile tracked closed items, linked
-  closed issues, the current event subject, and all items closed on or after the
-  Project's creation time. This durable boundary recovers replaced/failed event
-  runs without importing unrelated items closed before the Project existed. For
-  an older Project, preview this catch-up set before enabling writes. Skip
-  archived items and draft issues.
+- Issue/PR lifecycle events read only their subject and bounded linked issues/PRs,
+  including old/new body references and previously stored implementation links.
+  They do not scan repository Issues, PRs, Project items, or releases. Six-hour
+  scheduled and manual runs do full reconciliation; changes discovered only by
+  broad push/release scans wait until the next scheduled or manual run.
+- Full scans include open issues/all PRs, tracked and linked closed issues, and
+  all items closed on or after Project creation. This durable boundary recovers
+  replaced/failed events without unrelated older closed history. For an older
+  Project, preview catch-up before writes. Skip archived items and draft issues.
+- Release version verification runs only during full scans. Event runs defer it to
+  the next full scan, while preserving an existing published result when its
+  implementation links are unchanged.
 - Validate the Project schema/options and calculate all changes before writing;
   skip unchanged values and clear stale text. Paginate every GraphQL connection,
-  reject stalled cursors, and serialize whole-project runs.
+  reject stalled cursors, and serialize runs. Apply mode prints the plan first;
+  on failure it reports confirmed, outcome-unknown and unattempted mutation counts,
+  with affected item/field, so partial writes can be reconciled.
 - Privileged jobs run trusted default-branch code only, use full Git history/tags,
   and never execute PR code. PR tests use no Project secret.
 
@@ -41,6 +53,7 @@ Run offline tests and checks:
 ```sh
 python -I tests/test_sync_github_project.py -v
 python -I tests/test_project_delivery.py -v
+python -I tests/test_project_events.py -v
 uv run ruff format --check scripts/sync_github_project.py tests/test_sync_github_project.py tests/test_project_delivery.py
 uv run ruff check scripts/sync_github_project.py
 ```
@@ -130,9 +143,3 @@ GitHub's official "Using the API to manage Projects" documentation describes
 ProjectV2 field lookup, `addProjectV2ItemById` (including existing-item reuse),
 and `updateProjectV2ItemFieldValue`:
 https://docs.github.com/en/issues/planning-and-tracking-with-projects/automating-your-project/using-the-api-to-manage-projects
-
-Peach reference: [Issue #268](https://github.com/peach-mitao/peach/issues/268),
-[Project Board workflow](https://github.com/peach-mitao/peach/blob/master/.github/workflows/project-board.yml),
-and [reconciler](https://github.com/peach-mitao/peach/blob/master/scripts/project_board.py).
-This implementation adopts event/schedule/manual reconciliation and delivery
-evidence, not Peach's unrelated migration/alias configuration.

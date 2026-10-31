@@ -193,11 +193,15 @@ class DeliveryTests(unittest.TestCase):
             self.assertTrue(api.call_args.args[0].startswith("query"))
 
     def test_closed_subject_is_added_using_current_state(self):
-        closed = {**self.issue, "state": "CLOSED", "stateReason": "NOT_PLANNED"}
+        closed = {
+            **self.issue,
+            "state": "CLOSED",
+            "stateReason": "NOT_PLANNED",
+            "labels": [],
+        }
         with (
-            patch.object(
-                sync, "connection", side_effect=[self.fields, [], [closed], [], [], []]
-            ),
+            patch.object(sync, "connection", return_value=self.fields),
+            patch.object(sync, "event_snapshot", return_value=([closed], {}, {})),
             patch.object(sync.subprocess, "run", return_value=Mock(stdout="a" * 40)),
         ):
             plan = sync.reconcile("P", "AstrBotDevs/AstrBot", subject=1)
@@ -341,6 +345,12 @@ class DeliveryTests(unittest.TestCase):
             "```\nRefs #99\n```\n"
         )
         self.assertEqual(sync.references(body, "AstrBotDevs/AstrBot"), {12, 13, 14, 15})
+        self.assertEqual(
+            sync.references(
+                "Fixes #12, and see #99 for context", "AstrBotDevs/AstrBot"
+            ),
+            {12, 99},
+        )
 
     def test_decision_separates_acceptance_from_delivery(self):
         issue = {"__typename": "Issue", "state": "OPEN", "labels": []}
@@ -388,22 +398,18 @@ class DeliveryTests(unittest.TestCase):
             "closedAt": "2026-10-02T00:00:00Z",
             "url": "pr",
         }
-        for subject in (None, 999):
-            with (
-                self.subTest(subject=subject),
-                patch.object(
-                    sync,
-                    "connection",
-                    side_effect=[self.fields, [], [dict(issue)], [pr], [], []],
-                ),
-                patch.object(
-                    sync.subprocess, "run", return_value=Mock(stdout="a" * 40)
-                ),
-            ):
-                plan = sync.reconcile("P", "AstrBotDevs/AstrBot", subject=subject)
-            self.assertEqual({entry["number"] for entry in plan}, {1, 2})
-            self.assertEqual(plan[0]["changes"]["Status"], "Done")
-            self.assertEqual(plan[1]["changes"]["Status"], "Closed unmerged")
+        with (
+            patch.object(
+                sync,
+                "connection",
+                side_effect=[self.fields, [], [dict(issue)], [pr], [], []],
+            ),
+            patch.object(sync.subprocess, "run", return_value=Mock(stdout="a" * 40)),
+        ):
+            plan = sync.reconcile("P", "AstrBotDevs/AstrBot")
+        self.assertEqual({entry["number"] for entry in plan}, {1, 2})
+        self.assertEqual(plan[0]["changes"]["Status"], "Done")
+        self.assertEqual(plan[1]["changes"]["Status"], "Closed unmerged")
 
     def test_explicit_labels_and_unmerged_pr(self):
         issue = {

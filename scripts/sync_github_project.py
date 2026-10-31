@@ -240,29 +240,41 @@ def apply_plan(project, fields, plan, *, apply=False):
         plan: Source IDs, existing item IDs and changed values.
         apply: Explicit permission to write.
     """
+    print(json.dumps({"apply": apply, "plan": plan}, ensure_ascii=False), flush=True)
     if not apply:
         return
+    total = sum(len(entry["changes"]) + (not entry["item"]) for entry in plan)
+    confirmed = 0
     for entry in plan:
         item = entry["item"]
         if not item:
-            result = graphql(
-                """mutation($project: ID!, $content: ID!) {
-                  addProjectV2ItemById(input: {projectId:$project, contentId:$content}) { item { id } }
-                }""",
-                {"project": project, "content": entry["content"]},
-            )
-            item = result["addProjectV2ItemById"]["item"]["id"]
+            try:
+                result = graphql(
+                    """mutation($project: ID!, $content: ID!) {
+                      addProjectV2ItemById(input: {projectId:$project, contentId:$content}) { item { id } }
+                    }""",
+                    {"project": project, "content": entry["content"]},
+                )
+                item = result["addProjectV2ItemById"]["item"]["id"]
+            except (RuntimeError, ValueError, OSError, KeyError, TypeError):
+                print(
+                    json.dumps(
+                        {
+                            "confirmed": confirmed,
+                            "unknown": 1,
+                            "unattempted": total - confirmed - 1,
+                            "number": entry["number"],
+                            "field": "addProjectItem",
+                        }
+                    ),
+                    flush=True,
+                )
+                raise
+            confirmed += 1
         for name, value in entry["changes"].items():
             field = fields[name]
             variables = {"project": project, "item": item, "field": field["id"]}
-            if value == "":
-                graphql(
-                    """mutation($project:ID!,$item:ID!,$field:ID!){
-                      clearProjectV2ItemFieldValue(input:{projectId:$project,itemId:$item,fieldId:$field}){projectV2Item{id}}
-                    }""",
-                    variables,
-                )
-            else:
+            if value != "":
                 variables["value"] = (
                     {
                         "singleSelectOptionId": next(
@@ -272,12 +284,40 @@ def apply_plan(project, fields, plan, *, apply=False):
                     if "options" in field
                     else {"text": value}
                 )
-                graphql(
-                    """mutation($project:ID!,$item:ID!,$field:ID!,$value:ProjectV2FieldValue!){
+            try:
+                if value == "":
+                    graphql(
+                        """mutation($project:ID!,$item:ID!,$field:ID!){
+                          clearProjectV2ItemFieldValue(input:{projectId:$project,itemId:$item,fieldId:$field}){projectV2Item{id}}
+                        }""",
+                        variables,
+                    )
+                else:
+                    graphql(
+                        """mutation($project:ID!,$item:ID!,$field:ID!,$value:ProjectV2FieldValue!){
                       updateProjectV2ItemFieldValue(input:{projectId:$project,itemId:$item,fieldId:$field,value:$value}){projectV2Item{id}}
-                    }""",
-                    variables,
+                        }""",
+                        variables,
+                    )
+            except (RuntimeError, ValueError, OSError):
+                print(
+                    json.dumps(
+                        {
+                            "confirmed": confirmed,
+                            "unknown": 1,
+                            "unattempted": total - confirmed - 1,
+                            "number": entry["number"],
+                            "field": name,
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
                 )
+                raise
+            confirmed += 1
+    print(
+        json.dumps({"confirmed": confirmed, "unknown": 0, "unattempted": 0}), flush=True
+    )
 
 
 def graphql(query, variables):
@@ -321,7 +361,201 @@ def graphql(query, variables):
     return result["data"]
 
 
-def reconcile(project, repository, *, subject=None, apply=False, status_names=None):
+def read_subject(repository, number):
+    """Read current source state, memberships and direct association metadata.
+
+    Args:
+        repository: Allowed owner/name.
+        number: Issue or pull request number.
+
+    Returns:
+        Current source item with fully paginated association metadata.
+
+    Raises:
+        ValueError: The source is not an accessible Issue or PullRequest.
+    """
+    owner, name = repository.split("/")
+    membership = """projectItems(first:100,includeArchived:true){nodes{
+      id isArchived project{id}
+      fieldValues(first:100){nodes{
+        ... on ProjectV2ItemFieldSingleSelectValue{name field{... on ProjectV2SingleSelectField{name}}}
+        ... on ProjectV2ItemFieldTextValue{text field{... on ProjectV2Field{name}}}
+      }pageInfo{hasNextPage endCursor}}
+    }pageInfo{hasNextPage endCursor}}"""
+    query = """query($owner:String!,$name:String!,$number:Int!){
+      repository(owner:$owner,name:$name){issueOrPullRequest(number:$number){
+        __typename
+        ... on Issue {id number issueState:state stateReason closedAt
+          labels(first:100){nodes{name}pageInfo{hasNextPage endCursor}}
+          timelineItems(first:100,itemTypes:[CROSS_REFERENCED_EVENT]){nodes{
+            ... on CrossReferencedEvent{source{__typename
+              ... on PullRequest{number repository{nameWithOwner}}}}
+          }pageInfo{hasNextPage endCursor}} MEMBERSHIP}
+        ... on PullRequest {id number pullRequestState:state closedAt body url mergeCommit{oid}
+          closingIssuesReferences(first:100){nodes{number repository{nameWithOwner}}
+            pageInfo{hasNextPage endCursor}} MEMBERSHIP}
+      }}
+    }""".replace("MEMBERSHIP", membership)
+    result = graphql(query, {"owner": owner, "name": name, "number": number})
+    content = (result.get("repository") or {}).get("issueOrPullRequest")
+    if not content or content.get("__typename") not in {"Issue", "PullRequest"}:
+        raise ValueError("Source must be an accessible issue or pull request")
+    kind = content["__typename"]
+    content["state"] = content.pop(
+        "issueState" if kind == "Issue" else "pullRequestState"
+    )
+    if content["state"] not in (
+        {"OPEN", "CLOSED"} if kind == "Issue" else {"OPEN", "CLOSED", "MERGED"}
+    ):
+        raise ValueError("Unexpected source state")
+    for field, selection in {
+        "projectItems": "projectItems(first:100,after:$cursor,includeArchived:true){nodes{id isArchived project{id} fieldValues(first:100){nodes{... on ProjectV2ItemFieldSingleSelectValue{name field{... on ProjectV2SingleSelectField{name}}} ... on ProjectV2ItemFieldTextValue{text field{... on ProjectV2Field{name}}}}pageInfo{hasNextPage endCursor}}}pageInfo{hasNextPage endCursor}}",
+        **(
+            {
+                "timelineItems": "timelineItems(first:100,after:$cursor,itemTypes:[CROSS_REFERENCED_EVENT]){nodes{... on CrossReferencedEvent{source{__typename ... on PullRequest{number repository{nameWithOwner}}}}}pageInfo{hasNextPage endCursor}}"
+            }
+            if kind == "Issue"
+            else {
+                "closingIssuesReferences": "closingIssuesReferences(first:100,after:$cursor){nodes{number repository{nameWithOwner}}pageInfo{hasNextPage endCursor}}"
+            }
+        ),
+    }.items():
+        content[field] = connection(
+            "query($id:ID!,$cursor:String){node(id:$id){... on "
+            + kind
+            + "{"
+            + selection
+            + "}}}",
+            ("node", field),
+            initial=content[field],
+            id=content["id"],
+        )
+    return content
+
+
+def event_snapshot(project, repository, subject, event):
+    """Read the subject and one hop, leaving exhaustive discovery to scheduled runs.
+
+    Args:
+        project: Destination ProjectV2 ID.
+        repository: Allowed owner/name.
+        subject: Event subject number.
+        event: Webhook metadata used only for previous-body association hints.
+
+    Returns:
+        Candidates, existing memberships, and current implementation associations.
+    """
+    primary = read_subject(repository, subject)
+    related = set()
+    if primary["__typename"] == "Issue":
+        related.update(
+            source["number"]
+            for entry in primary["timelineItems"]
+            if (source := entry.get("source"))
+            and source.get("__typename") == "PullRequest"
+            and source["repository"]["nameWithOwner"].casefold()
+            == repository.casefold()
+        )
+        for item in primary["projectItems"]:
+            if item["project"]["id"] != project:
+                continue
+            for field in item["fieldValues"]:
+                if field.get("field", {}).get("name") != "实现关联":
+                    continue
+                for owner_repo, number in re.findall(
+                    r"https://github\.com/([\w.-]+/[\w.-]+)/pull/([0-9]+)",
+                    field.get("text", ""),
+                    re.I,
+                ):
+                    if owner_repo.casefold() == repository.casefold():
+                        related.add(int(number))
+    else:
+        related.update(
+            issue["number"]
+            for issue in primary["closingIssuesReferences"]
+            if issue["repository"]["nameWithOwner"].casefold() == repository.casefold()
+        )
+        related |= references(primary.get("body"), repository)
+        related |= references(
+            event.get("changes", {}).get("body", {}).get("from"), repository
+        )
+        for item in primary["projectItems"]:
+            if item["project"]["id"] != project:
+                continue
+            for field in item["fieldValues"]:
+                if field.get("field", {}).get("name") != "实现关联":
+                    continue
+                for owner_repo, number in re.findall(
+                    r"https://github\.com/([\w.-]+/[\w.-]+)/pull/([0-9]+)",
+                    field.get("text", ""),
+                    re.I,
+                ):
+                    if owner_repo.casefold() == repository.casefold():
+                        related.add(int(number))
+    # Keep the traversal bounded: read neighbours but never recursively expand them.
+    contents = [
+        primary,
+        *(read_subject(repository, number) for number in sorted(related - {subject})),
+    ]
+    seen = {content["id"] for content in contents}
+    # An edited PR can remove an old Issue link; follow that Issue's direct PR links once
+    # so the removed relationship is also reconciled without scanning the repository.
+    for content in tuple(contents):
+        if content["__typename"] != "Issue":
+            continue
+        linked_numbers = {
+            entry["source"]["number"]
+            for entry in content["timelineItems"]
+            if entry.get("source", {}).get("__typename") == "PullRequest"
+            and entry["source"]["repository"]["nameWithOwner"].casefold()
+            == repository.casefold()
+        }
+        for item in content["projectItems"]:
+            if item["project"]["id"] != project:
+                continue
+            for field in item["fieldValues"]:
+                if field.get("field", {}).get("name") == "实现关联":
+                    linked_numbers.update(
+                        int(number)
+                        for owner_repo, number in re.findall(
+                            r"https://github\.com/([\w.-]+/[\w.-]+)/pull/([0-9]+)",
+                            field.get("text", ""),
+                            re.I,
+                        )
+                        if owner_repo.casefold() == repository.casefold()
+                    )
+        for number in sorted(linked_numbers):
+            if not any(
+                item["__typename"] == "PullRequest" and item["number"] == number
+                for item in contents
+            ):
+                pr = read_subject(repository, number)
+                if pr["id"] not in seen:
+                    contents.append(pr)
+                    seen.add(pr["id"])
+    tracked, linked = {}, {}
+    for content in contents:
+        memberships = content["projectItems"]
+        for item in memberships:
+            if item["project"]["id"] == project:
+                tracked[content["id"]] = item
+        if content["__typename"] != "PullRequest" or content["state"] == "CLOSED":
+            continue
+        closing = content["closingIssuesReferences"]
+        numbers = {
+            i["number"]
+            for i in closing
+            if i["repository"]["nameWithOwner"].casefold() == repository.casefold()
+        }
+        numbers |= references(content.get("body"), repository)
+        for number in numbers:
+            linked.setdefault(number, []).append(content)
+    return contents, tracked, linked
+
+
+def reconcile(
+    project, repository, *, subject=None, apply=False, status_names=None, event=None
+):
     """Plan a complete snapshot before performing any Project mutations.
 
     Args:
@@ -372,106 +606,116 @@ def reconcile(project, repository, *, subject=None, apply=False, status_names=No
     for name in ("实现关联", "发布版本", "发布说明"):
         if fields.get(name, {}).get("dataType") != "TEXT":
             raise ValueError(f"Project {name} must be a text field")
-    metadata = graphql(
-        """query($project:ID!){node(id:$project){... on ProjectV2{createdAt}}}""",
-        {"project": project},
-    )
-    since = (metadata.get("node") or {}).get("createdAt")
-    if not isinstance(since, str) or not re.fullmatch(
-        r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", since
-    ):
-        raise ValueError("Project creation time is required for closed-item recovery")
-    items = connection(
-        """query($project:ID!,$cursor:String){node(id:$project){... on ProjectV2{
-          items(first:100,after:$cursor,archivedStates:[ARCHIVED,NOT_ARCHIVED]){nodes{
-            id isArchived content{__typename ... on Issue{id} ... on PullRequest{id}}
-            fieldValues(first:100){nodes{
-              ... on ProjectV2ItemFieldSingleSelectValue{name field{... on ProjectV2SingleSelectField{name}}}
-              ... on ProjectV2ItemFieldTextValue{text field{... on ProjectV2Field{name}}}
-            }pageInfo{hasNextPage endCursor}}
-          }pageInfo{hasNextPage endCursor}}}}}""",
-        ("node", "items"),
-        project=project,
-    )
-    tracked = {
-        item["content"]["id"]: item
-        for item in items
-        if item.get("content")
-        and item["content"]["__typename"] in {"Issue", "PullRequest"}
-    }
-    owner, name = repository.split("/")
-    variables = {"owner": owner, "name": name}
-    issues = connection(
-        """query($owner:String!,$name:String!,$states:[IssueState!],$cursor:String){repository(owner:$owner,name:$name){
-          issues(first:100,after:$cursor,states:$states){nodes{__typename id number state stateReason closedAt
-            labels(first:100){nodes{name}pageInfo{hasNextPage endCursor}}}
-          pageInfo{hasNextPage endCursor}}}}""",
-        ("repository", "issues"),
-        states=["OPEN", "CLOSED"],
-        **variables,
-    )
-    prs = connection(
-        """query($owner:String!,$name:String!,$states:[PullRequestState!],$cursor:String){repository(owner:$owner,name:$name){
-          pullRequests(first:100,after:$cursor,states:$states){nodes{__typename id number state body url closedAt
-            mergeCommit{oid}
-            closingIssuesReferences(first:100){nodes{number repository{nameWithOwner}}
-              pageInfo{hasNextPage endCursor}}
-          }pageInfo{hasNextPage endCursor}}}}""",
-        ("repository", "pullRequests"),
-        states=["OPEN", "CLOSED", "MERGED"],
-        **variables,
-    )
-    linked = {}
-    for pr in prs:
-        if pr["state"] not in {"OPEN", "MERGED", "CLOSED"}:
-            raise ValueError("Unexpected pull request state")
-        if pr["state"] == "CLOSED":
-            continue
-        closing = connection(
-            """query($id:ID!,$cursor:String){node(id:$id){... on PullRequest{
-              closingIssuesReferences(first:100,after:$cursor){nodes{number repository{nameWithOwner}}
-              pageInfo{hasNextPage endCursor}}}}}""",
-            ("node", "closingIssuesReferences"),
-            initial=pr["closingIssuesReferences"],
-            id=pr["id"],
+    if subject is not None:
+        candidates, tracked, linked = event_snapshot(
+            project, repository, subject, event or {}
         )
-        numbers = {
-            issue["number"]
-            for issue in closing
-            if issue["repository"]["nameWithOwner"].casefold() == repository.casefold()
+    else:
+        metadata = graphql(
+            """query($project:ID!){node(id:$project){... on ProjectV2{createdAt}}}""",
+            {"project": project},
+        )
+        since = (metadata.get("node") or {}).get("createdAt")
+        if not isinstance(since, str) or not re.fullmatch(
+            r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", since
+        ):
+            raise ValueError(
+                "Project creation time is required for closed-item recovery"
+            )
+        items = connection(
+            """query($project:ID!,$cursor:String){node(id:$project){... on ProjectV2{
+              items(first:100,after:$cursor,archivedStates:[ARCHIVED,NOT_ARCHIVED]){nodes{
+                id isArchived content{__typename ... on Issue{id} ... on PullRequest{id}}
+                fieldValues(first:100){nodes{
+                  ... on ProjectV2ItemFieldSingleSelectValue{name field{... on ProjectV2SingleSelectField{name}}}
+                  ... on ProjectV2ItemFieldTextValue{text field{... on ProjectV2Field{name}}}
+                }pageInfo{hasNextPage endCursor}}
+              }pageInfo{hasNextPage endCursor}}}}}""",
+            ("node", "items"),
+            project=project,
+        )
+        tracked = {
+            item["content"]["id"]: item
+            for item in items
+            if item.get("content")
+            and item["content"]["__typename"] in {"Issue", "PullRequest"}
         }
-        numbers |= references(pr.get("body"), repository)
-        for number in numbers:
-            linked.setdefault(number, []).append(pr)
-    candidates = [
-        i
-        for i in issues
-        if i["state"] == "OPEN"
-        or i["id"] in tracked
-        or i["number"] == subject
-        or i["number"] in linked
-        or (i.get("closedAt") or "") >= since
-    ]
-    issue_numbers = {i["number"] for i in candidates}
-    associated_ids = {
-        pr["id"] for number in issue_numbers for pr in linked.get(number, [])
-    }
-    candidates.extend(
-        pr
-        for pr in prs
-        if pr["state"] == "OPEN"
-        or pr["id"] in tracked
-        or pr["number"] == subject
-        or pr["id"] in associated_ids
-        or (pr.get("closedAt") or "") >= since
-    )
-    releases = connection(
-        """query($owner:String!,$name:String!,$cursor:String){repository(owner:$owner,name:$name){
-          releases(first:100,after:$cursor){nodes{tagName url publishedAt isDraft isPrerelease}
-          pageInfo{hasNextPage endCursor}}}}""",
-        ("repository", "releases"),
-        **variables,
-    )
+        owner, name = repository.split("/")
+        variables = {"owner": owner, "name": name}
+        issues = connection(
+            """query($owner:String!,$name:String!,$states:[IssueState!],$cursor:String){repository(owner:$owner,name:$name){
+              issues(first:100,after:$cursor,states:$states){nodes{__typename id number state stateReason closedAt
+                labels(first:100){nodes{name}pageInfo{hasNextPage endCursor}}}
+              pageInfo{hasNextPage endCursor}}}}""",
+            ("repository", "issues"),
+            states=["OPEN", "CLOSED"],
+            **variables,
+        )
+        prs = connection(
+            """query($owner:String!,$name:String!,$states:[PullRequestState!],$cursor:String){repository(owner:$owner,name:$name){
+              pullRequests(first:100,after:$cursor,states:$states){nodes{__typename id number state body url closedAt
+                mergeCommit{oid}
+                closingIssuesReferences(first:100){nodes{number repository{nameWithOwner}}
+                  pageInfo{hasNextPage endCursor}}
+              }pageInfo{hasNextPage endCursor}}}}""",
+            ("repository", "pullRequests"),
+            states=["OPEN", "CLOSED", "MERGED"],
+            **variables,
+        )
+        linked = {}
+        for pr in prs:
+            if pr["state"] not in {"OPEN", "MERGED", "CLOSED"}:
+                raise ValueError("Unexpected pull request state")
+            if pr["state"] == "CLOSED":
+                continue
+            closing = connection(
+                """query($id:ID!,$cursor:String){node(id:$id){... on PullRequest{
+                  closingIssuesReferences(first:100,after:$cursor){nodes{number repository{nameWithOwner}}
+                  pageInfo{hasNextPage endCursor}}}}}""",
+                ("node", "closingIssuesReferences"),
+                initial=pr["closingIssuesReferences"],
+                id=pr["id"],
+            )
+            numbers = {
+                issue["number"]
+                for issue in closing
+                if issue["repository"]["nameWithOwner"].casefold()
+                == repository.casefold()
+            }
+            numbers |= references(pr.get("body"), repository)
+            for number in numbers:
+                linked.setdefault(number, []).append(pr)
+        candidates = [
+            i
+            for i in issues
+            if i["state"] == "OPEN"
+            or i["id"] in tracked
+            or i["number"] == subject
+            or i["number"] in linked
+            or (i.get("closedAt") or "") >= since
+        ]
+        issue_numbers = {i["number"] for i in candidates}
+        associated_ids = {
+            pr["id"] for number in issue_numbers for pr in linked.get(number, [])
+        }
+        candidates.extend(
+            pr
+            for pr in prs
+            if pr["state"] == "OPEN"
+            or pr["id"] in tracked
+            or pr["number"] == subject
+            or pr["id"] in associated_ids
+            or (pr.get("closedAt") or "") >= since
+        )
+    releases = []
+    if subject is None:
+        releases = connection(
+            """query($owner:String!,$name:String!,$cursor:String){repository(owner:$owner,name:$name){
+              releases(first:100,after:$cursor){nodes{tagName url publishedAt isDraft isPrerelease}
+              pageInfo{hasNextPage endCursor}}}}""",
+            ("repository", "releases"),
+            **variables,
+        )
     mainline = subprocess.run(
         ["git", "rev-parse", "HEAD"],
         cwd=ROOT,
@@ -488,26 +732,30 @@ def reconcile(project, repository, *, subject=None, apply=False, status_names=No
         if content["__typename"] == "Issue":
             if content["state"] not in {"OPEN", "CLOSED"}:
                 raise ValueError("Unexpected issue state")
-            labels = connection(
-                """query($id:ID!,$cursor:String){node(id:$id){... on Issue{labels(first:100,after:$cursor){
-                  nodes{name}pageInfo{hasNextPage endCursor}}}}}""",
-                ("node", "labels"),
-                initial=content["labels"],
-                id=content["id"],
-            )
+            labels = content["labels"]
+            if isinstance(labels, dict):
+                labels = connection(
+                    """query($id:ID!,$cursor:String){node(id:$id){... on Issue{labels(first:100,after:$cursor){
+                      nodes{name}pageInfo{hasNextPage endCursor}}}}}""",
+                    ("node", "labels"),
+                    initial=labels,
+                    id=content["id"],
+                )
             content["labels"] = [label["name"] for label in labels]
         current = {}
         if item:
-            values = connection(
-                """query($id:ID!,$cursor:String){node(id:$id){... on ProjectV2Item{
-                  fieldValues(first:100,after:$cursor){nodes{
-                    ... on ProjectV2ItemFieldSingleSelectValue{name field{... on ProjectV2SingleSelectField{name}}}
-                    ... on ProjectV2ItemFieldTextValue{text field{... on ProjectV2Field{name}}}
-                  }pageInfo{hasNextPage endCursor}}}}}""",
-                ("node", "fieldValues"),
-                initial=item["fieldValues"],
-                id=item["id"],
-            )
+            values = item["fieldValues"]
+            if isinstance(values, dict):
+                values = connection(
+                    """query($id:ID!,$cursor:String){node(id:$id){... on ProjectV2Item{
+                      fieldValues(first:100,after:$cursor){nodes{
+                        ... on ProjectV2ItemFieldSingleSelectValue{name field{... on ProjectV2SingleSelectField{name}}}
+                        ... on ProjectV2ItemFieldTextValue{text field{... on ProjectV2Field{name}}}
+                      }pageInfo{hasNextPage endCursor}}}}}""",
+                    ("node", "fieldValues"),
+                    initial=values,
+                    id=item["id"],
+                )
             current = {
                 v["field"]["name"]: v.get("name", v.get("text", ""))
                 for v in values
@@ -523,6 +771,27 @@ def reconcile(project, repository, *, subject=None, apply=False, status_names=No
         desired = delivery(
             content, canonical, linked.get(content["number"], []), releases, mainline
         )
+        if subject is not None:
+            if (
+                current.get("交付进度") == "已发布"
+                and current.get("实现关联") == desired["实现关联"]
+            ):
+                desired["交付进度"] = current["交付进度"]
+                desired["发布版本"] = current.get("发布版本", "")
+                desired["发布说明"] = current.get("发布说明", "")
+            else:
+                desired["交付进度"] = (
+                    "已合入待发布"
+                    if any(
+                        pr["state"] == "MERGED"
+                        for pr in linked.get(content["number"], [])
+                    )
+                    else "尚未合入"
+                    if desired["实现关联"]
+                    else "未关联实现"
+                )
+                desired["发布版本"] = ""
+                desired["发布说明"] = ""
         desired["Status"] = status_names[desired["Status"]]
         changes = {k: v for k, v in desired.items() if current.get(k, "") != v}
         if changes or not item:
@@ -563,6 +832,7 @@ def main(argv=None):
     if repository != "AstrBotDevs/AstrBot":
         raise ValueError("Unexpected repository")
     subject = None
+    event = {}
     event_name = os.environ.get("GITHUB_EVENT_NAME")
     if event_name:
         allowed = {
@@ -583,8 +853,6 @@ def main(argv=None):
                 "ready_for_review",
                 "converted_to_draft",
             },
-            "release": {"published", "edited", "deleted"},
-            "push": None,
             "schedule": None,
             "workflow_dispatch": None,
         }
@@ -605,10 +873,10 @@ def main(argv=None):
         )
         default_ref = f"refs/heads/{default_branch}"
         if (
-            event_name in {"push", "workflow_dispatch", "schedule"}
+            event_name in {"workflow_dispatch", "schedule"}
             and os.environ.get("GITHUB_REF") != default_ref
         ):
-            raise ValueError("Push and manual runs require the default branch")
+            raise ValueError("Manual runs require the default branch")
         if (
             allowed[event_name] is not None
             and event.get("action") not in allowed[event_name]
@@ -642,6 +910,7 @@ def main(argv=None):
             subject=subject,
             apply=args.apply,
             status_names=status_names,
+            event=event,
         )
     except (RuntimeError, ValueError, OSError, subprocess.SubprocessError):
         raise SystemExit(

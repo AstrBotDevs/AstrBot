@@ -181,9 +181,6 @@ class SyncProjectTests(unittest.TestCase):
                 ("pull_request_target", "closed", "pull_request"),
                 ("pull_request_target", "edited", "pull_request"),
                 ("pull_request_target", "synchronize", "pull_request"),
-                ("release", "published", None),
-                ("release", "deleted", None),
-                ("push", None, None),
                 ("schedule", None, None),
                 ("workflow_dispatch", None, None),
             ]:
@@ -231,13 +228,28 @@ class SyncProjectTests(unittest.TestCase):
                 ("issues", "opened", "AstrBotDevs/AstrBot", 0, "refs/heads/master"),
                 ("issues", "opened", "AstrBotDevs/AstrBot", "42", "refs/heads/master"),
                 (
+                    "release",
+                    "published",
+                    "AstrBotDevs/AstrBot",
+                    42,
+                    "refs/heads/master",
+                ),
+                ("push", None, "AstrBotDevs/AstrBot", 42, "refs/heads/master"),
+                (
                     "workflow_dispatch",
                     None,
                     "AstrBotDevs/AstrBot",
                     42,
                     "refs/heads/untrusted",
                 ),
-                ("push", None, "AstrBotDevs/AstrBot", 42, "refs/heads/untrusted"),
+                (
+                    "release",
+                    "published",
+                    "AstrBotDevs/AstrBot",
+                    42,
+                    "refs/heads/master",
+                ),
+                ("push", None, "AstrBotDevs/AstrBot", 42, "refs/heads/master"),
             ]:
                 path.write_text(
                     json.dumps(

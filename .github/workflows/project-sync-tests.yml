@@ -7,6 +7,7 @@ on:
       - 'scripts/sync_github_project.py'
       - 'tests/test_sync_github_project.py'
       - 'tests/test_project_delivery.py'
+      - 'tests/test_project_events.py'
   push:
     branches: [master]
     paths:
@@ -14,6 +15,7 @@ on:
       - 'scripts/sync_github_project.py'
       - 'tests/test_sync_github_project.py'
       - 'tests/test_project_delivery.py'
+      - 'tests/test_project_events.py'
   workflow_dispatch:
 
 permissions:
@@ -34,3 +36,4 @@ jobs:
         run: |
           python -I tests/test_sync_github_project.py -v
           python -I tests/test_project_delivery.py -v
+          python -I tests/test_project_events.py -v
