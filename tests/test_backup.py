@@ -629,6 +629,91 @@ class TestAstrBotImporter:
         assert any("不存在" in err for err in result.errors)
 
     @pytest.mark.asyncio
+    async def test_attachment_write_failure_marks_restore_failed(
+        self, mock_main_db, tmp_path
+    ):
+        """Report attachment write failures through the overall import result.
+
+        Args:
+            mock_main_db: Database double for the unrelated table import.
+            tmp_path: Temporary directory for the archive and restore target.
+        """
+        attachment_dir = tmp_path / "attachments"
+        (attachment_dir / "test-id.txt").mkdir(parents=True)
+        archive = tmp_path / "backup.zip"
+        with zipfile.ZipFile(archive, "w") as zf:
+            zf.writestr("manifest.json", json.dumps({"astrbot_version": VERSION}))
+            zf.writestr(
+                "databases/main_db.json",
+                json.dumps(
+                    {
+                        "attachments": [
+                            {
+                                "attachment_id": "test-id",
+                                "path": "/old-install/data/attachments/uploaded.txt",
+                            }
+                        ]
+                    }
+                ),
+            )
+            zf.writestr("files/attachments/test-id.txt", "payload")
+        importer = AstrBotImporter(
+            mock_main_db, config_path=str(tmp_path / "cmd_config.json")
+        )
+        importer._clear_main_db = AsyncMock()
+        importer._import_main_database = AsyncMock(return_value={"attachments": 1})
+
+        result = await importer.import_all(str(archive))
+
+        assert not result.success
+        assert result.imported_files["attachments"] == 0
+        assert any("Failed to restore attachment" in error for error in result.errors)
+
+    @pytest.mark.asyncio
+    async def test_attachment_relocation_rejects_symlink_escape(
+        self, mock_main_db, tmp_path, require_symlink
+    ):
+        """Keep relocated attachment writes inside the target attachment directory.
+
+        Args:
+            mock_main_db: Database double that must not be used for a rejected file.
+            tmp_path: Temporary directory for the archive and restore target.
+            require_symlink: Fixture that skips platforms without symlink support.
+        """
+        attachment_dir = tmp_path / "attachments"
+        attachment_dir.mkdir()
+        outside = tmp_path / "outside.txt"
+        outside.write_bytes(b"keep existing bytes")
+        (attachment_dir / "test-id.txt").symlink_to(outside)
+        archive = tmp_path / "backup.zip"
+        with zipfile.ZipFile(archive, "w") as zf:
+            zf.writestr("files/attachments/test-id.txt", "replacement")
+        importer = AstrBotImporter(
+            mock_main_db, config_path=str(tmp_path / "cmd_config.json")
+        )
+        result = ImportResult()
+
+        with zipfile.ZipFile(archive) as zf:
+            count = await importer._import_attachments(
+                zf,
+                [
+                    {
+                        "attachment_id": "test-id",
+                        "path": "/old-install/data/attachments/uploaded.txt",
+                    }
+                ],
+                result,
+            )
+
+        assert count == 0
+        assert not result.success
+        assert any(
+            "outside the attachments directory" in error for error in result.errors
+        )
+        assert outside.read_bytes() == b"keep existing bytes"
+        mock_main_db.get_db.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_import_invalid_zip(self, mock_main_db, tmp_path):
         """测试导入无效的 ZIP 文件"""
         # 创建一个无效的文件
@@ -1072,6 +1157,64 @@ class TestModelMappings:
 
 class TestBackupIntegration:
     """备份集成测试"""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("relocate", [False, True], ids=["same-root", "new-root"])
+    async def test_attachment_restore_paths(self, tmp_path, monkeypatch, relocate):
+        """Restore attachment bytes and usable database paths after migration.
+
+        Args:
+            tmp_path: Temporary directory for isolated instances and backups.
+            monkeypatch: Fixture used to select each instance's data root.
+            relocate: Whether to restore into a different installation directory.
+        """
+        source_root = tmp_path / "source"
+        target_root = tmp_path / "target" if relocate else source_root
+        monkeypatch.setenv("ASTRBOT_ROOT", str(source_root))
+        source_data = source_root / "data"
+        target_data = target_root / "data"
+        original = source_data / "attachments" / "uploaded.txt"
+        original.parent.mkdir(parents=True)
+        target_data.mkdir(parents=True, exist_ok=True)
+        original.write_bytes(b"attachment payload")
+        source = SQLiteDatabase(str(source_data / "source.db"))
+        target = SQLiteDatabase(str(target_data / "target.db"))
+        try:
+            attachment = await source.insert_attachment(
+                str(original), "file", "text/plain"
+            )
+            archive = await AstrBotExporter(
+                source, config_path=str(source_data / "cmd_config.json")
+            ).export_all(output_dir=str(tmp_path / "backups"))
+            with zipfile.ZipFile(archive) as zf:
+                assert (
+                    zf.read(f"files/attachments/{attachment.attachment_id}.txt")
+                    == b"attachment payload"
+                )
+            original.unlink()
+            monkeypatch.setenv("ASTRBOT_ROOT", str(target_root))
+
+            result = await AstrBotImporter(
+                target, config_path=str(target_data / "cmd_config.json")
+            ).import_all(archive)
+
+            assert result.success, result.errors
+            assert result.warnings == []
+            assert result.imported_tables["attachments"] == 1
+            assert result.imported_files["attachments"] == 1
+            restored = await target.get_attachment_by_id(attachment.attachment_id)
+            assert restored is not None
+            restored_path = Path(restored.path)
+            assert restored_path.is_absolute()
+            assert restored_path.is_relative_to(target_data / "attachments")
+            assert restored_path.read_bytes() == b"attachment payload"
+            if relocate:
+                assert not original.exists()
+            else:
+                assert restored_path == original
+        finally:
+            await source.engine.dispose()
+            await target.engine.dispose()
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
