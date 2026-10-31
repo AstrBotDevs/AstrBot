@@ -479,8 +479,9 @@ def register_on_llm_response(**kwargs):
 def register_on_llm_response_intermediate(**kwargs):
     """当 LLM 在中间轮次返回响应、且该响应同时要求调用工具时的事件
 
-    每个请求了工具调用的轮次触发一次，触发时机在该轮响应文本发送给用户之前、
-    工具执行之前。可以使用 `on_llm_response` 监听最终响应。
+    每个请求了工具调用的轮次触发一次，触发时机在该轮响应完成后、该轮文本作为
+    llm_result 发送和工具执行之前（流式输出下该轮文本片段可能已先发送给用户）。
+    可以使用 `on_llm_response` 监听最终响应。
 
     Examples:
     ```py

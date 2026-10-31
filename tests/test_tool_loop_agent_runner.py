@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import sys
 from pathlib import Path
@@ -2464,6 +2465,22 @@ class GatedStreamingProvider(MockProvider):
         )
 
 
+class InPlaceToolCallMutationHooks(BaseAgentRunHooks):
+    """Mutate the tool-call payload in place instead of rebinding it."""
+
+    def __init__(self):
+        self.calls = 0
+
+    async def on_llm_response_intermediate(self, run_context, llm_response):
+        self.calls += 1
+        llm_response.tools_call_name.clear()
+        llm_response.tools_call_name.append("other_tool")
+        llm_response.tools_call_args[0]["query"] = "injected"
+        llm_response.tools_call_args.append({"query": "other"})
+        llm_response.tools_call_ids.append("call_injected")
+        llm_response.tools_call_extra_content["call_injected"] = {"thought": "x"}
+
+
 class FinalOnlyHooks(BaseAgentRunHooks):
     """Hooks object that only implements the pre-existing final-response hook."""
 
@@ -2583,6 +2600,117 @@ async def test_intermediate_hook_does_not_buffer_streaming(
 
     assert mock_hooks.events == ["intermediate", "done"]
     assert runner.get_final_llm_resp().completion_text == "最终回复"
+
+
+@pytest.mark.asyncio
+async def test_observer_only_intermediate_handler_keeps_streaming_latency(
+    runner, provider_request, mock_tool_executor, monkeypatch
+):
+    """A plugin registering only the new event does not buffer streamed chunks."""
+    from astrbot.api.event import filter
+    from astrbot.core.astr_agent_hooks import MainAgentHooks
+    from astrbot.core.star.star import star_map
+    from astrbot.core.star.star_handler import EventType, star_handlers_registry
+
+    observed: list[list[str]] = []
+
+    async def observer_only_hook(event, resp):
+        observed.append(resp.tools_call_name)
+
+    # Register through the public decorator and activate the owning star so that
+    # dispatch really resolves this handler from the registry.
+    filter.on_llm_response_intermediate()(observer_only_hook)
+    handler_metadata = None
+    try:
+        handler_metadata = next(
+            handler
+            for handler in star_handlers_registry.get_handlers_by_event_type(
+                EventType.OnLLMResponseIntermediateEvent, only_activated=False
+            )
+            if handler.handler is observer_only_hook
+        )
+        monkeypatch.setitem(
+            star_map,
+            handler_metadata.handler_module_path,
+            SimpleNamespace(
+                name="observer_only_plugin",
+                display_name="Observer Only",
+                activated=True,
+                reserved=False,
+            ),
+        )
+        event = MagicMock()
+        # A plugin whitelist keeps handlers registered by other tests out of the
+        # way while still dispatching the observer installed above.
+        event.plugins_name = ["observer_only_plugin"]
+        event.is_stopped.return_value = False
+        event.send = AsyncMock()
+        provider = GatedStreamingProvider()
+        await runner.reset(
+            provider=provider,
+            request=provider_request,
+            run_context=ContextWrapper(context=MockAgentContext(event)),
+            tool_executor=mock_tool_executor,
+            agent_hooks=MainAgentHooks(),
+            streaming=True,
+        )
+
+        step = runner.step()
+        first = await asyncio.wait_for(anext(step), timeout=5)
+        assert first.type == "streaming_delta"
+        assert first.data["chain"].get_plain_text() == "CHUNK-1"
+        assert not provider.gate.is_set()
+        assert observed == []
+
+        provider.gate.set()
+        async for _ in step:
+            pass
+        while not runner.done():
+            async for _ in runner.step():
+                pass
+
+        assert observed == [["test_tool"]]
+        assert runner.get_final_llm_resp().completion_text == "最终回复"
+    finally:
+        if handler_metadata is not None:
+            star_handlers_registry.remove(handler_metadata)
+
+
+@pytest.mark.asyncio
+async def test_intermediate_hook_cannot_mutate_tool_calls_in_place(
+    runner, mock_provider, provider_request, mock_tool_executor
+):
+    """In-place edits of the tool-call payload do not change the executed tools."""
+    hooks = InPlaceToolCallMutationHooks()
+    mock_provider.max_calls_before_normal_response = 1
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=hooks,
+        streaming=False,
+    )
+
+    responses = [resp async for resp in runner.step_until_done(3)]
+
+    assert hooks.calls == 1
+    assert [
+        resp.data["chain"].get_plain_text()
+        for resp in responses
+        if resp.type == "llm_result"
+    ] == ["我需要使用工具来帮助您", "这是我的最终回答"]
+    assert sum(resp.type == "tool_call_result" for resp in responses) == 1
+    assistant_tool_calls = [
+        message
+        for message in runner.run_context.messages
+        if message.role == "assistant" and message.tool_calls
+    ]
+    assert len(assistant_tool_calls) == 1
+    assert [
+        (call.function.name, json.loads(call.function.arguments))
+        for call in assistant_tool_calls[0].tool_calls
+    ] == [("test_tool", {"query": "test"})]
 
 
 @pytest.mark.asyncio
@@ -2823,6 +2951,7 @@ def test_filter_decorator_registers_intermediate_event():
 
     wrapped = filter.on_llm_response_intermediate()(unique_intermediate_hook)
     assert wrapped is unique_intermediate_hook
+    handler_metadata = None
     try:
         handler_metadata = next(
             handler
@@ -2841,4 +2970,5 @@ def test_filter_decorator_registers_intermediate_event():
             )
         )
     finally:
-        star_handlers_registry.remove(handler_metadata)
+        if handler_metadata is not None:
+            star_handlers_registry.remove(handler_metadata)
