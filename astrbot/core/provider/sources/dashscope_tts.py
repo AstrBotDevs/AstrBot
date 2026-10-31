@@ -131,6 +131,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
                     timeout=aiohttp.ClientTimeout(total=timeout),
                 ) as response,
             ):
+                response.raise_for_status()
                 return await response.read()
         except (aiohttp.ClientError, asyncio.TimeoutError, OSError) as e:
             logging.exception(f"Failed to download audio from URL {url}: {e}")
