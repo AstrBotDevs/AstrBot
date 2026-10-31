@@ -19,6 +19,7 @@ from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.config import AstrBotConfig
 from astrbot.core.pipeline.scheduler import PipelineScheduler
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.utils.error_redaction import sanitize_control_chars
 
 from .platform import AstrMessageEvent
 from .utils.active_event_registry import active_event_registry
@@ -144,15 +145,22 @@ class EventBus:
             "platform_id": event.get_platform_id(),
             "platform_type": event.get_platform_name(),
         }
+        sender_name = event.get_sender_name()
+        safe_conf_name = sanitize_control_chars(str(conf_name))
+        safe_platform_id = sanitize_control_chars(event.get_platform_id())
+        safe_platform_name = sanitize_control_chars(event.get_platform_name())
+        safe_sender_name = sanitize_control_chars(sender_name)
+        safe_sender_id = sanitize_control_chars(event.get_sender_id())
+        safe_message_outline = sanitize_control_chars(event.get_message_outline())
         # 如果有发送者名称: [平台名] 发送者名称/发送者ID: 消息概要
-        if event.get_sender_name():
+        if sender_name:
             logger.info(
-                f"[{conf_name}] [{event.get_platform_id()}({event.get_platform_name()})] {event.get_sender_name()}/{event.get_sender_id()}: {event.get_message_outline()}",
+                f"[{safe_conf_name}] [{safe_platform_id}({safe_platform_name})] {safe_sender_name}/{safe_sender_id}: {safe_message_outline}",
                 extra=log_extra,
             )
         # 没有发送者名称: [平台名] 发送者ID: 消息概要
         else:
             logger.info(
-                f"[{conf_name}] [{event.get_platform_id()}({event.get_platform_name()})] {event.get_sender_id()}: {event.get_message_outline()}",
+                f"[{safe_conf_name}] [{safe_platform_id}({safe_platform_name})] {safe_sender_id}: {safe_message_outline}",
                 extra=log_extra,
             )
