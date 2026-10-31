@@ -524,6 +524,34 @@ class TestGetMessageInfo:
         """Test get_sender_name method."""
         assert astr_message_event.get_sender_name() == "TestUser"
 
+    def test_get_sender_aliases_empty_when_absent(self, astr_message_event):
+        """Test get_sender_aliases returns an empty list without aliases."""
+        assert astr_message_event.get_sender_aliases() == []
+
+    def test_get_sender_aliases_returns_configured_ids(self, astr_message_event):
+        """Test get_sender_aliases returns the sender's alternate IDs."""
+        astr_message_event.message_obj.sender.aliases = ["emp-123", "union-456"]
+
+        assert astr_message_event.get_sender_aliases() == ["emp-123", "union-456"]
+
+    def test_get_sender_aliases_filters_invalid_entries(self, astr_message_event):
+        """Test get_sender_aliases strips IDs and ignores non-string entries."""
+        astr_message_event.message_obj.sender.aliases = [
+            " emp-123 ",
+            "",
+            None,
+            123,
+            "union-456",
+        ]
+
+        assert astr_message_event.get_sender_aliases() == ["emp-123", "union-456"]
+
+    def test_get_sender_aliases_ignores_non_list_value(self, astr_message_event):
+        """Test get_sender_aliases rejects a bare string instead of splitting it."""
+        astr_message_event.message_obj.sender.aliases = "emp-123"
+
+        assert astr_message_event.get_sender_aliases() == []
+
     def test_get_sender_name_empty_when_none(self, platform_meta, astrbot_message):
         """Test get_sender_name returns empty string when nickname is None."""
         astrbot_message.sender = MessageMember(user_id="user123", nickname=None)

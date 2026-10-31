@@ -289,6 +289,27 @@ class AstrMessageEvent(abc.ABC):
             return nickname
         return str(nickname)
 
+    def get_sender_aliases(self) -> list[str]:
+        """Get the sender's alternate platform identifiers.
+
+        Adapters populate these when the platform exposes multiple IDs for the
+        same sender, e.g. Lark `user_id` and `union_id` alongside `open_id`.
+        They are used for access-control matching in addition to the primary
+        sender ID.
+
+        Returns:
+            Non-empty alias identifiers, or an empty list when none are provided.
+        """
+        sender = getattr(self.message_obj, "sender", None)
+        aliases = getattr(sender, "aliases", None)
+        if not isinstance(aliases, (list, tuple)):
+            return []
+        return [
+            alias.strip()
+            for alias in aliases
+            if isinstance(alias, str) and alias.strip()
+        ]
+
     def set_extra(self, key, value) -> None:
         """设置额外的信息。"""
         self._extras[key] = value

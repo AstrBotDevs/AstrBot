@@ -189,6 +189,12 @@ Whether to enable the ID whitelist. Default is `true`. When enabled, only messag
 
 ID whitelist. If filled, only message events from the specified IDs will be processed. Empty means the whitelist filter is not enabled. You can use the `/sid` command to get the session ID on a platform.
 
+Three entry forms are accepted, and any match allows the event:
+
+- The full session ID (UMO), e.g. `aiocqhttp:GroupMessage:547540978`;
+- The group ID, which allows the entire group;
+- A platform sender alias ID. The Lark adapter currently collects the sender's `user_id` and `union_id`; an entry admits that member in both private and group chats without allowing the whole group. Lark requires the `contact:user.employee_id:readonly` scope, otherwise `user_id` is empty.
+
 Session IDs can also be found in AstrBot logs; when a message fails the whitelist, an INFO level log is output, e.g., `aiocqhttp:GroupMessage:547540978`.
 
 #### `platform_settings.id_whitelist_log`
@@ -481,6 +487,8 @@ Baidu AI content moderation settings.
 List of administrator IDs. Additionally, you can use `/op` and `/deop` commands to add or remove admins.
 
 In WebUI, select the profile used by your bot under `Config`, then open `Access Control → Administrators → Administrator IDs`. Send `/sid` to the bot to get your `UID`.
+
+Platform sender alias IDs are also accepted. The Lark adapter currently collects the sender's `user_id` and `union_id`; Lark requires the `contact:user.employee_id:readonly` scope, otherwise `user_id` is empty.
 
 ### `t2i`
 

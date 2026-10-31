@@ -42,7 +42,7 @@
 > App ID 获取方式：回到 AstrBot 的 `机器人` 页，选中刚刚创建的飞书机器人，在 `接入设置` 中查看 `app_id`。
 >
 > ```text
-> https://open.feishu.cn/app/<APP_ID>/auth?q=contact:contact.base:readonly,contact:user.base:readonly,im:message,im:message.p2p_msg:readonly,im:message.group_at_msg:readonly,im:message.group_msg,im:message:send_as_bot,im:resource,cardkit:card:write&op_from=openapi&token_type=tenant
+> https://open.feishu.cn/app/<APP_ID>/auth?q=contact:contact.base:readonly,contact:user.base:readonly,contact:user.employee_id:readonly,im:message,im:message.p2p_msg:readonly,im:message.group_at_msg:readonly,im:message.group_msg,im:message:send_as_bot,im:resource,cardkit:card:write&op_from=openapi&token_type=tenant
 > ```
 
 扫码创建完成后，建议继续检查后文的事件订阅、权限、版本发布和拉入群组步骤。
@@ -121,6 +121,13 @@
 
 开通 `contact:contact.base:readonly` 和 `contact:user.base:readonly`，用于读取私聊发送者的显示名。
 
+开通 `contact:user.employee_id:readonly`（获取用户 user ID），用于在消息事件中返回发送者的 `user_id`。未开通该权限时，事件中的 `user_id` 为空，只能使用 `open_id`。
+
+> [!TIP]
+> `open_id` 是应用级 ID，重建应用后会变化；`user_id` 是租户级 ID（企业租户中通常为工号），更稳定；`union_id` 是开发者账号级 ID。开通上述权限并发布应用版本后，可在 WebUI 的 `访问控制 -> 白名单 -> 白名单 ID 列表` 和 `访问控制 -> 管理员 -> 管理员 ID` 中直接填写 `user_id` 或 `union_id`。在群聊中，填写某个成员的 `user_id` 可以只放行该成员，而不必放行整个群。
+>
+> `/sid` 输出的 UID 和会话 ID 仍基于 `open_id`；`user_id`、`union_id` 可在飞书管理后台的用户详情中查看。
+
 如果需要在群聊里使用，请额外开通 `im:message.group_at_msg:readonly` 和 `im:message.group_msg` 权限。
 
 > [!TIP]
@@ -128,7 +135,7 @@
 
 如果需要使用流式输出，请额外开通 `创建与更新卡片(cardkit:card:write)` 权限。
 
-最终开通的权限如下图：
+最终开通的权限如下图（截图可能未包含后新增的 `contact:user.employee_id:readonly`，请以上面的权限列表为准）：
 
 ![最终开通的权限](https://files.astrbot.app/docs/source/images/lark/image-11.png)
 

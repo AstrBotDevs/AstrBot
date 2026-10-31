@@ -189,6 +189,12 @@ AstrBot 默认配置如下：
 
 ID 白名单。填写后，将只处理所填写的 ID 发来的消息事件。为空时表示不启用白名单过滤。可以使用 `/sid` 指令获取在某个平台上的会话 ID。
 
+支持以下三种填写形式，任意一项匹配即放行：
+
+- 完整的会话 ID（UMO），例如 `aiocqhttp:GroupMessage:547540978`；
+- 群 ID，用于放行整个群；
+- 平台提供的发送者别名 ID。目前飞书适配器会采集发送者的 `user_id` 和 `union_id`；填写后可在私聊和群聊中单独放行该成员，无需放行整个群。飞书需要在开发者后台开通 `contact:user.employee_id:readonly` 权限，否则 `user_id` 为空。
+
 也可在 AstrBot 日志内获取会话 ID，当一条消息没通过白名单时，会输出 INFO 级别的日志，格式类似 `aiocqhttp:GroupMessage:547540978`
 
 #### `platform_settings.id_whitelist_log`
@@ -481,6 +487,8 @@ Added in `v4.3.5`
 管理员 ID 列表。此外，还可以使用 `/op`, `/deop` 指令来添加或删除管理员。
 
 在 WebUI 的 `配置文件` 中选择机器人使用的配置文件，再进入 `访问控制 → 管理员 → 管理员 ID` 设置。给机器人发送 `/sid` 指令以获取 `UID`。
+
+也可以填写平台提供的发送者别名 ID。目前飞书适配器会采集发送者的 `user_id` 和 `union_id`；飞书需要在开发者后台开通 `contact:user.employee_id:readonly` 权限，否则 `user_id` 为空。
 
 ### `t2i`
 

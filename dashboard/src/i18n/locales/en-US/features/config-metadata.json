@@ -1123,7 +1123,7 @@
       "description": "Administrators",
       "admins_id": {
         "description": "Administrator IDs",
-        "hint": "Send the /sid command to the bot to get the ID."
+        "hint": "Send the /sid command to the bot to get the ID, or enter a platform sender ID such as Lark user_id/union_id."
       }
     },
     "whitelist": {
@@ -1135,7 +1135,7 @@
         },
         "id_whitelist": {
           "description": "Whitelist ID List",
-          "hint": "Send the /sid command to the bot to get the ID. An empty list disables the whitelist."
+          "hint": "Send the /sid command to the bot to get the session ID. Group IDs and platform sender IDs such as Lark user_id/union_id are also accepted. An empty list disables the whitelist."
         },
         "id_whitelist_log": {
           "description": "Log Blocked Messages",
