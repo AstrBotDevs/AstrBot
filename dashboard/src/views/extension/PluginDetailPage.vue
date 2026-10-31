@@ -1329,10 +1329,10 @@ onBeforeUnmount(() => {
   background-color: rgba(var(--v-theme-primary), 0.1);
   border-radius: 4px;
   font-size: 0.9em;
-  overflow: hidden;
+  min-width: 0;
+  overflow-wrap: anywhere;
   padding: 2px 6px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .command-cell code.command-code--group {
