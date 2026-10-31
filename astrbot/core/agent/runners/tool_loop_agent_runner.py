@@ -47,6 +47,7 @@ from astrbot.core.provider.modalities import (
 )
 from astrbot.core.provider.provider import Provider
 from astrbot.core.utils.async_generator import iterate_in_task
+from astrbot.core.utils.tool_protocol import ToolMessageProtocolError
 
 from ..context.compressor import ContextCompressor
 from ..context.config import ContextConfig
@@ -631,6 +632,16 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             raise
                     if self._is_stop_requested():
                         return
+            except ToolMessageProtocolError as exc:
+                logger.warning("Request blocked locally: %s", exc)
+                yield LLMResponse(
+                    role="err",
+                    completion_text=(
+                        "Invalid tool-call message pairing; request and provider "
+                        "fallback stopped locally."
+                    ),
+                )
+                return
             except Exception as exc:  # noqa: BLE001
                 last_exception = exc
                 logger.warning(
