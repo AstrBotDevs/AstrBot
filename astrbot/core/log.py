@@ -171,7 +171,8 @@ _plugin_name_aliases: dict[str, str] = {}
 A plugin directory does not have to match the name in the plugin's metadata, so
 the loader registers the mapping once a plugin loads. Records emitted through
 the plugin's dedicated logger and records whose source file is inside the plugin
-directory then share a single identifier in the Dashboard log filter.
+directory then share a single identifier in the Dashboard log filter. The entry
+is dropped again when the plugin is unloaded or removed.
 """
 
 
@@ -637,6 +638,22 @@ class LogManager:
         """
         if dir_name and plugin_name:
             _plugin_name_aliases[dir_name] = plugin_name
+
+    @classmethod
+    def forget_plugin_name_alias(cls, dir_name: str | None) -> None:
+        """Stop attributing a plugin directory to its previous plugin name.
+
+        The alias only describes the plugin that currently occupies the
+        directory. It is dropped when that plugin is unloaded or removed, so a
+        different plugin installed into the same directory is not attributed to
+        the previous plugin's name.
+
+        Args:
+            dir_name: Directory name of the plugin inside the plugin store;
+                ignored when empty.
+        """
+        if dir_name:
+            _plugin_name_aliases.pop(dir_name, None)
 
     @classmethod
     def get_plugin_logger(cls, plugin_name: str) -> logging.Logger:

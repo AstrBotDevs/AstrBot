@@ -15,6 +15,7 @@ import yaml
 from astrbot.core import log as log_module
 from astrbot.core.log import LogBroker, LogManager
 from astrbot.core.star import star_manager as star_manager_module
+from astrbot.core.star.star import StarMetadata
 from astrbot.core.star.star_manager import PluginManager
 
 
@@ -267,3 +268,114 @@ async def test_failed_plugin_load_is_filterable(
     assert success is False
     assert plugin_name in manager.failed_plugin_dict
     assert _plugin_options(broker) == {plugin_name}
+
+
+@pytest.mark.asyncio
+async def test_plugin_teardown_forgets_the_directory_alias(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ensure a removed plugin no longer owns the log identity of its directory.
+
+    A plugin directory can be reused. Once the previous plugin is unloaded or
+    removed, its alias has to go too, otherwise records from the next plugin in
+    the same directory would be attributed to the previous plugin's name.
+
+    Args:
+        tmp_path: Temporary directory used to build a plugin store layout.
+        monkeypatch: Pytest fixture used to isolate paths and plugin state.
+    """
+    dir_name = "astrbot_plugin_weather"
+    module_path = f"data.plugins.{dir_name}.main"
+    plugin_file = tmp_path / "data" / "plugins" / dir_name / "main.py"
+    plugin_file.parent.mkdir(parents=True)
+    monkeypatch.setattr(
+        star_manager_module,
+        "get_astrbot_plugin_path",
+        lambda: str(tmp_path / "data" / "plugins"),
+    )
+    monkeypatch.setattr(
+        star_manager_module,
+        "get_astrbot_config_path",
+        lambda: str(tmp_path / "config"),
+    )
+    monkeypatch.setattr(
+        star_manager_module,
+        "get_astrbot_path",
+        lambda: str(tmp_path),
+    )
+    monkeypatch.setattr(star_manager_module, "star_map", {})
+    monkeypatch.setattr(star_manager_module, "star_registry", [])
+    manager = PluginManager(cast(Any, _StubContext()), cast(Any, {}))
+    metadata = StarMetadata(
+        name="weather",
+        root_dir_name=dir_name,
+        module_path=module_path,
+    )
+    star_manager_module.star_map[module_path] = metadata
+    star_manager_module.star_registry.append(metadata)
+    broker = LogBroker()
+    LogManager.register_plugin_name_alias(dir_name, "weather")
+
+    await manager._unbind_plugin("weather", module_path)
+    after_unload = _publish_record(broker, plugin_file)
+
+    # The install and failed-load teardown drops the alias the same way.
+    LogManager.register_plugin_name_alias(dir_name, "weather")
+    manager._cleanup_plugin_state(dir_name)
+    after_cleanup = _publish_record(broker, plugin_file)
+
+    # The plugin is not loaded anymore, so the directory name is the identifier.
+    assert after_unload["plugin_name"] == dir_name
+    assert after_cleanup["plugin_name"] == dir_name
+    assert _plugin_options(broker) == {dir_name}
+
+
+def test_reused_plugin_directory_uses_the_new_metadata_name(tmp_path: Path) -> None:
+    """Ensure a replacement plugin is attributed to its own metadata name.
+
+    The alias only describes the plugin that currently occupies the directory,
+    so unloading the previous plugin and registering the next one has to leave
+    the new name as the only identifier of that directory.
+
+    Args:
+        tmp_path: Temporary directory used to build a plugin store layout.
+    """
+    dir_name = "astrbot_plugin_weather"
+    plugin_file = tmp_path / "data" / "plugins" / dir_name / "main.py"
+    plugin_file.parent.mkdir(parents=True)
+    LogManager.register_plugin_name_alias(dir_name, "weather")
+
+    # The old plugin is uninstalled and a different plugin takes its place.
+    LogManager.forget_plugin_name_alias(dir_name)
+    LogManager.register_plugin_name_alias(dir_name, "forecast")
+
+    entry = _publish_record(LogBroker(), plugin_file)
+
+    assert entry["plugin_name"] == "forecast"
+
+
+def test_registering_twice_and_forgetting_once_leaves_no_alias(
+    tmp_path: Path,
+) -> None:
+    """Ensure one forget clears a directory that was registered twice.
+
+    The alias map holds at most one name per directory, so a plugin that
+    registers twice leaves a single entry and forgetting the directory once
+    removes it completely instead of exposing the older name.
+
+    Args:
+        tmp_path: Temporary directory used to build a plugin store layout.
+    """
+    dir_name = "astrbot_plugin_weather"
+    plugin_file = tmp_path / "data" / "plugins" / dir_name / "main.py"
+    plugin_file.parent.mkdir(parents=True)
+    LogManager.register_plugin_name_alias(dir_name, "weather")
+    LogManager.register_plugin_name_alias(dir_name, "forecast")
+    assert log_module._plugin_name_aliases == {dir_name: "forecast"}
+
+    LogManager.forget_plugin_name_alias(dir_name)
+
+    assert log_module._plugin_name_aliases == {}
+    entry = _publish_record(LogBroker(), plugin_file)
+    assert entry["plugin_name"] == dir_name

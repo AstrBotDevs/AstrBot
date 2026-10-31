@@ -778,6 +778,9 @@ class PluginManager:
         plugin_root_name = "astrbot.builtin_stars." if is_reserved else "data.plugins."
         module_prefix = f"{plugin_root_name}{dir_name}"
 
+        # The plugin no longer owns its log attribution once its state is dropped.
+        LogManager.forget_plugin_name_alias(dir_name)
+
         # 清理 sys.modules
         for key in list(sys.modules.keys()):
             if self._is_plugin_module_path(key, module_prefix):
@@ -1885,6 +1888,9 @@ class PluginManager:
         if plugin is None:
             return
 
+        # The plugin no longer owns its directory, so it must not keep the log
+        # attribution of that directory either.
+        LogManager.forget_plugin_name_alias(plugin.root_dir_name)
         self._purge_modules(
             root_dir_name=plugin.root_dir_name,
             is_reserved=plugin.reserved,
