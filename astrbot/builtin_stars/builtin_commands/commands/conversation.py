@@ -141,7 +141,11 @@ class ConversationCommands:
         )
 
     async def stop(self, message: AstrMessageEvent) -> None:
-        """停止当前会话正在运行的 Agent"""
+        """Request cancellation and report newly marked tasks in this session.
+
+        Args:
+            message: Command event identifying the session to stop.
+        """
         cfg = self.context.get_config(umo=message.unified_msg_origin)
         agent_runner_type = cfg["agent_runner"]["runner_type"]
         umo = message.unified_msg_origin
@@ -157,13 +161,17 @@ class ConversationCommands:
         if stopped_count > 0:
             message.set_result(
                 MessageEventResult().message(
-                    f"✅ Requested to stop {stopped_count} running tasks."
+                    f"✅ Requested to stop {stopped_count} additional tasks. "
+                    "Previously requested tasks may still be stopping."
                 )
             )
             return
 
         message.set_result(
-            MessageEventResult().message("✅ No running tasks in the current session.")
+            MessageEventResult().message(
+                "✅ No new tasks to stop in the current session. "
+                "Previously requested tasks may still be stopping."
+            )
         )
 
     async def new_conv(self, message: AstrMessageEvent) -> None:

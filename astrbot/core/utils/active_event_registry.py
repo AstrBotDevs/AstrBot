@@ -115,14 +115,14 @@ class ActiveEventRegistry:
         umo: str,
         exclude: AstrMessageEvent | None = None,
     ) -> int:
-        """终止指定 UMO 的所有活跃事件及其后台任务。
+        """Stop a session's active events and their background tasks.
 
         Args:
-            umo: 统一消息来源标识符。
-            exclude: 需要排除的事件（通常是发起 reset 的事件本身）。
+            umo: Unified message origin identifying the session.
+            exclude: Event to exclude, usually the command event itself.
 
         Returns:
-            被终止的事件数量。
+            Number of events newly marked for Agent stop by this call.
         """
         events = set(self._events.get(umo, []))
         events.update(
@@ -153,17 +153,18 @@ class ActiveEventRegistry:
         umo: str,
         exclude: AstrMessageEvent | None = None,
     ) -> int:
-        """请求停止指定 UMO 的所有活跃事件中的 Agent 运行。
+        """Request Agent cancellation for a session's active events.
 
-        与 stop_all 不同，这里不会调用 event.stop_event()，
-        因此不会中断事件传播，后续流程（如历史记录保存）仍可继续。
+        Event propagation continues so cleanup and history saving can finish.
+        Events remain registered until their owners finish processing them.
 
         Args:
-            umo: 统一消息来源标识符。
-            exclude: 需要排除的事件。
+            umo: Unified message origin identifying the session.
+            exclude: Event to exclude from the stop request.
 
         Returns:
-            收到停止请求的事件数量，同一事件只计数一次。
+            Number of events newly marked for Agent stop by this call.
+            Events already stopping or aborted are not counted while exiting.
         """
         tasks = self._background_tasks.get(umo, {})
         events = set(self._events.get(umo, []))
@@ -171,12 +172,15 @@ class ActiveEventRegistry:
         count = 0
         for event in events:
             if event is not exclude:
+                if not event.get_extra("agent_stop_requested") and not event.get_extra(
+                    "agent_user_aborted"
+                ):
+                    count += 1
                 event.set_extra("agent_stop_requested", True)
                 self.get_background_stop_signal(event).set()
                 callback = self._agent_stop_callbacks.get(event)
                 if callback:
                     callback()
-                count += 1
         for task, event in list(tasks.items()):
             if (
                 event is not exclude
