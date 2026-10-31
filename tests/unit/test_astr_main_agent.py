@@ -2910,7 +2910,7 @@ class TestHandleWebchat:
     async def test_handle_webchat_generates_title(self, mock_event):
         """Test generating title for webchat session without display name."""
         module = ama
-        mock_event.session_id = "platform!webchat-session-123"
+        mock_event.session_id = "webchat!alice!webchat-session-123"
 
         req = ProviderRequest(prompt="What is machine learning?")
         prov = MagicMock(spec=Provider)
@@ -2920,6 +2920,7 @@ class TestHandleWebchat:
 
         mock_session = MagicMock()
         mock_session.display_name = None
+        mock_session.creator = "alice"
 
         with patch("astrbot.core.db_helper") as mock_db:
             mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
@@ -2936,16 +2937,78 @@ class TestHandleWebchat:
         )
 
     @pytest.mark.asyncio
+    async def test_handle_webchat_injected_delimiter_cannot_target_other_session(
+        self, mock_event
+    ):
+        """Test that a "!" inside the client-supplied cid cannot select another session."""
+        module = ama
+        mock_event.session_id = "webchat!mallory!mallory-session!victim-session"
+
+        req = ProviderRequest(prompt="What is machine learning?")
+        prov = MagicMock(spec=Provider)
+        llm_response = MagicMock()
+        llm_response.completion_text = "Injected Title"
+        prov.text_chat = AsyncMock(return_value=llm_response)
+
+        victim_session = MagicMock()
+        victim_session.display_name = None
+        victim_session.creator = "alice"
+        own_session = MagicMock()
+        own_session.display_name = None
+        own_session.creator = "mallory"
+        sessions = {
+            "victim-session": victim_session,
+            "mallory-session!victim-session": own_session,
+        }
+
+        with patch("astrbot.core.db_helper") as mock_db:
+            mock_db.get_platform_session_by_id = AsyncMock(side_effect=sessions.get)
+            mock_db.update_platform_session = AsyncMock()
+
+            await module._handle_webchat(mock_event, req, prov)
+
+        mock_db.update_platform_session.assert_called_once_with(
+            session_id="mallory-session!victim-session",
+            display_name="Injected Title",
+        )
+
+    @pytest.mark.asyncio
+    async def test_handle_webchat_skips_session_owned_by_other_user(self, mock_event):
+        """Test that a session created by another user is never retitled."""
+        module = ama
+        mock_event.session_id = "webchat!mallory!alice-session"
+
+        req = ProviderRequest(prompt="What is machine learning?")
+        prov = MagicMock(spec=Provider)
+        llm_response = MagicMock()
+        llm_response.completion_text = "Injected Title"
+        prov.text_chat = AsyncMock(return_value=llm_response)
+
+        mock_session = MagicMock()
+        mock_session.display_name = None
+        mock_session.creator = "alice"
+
+        with patch("astrbot.core.db_helper") as mock_db:
+            mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
+            mock_db.update_platform_session = AsyncMock()
+
+            await module._handle_webchat(mock_event, req, prov)
+
+        prov.text_chat.assert_not_called()
+        mock_db.update_platform_session.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_handle_webchat_no_user_prompt(self, mock_event):
         """Test that title generation is skipped when no user prompt."""
         module = ama
-        mock_event.session_id = "platform!webchat-session-123"
+        mock_event.session_id = "webchat!alice!webchat-session-123"
 
         req = ProviderRequest(prompt=None)
         prov = MagicMock(spec=Provider)
 
         mock_session = MagicMock()
         mock_session.display_name = None
+        mock_session.creator = "alice"
 
         with patch("astrbot.core.db_helper") as mock_db:
             mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
@@ -2957,13 +3020,14 @@ class TestHandleWebchat:
     async def test_handle_webchat_empty_user_prompt(self, mock_event):
         """Test that title generation is skipped when user prompt is empty."""
         module = ama
-        mock_event.session_id = "platform!webchat-session-123"
+        mock_event.session_id = "webchat!alice!webchat-session-123"
 
         req = ProviderRequest(prompt="")
         prov = MagicMock(spec=Provider)
 
         mock_session = MagicMock()
         mock_session.display_name = None
+        mock_session.creator = "alice"
 
         with patch("astrbot.core.db_helper") as mock_db:
             mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
@@ -2975,13 +3039,14 @@ class TestHandleWebchat:
     async def test_handle_webchat_session_already_has_display_name(self, mock_event):
         """Test that title generation is skipped when session already has display name."""
         module = ama
-        mock_event.session_id = "platform!webchat-session-123"
+        mock_event.session_id = "webchat!alice!webchat-session-123"
 
         req = ProviderRequest(prompt="What is AI?")
         prov = MagicMock(spec=Provider)
 
         mock_session = MagicMock()
         mock_session.display_name = "Existing Title"
+        mock_session.creator = "alice"
 
         with patch("astrbot.core.db_helper") as mock_db:
             mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
@@ -2994,7 +3059,7 @@ class TestHandleWebchat:
     async def test_handle_webchat_no_session_found(self, mock_event):
         """Test that title generation is skipped when session is not found."""
         module = ama
-        mock_event.session_id = "platform!webchat-session-123"
+        mock_event.session_id = "webchat!alice!webchat-session-123"
 
         req = ProviderRequest(prompt="What is AI?")
         prov = MagicMock(spec=Provider)
@@ -3010,7 +3075,7 @@ class TestHandleWebchat:
     async def test_handle_webchat_llm_returns_none_title(self, mock_event):
         """Test that title is not updated when LLM returns <None>."""
         module = ama
-        mock_event.session_id = "platform!webchat-session-123"
+        mock_event.session_id = "webchat!alice!webchat-session-123"
 
         req = ProviderRequest(prompt="hi")
         prov = MagicMock(spec=Provider)
@@ -3020,6 +3085,7 @@ class TestHandleWebchat:
 
         mock_session = MagicMock()
         mock_session.display_name = None
+        mock_session.creator = "alice"
 
         with patch("astrbot.core.db_helper") as mock_db:
             mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
@@ -3033,7 +3099,7 @@ class TestHandleWebchat:
     async def test_handle_webchat_llm_returns_empty_title(self, mock_event):
         """Test that title is not updated when LLM returns empty string."""
         module = ama
-        mock_event.session_id = "platform!webchat-session-123"
+        mock_event.session_id = "webchat!alice!webchat-session-123"
 
         req = ProviderRequest(prompt="hello")
         prov = MagicMock(spec=Provider)
@@ -3043,6 +3109,7 @@ class TestHandleWebchat:
 
         mock_session = MagicMock()
         mock_session.display_name = None
+        mock_session.creator = "alice"
 
         with patch("astrbot.core.db_helper") as mock_db:
             mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
@@ -3056,7 +3123,7 @@ class TestHandleWebchat:
     async def test_handle_webchat_llm_returns_none_response(self, mock_event):
         """Test handling when LLM returns None response."""
         module = ama
-        mock_event.session_id = "platform!webchat-session-123"
+        mock_event.session_id = "webchat!alice!webchat-session-123"
 
         req = ProviderRequest(prompt="test question")
         prov = MagicMock(spec=Provider)
@@ -3064,6 +3131,7 @@ class TestHandleWebchat:
 
         mock_session = MagicMock()
         mock_session.display_name = None
+        mock_session.creator = "alice"
 
         with patch("astrbot.core.db_helper") as mock_db:
             mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
@@ -3077,7 +3145,7 @@ class TestHandleWebchat:
     async def test_handle_webchat_llm_returns_no_completion_text(self, mock_event):
         """Test handling when LLM response has no completion_text."""
         module = ama
-        mock_event.session_id = "platform!webchat-session-123"
+        mock_event.session_id = "webchat!alice!webchat-session-123"
 
         req = ProviderRequest(prompt="test question")
         prov = MagicMock(spec=Provider)
@@ -3087,6 +3155,7 @@ class TestHandleWebchat:
 
         mock_session = MagicMock()
         mock_session.display_name = None
+        mock_session.creator = "alice"
 
         with patch("astrbot.core.db_helper") as mock_db:
             mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
@@ -3100,7 +3169,7 @@ class TestHandleWebchat:
     async def test_handle_webchat_strips_title_whitespace(self, mock_event):
         """Test that generated title has whitespace stripped."""
         module = ama
-        mock_event.session_id = "platform!webchat-session-123"
+        mock_event.session_id = "webchat!alice!webchat-session-123"
 
         req = ProviderRequest(prompt="What is Python?")
         prov = MagicMock(spec=Provider)
@@ -3110,6 +3179,7 @@ class TestHandleWebchat:
 
         mock_session = MagicMock()
         mock_session.display_name = None
+        mock_session.creator = "alice"
 
         with patch("astrbot.core.db_helper") as mock_db:
             mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
@@ -3126,7 +3196,7 @@ class TestHandleWebchat:
     async def test_handle_webchat_provider_exception_is_handled(self, mock_event):
         """Test that provider exception during title generation is handled."""
         module = ama
-        mock_event.session_id = "platform!webchat-session-123"
+        mock_event.session_id = "webchat!alice!webchat-session-123"
 
         req = ProviderRequest(prompt="What is Python?")
         prov = MagicMock(spec=Provider)
@@ -3134,6 +3204,7 @@ class TestHandleWebchat:
 
         mock_session = MagicMock()
         mock_session.display_name = None
+        mock_session.creator = "alice"
 
         with (
             patch("astrbot.core.db_helper") as mock_db,

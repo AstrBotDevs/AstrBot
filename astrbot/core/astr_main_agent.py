@@ -1120,11 +1120,20 @@ async def _handle_webchat(
 ) -> None:
     from astrbot.core import db_helper
 
-    chatui_session_id = event.session_id.split("!")[-1]
+    # event.session_id is "{platform_id}!{username}!{cid}" and the cid is supplied
+    # by the client, so it may itself contain "!". Split off only the first two
+    # fields instead of taking the last one, otherwise an injected "!" can point
+    # this lookup at another user's session.
+    parts = event.session_id.split("!", 2)
+    chatui_session_id = parts[-1]
     user_prompt = req.prompt
     session = await db_helper.get_platform_session_by_id(chatui_session_id)
 
     if not user_prompt or not chatui_session_id or not session or session.display_name:
+        return
+
+    # Only title sessions that belong to the user who sent this message.
+    if len(parts) != 3 or session.creator != parts[1]:
         return
 
     try:
