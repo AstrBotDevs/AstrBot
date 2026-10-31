@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock
 import pytest
 import yaml
 
+from astrbot.core.repository import GitCloneTimeoutError
 from astrbot.core.star import star_manager as star_manager_module
 from astrbot.core.star.star_handler import EventType, StarHandlerMetadata
 from astrbot.core.star.star_manager import PluginDependencyInstallError, PluginManager
@@ -526,6 +527,33 @@ async def test_install_plugin_staging_root_does_not_shadow_the_marker_file(
 
     assert marker.is_file()
     assert events[-1] == ("load", TEST_PLUGIN_DIR)
+
+
+@pytest.mark.asyncio
+async def test_install_plugin_keeps_the_clone_error_when_staging_teardown_fails(
+    plugin_manager_pm: PluginManager, monkeypatch
+):
+    """A staging teardown error must not replace the error that explains the install."""
+    if sys.platform != "win32":
+        # Outside Windows an open file does not block deletion, so the staging teardown
+        # cannot be made to fail with a real checkout on disk.
+        pytest.skip("only Windows keeps a deleted file locked")
+    open_handles = []
+
+    async def failing_install(repo_url: str, proxy="", *, download_url="", target_dir):
+        staged_path = Path(target_dir)
+        staged_path.mkdir(parents=True)
+        open_handles.append((staged_path / "held.txt").open("w", encoding="utf-8"))
+        raise GitCloneTimeoutError("Git clone timed out after 180s.")
+
+    monkeypatch.setattr(plugin_manager_pm._updater, "install", failing_install)
+
+    try:
+        with pytest.raises(GitCloneTimeoutError, match="timed out"):
+            await plugin_manager_pm.install_plugin(TEST_PLUGIN_REPO)
+    finally:
+        for handle in open_handles:
+            handle.close()
 
 
 @pytest.mark.asyncio
