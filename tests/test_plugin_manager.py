@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock
 import pytest
 import yaml
 
+from astrbot.core.provider.register import provider_cls_map, provider_registry
 from astrbot.core.star import star_manager as star_manager_module
 from astrbot.core.star.star_handler import EventType, StarHandlerMetadata
 from astrbot.core.star.star_manager import PluginDependencyInstallError, PluginManager
@@ -2980,3 +2981,448 @@ async def test_repeated_deactivated_loads_bind_handlers_once_when_activated(
         llm_tools.func_list = original_func_list
         cast(Any, plugin_manager_pm.context).stars.remove(metadata)
         _clear_star_runtime_state()
+
+
+# --- plugin-owned model provider adapter teardown ---
+
+
+def _write_provider_adapter_plugin(
+    plugin_path: Path,
+    *,
+    plugin_name: str,
+    provider_type: str | None = None,
+    raise_on_import: bool = False,
+) -> None:
+    """Writes a plugin that optionally registers one model provider adapter.
+
+    Args:
+        plugin_path: Directory that will contain the plugin files.
+        plugin_name: Plugin name recorded in ``metadata.yaml``.
+        provider_type: Provider type name to register, or None to register none.
+        raise_on_import: Whether the module raises after registering the adapter,
+            which simulates a plugin that fails while it is being imported.
+    """
+    plugin_path.mkdir(parents=True, exist_ok=True)
+    (plugin_path / "metadata.yaml").write_text(
+        yaml.dump(
+            {
+                "name": plugin_name,
+                "author": "AstrBot Team",
+                "desc": "Provider adapter test plugin",
+                "version": "1.0.0",
+            }
+        ),
+        encoding="utf-8",
+    )
+    adapter_block = ""
+    if provider_type:
+        adapter_block = (
+            f'@register_provider_adapter("{provider_type}", "Test provider adapter")\n'
+            "class DemoProvider:\n"
+            "    pass\n\n\n"
+        )
+    failure_block = 'raise RuntimeError("import failed")\n\n\n' if raise_on_import else ""
+    (plugin_path / "main.py").write_text(
+        "from astrbot.api.star import Star\n"
+        "from astrbot.core.provider.register import register_provider_adapter\n"
+        "\n\n"
+        f"{adapter_block}"
+        f"{failure_block}"
+        "class DemoPlugin(Star):\n"
+        "    pass\n",
+        encoding="utf-8",
+    )
+
+
+@pytest.fixture
+def provider_plugin_runtime(plugin_manager_pm, monkeypatch):
+    """Loads real plugin code while isolating plugin and provider registries.
+
+    The importer mirrors Python's module cache: a module already in
+    ``sys.modules`` is returned as is, and only a purged module is executed
+    again. This keeps reload and uninstall flows faithful.
+
+    Args:
+        plugin_manager_pm: Isolated plugin manager under test.
+        monkeypatch: Pytest monkeypatch fixture.
+
+    Yields:
+        Preferences mutated by the plugin manager during the test.
+    """
+    _clear_star_runtime_state()
+    preferences: dict[str, Any] = {}
+    imported_modules: list[str] = []
+
+    async def mock_global_get(key, default=None):
+        return preferences.get(key, default)
+
+    async def mock_global_put(key, value):
+        preferences[key] = value
+
+    async def mock_sync_command_configs():
+        return None
+
+    async def import_plugin(
+        path,
+        module_str,
+        root_dir_name,
+        requirements_path,
+        *,
+        reserved=False,
+    ):
+        del module_str, requirements_path, reserved
+        module = sys.modules.get(path)
+        if module is None:
+            module = ModuleType(path)
+            main_path = (
+                Path(plugin_manager_pm.plugin_store_path) / root_dir_name / "main.py"
+            )
+            module.__file__ = str(main_path)
+            sys.modules[path] = module
+            imported_modules.append(path)
+            exec(
+                compile(
+                    main_path.read_text(encoding="utf-8"),
+                    str(main_path),
+                    "exec",
+                ),
+                module.__dict__,
+            )
+        return module
+
+    monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
+    monkeypatch.setattr(star_manager_module.sp, "global_put", mock_global_put)
+    monkeypatch.setattr(
+        star_manager_module,
+        "sync_command_configs",
+        mock_sync_command_configs,
+    )
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_import_plugin_with_dependency_recovery",
+        import_plugin,
+    )
+    monkeypatch.setattr(
+        plugin_manager_pm.context,
+        "stars",
+        star_manager_module.star_registry,
+    )
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "reserved_plugin_path",
+        str(Path(plugin_manager_pm.plugin_store_path).parent / "reserved"),
+    )
+
+    registry_snapshot = list(provider_registry)
+    cls_map_snapshot = dict(provider_cls_map)
+    try:
+        yield preferences
+    finally:
+        provider_registry[:] = registry_snapshot
+        provider_cls_map.clear()
+        provider_cls_map.update(cls_map_snapshot)
+        for module_name in imported_modules:
+            sys.modules.pop(module_name, None)
+        _clear_star_runtime_state()
+
+
+@pytest.mark.asyncio
+async def test_reload_plugin_reregisters_provider_adapter(
+    plugin_manager_pm: PluginManager,
+    provider_plugin_runtime,
+):
+    plugin_name = "provider_reload_plugin"
+    provider_type = "provider_reload_adapter"
+    _write_provider_adapter_plugin(
+        Path(plugin_manager_pm.plugin_store_path) / plugin_name,
+        plugin_name=plugin_name,
+        provider_type=provider_type,
+    )
+
+    success, error = await plugin_manager_pm.load(specified_dir_name=plugin_name)
+    assert success, error
+    stale_cls = provider_cls_map[provider_type].cls_type
+
+    success, error = await plugin_manager_pm.reload(plugin_name)
+
+    assert success, error
+    entries = [
+        metadata for metadata in provider_registry if metadata.type == provider_type
+    ]
+    assert len(entries) == 1
+    assert provider_cls_map[provider_type] is entries[0]
+    fresh_cls = provider_cls_map[provider_type].cls_type
+    assert fresh_cls is not stale_cls
+    loaded_module = sys.modules[f"data.plugins.{plugin_name}.main"]
+    assert fresh_cls is loaded_module.DemoProvider
+
+
+@pytest.mark.asyncio
+async def test_uninstall_disabled_plugin_removes_provider_adapter(
+    plugin_manager_pm: PluginManager,
+    provider_plugin_runtime,
+):
+    # Disabling keeps the plugin imported by design, so the adapter registration
+    # only disappears when the disabled plugin is uninstalled.
+    plugin_name = "provider_disabled_uninstall_plugin"
+    provider_type = "provider_disabled_uninstall_adapter"
+    plugin_path = Path(plugin_manager_pm.plugin_store_path) / plugin_name
+    _write_provider_adapter_plugin(
+        plugin_path,
+        plugin_name=plugin_name,
+        provider_type=provider_type,
+    )
+    success, error = await plugin_manager_pm.load(specified_dir_name=plugin_name)
+    assert success, error
+    assert provider_cls_map[provider_type].cls_type is sys.modules[
+        f"data.plugins.{plugin_name}.main"
+    ].DemoProvider
+
+    await plugin_manager_pm.turn_off_plugin(plugin_name)
+    await plugin_manager_pm.uninstall_plugin(plugin_name)
+
+    assert provider_type not in provider_cls_map
+    assert all(metadata.type != provider_type for metadata in provider_registry)
+
+    _write_provider_adapter_plugin(
+        plugin_path,
+        plugin_name=plugin_name,
+        provider_type=provider_type,
+    )
+    success, error = await plugin_manager_pm.load(specified_dir_name=plugin_name)
+    assert success, error
+    entries = [
+        metadata for metadata in provider_registry if metadata.type == provider_type
+    ]
+    assert len(entries) == 1
+    assert provider_cls_map[provider_type] is entries[0]
+    assert entries[0].cls_type is sys.modules[
+        f"data.plugins.{plugin_name}.main"
+    ].DemoProvider
+
+
+@pytest.mark.asyncio
+async def test_uninstall_then_reinstall_plugin_reregisters_provider_adapter(
+    plugin_manager_pm: PluginManager,
+    provider_plugin_runtime,
+):
+    plugin_name = "provider_uninstall_plugin"
+    provider_type = "provider_uninstall_adapter"
+    plugin_path = Path(plugin_manager_pm.plugin_store_path) / plugin_name
+    _write_provider_adapter_plugin(
+        plugin_path,
+        plugin_name=plugin_name,
+        provider_type=provider_type,
+    )
+    success, error = await plugin_manager_pm.load(specified_dir_name=plugin_name)
+    assert success, error
+    stale_cls = provider_cls_map[provider_type].cls_type
+
+    await plugin_manager_pm.uninstall_plugin(plugin_name)
+
+    assert provider_type not in provider_cls_map
+    assert all(metadata.type != provider_type for metadata in provider_registry)
+
+    _write_provider_adapter_plugin(
+        plugin_path,
+        plugin_name=plugin_name,
+        provider_type=provider_type,
+    )
+    success, error = await plugin_manager_pm.load(specified_dir_name=plugin_name)
+
+    assert success, error
+    entries = [
+        metadata for metadata in provider_registry if metadata.type == provider_type
+    ]
+    assert len(entries) == 1
+    assert provider_cls_map[provider_type].cls_type is not stale_cls
+
+
+@pytest.mark.asyncio
+async def test_full_reload_plugin_reregisters_provider_adapter(
+    plugin_manager_pm: PluginManager,
+    provider_plugin_runtime,
+):
+    plugin_name = "provider_full_reload_plugin"
+    provider_type = "provider_full_reload_adapter"
+    _write_provider_adapter_plugin(
+        Path(plugin_manager_pm.plugin_store_path) / plugin_name,
+        plugin_name=plugin_name,
+        provider_type=provider_type,
+    )
+    success, error = await plugin_manager_pm.load(specified_dir_name=plugin_name)
+    assert success, error
+    stale_cls = provider_cls_map[provider_type].cls_type
+
+    success, error = await plugin_manager_pm.reload()
+
+    assert success, error
+    entries = [
+        metadata for metadata in provider_registry if metadata.type == provider_type
+    ]
+    assert len(entries) == 1
+    assert provider_cls_map[provider_type] is entries[0]
+    fresh_cls = provider_cls_map[provider_type].cls_type
+    assert fresh_cls is not stale_cls
+    assert fresh_cls is sys.modules[f"data.plugins.{plugin_name}.main"].DemoProvider
+
+
+@pytest.mark.asyncio
+async def test_reload_failed_plugin_reregisters_provider_adapter(
+    plugin_manager_pm: PluginManager,
+    provider_plugin_runtime,
+):
+    plugin_name = "provider_failed_reload_plugin"
+    provider_type = "provider_failed_reload_adapter"
+    plugin_path = Path(plugin_manager_pm.plugin_store_path) / plugin_name
+    _write_provider_adapter_plugin(
+        plugin_path,
+        plugin_name=plugin_name,
+        provider_type=provider_type,
+        raise_on_import=True,
+    )
+
+    success, error = await plugin_manager_pm.load(specified_dir_name=plugin_name)
+    assert success is False
+    assert error is not None
+    assert plugin_name in plugin_manager_pm.failed_plugin_dict
+    # The adapter registered before the import error must not outlive the failed
+    # load, otherwise it reserves the type name forever.
+    assert all(metadata.type != provider_type for metadata in provider_registry)
+    assert provider_type not in provider_cls_map
+
+    _write_provider_adapter_plugin(
+        plugin_path,
+        plugin_name=plugin_name,
+        provider_type=provider_type,
+    )
+    success, error = await plugin_manager_pm.reload_failed_plugin(plugin_name)
+
+    assert success, error
+    entries = [
+        metadata for metadata in provider_registry if metadata.type == provider_type
+    ]
+    assert len(entries) == 1
+    assert provider_cls_map[provider_type] is entries[0]
+    assert entries[0].cls_type is sys.modules[
+        f"data.plugins.{plugin_name}.main"
+    ].DemoProvider
+
+
+@pytest.mark.asyncio
+async def test_uninstall_failed_plugin_releases_provider_adapter(
+    plugin_manager_pm: PluginManager,
+    provider_plugin_runtime,
+):
+    plugin_name = "provider_failed_uninstall_plugin"
+    provider_type = "provider_failed_uninstall_adapter"
+    plugin_path = Path(plugin_manager_pm.plugin_store_path) / plugin_name
+    _write_provider_adapter_plugin(
+        plugin_path,
+        plugin_name=plugin_name,
+        provider_type=provider_type,
+        raise_on_import=True,
+    )
+    success, error = await plugin_manager_pm.load(specified_dir_name=plugin_name)
+    assert success is False
+    assert error is not None
+
+    await plugin_manager_pm.uninstall_failed_plugin(plugin_name)
+
+    assert provider_type not in provider_cls_map
+    assert all(metadata.type != provider_type for metadata in provider_registry)
+
+    _write_provider_adapter_plugin(
+        plugin_path,
+        plugin_name=plugin_name,
+        provider_type=provider_type,
+    )
+    success, error = await plugin_manager_pm.load(specified_dir_name=plugin_name)
+    assert success, error
+    entries = [
+        metadata for metadata in provider_registry if metadata.type == provider_type
+    ]
+    assert len(entries) == 1
+    assert entries[0].cls_type is sys.modules[
+        f"data.plugins.{plugin_name}.main"
+    ].DemoProvider
+
+
+@pytest.mark.asyncio
+async def test_teardown_plugin_without_provider_adapter_keeps_other_registrations(
+    plugin_manager_pm: PluginManager,
+    provider_plugin_runtime,
+):
+    # The sibling plugin shares the "demo" prefix, so a plain startswith()
+    # match would wrongly remove its adapter.
+    other_name = "demo_extra"
+    other_type = "demo_extra_provider"
+    plugin_name = "demo"
+    plugin_store = Path(plugin_manager_pm.plugin_store_path)
+    _write_provider_adapter_plugin(
+        plugin_store / other_name,
+        plugin_name=other_name,
+        provider_type=other_type,
+    )
+    _write_provider_adapter_plugin(
+        plugin_store / plugin_name,
+        plugin_name=plugin_name,
+        provider_type=None,
+    )
+    success, error = await plugin_manager_pm.load(specified_dir_name=other_name)
+    assert success, error
+    success, error = await plugin_manager_pm.load(specified_dir_name=plugin_name)
+    assert success, error
+    registry_before = list(provider_registry)
+    cls_map_before = dict(provider_cls_map)
+
+    success, error = await plugin_manager_pm.reload(plugin_name)
+
+    assert success, error
+    assert provider_registry == registry_before
+    assert provider_cls_map == cls_map_before
+    assert provider_cls_map[other_type] is cls_map_before[other_type]
+
+
+@pytest.mark.asyncio
+async def test_failed_provider_adapter_registration_keeps_owner_registration(
+    plugin_manager_pm: PluginManager,
+    provider_plugin_runtime,
+):
+    owner_name = "shared_owner_extra"
+    owner_type = "shared_provider_type"
+    plugin_name = "shared_owner"
+    plugin_store = Path(plugin_manager_pm.plugin_store_path)
+    _write_provider_adapter_plugin(
+        plugin_store / owner_name,
+        plugin_name=owner_name,
+        provider_type=owner_type,
+    )
+    success, error = await plugin_manager_pm.load(specified_dir_name=owner_name)
+    assert success, error
+    owner_entry = provider_cls_map[owner_type]
+
+    _write_provider_adapter_plugin(
+        plugin_store / plugin_name,
+        plugin_name=plugin_name,
+        provider_type=owner_type,
+    )
+    success, error = await plugin_manager_pm.load(specified_dir_name=plugin_name)
+    assert success is False
+    assert error is not None
+    assert plugin_name in plugin_manager_pm.failed_plugin_dict
+
+    # The failed plugin's teardown only sees its own module prefix, so the
+    # registration owned by the prefix-sharing sibling stays untouched.
+    assert provider_cls_map[owner_type] is owner_entry
+    assert owner_entry in provider_registry
+    assert (
+        len(
+            [
+                metadata
+                for metadata in provider_registry
+                if metadata.type == owner_type
+            ]
+        )
+        == 1
+    )
