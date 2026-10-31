@@ -743,6 +743,40 @@ class PluginManager:
             )
         )
 
+    def _unregister_plugin_provider_adapters(
+        self,
+        plugin_label: str,
+        module_prefix: str,
+    ) -> None:
+        """Removes the model provider adapters registered by one plugin.
+
+        The cleanup is performed here for the plugin teardown paths and would
+        delegate to a shared public helper once one exists. Ownership comes from
+        the adapter class defining module, so adapters registered by core or by
+        another plugin are kept.
+
+        Args:
+            plugin_label: Plugin name or directory used in log messages.
+            module_prefix: Plugin module path prefix, such as
+                ``data.plugins.my_plugin``.
+        """
+        provider_entries = [
+            metadata
+            for metadata in list(provider_registry)
+            if self._is_plugin_module_path(
+                getattr(metadata.cls_type, "__module__", None),
+                module_prefix,
+            )
+        ]
+        for metadata in provider_entries:
+            provider_registry.remove(metadata)
+            if provider_cls_map.get(metadata.type) is metadata:
+                del provider_cls_map[metadata.type]
+            logger.info(
+                f"Removed model provider adapter {metadata.type} from plugin "
+                f"{plugin_label}",
+            )
+
     def _purge_modules(
         self,
         module_patterns: list[str] | None = None,
@@ -821,6 +855,10 @@ class PluginManager:
 
         for adapter_name in unregister_platform_adapters_by_module(module_prefix):
             logger.info(f"Removed platform adapter: {adapter_name}")
+
+        # A failed import can register provider adapters before it raises, so the
+        # failed-plugin teardown path must clear them as well.
+        self._unregister_plugin_provider_adapters(dir_name, module_prefix)
 
     def _build_failed_plugin_record(
         self,
@@ -1856,28 +1894,11 @@ class PluginManager:
                     f"Removed platform adapter {adapter_name} from plugin {plugin_name}",
                 )
 
-        # Unregister model provider adapters registered by this plugin. The
-        # registry cleanup is performed inline here and would move to a shared
-        # helper once one exists. Ownership comes from the adapter class module
-        # path, matched with the same plugin module prefix as above, so adapters
-        # registered by core or by another plugin are never removed.
-        if module_prefix:
-            provider_entries = [
-                metadata
-                for metadata in list(provider_registry)
-                if self._is_plugin_module_path(
-                    getattr(metadata.cls_type, "__module__", None),
-                    module_prefix,
-                )
-            ]
-            for metadata in provider_entries:
-                provider_registry.remove(metadata)
-                if provider_cls_map.get(metadata.type) is metadata:
-                    del provider_cls_map[metadata.type]
-                logger.info(
-                    f"Removed model provider adapter {metadata.type} from plugin "
-                    f"{plugin_name}",
-                )
+        # Unregister model provider adapters registered by this plugin. Ownership
+        # comes from the adapter class module path, matched with the same plugin
+        # module prefix as above, so adapters registered by core or by another
+        # plugin are never removed.
+        self._unregister_plugin_provider_adapters(plugin_name, module_prefix)
 
         if plugin is None:
             return

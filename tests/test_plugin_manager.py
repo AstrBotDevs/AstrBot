@@ -2991,6 +2991,7 @@ def _write_provider_adapter_plugin(
     *,
     plugin_name: str,
     provider_type: str | None = None,
+    raise_on_import: bool = False,
 ) -> None:
     """Writes a plugin that optionally registers one model provider adapter.
 
@@ -2998,6 +2999,8 @@ def _write_provider_adapter_plugin(
         plugin_path: Directory that will contain the plugin files.
         plugin_name: Plugin name recorded in ``metadata.yaml``.
         provider_type: Provider type name to register, or None to register none.
+        raise_on_import: Whether the module raises after registering the adapter,
+            which simulates a plugin that fails while it is being imported.
     """
     plugin_path.mkdir(parents=True, exist_ok=True)
     (plugin_path / "metadata.yaml").write_text(
@@ -3018,11 +3021,13 @@ def _write_provider_adapter_plugin(
             "class DemoProvider:\n"
             "    pass\n\n\n"
         )
+    failure_block = 'raise RuntimeError("import failed")\n\n\n' if raise_on_import else ""
     (plugin_path / "main.py").write_text(
         "from astrbot.api.star import Star\n"
         "from astrbot.core.provider.register import register_provider_adapter\n"
         "\n\n"
         f"{adapter_block}"
+        f"{failure_block}"
         "class DemoPlugin(Star):\n"
         "    pass\n",
         encoding="utf-8",
@@ -3035,7 +3040,7 @@ def provider_plugin_runtime(plugin_manager_pm, monkeypatch):
 
     The importer mirrors Python's module cache: a module already in
     ``sys.modules`` is returned as is, and only a purged module is executed
-    again. This keeps reload, disable/enable, and uninstall flows faithful.
+    again. This keeps reload and uninstall flows faithful.
 
     Args:
         plugin_manager_pm: Isolated plugin manager under test.
@@ -3153,33 +3158,47 @@ async def test_reload_plugin_reregisters_provider_adapter(
 
 
 @pytest.mark.asyncio
-async def test_disable_then_enable_keeps_single_provider_adapter(
+async def test_uninstall_disabled_plugin_removes_provider_adapter(
     plugin_manager_pm: PluginManager,
     provider_plugin_runtime,
 ):
-    plugin_name = "provider_toggle_plugin"
-    provider_type = "provider_toggle_adapter"
+    # Disabling keeps the plugin imported by design, so the adapter registration
+    # only disappears when the disabled plugin is uninstalled.
+    plugin_name = "provider_disabled_uninstall_plugin"
+    provider_type = "provider_disabled_uninstall_adapter"
+    plugin_path = Path(plugin_manager_pm.plugin_store_path) / plugin_name
     _write_provider_adapter_plugin(
-        Path(plugin_manager_pm.plugin_store_path) / plugin_name,
+        plugin_path,
         plugin_name=plugin_name,
         provider_type=provider_type,
     )
     success, error = await plugin_manager_pm.load(specified_dir_name=plugin_name)
     assert success, error
+    assert provider_cls_map[provider_type].cls_type is sys.modules[
+        f"data.plugins.{plugin_name}.main"
+    ].DemoProvider
 
     await plugin_manager_pm.turn_off_plugin(plugin_name)
-    await plugin_manager_pm.turn_on_plugin(plugin_name)
+    await plugin_manager_pm.uninstall_plugin(plugin_name)
 
-    # Specified reload of an inactive plugin intentionally skips the module
-    # teardown, so enabling keeps the existing import. The adapter must still
-    # resolve to the plugin's current module with a single entry.
+    assert provider_type not in provider_cls_map
+    assert all(metadata.type != provider_type for metadata in provider_registry)
+
+    _write_provider_adapter_plugin(
+        plugin_path,
+        plugin_name=plugin_name,
+        provider_type=provider_type,
+    )
+    success, error = await plugin_manager_pm.load(specified_dir_name=plugin_name)
+    assert success, error
     entries = [
         metadata for metadata in provider_registry if metadata.type == provider_type
     ]
     assert len(entries) == 1
     assert provider_cls_map[provider_type] is entries[0]
-    loaded_module = sys.modules[f"data.plugins.{plugin_name}.main"]
-    assert entries[0].cls_type is loaded_module.DemoProvider
+    assert entries[0].cls_type is sys.modules[
+        f"data.plugins.{plugin_name}.main"
+    ].DemoProvider
 
 
 @pytest.mark.asyncio
@@ -3249,6 +3268,87 @@ async def test_full_reload_plugin_reregisters_provider_adapter(
 
 
 @pytest.mark.asyncio
+async def test_reload_failed_plugin_reregisters_provider_adapter(
+    plugin_manager_pm: PluginManager,
+    provider_plugin_runtime,
+):
+    plugin_name = "provider_failed_reload_plugin"
+    provider_type = "provider_failed_reload_adapter"
+    plugin_path = Path(plugin_manager_pm.plugin_store_path) / plugin_name
+    _write_provider_adapter_plugin(
+        plugin_path,
+        plugin_name=plugin_name,
+        provider_type=provider_type,
+        raise_on_import=True,
+    )
+
+    success, error = await plugin_manager_pm.load(specified_dir_name=plugin_name)
+    assert success is False
+    assert error is not None
+    assert plugin_name in plugin_manager_pm.failed_plugin_dict
+    # The adapter registered before the import error must not outlive the failed
+    # load, otherwise it reserves the type name forever.
+    assert all(metadata.type != provider_type for metadata in provider_registry)
+    assert provider_type not in provider_cls_map
+
+    _write_provider_adapter_plugin(
+        plugin_path,
+        plugin_name=plugin_name,
+        provider_type=provider_type,
+    )
+    success, error = await plugin_manager_pm.reload_failed_plugin(plugin_name)
+
+    assert success, error
+    entries = [
+        metadata for metadata in provider_registry if metadata.type == provider_type
+    ]
+    assert len(entries) == 1
+    assert provider_cls_map[provider_type] is entries[0]
+    assert entries[0].cls_type is sys.modules[
+        f"data.plugins.{plugin_name}.main"
+    ].DemoProvider
+
+
+@pytest.mark.asyncio
+async def test_uninstall_failed_plugin_releases_provider_adapter(
+    plugin_manager_pm: PluginManager,
+    provider_plugin_runtime,
+):
+    plugin_name = "provider_failed_uninstall_plugin"
+    provider_type = "provider_failed_uninstall_adapter"
+    plugin_path = Path(plugin_manager_pm.plugin_store_path) / plugin_name
+    _write_provider_adapter_plugin(
+        plugin_path,
+        plugin_name=plugin_name,
+        provider_type=provider_type,
+        raise_on_import=True,
+    )
+    success, error = await plugin_manager_pm.load(specified_dir_name=plugin_name)
+    assert success is False
+    assert error is not None
+
+    await plugin_manager_pm.uninstall_failed_plugin(plugin_name)
+
+    assert provider_type not in provider_cls_map
+    assert all(metadata.type != provider_type for metadata in provider_registry)
+
+    _write_provider_adapter_plugin(
+        plugin_path,
+        plugin_name=plugin_name,
+        provider_type=provider_type,
+    )
+    success, error = await plugin_manager_pm.load(specified_dir_name=plugin_name)
+    assert success, error
+    entries = [
+        metadata for metadata in provider_registry if metadata.type == provider_type
+    ]
+    assert len(entries) == 1
+    assert entries[0].cls_type is sys.modules[
+        f"data.plugins.{plugin_name}.main"
+    ].DemoProvider
+
+
+@pytest.mark.asyncio
 async def test_teardown_plugin_without_provider_adapter_keeps_other_registrations(
     plugin_manager_pm: PluginManager,
     provider_plugin_runtime,
@@ -3310,16 +3410,19 @@ async def test_failed_provider_adapter_registration_keeps_owner_registration(
     success, error = await plugin_manager_pm.load(specified_dir_name=plugin_name)
     assert success is False
     assert error is not None
+    assert plugin_name in plugin_manager_pm.failed_plugin_dict
 
-    module_path = f"data.plugins.{plugin_name}.main"
-    metadata = star_manager_module.StarMetadata(
-        name=plugin_name,
-        root_dir_name=plugin_name,
-        module_path=module_path,
-    )
-    star_manager_module.star_map[module_path] = metadata
-    star_manager_module.star_registry.append(metadata)
-    await plugin_manager_pm._unbind_plugin(plugin_name, module_path)
-
+    # The failed plugin's teardown only sees its own module prefix, so the
+    # registration owned by the prefix-sharing sibling stays untouched.
     assert provider_cls_map[owner_type] is owner_entry
     assert owner_entry in provider_registry
+    assert (
+        len(
+            [
+                metadata
+                for metadata in provider_registry
+                if metadata.type == owner_type
+            ]
+        )
+        == 1
+    )
