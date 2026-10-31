@@ -25,6 +25,7 @@ import astrbot.dashboard.services.stat_service as stat_service
 from astrbot.core import file_token_service
 from astrbot.core.utils import llm_metadata
 from astrbot.dashboard.api.app import create_dashboard_asgi_app
+from astrbot.dashboard.api.auth import AuthContext
 from astrbot.dashboard.api.backups import download_backup as download_backup_route
 from astrbot.dashboard.asgi_runtime import (
     FastAPIAppAdapter,
@@ -1433,6 +1434,7 @@ async def test_v1_backup_download_accepts_bearer_token(
     response = await download_backup_route(
         filename=filename,
         request=request,
+        auth=AuthContext(username="fastapi-v1-test", scopes=["*"], via="jwt"),
         token=None,
         service=service,
     )
@@ -1443,6 +1445,7 @@ async def test_v1_backup_download_accepts_bearer_token(
         filename=filename,
         token="desktop-session-token",
         jwt_secret=JWT_SECRET,
+        require_token=True,
     )
 
 
@@ -1451,6 +1454,7 @@ async def test_v1_backup_path_rejects_traversal(asgi_client: httpx.AsyncClient):
     download_response = await asgi_client.get(
         "/api/v1/backups/%2E%2E/secret.zip",
         params={"token": "demo"},
+        headers=_jwt_headers(),
     )
     delete_response = await asgi_client.delete(
         "/api/v1/backups/%2E%2E/secret.zip",
@@ -1780,12 +1784,15 @@ async def test_v1_active_umos_uses_session_service(
 
 @pytest.mark.asyncio
 async def test_v1_active_umos_filters_by_exact_platform_instance(
-    asgi_client: httpx.AsyncClient, fake_db: FakeDb,
+    asgi_client: httpx.AsyncClient,
+    fake_db: FakeDb,
 ):
     """Return only the requested instance's sessions to platform editors."""
     fake_db.umo_ids = ["qq:GroupMessage:1", "qq-2:GroupMessage:2"]
     response = await asgi_client.get(
-        "/api/v1/sessions/active-umos", params={"platform_id": "qq"}, headers=_jwt_headers(),
+        "/api/v1/sessions/active-umos",
+        params={"platform_id": "qq"},
+        headers=_jwt_headers(),
     )
     assert response.status_code == 200
     assert response.json()["data"]["umos"] == ["qq:GroupMessage:1"]
@@ -1793,16 +1800,24 @@ async def test_v1_active_umos_filters_by_exact_platform_instance(
 
 @pytest.mark.asyncio
 async def test_v1_sender_lookup_requires_auth_and_returns_source(
-    asgi_client: httpx.AsyncClient, fake_db: FakeDb,
+    asgi_client: httpx.AsyncClient,
+    fake_db: FakeDb,
 ):
     """Expose source session names without allowing unauthenticated lookup."""
-    fake_db.get_umo_senders = AsyncMock(return_value=[(
-        SimpleNamespace(umo="qq:GroupMessage:1000", sender_id="123", sender_name="Alice"),
-        None,
-    )])
+    fake_db.get_umo_senders = AsyncMock(
+        return_value=[
+            (
+                SimpleNamespace(
+                    umo="qq:GroupMessage:1000", sender_id="123", sender_name="Alice"
+                ),
+                None,
+            )
+        ]
+    )
     assert (await asgi_client.get("/api/v1/sessions/senders")).status_code == 401
     response = await asgi_client.get(
-        "/api/v1/sessions/senders", params={"search": " Alice ", "limit": 10},
+        "/api/v1/sessions/senders",
+        params={"search": " Alice ", "limit": 10},
         headers=_jwt_headers(),
     )
     assert response.status_code == 200
@@ -1824,22 +1839,36 @@ async def test_v1_sender_lookup_requires_auth_and_returns_source(
     fake_db.get_umo_senders.assert_awaited_once_with("", 101, ["123", "456"], offset=0)
     for limit in (0, 101):
         response = await asgi_client.get(
-            "/api/v1/sessions/senders", params={"limit": limit}, headers=_jwt_headers(),
+            "/api/v1/sessions/senders",
+            params={"limit": limit},
+            headers=_jwt_headers(),
         )
         assert response.status_code == 422
 
 
 @pytest.mark.asyncio
 async def test_v1_sender_lookup_pages_results_and_validates_page(
-    asgi_client: httpx.AsyncClient, fake_db: FakeDb,
+    asgi_client: httpx.AsyncClient,
+    fake_db: FakeDb,
 ):
     """Pass page offsets through and hide the extra row used to detect the next page."""
-    fake_db.get_umo_senders = AsyncMock(return_value=[
-        (SimpleNamespace(umo="qq:GroupMessage:room", sender_id=str(index), sender_name=f"User {index}"), None)
-        for index in range(3)
-    ])
+    fake_db.get_umo_senders = AsyncMock(
+        return_value=[
+            (
+                SimpleNamespace(
+                    umo="qq:GroupMessage:room",
+                    sender_id=str(index),
+                    sender_name=f"User {index}",
+                ),
+                None,
+            )
+            for index in range(3)
+        ]
+    )
     response = await asgi_client.get(
-        "/api/v1/sessions/senders", params={"page": 2, "limit": 2}, headers=_jwt_headers(),
+        "/api/v1/sessions/senders",
+        params={"page": 2, "limit": 2},
+        headers=_jwt_headers(),
     )
     assert response.status_code == 200
     data = response.json()["data"]
@@ -1849,7 +1878,9 @@ async def test_v1_sender_lookup_pages_results_and_validates_page(
     fake_db.get_umo_senders.assert_awaited_once_with("", 3, None, offset=2)
     for page in (0, -1):
         response = await asgi_client.get(
-            "/api/v1/sessions/senders", params={"page": page}, headers=_jwt_headers(),
+            "/api/v1/sessions/senders",
+            params={"page": page},
+            headers=_jwt_headers(),
         )
         assert response.status_code == 422
 
@@ -4622,8 +4653,12 @@ async def test_diagnostic_export_time_range_filters_logs_and_persisted_traces(
     service.log_broker.publish({"time": base, "data": "outside-before"})
     service.log_broker.publish({"time": base + 1, "data": "selected memory log"})
     service.log_broker.publish({"time": base + 3, "data": "outside-after"})
-    service.log_broker.log_cache.append({"type": "trace", "time": base, "data": "outside"})
-    service.log_broker.log_cache.append({"type": "trace", "time": base + 1, "data": "selected"})
+    service.log_broker.log_cache.append(
+        {"type": "trace", "time": base, "data": "outside"}
+    )
+    service.log_broker.log_cache.append(
+        {"type": "trace", "time": base + 1, "data": "selected"}
+    )
     path = logs_dir / "traces.db"
     service.config["trace_db_path"] = str(path)
     store = TraceStore(path, {"trace_db_max_mb": 8})
@@ -4653,19 +4688,36 @@ async def test_diagnostic_export_time_range_filters_logs_and_persisted_traces(
         response = await asgi_client.get(
             "/api/v1/logs/export",
             headers=_jwt_headers(),
-            params={"redact": str(redact).lower(), "start_time": base + 1, "end_time": base + 2},
+            params={
+                "redact": str(redact).lower(),
+                "start_time": base + 1,
+                "end_time": base + 2,
+            },
         )
         assert response.status_code == 200
         with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
             disk_log = archive.read("logs/astrbot.log").decode()
             assert disk_log == (
-                selected.replace("private-range-value", "[REDACTED]") if redact else selected
+                selected.replace("private-range-value", "[REDACTED]")
+                if redact
+                else selected
             )
             assert archive.read("logs/undated.log") == b""
-            assert archive.read("logs/astrbot.in-memory.log") == b"selected memory log\n"
-            assert json.loads(archive.read("traces/history.in-memory.jsonl"))["data"] == "selected"
-            history = [json.loads(line) for line in archive.read("traces/history.jsonl").splitlines()]
-            assert [item["trace"]["trace_id"] for item in history] == [f"{3:032x}", f"{2:032x}"]
+            assert (
+                archive.read("logs/astrbot.in-memory.log") == b"selected memory log\n"
+            )
+            assert (
+                json.loads(archive.read("traces/history.in-memory.jsonl"))["data"]
+                == "selected"
+            )
+            history = [
+                json.loads(line)
+                for line in archive.read("traces/history.jsonl").splitlines()
+            ]
+            assert [item["trace"]["trace_id"] for item in history] == [
+                f"{3:032x}",
+                f"{2:032x}",
+            ]
             assert "config.json" in archive.namelist()
             assert "environment.json" in archive.namelist()
             manifest = json.loads(archive.read("manifest.json"))
@@ -4690,7 +4742,9 @@ async def test_diagnostic_export_time_range_filters_logs_and_persisted_traces(
         ({"end_time": "invalid"}, 422),
     ],
 )
-async def test_diagnostic_export_rejects_invalid_time_ranges(asgi_client, params, status):
+async def test_diagnostic_export_rejects_invalid_time_ranges(
+    asgi_client, params, status
+):
     response = await asgi_client.get(
         "/api/v1/logs/export", headers=_jwt_headers(), params=params
     )
@@ -4774,9 +4828,13 @@ async def test_v1_log_export_keeps_archive_names_unique(
     monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
     data_dir = tmp_path / "data"
     (data_dir / "logs").mkdir(parents=True)
-    (data_dir / "logs" / "astrbot.in-memory.log").write_text("file log", encoding="utf-8")
+    (data_dir / "logs" / "astrbot.in-memory.log").write_text(
+        "file log", encoding="utf-8"
+    )
     (data_dir / "traces").mkdir()
-    (data_dir / "traces" / "history.in-memory.jsonl").write_text("file trace", encoding="utf-8")
+    (data_dir / "traces" / "history.in-memory.jsonl").write_text(
+        "file trace", encoding="utf-8"
+    )
     (data_dir / "manifest.json").write_text("trace log", encoding="utf-8")
     service = asgi_app.state.services.logs
     service.config["log_file_path"] = "manifest.json"
@@ -4921,7 +4979,9 @@ async def test_diagnostic_export_respects_redaction_for_every_section(
     )
     (logs / "astrbot.1.log").write_text(plugin_secret, encoding="utf-8")
     (logs / "binary.log").write_bytes(b"\x00binary-private-data")
-    service.log_broker.publish({"time": 1, "level": "INFO", "data": f"{secret} peer=8.8.8.8"})
+    service.log_broker.publish(
+        {"time": 1, "level": "INFO", "data": f"{secret} peer=8.8.8.8"}
+    )
     service.log_broker.publish(
         {"type": "trace", "time": 2, "fields": {"api_key": secret, "enabled": True}}
     )
@@ -4935,7 +4995,14 @@ async def test_diagnostic_export_respects_redaction_for_every_section(
             return {
                 "trace": {"trace_id": "a" * 32},
                 "spans": [
-                    {"attributes": {"api_key": trace_secret, "message": plugin_secret, "peer": "::ffff:8.8.8.8", "ipv6": "2606:4700:4700:0:0:0:0:1111"}}
+                    {
+                        "attributes": {
+                            "api_key": trace_secret,
+                            "message": plugin_secret,
+                            "peer": "::ffff:8.8.8.8",
+                            "ipv6": "2606:4700:4700:0:0:0:0:1111",
+                        }
+                    }
                 ],
             }
 
@@ -4968,13 +5035,23 @@ async def test_diagnostic_export_respects_redaction_for_every_section(
             assert (private not in all_text) is redact
         assert "binary-private-data" not in all_text
         if not redact:
-            assert archive.read("logs/astrbot.log") == (logs / "astrbot.log").read_bytes()
+            assert (
+                archive.read("logs/astrbot.log") == (logs / "astrbot.log").read_bytes()
+            )
         exported = json.loads(archive.read("config.json"))["profiles"]["default"]
         if redact:
-            assert exported["diagnostic_network"]["public_endpoint"] == "http://[PUBLIC_IP_1]:8080/v1"
-            assert exported["diagnostic_network"]["public_ipv6"] == "https://[PUBLIC_IP_2]:443/v1"
+            assert (
+                exported["diagnostic_network"]["public_endpoint"]
+                == "http://[PUBLIC_IP_1]:8080/v1"
+            )
+            assert (
+                exported["diagnostic_network"]["public_ipv6"]
+                == "https://[PUBLIC_IP_2]:443/v1"
+            )
             assert b"peer=[PUBLIC_IP_1]" in archive.read("logs/astrbot.in-memory.log")
-            trace = json.loads(archive.read("traces/history.jsonl"))["spans"][0]["attributes"]
+            trace = json.loads(archive.read("traces/history.jsonl"))["spans"][0][
+                "attributes"
+            ]
             assert trace["peer"] == "[PUBLIC_IP_1]"
             assert trace["ipv6"] == "[PUBLIC_IP_2]"
             assert "8.8.8.8" not in all_text
@@ -4982,11 +5059,16 @@ async def test_diagnostic_export_respects_redaction_for_every_section(
         else:
             assert exported["diagnostic_network"] == config["diagnostic_network"]
             assert "::ffff:8.8.8.8" in all_text
-        assert exported["diagnostic_network"]["local_endpoint"] == "http://192.168.1.2:6185/health"
+        assert (
+            exported["diagnostic_network"]["local_endpoint"]
+            == "http://192.168.1.2:6185/health"
+        )
         assert exported["dashboard"]["password_storage_upgraded"] is True
         assert exported["dashboard"]["password_change_required"] is False
         assert exported["max_tokens"] == 4096
-        assert exported["provider_sources"][0]["key"] == ["[REDACTED]" if redact else secret]
+        assert exported["provider_sources"][0]["key"] == [
+            "[REDACTED]" if redact else secret
+        ]
         assert json.loads(archive.read("plugins.json"))["plugins"][0]["enabled"] is True
         manifest = json.loads(archive.read("manifest.json"))
         assert manifest["trace_history"]["count"] == 1
@@ -5207,6 +5289,8 @@ async def test_bot_delete_cleanup_query_is_validated(asgi_app, asgi_client, rout
     response = await asgi_client.delete(route, params=params, headers=_jwt_headers())
     assert response.status_code == 200
     delete_bot.assert_awaited_once_with("bot", cleanup=["custom_rules", "traces"])
-    invalid = await asgi_client.delete(route, params={"bot_id": "bot", "cleanup": "unknown"}, headers=_jwt_headers())
+    invalid = await asgi_client.delete(
+        route, params={"bot_id": "bot", "cleanup": "unknown"}, headers=_jwt_headers()
+    )
     assert invalid.status_code == 422
     assert delete_bot.await_count == 1

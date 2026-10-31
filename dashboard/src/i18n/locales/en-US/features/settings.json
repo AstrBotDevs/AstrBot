@@ -291,6 +291,8 @@
       "chat": "Create sessions, send messages, and manage ChatUI projects.",
       "chatAdmin": "Allow username to use configured administrator IDs and receive their administrator privileges.",
       "data": "Access statistics and runtime data.",
+      "backup": "List, download, upload, and manage data backups.",
+      "importBackup": "Allow importing (restoring) backups, which overwrites the live data directory.",
       "file": "Upload and access API files.",
       "plugin": "Read and manage plugins.",
       "mcp": "Read and manage MCP servers.",

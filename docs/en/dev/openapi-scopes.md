@@ -198,6 +198,29 @@ Manage conversations and platform-session data.
 | `GET` | `/api/v1/sessions/senders` | — |
 | `PATCH` | `/api/v1/sessions/service` | — |
 
+## `backup`
+
+List, create, download, upload, and manage data backups.
+
+- **Sensitive sub-scope `backup:import`:** Allow a `backup`-scoped key to import (restore) backups, which overwrites the live data directory. This sub-scope must be granted explicitly.
+
+| Method | Endpoint | Conditional sensitive sub-scope |
+| --- | --- | --- |
+| `GET` | `/api/v1/backups` | — |
+| `POST` | `/api/v1/backups` | — |
+| `GET` | `/api/v1/backups/tasks/{task_id}` | — |
+| `POST` | `/api/v1/backups/upload` | — |
+| `POST` | `/api/v1/backups/upload/abort` | — |
+| `POST` | `/api/v1/backups/upload/chunk` | — |
+| `POST` | `/api/v1/backups/upload/complete` | — |
+| `POST` | `/api/v1/backups/upload/init` | — |
+| `POST` | `/api/v1/backups/upload/status` | — |
+| `GET` | `/api/v1/backups/{filename}` | — |
+| `PATCH` | `/api/v1/backups/{filename}` | — |
+| `DELETE` | `/api/v1/backups/{filename}` | — |
+| `POST` | `/api/v1/backups/{filename}/check` | — |
+| `POST` | `/api/v1/backups/{filename}/import` | `backup:import` |
+
 ## `file`
 
 Upload and download chat attachments.
