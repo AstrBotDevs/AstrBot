@@ -1,5 +1,9 @@
 # Unreleased
 
+- WebUI: Rename **Extensions → Installed → Update All** to **Extensions → Installed → Batch Update Plugins**. List available plugin updates with checkboxes, select all by default, and update only checked plugins. Disable confirmation when none are selected.
+
+- Move session-waiter dispatch from the built-in plugin's `handle_session_control_agent` handler into the core pipeline. Admit matching follow-up input without a mention or wake prefix, and dispatch after access/safety checks and preprocessing but before ordinary plugin handlers or the Agent. Preserve the existing `@session_waiter` API.
+
 - Fix plugin installation failing with `FileExistsError` in NAS and similar environments where cross-device (`EXDEV`) errors make system temporary directories unusable and Python falls back to the working directory. Use `.astrbot-tmp` when the temporary path conflicts with the `.astrbot` initialization marker file. ([#10784](https://github.com/AstrBotDevs/AstrBot/pull/10784))
 
 - Simplify Context Management Strategy settings: Handling for History Limits or Context Window Pressure → Compression Strategy; Model Provider ID for Context Compression → Compression Model. Move maximum turns, discarded turns, compression instruction, recent-context ratio and fallback context window size under the collapsed More Settings section. Preserve existing configuration keys, defaults and runtime behavior.
