@@ -782,6 +782,11 @@ class KnowledgeBaseService:
         if not kb_helper:
             raise KnowledgeBaseServiceError("知识库不存在")
 
+        # Clamp page and page_size to at least 1 before calculating offsets/slices.
+        # A page below 1 yields a negative OFFSET, and page_size -1 is SQLite's
+        # "no limit", so both must be bounded like list_documents does.
+        page = max(page, 1)
+        page_size = max(page_size, 1)
         offset = (page - 1) * page_size
         return {
             "items": await kb_helper.get_chunks_by_doc_id(
