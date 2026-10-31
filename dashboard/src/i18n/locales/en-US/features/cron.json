@@ -145,7 +145,7 @@
     "cron": "Cron expression *",
     "cronPlaceholder": "0 9 * * *",
     "runAt": "Run at *",
-    "session": "Deliver to",
+    "session": "Deliver to (optional, multiple)",
     "noUmos": "No sessions available",
     "timezone": "Timezone (optional, e.g. Asia/Shanghai)",
     "enabled": "Enabled"
