@@ -93,6 +93,16 @@ Comp.Video.fromURL(url="https://example.com/video.mp4")
 
 按钮动作和样式分别通过 `Button.CallbackAction`、`Button.UrlAction` 和 `Button.Style` 创建；`ActionRow` 是独立的消息组件。
 
+目前的平台支持情况：
+
+| 支持方式 | 平台 |
+| --- | --- |
+| 回调按钮和链接按钮 | QQ 官方机器人、Telegram、飞书（Lark）、钉钉、Discord、Slack、LINE、KOOK、Satori、企业微信（含微信客服）、企业微信 AI Bot、WebChat |
+| 回调按钮，URL 动作显示为普通链接 | Mattermost |
+| 文字或链接回退，不触发按钮回调 | OneBot v11（aiocqhttp）、Misskey、微信公众号、微信个人号（weixin_oc） |
+
+Satori 的按钮支持取决于所连接的平台和客户端。Mattermost 的回调按钮需要配置可由 Mattermost 服务访问的回调地址。对于使用文字回退的平台，建议设置 `fallback_text`，说明可用的文字指令。
+
 ```python
 from astrbot.api.event import AstrMessageEvent, filter
 import astrbot.api.message_components as Comp

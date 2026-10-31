@@ -95,6 +95,16 @@ Create button actions and styles with `Button.CallbackAction`, `Button.UrlAction
 
 Wrap `Button` components in an `ActionRow` and handle clicks with `@filter.button_action("button ID")`. Add these methods to an existing `Star` plugin class.
 
+Current platform support:
+
+| Support | Platforms |
+| --- | --- |
+| Callback and URL buttons | QQ Official Bot, Telegram, Lark, DingTalk, Discord, Slack, LINE, KOOK, Satori, WeCom (including WeChat Customer Service), WeCom AI Bot, WebChat |
+| Callback buttons; URL actions appear as regular links | Mattermost |
+| Text or link fallback without button callbacks | OneBot v11 (aiocqhttp), Misskey, Weixin Official Account, Weixin Personal (weixin_oc) |
+
+Satori button support depends on the connected platform and client. Mattermost callback buttons require a callback URL reachable by the Mattermost server. For platforms using text fallbacks, set `fallback_text` to explain the available text commands.
+
 ```python
 from astrbot.api.event import AstrMessageEvent, filter
 import astrbot.api.message_components as Comp
