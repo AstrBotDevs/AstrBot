@@ -546,7 +546,7 @@ def main(argv=None):
 
     Raises:
         ValueError: Credentials or supported event context are missing or invalid.
-        RuntimeError: Synchronization fails.
+        SystemExit: Synchronization fails; report a sanitized error without a traceback.
     """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--apply", action="store_true")
@@ -635,13 +635,20 @@ def main(argv=None):
         not isinstance(v, str) or not v.strip() for v in status_names.values()
     ) or len(set(status_names.values())) != len(STATUS_OPTIONS):
         raise ValueError("Status names must be nonempty and distinct")
-    plan = reconcile(
-        project,
-        repository,
-        subject=subject,
-        apply=args.apply,
-        status_names=status_names,
-    )
+    try:
+        plan = reconcile(
+            project,
+            repository,
+            subject=subject,
+            apply=args.apply,
+            status_names=status_names,
+        )
+    except (RuntimeError, ValueError, OSError, subprocess.SubprocessError):
+        raise SystemExit(
+            "Project synchronization failed; check API access, Project schema, "
+            "pagination and full Git history. Rerun after correcting the cause; "
+            "some Project updates may already have been applied."
+        ) from None
     print(
         json.dumps({"apply": args.apply, "changes": plan}, ensure_ascii=False, indent=2)
     )

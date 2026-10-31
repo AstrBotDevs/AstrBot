@@ -15,6 +15,31 @@ SCRIPT = Path(__file__).resolve().parents[1] / "scripts/sync_github_project.py"
 
 
 class SyncProjectTests(unittest.TestCase):
+    def test_main_reports_sync_failures_without_raw_details(self):
+        failures = [
+            RuntimeError("secret stalled cursor"),
+            ValueError("secret invalid ref"),
+            urllib.error.URLError("secret transport"),
+            TimeoutError("secret timeout"),
+            OSError("secret missing git"),
+        ]
+        for failure in failures:
+            with (
+                self.subTest(failure=failure),
+                patch.dict(
+                    os.environ,
+                    {"ASTRBOT_PROJECT_ID": "P", "ASTRBOT_PROJECT_TOKEN": "secret"},
+                    clear=True,
+                ),
+                patch.object(self.module, "reconcile", side_effect=failure),
+                patch("sys.stdout", new_callable=io.StringIO) as output,
+            ):
+                with self.assertRaises(SystemExit) as caught:
+                    self.module.main([])
+                self.assertIn("Project synchronization failed", str(caught.exception))
+                self.assertNotIn("secret", str(caught.exception))
+                self.assertEqual(output.getvalue(), "")
+
     def setUp(self):
         spec = importlib.util.spec_from_file_location("sync_github_project", SCRIPT)
         self.module = importlib.util.module_from_spec(spec)
