@@ -492,7 +492,15 @@ class ProviderGoogleGenAI(Provider):
                     describe_media_ref(url),
                 )
                 return None
-            assert image_data is not None, "strict image resolution returned no data"
+            if image_data is None:
+                # Strict resolution raises instead of returning None today, so
+                # a future contract change must still skip the image rather
+                # than fail when the data is dereferenced below.
+                logger.warning(
+                    "Conversation payload image is unavailable (no data): %s",
+                    describe_media_ref(url),
+                )
+                return None
             return base64.b64decode(image_data.base64_data), image_data.mime_type
 
         async def process_audio_url(audio_url_dict: dict) -> types.Part:
