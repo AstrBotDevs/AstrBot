@@ -33,6 +33,8 @@ from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.provider.entites import ProviderRequest
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.tools.computer_tools import (
+    BrowserBatchExecTool,
+    BrowserExecTool,
     CuaKeyboardTypeTool,
     CuaMouseClickTool,
     CuaScreenshotTool,
@@ -46,6 +48,7 @@ from astrbot.core.tools.computer_tools import (
     LocalExecuteShellTool,
     LocalPythonTool,
     PythonTool,
+    RunBrowserSkillTool,
     ShellSessionTool,
 )
 from astrbot.core.tools.message_tools import SendMessageToUserTool
@@ -211,6 +214,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         runtime: str,
         tool_mgr,
         booter: str | None = None,
+        session_id: str | None = None,
     ) -> dict[str, FunctionTool]:
         booter = "" if booter is None else str(booter).lower()
         if runtime == "sandbox":
@@ -243,6 +247,29 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                         keyboard_type_tool.name: keyboard_type_tool,
                     }
                 )
+            if booter == "shipyard_neo":
+                # Same gate as the main agent: browser tools ride along when the
+                # booted sandbox profile supports them, or before the first boot
+                # when capabilities are still unknown.
+                from astrbot.core.computer.computer_client import session_booter
+
+                existing_booter = session_booter.get(session_id) if session_id else None
+                capabilities = (
+                    getattr(existing_booter, "capabilities", None)
+                    if existing_booter is not None
+                    else None
+                )
+                if capabilities is None or "browser" in capabilities:
+                    browser_exec_tool = tool_mgr.get_builtin_tool(BrowserExecTool)
+                    browser_batch_tool = tool_mgr.get_builtin_tool(BrowserBatchExecTool)
+                    browser_skill_tool = tool_mgr.get_builtin_tool(RunBrowserSkillTool)
+                    tools.update(
+                        {
+                            browser_exec_tool.name: browser_exec_tool,
+                            browser_batch_tool.name: browser_batch_tool,
+                            browser_skill_tool.name: browser_skill_tool,
+                        }
+                    )
             return tools
         if runtime == "local":
             shell_tool = LocalExecuteShellTool()
@@ -283,6 +310,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             runtime,
             tool_mgr,
             provider_settings.get("sandbox", {}).get("booter"),
+            session_id=event.unified_msg_origin,
         )
 
         # Keep persona semantics aligned with the main agent: tools=None means
@@ -300,24 +328,61 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 if registered_tool.active:
                     toolset.add_tool(registered_tool)
             for runtime_tool in runtime_computer_tools.values():
-                toolset.add_tool(runtime_tool)
+                if runtime_tool.active:
+                    toolset.add_tool(runtime_tool)
             return None if toolset.empty() else toolset
 
-        if not tools:
-            return None
-
+        # Mirror the main agent: a persona tool whitelist narrows the plugin
+        # and MCP tools, but the runtime computer-use tools stay available
+        # even when the whitelist cannot name them (the dashboard only lists
+        # plugin tools, so builtin tool names never appear in `tools`). An
+        # empty whitelist keeps the runtime tools too, same as an empty
+        # persona whitelist on the main agent.
         toolset = ToolSet()
+        unknown_names: list[str] = []
+        inactive_names: list[str] = []
+        inactive_runtime_names: list[str] = []
+        for runtime_tool in runtime_computer_tools.values():
+            if runtime_tool.active:
+                toolset.add_tool(runtime_tool)
+            else:
+                inactive_runtime_names.append(runtime_tool.name)
         for tool_name_or_obj in tools:
             if isinstance(tool_name_or_obj, str):
                 registered_tool = llm_tools.get_func(tool_name_or_obj)
-                if registered_tool and registered_tool.active:
-                    toolset.add_tool(registered_tool)
+                if registered_tool is not None:
+                    if registered_tool.active:
+                        toolset.add_tool(registered_tool)
+                    else:
+                        inactive_names.append(tool_name_or_obj)
                     continue
                 runtime_tool = runtime_computer_tools.get(tool_name_or_obj)
                 if runtime_tool:
                     toolset.add_tool(runtime_tool)
+                else:
+                    unknown_names.append(tool_name_or_obj)
             elif isinstance(tool_name_or_obj, FunctionTool):
                 toolset.add_tool(tool_name_or_obj)
+        if unknown_names:
+            logger.warning(
+                "Subagent tool whitelist references unknown tools (skipped): %s",
+                ", ".join(sorted(unknown_names)),
+            )
+        if inactive_names:
+            logger.warning(
+                "Subagent tool whitelist references inactive tools (skipped): %s",
+                ", ".join(sorted(inactive_names)),
+            )
+        if inactive_runtime_names:
+            logger.warning(
+                "Subagent handoff skips deactivated runtime tools: %s",
+                ", ".join(sorted(inactive_runtime_names)),
+            )
+        if toolset.empty():
+            logger.warning(
+                "Subagent handoff ended up with an empty toolset; the agent "
+                "will run without any tools."
+            )
         return None if toolset.empty() else toolset
 
     @classmethod
