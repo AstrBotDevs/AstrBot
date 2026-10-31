@@ -1728,7 +1728,7 @@ CONFIG_METADATA_2 = {
                         "enable": False,
                         "api_key": "",
                         "api_base": "",
-                        "model": "whisper-1",
+                        "model": "gpt-transcribe",
                         "proxy": "",
                     },
                     "MiMo STT(API)": {
