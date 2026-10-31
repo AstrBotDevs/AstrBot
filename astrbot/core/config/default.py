@@ -1421,7 +1421,7 @@ CONFIG_METADATA_2 = {
                         "provider_type": "chat_completion",
                         "enable": True,
                         "key": [],
-                        "api_base": "https://api.minimaxi.com/anthropic",
+                        "api_base": "https://api.minimax.cn/anthropic",
                         "timeout": 120,
                         "proxy": "",
                         "custom_headers": {},
