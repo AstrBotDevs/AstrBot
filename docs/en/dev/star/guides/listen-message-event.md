@@ -340,7 +340,7 @@ async def my_custom_hook_1(
 
 #### On LLM Response Complete
 
-After the LLM request completes, the `on_llm_response` hook is triggered. This hook is the final-response hook: it fires at most once per turn, for the completed response (and with a synthetic stop or error response when the turn is aborted or fails). A round that also requests tool calls does not trigger it; that round's text is handled by the `on_llm_response_intermediate` hook described below.
+After the LLM request completes, the `on_llm_response` hook is triggered. This hook is the final-response hook: it fires once for the turn's final response, and once with a synthetic stop response when the turn is stopped. A turn that ends with an LLM error response does not trigger it. A round that also requests tool calls does not trigger it either; that round's text is handled by the `on_llm_response_intermediate` hook described below.
 
 You can obtain the `ProviderResponse` object and modify it.
 
@@ -363,9 +363,11 @@ async def on_llm_resp(
 
 #### On Intermediate LLM Response
 
+> Requires AstrBot version > v4.29.3
+
 When an LLM round requests tool calls, the `on_llm_response_intermediate` hook is triggered once, on that completed round response, before its `llm_result` is delivered and before the tools run. With streaming, the text chunks of that round were already streamed as `streaming_delta` while the response was being generated, so they may have reached the user before this hook runs.
 
-The hook fires once for each tool-calling round whose response is delivered to the user. A final round that requests no tool calls only triggers `on_llm_response`. Internal rounds that are not delivered, such as the tool re-query in the `skills_like` tool schema mode, do not trigger it, and a turn can end with an intermediate event and no `on_llm_response` at all, for example when a tool returns its result directly or when the turn is stopped.
+The hook fires once for each round that requests tool calls. A final round that requests no tool calls only triggers `on_llm_response`. Internal rounds that are not delivered, such as the tool re-query in the `skills_like` tool schema mode, do not trigger it, and a turn can end with an intermediate event and no `on_llm_response` at all, for example when a tool returns its result directly. The hook is dispatched by AstrBot's built-in tool-loop agent only: the Dify, Coze, DashScope and DeerFlow agent runners never trigger it.
 
 You can obtain the `LLMResponse` object and modify its text. Tool call names, arguments, ids and extra content are managed by AstrBot: they are restored after the hook, so edits to them never change whether or which tools run.
 
