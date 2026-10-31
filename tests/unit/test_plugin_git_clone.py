@@ -15,6 +15,7 @@ import pytest
 
 from astrbot.core.repository import GitCloneTimeoutError
 from astrbot.core.star import updater as plugin_updater
+from astrbot.core.star.star_manager import StarMetadata
 
 
 class _FakeProcess:
@@ -512,3 +513,61 @@ async def test_repository_inspection_keeps_the_timeout_when_teardown_fails(
             for path in tmp_path.rglob("*"):
                 if path.is_dir():
                     path.chmod(0o700)
+
+
+@pytest.mark.asyncio
+async def test_install_keeps_the_timeout_when_the_staging_cleanup_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A staging cleanup error must not replace the timeout the caller needs."""
+    updater = plugin_updater._PluginUpdater()
+
+    async def failing_clone(_repo_url, target_path):
+        Path(target_path).mkdir(parents=True)
+        raise GitCloneTimeoutError("Git clone timed out after 180s.")
+
+    def failing_remove_dir(_path):
+        raise PermissionError("the staging directory is still held open")
+
+    monkeypatch.setattr(updater, "_clone_repository", failing_clone)
+    monkeypatch.setattr(plugin_updater, "remove_dir", failing_remove_dir)
+
+    with pytest.raises(GitCloneTimeoutError, match="timed out"):
+        await updater.install(
+            "git@github.com:AstrBotDevs/demo.git", target_dir=tmp_path / "plugin"
+        )
+
+
+@pytest.mark.asyncio
+async def test_update_keeps_the_timeout_when_the_staging_teardown_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A staging teardown error must not replace the timeout the caller needs."""
+    if sys.platform != "win32":
+        # Outside Windows an open file does not block deletion, so the staging teardown
+        # cannot be made to fail with a real checkout on disk.
+        pytest.skip("only Windows keeps a deleted file locked")
+    updater = plugin_updater._PluginUpdater()
+    monkeypatch.setattr(updater, "plugin_store_path", str(tmp_path))
+    open_handles: list = []
+
+    async def failing_clone(_repo_url, target_path):
+        checkout = Path(target_path)
+        checkout.mkdir(parents=True)
+        open_handles.append((checkout / "held.txt").open("w", encoding="utf-8"))
+        raise GitCloneTimeoutError("Git clone timed out after 180s.")
+
+    monkeypatch.setattr(updater, "_clone_repository", failing_clone)
+    plugin = StarMetadata(
+        name="demo",
+        root_dir_name="demo",
+        repo="git@github.com:AstrBotDevs/demo.git",
+    )
+
+    try:
+        with pytest.raises(GitCloneTimeoutError, match="timed out"):
+            await updater.update(plugin)
+    finally:
+        for handle in open_handles:
+            handle.close()
+
