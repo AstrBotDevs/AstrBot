@@ -22,6 +22,7 @@ from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
 from astrbot.core.utils.media_utils import (
     describe_media_ref,
+    is_recoverable_image_error,
     resolve_media_ref_to_base64_data,
 )
 from astrbot.core.utils.network_utils import is_connection_error, log_connection_failure
@@ -387,18 +388,24 @@ class ProviderGoogleGenAI(Provider):
 
         async def process_image_url(image_url_dict: dict) -> types.Part | None:
             url = image_url_dict["url"]
-            image_data = await resolve_media_ref_to_base64_data(
-                url,
-                media_type="image",
-            )
-            if image_data is None:
-                # A history image that cannot be materialized is skipped so one
-                # stale reference does not fail the whole replayed turn.
+            try:
+                image_data = await resolve_media_ref_to_base64_data(
+                    url,
+                    media_type="image",
+                    strict=True,
+                )
+            except Exception as exc:
+                if not is_recoverable_image_error(exc):
+                    raise
+                # Strict resolution exposes the cause. A declared-recoverable
+                # image error drops only this image, not the whole request.
                 logger.warning(
-                    "Skipping Gemini history image that could not be resolved: %s",
+                    "Conversation payload image is unavailable (%s): %s",
+                    type(exc).__name__,
                     describe_media_ref(url),
                 )
                 return None
+            assert image_data is not None, "strict image resolution returned no data"
             return types.Part.from_bytes(
                 data=base64.b64decode(image_data.base64_data),
                 mime_type=image_data.mime_type,
