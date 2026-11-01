@@ -240,11 +240,19 @@ class DeliveryTests(unittest.TestCase):
         with (
             patch.object(sync, "ancestor", return_value=True),
             patch.object(sync, "tag_names", return_value={"v1"}),
-            patch.object(sync, "tags_containing", side_effect=[{"v1"}, set()]),
+            patch.object(
+                sync,
+                "tags_containing",
+                side_effect=lambda commit: {"v1"} if commit == "a" * 40 else set(),
+            ) as tags_containing,
         ):
             desired = sync.delivery(issue, {}, prs, releases, "c" * 40)
         self.assertEqual(desired["发布版本"], "")
         self.assertEqual(desired["Status"], "Needs verification")
+        self.assertEqual(
+            {call.args[0] for call in tags_containing.call_args_list},
+            {"a" * 40, "b" * 40},
+        )
 
     def test_open_implementation_prevents_released_delivery(self):
         issue = {"__typename": "Issue", "state": "OPEN", "labels": []}
