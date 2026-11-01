@@ -125,10 +125,8 @@ async def run_agent(
     stream_to_general: bool = False,
     show_reasoning: bool = False,
     buffer_intermediate_messages: bool = False,
-    *,
-    emit_output: bool = True,
 ) -> AsyncGenerator[MessageChain | None, None]:
-    """Drive an agent with optional automatic output for interactive clients.
+    """Drive an agent and forward its output to the message pipeline.
 
     Args:
         agent_runner: Initialized runner to execute.
@@ -138,11 +136,9 @@ async def run_agent(
         stream_to_general: Whether to collect streaming output into ordinary replies.
         show_reasoning: Whether to emit reasoning text.
         buffer_intermediate_messages: Whether to buffer intermediate text replies.
-        emit_output: Whether to emit automatic UI frames. Explicit sends performed
-            inside tools or hooks remain controlled by those callers.
 
     Yields:
-        Interactive output chains, or no chains for a silent wakeup.
+        Output chains for delivery by the message pipeline.
     """
     step_idx = 0
     agent_runner._step_budget_max = max_step
@@ -151,7 +147,7 @@ async def run_agent(
     astr_event = agent_runner.run_context.context.event
     tool_name_by_call_id: dict[str, str] = {}
     buffered_llm_chains: list[MessageChain] = []
-    can_buffer_llm_result = emit_output and _should_buffer_llm_result(
+    can_buffer_llm_result = _should_buffer_llm_result(
         buffer_intermediate_messages,
         stream_to_general,
         agent_runner,
@@ -209,7 +205,7 @@ async def run_agent(
                     continue
 
                 if resp.type == "agent_stats":
-                    if emit_output and astr_event.get_platform_name() == "webchat":
+                    if astr_event.get_platform_name() == "webchat":
                         await astr_event.send(resp.data["chain"])
                     continue
 
@@ -223,8 +219,6 @@ async def run_agent(
                         ),
                     )
 
-                    if not emit_output:
-                        continue
                     if msg_chain.type == "tool_direct_result":
                         # tool_direct_result 用于标记 llm tool 需要直接发送给用户的内容
                         await astr_event.send(msg_chain)
@@ -241,7 +235,7 @@ async def run_agent(
                     # 对于其他情况，暂时先不处理
                     continue
                 elif resp.type == "tool_call":
-                    if emit_output and agent_runner.streaming and show_tool_use:
+                    if agent_runner.streaming and show_tool_use:
                         # 向下游平台发送 "break" 分段信号（空 MessageChain，不携带数据）。
                         # 平台适配器收到后会关闭当前流式消息，并在后续文本到来时创建新消息。
                         # 仅在 show_tool_use 为 True 时才发送：此时紧接着会通过
@@ -257,8 +251,6 @@ async def run_agent(
                     )
                     _record_tool_call_name(tool_info, tool_name_by_call_id)
 
-                    if not emit_output:
-                        continue
                     if astr_event.get_platform_name() == "webchat":
                         await astr_event.send(resp.data["chain"])
                     elif show_tool_use:
@@ -277,8 +269,6 @@ async def run_agent(
                         # For streaming mode, we yield content immediately when received a reasoning chunk but not in here, see below.
                         continue
 
-                if not emit_output:
-                    continue
                 if stream_to_general and resp.type == "streaming_delta":
                     continue
 
@@ -347,8 +337,6 @@ async def run_agent(
                 break
 
         except Exception as e:
-            if not emit_output:
-                raise
             if "stop_watcher" in locals() and not stop_watcher.done():
                 stop_watcher.cancel()
                 try:

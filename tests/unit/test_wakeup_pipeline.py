@@ -99,11 +99,19 @@ async def runtime(monkeypatch):
         finally:
             control.cleaned.set()
 
+    async def respond_stream(**kwargs):
+        response = await respond(**kwargs)
+        if response.role != "err":
+            for text in ("Reply ", str(len(control.requests))):
+                yield LLMResponse(role="assistant", completion_text=text, is_chunk=True)
+        yield response
+
     provider = SimpleNamespace(
         provider_config={"id": "offline", "modalities": ["text"]},
         get_model=lambda: "offline",
         meta=lambda: SimpleNamespace(type="test"),
         text_chat=respond,
+        text_chat_stream=respond_stream,
     )
 
     async def build(*, event, plugin_context, config):
@@ -117,7 +125,7 @@ async def runtime(monkeypatch):
             run_context=ContextWrapper(context=SimpleNamespace(event=event)),
             tool_executor=MagicMock(),
             agent_hooks=BaseAgentRunHooks(),
-            streaming=False,
+            streaming=config.streaming_response,
         )
         return MainAgentBuildResult(runner, prepared.request, provider)
 
@@ -159,6 +167,9 @@ async def runtime(monkeypatch):
 
     control.context, control.conversation = context, conversation
     control.bus, control.scheduler, control.drain = bus, scheduler, drain
+    control.agent_stage = next(
+        s for s in scheduler.stages if type(s).__name__ == "ProcessStage"
+    ).agent_sub_stage.agent_sub_stage
     yield control
     dispatcher.cancel()
     pending = [dispatcher, *bus._pending_tasks]
@@ -169,11 +180,13 @@ async def runtime(monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("deliver", [False, True])
-async def test_wakeup_uses_current_context_and_only_sends_explicit_messages(
-    runtime, deliver
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_wakeup_uses_current_context_and_sends_final_reply(
+    runtime, deliver, streaming
 ):
     """Keep routing, execution scopes, history, and delivery on the normal path."""
     runtime.deliver = deliver
+    runtime.agent_stage.streaming_response = streaming
     history = [{"role": "user", "content": "Existing context"}]
     runtime.conversation.history = json.dumps(history)
     umo = "target:GroupMessage:user_group"
@@ -189,7 +202,11 @@ async def test_wakeup_uses_current_context_and_only_sends_explicit_messages(
         {"role": "user", "content": [{"type": "text", "text": "Continue"}]},
         {"role": "assistant", "content": [{"type": "text", "text": "Reply 1"}]},
     ]
-    assert runtime.context.send_message.await_count == int(deliver)
+    delivered_texts = [
+        call.args[1].get_plain_text()
+        for call in runtime.context.send_message.await_args_list
+    ]
+    assert delivered_texts == (["Explicit delivery"] if deliver else []) + ["Reply 1"]
     assert event.trace._summary["state"] == "completed"
     assert not event.trace._summary["has_errors"]
     assert current_message_event.get() is None and _log_context.get() is None
@@ -273,9 +290,11 @@ async def test_platform_stop_cancels_the_wakeup_provider_and_preserves_history(r
 
 
 @pytest.mark.asyncio
-async def test_wakeup_failure_is_traced_without_automatic_delivery(runtime):
-    """Keep asynchronous execution failures visible without sending a chat reply."""
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_wakeup_failure_is_traced_and_delivered(runtime, streaming):
+    """Deliver the provider error while retaining the failed trace and history."""
     runtime.fail = True
+    runtime.agent_stage.streaming_response = streaming
     await wake_main_agent(
         runtime.context,
         umo="target:FriendMessage:user",
@@ -284,5 +303,9 @@ async def test_wakeup_failure_is_traced_without_automatic_delivery(runtime):
     )
     await asyncio.wait_for(runtime.drain(), 1)
     assert runtime.events[0].trace._summary["has_errors"]
-    runtime.context.send_message.assert_not_awaited()
+    runtime.context.send_message.assert_awaited_once()
+    assert (
+        runtime.context.send_message.await_args.args[1].get_plain_text()
+        == "LLM 响应错误: Reply 1"
+    )
     runtime.context.conversation_manager.update_conversation.assert_not_awaited()

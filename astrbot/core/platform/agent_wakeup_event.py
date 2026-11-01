@@ -88,6 +88,7 @@ class AgentWakeupEvent(AstrMessageEvent):
         # The supplied UMO is already the final target, including any isolation.
         self.set_extra("_session_resolved", True)
         self.set_extra("_role_resolved", True)
+        self.set_extra("enable_streaming", False)
 
     async def send(self, message: MessageChain) -> None:
         """Deliver through the target session and account only for successful sends.
@@ -109,11 +110,20 @@ class AgentWakeupEvent(AstrMessageEvent):
     async def send_streaming(
         self, generator: AsyncGenerator[MessageChain, None], use_fallback: bool = False
     ) -> None:
-        """Forward streamed message chains through the same delivery accounting.
+        """Buffer streaming output and deliver it as one complete message.
 
         Args:
             generator: Stream of message chains to deliver.
-            use_fallback: Compatibility argument for the message-event interface.
+            use_fallback: Compatibility argument; wakeups always buffer the stream.
         """
+        buffer: MessageChain | None = None
         async for chain in generator:
-            await self.send(chain)
+            if not chain.chain:
+                continue
+            if buffer is None:
+                buffer = chain
+            else:
+                buffer.chain.extend(chain.chain)
+        if buffer is not None:
+            buffer.squash_plain()
+            await self.send(buffer)
