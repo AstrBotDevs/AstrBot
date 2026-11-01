@@ -1477,6 +1477,60 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 subset.add_tool(tool)
         return subset
 
+    async def _requery_text_chat(
+        self,
+        contexts: list[dict[str, T.Any]],
+        func_tool: ToolSet,
+    ) -> LLMResponse | None:
+        """Re-query the LLM for tool parameters, retrying empty completions.
+
+        The main step loop already retries ``EmptyModelOutputError`` and switches
+        to a fallback provider, but the skills_like re-query used to call
+        ``text_chat`` directly, so a single empty completion raised out of the
+        runner and aborted the whole agent run. Retry here with the same policy
+        and return None when every attempt stayed empty, letting the caller
+        degrade instead of killing the turn.
+        """
+        retrying = AsyncRetrying(
+            retry=retry_if_exception_type(EmptyModelOutputError),
+            stop=stop_after_attempt(self.EMPTY_OUTPUT_RETRY_ATTEMPTS),
+            wait=wait_exponential(
+                multiplier=1,
+                min=self.EMPTY_OUTPUT_RETRY_WAIT_MIN_S,
+                max=self.EMPTY_OUTPUT_RETRY_WAIT_MAX_S,
+            ),
+            before_sleep=lambda state: logger.warning(
+                "skills_like tool re-query returned an empty completion on attempt %s/%s.",
+                state.attempt_number,
+                self.EMPTY_OUTPUT_RETRY_ATTEMPTS,
+            ),
+            reraise=True,
+        )
+        response: LLMResponse | None = None
+        try:
+            async for attempt in retrying:
+                with attempt:
+                    response = await self._await_or_stop(
+                        self.provider.text_chat(
+                            contexts=self._sanitize_contexts_for_provider(contexts),
+                            func_tool=func_tool,
+                            model=self.req.model,
+                            session_id=self.req.session_id,
+                            extra_user_content_parts=self.req.extra_user_content_parts,
+                            # tool_choice="required",
+                            abort_signal=self._abort_signal,
+                            request_max_retries=self.request_max_retries,
+                        )
+                    )
+        except EmptyModelOutputError:
+            logger.warning(
+                "skills_like tool re-query still returned an empty completion after %s attempts; skipping the re-query.",
+                self.EMPTY_OUTPUT_RETRY_ATTEMPTS,
+                exc_info=True,
+            )
+            return None
+        return response
+
     async def _resolve_tool_exec(
         self,
         llm_resp: LLMResponse,
@@ -1499,21 +1553,14 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
             if param_subset.tools and tool_names:
                 contexts = self._build_tool_requery_context(tool_names)
-                requery_resp = await self._await_or_stop(
-                    self.provider.text_chat(
-                        contexts=self._sanitize_contexts_for_provider(contexts),
-                        func_tool=param_subset,
-                        model=self.req.model,
-                        session_id=self.req.session_id,
-                        extra_user_content_parts=self.req.extra_user_content_parts,
-                        # tool_choice="required",
-                        abort_signal=self._abort_signal,
-                        request_max_retries=self.request_max_retries,
-                    )
-                )
-                if requery_resp:
-                    llm_resp = requery_resp
-                    self._sanitize_malformed_tool_calls(llm_resp)
+                requery_resp = await self._requery_text_chat(contexts, param_subset)
+                if requery_resp is None:
+                    # Stopped by the user, or every attempt returned an empty
+                    # completion: keep the tool call parsed from the current step
+                    # so the run survives instead of raising EmptyModelOutputError.
+                    return llm_resp, subset
+                llm_resp = requery_resp
+                self._sanitize_malformed_tool_calls(llm_resp)
 
                 # If the re-query still returns no tool calls, and also does not have a meaningful assistant reply,
                 # we consider it as a failure of the LLM to follow the tool-use instruction,
@@ -1529,19 +1576,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         tool_names,
                         extra_instruction=self.SKILLS_LIKE_REQUERY_REPAIR_INSTRUCTION,
                     )
-                    repair_resp = await self._await_or_stop(
-                        self.provider.text_chat(
-                            contexts=self._sanitize_contexts_for_provider(
-                                repair_contexts
-                            ),
-                            func_tool=param_subset,
-                            model=self.req.model,
-                            session_id=self.req.session_id,
-                            extra_user_content_parts=self.req.extra_user_content_parts,
-                            # tool_choice="required",
-                            abort_signal=self._abort_signal,
-                            request_max_retries=self.request_max_retries,
-                        )
+                    repair_resp = await self._requery_text_chat(
+                        repair_contexts, param_subset
                     )
                     if repair_resp:
                         llm_resp = repair_resp

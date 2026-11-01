@@ -1737,6 +1737,133 @@ async def test_skills_like_requery_passes_extra_user_content_parts(streaming):
     assert parts[0].text == "<image_caption>一张猫的照片</image_caption>"
 
 
+class _ScriptedSkillsLikeProvider(MockProvider):
+    """按脚本返回 re-query 响应，脚本项可以是 LLMResponse 或异常实例。"""
+
+    def __init__(self, script: list[Any]):
+        super().__init__()
+        self.script = list(script)
+        self.text_chat_calls = 0
+
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        self.text_chat_calls += 1
+        if self.script:
+            item = self.script.pop(0)
+            if isinstance(item, BaseException):
+                raise item
+            return item
+        return LLMResponse(
+            role="assistant",
+            completion_text="最终回复",
+            usage=TokenUsage(input_other=10, output=5),
+        )
+
+
+class _RecordingToolExecutor:
+    """记录每次工具调用实际收到的参数。"""
+
+    calls: list[dict[str, Any]] = []
+
+    @classmethod
+    def reset(cls):
+        cls.calls = []
+
+    @classmethod
+    def execute(cls, tool, run_context, **tool_args):
+        cls.calls.append({"tool": getattr(tool, "name", None), "args": tool_args})
+
+        async def generator():
+            from mcp.types import CallToolResult, TextContent
+
+            yield CallToolResult(
+                content=[TextContent(type="text", text="工具执行结果")]
+            )
+
+        return generator()
+
+
+def _tool_call_response(args: dict[str, Any], call_id: str) -> LLMResponse:
+    return LLMResponse(
+        role="assistant",
+        completion_text="选择工具",
+        tools_call_name=["test_tool"],
+        tools_call_args=[args],
+        tools_call_ids=[call_id],
+        usage=TokenUsage(input_other=10, output=5),
+    )
+
+
+async def _run_skills_like_requery(script: list[Any]) -> _ScriptedSkillsLikeProvider:
+    """跑一轮 skills_like 模式的 step，返回 provider 供断言使用。"""
+    _RecordingToolExecutor.reset()
+    provider = _ScriptedSkillsLikeProvider(script)
+    tool = FunctionTool(
+        name="test_tool",
+        description="测试",
+        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+        handler=AsyncMock(),
+    )
+    req = ProviderRequest(prompt="查一下", func_tool=ToolSet(tools=[tool]), contexts=[])
+    runner = ToolLoopAgentRunner()
+    # 去掉退避等待，避免测试白等
+    runner.EMPTY_OUTPUT_RETRY_WAIT_MIN_S = 0
+    runner.EMPTY_OUTPUT_RETRY_WAIT_MAX_S = 0
+
+    await runner.reset(
+        provider=provider,
+        request=req,
+        run_context=ContextWrapper(
+            context=MockAgentContext(MockEvent(umo="test_umo", sender_id="test_sender"))
+        ),
+        tool_executor=cast(Any, _RecordingToolExecutor()),
+        agent_hooks=MockHooks(),
+        tool_schema_mode="skills_like",
+        streaming=False,
+    )
+
+    async for _ in runner.step():
+        pass
+
+    return provider
+
+
+@pytest.mark.asyncio
+async def test_skills_like_requery_retries_empty_completion():
+    """re-query 返回空 completion 时应重试，而不是中断整轮 Agent（#issue）"""
+    provider = await _run_skills_like_requery(
+        [
+            _tool_call_response({"query": "light"}, "call_1"),
+            EmptyModelOutputError("OpenAI completion has no usable output. 1"),
+            EmptyModelOutputError("OpenAI completion has no usable output. 2"),
+            _tool_call_response({"query": "requery"}, "call_2"),
+        ]
+    )
+
+    # 1 次 light 调用 + 2 次空返回 + 1 次成功的 re-query
+    assert provider.text_chat_calls == 4
+    assert _RecordingToolExecutor.calls, "工具应该被正常执行"
+    assert _RecordingToolExecutor.calls[0]["args"] == {"query": "requery"}
+
+
+@pytest.mark.asyncio
+async def test_skills_like_requery_degrades_when_all_attempts_empty():
+    """re-query 重试全部为空时应降级沿用本轮已有工具调用，而不是抛异常"""
+    provider = await _run_skills_like_requery(
+        [
+            _tool_call_response({"query": "light"}, "call_1"),
+            EmptyModelOutputError("OpenAI completion has no usable output. 1"),
+            EmptyModelOutputError("OpenAI completion has no usable output. 2"),
+            EmptyModelOutputError("OpenAI completion has no usable output. 3"),
+        ]
+    )
+
+    # 1 次 light 调用 + 3 次全部失败的 re-query 尝试，全程没有抛异常
+    assert provider.text_chat_calls == 4
+    assert _RecordingToolExecutor.calls, "降级后工具仍应执行"
+    assert _RecordingToolExecutor.calls[0]["args"] == {"query": "light"}
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("streaming", "stream_to_general", "show_reasoning"),
