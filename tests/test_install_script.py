@@ -26,6 +26,11 @@ PYTHON_MIRROR = (
 
 FAKE_UV = rb"""#!/bin/bash
 if [ "$1" = --version ]; then printf 'uv fixture\n'; exit 0; fi
+tool_bin_dir="${UV_TOOL_BIN_DIR:-$HOME/.local/bin}"
+if [ "$1" = tool ] && [ "$2" = dir ] && [ "$3" = --bin ]; then
+  printf '%s\n' "$tool_bin_dir"
+  exit 0
+fi
 if [ "$1" = tool ] && [ "$2" = update-shell ]; then
   touch "$TEST_DIR/uv-update-shell"
   printf '%s\n' "$PATH" > "$TEST_DIR/update-shell-path"
@@ -34,9 +39,9 @@ if [ "$1" = tool ] && [ "$2" = update-shell ]; then
     exit 1
   fi
   case ":$PATH:" in
-    *":$UV_UNMANAGED_INSTALL:"*) exit 0 ;;
+    *":$tool_bin_dir:"*) exit 0 ;;
   esac
-  line="$(printf 'export PATH=%q:\"$PATH\"' "$UV_UNMANAGED_INSTALL")"
+  line="$(printf 'export PATH=%q:\"$PATH\"' "$tool_bin_dir")"
   if ! grep -Fqx "$line" "$HOME/.bashrc"; then
     printf '%s\n' "$line" >> "$HOME/.bashrc"
   fi
@@ -49,8 +54,9 @@ if [ "${TEST_FAIL_ONCE:-0}" = 1 ] && [ ! -f "$TEST_DIR/failed-once" ]; then
   exit 1
 fi
 if [ "${TEST_INSTALL_EXIT:-0}" != 0 ]; then exit "$TEST_INSTALL_EXIT"; fi
-printf '#!/bin/bash\nexit 0\n' > "$UV_UNMANAGED_INSTALL/astrbot"
-chmod +x "$UV_UNMANAGED_INSTALL/astrbot"
+mkdir -p "$tool_bin_dir"
+printf '#!/bin/bash\nexit 0\n' > "$tool_bin_dir/astrbot"
+chmod +x "$tool_bin_dir/astrbot"
 """
 
 # BASH_ENV supplies only fixture commands; uv itself is a real fixture executable.
@@ -161,6 +167,7 @@ class ShellInstallerTests(unittest.TestCase):
             BASH_ENV=str(self.root / "env.sh"),
             TEST_DIR=str(self.root),
             UV_UNMANAGED_INSTALL=str(self.root / "bin"),
+            UV_TOOL_BIN_DIR=str(self.root / "bin"),
             NO_COLOR="1",
             TMPDIR=str(self.root),
         )
@@ -300,6 +307,7 @@ class ShellInstallerTests(unittest.TestCase):
         install_dir.mkdir()
         shutil.copy2(self.root / "fake-uv", install_dir / "uv")
         self.env["UV_UNMANAGED_INSTALL"] = str(install_dir)
+        self.env["UV_TOOL_BIN_DIR"] = str(install_dir)
         self.env["PATH"] += ":/custom/bin"
         for _ in range(2):
             status, output = self.run_installer(["--non-interactive"], existing=False)
@@ -325,6 +333,106 @@ class ShellInstallerTests(unittest.TestCase):
         self.assertIn("Cannot write shell configuration", output)
         self.assertIn("[WARN]", output)
         self.assertIn(f"{self.root / 'bin/uv'} tool update-shell", output)
+
+    def test_exported_uv_function_reaches_shell_setup(self):
+        with (self.root / "env.sh").open("a") as fixture:
+            fixture.write(
+                '\ncommand() { builtin command "$@"; }\n'
+                'uv() { "$TEST_DIR/fake-uv" "$@"; }\n'
+            )
+        (self.root / "bin").mkdir()
+        for fail_update in ("0", "1"):
+            with self.subTest(fail_update=fail_update):
+                self.env["TEST_UPDATE_SHELL_FAIL"] = fail_update
+                status, output = self.run_installer(
+                    ["--non-interactive"], existing=False
+                )
+                self.assertEqual(status, 0, output)
+                self.assertTrue((self.root / "uv-update-shell").exists())
+                self.assertIn("Bash: source ~/.bashrc", output)
+                if fail_update == "1":
+                    self.assertIn("Cannot write shell configuration", output)
+                    self.assertIn("    uv tool update-shell", output)
+                else:
+                    self.assertTrue((self.root / ".bashrc").read_text())
+
+    def test_retry_from_relative_path_works_in_another_directory(self):
+        with (self.root / "env.sh").open("a") as fixture:
+            fixture.write('\ncd "$TEST_DIR"\n')
+        self.env.update(UV_UNMANAGED_INSTALL="bin", TEST_UPDATE_SHELL_FAIL="1")
+        status, output = self.run_installer(["--non-interactive"])
+        self.assertEqual(status, 0, output)
+        retry = next(
+            line.strip()
+            for line in output.splitlines()
+            if line.endswith(" tool update-shell")
+        )
+        self.assertEqual(retry, f"{self.root / 'bin/uv'} tool update-shell")
+        retry_env = self.env.copy()
+        retry_env.pop("BASH_ENV")
+        retry_env.pop("TEST_UPDATE_SHELL_FAIL")
+        result = subprocess.run(
+            ["/bin/bash", "-c", retry],
+            cwd="/",
+            env=retry_env,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((self.root / ".bashrc").read_text())
+
+    def test_separate_uv_and_tool_directories_survive_shell_reload(self):
+        uv_bin = self.root / "uv bin"
+        tool_bin = self.root / "tool bin"
+        self.env["UV_UNMANAGED_INSTALL"] = str(uv_bin)
+        self.env["UV_TOOL_BIN_DIR"] = str(tool_bin)
+        for fail_update in ("0", "1"):
+            with self.subTest(fail_update=fail_update):
+                (self.root / ".bashrc").write_text("")
+                self.env["TEST_UPDATE_SHELL_FAIL"] = fail_update
+                status, output = self.run_installer(
+                    ["--non-interactive"], existing=False
+                )
+                self.assertEqual(status, 0, output)
+                shell_env = self.env.copy()
+                shell_env.pop("BASH_ENV")
+                shell_env.pop("TEST_UPDATE_SHELL_FAIL")
+                if fail_update == "1":
+                    retries = [
+                        line.strip()
+                        for line in output.splitlines()
+                        if line.endswith(" tool update-shell")
+                    ]
+                    self.assertTrue(retries, output)
+                    for retry in retries:
+                        result = subprocess.run(
+                            ["/bin/bash", "-c", retry],
+                            cwd="/",
+                            env=shell_env,
+                            capture_output=True,
+                            text=True,
+                            timeout=15,
+                        )
+                        self.assertEqual(result.returncode, 0, result.stderr)
+                result = subprocess.run(
+                    [
+                        "/bin/bash",
+                        "--noprofile",
+                        "--norc",
+                        "-c",
+                        'source "$HOME/.bashrc"; command -v uv; command -v astrbot',
+                    ],
+                    env=shell_env,
+                    capture_output=True,
+                    text=True,
+                    timeout=15,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(
+                    result.stdout.splitlines(),
+                    [str(uv_bin / "uv"), str(tool_bin / "astrbot")],
+                )
 
     def test_chinese_defaults_to_all_china_mirrors(self):
         status, output = self.run_installer(

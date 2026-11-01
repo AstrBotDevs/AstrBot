@@ -442,10 +442,29 @@ fi
 ok "$(message Installed)"
 # uv skips shell configuration when its tool directory is already on PATH.
 # Use the caller's PATH and resolve uv before removing our temporary additions.
-uv_executable="$(type -P uv)"
+if uv_executable="$(type -P uv)"; then
+  case "$uv_executable" in
+    /*) ;;
+    *) uv_executable="$PWD/$uv_executable" ;;
+  esac
+else
+  # An exported shell function can provide uv without a binary on PATH.
+  uv_executable='uv'
+fi
 if ! PATH="$original_path" "$uv_executable" tool update-shell; then
   warn 'Could not update shell PATH. Run the following command, then reload your shell:'
   printf '%s  %q tool update-shell\n' "$indent" "$uv_executable"
+fi
+# A custom uv installation can live outside the tool executable directory.
+# Let uv configure that directory too, without changing where tools are installed.
+if [ "$uv_executable" != 'uv' ] && \
+   tool_bin_dir="$("$uv_executable" tool dir --bin)" && \
+   [ "${uv_executable%/*}" != "$tool_bin_dir" ]; then
+  uv_bin_dir="${uv_executable%/*}"
+  if ! PATH="$original_path" UV_TOOL_BIN_DIR="$uv_bin_dir" "$uv_executable" tool update-shell; then
+    warn 'Could not add the uv installation directory to shell PATH. Run the following command, then reload your shell:'
+    printf '%s  env UV_TOOL_BIN_DIR=%q %q tool update-shell\n' "$indent" "$uv_bin_dir" "$uv_executable"
+  fi
 fi
 printf '\n%s%s\n' "$indent" "$(message ReloadShell)"
 printf '%s  Bash: source ~/.bashrc\n' "$indent"
