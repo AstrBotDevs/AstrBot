@@ -79,6 +79,7 @@ def test_wakeup_keeps_target_identity_separate_from_its_source(source, message_t
     assert event.get_sender_name() == "System"
     assert event.role == "member"
     assert event.is_wake and event.is_at_or_wake_command
+    assert event.get_extra("enable_streaming") is False
 
 
 def test_wakeup_preserves_the_resolved_permission_role(wakeup_event):
