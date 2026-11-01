@@ -84,6 +84,10 @@ class SystemOneDecisionProvider(DecisionProvider):
         )
         if self.max_concurrency <= 0:
             raise ValueError("max_concurrency must be greater than 0")
+        # Strictly compare with True so that string values like "false" stay off.
+        self.use_default_boolean_criteria = (
+            provider_config.get("use_default_boolean_criteria") is True
+        )
         self.request_semaphore = asyncio.Semaphore(self.max_concurrency)
         self.client = httpx.AsyncClient(
             timeout=self.timeout,
@@ -152,10 +156,14 @@ class SystemOneDecisionProvider(DecisionProvider):
                     "criteria": list(question.criteria),
                 }
             elif isinstance(question, DecisionBooleanQuestion):
-                if (
-                    not isinstance(question.criteria, Mapping)
-                    or set(question.criteria) != {"true", "false"}
-                    or not all(isinstance(v, str) for v in question.criteria.values())
+                criteria = question.criteria
+                if criteria is None and self.use_default_boolean_criteria:
+                    # Some System One compatible endpoints require the true/false keys.
+                    criteria = {"true": "", "false": ""}
+                if criteria is not None and (
+                    not isinstance(criteria, Mapping)
+                    or set(criteria) != {"true", "false"}
+                    or not all(isinstance(value, str) for value in criteria.values())
                 ):
                     raise ValueError(
                         f"question {head} field `criteria` must be an object with `true`/`false` keys"
@@ -163,8 +171,9 @@ class SystemOneDecisionProvider(DecisionProvider):
                 payload_questions[head] = {
                     "type": "noul",
                     "instructions": instructions,
-                    "criteria": dict(question.criteria),
                 }
+                if criteria is not None:
+                    payload_questions[head]["criteria"] = dict(criteria)
             else:
                 raise TypeError(
                     f"question {head} type must be one of the following: DecisionBooleanQuestion, DecisionChoiceQuestion, DecisionScoreQuestion"

@@ -1990,6 +1990,10 @@
         "description": "最大并发数",
         "hint": "该提供商同时进行的决策请求上限；默认 4。"
       },
+      "use_default_boolean_criteria": {
+        "description": "设置布尔判定的 criteria 默认值",
+        "hint": "开启后，未自带 criteria 的布尔判定（noul 类型）请求会携带 criteria = {\"true\": \"\", \"false\": \"\"} 作为默认值，用于兼容必须提供 true/false 键的 System One 协议接口；默认关闭。"
+      },
       "proxy": {
         "description": "代理地址",
         "hint": "HTTP/HTTPS 代理地址，格式如 http://127.0.0.1:7890。仅对该提供商的 API 请求生效，不影响 Docker 内网通信。"

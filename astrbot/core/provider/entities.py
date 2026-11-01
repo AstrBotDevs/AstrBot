@@ -59,17 +59,14 @@ class DecisionBooleanQuestion:
 
     Attributes:
         instructions: The statement or question evaluated by the model.
-        criteria: It must contain exactly two keys, `true` and `false`;
-            any other key (or a missing one) is invalid.
+        criteria: Optional descriptions keyed by `true` and `false`. When set, it
+            must contain exactly those two keys. When omitted, whether the
+            request carries `criteria` is decided by the provider's
+            `use_default_boolean_criteria` option.
     """
 
     instructions: str
-    criteria: Mapping[str, str] = field(
-        default_factory=lambda: {
-            "true": "",
-            "false": "",
-        }
-    )
+    criteria: Mapping[str, str] | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -94,7 +94,6 @@ async def test_system_one_decisions_share_one_request_and_parse_all_heads():
             "available": {
                 "type": "noul",
                 "instructions": "Is the endpoint available?",
-                "criteria": {"true": "", "false": ""},
             },
         },
     }
@@ -104,6 +103,55 @@ async def test_system_one_decisions_share_one_request_and_parse_all_heads():
     assert answers["decision"].probabilities == {"respond": 0.8, "ignore": 0.2}
     assert isinstance(answers["available"], DecisionBooleanAnswer)
     assert answers["available"].probability == 0.73
+
+
+@pytest.mark.asyncio
+async def test_system_one_sends_default_criteria_when_enabled():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={"answers": {"available": {"type": "noul", "noul": 0.6}}},
+        )
+
+    provider = _provider(handler, use_default_boolean_criteria=True)
+    try:
+        answers = await provider.ask(
+            {"available": DecisionBooleanQuestion("Is the endpoint available?")}
+        )
+    finally:
+        await provider.terminate()
+
+    assert captured["body"]["questions"]["available"] == {
+        "type": "noul",
+        "instructions": "Is the endpoint available?",
+        "criteria": {"true": "", "false": ""},
+    }
+    assert answers["available"].probability == 0.6
+
+
+@pytest.mark.asyncio
+async def test_system_one_ignores_non_boolean_criteria_flag():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={"answers": {"available": {"type": "noul", "noul": 0.9}}},
+        )
+
+    provider = _provider(handler, use_default_boolean_criteria="false")
+    try:
+        await provider.ask(
+            {"available": DecisionBooleanQuestion("Is the endpoint available?")}
+        )
+    finally:
+        await provider.terminate()
+
+    assert "criteria" not in captured["body"]["questions"]["available"]
 
 
 @pytest.mark.asyncio
@@ -139,12 +187,43 @@ async def test_system_one_forwards_boolean_criteria():
 
 
 @pytest.mark.asyncio
+async def test_system_one_prefers_question_criteria_over_default():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={"answers": {"available": {"type": "noul", "noul": 0.2}}},
+        )
+
+    provider = _provider(handler, use_default_boolean_criteria=True)
+    try:
+        await provider.ask(
+            {
+                "available": DecisionBooleanQuestion(
+                    "Is the endpoint available?",
+                    {"true": "Endpoint is reachable", "false": "Endpoint is down"},
+                )
+            }
+        )
+    finally:
+        await provider.terminate()
+
+    assert captured["body"]["questions"]["available"]["criteria"] == {
+        "true": "Endpoint is reachable",
+        "false": "Endpoint is down",
+    }
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "criteria",
     [
         {"true": "Statement holds"},
         {"true": "Statement holds", "false": "Statement fails", "maybe": "Unsure"},
         {"yes": "Yes", "no": "No"},
+        {"true": 1, "false": None},
     ],
 )
 async def test_system_one_rejects_invalid_boolean_criteria(criteria):
@@ -229,6 +308,18 @@ def test_system_one_templates_expose_max_concurrency():
         "Custom System One",
     ):
         assert templates[name]["max_concurrency"] == 4
+
+
+def test_system_one_templates_keep_boolean_criteria_default_off():
+    metadata = CONFIG_METADATA_2["provider_group"]["metadata"]["provider"]
+    for name in (
+        "TypeSafe System One",
+        "OpenRouter System One",
+        "Vercel System One",
+        "Custom System One",
+    ):
+        assert metadata["config_template"][name]["use_default_boolean_criteria"] is False
+    assert metadata["items"]["use_default_boolean_criteria"]["type"] == "bool"
 
 
 @pytest.mark.asyncio

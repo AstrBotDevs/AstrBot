@@ -2070,6 +2070,10 @@
         "description": "最大同時実行数",
         "hint": "このプロバイダーで同時に実行する判定リクエストの上限です。既定値は 4 です。"
       },
+      "use_default_boolean_criteria": {
+        "description": "真偽判定の criteria 既定値の設定",
+        "hint": "有効にすると、criteria を指定していない真偽判定（noul タイプ）のリクエストに、既定値として criteria = {\"true\": \"\", \"false\": \"\"} が含まれます。true/false キーが必須の System One プロトコル API との互換性のための設定です。既定では無効です。"
+      },
       "proxy": {
         "description": "プロキシアドレス",
         "hint": "HTTP/HTTPS プロキシアドレスです。形式例: http://127.0.0.1:7890。このプロバイダーの API リクエストにのみ適用され、Docker 内部ネットワークの通信には影響しません。"

@@ -1969,6 +1969,10 @@
         "description": "Maximum concurrency",
         "hint": "Maximum number of simultaneous decision requests for this provider; default 4."
       },
+      "use_default_boolean_criteria": {
+        "description": "Default boolean criteria",
+        "hint": "When enabled, boolean (noul) questions without their own criteria send criteria = {\"true\": \"\", \"false\": \"\"} as the default value, for compatibility with System One endpoints that require the true/false keys. Disabled by default."
+      },
       "proxy": {
         "description": "Proxy address",
         "hint": "HTTP/HTTPS proxy URL, e.g. http://127.0.0.1:7890. Applies only to this provider's API requests and does not affect Docker internal networking."
