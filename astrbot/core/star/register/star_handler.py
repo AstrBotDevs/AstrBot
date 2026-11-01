@@ -607,7 +607,12 @@ def register_on_llm_tool_respond(**kwargs):
     return decorator
 
 
-def register_llm_tool(name: str | None = None, **kwargs):
+def register_llm_tool(
+    name: str | None = None,
+    *,
+    permission_type: PermissionType | None = None,
+    **kwargs,
+):
     """为函数调用（function-calling / tools-use）添加工具。
 
     请务必按照以下格式编写一个工具（包括函数注释，AstrBot 会尝试解析该函数注释）
@@ -639,11 +644,54 @@ def register_llm_tool(name: str | None = None, **kwargs):
     yield
     ```
 
+    默认权限：
+        可以通过 ``permission_type`` 参数为该工具声明一个默认权限，用法类似于
+        ``@filter.command()`` 配合 ``@filter.permission_type()``。这样即使管理员
+        从未在管理面板配置过该工具，它也会默认带有这层权限保护：
+
+        ```
+        @llm_tool(name="restart_server", permission_type=filter.PermissionType.ADMIN)
+        async def restart_server(event: AstrMessageEvent):
+            \'\'\'重启服务器。\'\'\'
+            # 处理逻辑
+        ```
+
+        - 该参数仅是默认值：管理员在管理面板中为该工具配置的权限会覆盖它。
+        - 仅接受 ``PermissionType.ADMIN`` 和 ``PermissionType.MEMBER``，且必须作为
+          关键字参数传入。
+        - 通过 ``Agent.llm_tool()`` 注册的工具不支持该声明。
+
     """
+    if isinstance(name, PermissionType):
+        raise ValueError(
+            "permission_type must be passed as a keyword argument, e.g. "
+            "@llm_tool(permission_type=filter.PermissionType.ADMIN)."
+        )
+    if permission_type is not None and permission_type not in (
+        PermissionType.ADMIN,
+        PermissionType.MEMBER,
+    ):
+        raise ValueError(
+            "permission_type only supports filter.PermissionType.ADMIN "
+            "or filter.PermissionType.MEMBER."
+        )
+
     name_ = name
     registering_agent = None
     if kwargs.get("registering_agent"):
         registering_agent = kwargs["registering_agent"]
+    if registering_agent is not None and permission_type is not None:
+        raise ValueError(
+            "Tools registered through an Agent do not support the "
+            "permission_type declaration. Register the tool with "
+            "@filter.llm_tool instead."
+        )
+
+    declared_permission_type = None
+    if permission_type is not None:
+        declared_permission_type = (
+            "admin" if permission_type == PermissionType.ADMIN else "member"
+        )
 
     def decorator(
         awaitable: Callable[
@@ -691,7 +739,13 @@ def register_llm_tool(name: str | None = None, **kwargs):
         if not registering_agent:
             doc_desc = docstring.description.strip() if docstring.description else ""
             md = get_handler_or_create(awaitable, EventType.OnCallingFuncToolEvent)
-            llm_tools.add_func(llm_tool_name, args, doc_desc, md.handler)
+            llm_tools.add_func(
+                llm_tool_name,
+                args,
+                doc_desc,
+                md.handler,
+                declared_permission_type=declared_permission_type,
+            )
         else:
             assert isinstance(registering_agent, RegisteringAgent)
             # print(f"Registering tool {llm_tool_name} for agent", registering_agent._agent.name)
@@ -699,7 +753,13 @@ def register_llm_tool(name: str | None = None, **kwargs):
                 registering_agent._agent.tools = []
 
             desc = docstring.description.strip() if docstring.description else ""
-            tool = llm_tools.spec_to_func(llm_tool_name, args, desc, awaitable)
+            tool = llm_tools.spec_to_func(
+                llm_tool_name,
+                args,
+                desc,
+                awaitable,
+                declared_permission_type=declared_permission_type,
+            )
             registering_agent._agent.tools.append(tool)
 
         return awaitable

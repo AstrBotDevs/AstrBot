@@ -198,6 +198,22 @@ Supported types: `string`, `number`, `object`, `boolean`, `array`. Since v4.5.7,
 >
 > Additionally, passing `parameters=...` directly to the decorator is **not supported** and will be silently ignored. If you need manual control over the schema, use the `@dataclass` + `add_llm_tools()` approach above.
 
+### Declaring Default Tool Permissions
+
+`@filter.llm_tool()` accepts a `permission_type` argument, similar to `@filter.command()` combined with `@filter.permission_type()`. It declares the default permission of a tool, so the tool is protected even when an administrator has never configured it in the WebUI dashboard:
+
+```py
+@filter.llm_tool(name="restart_server", permission_type=filter.PermissionType.ADMIN)
+async def restart_server(self, event: AstrMessageEvent) -> MessageEventResult:
+    """Restart the server."""
+    ...
+```
+
+- Only `filter.PermissionType.ADMIN` and `filter.PermissionType.MEMBER` are accepted, and the argument must be passed by keyword.
+- The declaration is only a default: once an administrator sets a permission for that tool in the WebUI (Extensions → Handlers → Function Tools), the dashboard value takes precedence.
+- The check runs when the tool is executed, regardless of whether the tool came from the default tool set, a persona's tool list, or a sub-agent's explicit tool list.
+- Tools defined with `@dataclass` can set the `declared_permission_type` field instead (`"admin"` / `"member"`, or `filter.PermissionType.ADMIN` / `filter.PermissionType.MEMBER`); invalid values raise `ValueError` at construction time. Tools registered through `Agent.llm_tool()` do not support this declaration.
+
 ## Invoking Agents
 
 > [!TIP]

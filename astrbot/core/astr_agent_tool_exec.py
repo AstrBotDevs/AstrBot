@@ -31,6 +31,7 @@ from astrbot.core.message.message_event_result import (
 )
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.provider.entites import ProviderRequest
+from astrbot.core.provider.func_tool_manager import _PermissionGuardedTool
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.tools.computer_tools import (
     CuaKeyboardTypeTool,
@@ -144,6 +145,24 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             AsyncGenerator[None | mcp.types.CallToolResult, None]
 
         """
+        # Single enforcement point for per-tool permissions: toolsets reach
+        # this method from several builders (get_full_tool_set, persona tool
+        # lists, sub-agent tool lists, plugin-built sets), so the check must
+        # not depend on how the toolset was assembled. Guarded tools already
+        # checked inside _PermissionGuardedTool.call, handoff and builtin tools
+        # keep their own paths.
+        if not isinstance(tool, (HandoffTool, _PermissionGuardedTool)):
+            registered = any(t is tool for t in llm_tools.func_list)
+            if registered or not llm_tools.is_builtin_tool(tool.name):
+                error = await llm_tools._check_tool_permission(
+                    tool.name, run_context, tool
+                )
+                if error is not None:
+                    yield mcp.types.CallToolResult(
+                        content=[mcp.types.TextContent(type="text", text=error)]
+                    )
+                    return
+
         if isinstance(tool, HandoffTool):
             is_bg = tool_args.pop("background_task", False)
             if is_bg:

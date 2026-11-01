@@ -246,7 +246,9 @@ class _PermissionGuardedTool(FunctionTool):
     async def call(self, context: Any, **kwargs: Any) -> Any:
         import inspect as _inspect
 
-        error = await self._mgr._check_tool_permission(self.name, context)
+        error = await self._mgr._check_tool_permission(
+            self.name, context, self._wrapped
+        )
         if error is not None:
             return error
 
@@ -346,6 +348,8 @@ class FunctionToolManager:
         func_args: list[dict],
         desc: str,
         handler: Callable[..., Awaitable[Any] | AsyncGenerator[Any]],
+        *,
+        declared_permission_type: str | None = None,
     ) -> FuncTool:
         params = {
             "type": "object",  # hard-coded here
@@ -360,6 +364,7 @@ class FunctionToolManager:
             parameters=params,
             description=desc,
             handler=handler,
+            declared_permission_type=declared_permission_type,
         )
 
     def add_func(
@@ -368,6 +373,8 @@ class FunctionToolManager:
         func_args: list,
         desc: str,
         handler: Callable[..., Awaitable[Any] | AsyncGenerator[Any]],
+        *,
+        declared_permission_type: str | None = None,
     ) -> None:
         """添加函数调用工具
 
@@ -375,6 +382,7 @@ class FunctionToolManager:
         @param func_args: 函数参数列表，格式为 [{"type": "string", "name": "arg_name", "description": "arg_description"}, ...]
         @param desc: 函数描述
         @param func_obj: 处理函数
+        @param declared_permission_type: 工具作者声明的默认权限（"admin" / "member"），未在 WebUI 配置时生效
         """
         # check if the tool has been added before
         self.remove_func(name)
@@ -385,6 +393,7 @@ class FunctionToolManager:
                 func_args=func_args,
                 desc=desc,
                 handler=handler,
+                declared_permission_type=declared_permission_type,
             ),
         )
         logger.info(f"Added llm tool: {name}")
@@ -450,24 +459,57 @@ class FunctionToolManager:
         ensure_builtin_tools_loaded()
         return get_builtin_tool_class(name) is not None
 
-    def _default_permission(self, tool_name: str) -> str:
+    def _default_permission(self, tool_name: str, tool: FuncTool | None = None) -> str:
         """Compute the fallback permission for a non-builtin tool.
 
-        All non-builtin tools default to ``"member"`` (no restriction).
-        Builtin tools are never routed through this method."""
+        A tool may declare a default through ``@llm_tool(permission_type=...)``
+        or the ``declared_permission_type`` field. Undeclared tools, and tools
+        with an unexpected declared value, fall back to ``"member"`` (no
+        restriction). Builtin tools are never routed through this method.
+
+        Args:
+            tool_name: Name of the tool.
+            tool: The tool instance to read the declaration from. When omitted,
+                the tool is resolved through ``get_func``.
+
+        Returns:
+            Either ``"admin"`` or ``"member"``.
+        """
+        resolved = tool if tool is not None else self.get_func(tool_name)
+        declared = getattr(resolved, "declared_permission_type", None)
+        if declared in ("admin", "member"):
+            return declared
+        if declared is not None:
+            logger.warning(
+                "Tool %s declared an unsupported permission %r; "
+                "falling back to member.",
+                tool_name,
+                declared,
+            )
         return "member"
 
     async def _check_tool_permission(
         self,
         tool_name: str,
         context: Any,
+        tool: FuncTool | None = None,
     ) -> str | None:
         """Return an error string if the caller lacks permission, or None.
 
         Only non-builtin tools are guarded. Permission is resolved from
         ``tool_permissions`` in SharedPreferences (``_default`` key). When
         no explicit entry exists the tool inherits the fallback
-        ``_default_permission``."""
+        ``_default_permission``.
+
+        Args:
+            tool_name: Name of the tool.
+            context: Run context carrying the event that triggered the call.
+            tool: The tool instance being invoked, used to read the declared
+                default permission without a name lookup.
+
+        Returns:
+            An error message when the caller lacks permission, otherwise None.
+        """
         try:
             perms_raw = await sp.global_get("tool_permissions", {})
         except Exception:
@@ -475,7 +517,7 @@ class FunctionToolManager:
         defaults = perms_raw.get("_default", {}) if isinstance(perms_raw, dict) else {}
         effective = defaults.get(tool_name)
         if effective is None:
-            effective = self._default_permission(tool_name)
+            effective = self._default_permission(tool_name, tool)
 
         if effective != "admin":
             return None  # member or unknown → pass
@@ -489,7 +531,8 @@ class FunctionToolManager:
             return (
                 f"error: Permission denied. The tool '{tool_name}' requires admin "
                 f"privileges. Your ID: {sender_id}. "
-                "Ask admin to configure in WebUI → Extension → Components."
+                "Ask an admin to configure it in WebUI → Extensions → Handlers "
+                "→ Function Tools."
             )
         return None
 
