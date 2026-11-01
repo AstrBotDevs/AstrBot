@@ -442,28 +442,43 @@ fi
 ok "$(message Installed)"
 # uv skips shell configuration when its tool directory is already on PATH.
 # Use the caller's PATH and resolve uv before removing our temporary additions.
-if uv_executable="$(type -P uv)"; then
-  case "$uv_executable" in
+uv_binary="$(type -P uv)" || uv_binary=''
+if [ -n "$uv_binary" ]; then
+  case "$uv_binary" in
     /*) ;;
-    *) uv_executable="$PWD/$uv_executable" ;;
+    *) uv_binary="$PWD/$uv_binary" ;;
   esac
-else
-  # An exported shell function can provide uv without a binary on PATH.
+fi
+uv_executable="${uv_binary:-uv}"
+if [ "$(type -t uv)" = 'function' ]; then
+  # Keep wrapper settings consistent with the preceding tool installation.
   uv_executable='uv'
 fi
-if ! PATH="$original_path" "$uv_executable" tool update-shell; then
+# Preserve invocation-only settings in the retry command, including wrapper overrides.
+tool_bin_dir="$("$uv_executable" tool dir --bin)" || tool_bin_dir="${UV_TOOL_BIN_DIR:-}"
+if ! (
+  export PATH="$original_path"
+  # Wrappers using `command uv` must still find a recovered binary, while uv
+  # itself must see the original PATH when deciding whether to update the shell.
+  if [ -n "$uv_binary" ]; then hash -p "$uv_binary" uv; fi
+  "$uv_executable" tool update-shell
+); then
   warn 'Could not update shell PATH. Run the following command, then reload your shell:'
-  printf '%s  %q tool update-shell\n' "$indent" "$uv_executable"
+  if [ -n "$tool_bin_dir" ]; then
+    # An assignment also works with shell functions, unlike invoking through env.
+    printf '%s  UV_TOOL_BIN_DIR=%q %q tool update-shell\n' "$indent" "$tool_bin_dir" "${uv_binary:-$uv_executable}"
+  else
+    printf '%s  %q tool update-shell\n' "$indent" "${uv_binary:-$uv_executable}"
+  fi
 fi
 # A custom uv installation can live outside the tool executable directory.
 # Let uv configure that directory too, without changing where tools are installed.
-if [ "$uv_executable" != 'uv' ] && \
-   tool_bin_dir="$("$uv_executable" tool dir --bin)" && \
-   [ "${uv_executable%/*}" != "$tool_bin_dir" ]; then
-  uv_bin_dir="${uv_executable%/*}"
-  if ! PATH="$original_path" UV_TOOL_BIN_DIR="$uv_bin_dir" "$uv_executable" tool update-shell; then
+if [ -n "$uv_binary" ] && [ -n "$tool_bin_dir" ] && \
+   [ "${uv_binary%/*}" != "$tool_bin_dir" ]; then
+  uv_bin_dir="${uv_binary%/*}"
+  if ! PATH="$original_path" UV_TOOL_BIN_DIR="$uv_bin_dir" "$uv_binary" tool update-shell; then
     warn 'Could not add the uv installation directory to shell PATH. Run the following command, then reload your shell:'
-    printf '%s  env UV_TOOL_BIN_DIR=%q %q tool update-shell\n' "$indent" "$uv_bin_dir" "$uv_executable"
+    printf '%s  env UV_TOOL_BIN_DIR=%q %q tool update-shell\n' "$indent" "$uv_bin_dir" "$uv_binary"
   fi
 fi
 printf '\n%s%s\n' "$indent" "$(message ReloadShell)"

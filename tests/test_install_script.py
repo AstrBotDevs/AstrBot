@@ -70,7 +70,6 @@ command() {
   fi
   builtin command "$@"
 }
-uv() { "$UV_UNMANAGED_INSTALL/uv" "$@"; }
 uname() {
   case "$1" in
     -s) printf '%s\n' "${TEST_PLATFORM:-Darwin}" ;;
@@ -352,7 +351,7 @@ class ShellInstallerTests(unittest.TestCase):
                 self.assertIn("Bash: source ~/.bashrc", output)
                 if fail_update == "1":
                     self.assertIn("Cannot write shell configuration", output)
-                    self.assertIn("    uv tool update-shell", output)
+                    self.assertIn(" uv tool update-shell", output)
                 else:
                     self.assertTrue((self.root / ".bashrc").read_text())
 
@@ -367,10 +366,11 @@ class ShellInstallerTests(unittest.TestCase):
             for line in output.splitlines()
             if line.endswith(" tool update-shell")
         )
-        self.assertEqual(retry, f"{self.root / 'bin/uv'} tool update-shell")
+        self.assertIn(f"{self.root / 'bin/uv'} tool update-shell", retry)
         retry_env = self.env.copy()
         retry_env.pop("BASH_ENV")
         retry_env.pop("TEST_UPDATE_SHELL_FAIL")
+        retry_env.pop("UV_TOOL_BIN_DIR")
         result = subprocess.run(
             ["/bin/bash", "-c", retry],
             cwd="/",
@@ -398,6 +398,7 @@ class ShellInstallerTests(unittest.TestCase):
                 shell_env = self.env.copy()
                 shell_env.pop("BASH_ENV")
                 shell_env.pop("TEST_UPDATE_SHELL_FAIL")
+                shell_env.pop("UV_TOOL_BIN_DIR")
                 if fail_update == "1":
                     retries = [
                         line.strip()
@@ -432,6 +433,72 @@ class ShellInstallerTests(unittest.TestCase):
                 self.assertEqual(
                     result.stdout.splitlines(),
                     [str(uv_bin / "uv"), str(tool_bin / "astrbot")],
+                )
+
+    def test_shadowing_uv_function_keeps_its_tool_configuration(self):
+        wrapper_bin = self.root / "wrapper bin"
+        original_path = self.env["PATH"]
+        with (self.root / "env.sh").open("a") as fixture:
+            # Exercise Bash's real command builtin inside the wrapper.
+            fixture.write(
+                '\nunset -f command\nuv() { UV_TOOL_BIN_DIR="$TEST_DIR/wrapper bin" '
+                'command uv "$@"; }\n'
+            )
+        for binary_on_path, fail_update in (
+            (True, "0"),
+            (True, "1"),
+            (False, "0"),
+            (False, "1"),
+        ):
+            with self.subTest(binary_on_path=binary_on_path, fail_update=fail_update):
+                self.env["PATH"] = (
+                    f"{self.root / 'bin'}:{original_path}"
+                    if binary_on_path
+                    else original_path
+                )
+                (self.root / ".bashrc").write_text("")
+                self.env["TEST_UPDATE_SHELL_FAIL"] = fail_update
+                status, output = self.run_installer(["--non-interactive"])
+                self.assertEqual(status, 0, output)
+                self.assertTrue((wrapper_bin / "astrbot").exists())
+                if fail_update == "1":
+                    retries = [
+                        line.strip()
+                        for line in output.splitlines()
+                        if line.endswith(" tool update-shell")
+                    ]
+                    self.assertTrue(retries, output)
+                    retry_env = self.env.copy()
+                    retry_env.pop("TEST_UPDATE_SHELL_FAIL")
+                    retry_env.pop("UV_TOOL_BIN_DIR")
+                    for retry in retries:
+                        result = subprocess.run(
+                            ["/bin/bash", "-c", retry],
+                            env=retry_env,
+                            capture_output=True,
+                            text=True,
+                            timeout=15,
+                        )
+                        self.assertEqual(result.returncode, 0, result.stderr)
+                shell_env = self.env.copy()
+                shell_env.pop("BASH_ENV")
+                result = subprocess.run(
+                    [
+                        "/bin/bash",
+                        "--noprofile",
+                        "--norc",
+                        "-c",
+                        'source "$HOME/.bashrc"; command -v uv; command -v astrbot',
+                    ],
+                    env=shell_env,
+                    capture_output=True,
+                    text=True,
+                    timeout=15,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(
+                    result.stdout.splitlines(),
+                    [str(self.root / "bin/uv"), str(wrapper_bin / "astrbot")],
                 )
 
     def test_chinese_defaults_to_all_china_mirrors(self):
