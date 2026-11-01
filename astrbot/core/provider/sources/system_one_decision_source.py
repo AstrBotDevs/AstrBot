@@ -14,6 +14,7 @@ from astrbot.core.utils.network_utils import log_connection_failure
 from ..entities import (
     DecisionAnswer,
     DecisionBooleanAnswer,
+    DecisionBooleanQuestion,
     DecisionChoiceAnswer,
     DecisionChoiceQuestion,
     DecisionError,
@@ -113,6 +114,7 @@ class SystemOneDecisionProvider(DecisionProvider):
             ValueError: A question is empty or its criteria are unusable.
             DecisionError: The request fails or the response violates the
                 decision contract.
+            TypeError: The question type is not supported.
         """
         if not questions:
             raise ValueError("questions must not be empty")
@@ -149,11 +151,22 @@ class SystemOneDecisionProvider(DecisionProvider):
                     "instructions": instructions,
                     "criteria": list(question.criteria),
                 }
-            else:
+            elif isinstance(question, DecisionBooleanQuestion):
+                if not isinstance(question.criteria, Mapping) or set(
+                    question.criteria
+                ) != {"true", "false"}:
+                    raise ValueError(
+                        f"question {head} field `criteria` must be an object with `true`/`false` keys"
+                    )
                 payload_questions[head] = {
                     "type": "noul",
                     "instructions": instructions,
+                    "criteria": dict(question.criteria),
                 }
+            else:
+                raise TypeError(
+                    f"question {head} type must be one of the following: DecisionBooleanQuestion, DecisionChoiceQuestion, DecisionScoreQuestion"
+                )
 
         async def _post() -> Any:
             response = await self.client.post(

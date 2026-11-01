@@ -94,6 +94,7 @@ async def test_system_one_decisions_share_one_request_and_parse_all_heads():
             "available": {
                 "type": "noul",
                 "instructions": "Is the endpoint available?",
+                "criteria": {"true": "", "false": ""},
             },
         },
     }
@@ -103,6 +104,58 @@ async def test_system_one_decisions_share_one_request_and_parse_all_heads():
     assert answers["decision"].probabilities == {"respond": 0.8, "ignore": 0.2}
     assert isinstance(answers["available"], DecisionBooleanAnswer)
     assert answers["available"].probability == 0.73
+
+
+@pytest.mark.asyncio
+async def test_system_one_forwards_boolean_criteria():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={"answers": {"available": {"type": "noul", "noul": 0.4}}},
+        )
+
+    provider = _provider(handler)
+    try:
+        answers = await provider.ask(
+            {
+                "available": DecisionBooleanQuestion(
+                    "Is the endpoint available?",
+                    {"true": "Endpoint is reachable", "false": "Endpoint is down"},
+                )
+            }
+        )
+    finally:
+        await provider.terminate()
+
+    assert captured["body"]["questions"]["available"] == {
+        "type": "noul",
+        "instructions": "Is the endpoint available?",
+        "criteria": {"true": "Endpoint is reachable", "false": "Endpoint is down"},
+    }
+    assert answers["available"].probability == 0.4
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "criteria",
+    [
+        {"true": "Statement holds"},
+        {"true": "Statement holds", "false": "Statement fails", "maybe": "Unsure"},
+        {"yes": "Yes", "no": "No"},
+    ],
+)
+async def test_system_one_rejects_invalid_boolean_criteria(criteria):
+    provider = _provider(lambda request: httpx.Response(200))
+    try:
+        with pytest.raises(ValueError, match="must be an object with"):
+            await provider.ask(
+                {"available": DecisionBooleanQuestion("Is it available?", criteria)}
+            )
+    finally:
+        await provider.terminate()
 
 
 @pytest.mark.asyncio

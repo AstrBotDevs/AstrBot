@@ -59,9 +59,17 @@ class DecisionBooleanQuestion:
 
     Attributes:
         instructions: The statement or question evaluated by the model.
+        criteria: It must contain exactly two keys, `true` and `false`;
+            any other key (or a missing one) is invalid.
     """
 
     instructions: str
+    criteria: Mapping[str, str] = field(
+        default_factory=lambda: {
+            "true": "",
+            "false": "",
+        }
+    )
 
 
 @dataclass(frozen=True, slots=True)

@@ -59,7 +59,11 @@ answers = await self.context.decision.ask(
             criteria={"latest": "Latest message", "previous": "Previous message"},
         ),
         "needs_tool": DecisionBooleanQuestion(
-            "Does this request require a tool call?"
+            instructions="Does this request require a tool call?",
+            criteria={
+                "true": "A tool call is required",
+                "false": "No tool call is needed",
+            },
         ),
         "severity": DecisionScoreQuestion(
             instructions="How severe is the reported problem?",
@@ -83,7 +87,7 @@ if (
     # 使用 target.choice 和 answers["needs_tool"].probability 执行后续业务逻辑
 ```
 
-`DecisionChoiceQuestion.criteria` 是选项 ID 到选项描述的映射，与 System One 请求中的 `criteria` 对应。选择类结果的 `choice` 是选项 ID，`probabilities` 包含完整概率分布，`confidence` 是模型置信度；布尔类结果使用 `probability` 表示陈述为真的概率。主动回复阈值等业务规则由调用方决定。
+`DecisionChoiceQuestion.criteria` 是选项 ID 到选项描述的映射，与 System One 请求中的 `criteria` 对应。`DecisionBooleanQuestion.criteria` 必须且只能包含 `true` 和 `false` 两个键，值为陈述成立与不成立的描述，默认为 `{"true": "", "false": ""}`；即使描述留空，这两个键也会随请求发送，因为部分 System One 兼容接口要求布尔题必须携带 `criteria`，传入其它键会抛出 `ValueError`。选择类结果的 `choice` 是选项 ID，`probabilities` 包含完整概率分布，`confidence` 是模型置信度；布尔类结果使用 `probability` 表示陈述为真的概率。主动回复阈值等业务规则由调用方决定。
 
 返回结果按题型分别是 `DecisionChoiceAnswer`、`DecisionBooleanAnswer` 和 `DecisionScoreAnswer`，它们是三个独立的冻结数据类。`DecisionAnswer` 是这三个类的联合类型。调用 `ask()` 后，可使用 `isinstance()` 确认结果类型再读取对应字段；`choose()` 明确返回 `DecisionChoiceAnswer`，`yes_no()` 返回 `bool`。
 
