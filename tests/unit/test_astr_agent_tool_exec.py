@@ -272,6 +272,8 @@ async def test_do_handoff_background_reports_prepared_image_urls(
     )
 
     prompt = captured["user_prompt"]
+    assert captured["source"] == "background_task"
+    assert captured["source_id"] == "task-id"
     assert prompt.startswith("<system_reminder>\n")
     assert prompt.endswith("\n</system_reminder>")
     payload = json.loads(prompt.removesuffix("\n</system_reminder>").rsplit("\n", 1)[1])
@@ -507,6 +509,7 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
     await wake_main_agent(
         (run_context).context.context,
         session_str=(run_context).context.event.unified_msg_origin,
+        source="background_task",
         user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
             background_task_result=json.dumps(
                 {
@@ -622,6 +625,7 @@ async def test_background_wakeup_applies_max_agent_step(
     await wake_main_agent(
         (run_context).context.context,
         session_str=(run_context).context.event.unified_msg_origin,
+        source="background_task",
         user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
             background_task_result=json.dumps(
                 {
@@ -644,11 +648,16 @@ async def test_background_wakeup_applies_max_agent_step(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("delivered", [False, True])
-async def test_background_wakeup_warns_when_result_is_not_sent_to_user(
+async def test_background_wakeup_allows_completion_without_user_delivery(
     monkeypatch: pytest.MonkeyPatch,
     delivered: bool,
 ):
-    """The user only sees the result if the main agent sends it to them."""
+    """A completed turn can be saved successfully without sending an IM message.
+
+    Args:
+        monkeypatch: Pytest patch manager.
+        delivered: Whether the agent chooses to send a message.
+    """
     from astrbot.core.tools.message_tools import SendMessageToUserTool
 
     send_tool = SendMessageToUserTool()
@@ -711,6 +720,7 @@ async def test_background_wakeup_warns_when_result_is_not_sent_to_user(
     await wake_main_agent(
         (run_context).context.context,
         session_str=(run_context).context.event.unified_msg_origin,
+        source="background_task",
         user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
             background_task_result=json.dumps(
                 {
@@ -729,11 +739,7 @@ async def test_background_wakeup_warns_when_result_is_not_sent_to_user(
     )
 
     assert send_message.await_count == int(delivered)
-    warned = any(
-        "without user delivery" in call.args[0]
-        for call in logger.warning.call_args_list
-    )
-    assert warned is not delivered
+    logger.warning.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -826,6 +832,9 @@ async def test_background_execution_lifecycle(
         assert task.cancelled() == cancelled
         assert delivered.is_set() != cancelled
         assert wakeup.await_count == (0 if phase == "tool" else 1)
+        if wakeup.await_count:
+            assert wakeup.call_args.kwargs["source"] == "background_task"
+            assert wakeup.call_args.kwargs["source_id"] in results[0].content[0].text
         if phase == "failure":
             assert "tool failed" in wakeup.call_args.kwargs["user_prompt"]
         assert not registry._background_tasks

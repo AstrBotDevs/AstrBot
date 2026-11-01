@@ -1,12 +1,12 @@
-"""Run a main-agent turn triggered by a scheduled task or background completion."""
+"""Run a programmatically triggered main-agent turn for a target session."""
 
 import asyncio
 from dataclasses import replace
 
 from astrbot import logger
 from astrbot.core.agent.runners.base import AgentState
-from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.log import log_context
+from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent, WakeupSource
 from astrbot.core.platform.astr_message_event import event_context
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.platform_metadata import PlatformMetadata
@@ -24,6 +24,8 @@ async def wake_main_agent(
     *,
     session_str: str,
     user_prompt: str,
+    source: WakeupSource,
+    source_id: str | None = None,
     role: str = "member",
     stop_signal: asyncio.Event | None = None,
 ) -> None:
@@ -33,30 +35,41 @@ async def wake_main_agent(
         ctx: Session configuration and agent services.
         session_str: UMO whose current conversation supplies the existing context.
         user_prompt: Trigger instructions and data, exclusively for this user turn.
+        source: Trigger mechanism, independent of the target session's platform.
+        source_id: Cron job ID, background task ID, or invoking plugin ID.
         role: Initiating caller's resolved permission role.
         stop_signal: Optional cancellation signal shared with a background task.
 
     Raises:
         RuntimeError: If construction or execution fails.
-        ValueError: If the session or stored conversation history is invalid.
+        ValueError: If the source, target session, or stored history is invalid.
     """
     from astrbot.core.astr_main_agent import MainAgentBuildConfig, build_main_agent
 
     if stop_signal is not None and stop_signal.is_set():
         return
     session = MessageSession.from_str(session_str)
-    event = CronMessageEvent(
-        context=ctx,
-        session=session,
-        message=user_prompt,
-        message_type=session.message_type,
+    metadata = PlatformMetadata(
+        id=session.platform_id,
+        name="internal",
+        description="Agent wakeup target without an active platform adapter",
+        support_proactive_message=False,
+        support_streaming_message=False,
     )
     platform = ctx.get_platform_inst(session.platform_id)
     if platform is not None:
-        metadata = platform.meta()
-        if isinstance(metadata, PlatformMetadata):
-            event.platform_meta = metadata
-    event.role = role
+        platform_metadata = platform.meta()
+        if isinstance(platform_metadata, PlatformMetadata):
+            metadata = platform_metadata
+    event = AgentWakeupEvent(
+        context=ctx,
+        session=session,
+        platform_meta=metadata,
+        prompt=user_prompt,
+        source=source,
+        source_id=source_id,
+        role=role,
+    )
     if stop_signal is not None:
         event.set_extra("_background_stop_signal", stop_signal)
     stop_signal = active_event_registry.get_background_stop_signal(event)
@@ -116,7 +129,7 @@ async def wake_main_agent(
             if response is None:
                 logger.warning("Main-agent wakeup completed without a final response.")
             elif not event._has_send_oper:
-                logger.warning(
+                logger.debug(
                     "Main-agent wakeup completed without user delivery; "
                     "the result was saved to conversation history."
                 )

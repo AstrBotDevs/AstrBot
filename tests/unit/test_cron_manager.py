@@ -664,6 +664,38 @@ class TestRunJob:
 
 
 class TestRunActiveAgentJob:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("origin", ["tool", "api"])
+    async def test_job_supplies_its_wakeup_source(
+        self, cron_manager, sample_cron_job, mock_context, monkeypatch, origin
+    ):
+        """Keep job provenance separate from its delivery target and permissions.
+
+        Args:
+            cron_manager: Scheduler under test.
+            sample_cron_job: Job carrying the target conversation.
+            mock_context: Services resolving the caller's permissions.
+            monkeypatch: Pytest patch manager.
+            origin: Whether the task was created by an ordinary caller or the API.
+        """
+        wake = AsyncMock()
+        monkeypatch.setattr("astrbot.core.astr_agent_wakeup.wake_main_agent", wake)
+        cron_manager.ctx = mock_context
+        sample_cron_job.payload = {
+            "session": "target:GroupMessage:group-id",
+            "note": "Continue the scheduled task.",
+            "origin": origin,
+        }
+        await cron_manager._run_active_agent_job(
+            sample_cron_job, datetime(2026, 11, 1, tzinfo=timezone.utc)
+        )
+        kwargs = wake.await_args.kwargs
+        assert kwargs["session_str"] == "target:GroupMessage:group-id"
+        assert kwargs["source"] == "cron"
+        assert kwargs["source_id"] == sample_cron_job.job_id
+        assert kwargs["role"] == ("admin" if origin == "api" else "member")
+        assert "Continue the scheduled task." in kwargs["user_prompt"]
+
     """Tests for active agent cron job execution."""
 
     @pytest.mark.asyncio
@@ -745,6 +777,7 @@ class TestRunActiveAgentJob:
             await wake_main_agent(
                 cron_manager.ctx,
                 session_str="test:GroupMessage:group123",
+                source="cron",
                 user_prompt=PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
                     cron_job=json.dumps(
                         ({"cron_job": {"id": "job-1"}, "cron_payload": {}}).get(
@@ -850,6 +883,7 @@ class TestRunActiveAgentJob:
                 await wake_main_agent(
                     cron_manager.ctx,
                     session_str="test:FriendMessage:user123",
+                    source="cron",
                     user_prompt=PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
                         cron_job=json.dumps(
                             (
@@ -972,6 +1006,7 @@ class TestRunActiveAgentJob:
             await wake_main_agent(
                 cron_manager.ctx,
                 session_str="test:FriendMessage:user123",
+                source="cron",
                 user_prompt=PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
                     cron_job=json.dumps(
                         ({"cron_job": {"id": "job-1"}, "cron_payload": {}}).get(

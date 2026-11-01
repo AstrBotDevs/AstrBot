@@ -242,6 +242,7 @@ async def test_proactive_agent_uses_session_fallback_models(
             await wake_main_agent(
                 manager.ctx,
                 session_str=mock_event.unified_msg_origin,
+                source="cron",
                 user_prompt=PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
                     cron_job=json.dumps(
                         ({"cron_job": {"id": "job-1"}, "cron_payload": {}}).get(
@@ -258,6 +259,7 @@ async def test_proactive_agent_uses_session_fallback_models(
             await wake_main_agent(
                 wakeup_context.context.context,
                 session_str=wakeup_context.context.event.unified_msg_origin,
+                source="background_task",
                 user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
                     background_task_result=json.dumps(
                         {
@@ -351,6 +353,12 @@ async def test_proactive_agent_respects_runtime_and_safety_settings(
     mock_event.unified_msg_origin = "test:FriendMessage:user123"
     mock_event.role = "member"
 
+    mock_context.get_platform_inst.return_value = SimpleNamespace(
+        meta=lambda: PlatformMetadata(
+            id="test", name="test_platform", description="Target"
+        )
+    )
+
     with (
         patch.object(
             request_build,
@@ -384,6 +392,7 @@ async def test_proactive_agent_respects_runtime_and_safety_settings(
             await wake_main_agent(
                 manager.ctx,
                 session_str=mock_event.unified_msg_origin,
+                source="cron",
                 user_prompt=PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
                     cron_job=json.dumps(
                         ({"cron_job": {"id": "job-1"}, "cron_payload": {}}).get(
@@ -400,6 +409,7 @@ async def test_proactive_agent_respects_runtime_and_safety_settings(
             await wake_main_agent(
                 wakeup_context.context.context,
                 session_str=wakeup_context.context.event.unified_msg_origin,
+                source="background_task",
                 user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
                     background_task_result=json.dumps(
                         {
@@ -3785,8 +3795,15 @@ class TestApplySandboxTools:
 @pytest.mark.asyncio
 @pytest.mark.parametrize("entrypoint", ["chat", "cron", "background"])
 @pytest.mark.parametrize("allowed", [None, [], ["chosen"]])
+@pytest.mark.parametrize("supports_delivery", [False, True])
 async def test_all_triggers_share_persona_tools_and_structured_history(
-    entrypoint, allowed, mock_context, mock_provider, mock_event, mock_conversation
+    entrypoint,
+    allowed,
+    supports_delivery,
+    mock_context,
+    mock_provider,
+    mock_event,
+    mock_conversation,
 ):
     """Trigger adapters must preserve the same persona policy in the real builder."""
     import json
@@ -3819,7 +3836,11 @@ async def test_all_triggers_share_persona_tools_and_structured_history(
     conf = {"provider_settings": {"proactive_capability": {"add_cron_tools": False}}}
     mock_context.get_config.return_value = conf
     mock_event.unified_msg_origin = "test:FriendMessage:user123"
-    mock_event.platform_meta.support_proactive_message = False
+    mock_event.platform_meta.id = "test"
+    mock_event.platform_meta.support_proactive_message = supports_delivery
+    mock_context.get_platform_inst.return_value = SimpleNamespace(
+        meta=lambda: mock_event.platform_meta
+    )
     mock_event.role = "member"
     mock_event.get_extra.side_effect = {}.get
     runner = MagicMock(state=AgentState.DONE)
@@ -3852,6 +3873,7 @@ async def test_all_triggers_share_persona_tools_and_structured_history(
             await wake_main_agent(
                 mock_context,
                 session_str=mock_event.unified_msg_origin,
+                source="cron",
                 user_prompt=PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
                     cron_job=json.dumps(
                         ({"cron_job": {"id": "job"}}).get("cron_job", {}),
@@ -3866,6 +3888,7 @@ async def test_all_triggers_share_persona_tools_and_structured_history(
             await wake_main_agent(
                 wakeup_context.context.context,
                 session_str=wakeup_context.context.event.unified_msg_origin,
+                source="background_task",
                 user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
                     background_task_result=json.dumps(
                         {
@@ -3885,7 +3908,7 @@ async def test_all_triggers_share_persona_tools_and_structured_history(
     req = runner.reset.await_args.kwargs["request"]
     expected = {"chosen", "other"} if allowed is None else set(allowed)
     assert set(req.func_tool.names()) - {"send_message_to_user"} == expected
-    assert ("send_message_to_user" in req.func_tool.names()) == (entrypoint != "chat")
+    assert ("send_message_to_user" in req.func_tool.names()) == supports_delivery
     assert req.contexts == history
     assert "Shared persona" in req.system_prompt
 
@@ -4304,20 +4327,35 @@ async def test_wakeup_preserves_the_conversation_prefix(
             ),
         )
         with patch.object(ama, "build_main_agent", side_effect=build):
-            for user_prompt in (
-                PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
-                    cron_job='{"id":"job","run_started_at":"first"}'
+            for source, source_id, user_prompt in (
+                (
+                    "cron",
+                    "job",
+                    PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
+                        cron_job='{"id":"job","run_started_at":"first"}'
+                    ),
                 ),
-                PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
-                    cron_job='{"id":"job","run_started_at":"second"}'
+                (
+                    "cron",
+                    "job",
+                    PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
+                        cron_job='{"id":"job","run_started_at":"second"}'
+                    ),
                 ),
-                BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
-                    background_task_result='{"task_id":"task","result":"done"}'
+                (
+                    "background_task",
+                    "task",
+                    BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
+                        background_task_result='{"task_id":"task","result":"done"}'
+                    ),
                 ),
+                ("plugin", "example_plugin", "Continue processing the updated data."),
             ):
                 await wake_main_agent(
                     mock_context,
                     session_str=mock_event.unified_msg_origin,
+                    source=source,
+                    source_id=source_id,
                     user_prompt=user_prompt,
                 )
                 actual = built[-1]
@@ -4373,6 +4411,7 @@ async def test_wakeup_waits_for_the_existing_conversation_turn(mock_context, sto
                 wake_main_agent(
                     mock_context,
                     session_str=umo,
+                    source="plugin",
                     user_prompt="Triggered turn",
                     stop_signal=signal,
                 )
@@ -4386,4 +4425,11 @@ async def test_wakeup_waits_for_the_existing_conversation_turn(mock_context, sto
         await asyncio.wait_for(task, timeout=1)
         assert build.await_count == int(not stopped)
         assert persist.await_count == int(not stopped)
+        if not stopped:
+            event = build.await_args.kwargs["event"]
+            assert event.unified_msg_origin == umo
+            assert event.source == "plugin"
+            assert event.get_platform_name() == "internal"
+            assert not event.platform_meta.support_proactive_message
+            assert not event.platform_meta.support_streaming_message
     assert umo not in active_event_registry._events

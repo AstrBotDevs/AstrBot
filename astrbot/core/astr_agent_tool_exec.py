@@ -406,7 +406,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         Immediately yields a success response with a task_id, then runs
         the subagent asynchronously.  When the subagent finishes, a
-        ``CronMessageEvent`` is created so the main LLM can inform the
+        ``AgentWakeupEvent`` is created so the main LLM can inform the
         user of the result – the same pattern used by
         ``_execute_background`` for regular background tasks.
         """
@@ -478,6 +478,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         await wake_main_agent(
             ctx=run_context.context.context,
             session_str=event.unified_msg_origin,
+            source="background_task",
+            source_id=task_id,
             user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
                 background_task_result=json.dumps(
                     {
@@ -525,6 +527,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         await wake_main_agent(
             ctx=run_context.context.context,
             session_str=event.unified_msg_origin,
+            source="background_task",
+            source_id=task_id,
             user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
                 background_task_result=json.dumps(
                     {

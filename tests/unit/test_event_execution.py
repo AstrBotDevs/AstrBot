@@ -111,6 +111,8 @@ def test_event_scope_finishes_and_restores_context(event, frames, tmp_path, fail
         assert failure is None
     root = frames[-1]["span"]
     assert frames[-1]["trace"]["state"] == "completed"
+    assert frames[0]["trace"]["name"] == "AstrMessageEvent"
+    assert frames[0]["trace"]["attributes"]["astrbot.kind"] == "message"
     assert root["span_id"] == event.trace.span_id
     assert root["status"]["code"] == (2 if failure else 1)
     if failure:
@@ -249,7 +251,7 @@ async def test_scheduler_uses_event_scope(event, frames, monkeypatch, failure_at
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("trigger", ["cron", "background"])
+@pytest.mark.parametrize("trigger", ["cron", "background_task", "plugin"])
 @pytest.mark.parametrize(
     "failure_at",
     [
@@ -277,6 +279,11 @@ async def test_wakeup_uses_event_scope(frames, monkeypatch, failure_at, trigger)
 
     ctx = MagicMock()
     ctx.get_config.return_value = {"admins_id": [], "plugin_set": ["allowed"]}
+    ctx.get_platform_inst.return_value = SimpleNamespace(
+        meta=lambda: PlatformMetadata(
+            id="test", name="test-platform", description="Test"
+        )
+    )
     if failure_at == "config":
         ctx.get_config.side_effect = RuntimeError("config failed")
     manager = CronJobManager(MagicMock())
@@ -313,7 +320,9 @@ async def test_wakeup_uses_event_scope(frames, monkeypatch, failure_at, trigger)
             == kwargs["event"].trace.trace_id
         )
         assert _log_context.get().platform_id == "test"
-        assert _log_context.get().platform_type == "cron"
+        assert _log_context.get().platform_type == "test-platform"
+        assert kwargs["event"].source == trigger
+        assert kwargs["event"].source_id == "trigger-id"
         assert kwargs["event"].plugins_name == ["allowed"]
         if failure_at == "build":
             raise RuntimeError("build failed")
@@ -340,16 +349,21 @@ async def test_wakeup_uses_event_scope(frames, monkeypatch, failure_at, trigger)
     monkeypatch.setattr(astr_main_agent, "build_main_agent", build)
     save = AsyncMock(side_effect=persist)
     monkeypatch.setattr("astrbot.core.astr_agent_wakeup.persist_agent_history", save)
-    prompt = (
-        PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(cron_job='{"id":"test-job"}')
-        if trigger == "cron"
-        else BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
+    if trigger == "cron":
+        prompt = PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
+            cron_job='{"id":"test-job"}'
+        )
+    elif trigger == "background_task":
+        prompt = BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
             background_task_result='{"task_id":"test-task"}'
         )
-    )
+    else:
+        prompt = "Continue processing the plugin result."
     execution = wake_main_agent(
         manager.ctx,
         session_str="test:FriendMessage:cron-execution-test",
+        source=trigger,
+        source_id="trigger-id",
         user_prompt=prompt,
     )
     if failure_at:
@@ -361,6 +375,13 @@ async def test_wakeup_uses_event_scope(frames, monkeypatch, failure_at, trigger)
         await execution
     assert save.await_count == int(failure_at in (None, "history"))
     final = frames[-1]
+    for frame in (frames[0], final):
+        attributes = frame["trace"]["attributes"]
+        assert frame["trace"]["name"] == "AgentWakeupEvent"
+        assert attributes["astrbot.kind"] == "agent_wakeup"
+        assert attributes["astrbot.source"] == trigger
+        assert attributes["astrbot.source_id"] == "trigger-id"
+        assert attributes["astrbot.platform_name"] == "test-platform"
     assert final["trace"]["state"] == "completed"
     assert final["span"]["span_id"] == final["trace"]["root_span_id"]
     assert final["span"]["status"]["code"] == (2 if failure_at else 1)

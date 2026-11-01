@@ -165,6 +165,7 @@ async def test_wakeup_uses_same_compression_settings_as_chat(
             await wake_main_agent(
                 manager.ctx,
                 session_str="test:FriendMessage:user123",
+                source="cron",
                 user_prompt=PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
                     cron_job=json.dumps(
                         ({"cron_job": {"id": "job-1"}, "cron_payload": {}}).get(
@@ -198,6 +199,7 @@ async def test_wakeup_uses_same_compression_settings_as_chat(
             await wake_main_agent(
                 wakeup_context.context.context,
                 session_str=wakeup_context.context.event.unified_msg_origin,
+                source="background_task",
                 user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
                     background_task_result=json.dumps(
                         {

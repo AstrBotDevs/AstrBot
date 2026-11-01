@@ -470,6 +470,8 @@ class CronJobManager:
         await wake_main_agent(
             self.ctx,
             session_str=session_str,
+            source="cron",
+            source_id=job.job_id,
             user_prompt=PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
                 cron_job=json.dumps(extras["cron_job"], ensure_ascii=False)
             ),
