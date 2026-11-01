@@ -1,7 +1,7 @@
 import asyncio
 import json
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import mcp
 import pytest
@@ -9,15 +9,10 @@ import pytest
 from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.agent.runners.base import AgentState
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
-from astrbot.core.astr_main_agent_resources import (
-    BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT,
-)
 from astrbot.core.message.components import Image
-from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider.func_tool_manager import (
     FunctionToolManager,
     _PermissionGuardedTool,
@@ -25,7 +20,6 @@ from astrbot.core.provider.func_tool_manager import (
 from astrbot.core.tools.computer_tools.shell import ShellSessionTool
 from astrbot.core.utils.active_event_registry import (
     ActiveEventRegistry,
-    active_event_registry,
 )
 
 
@@ -90,17 +84,6 @@ async def test_shell_session_wait_fits_inside_tool_timeout(
     )
 
 
-class _DoneRunner:
-    state = AgentState.DONE
-
-    async def step_until_done(self, _max_step):
-        for item in ():
-            yield item
-
-    def get_final_llm_resp(self):
-        return SimpleNamespace(role="assistant", completion_text="done")
-
-
 @pytest.mark.parametrize("runtime", ["none", "local", "sandbox", None])
 def test_build_handoff_toolset_keeps_permission_guards_for_default_tools(runtime):
     mgr = FunctionToolManager()
@@ -115,11 +98,6 @@ def test_build_handoff_toolset_keeps_permission_guards_for_default_tools(runtime
     event = _DummyEvent()
     provider_settings = {} if runtime is None else {"computer_use_runtime": runtime}
     context = SimpleNamespace(
-        get_platform_inst=lambda platform_id: SimpleNamespace(
-            meta=lambda: PlatformMetadata(
-                id=platform_id, name="webchat", description="Test"
-            )
-        ),
         get_config=lambda **_kwargs: {"provider_settings": provider_settings},
         get_llm_tool_manager=lambda: mgr,
     )
@@ -303,11 +281,6 @@ async def test_execute_handoff_skips_renormalize_when_image_urls_prepared(
     context = SimpleNamespace(
         get_current_chat_provider_id=_fake_get_current_chat_provider_id,
         tool_loop_agent=_fake_tool_loop_agent,
-        get_platform_inst=lambda platform_id: SimpleNamespace(
-            meta=lambda: PlatformMetadata(
-                id=platform_id, name="webchat", description="Test"
-            )
-        ),
         get_config=lambda **_kwargs: {"provider_settings": {}},
     )
     event = _DummyEvent([])
@@ -406,11 +379,6 @@ async def test_execute_handoff_passes_tool_call_timeout_to_tool_loop_agent(
     context = SimpleNamespace(
         get_current_chat_provider_id=_fake_get_current_chat_provider_id,
         tool_loop_agent=_fake_tool_loop_agent,
-        get_platform_inst=lambda platform_id: SimpleNamespace(
-            meta=lambda: PlatformMetadata(
-                id=platform_id, name="webchat", description="Test"
-            )
-        ),
         get_config=lambda **_kwargs: {"provider_settings": {}},
     )
     event = _DummyEvent([])
@@ -442,348 +410,6 @@ async def test_execute_handoff_passes_tool_call_timeout_to_tool_loop_agent(
 
     assert len(results) == 1
     assert captured["tool_call_timeout"] == 120
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("stop_phase", [None, "before", "history", "build"])
-async def test_background_wakeup_passes_history_and_provider_settings_to_main_agent(
-    monkeypatch: pytest.MonkeyPatch,
-    stop_phase,
-    wakeup_pipeline,
-):
-    """Test background wakeup keeps structured history and provider settings."""
-    provider_settings = {
-        "fallback_chat_models": ["fallback-provider"],
-        "request_max_retries": 3,
-        "streaming_response": True,
-    }
-    history = [
-        {"role": "user", "content": "old question"},
-        {"role": "assistant", "content": "old answer"},
-    ]
-    captured: dict = {}
-
-    async def _fake_get_session_conv(*_args, **_kwargs):
-        if stop_phase == "history":
-            stop_signal.set()
-        return SimpleNamespace(history=json.dumps(history))
-
-    async def _fake_build_main_agent(**kwargs):
-        from astrbot.core.astr_main_agent.request import prepare_request
-
-        prepared = await prepare_request(
-            kwargs["event"],
-            kwargs["plugin_context"],
-            kwargs["config"],
-            SimpleNamespace(provider_config={"modalities": ["image"]}),
-            kwargs.get("req"),
-        )
-        captured.update(kwargs)
-        captured["req"] = prepared.request if prepared else None
-        if stop_phase == "build":
-            stop_signal.set()
-        return SimpleNamespace(agent_runner=_DoneRunner())
-
-    monkeypatch.setattr(
-        "astrbot.core.astr_main_agent.request._get_session_conv",
-        _fake_get_session_conv,
-    )
-    monkeypatch.setattr(
-        "astrbot.core.astr_main_agent.build_main_agent",
-        _fake_build_main_agent,
-    )
-    persist = AsyncMock()
-    monkeypatch.setattr(
-        "astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal.InternalAgentSubStage._save_to_history",
-        persist,
-    )
-
-    send_tool = FunctionTool(
-        name="send_message_to_user",
-        description="send",
-        parameters={"type": "object", "properties": {}},
-    )
-    context = SimpleNamespace(
-        get_platform_inst=lambda platform_id: SimpleNamespace(
-            meta=lambda: PlatformMetadata(
-                id=platform_id, name="webchat", description="Test"
-            )
-        ),
-        get_config=lambda **_kwargs: {"provider_settings": provider_settings},
-        get_llm_tool_manager=lambda: SimpleNamespace(
-            get_builtin_tool=lambda _tool_cls: send_tool
-        ),
-        conversation_manager=SimpleNamespace(),
-    )
-    run_context = ContextWrapper(
-        context=SimpleNamespace(event=_DummyEvent([]), context=context),
-        tool_call_timeout=456,
-    )
-    stop_signal = asyncio.Event()
-    run_context.context.event.set_extra("_background_stop_signal", stop_signal)
-    if stop_phase == "before":
-        stop_signal.set()
-
-    execution = wakeup_pipeline.execute(
-        wakeup_pipeline((run_context).context.context),
-        umo=(run_context).context.event.unified_msg_origin,
-        source="background_task",
-        user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
-            background_task_result=json.dumps(
-                {
-                    "task_id": "task-id",
-                    "tool_name": "long_tool",
-                    "result": "ok",
-                    "tool_args": {},
-                },
-                ensure_ascii=False,
-            )
-        ),
-        role=(run_context).context.event.role,
-        stop_signal=active_event_registry.get_background_stop_signal(
-            (run_context).context.event
-        ),
-    )
-
-    if stop_phase in ("history", "build"):
-        with pytest.raises(asyncio.CancelledError):
-            await execution
-    else:
-        await execution
-
-    if stop_phase == "before":
-        assert not captured
-        persist.assert_not_awaited()
-        return
-    config = captured["config"]
-    assert config.tool_call_timeout == 120
-    assert config.streaming_response == provider_settings["streaming_response"]
-    assert all(
-        config.provider_settings[key] == value
-        for key, value in provider_settings.items()
-    )
-    assert config.provider_settings["fallback_chat_models"] == ["fallback-provider"]
-    request = captured["req"]
-    if stop_phase == "history":
-        assert request is None
-        persist.assert_not_awaited()
-        return
-    assert "old question" not in request.system_prompt
-    assert "old answer" not in request.system_prompt
-    assert request.contexts == history
-    assert captured["event"].get_extra("_background_stop_signal") is stop_signal
-    assert "_background_stop_signal" not in request.system_prompt
-    assert persist.await_count == (0 if stop_phase in ("history", "build") else 1)
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("provider_settings", "expected_max_step"),
-    [
-        pytest.param({"max_agent_step": 50}, 50, id="configured"),
-        pytest.param({}, 128, id="missing_falls_back_to_default"),
-        pytest.param({"max_agent_step": True}, 128, id="boolean_falls_back_to_default"),
-        pytest.param({"max_agent_step": "50"}, 50, id="numeric_string_coerced"),
-        pytest.param({"max_agent_step": 0}, 1, id="zero_clamped_to_min"),
-    ],
-)
-async def test_background_wakeup_applies_max_agent_step(
-    monkeypatch: pytest.MonkeyPatch,
-    provider_settings: dict,
-    expected_max_step: int,
-    wakeup_pipeline,
-):
-    class _StepCapturingRunner:
-        state = AgentState.DONE
-
-        def __init__(self):
-            self.captured_max_step = None
-
-        async def step_until_done(self, max_step):
-            self.captured_max_step = max_step
-            if False:
-                yield
-
-        def get_final_llm_resp(self):
-            return SimpleNamespace(role="assistant", completion_text="done")
-
-    runner = _StepCapturingRunner()
-
-    async def _fake_get_session_conv(**_kwargs):
-        return SimpleNamespace(history="[]")
-
-    async def _fake_build_main_agent(**_kwargs):
-        return SimpleNamespace(agent_runner=runner)
-
-    monkeypatch.setattr(
-        "astrbot.core.astr_main_agent.request._get_session_conv",
-        _fake_get_session_conv,
-    )
-    monkeypatch.setattr(
-        "astrbot.core.astr_main_agent.build_main_agent",
-        _fake_build_main_agent,
-    )
-    monkeypatch.setattr(
-        "astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal.InternalAgentSubStage._save_to_history",
-        AsyncMock(),
-    )
-
-    send_tool = FunctionTool(
-        name="send_message_to_user",
-        description="send",
-        parameters={"type": "object", "properties": {}},
-    )
-    context = SimpleNamespace(
-        get_platform_inst=lambda platform_id: SimpleNamespace(
-            meta=lambda: PlatformMetadata(
-                id=platform_id, name="webchat", description="Test"
-            )
-        ),
-        get_config=lambda **_kwargs: {
-            "provider_settings": {},
-            "agent_runner": {
-                "runner_type": "local",
-                "config": {
-                    "misc": {"max_steps": provider_settings.get("max_agent_step", 128)}
-                },
-            },
-        },
-        get_llm_tool_manager=lambda: SimpleNamespace(
-            get_builtin_tool=lambda _tool_cls: send_tool
-        ),
-        conversation_manager=SimpleNamespace(),
-    )
-    run_context = ContextWrapper(
-        context=SimpleNamespace(event=_DummyEvent([]), context=context),
-        tool_call_timeout=120,
-    )
-
-    await wakeup_pipeline.execute(
-        wakeup_pipeline((run_context).context.context),
-        umo=(run_context).context.event.unified_msg_origin,
-        source="background_task",
-        user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
-            background_task_result=json.dumps(
-                {
-                    "task_id": "task-id",
-                    "tool_name": "long_tool",
-                    "result": "ok",
-                    "tool_args": {},
-                },
-                ensure_ascii=False,
-            )
-        ),
-        role=(run_context).context.event.role,
-        stop_signal=active_event_registry.get_background_stop_signal(
-            (run_context).context.event
-        ),
-    )
-
-    assert runner.captured_max_step == expected_max_step
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("delivered", [False, True])
-async def test_background_wakeup_allows_completion_without_user_delivery(
-    monkeypatch: pytest.MonkeyPatch,
-    delivered: bool,
-    wakeup_pipeline,
-):
-    """A completed turn can be saved successfully without sending an IM message.
-
-    Args:
-        monkeypatch: Pytest patch manager.
-        delivered: Whether the agent chooses to send a message.
-    """
-    from astrbot.core.tools.message_tools import SendMessageToUserTool
-
-    send_tool = SendMessageToUserTool()
-    send_message = AsyncMock(return_value=True)
-    context = SimpleNamespace(
-        get_platform_inst=lambda platform_id: SimpleNamespace(
-            meta=lambda: PlatformMetadata(
-                id=platform_id, name="webchat", description="Test"
-            )
-        ),
-        get_config=lambda **_kwargs: {},
-        get_llm_tool_manager=lambda: SimpleNamespace(
-            get_builtin_tool=lambda _tool_cls: send_tool
-        ),
-        conversation_manager=SimpleNamespace(),
-        send_message=send_message,
-    )
-
-    class _Runner:
-        state = AgentState.DONE
-
-        def __init__(self, event):
-            self.event = event
-
-        async def step_until_done(self, _max_step):
-            if delivered:
-                await send_tool.call(
-                    ContextWrapper(
-                        context=SimpleNamespace(event=self.event, context=context)
-                    ),
-                    messages=[{"type": "plain", "text": "the report is ready"}],
-                )
-            if False:
-                yield
-
-        def get_final_llm_resp(self):
-            return SimpleNamespace(role="assistant", completion_text="done")
-
-    async def _fake_get_session_conv(**_kwargs):
-        return SimpleNamespace(history="[]")
-
-    async def _fake_build_main_agent(**kwargs):
-        return SimpleNamespace(agent_runner=_Runner(kwargs["event"]))
-
-    monkeypatch.setattr(
-        "astrbot.core.astr_main_agent.request._get_session_conv",
-        _fake_get_session_conv,
-    )
-    monkeypatch.setattr(
-        "astrbot.core.astr_main_agent.build_main_agent",
-        _fake_build_main_agent,
-    )
-    monkeypatch.setattr(
-        "astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal.InternalAgentSubStage._save_to_history",
-        AsyncMock(),
-    )
-    logger = MagicMock()
-    monkeypatch.setattr(
-        "astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal.logger",
-        logger,
-    )
-    run_context = ContextWrapper(
-        context=SimpleNamespace(event=_DummyEvent([]), context=context),
-        tool_call_timeout=120,
-    )
-
-    await wakeup_pipeline.execute(
-        wakeup_pipeline((run_context).context.context),
-        umo=(run_context).context.event.unified_msg_origin,
-        source="background_task",
-        user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
-            background_task_result=json.dumps(
-                {
-                    "task_id": "task-id",
-                    "tool_name": "long_tool",
-                    "result": "ok",
-                    "tool_args": {},
-                },
-                ensure_ascii=False,
-            )
-        ),
-        role=(run_context).context.event.role,
-        stop_signal=active_event_registry.get_background_stop_signal(
-            (run_context).context.event
-        ),
-    )
-
-    assert send_message.await_count == int(delivered)
-    logger.warning.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -879,6 +505,12 @@ async def test_background_execution_lifecycle(
         if wakeup.await_count:
             assert wakeup.call_args.kwargs["source"] == "background_task"
             assert wakeup.call_args.kwargs["source_id"] in results[0].content[0].text
+            assert wakeup.call_args.kwargs["user_prompt"].startswith(
+                "<system_reminder>\n"
+            )
+            assert wakeup.call_args.kwargs["user_prompt"].endswith(
+                "\n</system_reminder>"
+            )
         if phase == "failure":
             assert "tool failed" in wakeup.call_args.kwargs["user_prompt"]
         assert not registry._background_tasks

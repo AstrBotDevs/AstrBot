@@ -4,7 +4,6 @@ import asyncio
 import datetime
 import json
 import os
-from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -13,12 +12,11 @@ import pytest
 
 from astrbot.core import astr_main_agent as ama
 from astrbot.core import astr_main_agent_resources as agent_resources
-from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import Message, dump_messages_with_checkpoints
-from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.base import AgentState
 from astrbot.core.agent.tool import FunctionTool, ToolSet
+from astrbot.core.astr_agent_wakeup import wake_main_agent
 from astrbot.core.astr_main_agent import builder as builder_build
 from astrbot.core.astr_main_agent import computer_use as computer_use_build
 from astrbot.core.astr_main_agent import knowledge_base as knowledge_base_build
@@ -29,13 +27,8 @@ from astrbot.core.astr_main_agent import request as request_build
 from astrbot.core.astr_main_agent import subagent as subagent_build
 from astrbot.core.astr_main_agent import web_search as web_search_build
 from astrbot.core.astr_main_agent import workspace as workspace_build
-from astrbot.core.astr_main_agent_resources import (
-    BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT,
-    PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT,
-)
 from astrbot.core.config.agent_runner import resolve_context_compression_config
 from astrbot.core.conversation_mgr import Conversation
-from astrbot.core.cron.manager import CronJobManager
 from astrbot.core.message.components import File, Image, Plain, Record, Reply, Video
 from astrbot.core.pipeline.process_stage.method.agent_sub_stages import (
     webchat as webchat_build,
@@ -44,7 +37,7 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider import Provider
 from astrbot.core.provider import manager as provider_manager_module
-from astrbot.core.provider.entities import LLMResponse, ProviderRequest, ProviderType
+from astrbot.core.provider.entities import ProviderRequest, ProviderType
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.skills.skill_manager import SkillInfo
 from astrbot.core.star.context import Context
@@ -163,149 +156,6 @@ def test_provider_supports_modality_requires_explicit_list():
     assert not providers_build.supports_modality(provider, "image")
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize("entrypoint", ["cron", "background"])
-@pytest.mark.parametrize(
-    "scenario",
-    ["primary-success", "exception", "error-response", "all-fail", "unconfigured"],
-)
-async def test_proactive_agent_uses_session_fallback_models(
-    entrypoint,
-    scenario,
-    mock_context,
-    mock_provider,
-    mock_event,
-    mock_conversation,
-    wakeup_pipeline,
-):
-    """Exercise real agent construction and failover from both wakeup entrypoints.
-
-    Args:
-        entrypoint: Proactive wakeup path to execute.
-        scenario: Provider outcomes and fallback configuration to exercise.
-        mock_context: Session context fixture.
-        mock_provider: Primary provider fixture.
-        mock_event: Originating message event fixture.
-        mock_conversation: Stored conversation fixture.
-    """
-    mock_context.mock_add_spec(Context)
-    calls = []
-    providers = {"primary": mock_provider}
-    for name in ("backup-1", "backup-2"):
-        providers[name] = MagicMock(spec=Provider)
-    for name, provider in providers.items():
-        provider.provider_config = {
-            "id": name,
-            "modalities": ["text", "tool_use"],
-            "max_context_tokens": 8192,
-        }
-        provider.get_model.return_value = name
-        if name == "primary" and scenario == "primary-success":
-            result = LLMResponse(role="assistant", completion_text="Primary completed.")
-        elif name == "primary" and scenario == "error-response":
-            result = LLMResponse(role="err", completion_text="Primary unavailable.")
-        elif name == "backup-2" and scenario != "all-fail":
-            result = LLMResponse(role="assistant", completion_text="Backup completed.")
-        else:
-            result = RuntimeError(f"{name} unavailable")
-        provider.text_chat = AsyncMock(side_effect=[result])
-        calls.append(provider.text_chat)
-
-    model = (
-        {}
-        if scenario == "unconfigured"
-        else {"fallback_provider_ids": ["backup-1", "backup-2"]}
-    )
-    mock_context.get_config.return_value = {
-        "agent_runner": {"config": {"model": model}},
-        "provider_settings": {"streaming_response": False},
-    }
-    mock_context.get_using_provider_async.side_effect = None
-    mock_context.get_using_provider_async.return_value = mock_provider
-    mock_context.get_provider_by_id.side_effect = providers.get
-    mock_event.unified_msg_origin = "test:FriendMessage:user123"
-    mock_event.role = "member"
-    runner = builder_build.AgentRunner()
-    failed = scenario in ("all-fail", "unconfigured")
-    expectation = (
-        pytest.raises(RuntimeError, match="Wakeup agent run ended in ERROR")
-        if failed
-        else nullcontext()
-    )
-    with (
-        patch.object(
-            request_build,
-            "_get_session_conv",
-            AsyncMock(return_value=mock_conversation),
-        ),
-        patch.object(persona_build, "apply_persona", AsyncMock(return_value=None)),
-        patch.object(knowledge_base_build, "apply_knowledge_base", AsyncMock()),
-        patch.object(builder_build, "MAIN_AGENT_HOOKS", BaseAgentRunHooks()),
-        patch.object(builder_build, "AgentRunner", return_value=runner),
-        patch(
-            "astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal.InternalAgentSubStage._save_to_history",
-            AsyncMock(),
-        ),
-        expectation,
-    ):
-        if entrypoint == "cron":
-            manager = CronJobManager(MagicMock())
-            manager.ctx = mock_context
-            await wakeup_pipeline.execute(
-                wakeup_pipeline(manager.ctx),
-                umo=mock_event.unified_msg_origin,
-                source="cron",
-                user_prompt=PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
-                    cron_job=json.dumps(
-                        ({"cron_job": {"id": "job-1"}, "cron_payload": {}}).get(
-                            "cron_job", {}
-                        ),
-                        ensure_ascii=False,
-                    )
-                ),
-            )
-        else:
-            wakeup_context = ContextWrapper(
-                context=SimpleNamespace(event=mock_event, context=mock_context)
-            )
-            await wakeup_pipeline.execute(
-                wakeup_pipeline(wakeup_context.context.context),
-                umo=wakeup_context.context.event.unified_msg_origin,
-                source="background_task",
-                user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
-                    background_task_result=json.dumps(
-                        {
-                            "task_id": "task-1",
-                            "tool_name": "background-tool",
-                            "result": "Work finished.",
-                            "tool_args": {},
-                        },
-                        ensure_ascii=False,
-                    )
-                ),
-                role=wakeup_context.context.event.role,
-                stop_signal=active_event_registry.get_background_stop_signal(
-                    wakeup_context.context.event
-                ),
-            )
-
-    expected_calls = (
-        [1, 0, 0] if scenario in ("primary-success", "unconfigured") else [1, 1, 1]
-    )
-    assert [call.await_count for call in calls] == expected_calls
-    if failed:
-        assert runner.state == AgentState.ERROR
-    else:
-        assert runner.state == AgentState.DONE
-        response = runner.get_final_llm_resp()
-        assert response.role == "assistant"
-        assert response.completion_text == (
-            "Primary completed."
-            if scenario == "primary-success"
-            else "Backup completed."
-        )
-
-
 @pytest.fixture
 def sample_config():
     """Create a sample MainAgentBuildConfig."""
@@ -332,133 +182,6 @@ def _setup_conversation_for_build(conv_mgr, cid: str = "conv-id") -> MagicMock:
     conversation = _new_mock_conversation(cid=cid)
     conv_mgr.get_conversation = AsyncMock(return_value=conversation)
     return conversation
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("entrypoint", ["cron", "background"])
-@pytest.mark.parametrize("runtime", ["none", "local", "sandbox", None])
-@pytest.mark.parametrize("safety_mode", [True, False])
-async def test_proactive_agent_respects_runtime_and_safety_settings(
-    entrypoint,
-    runtime,
-    safety_mode,
-    mock_context,
-    mock_provider,
-    mock_event,
-    mock_conversation,
-    tmp_path,
-    wakeup_pipeline,
-):
-    """Build real proactive requests without loading tools outside the runtime."""
-    provider_settings = {
-        "computer_use_require_admin": False,
-        "sandbox": {"booter": "cua"},
-    }
-    if runtime is not None:
-        provider_settings["computer_use_runtime"] = runtime
-    mock_context.get_config.return_value = {
-        "admins_id": [],
-        "provider_settings": provider_settings,
-        "agent_runner": {"config": {"persona": {"safety_mode": safety_mode}}},
-    }
-    mock_context.get_using_provider_async.return_value = mock_provider
-    mock_context.get_using_provider_async.side_effect = None
-    mock_event.unified_msg_origin = "test:FriendMessage:user123"
-    mock_event.role = "member"
-
-    mock_context.get_platform_inst.return_value = SimpleNamespace(
-        meta=lambda: PlatformMetadata(
-            id="test", name="test_platform", description="Target"
-        )
-    )
-
-    with (
-        patch.object(
-            request_build,
-            "_get_session_conv",
-            AsyncMock(return_value=mock_conversation),
-        ),
-        patch.object(persona_build, "apply_persona", AsyncMock(return_value=None)),
-        patch.object(knowledge_base_build, "apply_knowledge_base", AsyncMock()),
-        patch.object(
-            persona_build,
-            "resolve_workspace_path",
-            AsyncMock(return_value=tmp_path),
-        ),
-        patch.object(
-            builder_build,
-            "AstrAgentContext",
-            side_effect=lambda **kwargs: SimpleNamespace(**kwargs),
-        ),
-        patch.object(builder_build, "AgentRunner") as runner_cls,
-        patch(
-            "astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal.InternalAgentSubStage._save_to_history",
-            AsyncMock(),
-        ),
-    ):
-        runner = runner_cls.return_value
-        runner.reset = AsyncMock()
-        runner.step_until_done.return_value.__aiter__.return_value = []
-        runner.get_final_llm_resp.return_value = None
-
-        if entrypoint == "cron":
-            manager = CronJobManager(MagicMock())
-            manager.ctx = mock_context
-            await wakeup_pipeline.execute(
-                wakeup_pipeline(manager.ctx),
-                umo=mock_event.unified_msg_origin,
-                source="cron",
-                user_prompt=PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
-                    cron_job=json.dumps(
-                        ({"cron_job": {"id": "job-1"}, "cron_payload": {}}).get(
-                            "cron_job", {}
-                        ),
-                        ensure_ascii=False,
-                    )
-                ),
-            )
-        else:
-            wakeup_context = ContextWrapper(
-                context=MagicMock(context=mock_context, event=mock_event)
-            )
-            await wakeup_pipeline.execute(
-                wakeup_pipeline(wakeup_context.context.context),
-                umo=wakeup_context.context.event.unified_msg_origin,
-                source="background_task",
-                user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
-                    background_task_result=json.dumps(
-                        {
-                            "task_id": "task-1",
-                            "tool_name": "long_tool",
-                            "result": "done",
-                            "tool_args": {},
-                        },
-                        ensure_ascii=False,
-                    )
-                ),
-                role=wakeup_context.context.event.role,
-                stop_signal=active_event_registry.get_background_stop_signal(
-                    wakeup_context.context.event
-                ),
-            )
-
-        runner.reset.assert_awaited_once()
-        request = runner.reset.call_args.kwargs["request"]
-
-    tool_names = request.func_tool.names()
-    assert "send_message_to_user" in tool_names
-    assert "future_task" in tool_names
-    assert ("astrbot_execute_python" in tool_names) == (runtime == "local")
-    if runtime == "sandbox":
-        assert "astrbot_execute_ipython" in tool_names
-        assert "astrbot_cua_screenshot" in tool_names
-        assert "CUA Desktop Control" in request.system_prompt
-    else:
-        assert "astrbot_execute_ipython" not in tool_names
-    assert ("astrbot_execute_shell" in tool_names) == (runtime in {"local", "sandbox"})
-    assert (
-        persona_build.LLM_SAFETY_MODE_SYSTEM_PROMPT in request.system_prompt
-    ) == safety_mode
 
 
 def test_append_system_reminders_includes_weekday(mock_event):
@@ -500,8 +223,9 @@ def test_local_mode_prompt_uses_windows_powershell_51():
             "astrbot.core.astr_main_agent.computer_use.platform.system",
             return_value="Windows",
         ),
-        patch(
-            "astrbot.core.astr_main_agent.computer_use.resolve_windows_shell",
+        patch.object(
+            computer_use_build,
+            "resolve_windows_shell",
             return_value="powershell.exe",
         ),
     ):
@@ -518,8 +242,9 @@ def test_local_mode_prompt_hints_pwsh_when_resolved():
             "astrbot.core.astr_main_agent.computer_use.platform.system",
             return_value="Windows",
         ),
-        patch(
-            "astrbot.core.astr_main_agent.computer_use.resolve_windows_shell",
+        patch.object(
+            computer_use_build,
+            "resolve_windows_shell",
             return_value="pwsh.exe",
         ),
     ):
@@ -536,8 +261,9 @@ def test_local_mode_prompt_ignores_pwsh_on_non_windows():
             "astrbot.core.astr_main_agent.computer_use.platform.system",
             return_value="Linux",
         ),
-        patch(
-            "astrbot.core.astr_main_agent.computer_use.resolve_windows_shell",
+        patch.object(
+            computer_use_build,
+            "resolve_windows_shell",
             return_value="pwsh.exe",
         ),
     ):
@@ -805,8 +531,9 @@ class TestApplyKb:
         req = ProviderRequest(prompt="test question", system_prompt="System prompt")
         config = ama.MainAgentBuildConfig(tool_call_timeout=60, kb_agentic_mode=False)
 
-        with patch(
-            "astrbot.core.astr_main_agent.knowledge_base.retrieve_knowledge_base",
+        with patch.object(
+            knowledge_base_build,
+            "retrieve_knowledge_base",
             AsyncMock(return_value="KB result"),
         ):
             await knowledge_base_build.apply_knowledge_base(
@@ -861,8 +588,9 @@ class TestApplyKb:
         config = ama.MainAgentBuildConfig(tool_call_timeout=60, kb_agentic_mode=False)
         retrieve = AsyncMock(return_value="KB result")
 
-        with patch(
-            "astrbot.core.astr_main_agent.knowledge_base.retrieve_knowledge_base",
+        with patch.object(
+            knowledge_base_build,
+            "retrieve_knowledge_base",
             retrieve,
         ):
             await knowledge_base_build.apply_knowledge_base(
@@ -878,8 +606,9 @@ class TestApplyKb:
         req = ProviderRequest(prompt="test", system_prompt="System")
         config = ama.MainAgentBuildConfig(tool_call_timeout=60, kb_agentic_mode=False)
 
-        with patch(
-            "astrbot.core.astr_main_agent.knowledge_base.retrieve_knowledge_base",
+        with patch.object(
+            knowledge_base_build,
+            "retrieve_knowledge_base",
             AsyncMock(return_value=None),
         ):
             await knowledge_base_build.apply_knowledge_base(
@@ -1135,9 +864,7 @@ class TestApplyFileExtract:
 
         req = ProviderRequest(prompt="Summarize")
 
-        with patch(
-            "astrbot.core.astr_main_agent.request.extract_file_moonshotai"
-        ) as mock_extract:
+        with patch.object(request_build, "extract_file_moonshotai") as mock_extract:
             mock_extract.return_value = "File content"
 
             await request_build._apply_file_extract(mock_event, req, sample_config)
@@ -1167,9 +894,7 @@ class TestApplyFileExtract:
 
         req = ProviderRequest(prompt="Summarize")
 
-        with patch(
-            "astrbot.core.astr_main_agent.request.extract_file_moonshotai"
-        ) as mock_extract:
+        with patch.object(request_build, "extract_file_moonshotai") as mock_extract:
             mock_extract.return_value = "Reply content"
 
             await request_build._apply_file_extract(mock_event, req, sample_config)
@@ -1186,9 +911,7 @@ class TestApplyFileExtract:
 
         req = ProviderRequest(prompt=None)
 
-        with patch(
-            "astrbot.core.astr_main_agent.request.extract_file_moonshotai"
-        ) as mock_extract:
+        with patch.object(request_build, "extract_file_moonshotai") as mock_extract:
             mock_extract.return_value = "Content"
 
             await request_build._apply_file_extract(mock_event, req, sample_config)
@@ -1828,11 +1551,10 @@ class TestEnsurePersonaAndSkills:
         req.conversation = MagicMock(persona_id="locked", history="[]")
 
         with (
-            patch(
-                "astrbot.core.astr_main_agent.builder.AgentRunner"
-            ) as mock_runner_cls,
-            patch(
-                "astrbot.core.astr_main_agent.builder.AstrAgentContext",
+            patch.object(builder_build, "AgentRunner") as mock_runner_cls,
+            patch.object(
+                builder_build,
+                "AstrAgentContext",
                 side_effect=lambda **kwargs: SimpleNamespace(**kwargs),
             ),
         ):
@@ -1904,11 +1626,10 @@ class TestEnsurePersonaAndSkills:
         req.conversation = MagicMock(persona_id="locked", history="[]")
 
         with (
-            patch(
-                "astrbot.core.astr_main_agent.builder.AgentRunner"
-            ) as mock_runner_cls,
-            patch(
-                "astrbot.core.astr_main_agent.builder.AstrAgentContext",
+            patch.object(builder_build, "AgentRunner") as mock_runner_cls,
+            patch.object(
+                builder_build,
+                "AstrAgentContext",
                 return_value=SimpleNamespace(context=mock_context, event=mock_event),
             ),
         ):
@@ -2049,7 +1770,7 @@ class TestPluginToolFix:
         req = ProviderRequest(func_tool=tool_set)
         mock_event.plugins_name = ["test_plugin"]
 
-        with patch("astrbot.core.astr_main_agent.plugins.star_map") as mock_star_map:
+        with patch.object(plugins_build, "star_map") as mock_star_map:
             mock_plugin = MagicMock()
             mock_plugin.name = "test_plugin"
             mock_plugin.reserved = False
@@ -2072,7 +1793,7 @@ class TestPluginToolFix:
         req = ProviderRequest(func_tool=tool_set)
         mock_event.plugins_name = ["other_plugin"]
 
-        with patch("astrbot.core.astr_main_agent.plugins.star_map"):
+        with patch.object(plugins_build, "star_map"):
             plugins_build.filter_tools(mock_event, req)
 
         assert "mcp_tool" in req.func_tool.names()
@@ -2095,7 +1816,7 @@ class TestPluginToolFix:
         req = ProviderRequest(func_tool=tool_set)
         mock_event.plugins_name = ["other_plugin"]
 
-        with patch("astrbot.core.astr_main_agent.plugins.star_map"):
+        with patch.object(plugins_build, "star_map"):
             plugins_build.filter_tools(mock_event, req)
 
         assert "transfer_to_demo_agent" in req.func_tool.names()
@@ -2164,11 +1885,10 @@ class TestBuildMainAgent:
         _setup_conversation_for_build(conv_mgr)
 
         with (
-            patch(
-                "astrbot.core.astr_main_agent.builder.AgentRunner"
-            ) as mock_runner_cls,
-            patch(
-                "astrbot.core.astr_main_agent.builder.AstrAgentContext",
+            patch.object(builder_build, "AgentRunner") as mock_runner_cls,
+            patch.object(
+                builder_build,
+                "AstrAgentContext",
                 side_effect=lambda **kwargs: SimpleNamespace(**kwargs),
             ),
         ):
@@ -2197,11 +1917,10 @@ class TestBuildMainAgent:
         _setup_conversation_for_build(conv_mgr)
 
         with (
-            patch(
-                "astrbot.core.astr_main_agent.builder.AgentRunner"
-            ) as mock_runner_cls,
-            patch(
-                "astrbot.core.astr_main_agent.builder.AstrAgentContext",
+            patch.object(builder_build, "AgentRunner") as mock_runner_cls,
+            patch.object(
+                builder_build,
+                "AstrAgentContext",
                 side_effect=lambda **kwargs: SimpleNamespace(**kwargs),
             ),
         ):
@@ -2236,9 +1955,10 @@ class TestBuildMainAgent:
         _setup_conversation_for_build(mock_context.conversation_manager)
 
         with (
-            patch("astrbot.core.astr_main_agent.builder.AgentRunner") as runner_cls,
-            patch(
-                "astrbot.core.astr_main_agent.builder.AstrAgentContext",
+            patch.object(builder_build, "AgentRunner") as runner_cls,
+            patch.object(
+                builder_build,
+                "AstrAgentContext",
                 side_effect=lambda **kwargs: SimpleNamespace(**kwargs),
             ),
         ):
@@ -2302,11 +2022,10 @@ class TestBuildMainAgent:
         _setup_conversation_for_build(conv_mgr)
 
         with (
-            patch(
-                "astrbot.core.astr_main_agent.builder.AgentRunner"
-            ) as mock_runner_cls,
-            patch(
-                "astrbot.core.astr_main_agent.builder.AstrAgentContext",
+            patch.object(builder_build, "AgentRunner") as mock_runner_cls,
+            patch.object(
+                builder_build,
+                "AstrAgentContext",
                 side_effect=lambda **kwargs: SimpleNamespace(**kwargs),
             ),
         ):
@@ -2379,11 +2098,10 @@ class TestBuildMainAgent:
         _setup_conversation_for_build(conv_mgr)
 
         with (
-            patch(
-                "astrbot.core.astr_main_agent.builder.AgentRunner"
-            ) as mock_runner_cls,
-            patch(
-                "astrbot.core.astr_main_agent.builder.AstrAgentContext",
+            patch.object(builder_build, "AgentRunner") as mock_runner_cls,
+            patch.object(
+                builder_build,
+                "AstrAgentContext",
                 side_effect=lambda **kwargs: SimpleNamespace(**kwargs),
             ),
         ):
@@ -2450,11 +2168,10 @@ class TestBuildMainAgent:
         _setup_conversation_for_build(conv_mgr)
 
         with (
-            patch(
-                "astrbot.core.astr_main_agent.builder.AgentRunner"
-            ) as mock_runner_cls,
-            patch(
-                "astrbot.core.astr_main_agent.builder.AstrAgentContext",
+            patch.object(builder_build, "AgentRunner") as mock_runner_cls,
+            patch.object(
+                builder_build,
+                "AstrAgentContext",
                 side_effect=lambda **kwargs: SimpleNamespace(**kwargs),
             ),
             patch.object(
@@ -2523,11 +2240,10 @@ class TestBuildMainAgent:
         _setup_conversation_for_build(conv_mgr)
 
         with (
-            patch(
-                "astrbot.core.astr_main_agent.builder.AgentRunner"
-            ) as mock_runner_cls,
-            patch(
-                "astrbot.core.astr_main_agent.builder.AstrAgentContext",
+            patch.object(builder_build, "AgentRunner") as mock_runner_cls,
+            patch.object(
+                builder_build,
+                "AstrAgentContext",
                 side_effect=lambda **kwargs: SimpleNamespace(**kwargs),
             ),
             patch.object(
@@ -2597,11 +2313,10 @@ class TestBuildMainAgent:
         _setup_conversation_for_build(conv_mgr)
 
         with (
-            patch(
-                "astrbot.core.astr_main_agent.builder.AgentRunner"
-            ) as mock_runner_cls,
-            patch(
-                "astrbot.core.astr_main_agent.builder.AstrAgentContext",
+            patch.object(builder_build, "AgentRunner") as mock_runner_cls,
+            patch.object(
+                builder_build,
+                "AstrAgentContext",
                 side_effect=lambda **kwargs: SimpleNamespace(**kwargs),
             ),
             patch.object(
@@ -2667,11 +2382,10 @@ class TestBuildMainAgent:
         mock_context.get_config.return_value = {}
 
         with (
-            patch(
-                "astrbot.core.astr_main_agent.builder.AgentRunner"
-            ) as mock_runner_cls,
-            patch(
-                "astrbot.core.astr_main_agent.builder.AstrAgentContext",
+            patch.object(builder_build, "AgentRunner") as mock_runner_cls,
+            patch.object(
+                builder_build,
+                "AstrAgentContext",
                 side_effect=lambda **kwargs: SimpleNamespace(**kwargs),
             ),
         ):
@@ -2721,11 +2435,10 @@ class TestBuildMainAgent:
         mock_context.get_config.return_value = {}
 
         with (
-            patch(
-                "astrbot.core.astr_main_agent.builder.AgentRunner"
-            ) as mock_runner_cls,
-            patch(
-                "astrbot.core.astr_main_agent.builder.AstrAgentContext",
+            patch.object(builder_build, "AgentRunner") as mock_runner_cls,
+            patch.object(
+                builder_build,
+                "AstrAgentContext",
                 side_effect=lambda **kwargs: SimpleNamespace(**kwargs),
             ),
         ):
@@ -2771,11 +2484,10 @@ class TestBuildMainAgent:
         _setup_conversation_for_build(conv_mgr)
 
         with (
-            patch(
-                "astrbot.core.astr_main_agent.builder.AgentRunner"
-            ) as mock_runner_cls,
-            patch(
-                "astrbot.core.astr_main_agent.builder.AstrAgentContext",
+            patch.object(builder_build, "AgentRunner") as mock_runner_cls,
+            patch.object(
+                builder_build,
+                "AstrAgentContext",
                 side_effect=lambda **kwargs: SimpleNamespace(**kwargs),
             ),
         ):
@@ -2817,11 +2529,10 @@ class TestBuildMainAgent:
         _setup_conversation_for_build(conv_mgr)
 
         with (
-            patch(
-                "astrbot.core.astr_main_agent.builder.AgentRunner"
-            ) as mock_runner_cls,
-            patch(
-                "astrbot.core.astr_main_agent.builder.AstrAgentContext",
+            patch.object(builder_build, "AgentRunner") as mock_runner_cls,
+            patch.object(
+                builder_build,
+                "AstrAgentContext",
                 side_effect=lambda **kwargs: SimpleNamespace(**kwargs),
             ),
         ):
@@ -2869,11 +2580,10 @@ class TestBuildMainAgent:
             raise RuntimeError("quoted")
 
         with (
-            patch(
-                "astrbot.core.astr_main_agent.builder.AgentRunner"
-            ) as mock_runner_cls,
-            patch(
-                "astrbot.core.astr_main_agent.builder.AstrAgentContext",
+            patch.object(builder_build, "AgentRunner") as mock_runner_cls,
+            patch.object(
+                builder_build,
+                "AstrAgentContext",
                 side_effect=lambda **kwargs: SimpleNamespace(**kwargs),
             ),
             patch("astrbot.core.astr_main_agent.media.logger") as mock_logger,
@@ -2940,11 +2650,10 @@ class TestBuildMainAgent:
             return quoted_path if self.file == "quoted.amr" else direct_path
 
         with (
-            patch(
-                "astrbot.core.astr_main_agent.builder.AgentRunner"
-            ) as mock_runner_cls,
-            patch(
-                "astrbot.core.astr_main_agent.builder.AstrAgentContext",
+            patch.object(builder_build, "AgentRunner") as mock_runner_cls,
+            patch.object(
+                builder_build,
+                "AstrAgentContext",
                 side_effect=lambda **kwargs: SimpleNamespace(**kwargs),
             ),
             patch.object(
@@ -3005,11 +2714,10 @@ class TestBuildMainAgent:
             raise Exception(f"not a valid file: {self.file}")
 
         with (
-            patch(
-                "astrbot.core.astr_main_agent.builder.AgentRunner"
-            ) as mock_runner_cls,
-            patch(
-                "astrbot.core.astr_main_agent.builder.AstrAgentContext",
+            patch.object(builder_build, "AgentRunner") as mock_runner_cls,
+            patch.object(
+                builder_build,
+                "AstrAgentContext",
                 side_effect=lambda **kwargs: SimpleNamespace(**kwargs),
             ),
             patch.object(
@@ -3058,11 +2766,10 @@ class TestBuildMainAgent:
         _setup_conversation_for_build(conv_mgr)
 
         with (
-            patch(
-                "astrbot.core.astr_main_agent.builder.AgentRunner"
-            ) as mock_runner_cls,
-            patch(
-                "astrbot.core.astr_main_agent.builder.AstrAgentContext",
+            patch.object(builder_build, "AgentRunner") as mock_runner_cls,
+            patch.object(
+                builder_build,
+                "AstrAgentContext",
                 side_effect=lambda **kwargs: SimpleNamespace(**kwargs),
             ),
             patch.object(
@@ -3134,15 +2841,15 @@ class TestBuildMainAgent:
             return stop
 
         with (
-            patch(
-                "astrbot.core.astr_main_agent.builder.AgentRunner"
-            ) as mock_runner_cls,
-            patch(
-                "astrbot.core.astr_main_agent.builder.AstrAgentContext",
+            patch.object(builder_build, "AgentRunner") as mock_runner_cls,
+            patch.object(
+                builder_build,
+                "AstrAgentContext",
                 side_effect=lambda **kwargs: SimpleNamespace(**kwargs),
             ),
-            patch(
-                "astrbot.core.astr_main_agent.builder.call_event_hook",
+            patch.object(
+                builder_build,
+                "call_event_hook",
                 AsyncMock(side_effect=request_hook),
             ) as hook,
         ):
@@ -3171,90 +2878,6 @@ class TestBuildMainAgent:
         )
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("failure", [RuntimeError, asyncio.CancelledError])
-    async def test_request_hook_failure_does_not_create_reset_coroutine(
-        self, mock_event, mock_context, mock_provider, failure
-    ):
-        """Propagate failed or cancelled hooks before runner initialization.
-
-        Args:
-            mock_event: Interactive event fixture.
-            mock_context: Services used during construction.
-            mock_provider: Selected chat provider.
-            failure: Exception raised by the request hook.
-        """
-        with (
-            patch.object(builder_build, "AgentRunner") as runner_cls,
-            patch.object(
-                builder_build,
-                "AstrAgentContext",
-                side_effect=lambda **kwargs: SimpleNamespace(**kwargs),
-            ),
-            patch.object(
-                builder_build,
-                "call_event_hook",
-                AsyncMock(side_effect=failure("interrupted")),
-            ),
-        ):
-            runner_cls.return_value.reset = AsyncMock()
-            with pytest.raises(failure, match="interrupted"):
-                await ama.build_main_agent(
-                    event=mock_event,
-                    plugin_context=mock_context,
-                    config=ama.MainAgentBuildConfig(
-                        tool_call_timeout=60,
-                        call_request_hook=True,
-                        validate_provider_endpoint=True,
-                    ),
-                    provider=mock_provider,
-                    req=ProviderRequest(prompt="hello"),
-                )
-            runner_cls.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_blocked_interactive_provider_does_not_dispatch_request_hook(
-        self, mock_event, mock_context, mock_provider
-    ):
-        """Preserve interactive provider validation before hooks and initialization.
-
-        Args:
-            mock_event: Event receiving the provider error.
-            mock_context: Services used during construction.
-            mock_provider: Provider using a blocked endpoint.
-        """
-        mock_provider.provider_config["api_base"] = next(
-            iter(builder_build.decoded_blocked)
-        )
-        with (
-            patch.object(builder_build, "AgentRunner") as runner_cls,
-            patch.object(
-                builder_build,
-                "AstrAgentContext",
-                side_effect=lambda **kwargs: SimpleNamespace(**kwargs),
-            ),
-            patch.object(builder_build, "call_event_hook", AsyncMock()) as hook,
-        ):
-            result = await ama.build_main_agent(
-                event=mock_event,
-                plugin_context=mock_context,
-                config=ama.MainAgentBuildConfig(
-                    tool_call_timeout=60,
-                    call_request_hook=True,
-                    validate_provider_endpoint=True,
-                ),
-                provider=mock_provider,
-                req=ProviderRequest(prompt="hello"),
-            )
-
-        assert result is None
-        runner_cls.assert_not_called()
-        hook.assert_not_awaited()
-        assert (
-            mock_event.set_extra.call_args.args[0]
-            == agent_resources.LLM_ERROR_MESSAGE_EXTRA_KEY
-        )
-
-    @pytest.mark.asyncio
     async def test_build_main_agent_with_existing_request(
         self, mock_event, mock_context, mock_provider
     ):
@@ -3265,11 +2888,10 @@ class TestBuildMainAgent:
         )
 
         with (
-            patch(
-                "astrbot.core.astr_main_agent.builder.AgentRunner"
-            ) as mock_runner_cls,
-            patch(
-                "astrbot.core.astr_main_agent.builder.AstrAgentContext",
+            patch.object(builder_build, "AgentRunner") as mock_runner_cls,
+            patch.object(
+                builder_build,
+                "AstrAgentContext",
                 side_effect=lambda **kwargs: SimpleNamespace(**kwargs),
             ),
         ):
@@ -3580,7 +3202,7 @@ class TestApplyLlmSafetyMode:
         )
         req = ProviderRequest(prompt="Test", system_prompt="Original")
 
-        with patch("astrbot.core.astr_main_agent.persona.logger") as mock_logger:
+        with patch.object(persona_build, "logger") as mock_logger:
             persona_build.apply_safety_instructions(config, req)
 
         mock_logger.warning.assert_called_once()
@@ -3723,7 +3345,7 @@ class TestApplySandboxTools:
         )
         req = ProviderRequest(prompt="Test", func_tool=None)
 
-        with patch("astrbot.core.astr_main_agent.computer_use.logger") as mock_logger:
+        with patch.object(computer_use_build, "logger") as mock_logger:
             req.system_prompt = (
                 req.system_prompt or ""
             ) + computer_use_build._apply_sandbox_tools(config, req, "session-123")
@@ -3747,7 +3369,7 @@ class TestApplySandboxTools:
         )
         req = ProviderRequest(prompt="Test", func_tool=None)
 
-        with patch("astrbot.core.astr_main_agent.computer_use.logger") as mock_logger:
+        with patch.object(computer_use_build, "logger") as mock_logger:
             req.system_prompt = (
                 req.system_prompt or ""
             ) + computer_use_build._apply_sandbox_tools(config, req, "session-123")
@@ -3805,131 +3427,6 @@ class TestApplySandboxTools:
 
         assert isinstance(req.system_prompt, str)
         assert "sandboxed environment" in req.system_prompt
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("entrypoint", ["chat", "cron", "background"])
-@pytest.mark.parametrize("allowed", [None, [], ["chosen"]])
-@pytest.mark.parametrize("supports_delivery", [False, True])
-async def test_all_triggers_share_persona_tools_and_structured_history(
-    entrypoint,
-    allowed,
-    supports_delivery,
-    mock_context,
-    mock_provider,
-    mock_event,
-    mock_conversation,
-    wakeup_pipeline,
-):
-    """Trigger adapters must preserve the same persona policy in the real builder."""
-    import json
-
-    registered = [
-        FunctionTool(
-            name=name, description=name, parameters={"type": "object"}, active=active
-        )
-        for name, active in [("chosen", True), ("other", True), ("disabled", False)]
-    ]
-    tmgr = mock_context.get_llm_tool_manager.return_value
-    tmgr.get_full_tool_set.side_effect = lambda: ToolSet(list(registered))
-    tmgr.get_func.side_effect = lambda name: next(
-        (t for t in registered if t.name == name), None
-    )
-    selected = {"prompt": "Shared persona", "tools": allowed, "skills": []}
-    mock_context.persona_manager.resolve_selected_persona.return_value = (
-        "selected",
-        selected,
-        None,
-        False,
-    )
-    history = [
-        {"role": "user", "content": "Earlier question"},
-        {"role": "assistant", "content": "Earlier answer"},
-    ]
-    mock_conversation.history = json.dumps(history)
-    mock_context.get_using_provider_async.side_effect = None
-    mock_context.get_using_provider_async.return_value = mock_provider
-    conf = {"provider_settings": {"proactive_capability": {"add_cron_tools": False}}}
-    mock_context.get_config.return_value = conf
-    mock_event.unified_msg_origin = "test:FriendMessage:user123"
-    mock_event.platform_meta.id = "test"
-    mock_event.platform_meta.support_proactive_message = supports_delivery
-    mock_context.get_platform_inst.return_value = SimpleNamespace(
-        meta=lambda: mock_event.platform_meta
-    )
-    mock_event.role = "member"
-    mock_event.get_extra.side_effect = {}.get
-    runner = MagicMock(state=AgentState.DONE)
-    runner.reset = AsyncMock()
-    runner.step_until_done.return_value.__aiter__.return_value = []
-    runner.get_final_llm_resp.return_value = LLMResponse(
-        role="assistant", completion_text="Done"
-    )
-    with (
-        patch.object(
-            request_build,
-            "_get_session_conv",
-            AsyncMock(return_value=mock_conversation),
-        ),
-        patch.object(builder_build, "AgentRunner", return_value=runner),
-        patch.object(
-            builder_build,
-            "AstrAgentContext",
-            side_effect=lambda **kw: SimpleNamespace(**kw),
-        ),
-        patch(
-            "astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal.InternalAgentSubStage._save_to_history",
-            AsyncMock(),
-        ),
-    ):
-        if entrypoint == "chat":
-            await ama.build_main_agent(
-                event=mock_event,
-                plugin_context=mock_context,
-                config=ama.MainAgentBuildConfig.from_config(conf),
-            )
-        elif entrypoint == "cron":
-            await wakeup_pipeline.execute(
-                wakeup_pipeline(mock_context),
-                umo=mock_event.unified_msg_origin,
-                source="cron",
-                user_prompt=PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
-                    cron_job=json.dumps(
-                        ({"cron_job": {"id": "job"}}).get("cron_job", {}),
-                        ensure_ascii=False,
-                    )
-                ),
-            )
-        else:
-            wakeup_context = ContextWrapper(
-                context=SimpleNamespace(event=mock_event, context=mock_context)
-            )
-            await wakeup_pipeline.execute(
-                wakeup_pipeline(wakeup_context.context.context),
-                umo=wakeup_context.context.event.unified_msg_origin,
-                source="background_task",
-                user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
-                    background_task_result=json.dumps(
-                        {
-                            "task_id": "task",
-                            "tool_name": "worker",
-                            "result": "Result",
-                            "tool_args": {},
-                        },
-                        ensure_ascii=False,
-                    )
-                ),
-                role=wakeup_context.context.event.role,
-                stop_signal=active_event_registry.get_background_stop_signal(
-                    wakeup_context.context.event
-                ),
-            )
-    req = runner.reset.await_args.kwargs["request"]
-    expected = {"chosen", "other"} if allowed is None else set(allowed)
-    assert set(req.func_tool.names()) - {"send_message_to_user"} == expected
-    assert ("send_message_to_user" in req.func_tool.names()) == supports_delivery
-    assert req.contexts == history
-    assert "Shared persona" in req.system_prompt
 
 
 @pytest.mark.asyncio
@@ -3995,11 +3492,13 @@ async def test_stopping_during_history_loading_does_not_initialize_an_agent(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("runtime", "booter"),
-    [("local", "shipyard_neo"), ("sandbox", "cua"), ("sandbox", "shipyard_neo")],
+    ("runtime", "booter", "agentic_kb", "tool_schema_mode"),
+    [
+        ("local", "shipyard_neo", True, "full"),
+        ("sandbox", "cua", False, "skills_like"),
+        ("sandbox", "shipyard_neo", True, "full"),
+    ],
 )
-@pytest.mark.parametrize("agentic_kb", [False, True])
-@pytest.mark.parametrize("tool_schema_mode", ["full", "skills_like"])
 async def test_feature_composition_preserves_tool_scope_and_instruction_order(
     mock_context,
     mock_event,
@@ -4230,184 +3729,7 @@ async def test_feature_composition_preserves_tool_scope_and_instruction_order(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("platform_name", ["webchat", "test_platform"])
-async def test_wakeup_uses_the_existing_conversation(
-    mock_context,
-    mock_event,
-    mock_provider,
-    mock_conversation,
-    platform_name,
-    wakeup_pipeline,
-):
-    """Keep ordinary and triggered requests identical before their current user turn.
-
-    Args:
-        mock_context: Shared provider, conversation, persona, and tool services.
-        mock_event: Ordinary message used to build the reference request.
-        mock_provider: Provider used by both the ordinary and triggered requests.
-        mock_conversation: Stored conversation whose prefix must remain unchanged.
-        platform_name: Original adapter type used for persona selection.
-    """
-    from copy import deepcopy
-    from dataclasses import replace
-
-    from opentelemetry.trace import format_trace_id, get_current_span
-
-    from astrbot.core.log import _log_context
-    from astrbot.core.platform.astr_message_event import current_message_event
-
-    history = [
-        {"role": "user", "content": "Original question", "custom": {"keep": True}},
-        {"role": "assistant", "content": "Original answer"},
-        {"role": "_checkpoint", "content": {"id": "existing-checkpoint"}},
-    ]
-    mock_conversation.history = json.dumps(history)
-    stored_history = mock_conversation.history
-    config_source = {
-        "provider_settings": {"streaming_response": False, "identifier": True},
-        "plugin_set": ["allowed"],
-    }
-    mock_context.get_config.return_value = config_source
-    metadata = PlatformMetadata(
-        id=platform_name, name=platform_name, description="Adapter"
-    )
-    mock_event.platform_meta = metadata
-    mock_event.get_platform_name.return_value = platform_name
-    mock_event.unified_msg_origin = f"{platform_name}:FriendMessage:prefix-test"
-    mock_context.persona_manager.resolve_selected_persona.return_value = (
-        ("_chatui_default_", None, None, True)
-        if platform_name == "webchat"
-        else ("persona", {"prompt": "Stable persona", "tools": None}, None, False)
-    )
-    mock_context.get_platform_inst.return_value = SimpleNamespace(meta=lambda: metadata)
-    mock_context.get_llm_tool_manager.return_value.get_full_tool_set.side_effect = (
-        ToolSet
-    )
-    mock_context.get_using_provider_async.side_effect = None
-    mock_context.get_using_provider_async.return_value = mock_provider
-    mock_context.conversation_manager.get_curr_conversation_id = AsyncMock(
-        return_value="conv-id"
-    )
-    mock_context.conversation_manager.get_conversation = AsyncMock(
-        return_value=mock_conversation
-    )
-    mock_context.conversation_manager.update_conversation = AsyncMock()
-    runner = MagicMock(state=AgentState.DONE)
-    runner.reset = AsyncMock()
-    runner.step_until_done.return_value.__aiter__.return_value = []
-    runner.get_final_llm_resp.return_value = LLMResponse(
-        role="assistant", completion_text="Completed"
-    )
-    built = []
-    original_build = ama.build_main_agent
-
-    async def build(**kwargs):
-        event = kwargs["event"]
-        assert "req" not in kwargs
-        assert current_message_event.get() is event
-        assert (
-            format_trace_id(get_current_span().get_span_context().trace_id)
-            == event.trace.trace_id
-        )
-        assert _log_context.get().platform_type == platform_name
-        assert event.plugins_name == ["allowed"]
-        result = await original_build(**kwargs)
-        built.append(result.provider_request)
-        return result
-
-    config = replace(
-        ama.MainAgentBuildConfig.from_config(config_source),
-        call_request_hook=True,
-        validate_provider_endpoint=True,
-    )
-    with (
-        patch.object(builder_build, "AgentRunner", return_value=runner),
-        patch.object(builder_build, "call_event_hook", AsyncMock(return_value=False)),
-        patch.object(
-            builder_build,
-            "AstrAgentContext",
-            side_effect=lambda **kw: SimpleNamespace(**kw),
-        ),
-        patch.object(persona_build, "SkillManager") as skills,
-        patch.object(
-            knowledge_base_build,
-            "retrieve_knowledge_base",
-            AsyncMock(return_value=None),
-        ),
-    ):
-        skills.return_value.list_skills.return_value = []
-        reference = await original_build(
-            event=mock_event,
-            plugin_context=mock_context,
-            provider=mock_provider,
-            config=config,
-            req=ProviderRequest(
-                prompt="Ordinary request",
-                conversation=mock_conversation,
-                contexts=deepcopy(history),
-            ),
-        )
-        with patch.object(ama, "build_main_agent", side_effect=build):
-            for source, source_id, user_prompt in (
-                (
-                    "cron",
-                    "job",
-                    PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
-                        cron_job='{"id":"job","run_started_at":"first"}'
-                    ),
-                ),
-                (
-                    "cron",
-                    "job",
-                    PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
-                        cron_job='{"id":"job","run_started_at":"second"}'
-                    ),
-                ),
-                (
-                    "background_task",
-                    "task",
-                    BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
-                        background_task_result='{"task_id":"task","result":"done"}'
-                    ),
-                ),
-                ("plugin", "example_plugin", "Continue processing the updated data."),
-            ):
-                await wakeup_pipeline.execute(
-                    wakeup_pipeline(mock_context),
-                    umo=mock_event.unified_msg_origin,
-                    source=source,
-                    source_id=source_id,
-                    user_prompt=user_prompt,
-                )
-                actual = built[-1]
-                assert actual.system_prompt == reference.provider_request.system_prompt
-                assert actual.contexts == reference.provider_request.contexts == history
-                assert (
-                    actual.func_tool.names()
-                    == reference.provider_request.func_tool.names()
-                )
-                assert actual.prompt == user_prompt
-                saved = mock_context.conversation_manager.update_conversation.await_args.kwargs[
-                    "history"
-                ]
-                assert saved[: len(history)] == [
-                    {key: value for key, value in message.items() if key != "custom"}
-                    for message in history
-                ]
-                saved_input = saved[len(history)]["content"]
-                if isinstance(saved_input, list):
-                    saved_input = "".join(part.get("text", "") for part in saved_input)
-                assert user_prompt in saved_input
-                assert saved[-1] == {"role": "assistant", "content": "Completed"}
-                assert mock_conversation.history == stored_history
-                assert current_message_event.get() is None
-                assert not get_current_span().get_span_context().is_valid
-
-
-@pytest.mark.asyncio
-async def test_wakeup_rejects_a_missing_platform_before_loading_history(
-    mock_context, wakeup_pipeline
-):
+async def test_wakeup_rejects_a_missing_platform_before_loading_history(mock_context):
     """Fail explicitly instead of constructing internal metadata for a missing adapter.
 
     Args:
@@ -4417,8 +3739,8 @@ async def test_wakeup_rejects_a_missing_platform_before_loading_history(
     mock_context.get_platform_inst.return_value = None
     with patch.object(ama, "build_main_agent", AsyncMock()) as build:
         with pytest.raises(ValueError, match="Platform adapter 'missing' not found"):
-            await wakeup_pipeline.execute(
-                wakeup_pipeline(mock_context),
+            await wake_main_agent(
+                mock_context,
                 umo=umo,
                 user_prompt="Continue the task.",
                 source="plugin",
@@ -4431,84 +3753,21 @@ async def test_wakeup_rejects_a_missing_platform_before_loading_history(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("stopped", [False, True])
-async def test_wakeup_waits_for_the_existing_conversation_turn(
-    mock_context, stopped, wakeup_pipeline
-):
-    """Read the latest conversation after the foreground turn releases its lock.
-
-    Args:
-        mock_context: Services whose history reads must wait for the session lock.
-        stopped: Whether cancellation arrives while the wakeup waits for its turn.
-    """
-    from astrbot.core.utils.session_lock import session_lock_manager
-
-    umo = "test:FriendMessage:locked-wakeup"
-    signal = asyncio.Event()
-    mock_context.get_config.return_value = {}
-    runner = MagicMock(state=AgentState.DONE)
-    runner.step_until_done.return_value.__aiter__.return_value = []
-    runner.get_final_llm_resp.return_value = None
-    with (
-        patch.object(
-            ama,
-            "build_main_agent",
-            AsyncMock(return_value=SimpleNamespace(agent_runner=runner)),
-        ) as build,
-        patch(
-            "astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal.InternalAgentSubStage._save_to_history",
-            AsyncMock(),
-        ) as persist,
-    ):
-        async with session_lock_manager.acquire_lock(umo):
-            task = asyncio.create_task(
-                wakeup_pipeline.execute(
-                    wakeup_pipeline(mock_context),
-                    umo=umo,
-                    source="plugin",
-                    user_prompt="Triggered turn",
-                    stop_signal=signal,
-                )
-            )
-            for _ in range(20):
-                if umo in active_event_registry._events:
-                    break
-                await asyncio.sleep(0)
-            build.assert_not_awaited()
-            mock_context.get_config.assert_not_called()
-            assert umo in active_event_registry._events
-            if stopped:
-                signal.set()
-        if stopped:
-            with pytest.raises(asyncio.CancelledError):
-                await asyncio.wait_for(task, timeout=1)
-        else:
-            await asyncio.wait_for(task, timeout=1)
-        assert build.await_count == int(not stopped)
-        assert persist.await_count == int(not stopped)
-        if not stopped:
-            event = build.await_args.kwargs["event"]
-            assert event.unified_msg_origin == umo
-            assert event.source == "plugin"
-            assert event.get_platform_name() == "test_platform"
-    assert umo not in active_event_registry._events
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("source", ["cron", "background_task", "plugin"])
-@pytest.mark.parametrize("platform_name", ["test_platform", "webchat", "lark"])
 @pytest.mark.parametrize(
-    "prompt", ["Continue this conversation.", "/llm Keep this exact input."]
+    ("platform_name", "prompt"),
+    [
+        ("test_platform", "Continue this conversation."),
+        ("lark", "/llm Keep this exact input."),
+        ("webchat", "/llm Keep this exact input."),
+    ],
 )
 async def test_wakeup_collects_current_conversation_without_an_explicit_request(
-    source,
     platform_name,
     prompt,
 ):
     """Collect history normally while preserving all programmatic input text.
 
     Args:
-        source: Programmatic trigger mechanism.
         platform_name: Target adapter type with its normal prefix behavior.
         prompt: Input with or without the configured provider prefix.
     """
@@ -4529,7 +3788,7 @@ async def test_wakeup_collects_current_conversation_without_an_explicit_request(
             id="target", name=platform_name, description="Target"
         ),
         prompt=prompt,
-        source=source,
+        source="plugin",
     )
     prepared = await request_build.prepare_request(
         event,

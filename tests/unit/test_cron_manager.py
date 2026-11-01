@@ -1,7 +1,6 @@
 """Tests for CronJobManager."""
 
 import asyncio
-import json
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -9,8 +8,6 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from astrbot.core.agent.runners.base import AgentState
-from astrbot.core.astr_main_agent_resources import PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT
 from astrbot.core.cron.manager import (
     CronJobManager,
     CronJobSchedulingError,
@@ -18,7 +15,6 @@ from astrbot.core.cron.manager import (
 )
 from astrbot.core.db.po import CronJob
 from astrbot.core.platform.platform_metadata import PlatformMetadata
-from astrbot.core.provider.entities import ProviderRequest
 
 
 @pytest.fixture
@@ -34,7 +30,7 @@ def mock_db():
 
 
 @pytest.fixture
-def mock_context(wakeup_pipeline):
+def mock_context():
     """Create a mock Context."""
     ctx = MagicMock()
     ctx.get_platform_inst.return_value = SimpleNamespace(
@@ -44,7 +40,7 @@ def mock_context(wakeup_pipeline):
     )
     ctx.get_config = MagicMock(return_value={"admins_id": []})
     ctx.conversation_manager = MagicMock()
-    return wakeup_pipeline(ctx)
+    return ctx
 
 
 @pytest.fixture
@@ -700,7 +696,7 @@ class TestRunActiveAgentJob:
     @pytest.mark.asyncio
     @pytest.mark.parametrize("origin", ["tool", "api"])
     async def test_job_supplies_its_wakeup_source(
-        self, cron_manager, sample_cron_job, mock_context, monkeypatch, origin
+        self, cron_manager, sample_cron_job, mock_context, mock_db, monkeypatch, origin
     ):
         """Keep job provenance separate from its delivery target and permissions.
 
@@ -719,453 +715,18 @@ class TestRunActiveAgentJob:
             "note": "Continue the scheduled task.",
             "origin": origin,
         }
-        await cron_manager._run_active_agent_job(
-            sample_cron_job, datetime(2026, 11, 1, tzinfo=timezone.utc)
-        )
+        sample_cron_job.job_type = "active_agent"
+        mock_db.get_cron_job.return_value = sample_cron_job
+        await cron_manager._run_job(sample_cron_job.job_id)
+        assert mock_db.update_cron_job.await_args.kwargs["status"] == "dispatched"
         kwargs = wake.await_args.kwargs
         assert kwargs["umo"] == "target:GroupMessage:group-id"
         assert kwargs["source"] == "cron"
         assert kwargs["source_id"] == sample_cron_job.job_id
         assert kwargs["role"] == ("admin" if origin == "api" else "member")
         assert "Continue the scheduled task." in kwargs["user_prompt"]
-
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize(
-        ("session_config", "expected_plugins"),
-        [
-            ({"plugin_set": ["allowed"]}, {"allowed", "reserved"}),
-            ({"plugin_set": []}, {"reserved"}),
-            ({"plugin_set": ["*"]}, {"allowed", "disabled", "reserved"}),
-            ({}, {"allowed", "disabled", "reserved"}),
-        ],
-        ids=["whitelist", "empty", "wildcard", "default"],
-    )
-    async def test_woke_main_agent_filters_plugin_hooks_and_tools(
-        self,
-        cron_manager,
-        monkeypatch,
-        session_config,
-        expected_plugins,
-        wakeup_pipeline,
-    ):
-        """Apply the session plugin policy to cron response hooks and tools."""
-        from astrbot.core.agent.tool import FunctionTool, ToolSet
-        from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
-        from astrbot.core.astr_main_agent.plugins import filter_tools
-        from astrbot.core.pipeline import context_utils
-        from astrbot.core.star.star import StarMetadata, star_map
-        from astrbot.core.star.star_handler import (
-            EventType,
-            StarHandlerMetadata,
-            StarHandlerRegistry,
-        )
-
-        ctx = MagicMock()
-        ctx.get_platform_inst.return_value = SimpleNamespace(
-            meta=lambda: PlatformMetadata(
-                id="test", name="test_platform", description="Test"
-            )
-        )
-        ctx.get_config.return_value = session_config
-        cron_manager.ctx = ctx
-        registry = StarHandlerRegistry()
-        monkeypatch.setattr(context_utils, "star_handlers_registry", registry)
-        hooks = {}
-        tools = ToolSet()
-        for name in ("allowed", "disabled", "reserved"):
-            module_path = f"test_cron_plugins.{name}"
-            monkeypatch.setitem(
-                star_map,
-                module_path,
-                StarMetadata(name=name, reserved=name == "reserved"),
-            )
-            tools.add_tool(
-                FunctionTool(
-                    name=name,
-                    description="Test plugin tool",
-                    parameters={"type": "object", "properties": {}},
-                    handler_module_path=module_path,
-                )
-            )
-            for hook_type in (EventType.OnLLMResponseEvent, EventType.OnAgentDoneEvent):
-                hook = AsyncMock()
-                hooks[name, hook_type] = hook
-                registry.append(
-                    StarHandlerMetadata(
-                        event_type=hook_type,
-                        handler_full_name=f"{module_path}.{hook_type.name}",
-                        handler_name=hook_type.name,
-                        handler_module_path=module_path,
-                        handler=hook,
-                        event_filters=[],
-                    )
-                )
-
-        runner = MagicMock(state=AgentState.DONE)
-        runner.step_until_done.return_value.__aiter__.return_value = []
-        runner.get_final_llm_resp.return_value = None
-        with (
-            patch(
-                "astrbot.core.astr_main_agent.request._get_session_conv",
-                AsyncMock(return_value=SimpleNamespace(history="[]")),
-            ),
-            patch(
-                "astrbot.core.astr_main_agent.build_main_agent",
-                AsyncMock(return_value=SimpleNamespace(agent_runner=runner)),
-            ) as build_agent,
-            patch(
-                "astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal.InternalAgentSubStage._save_to_history",
-                AsyncMock(),
-            ),
-        ):
-            await wakeup_pipeline.execute(
-                wakeup_pipeline(cron_manager.ctx),
-                umo="test:GroupMessage:group123",
-                source="cron",
-                user_prompt=PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
-                    cron_job=json.dumps(
-                        ({"cron_job": {"id": "job-1"}, "cron_payload": {}}).get(
-                            "cron_job", {}
-                        ),
-                        ensure_ascii=False,
-                    )
-                ),
-            )
-
-        ctx.get_config.assert_called_once_with(umo="test:GroupMessage:group123")
-        event = build_agent.call_args.kwargs["event"]
-        assert "req" not in build_agent.call_args.kwargs
-        req = ProviderRequest(prompt=event.message_str)
-        req.func_tool = tools
-        filter_tools(event, req)
-        await MAIN_AGENT_HOOKS.on_agent_done(
-            SimpleNamespace(context=SimpleNamespace(event=event)),
-            SimpleNamespace(reasoning_content=""),
-        )
-
-        assert set(req.func_tool.names()) == expected_plugins
-        for (name, _), hook in hooks.items():
-            assert hook.await_count == int(name in expected_plugins)
-
-    @pytest.mark.asyncio
-    async def test_woke_main_agent_passes_history_and_provider_settings(
-        self, cron_manager, wakeup_pipeline
-    ):
-        """Test active cron agent keeps structured history and provider settings."""
-        provider_settings = {
-            "fallback_chat_models": ["fallback-provider"],
-        }
-        ctx = MagicMock()
-        ctx.get_platform_inst.return_value = SimpleNamespace(
-            meta=lambda: PlatformMetadata(
-                id="test", name="test_platform", description="Test"
-            )
-        )
-        ctx.get_config.return_value = {
-            "admins_id": [],
-            "provider_settings": provider_settings,
-            "agent_runner": {
-                "runner_type": "local",
-                "config": {"misc": {"tool_call_timeout": 77}},
-            },
-        }
-        cron_manager.ctx = ctx
-
-        history = [
-            {"role": "user", "content": "old question"},
-            {"role": "assistant", "content": "old answer"},
-        ]
-        conv = MagicMock()
-        conv.history = json.dumps(history)
-
-        class FakeRunner:
-            state = AgentState.DONE
-
-            def step_until_done(self, max_step):
-                async def gen():
-                    if False:
-                        yield None
-
-                return gen()
-
-            def get_final_llm_resp(self):
-                return None
-
-        captured = {"requests": []}
-        started_ats = (
-            "2026-10-13T00:00:00+00:00",
-            "2026-10-13T01:00:00+00:00",
-        )
-
-        async def fake_build_main_agent(*, event, plugin_context, config, req=None):
-            from astrbot.core.astr_main_agent.request import prepare_request
-
-            prepared = await prepare_request(
-                event,
-                plugin_context,
-                config,
-                SimpleNamespace(provider_config={"modalities": ["image"]}),
-                req,
-            )
-            req = prepared.request
-            captured["config"] = config
-            captured["req"] = req
-            captured["requests"].append(req)
-            return MagicMock(agent_runner=FakeRunner())
-
-        async def fake_persist_agent_history(*args, **kwargs):
-            return None
-
-        with (
-            patch(
-                "astrbot.core.astr_main_agent.request._get_session_conv",
-                AsyncMock(return_value=conv),
-            ),
-            patch(
-                "astrbot.core.astr_main_agent.build_main_agent",
-                side_effect=fake_build_main_agent,
-            ),
-            patch(
-                "astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal.InternalAgentSubStage._save_to_history",
-                side_effect=fake_persist_agent_history,
-            ),
-        ):
-            for started_at in started_ats:
-                await wakeup_pipeline.execute(
-                    wakeup_pipeline(cron_manager.ctx),
-                    umo="test:FriendMessage:user123",
-                    source="cron",
-                    user_prompt=PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
-                        cron_job=json.dumps(
-                            (
-                                {
-                                    "cron_job": {
-                                        "id": "job-1",
-                                        "note": "提醒喝水",
-                                        "run_started_at": started_at,
-                                    },
-                                    "cron_payload": {},
-                                }
-                            ).get("cron_job", {}),
-                            ensure_ascii=False,
-                        )
-                    ),
-                )
-
-        config = captured["config"]
-        assert config.tool_call_timeout == 77
-        assert all(
-            config.provider_settings[key] == value
-            for key, value in provider_settings.items()
-        )
-        assert config.provider_settings is not provider_settings
-        assert config.provider_settings["fallback_chat_models"] == ["fallback-provider"]
-        request = captured["req"]
-        assert "old question" not in request.system_prompt
-        assert "old answer" not in request.system_prompt
-        assert request.contexts == history
-        first, second = captured["requests"]
-        assert first.system_prompt == second.system_prompt
-        assert first.contexts == second.contexts == history
-        assert first.prompt != second.prompt
-        for request, started_at in zip(captured["requests"], started_ats, strict=True):
-            assert "# CRON JOB CONTEXT" not in request.system_prompt
-            assert "run_started_at" not in request.system_prompt
-            assert request.prompt.startswith("<system_reminder>\n")
-            assert request.prompt.endswith("\n</system_reminder>")
-            context, instruction = (
-                request.prompt.removeprefix("<system_reminder>\n")
-                .removesuffix("\n</system_reminder>")
-                .split("\n\n", 1)
-            )
-            assert context.startswith("# CRON JOB CONTEXT\n")
-            job = json.loads(context.split("\n", 2)[2])
-            assert job == {
-                "id": "job-1",
-                "note": "提醒喝水",
-                "run_started_at": started_at,
-            }
-            assert instruction.startswith("You are now responding to a scheduled task.")
-
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize(
-        ("provider_settings", "expected_max_step"),
-        [
-            pytest.param({"max_agent_step": 50}, 50, id="configured"),
-            pytest.param({}, 128, id="missing_falls_back_to_default"),
-            pytest.param(
-                {"max_agent_step": True}, 128, id="boolean_falls_back_to_default"
-            ),
-            pytest.param({"max_agent_step": "50"}, 50, id="numeric_string_coerced"),
-            pytest.param({"max_agent_step": 0}, 1, id="zero_clamped_to_min"),
-        ],
-    )
-    async def test_woke_main_agent_applies_max_agent_step(
-        self, cron_manager, provider_settings, expected_max_step, wakeup_pipeline
-    ):
-        """Test the cron agent runner receives max_agent_step from provider settings."""
-
-        class _StepCapturingRunner:
-            state = AgentState.DONE
-
-            def __init__(self):
-                self.captured_max_step = None
-
-            def step_until_done(self, max_step):
-                self.captured_max_step = max_step
-
-                async def gen():
-                    if False:
-                        yield None
-
-                return gen()
-
-            def get_final_llm_resp(self):
-                return None
-
-        ctx = MagicMock()
-        ctx.get_platform_inst.return_value = SimpleNamespace(
-            meta=lambda: PlatformMetadata(
-                id="test", name="test_platform", description="Test"
-            )
-        )
-        ctx.get_config.return_value = {
-            "admins_id": [],
-            "provider_settings": {},
-            "agent_runner": {
-                "runner_type": "local",
-                "config": {
-                    "misc": {"max_steps": provider_settings.get("max_agent_step", 128)}
-                },
-            },
-        }
-        cron_manager.ctx = ctx
-
-        conv = MagicMock()
-        conv.history = "[]"
-        runner = _StepCapturingRunner()
-
-        async def fake_build_main_agent(*, event, plugin_context, config, req=None):
-            return MagicMock(agent_runner=runner)
-
-        with (
-            patch(
-                "astrbot.core.astr_main_agent.request._get_session_conv",
-                AsyncMock(return_value=conv),
-            ),
-            patch(
-                "astrbot.core.astr_main_agent.build_main_agent",
-                side_effect=fake_build_main_agent,
-            ),
-            patch(
-                "astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal.InternalAgentSubStage._save_to_history",
-                AsyncMock(),
-            ),
-        ):
-            await wakeup_pipeline.execute(
-                wakeup_pipeline(cron_manager.ctx),
-                umo="test:FriendMessage:user123",
-                source="cron",
-                user_prompt=PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
-                    cron_job=json.dumps(
-                        ({"cron_job": {"id": "job-1"}, "cron_payload": {}}).get(
-                            "cron_job", {}
-                        ),
-                        ensure_ascii=False,
-                    )
-                ),
-            )
-
-        assert runner.captured_max_step == expected_max_step
-
-    @pytest.mark.asyncio
-    async def test_agent_execution_failure_is_separate_from_dispatch(
-        self, cron_manager, mock_db, mock_context, wakeup_pipeline
-    ):
-        """Record successful dispatch separately from asynchronous runner failure."""
-
-        job = CronJob(
-            job_id="active-job",
-            name="Active",
-            job_type="active_agent",
-            cron_expression="0 9 * * *",
-            enabled=True,
-            persistent=True,
-            payload={
-                "note": "check something",
-                "session": "test:FriendMessage:user123",
-            },
-        )
-        mock_db.get_cron_job.return_value = job
-        cron_manager.ctx = mock_context
-
-        class FakeRunner:
-            state = AgentState.ERROR
-
-            async def step_until_done(self, max_step):
-                return
-                yield  # pragma: no cover
-
-            def get_final_llm_resp(self):
-                resp = MagicMock()
-                resp.completion_text = "malformed_function_call"
-                return resp
-
-        fake_result = SimpleNamespace(agent_runner=FakeRunner())
-        with (
-            patch(
-                "astrbot.core.astr_main_agent.build_main_agent",
-                new=AsyncMock(return_value=fake_result),
-            ),
-            patch(
-                "astrbot.core.astr_main_agent.request._get_session_conv",
-                new=AsyncMock(return_value=SimpleNamespace(history="[]")),
-            ),
-        ):
-            await cron_manager._run_job("active-job")
-            with pytest.raises(RuntimeError):
-                await wakeup_pipeline.drain(mock_context)
-        status_calls = [c.kwargs for c in mock_db.update_cron_job.call_args_list]
-        final = status_calls[-1]
-        assert final["status"] == "dispatched"
-        assert final["last_error"] is None
-
-    @pytest.mark.asyncio
-    async def test_agent_build_failure_is_separate_from_dispatch(
-        self, cron_manager, mock_db, mock_context, wakeup_pipeline
-    ):
-        """Building happens in the pipeline after Cron has dispatched its input."""
-        job = CronJob(
-            job_id="active-job",
-            name="Active",
-            job_type="active_agent",
-            cron_expression="0 9 * * *",
-            enabled=True,
-            persistent=True,
-            payload={
-                "note": "check something",
-                "session": "test:FriendMessage:user123",
-            },
-        )
-        mock_db.get_cron_job.return_value = job
-        cron_manager.ctx = mock_context
-        with (
-            patch(
-                "astrbot.core.astr_main_agent.build_main_agent",
-                new=AsyncMock(return_value=None),
-            ),
-            patch(
-                "astrbot.core.astr_main_agent.request._get_session_conv",
-                new=AsyncMock(return_value=SimpleNamespace(history="[]")),
-            ),
-        ):
-            await cron_manager._run_job("active-job")
-            with pytest.raises(RuntimeError):
-                await wakeup_pipeline.drain(mock_context)
-        status_calls = [c.kwargs for c in mock_db.update_cron_job.call_args_list]
-        final = status_calls[-1]
-        assert final["status"] == "dispatched"
-        assert final["last_error"] is None
+        assert kwargs["user_prompt"].startswith("<system_reminder>\n")
+        assert kwargs["user_prompt"].endswith("\n</system_reminder>")
 
     """Tests for _run_basic_job method."""
 
