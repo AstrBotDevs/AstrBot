@@ -9,13 +9,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from astrbot.core.agent.tool import FunctionTool
-from astrbot.core.astr_agent_wakeup import wake_main_agent
 from astrbot.core.astr_main_agent import MainAgentBuildConfig
 from astrbot.core.astr_main_agent_resources import (
     BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT,
     PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT,
 )
-from astrbot.core.config.agent_runner import resolve_context_compression_config
+from astrbot.core.config.agent_runner import (
+    normalize_agent_runner,
+    resolve_context_compression_config,
+)
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.cron.manager import CronJobManager
 from astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal import (
@@ -78,38 +80,38 @@ def test_explicit_build_settings_and_per_request_overrides_are_preserved():
         ),
         pytest.param(
             {},
-            ("truncate_by_turns", "", 0.15, "", -1, 1, 128000),
+            ("llm_compress", "", 0.15, "", -1, 1, 128000),
             id="empty-config",
         ),
         pytest.param(
             None,
-            ("truncate_by_turns", "", 0.15, "", -1, 1, 128000),
+            ("llm_compress", "", 0.15, "", -1, 1, 128000),
             id="missing-cron-compression-section",
         ),
         pytest.param(
             {"max_turns": 4, "trim_turns": 20},
-            ("truncate_by_turns", "", 0.15, "", 4, 3, 128000),
+            ("llm_compress", "", 0.15, "", 4, 3, 128000),
             id="trim-clamped-to-preserve-recent-turn",
         ),
         pytest.param(
             {"max_turns": 1, "trim_turns": 0},
-            ("truncate_by_turns", "", 0.15, "", 1, 1, 128000),
+            ("llm_compress", "", 0.15, "", 1, 1, 128000),
             id="single-turn-minimum-trim",
         ),
         pytest.param(
             {"max_turns": -1, "trim_turns": 5},
-            ("truncate_by_turns", "", 0.15, "", -1, 5, 128000),
+            ("llm_compress", "", 0.15, "", -1, 5, 128000),
             id="unlimited-turns",
         ),
         pytest.param(
             {"max_turns": -1, "trim_turns": -3},
-            ("truncate_by_turns", "", 0.15, "", -1, 1, 128000),
+            ("llm_compress", "", 0.15, "", -1, 1, 128000),
             id="unlimited-turns-minimum-trim",
         ),
     ],
 )
 async def test_wakeup_uses_same_compression_settings_as_chat(
-    compression, expected, entrypoint
+    compression, expected, entrypoint, wakeup_pipeline
 ):
     """Resolve compression from the bound session without changing its history."""
     conf = copy.deepcopy(DEFAULT_CONFIG)
@@ -127,10 +129,14 @@ async def test_wakeup_uses_same_compression_settings_as_chat(
         )
     )
     ctx.get_config.return_value = conf
+    conf_for_chat = copy.deepcopy(conf)
+    conf_for_chat["agent_runner"] = normalize_agent_runner(
+        conf_for_chat["agent_runner"]
+    )
     stage = InternalAgentSubStage()
     await stage.initialize(
         SimpleNamespace(
-            astrbot_config=conf,
+            astrbot_config=conf_for_chat,
             plugin_manager=SimpleNamespace(context=ctx),
         )
     )
@@ -164,12 +170,14 @@ async def test_wakeup_uses_same_compression_settings_as_chat(
             "astrbot.core.astr_main_agent.build_main_agent",
             AsyncMock(return_value=SimpleNamespace(agent_runner=runner)),
         ) as build,
-        patch("astrbot.core.astr_agent_wakeup.persist_agent_history", AsyncMock()),
-        patch("astrbot.core.astr_agent_wakeup.persist_agent_history", AsyncMock()),
+        patch(
+            "astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal.InternalAgentSubStage._save_to_history",
+            AsyncMock(),
+        ),
     ):
         if entrypoint == "cron":
-            await wake_main_agent(
-                manager.ctx,
+            await wakeup_pipeline.execute(
+                wakeup_pipeline(manager.ctx),
                 umo="test:FriendMessage:user123",
                 source="cron",
                 user_prompt=PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
@@ -202,8 +210,8 @@ async def test_wakeup_uses_same_compression_settings_as_chat(
                 ),
                 tool_call_timeout=120,
             )
-            await wake_main_agent(
-                wakeup_context.context.context,
+            await wakeup_pipeline.execute(
+                wakeup_pipeline(wakeup_context.context.context),
                 umo=wakeup_context.context.event.unified_msg_origin,
                 source="background_task",
                 user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
@@ -254,11 +262,6 @@ async def test_wakeup_uses_same_compression_settings_as_chat(
     assert wakeup_config.streaming_response is False
     assert wakeup_config.call_request_hook is True
     assert wakeup_config.validate_provider_endpoint is True
-    request = build.await_args.kwargs["req"]
-    assert wakeup_config.load_session_history is True
-    assert (
-        request.contexts == []
-    )  # The builder, not the trigger adapter, loads history.
-    assert "An earlier request" not in request.system_prompt
+    assert "req" not in build.await_args.kwargs
     assert conf == original_conf
     assert json.loads(conv.history) == history

@@ -403,3 +403,177 @@ def pytest_runtest_setup(item):
             f"TEST_{required_platform.upper()}_ENABLED"
         ):
             pytest.skip(f"TEST_{required_platform.upper()}_ENABLED not set")
+
+
+@pytest_asyncio.fixture
+async def wakeup_pipeline(monkeypatch):
+    """Attach controlled contexts to the real bus and shared agent pipeline.
+
+    Args:
+        monkeypatch: Pytest patch manager.
+
+    Yields:
+        A function attaching an event queue and bus to a context.
+    """
+    import asyncio
+    import copy
+    from types import SimpleNamespace
+
+    from astrbot.core import astr_main_agent
+    from astrbot.core.agent.message import Message, bind_checkpoint_messages
+    from astrbot.core.agent.response import AgentStats
+    from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
+    from astrbot.core.config.default import DEFAULT_CONFIG
+    from astrbot.core.event_bus import EventBus
+    from astrbot.core.pipeline.context import PipelineContext
+    from astrbot.core.pipeline.process_stage.method.agent_sub_stages import internal
+    from astrbot.core.pipeline.scheduler import PipelineScheduler
+    from astrbot.core.provider.entities import ProviderRequest
+
+    buses = {}
+    errors = {}
+    tasks = []
+    original_run = internal.run_agent
+
+    async def build(**kwargs):
+        result = await astr_main_agent.build_main_agent(**kwargs)
+        if result is None:
+            return None
+        runner = result.agent_runner
+        if not isinstance(runner, ToolLoopAgentRunner):
+            request = getattr(result, "provider_request", None)
+            if not isinstance(request, ProviderRequest):
+                request = kwargs["event"].get_extra("provider_request")
+            if not isinstance(request, ProviderRequest):
+                request = ProviderRequest(prompt=kwargs["event"].message_str)
+            provider = SimpleNamespace(
+                provider_config={},
+                get_model=lambda: "test-model",
+                meta=lambda: SimpleNamespace(type="test"),
+            )
+            runner.provider = provider
+            runner.stats = AgentStats()
+            runner.run_context = SimpleNamespace(
+                context=SimpleNamespace(event=kwargs["event"]),
+                messages=bind_checkpoint_messages(request.contexts or [])
+                + [Message.model_validate(await request.assemble_context())],
+            )
+            if not hasattr(runner, "request_stop"):
+                runner.request_stop = lambda: None
+            if not hasattr(runner, "_resolve_unconsumed_follow_ups"):
+                runner._resolve_unconsumed_follow_ups = lambda: None
+            if not hasattr(runner, "was_aborted"):
+                runner.was_aborted = lambda: False
+            return SimpleNamespace(
+                agent_runner=runner, provider_request=request, provider=provider
+            )
+        return result
+
+    async def run(runner, max_step, **kwargs):
+        if isinstance(runner, ToolLoopAgentRunner):
+            async for response in original_run(runner, max_step, **kwargs):
+                yield response
+        else:
+            async for response in runner.step_until_done(max_step):
+                yield response
+            response = runner.get_final_llm_resp()
+            if response is not None and response.role == "assistant":
+                runner.run_context.messages.append(
+                    Message(role="assistant", content=response.completion_text)
+                )
+
+    monkeypatch.setattr(internal, "build_main_agent", build)
+    monkeypatch.setattr(internal, "run_agent", run)
+    monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
+    monkeypatch.setattr(internal.Metric, "upload", AsyncMock())
+    monkeypatch.setattr(
+        internal.SessionServiceManager,
+        "is_session_enabled",
+        AsyncMock(return_value=True),
+    )
+    monkeypatch.setattr(
+        internal.SessionServiceManager,
+        "should_process_llm_request",
+        AsyncMock(return_value=True),
+    )
+
+    def attach(context):
+        key = id(context)
+        if key in buses:
+            return context
+        queue = asyncio.Queue()
+        config = copy.deepcopy(DEFAULT_CONFIG)
+        get_config = context.get_config
+        source = (
+            get_config.return_value
+            if isinstance(get_config, MagicMock)
+            else get_config(umo="test:FriendMessage:profile")
+        )
+        if isinstance(source, dict):
+            for name, value in source.items():
+                if isinstance(value, dict) and isinstance(config.get(name), dict):
+                    config[name].update(copy.deepcopy(value))
+                else:
+                    config[name] = copy.deepcopy(value)
+        pipeline_context = PipelineContext(
+            astrbot_config=config,
+            plugin_manager=SimpleNamespace(context=context),
+            astrbot_config_id="wakeup-test",
+        )
+        scheduler = PipelineScheduler(pipeline_context)
+        initialized = False
+
+        async def execute(event):
+            nonlocal initialized
+            if not initialized:
+                await scheduler.initialize()
+                initialized = True
+            try:
+                await PipelineScheduler.execute(scheduler, event)
+            except BaseException as error:
+                errors[key].append(error)
+                raise
+
+        scheduler.execute = execute
+        bus = EventBus(
+            queue,
+            {"wakeup-test": scheduler},
+            SimpleNamespace(get_conf_info=lambda _: {"id": "wakeup-test"}),
+        )
+        buses[key] = bus
+        errors[key] = []
+        started = False
+
+        def get_queue():
+            nonlocal started
+            if not started:
+                tasks.append(asyncio.create_task(bus.dispatch()))
+                started = True
+            return queue
+
+        context.get_event_queue = get_queue
+        return context
+
+    async def drain(context):
+        bus = buses[id(context)]
+        while not bus.event_queue.empty() or bus._pending_tasks:
+            await asyncio.sleep(0)
+            pending = list(bus._pending_tasks)
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
+        if errors[id(context)]:
+            raise errors[id(context)].pop(0)
+
+    async def execute(context, **kwargs):
+        from astrbot.core.astr_agent_wakeup import wake_main_agent
+
+        await wake_main_agent(context, **kwargs)
+        await drain(context)
+
+    attach.execute = execute
+    attach.drain = drain
+    yield attach
+    pending = tasks + [task for bus in buses.values() for task in bus._pending_tasks]
+    for task in pending:
+        task.cancel()
+    await asyncio.gather(*pending, return_exceptions=True)

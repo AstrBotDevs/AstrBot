@@ -385,6 +385,7 @@ class CronJobManager:
                     await self._run_basic_job(job)
                 elif job.job_type == "active_agent":
                     await self._run_active_agent_job(job, start_time=start_time)
+                    status = "dispatched"
                 else:
                     raise ValueError(f"Unknown cron job type: {job.job_type}")
             except asyncio.CancelledError:

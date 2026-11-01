@@ -13,7 +13,6 @@ from astrbot.core.agent.runners.base import AgentState
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
-from astrbot.core.astr_agent_wakeup import wake_main_agent
 from astrbot.core.astr_main_agent_resources import (
     BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT,
 )
@@ -450,12 +449,13 @@ async def test_execute_handoff_passes_tool_call_timeout_to_tool_loop_agent(
 async def test_background_wakeup_passes_history_and_provider_settings_to_main_agent(
     monkeypatch: pytest.MonkeyPatch,
     stop_phase,
+    wakeup_pipeline,
 ):
     """Test background wakeup keeps structured history and provider settings."""
     provider_settings = {
         "fallback_chat_models": ["fallback-provider"],
         "request_max_retries": 3,
-        "stream": True,
+        "streaming_response": True,
     }
     history = [
         {"role": "user", "content": "old question"},
@@ -471,14 +471,15 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
     async def _fake_build_main_agent(**kwargs):
         from astrbot.core.astr_main_agent.request import prepare_request
 
-        await prepare_request(
+        prepared = await prepare_request(
             kwargs["event"],
             kwargs["plugin_context"],
             kwargs["config"],
             SimpleNamespace(provider_config={"modalities": ["image"]}),
-            kwargs["req"],
+            kwargs.get("req"),
         )
         captured.update(kwargs)
+        captured["req"] = prepared.request if prepared else None
         if stop_phase == "build":
             stop_signal.set()
         return SimpleNamespace(agent_runner=_DoneRunner())
@@ -493,7 +494,7 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
     )
     persist = AsyncMock()
     monkeypatch.setattr(
-        "astrbot.core.astr_agent_wakeup.persist_agent_history",
+        "astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal.InternalAgentSubStage._save_to_history",
         persist,
     )
 
@@ -523,8 +524,8 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
     if stop_phase == "before":
         stop_signal.set()
 
-    await wake_main_agent(
-        (run_context).context.context,
+    execution = wakeup_pipeline.execute(
+        wakeup_pipeline((run_context).context.context),
         umo=(run_context).context.event.unified_msg_origin,
         source="background_task",
         user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
@@ -544,16 +545,29 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
         ),
     )
 
+    if stop_phase in ("history", "build"):
+        with pytest.raises(asyncio.CancelledError):
+            await execution
+    else:
+        await execution
+
     if stop_phase == "before":
         assert not captured
         persist.assert_not_awaited()
         return
     config = captured["config"]
     assert config.tool_call_timeout == 120
-    assert config.streaming_response == provider_settings["stream"]
-    assert config.provider_settings == provider_settings
+    assert config.streaming_response == provider_settings["streaming_response"]
+    assert all(
+        config.provider_settings[key] == value
+        for key, value in provider_settings.items()
+    )
     assert config.provider_settings["fallback_chat_models"] == ["fallback-provider"]
     request = captured["req"]
+    if stop_phase == "history":
+        assert request is None
+        persist.assert_not_awaited()
+        return
     assert "old question" not in request.system_prompt
     assert "old answer" not in request.system_prompt
     assert request.contexts == history
@@ -577,6 +591,7 @@ async def test_background_wakeup_applies_max_agent_step(
     monkeypatch: pytest.MonkeyPatch,
     provider_settings: dict,
     expected_max_step: int,
+    wakeup_pipeline,
 ):
     class _StepCapturingRunner:
         state = AgentState.DONE
@@ -609,7 +624,7 @@ async def test_background_wakeup_applies_max_agent_step(
         _fake_build_main_agent,
     )
     monkeypatch.setattr(
-        "astrbot.core.astr_agent_wakeup.persist_agent_history",
+        "astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal.InternalAgentSubStage._save_to_history",
         AsyncMock(),
     )
 
@@ -643,8 +658,8 @@ async def test_background_wakeup_applies_max_agent_step(
         tool_call_timeout=120,
     )
 
-    await wake_main_agent(
-        (run_context).context.context,
+    await wakeup_pipeline.execute(
+        wakeup_pipeline((run_context).context.context),
         umo=(run_context).context.event.unified_msg_origin,
         source="background_task",
         user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
@@ -672,6 +687,7 @@ async def test_background_wakeup_applies_max_agent_step(
 async def test_background_wakeup_allows_completion_without_user_delivery(
     monkeypatch: pytest.MonkeyPatch,
     delivered: bool,
+    wakeup_pipeline,
 ):
     """A completed turn can be saved successfully without sending an IM message.
 
@@ -732,18 +748,21 @@ async def test_background_wakeup_allows_completion_without_user_delivery(
         _fake_build_main_agent,
     )
     monkeypatch.setattr(
-        "astrbot.core.astr_agent_wakeup.persist_agent_history",
+        "astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal.InternalAgentSubStage._save_to_history",
         AsyncMock(),
     )
     logger = MagicMock()
-    monkeypatch.setattr("astrbot.core.astr_agent_wakeup.logger", logger)
+    monkeypatch.setattr(
+        "astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal.logger",
+        logger,
+    )
     run_context = ContextWrapper(
         context=SimpleNamespace(event=_DummyEvent([]), context=context),
         tool_call_timeout=120,
     )
 
-    await wake_main_agent(
-        (run_context).context.context,
+    await wakeup_pipeline.execute(
+        wakeup_pipeline((run_context).context.context),
         umo=(run_context).context.event.unified_msg_origin,
         source="background_task",
         user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(

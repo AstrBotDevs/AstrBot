@@ -62,7 +62,7 @@ class AgentWakeupEvent(AstrMessageEvent):
 
         message = AstrBotMessage()
         message.type = session.message_type
-        message.self_id = "astrbot"
+        message.self_id = ""
         message.session_id = session.session_id
         message.message_id = uuid.uuid4().hex
         message.sender = MessageMember(user_id="astrbot", nickname="System")
@@ -85,6 +85,9 @@ class AgentWakeupEvent(AstrMessageEvent):
         self.role = role
         self.is_at_or_wake_command = True
         self.is_wake = True
+        # The supplied UMO is already the final target, including any isolation.
+        self.set_extra("_session_resolved", True)
+        self.set_extra("_role_resolved", True)
 
     async def send(self, message: MessageChain) -> None:
         """Deliver through the target session and account only for successful sends.

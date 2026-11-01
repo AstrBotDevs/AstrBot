@@ -19,7 +19,6 @@ from astrbot.core.agent.message import Message, dump_messages_with_checkpoints
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.base import AgentState
 from astrbot.core.agent.tool import FunctionTool, ToolSet
-from astrbot.core.astr_agent_wakeup import wake_main_agent
 from astrbot.core.astr_main_agent import builder as builder_build
 from astrbot.core.astr_main_agent import computer_use as computer_use_build
 from astrbot.core.astr_main_agent import knowledge_base as knowledge_base_build
@@ -171,7 +170,13 @@ def test_provider_supports_modality_requires_explicit_list():
     ["primary-success", "exception", "error-response", "all-fail", "unconfigured"],
 )
 async def test_proactive_agent_uses_session_fallback_models(
-    entrypoint, scenario, mock_context, mock_provider, mock_event, mock_conversation
+    entrypoint,
+    scenario,
+    mock_context,
+    mock_provider,
+    mock_event,
+    mock_conversation,
+    wakeup_pipeline,
 ):
     """Exercise real agent construction and failover from both wakeup entrypoints.
 
@@ -237,15 +242,17 @@ async def test_proactive_agent_uses_session_fallback_models(
         patch.object(knowledge_base_build, "apply_knowledge_base", AsyncMock()),
         patch.object(builder_build, "MAIN_AGENT_HOOKS", BaseAgentRunHooks()),
         patch.object(builder_build, "AgentRunner", return_value=runner),
-        patch("astrbot.core.astr_agent_wakeup.persist_agent_history", AsyncMock()),
-        patch("astrbot.core.astr_agent_wakeup.persist_agent_history", AsyncMock()),
+        patch(
+            "astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal.InternalAgentSubStage._save_to_history",
+            AsyncMock(),
+        ),
         expectation,
     ):
         if entrypoint == "cron":
             manager = CronJobManager(MagicMock())
             manager.ctx = mock_context
-            await wake_main_agent(
-                manager.ctx,
+            await wakeup_pipeline.execute(
+                wakeup_pipeline(manager.ctx),
                 umo=mock_event.unified_msg_origin,
                 source="cron",
                 user_prompt=PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
@@ -261,8 +268,8 @@ async def test_proactive_agent_uses_session_fallback_models(
             wakeup_context = ContextWrapper(
                 context=SimpleNamespace(event=mock_event, context=mock_context)
             )
-            await wake_main_agent(
-                wakeup_context.context.context,
+            await wakeup_pipeline.execute(
+                wakeup_pipeline(wakeup_context.context.context),
                 umo=wakeup_context.context.event.unified_msg_origin,
                 source="background_task",
                 user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
@@ -340,6 +347,7 @@ async def test_proactive_agent_respects_runtime_and_safety_settings(
     mock_event,
     mock_conversation,
     tmp_path,
+    wakeup_pipeline,
 ):
     """Build real proactive requests without loading tools outside the runtime."""
     provider_settings = {
@@ -383,8 +391,10 @@ async def test_proactive_agent_respects_runtime_and_safety_settings(
             side_effect=lambda **kwargs: SimpleNamespace(**kwargs),
         ),
         patch.object(builder_build, "AgentRunner") as runner_cls,
-        patch("astrbot.core.astr_agent_wakeup.persist_agent_history", AsyncMock()),
-        patch("astrbot.core.astr_agent_wakeup.persist_agent_history", AsyncMock()),
+        patch(
+            "astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal.InternalAgentSubStage._save_to_history",
+            AsyncMock(),
+        ),
     ):
         runner = runner_cls.return_value
         runner.reset = AsyncMock()
@@ -394,8 +404,8 @@ async def test_proactive_agent_respects_runtime_and_safety_settings(
         if entrypoint == "cron":
             manager = CronJobManager(MagicMock())
             manager.ctx = mock_context
-            await wake_main_agent(
-                manager.ctx,
+            await wakeup_pipeline.execute(
+                wakeup_pipeline(manager.ctx),
                 umo=mock_event.unified_msg_origin,
                 source="cron",
                 user_prompt=PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
@@ -411,8 +421,8 @@ async def test_proactive_agent_respects_runtime_and_safety_settings(
             wakeup_context = ContextWrapper(
                 context=MagicMock(context=mock_context, event=mock_event)
             )
-            await wake_main_agent(
-                wakeup_context.context.context,
+            await wakeup_pipeline.execute(
+                wakeup_pipeline(wakeup_context.context.context),
                 umo=wakeup_context.context.event.unified_msg_origin,
                 source="background_task",
                 user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
@@ -3809,6 +3819,7 @@ async def test_all_triggers_share_persona_tools_and_structured_history(
     mock_provider,
     mock_event,
     mock_conversation,
+    wakeup_pipeline,
 ):
     """Trigger adapters must preserve the same persona policy in the real builder."""
     import json
@@ -3866,7 +3877,10 @@ async def test_all_triggers_share_persona_tools_and_structured_history(
             "AstrAgentContext",
             side_effect=lambda **kw: SimpleNamespace(**kw),
         ),
-        patch("astrbot.core.astr_agent_wakeup.persist_agent_history", AsyncMock()),
+        patch(
+            "astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal.InternalAgentSubStage._save_to_history",
+            AsyncMock(),
+        ),
     ):
         if entrypoint == "chat":
             await ama.build_main_agent(
@@ -3875,8 +3889,8 @@ async def test_all_triggers_share_persona_tools_and_structured_history(
                 config=ama.MainAgentBuildConfig.from_config(conf),
             )
         elif entrypoint == "cron":
-            await wake_main_agent(
-                mock_context,
+            await wakeup_pipeline.execute(
+                wakeup_pipeline(mock_context),
                 umo=mock_event.unified_msg_origin,
                 source="cron",
                 user_prompt=PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
@@ -3890,8 +3904,8 @@ async def test_all_triggers_share_persona_tools_and_structured_history(
             wakeup_context = ContextWrapper(
                 context=SimpleNamespace(event=mock_event, context=mock_context)
             )
-            await wake_main_agent(
-                wakeup_context.context.context,
+            await wakeup_pipeline.execute(
+                wakeup_pipeline(wakeup_context.context.context),
                 umo=wakeup_context.context.event.unified_msg_origin,
                 source="background_task",
                 user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
@@ -3972,10 +3986,7 @@ async def test_stopping_during_history_loading_does_not_initialize_an_agent(
             event=mock_event,
             plugin_context=mock_context,
             provider=mock_provider,
-            req=ProviderRequest(prompt="Background completion"),
-            config=ama.MainAgentBuildConfig(
-                tool_call_timeout=60, load_session_history=True
-            ),
+            config=ama.MainAgentBuildConfig(tool_call_timeout=60),
         )
     assert result is None
     runner.assert_not_called()
@@ -4220,8 +4231,13 @@ async def test_feature_composition_preserves_tool_scope_and_instruction_order(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("platform_name", ["webchat", "test_platform"])
-async def test_wakeup_preserves_the_conversation_prefix(
-    mock_context, mock_event, mock_provider, mock_conversation, platform_name
+async def test_wakeup_uses_the_existing_conversation(
+    mock_context,
+    mock_event,
+    mock_provider,
+    mock_conversation,
+    platform_name,
+    wakeup_pipeline,
 ):
     """Keep ordinary and triggered requests identical before their current user turn.
 
@@ -4287,7 +4303,7 @@ async def test_wakeup_preserves_the_conversation_prefix(
 
     async def build(**kwargs):
         event = kwargs["event"]
-        assert kwargs["req"].system_prompt == ""
+        assert "req" not in kwargs
         assert current_message_event.get() is event
         assert (
             format_trace_id(get_current_span().get_span_context().trace_id)
@@ -4356,8 +4372,8 @@ async def test_wakeup_preserves_the_conversation_prefix(
                 ),
                 ("plugin", "example_plugin", "Continue processing the updated data."),
             ):
-                await wake_main_agent(
-                    mock_context,
+                await wakeup_pipeline.execute(
+                    wakeup_pipeline(mock_context),
                     umo=mock_event.unified_msg_origin,
                     source=source,
                     source_id=source_id,
@@ -4374,18 +4390,24 @@ async def test_wakeup_preserves_the_conversation_prefix(
                 saved = mock_context.conversation_manager.update_conversation.await_args.kwargs[
                     "history"
                 ]
-                assert saved[: len(history)] == history
-                assert saved[len(history) :] == [
-                    {"role": "user", "content": user_prompt},
-                    {"role": "assistant", "content": "Completed"},
+                assert saved[: len(history)] == [
+                    {key: value for key, value in message.items() if key != "custom"}
+                    for message in history
                 ]
+                saved_input = saved[len(history)]["content"]
+                if isinstance(saved_input, list):
+                    saved_input = "".join(part.get("text", "") for part in saved_input)
+                assert user_prompt in saved_input
+                assert saved[-1] == {"role": "assistant", "content": "Completed"}
                 assert mock_conversation.history == stored_history
                 assert current_message_event.get() is None
                 assert not get_current_span().get_span_context().is_valid
 
 
 @pytest.mark.asyncio
-async def test_wakeup_rejects_a_missing_platform_before_loading_history(mock_context):
+async def test_wakeup_rejects_a_missing_platform_before_loading_history(
+    mock_context, wakeup_pipeline
+):
     """Fail explicitly instead of constructing internal metadata for a missing adapter.
 
     Args:
@@ -4395,8 +4417,8 @@ async def test_wakeup_rejects_a_missing_platform_before_loading_history(mock_con
     mock_context.get_platform_inst.return_value = None
     with patch.object(ama, "build_main_agent", AsyncMock()) as build:
         with pytest.raises(ValueError, match="Platform adapter 'missing' not found"):
-            await wake_main_agent(
-                mock_context,
+            await wakeup_pipeline.execute(
+                wakeup_pipeline(mock_context),
                 umo=umo,
                 user_prompt="Continue the task.",
                 source="plugin",
@@ -4410,7 +4432,9 @@ async def test_wakeup_rejects_a_missing_platform_before_loading_history(mock_con
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("stopped", [False, True])
-async def test_wakeup_waits_for_the_existing_conversation_turn(mock_context, stopped):
+async def test_wakeup_waits_for_the_existing_conversation_turn(
+    mock_context, stopped, wakeup_pipeline
+):
     """Read the latest conversation after the foreground turn releases its lock.
 
     Args:
@@ -4432,26 +4456,34 @@ async def test_wakeup_waits_for_the_existing_conversation_turn(mock_context, sto
             AsyncMock(return_value=SimpleNamespace(agent_runner=runner)),
         ) as build,
         patch(
-            "astrbot.core.astr_agent_wakeup.persist_agent_history", AsyncMock()
+            "astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal.InternalAgentSubStage._save_to_history",
+            AsyncMock(),
         ) as persist,
     ):
         async with session_lock_manager.acquire_lock(umo):
             task = asyncio.create_task(
-                wake_main_agent(
-                    mock_context,
+                wakeup_pipeline.execute(
+                    wakeup_pipeline(mock_context),
                     umo=umo,
                     source="plugin",
                     user_prompt="Triggered turn",
                     stop_signal=signal,
                 )
             )
-            await asyncio.sleep(0)
+            for _ in range(20):
+                if umo in active_event_registry._events:
+                    break
+                await asyncio.sleep(0)
             build.assert_not_awaited()
             mock_context.get_config.assert_not_called()
             assert umo in active_event_registry._events
             if stopped:
                 signal.set()
-        await asyncio.wait_for(task, timeout=1)
+        if stopped:
+            with pytest.raises(asyncio.CancelledError):
+                await asyncio.wait_for(task, timeout=1)
+        else:
+            await asyncio.wait_for(task, timeout=1)
         assert build.await_count == int(not stopped)
         assert persist.await_count == int(not stopped)
         if not stopped:
@@ -4460,3 +4492,59 @@ async def test_wakeup_waits_for_the_existing_conversation_turn(mock_context, sto
             assert event.source == "plugin"
             assert event.get_platform_name() == "test_platform"
     assert umo not in active_event_registry._events
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source", ["cron", "background_task", "plugin"])
+@pytest.mark.parametrize("platform_name", ["test_platform", "webchat", "lark"])
+@pytest.mark.parametrize(
+    "prompt", ["Continue this conversation.", "/llm Keep this exact input."]
+)
+async def test_wakeup_collects_current_conversation_without_an_explicit_request(
+    source,
+    platform_name,
+    prompt,
+):
+    """Collect history normally while preserving all programmatic input text.
+
+    Args:
+        source: Programmatic trigger mechanism.
+        platform_name: Target adapter type with its normal prefix behavior.
+        prompt: Input with or without the configured provider prefix.
+    """
+    from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
+    from astrbot.core.platform.message_session import MessageSession
+
+    history = [{"role": "user", "content": "Existing context"}]
+    conversation = SimpleNamespace(cid="conversation", history=json.dumps(history))
+    manager = SimpleNamespace(
+        get_curr_conversation_id=AsyncMock(return_value="conversation"),
+        get_conversation=AsyncMock(return_value=conversation),
+    )
+    context = SimpleNamespace(conversation_manager=manager)
+    event = AgentWakeupEvent(
+        context=context,
+        session=MessageSession.from_str("target:FriendMessage:user"),
+        platform_meta=PlatformMetadata(
+            id="target", name=platform_name, description="Target"
+        ),
+        prompt=prompt,
+        source=source,
+    )
+    prepared = await request_build.prepare_request(
+        event,
+        context,
+        ama.MainAgentBuildConfig(tool_call_timeout=60, provider_wake_prefix="/llm "),
+        SimpleNamespace(provider_config={"modalities": ["text"]}),
+        None,
+    )
+    assert prepared is not None
+    request = prepared.request
+    assert request.prompt == prompt
+    assert request.conversation is conversation
+    assert request.contexts == history
+    assert request.session_id == event.unified_msg_origin
+    manager.get_curr_conversation_id.assert_awaited_once_with(event.unified_msg_origin)
+    manager.get_conversation.assert_awaited_once_with(
+        event.unified_msg_origin, "conversation"
+    )

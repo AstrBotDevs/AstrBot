@@ -72,8 +72,6 @@ class MainAgentBuildConfig:
     """Maximum number of images injected from quoted-message fallback extraction."""
     validate_provider_endpoint: bool = False
     """Apply the endpoint blocklist; enabled by the interactive entry point."""
-    load_session_history: bool = False
-    """Bind an explicit request to the current conversation (proactive wakeups)."""
     enable_message_delivery: bool = False
     """Provide the delivery tool when a proactive trigger has a destination."""
     group_message_history_enabled: bool = False

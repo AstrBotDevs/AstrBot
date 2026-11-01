@@ -15,6 +15,7 @@ from astrbot.core.agent.message import TextPart
 from astrbot.core.astr_main_agent_resources import LLM_ERROR_MESSAGE_EXTRA_KEY
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.message.components import File, Image, Record, Reply, Video
+from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import ProviderRequest
@@ -190,14 +191,15 @@ def matches_provider_wake_prefix(
         provider_wake_prefix: Prefix required by the provider, if any.
 
     Returns:
-        True when no prefix is configured, WebChat is exempt, or the message
-        starts with the configured prefix.
+        True for programmatic wakeups, when no prefix is configured, when
+        WebChat is exempt, or when the message starts with the prefix.
     """
     message_str = event.message_str or ""
     if event.get_platform_name() == "lark":
         message_str = message_str.lstrip()
     return (
-        not provider_wake_prefix
+        isinstance(event, AgentWakeupEvent)
+        or not provider_wake_prefix
         or event.get_platform_name() == "webchat"
         or message_str.startswith(provider_wake_prefix)
     )
@@ -272,7 +274,11 @@ async def collect_initial_request(
             prefix_text = event.message_str
             if event.get_platform_name() == "lark":
                 prefix_text = prefix_text.lstrip()
-            if provider_wake_prefix and prefix_text.startswith(provider_wake_prefix):
+            if (
+                provider_wake_prefix
+                and not isinstance(event, AgentWakeupEvent)
+                and prefix_text.startswith(provider_wake_prefix)
+            ):
                 req.prompt = prefix_text[len(provider_wake_prefix) :]
 
             # media files attachments
@@ -500,13 +506,6 @@ async def prepare_request(
     Returns:
         Prepared content and image state, or None for a rejected, stopped, or empty input.
     """
-    if req is not None and config.load_session_history and req.conversation is None:
-        req.conversation = await _get_session_conv(event, plugin_context)
-        req.contexts = json.loads(req.conversation.history)
-        # A background task may be stopped while conversation loading is pending.
-        stop_signal = event.get_extra("_background_stop_signal")
-        if isinstance(stop_signal, asyncio.Event) and stop_signal.is_set():
-            return None
     collected_request = req is None or (
         any(isinstance(part, Reply) for part in event.message_obj.message)
         and not any(
@@ -522,6 +521,11 @@ async def prepare_request(
         )
         if req is None:
             return None
+
+    # A background task may be stopped while conversation loading is pending.
+    stop_signal = event.get_extra("_background_stop_signal")
+    if isinstance(stop_signal, asyncio.Event) and stop_signal.is_set():
+        return None
 
     cfg = config.provider_settings
     options = cfg.get("image_compress_options", {})

@@ -98,7 +98,11 @@ class WakingCheckStage(Stage):
         if not preserve_whitespace:
             event.message_str = message_str
         api_key_allow_admin_role = event.get_extra("_api_key_allow_admin_role")
-        for admin_id in self.ctx.astrbot_config["admins_id"]:
+        for admin_id in (
+            []
+            if event.get_extra("_role_resolved", False)
+            else self.ctx.astrbot_config["admins_id"]
+        ):
             if (
                 api_key_allow_admin_role is not False
                 and str(event.get_sender_id()) == admin_id
@@ -109,8 +113,8 @@ class WakingCheckStage(Stage):
         # 检查 wake
         wake_prefixes = self.ctx.astrbot_config["wake_prefix"]
         messages = event.get_messages()
-        is_wake = False
-        for wake_prefix in wake_prefixes:
+        is_wake = event.is_wake
+        for wake_prefix in [] if is_wake else wake_prefixes:
             if message_str.startswith(wake_prefix):
                 if (
                     not event.is_private_chat()

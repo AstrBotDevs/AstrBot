@@ -9,7 +9,6 @@ import pytest
 from opentelemetry.trace import format_trace_id, get_current_span
 
 from astrbot.core.agent.runners.base import AgentState
-from astrbot.core.astr_agent_wakeup import wake_main_agent
 from astrbot.core.astr_main_agent import request as request_build
 from astrbot.core.astr_main_agent_resources import (
     BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT,
@@ -266,7 +265,9 @@ async def test_scheduler_uses_event_scope(event, frames, monkeypatch, failure_at
         "cancel",
     ],
 )
-async def test_wakeup_uses_event_scope(frames, monkeypatch, failure_at, trigger):
+async def test_wakeup_uses_event_scope(
+    frames, monkeypatch, failure_at, trigger, wakeup_pipeline
+):
     """Cover both triggers' execution, saving, failure, and cancellation scopes.
 
     Args:
@@ -332,7 +333,7 @@ async def test_wakeup_uses_event_scope(frames, monkeypatch, failure_at, trigger)
                 kwargs["plugin_context"],
                 kwargs["config"],
                 SimpleNamespace(provider_config={"modalities": ["image"]}),
-                kwargs["req"],
+                kwargs.get("req"),
             )
         return None if failure_at == "empty" else SimpleNamespace(agent_runner=runner)
 
@@ -348,7 +349,10 @@ async def test_wakeup_uses_event_scope(frames, monkeypatch, failure_at, trigger)
     monkeypatch.setattr(request_build, "_get_session_conv", conversation)
     monkeypatch.setattr(astr_main_agent, "build_main_agent", build)
     save = AsyncMock(side_effect=persist)
-    monkeypatch.setattr("astrbot.core.astr_agent_wakeup.persist_agent_history", save)
+    monkeypatch.setattr(
+        "astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal.InternalAgentSubStage._save_to_history",
+        save,
+    )
     if trigger == "cron":
         prompt = PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
             cron_job='{"id":"test-job"}'
@@ -359,8 +363,8 @@ async def test_wakeup_uses_event_scope(frames, monkeypatch, failure_at, trigger)
         )
     else:
         prompt = "Continue processing the plugin result."
-    execution = wake_main_agent(
-        manager.ctx,
+    execution = wakeup_pipeline.execute(
+        wakeup_pipeline(manager.ctx),
         umo="test:FriendMessage:cron-execution-test",
         source=trigger,
         source_id="trigger-id",

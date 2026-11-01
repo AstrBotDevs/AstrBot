@@ -12,6 +12,7 @@ from astrbot.core.agent.message import (
     dump_messages_with_checkpoints,
 )
 from astrbot.core.agent.response import AgentStats
+from astrbot.core.agent.runners.base import AgentState
 from astrbot.core.astr_main_agent import (
     MainAgentBuildConfig,
     MainAgentBuildResult,
@@ -29,6 +30,7 @@ from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_event,
 )
 from astrbot.core.pipeline.stage import Stage
+from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import (
     LLMResponse,
@@ -36,6 +38,7 @@ from astrbot.core.provider.entities import (
 )
 from astrbot.core.star.session_llm_manager import SessionServiceManager
 from astrbot.core.star.star_handler import EventType
+from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.session_lock import session_lock_manager
 
@@ -106,7 +109,13 @@ class InternalAgentSubStage(Stage):
         follow_up_consumed_marked = False
         follow_up_activated = False
         typing_requested = False
+        is_wakeup = isinstance(event, AgentWakeupEvent)
         try:
+            if (
+                is_wakeup
+                and active_event_registry.get_background_stop_signal(event).is_set()
+            ):
+                raise asyncio.CancelledError()
             streaming_response = self.streaming_response
             if (enable_streaming := event.get_extra("enable_streaming")) is not None:
                 streaming_response = bool(enable_streaming)
@@ -153,11 +162,12 @@ class InternalAgentSubStage(Stage):
                     )
                     return
 
-            try:
-                typing_requested = True
-                await event.send_typing()
-            except Exception:
-                logger.warning("send_typing failed", exc_info=True)
+            if not is_wakeup:
+                try:
+                    typing_requested = True
+                    await event.send_typing()
+                except Exception:
+                    logger.warning("send_typing failed", exc_info=True)
             if await call_event_hook(event, EventType.OnWaitingLLMRequestEvent):
                 return
 
@@ -173,6 +183,11 @@ class InternalAgentSubStage(Stage):
 
             async with session_lock_manager.acquire_lock(event.unified_msg_origin):
                 logger.debug("acquired session lock for llm request")
+                if (
+                    is_wakeup
+                    and active_event_registry.get_background_stop_signal(event).is_set()
+                ):
+                    raise asyncio.CancelledError()
                 current_config = self.ctx.plugin_manager.context.get_config(
                     umo=event.unified_msg_origin
                 )
@@ -195,7 +210,6 @@ class InternalAgentSubStage(Stage):
                         call_request_hook=True,
                         validate_provider_endpoint=True,
                     )
-
                     plugin_context = self.ctx.plugin_manager.context
                     build_result: MainAgentBuildResult | None = await build_main_agent(
                         event=event,
@@ -203,7 +217,16 @@ class InternalAgentSubStage(Stage):
                         config=build_cfg,
                     )
 
+                    if is_wakeup and (
+                        event.is_stopped()
+                        or active_event_registry.get_background_stop_signal(
+                            event
+                        ).is_set()
+                    ):
+                        raise asyncio.CancelledError()
                     if build_result is None:
+                        if is_wakeup:
+                            raise RuntimeError("Failed to build main agent for wakeup.")
                         if llm_error_message := event.get_extra(
                             LLM_ERROR_MESSAGE_EXTRA_KEY
                         ):
@@ -216,7 +239,7 @@ class InternalAgentSubStage(Stage):
                     agent_runner = build_result.agent_runner
                     req = build_result.provider_request
                     provider = build_result.provider
-                    if event.get_platform_name() == "webchat":
+                    if not is_wakeup and event.get_platform_name() == "webchat":
                         asyncio.create_task(
                             generate_conversation_title(event, req, provider)
                         )
@@ -243,7 +266,27 @@ class InternalAgentSubStage(Stage):
                     )
 
                     # 检测 Live Mode
-                    if action_type == "live":
+                    if is_wakeup:
+                        async for _ in run_agent(
+                            agent_runner, self.max_step, emit_output=False
+                        ):
+                            pass
+                        if (
+                            event.is_stopped()
+                            or active_event_registry.get_background_stop_signal(
+                                event
+                            ).is_set()
+                        ):
+                            raise asyncio.CancelledError()
+                        response = agent_runner.get_final_llm_resp()
+                        if agent_runner.state == AgentState.ERROR or (
+                            response is not None and response.role == "err"
+                        ):
+                            detail = f": {response.completion_text}" if response else ""
+                            raise RuntimeError(
+                                f"Wakeup agent run ended in ERROR state{detail}"
+                            )
+                    elif action_type == "live":
                         # Live Mode: 使用 run_live_agent
                         logger.info(
                             "[Internal Agent] Live Mode detected; enabling TTS processing."
@@ -283,11 +326,11 @@ class InternalAgentSubStage(Stage):
                             not event.is_stopped() or agent_runner.was_aborted()
                         ):
                             await self._save_to_history(
-                                event,
-                                req,
-                                agent_runner.get_final_llm_resp(),
-                                agent_runner.run_context.messages,
-                                agent_runner.stats,
+                                event=event,
+                                req=req,
+                                llm_response=agent_runner.get_final_llm_resp(),
+                                all_messages=agent_runner.run_context.messages,
+                                runner_stats=agent_runner.stats,
                                 user_aborted=agent_runner.was_aborted(),
                             )
 
@@ -358,11 +401,11 @@ class InternalAgentSubStage(Stage):
                     # 检查事件是否被停止，如果被停止则不保存历史记录
                     if not event.is_stopped() or agent_runner.was_aborted():
                         await self._save_to_history(
-                            event,
-                            req,
-                            final_resp,
-                            agent_runner.run_context.messages,
-                            agent_runner.stats,
+                            event=event,
+                            req=req,
+                            llm_response=final_resp,
+                            all_messages=agent_runner.run_context.messages,
+                            runner_stats=agent_runner.stats,
                             user_aborted=agent_runner.was_aborted(),
                         )
 
@@ -375,9 +418,12 @@ class InternalAgentSubStage(Stage):
                     )
                 finally:
                     if runner_registered and agent_runner is not None:
+                        agent_runner._resolve_unconsumed_follow_ups()
                         unregister_active_runner(event.unified_msg_origin, agent_runner)
 
         except Exception as e:
+            if is_wakeup:
+                raise
             logger.error(f"Error occurred while processing agent: {e}")
             custom_error_message = extract_persona_custom_error_message_from_event(
                 event
