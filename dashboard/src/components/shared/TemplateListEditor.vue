@@ -105,7 +105,16 @@
                         </v-list-item>
                       </v-col>
                       <v-col cols="12" sm="6" class="config-input">
+                        <TemplateListEditor
+                          v-if="childMeta?.type === 'template_list'"
+                          v-model="entry[itemKey][childKey]"
+                          :templates="childMeta.templates"
+                          :plugin-name="pluginName"
+                          :plugin-i18n="pluginI18n"
+                          :config-path="templateItemPath(entry.__template_key, `${itemKey}.${childKey}`)"
+                        />
                         <ConfigItemRenderer
+                          v-else
                           v-model="entry[itemKey][childKey]"
                           :item-meta="childMeta"
                           :plugin-name="pluginName"
@@ -137,7 +146,16 @@
                     </v-list-item>
                   </v-col>
                   <v-col cols="12" sm="6" class="config-input">
+                    <TemplateListEditor
+                      v-if="itemMeta?.type === 'template_list'"
+                      v-model="entry[itemKey]"
+                      :templates="itemMeta.templates"
+                      :plugin-name="pluginName"
+                      :plugin-i18n="pluginI18n"
+                      :config-path="templateItemPath(entry.__template_key, itemKey)"
+                    />
                     <ConfigItemRenderer
+                      v-else
                       v-model="entry[itemKey]"
                       :item-meta="itemMeta"
                       :plugin-name="pluginName"
