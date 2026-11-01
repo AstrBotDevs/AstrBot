@@ -200,7 +200,7 @@ async def test_get_booter_creates_cua_booter(monkeypatch):
             return True
 
     monkeypatch.setattr(
-        computer_client, "_sync_skills_to_sandbox", lambda booter: asyncio.sleep(0)
+        computer_client, "_sync_skills_to_sandbox", lambda booter, *_: asyncio.sleep(0)
     )
     monkeypatch.setitem(computer_client.session_booter, "cua-test", None)
     computer_client.session_booter.pop("cua-test", None)
@@ -301,7 +301,7 @@ async def test_cua_config_log_does_not_include_api_key(monkeypatch):
             return True
 
     monkeypatch.setattr(
-        computer_client, "_sync_skills_to_sandbox", lambda booter: asyncio.sleep(0)
+        computer_client, "_sync_skills_to_sandbox", lambda booter, *_: asyncio.sleep(0)
     )
     monkeypatch.setitem(computer_client.session_booter, "cua-log-test", None)
     computer_client.session_booter.pop("cua-log-test", None)
@@ -348,7 +348,7 @@ async def test_get_booter_shuts_down_client_when_skill_sync_fails(monkeypatch):
         async def shutdown(self):
             shutdowns.append(self.session_id)
 
-    async def fail_sync(booter):
+    async def fail_sync(booter, *_):
         raise RuntimeError("sync failed")
 
     monkeypatch.setattr(computer_client, "_sync_skills_to_sandbox", fail_sync)
@@ -396,7 +396,7 @@ async def test_cua_idle_timeout_shuts_down_session_proactively(monkeypatch):
             shutdowns.append(self.session_id)
 
     monkeypatch.setattr(
-        computer_client, "_sync_skills_to_sandbox", lambda booter: asyncio.sleep(0)
+        computer_client, "_sync_skills_to_sandbox", lambda booter, *_: asyncio.sleep(0)
     )
     monkeypatch.setattr(
         "astrbot.core.computer.booters.cua.CuaBooter",
@@ -444,7 +444,7 @@ async def test_cua_idle_timeout_refreshes_on_reuse(monkeypatch):
             shutdowns.append(self.session_id)
 
     monkeypatch.setattr(
-        computer_client, "_sync_skills_to_sandbox", lambda booter: asyncio.sleep(0)
+        computer_client, "_sync_skills_to_sandbox", lambda booter, *_: asyncio.sleep(0)
     )
     monkeypatch.setattr(
         "astrbot.core.computer.booters.cua.CuaBooter",
@@ -499,7 +499,7 @@ async def test_cua_idle_timeout_zero_disables_proactive_shutdown(monkeypatch):
             shutdowns.append(self.session_id)
 
     monkeypatch.setattr(
-        computer_client, "_sync_skills_to_sandbox", lambda booter: asyncio.sleep(0)
+        computer_client, "_sync_skills_to_sandbox", lambda booter, *_: asyncio.sleep(0)
     )
     monkeypatch.setattr(
         "astrbot.core.computer.booters.cua.CuaBooter",
@@ -538,6 +538,9 @@ async def test_non_cua_booter_does_not_schedule_idle_cleanup(monkeypatch):
 
     _clear_cua_session_state(computer_client, "shipyard-session")
     computer_client.session_booter["shipyard-session"] = FakeShipyardBooter()
+    monkeypatch.setitem(
+        computer_client._session_synced_skill_names, "shipyard-session", frozenset()
+    )
 
     ctx = FakeContext(
         {

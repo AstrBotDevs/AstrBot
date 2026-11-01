@@ -5,6 +5,7 @@ import shutil
 import sys
 import time
 import uuid
+from collections.abc import Collection
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -20,6 +21,13 @@ from .booters.base import ComputerBooter
 from .booters.local import LocalBooter, resolve_windows_shell
 
 session_booter: dict[str, ComputerBooter] = {}
+# Skill names each session may use, recorded when its LLM request is built.
+# Sessions without a record get no AstrBot-managed skills.
+session_skill_names: dict[str, frozenset[str]] = {}
+_session_synced_skill_names: dict[str, frozenset[str]] = {}
+# Serializes skill syncs per session so overlapping syncs cannot interleave
+# their upload/apply phases on the shared sandbox ``skills.zip``.
+_session_skill_sync_locks: dict[str, asyncio.Lock] = {}
 local_booter: ComputerBooter | None = None
 _MANAGED_SKILLS_FILE = ".astrbot_managed_skills.json"
 
@@ -99,8 +107,18 @@ def _list_local_skill_dirs(skills_root: Path) -> list[Path]:
     return skills
 
 
-def _collect_sync_skill_dirs() -> list[tuple[str, Path]]:
-    """Collect local and plugin-provided skills that should be synced."""
+def _collect_sync_skill_dirs(
+    skill_names: Collection[str] | None = None,
+) -> list[tuple[str, Path]]:
+    """Collect active local and plugin-provided skills that should be synced.
+
+    Args:
+        skill_names: Skill names allowed for the session. ``None`` keeps every
+            active skill.
+
+    Returns:
+        Pairs of skill name and local skill directory.
+    """
     from astrbot.core.star.star import star_registry
 
     skills_root = Path(get_astrbot_skills_path())
@@ -117,11 +135,13 @@ def _collect_sync_skill_dirs() -> list[tuple[str, Path]]:
     }
     sync_dirs: list[tuple[str, Path]] = []
     for skill in skill_manager.list_skills(
-        active_only=False,
+        active_only=True,
         runtime="local",
         show_sandbox_path=False,
     ):
         if skill.source_type == "sandbox_only":
+            continue
+        if skill_names is not None and skill.name not in skill_names:
             continue
         if (
             skill.source_type == "plugin"
@@ -490,19 +510,29 @@ async def _scan_sandbox_skills(booter: ComputerBooter) -> dict | None:
     return payload
 
 
-async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
+async def _sync_skills_to_sandbox(
+    booter: ComputerBooter,
+    skill_names: Collection[str] | None = None,
+) -> None:
     """Sync local skills to sandbox and refresh cache.
 
     Backward-compatible orchestrator: keep historical behavior while internally
-    splitting into `apply` and `scan` phases.
+    splitting into `apply` and `scan` phases. Managed skills that are no longer
+    collected are removed from the sandbox by the apply phase.
+
+    Args:
+        booter: Sandbox to sync.
+        skill_names: Skill names allowed for the session. ``None`` syncs every
+            active skill.
     """
-    sync_skill_dirs = _collect_sync_skill_dirs()
+    sync_skill_dirs = _collect_sync_skill_dirs(skill_names)
 
     temp_dir = Path(get_astrbot_temp_path())
     temp_dir.mkdir(parents=True, exist_ok=True)
-    zip_base = temp_dir / "skills_bundle"
+    bundle_id = uuid.uuid4().hex
+    zip_base = temp_dir / f"skills_bundle_{bundle_id}"
     zip_path = zip_base.with_suffix(".zip")
-    bundle_root = temp_dir / f"skills_bundle_{uuid.uuid4().hex}"
+    bundle_root = temp_dir / f"skills_bundle_{bundle_id}_files"
 
     try:
         if sync_skill_dirs:
@@ -548,6 +578,34 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
                 zip_path.unlink()
             except Exception:
                 logger.warning(f"Failed to remove temp skills zip: {zip_path}")
+
+
+async def _sync_session_skills(
+    session_id: str,
+    booter: ComputerBooter,
+    *,
+    force: bool = False,
+) -> None:
+    """Sync a session's allowed skills to its sandbox, one sync at a time.
+
+    The allowlist is read and recorded inside the per-session lock, and only
+    after the sync succeeds, so the recorded allowlist always matches the
+    files left in the sandbox by the last completed sync.
+
+    Args:
+        session_id: Session that owns the sandbox.
+        booter: Sandbox to sync.
+        force: Sync even if the allowlist matches the last successful sync.
+    """
+    lock = _session_skill_sync_locks.setdefault(session_id, asyncio.Lock())
+    async with lock:
+        skill_names = session_skill_names.get(session_id, frozenset())
+        if not force and _session_synced_skill_names.get(session_id) == skill_names:
+            return
+        # Forget the old record first so a failed sync is retried next time.
+        _session_synced_skill_names.pop(session_id, None)
+        await _sync_skills_to_sandbox(booter, skill_names)
+        _session_synced_skill_names[session_id] = skill_names
 
 
 async def get_booter(
@@ -645,7 +703,7 @@ async def get_booter(
             logger.info(
                 f"[Computer] Sandbox booted successfully: type={booter_type}, session={session_id}"
             )
-            await _sync_skills_to_sandbox(client)
+            await _sync_session_skills(session_id, client, force=True)
         except Exception as e:
             logger.error(f"Error booting sandbox for session {session_id}: {e}")
             try:
@@ -663,6 +721,10 @@ async def get_booter(
             raise e
 
         session_booter[session_id] = client
+    else:
+        # Resync before any tool runs if the allowed skills changed (persona,
+        # plugin set or global toggle) so revoked skill files are dropped.
+        await _sync_session_skills(session_id, session_booter[session_id])
     if booter_type == "cua":
         _schedule_cua_idle_cleanup(session_id, cua_idle_timeout)
     return session_booter[session_id]
@@ -677,7 +739,7 @@ async def sync_skills_to_active_sandboxes() -> None:
         try:
             if not await booter.available():
                 continue
-            await _sync_skills_to_sandbox(booter)
+            await _sync_session_skills(session_id, booter, force=True)
         except Exception as e:
             logger.warning(
                 "Failed to sync skills to sandbox for session %s: %s",
