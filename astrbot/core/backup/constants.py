@@ -6,18 +6,24 @@
 from sqlmodel import SQLModel
 
 from astrbot.core.db.po import (
+    ApiKey,
     Attachment,
     ChatUIProject,
     CommandConfig,
     CommandConflict,
     ConversationV2,
+    CronJob,
+    DashboardTrustedDevice,
     Persona,
     PersonaFolder,
     PlatformMessageHistory,
     PlatformSession,
     PlatformStat,
     Preference,
+    ProviderStat,
     SessionProjectRelation,
+    UmoAlias,
+    UmoSender,
     WebChatThread,
 )
 from astrbot.core.knowledge_base.models import (
@@ -42,7 +48,9 @@ from astrbot.core.utils.astrbot_path import (
 # 主数据库模型类映射
 MAIN_DB_MODELS: dict[str, type[SQLModel]] = {
     "platform_stats": PlatformStat,
+    "provider_stats": ProviderStat,
     "conversations": ConversationV2,
+    "cron_jobs": CronJob,
     "personas": Persona,
     "persona_folders": PersonaFolder,
     "preferences": Preference,
@@ -54,6 +62,14 @@ MAIN_DB_MODELS: dict[str, type[SQLModel]] = {
     "attachments": Attachment,
     "command_configs": CommandConfig,
     "command_conflicts": CommandConflict,
+    "umo_aliases": UmoAlias,
+    "umo_senders": UmoSender,
+    "api_keys": ApiKey,
+}
+
+# Device trust must be re-established after restore, never copied from a backup.
+EXCLUDED_MAIN_DB_MODELS: dict[str, type[SQLModel]] = {
+    "dashboard_trusted_devices": DashboardTrustedDevice,
 }
 
 # 知识库元数据模型类映射

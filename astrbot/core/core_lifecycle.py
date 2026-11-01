@@ -15,6 +15,7 @@ import threading
 import time
 import traceback
 from asyncio import Queue
+from pathlib import Path
 
 from astrbot.api import logger, sp
 from astrbot.core import LogBroker, LogManager
@@ -27,6 +28,9 @@ from astrbot.core.db import BaseDatabase
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.pipeline.scheduler import PipelineContext, PipelineScheduler
+from astrbot.core.platform.button_interaction import (
+    configure_button_callback_registry,
+)
 from astrbot.core.platform.manager import PlatformManager
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
 from astrbot.core.process_restart import restart_process
@@ -165,12 +169,13 @@ class AstrBotCoreLifecycle:
             LogManager.configure_logger(
                 logger, self.astrbot_config, override_level="DEBUG"
             )
-            LogManager.configure_trace_logger(self.astrbot_config)
         else:
             LogManager.configure_logger(logger, self.astrbot_config)
-            LogManager.configure_trace_logger(self.astrbot_config)
 
         await self.db.initialize()
+        button_callback_db_path = getattr(self.db, "db_path", None)
+        if isinstance(button_callback_db_path, (str, Path)):
+            configure_button_callback_registry(button_callback_db_path)
         if sp.db_helper is self.db:
             await sp.initialize()
 
@@ -420,6 +425,9 @@ class AstrBotCoreLifecycle:
                 logger.error(f"任务 {task.get_name()} 发生错误: {e}")
 
         # 释放数据库引擎连接池
+        from astrbot.core.utils.trace_store import close_trace_store
+
+        await asyncio.to_thread(close_trace_store)
         try:
             await self.db.engine.dispose()
         except Exception as e:
@@ -431,6 +439,9 @@ class AstrBotCoreLifecycle:
         await self.provider_manager.terminate()
         await self.platform_manager.terminate()
         await self.kb_manager.terminate()
+        from astrbot.core.utils.trace_store import close_trace_store
+
+        await asyncio.to_thread(close_trace_store)
         if sp.db_helper is self.db:
             await sp.close()
         self.dashboard_shutdown_event.set()

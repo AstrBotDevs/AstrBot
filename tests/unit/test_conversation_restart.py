@@ -1,3 +1,4 @@
+import asyncio
 import copy
 import importlib.util
 import json
@@ -18,6 +19,7 @@ from astrbot.core.config.default import (
     CONFIG_METADATA_3,
     DEFAULT_CONFIG,
 )
+from astrbot.core.event_bus import UNIQUE_SESSION_ID_BUILDERS, EventBus
 from astrbot.core.message.components import Plain
 from astrbot.core.pipeline.waking_check import stage as waking
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -194,7 +196,7 @@ async def test_restart_permissions_follow_pipeline_isolation(
             "admins_id": [],
             "wake_prefix": ["/"],
         }
-        if profile not in profiles or profiles[profile].unique_session != enabled:
+        if profile not in profiles or profiles[profile].ctx.astrbot_config != config:
             stage = waking.WakingCheckStage()
             await stage.initialize(
                 SimpleNamespace(
@@ -218,8 +220,17 @@ async def test_restart_permissions_follow_pipeline_isolation(
         event.send = AsyncMock()
         # A stale marker must never grant access on a shared-group event.
         event.set_extra("_session_isolated", True)
-        await profiles[profile].process(event)
-        isolated = enabled and platform in waking.UNIQUE_SESSION_ID_BUILDERS
+        stage = profiles[profile]
+        queue = AsyncMock()
+        queue.get.side_effect = [event, asyncio.CancelledError]
+        config_manager = MagicMock()
+        config_manager.get_conf_info.return_value = {"id": profile}
+        scheduler = SimpleNamespace(ctx=stage.ctx, execute=stage.process)
+        bus = EventBus(queue, {profile: scheduler}, config_manager)
+        with pytest.raises(asyncio.CancelledError):
+            await bus.dispatch()
+        await asyncio.gather(*bus._pending_tasks)
+        isolated = enabled and platform in UNIQUE_SESSION_ID_BUILDERS
         assert event.get_extra("_session_isolated") is isolated
         assert event.session_id == ("member_group" if isolated else "group")
         allowed = override == "member" or (

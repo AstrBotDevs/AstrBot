@@ -1,5 +1,6 @@
 """备份功能单元测试"""
 
+import hashlib
 import json
 import os
 import re
@@ -9,6 +10,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from sqlmodel import SQLModel, select
 
 from astrbot.core.backup import (
     BACKUP_MANIFEST_VERSION,
@@ -16,6 +18,7 @@ from astrbot.core.backup import (
     MAIN_DB_MODELS,
     ImportPreCheckResult,
 )
+from astrbot.core.backup.constants import EXCLUDED_MAIN_DB_MODELS
 from astrbot.core.backup.exporter import AstrBotExporter
 from astrbot.core.backup.importer import (
     PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT,
@@ -25,9 +28,16 @@ from astrbot.core.backup.importer import (
     _get_major_version,
 )
 from astrbot.core.config.default import VERSION
+from astrbot.core.db import po
 from astrbot.core.db.po import (
+    ApiKey,
     ConversationV2,
+    DashboardTrustedDevice,
+    ProviderStat,
+    UmoAlias,
+    UmoSender,
 )
+from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.utils.upload import UploadTooLargeError
 from astrbot.core.utils.version_comparator import VersionComparator
 from astrbot.dashboard.services.backup_service import (
@@ -1016,6 +1026,21 @@ class TestModelMappings:
         """测试主数据库模型映射非空"""
         assert len(MAIN_DB_MODELS) > 0
 
+    def test_all_main_db_models_have_a_backup_policy(self):
+        """Require each main database table to be backed up or explicitly excluded."""
+        models = {
+            model.__tablename__: model
+            for model in vars(po).values()
+            if isinstance(model, type)
+            and issubclass(model, SQLModel)
+            and "__table__" in vars(model)
+        }
+        assert MAIN_DB_MODELS.keys().isdisjoint(EXCLUDED_MAIN_DB_MODELS)
+        assert models == MAIN_DB_MODELS | EXCLUDED_MAIN_DB_MODELS
+        assert EXCLUDED_MAIN_DB_MODELS == {
+            "dashboard_trusted_devices": DashboardTrustedDevice,
+        }
+
     def test_main_db_models_contain_expected_tables(self):
         """测试主数据库模型映射包含预期的表"""
         expected_tables = [
@@ -1047,6 +1072,264 @@ class TestModelMappings:
 
 class TestBackupIntegration:
     """备份集成测试"""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("model", "data"),
+        [
+            (
+                UmoAlias,
+                {
+                    "umo": "qq:GroupMessage:123",
+                    "creator_sender_id": "admin",
+                    "auto_name": "Original group name",
+                    "user_alias": "Team chat",
+                },
+            ),
+            (
+                UmoSender,
+                {
+                    "umo": "qq:GroupMessage:123",
+                    "sender_id": "456",
+                    "sender_name": "Alice",
+                },
+            ),
+            (
+                ProviderStat,
+                {
+                    "umo": "qq:GroupMessage:123",
+                    "conversation_id": "conversation-1",
+                    "provider_id": "provider-1",
+                    "provider_model": "model-1",
+                    "status": "completed",
+                    "token_input_other": 120,
+                    "token_input_cached": 80,
+                    "token_output": 40,
+                    "start_time": 10.0,
+                    "end_time": 12.5,
+                    "time_to_first_token": 0.5,
+                },
+            ),
+            (
+                ApiKey,
+                {
+                    "name": "External client",
+                    "key_id": "key-1",
+                    "key_hash": "a" * 64,
+                    "key_prefix": "ab_test",
+                    "scopes": ["chat", "sessions"],
+                    "created_by": "admin",
+                    "last_used_at": datetime(2026, 1, 1),
+                    "expires_at": datetime(2099, 1, 1),
+                },
+            ),
+            (
+                ApiKey,
+                {
+                    "name": "Revoked client",
+                    "key_id": "key-2",
+                    "key_hash": "b" * 64,
+                    "key_prefix": "ab_revoked",
+                    "scopes": [],
+                    "created_by": "admin",
+                    "revoked_at": datetime(2026, 1, 1),
+                },
+            ),
+        ],
+        ids=["umo-alias", "umo-sender", "provider-stats", "api-key", "revoked-api-key"],
+    )
+    async def test_persistent_models_roundtrip(
+        self, tmp_path, monkeypatch, model, data
+    ):
+        """Preserve persistent records and replace existing target rows.
+
+        Args:
+            tmp_path: Temporary directory for SQLite databases and the archive.
+            monkeypatch: Fixture used to isolate the AstrBot data directory.
+            model: Model whose backup behavior is under test.
+            data: Persisted field values to preserve through the archive.
+        """
+        monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
+        source = SQLiteDatabase(str(tmp_path / "source.db"))
+        target = SQLiteDatabase(str(tmp_path / "target.db"))
+        try:
+            async with source.get_db() as session:
+                async with session.begin():
+                    session.add(model(**data))
+            async with source.get_db() as session:
+                expected = (
+                    (await session.execute(select(model))).scalar_one().model_dump()
+                )
+            async with target.get_db() as session:
+                async with session.begin():
+                    primary_key = next(iter(model.__table__.primary_key)).name
+                    session.add(model(**(data | {primary_key: 999})))
+            exporter = AstrBotExporter(
+                main_db=source, config_path=str(tmp_path / "missing-config.json")
+            )
+            zip_path = await exporter.export_all(output_dir=str(tmp_path / "backups"))
+
+            result = await AstrBotImporter(main_db=target).import_all(zip_path)
+            assert result.success, result.errors
+            assert result.imported_tables[model.__tablename__] == 1
+            async with target.get_db() as session:
+                restored = (await session.execute(select(model))).scalars().all()
+                assert [row.model_dump() for row in restored] == [expected]
+            if model is ApiKey:
+                active = await target.get_active_api_key_by_hash(data["key_hash"])
+                assert (active is None) == (data.get("revoked_at") is not None)
+        finally:
+            await source.engine.dispose()
+            await target.engine.dispose()
+
+    @pytest.mark.asyncio
+    async def test_device_trust_is_excluded_and_cleared(self, tmp_path, monkeypatch):
+        """Exclude source device trust and invalidate target trust on replace restore.
+
+        Args:
+            tmp_path: Temporary directory for databases and the archive.
+            monkeypatch: Fixture used to isolate the AstrBot data directory.
+        """
+        monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
+        source = SQLiteDatabase(str(tmp_path / "source.db"))
+        target = SQLiteDatabase(str(tmp_path / "target.db"))
+        try:
+            for database in (source, target):
+                async with database.get_db() as session:
+                    async with session.begin():
+                        session.add(
+                            DashboardTrustedDevice(
+                                token_hash="device-token",
+                                totp_secret_hash="totp-secret",
+                                expires_at=datetime(2099, 1, 1),
+                            )
+                        )
+            exporter = AstrBotExporter(
+                main_db=source, config_path=str(tmp_path / "missing-config.json")
+            )
+            zip_path = await exporter.export_all(output_dir=str(tmp_path / "backups"))
+            with zipfile.ZipFile(zip_path) as archive:
+                main_data = json.loads(archive.read("databases/main_db.json"))
+                assert "dashboard_trusted_devices" not in main_data
+
+            result = await AstrBotImporter(main_db=target).import_all(zip_path)
+            assert result.success, result.errors
+            async with target.get_db() as session:
+                assert (
+                    not (await session.execute(select(DashboardTrustedDevice)))
+                    .scalars()
+                    .all()
+                )
+        finally:
+            await source.engine.dispose()
+            await target.engine.dispose()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("include_mcp", [True, False], ids=["mcp", "legacy"])
+    @pytest.mark.parametrize(
+        "existing_target", [True, False], ids=["existing", "fresh"]
+    )
+    async def test_mcp_config_roundtrip(
+        self, tmp_path, monkeypatch, include_mcp, existing_target
+    ):
+        """Restore MCP configuration across distinct AstrBot roots.
+
+        Args:
+            tmp_path: Temporary directory for both instances and their databases.
+            monkeypatch: Fixture used to switch between instance roots.
+            include_mcp: Whether the backup contains an MCP configuration.
+            existing_target: Whether the target already has MCP configuration.
+        """
+        source_root = tmp_path / "source"
+        target_root = tmp_path / "target"
+        source_data = source_root / "data"
+        source_data.mkdir(parents=True)
+        mcp_content = json.dumps(
+            {
+                "mcpServers": {
+                    "search": {"url": "https://example.com/mcp", "enabled": False}
+                }
+            },
+            indent=2,
+        ).encode("utf-8")
+        if include_mcp:
+            (source_data / "mcp_server.json").write_bytes(mcp_content)
+        target_data = target_root / "data"
+        target_mcp = target_data / "mcp_server.json"
+        if existing_target:
+            target_data.mkdir(parents=True)
+            target_mcp.write_bytes(b'{"mcpServers": {}}')
+
+        source = SQLiteDatabase(str(tmp_path / "source.db"))
+        target = SQLiteDatabase(str(tmp_path / "target.db"))
+        try:
+            monkeypatch.setenv("ASTRBOT_ROOT", str(source_root))
+            exporter = AstrBotExporter(
+                main_db=source, config_path=str(source_data / "cmd_config.json")
+            )
+            zip_path = await exporter.export_all(output_dir=str(tmp_path / "backups"))
+            with zipfile.ZipFile(zip_path) as archive:
+                manifest = json.loads(archive.read("manifest.json"))
+                assert ("config/mcp_server.json" in archive.namelist()) == include_mcp
+                if include_mcp:
+                    assert manifest["checksums"]["config/mcp_server.json"] == (
+                        "sha256:" + hashlib.sha256(mcp_content).hexdigest()
+                    )
+
+            monkeypatch.setenv("ASTRBOT_ROOT", str(target_root))
+            result = await AstrBotImporter(
+                main_db=target, config_path=str(target_data / "cmd_config.json")
+            ).import_all(zip_path)
+            assert result.success, result.errors
+            assert not result.warnings
+            if include_mcp:
+                assert target_mcp.read_bytes() == mcp_content
+                assert result.imported_files["mcp_config"] == 1
+                if existing_target:
+                    assert (
+                        target_mcp.with_suffix(".json.bak").read_bytes()
+                        == b'{"mcpServers": {}}'
+                    )
+            elif existing_target:
+                assert target_mcp.read_bytes() == b'{"mcpServers": {}}'
+                assert not target_mcp.with_suffix(".json.bak").exists()
+            else:
+                assert not target_mcp.exists()
+        finally:
+            await source.engine.dispose()
+            await target.engine.dispose()
+
+    @pytest.mark.asyncio
+    async def test_cron_jobs_roundtrip(self, tmp_path):
+        """Preserve a scheduled task through backup export and import."""
+        source = SQLiteDatabase(str(tmp_path / "source.db"))
+        target = SQLiteDatabase(str(tmp_path / "target.db"))
+        try:
+            job = await source.create_cron_job(
+                name="Daily reminder",
+                job_type="active_agent",
+                cron_expression="0 9 * * *",
+                timezone="Asia/Taipei",
+                payload={"message": "Reminder"},
+            )
+            exporter = AstrBotExporter(
+                main_db=source, config_path=str(tmp_path / "missing-config.json")
+            )
+            with patch(
+                "astrbot.core.backup.exporter.get_backup_directories", return_value={}
+            ):
+                zip_path = await exporter.export_all(
+                    output_dir=str(tmp_path / "backups")
+                )
+
+            result = await AstrBotImporter(main_db=target).import_all(zip_path)
+            assert result.success, result.errors
+            restored = await target.list_cron_jobs()
+            assert len(restored) == 1
+            assert restored[0].model_dump() == job.model_dump()
+        finally:
+            await source.engine.dispose()
+            await target.engine.dispose()
 
     @pytest.mark.asyncio
     async def test_export_import_roundtrip(self, tmp_path):

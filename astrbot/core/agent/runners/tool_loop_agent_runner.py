@@ -46,6 +46,7 @@ from astrbot.core.provider.modalities import (
     sanitize_contexts_by_modalities,
 )
 from astrbot.core.provider.provider import Provider
+from astrbot.core.utils.async_generator import iterate_in_task
 
 from ..context.compressor import ContextCompressor
 from ..context.config import ContextConfig
@@ -231,6 +232,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         request_max_retries: int | None = None,
         tool_result_overflow_dir: str | None = None,
         read_tool: FunctionTool | None = None,
+        max_context_tokens: int | None = None,
         **kwargs: T.Any,
     ) -> None:
         self.req = request
@@ -248,7 +250,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._tool_result_token_counter = EstimateTokenCounter()
         self.request_context_manager_config = ContextConfig(
             # <=0 disables token-based guarding.
-            max_context_tokens=provider.provider_config.get("max_context_tokens", 0),
+            max_context_tokens=(
+                max_context_tokens
+                if max_context_tokens is not None
+                else provider.provider_config.get("max_context_tokens", 0)
+            ),
             # Enforce max turns before token-based guarding.
             enforce_max_turns=self.enforce_max_turns,
             truncate_turns=self.truncate_turns,
@@ -1625,49 +1631,49 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self,
         executor: T.AsyncGenerator[ToolExecutorResultT, None],
     ) -> T.AsyncGenerator[ToolExecutorResultT, None]:
+        executor = iterate_in_task(executor)
+
         async def _next_executor_result() -> ToolExecutorResultT:
             return await anext(executor)
 
-        while True:
-            if self._is_stop_requested():
-                await self._close_executor(executor)
-                raise _ToolExecutionInterrupted(
-                    "Tool execution interrupted before reading the next tool result."
-                )
-
-            next_result_task = asyncio.create_task(_next_executor_result())
-            abort_task = asyncio.create_task(self._abort_signal.wait())
-            try:
-                done, _ = await asyncio.wait(
-                    {next_result_task, abort_task},
-                    return_when=asyncio.FIRST_COMPLETED,
-                )
-
-                if abort_task in done:
-                    if not next_result_task.done():
-                        next_result_task.cancel()
-                        with suppress(asyncio.CancelledError, StopAsyncIteration):
-                            await next_result_task
-
-                    await self._close_executor(executor)
-
+        try:
+            while True:
+                if self._is_stop_requested():
                     raise _ToolExecutionInterrupted(
-                        "Tool execution interrupted by a stop request."
+                        "Tool execution interrupted before reading the next tool result."
                     )
 
+                next_result_task = asyncio.create_task(_next_executor_result())
+                abort_task = asyncio.create_task(self._abort_signal.wait())
                 try:
-                    yield next_result_task.result()
-                except StopAsyncIteration:
-                    return
-            except asyncio.CancelledError:
-                if not next_result_task.done():
-                    next_result_task.cancel()
-                # The reader must finish before its async generator can be closed.
-                await asyncio.gather(next_result_task, return_exceptions=True)
-                await self._close_executor(executor)
-                raise
-            finally:
-                if not abort_task.done():
-                    abort_task.cancel()
-                    with suppress(asyncio.CancelledError):
-                        await abort_task
+                    done, _ = await asyncio.wait(
+                        {next_result_task, abort_task},
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+
+                    if abort_task in done:
+                        if not next_result_task.done():
+                            next_result_task.cancel()
+                            with suppress(asyncio.CancelledError, StopAsyncIteration):
+                                await next_result_task
+                        raise _ToolExecutionInterrupted(
+                            "Tool execution interrupted by a stop request."
+                        )
+
+                    try:
+                        yield next_result_task.result()
+                    except StopAsyncIteration:
+                        return
+                except asyncio.CancelledError:
+                    if not next_result_task.done():
+                        next_result_task.cancel()
+                    # The reader must finish before its async generator can be closed.
+                    await asyncio.gather(next_result_task, return_exceptions=True)
+                    raise
+                finally:
+                    if not abort_task.done():
+                        abort_task.cancel()
+                        with suppress(asyncio.CancelledError):
+                            await abort_task
+        finally:
+            await executor.aclose()

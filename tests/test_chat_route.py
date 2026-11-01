@@ -29,7 +29,10 @@ def chat_service_instance(monkeypatch, tmp_path):
     )
     db = Mock()
     db.get_platform_session_by_id = AsyncMock(
-        return_value=SimpleNamespace(session_id="existing-session")
+        return_value=SimpleNamespace(
+            session_id="existing-session",
+            creator="alice",
+        )
     )
     db.create_platform_session = AsyncMock()
     service = ChatService(db, core_lifecycle)
@@ -85,6 +88,28 @@ def _decode_sse_event(event: str) -> dict:
         Decoded event payload.
     """
     return json.loads(event.removeprefix("data: ").strip())
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_rejects_session_owned_by_another_user(
+    chat_service_instance,
+):
+    service = chat_service_instance
+    service.db.get_platform_session_by_id.return_value = SimpleNamespace(
+        session_id="alice-session",
+        creator="alice",
+    )
+
+    with pytest.raises(ChatServiceError, match="Permission denied"):
+        await service.build_chat_stream(
+            "bob",
+            {"message": "canary", "session_id": "alice-session"},
+        )
+
+    service.db.create_platform_session.assert_not_awaited()
+    history_mgr = service.core_lifecycle.platform_message_history_manager
+    history_mgr.insert.assert_not_awaited()
+    assert not service.chat_runs
 
 
 @pytest.mark.asyncio
