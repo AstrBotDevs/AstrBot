@@ -24,7 +24,6 @@ from packaging.version import InvalidVersion, Version
 
 from astrbot.core import (
     DependencyConflictError,
-    LogManager,
     logger,
     pip_installer,
     sp,
@@ -1105,8 +1104,6 @@ class PluginManager:
 
         # 导入插件模块，并尝试实例化插件类
         for plugin_module in plugin_modules:
-            # Fall back to the core logger if the plugin logger cannot be resolved
-            # before the plugin directory name is known.
             plugin_logger = logger
             try:
                 module_str = plugin_module["module"]
@@ -1132,10 +1129,10 @@ class PluginManager:
                 if specified_dir_name and root_dir_name != specified_dir_name:
                     continue
 
-                # Attribute the load lifecycle to the plugin itself. Logs about a
-                # plugin that fails to load must carry its name, otherwise the
-                # WebUI plugin filter cannot list it.
-                plugin_logger = LogManager.get_plugin_logger(root_dir_name)
+                # Use the directory name until plugin metadata is available.
+                plugin_logger = logging.LoggerAdapter(
+                    logger, {"plugin_name": root_dir_name}
+                )
                 plugin_logger.info("Loading plugin %s ...", root_dir_name)
 
                 # 尝试导入模块
@@ -1209,6 +1206,10 @@ class PluginManager:
                             f"Failed to load metadata for plugin {root_dir_name}: "
                             f"{e!s}. Using default metadata.",
                         )
+
+                    plugin_logger = logging.LoggerAdapter(
+                        logger, {"plugin_name": metadata.name or root_dir_name}
+                    )
 
                     if not ignore_version_check:
                         is_valid, error_message = (
@@ -1360,6 +1361,10 @@ class PluginManager:
                     if not metadata:
                         raise Exception(f"无法找到插件 {plugin_dir_path} 的元数据。")
 
+                    plugin_logger = logging.LoggerAdapter(
+                        logger, {"plugin_name": metadata.name or root_dir_name}
+                    )
+
                     if not ignore_version_check:
                         is_valid, error_message = (
                             self._validate_astrbot_version_specifier(
@@ -1438,13 +1443,21 @@ class PluginManager:
                     EventType.OnPluginLoadedEvent,
                 )
                 for handler in handlers:
+                    handler_plugin = star_map.get(handler.handler_module_path)
+                    handler_plugin_name = (
+                        handler_plugin.name if handler_plugin else None
+                    ) or handler.handler_module_path
                     try:
-                        plugin_logger.info(
-                            f"hook(on_plugin_loaded) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
+                        logger.info(
+                            f"hook(on_plugin_loaded) -> {handler_plugin_name} - {handler.handler_name}",
+                            extra={"plugin_name": handler_plugin_name},
                         )
                         await handler.handler(metadata)
                     except Exception:
-                        plugin_logger.error(traceback.format_exc())
+                        logger.error(
+                            traceback.format_exc(),
+                            extra={"plugin_name": handler_plugin_name},
+                        )
 
             except BaseException as e:
                 plugin_logger.error(
