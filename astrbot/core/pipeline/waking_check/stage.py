@@ -98,10 +98,10 @@ class WakingCheckStage(Stage):
         if not preserve_whitespace:
             event.message_str = message_str
         api_key_allow_admin_role = event.get_extra("_api_key_allow_admin_role")
+        sender_aliases = set(event.get_sender_aliases())
         for admin_id in self.ctx.astrbot_config["admins_id"]:
-            if (
-                api_key_allow_admin_role is not False
-                and str(event.get_sender_id()) == admin_id
+            if api_key_allow_admin_role is not False and (
+                str(event.get_sender_id()) == admin_id or admin_id in sender_aliases
             ):
                 event.role = "admin"
                 break

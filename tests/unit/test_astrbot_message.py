@@ -25,6 +25,11 @@ class TestMessageMember:
         assert member.user_id == "user123"
         assert member.nickname == "TestUser"
 
+    def test_message_member_aliases_default_and_positional(self):
+        """Test aliases default to None and remain positionally compatible."""
+        assert MessageMember(user_id="user123").aliases is None
+        assert MessageMember("user123", "TestUser", ["emp-123"]).aliases == ["emp-123"]
+
     def test_message_member_str_with_nickname(self):
         """Test __str__ method with nickname."""
         member = MessageMember(user_id="user123", nickname="TestUser")

@@ -60,12 +60,15 @@ class WhitelistCheckStage(Stage):
         if (
             event.unified_msg_origin not in self.whitelist
             and str(event.get_group_id()).strip() not in self.whitelist
+            and not any(alias in self.whitelist for alias in event.get_sender_aliases())
         ):
             if self.wl_log:
                 logger.info(
-                    f"Session ID {event.unified_msg_origin} is not in the session "
-                    "allowlist, so event propagation was stopped. Add this session "
-                    "ID in WebUI: Config -> Access Control -> Whitelist -> "
-                    "Whitelist ID List, using the profile assigned to this bot.",
+                    f"Session ID {event.unified_msg_origin} (sender ID "
+                    f"{event.get_sender_id()}) is not in the allowlist, so event "
+                    "propagation was stopped. Add this session ID, the group ID, "
+                    "or a sender ID in WebUI: Config -> Access Control -> "
+                    "Whitelist -> Whitelist ID List, using the profile assigned "
+                    "to this bot.",
                 )
             event.stop_event()

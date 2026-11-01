@@ -691,7 +691,16 @@ class LarkPlatformAdapter(Platform):
 
         abm.message_id = message.message_id
         abm.raw_message = message
-        sender_open_id = event.event.sender.sender_id.open_id
+        sender_id_info = event.event.sender.sender_id
+        sender_open_id = sender_id_info.open_id
+        sender_aliases = [
+            alias
+            for alias in (
+                getattr(sender_id_info, "user_id", None),
+                getattr(sender_id_info, "union_id", None),
+            )
+            if isinstance(alias, str) and alias and alias != sender_open_id
+        ]
         sender_name = sender_open_id[:8]
         if getattr(event.event.sender, "sender_type", "user") == "user":
             cached_name = self._user_name_cache.get(sender_open_id)
@@ -738,7 +747,11 @@ class LarkPlatformAdapter(Platform):
                 if len(self._user_name_cache) > USER_NAME_CACHE_MAX_SIZE:
                     self._user_name_cache.pop(next(iter(self._user_name_cache)))
 
-        abm.sender = MessageMember(user_id=sender_open_id, nickname=sender_name)
+        abm.sender = MessageMember(
+            user_id=sender_open_id,
+            nickname=sender_name,
+            aliases=sender_aliases,
+        )
         if abm.type == MessageType.GROUP_MESSAGE:
             abm.session_id = abm.group_id
         else:
@@ -836,6 +849,14 @@ class LarkPlatformAdapter(Platform):
         abm.sender = MessageMember(
             user_id=sender_id,
             nickname=sender_id[:8],
+            aliases=[
+                alias
+                for alias in (
+                    str(operator.get("user_id") or "").strip(),
+                    str(operator.get("union_id") or "").strip(),
+                )
+                if alias and alias != sender_id
+            ],
         )
         if message_type == MessageType.GROUP_MESSAGE and chat_id:
             abm.group_id = chat_id
