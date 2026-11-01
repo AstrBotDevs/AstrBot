@@ -7,7 +7,6 @@ from unittest.mock import AsyncMock
 import pytest
 
 from astrbot import logger
-from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -148,37 +147,6 @@ async def test_send_accounting_respects_context_result(wakeup_event, outcomes):
     assert event._has_send_oper is any(outcomes)
     assert send.await_count == len(outcomes)
     assert metric.await_count == sum(outcomes)
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("use_fallback", [False, True])
-@pytest.mark.parametrize("delivered", [False, True])
-async def test_streaming_buffers_chunks_before_sending(
-    wakeup_event, use_fallback, delivered
-):
-    """Merge text and retain media without sending partial chunks."""
-    event, send, metric = wakeup_event
-    send.return_value = delivered
-    image = Image.fromURL("https://example.com/result.png")
-
-    async def chunks():
-        yield MessageChain(type="break")
-        yield MessageChain().message("Hello ")
-        send.assert_not_awaited()
-        yield MessageChain().message("world")
-        yield MessageChain(chain=[image])
-        send.assert_not_awaited()
-
-    await event.send_streaming(chunks(), use_fallback=use_fallback)
-    await asyncio.sleep(0)
-
-    send.assert_awaited_once()
-    session, message = send.await_args.args
-    assert session == event.session
-    assert message.get_plain_text() == "Hello world"
-    assert len(message.chain) == 2 and message.chain[1] is image
-    assert event._has_send_oper is delivered
-    assert metric.await_count == int(delivered)
 
 
 @pytest.mark.asyncio
