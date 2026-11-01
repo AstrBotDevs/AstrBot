@@ -152,9 +152,11 @@ class SystemOneDecisionProvider(DecisionProvider):
                     "criteria": list(question.criteria),
                 }
             elif isinstance(question, DecisionBooleanQuestion):
-                if not isinstance(question.criteria, Mapping) or set(
-                    question.criteria
-                ) != {"true", "false"}:
+                if (
+                    not isinstance(question.criteria, Mapping)
+                    or set(question.criteria) != {"true", "false"}
+                    or not all(isinstance(v, str) for v in question.criteria.values())
+                ):
                     raise ValueError(
                         f"question {head} field `criteria` must be an object with `true`/`false` keys"
                     )
