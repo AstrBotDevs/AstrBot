@@ -383,6 +383,10 @@ class Record(BaseMessageComponent):
     async def convert_to_base64(self) -> str:
         """将语音统一转换为 base64 编码。这个方法避免了手动判断语音数据类型，直接返回语音数据的 base64 编码。
 
+        MP3 payloads keep their original container so the base64 body stays
+        small; every other format is still converted to WAV, so the returned
+        payload is not guaranteed to be WAV.
+
         Returns:
             str: 语音的 base64 编码，不以 base64:// 或者 data:image/jpeg;base64, 开头。
 
@@ -390,11 +394,17 @@ class Record(BaseMessageComponent):
         file_source = await self._resolve_file_source()
         if not file_source:
             raise Exception(f"not a valid file: {self.file}")
+        # v4.26.0 (#8764) started transcoding every record to WAV before base64
+        # encoding, which inflates MP3 payloads by roughly 4.4x and can exceed
+        # platform frame limits. Keep MP3 in its original container; the format is
+        # sniffed from the payload bytes by the resolver, so references without a
+        # usable suffix behave the same. Non-MP3 formats still take the v4.26.0
+        # WAV path; their inflation is tracked separately.
         return await MediaResolver(
             file_source,
             media_type="audio",
             default_suffix=".wav",
-        ).to_base64(target_format="wav")
+        ).to_base64(preserve_mp3=True)
 
     async def register_to_file_service(self) -> str:
         """将语音注册到文件服务。
