@@ -30,6 +30,7 @@ from astrbot.core.utils.version_comparator import VersionComparator
 
 # 从共享常量模块导入
 from .constants import (
+    EXCLUDED_MAIN_DB_MODELS,
     KB_METADATA_MODELS,
     MAIN_DB_MODELS,
     get_backup_directories,
@@ -471,6 +472,22 @@ class AstrBotImporter:
                     except Exception as e:
                         result.add_warning(f"导入配置文件失败: {e}")
 
+                if "config/mcp_server.json" in zf.namelist():
+                    try:
+                        mcp_config_path = (
+                            Path(get_astrbot_data_path()) / "mcp_server.json"
+                        )
+                        mcp_config_path.parent.mkdir(parents=True, exist_ok=True)
+                        if mcp_config_path.exists():
+                            shutil.copy2(
+                                mcp_config_path,
+                                mcp_config_path.with_suffix(".json.bak"),
+                            )
+                        mcp_config_path.write_bytes(zf.read("config/mcp_server.json"))
+                        result.imported_files["mcp_config"] = 1
+                    except Exception as e:
+                        result.add_warning(f"Failed to restore MCP configuration: {e}")
+
                 if progress_callback:
                     await progress_callback("config", 100, 100, "配置文件导入完成")
 
@@ -532,7 +549,10 @@ class AstrBotImporter:
         """清空主数据库所有表"""
         async with self.main_db.get_db() as session:
             async with session.begin():
-                for table_name, model_class in MAIN_DB_MODELS.items():
+                # Replace restores also invalidate device trust on the target instance.
+                for table_name, model_class in (
+                    MAIN_DB_MODELS | EXCLUDED_MAIN_DB_MODELS
+                ).items():
                     try:
                         await session.execute(delete(model_class))
                         logger.debug(f"已清空表 {table_name}")
