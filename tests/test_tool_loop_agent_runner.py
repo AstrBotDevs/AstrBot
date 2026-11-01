@@ -1865,6 +1865,30 @@ async def test_skills_like_requery_degrades_when_all_attempts_empty():
 
 
 @pytest.mark.asyncio
+async def test_skills_like_requery_degrades_when_repair_attempts_are_empty():
+    """re-query 返回空回复、repair 又全部为空时，仍应执行本轮已解析的工具调用"""
+    provider = await _run_skills_like_requery(
+        [
+            _tool_call_response({"query": "light"}, "call_1"),
+            # 初查成功返回，但既没有工具调用也没有有效正文 → 触发 repair
+            LLMResponse(
+                role="assistant",
+                completion_text="",
+                usage=TokenUsage(input_other=10, output=5),
+            ),
+            EmptyModelOutputError("OpenAI completion has no usable output. 1"),
+            EmptyModelOutputError("OpenAI completion has no usable output. 2"),
+            EmptyModelOutputError("OpenAI completion has no usable output. 3"),
+        ]
+    )
+
+    # 1 次 light 调用 + 1 次空回复的初查 + 3 次全部失败的 repair
+    assert provider.text_chat_calls == 5
+    assert _RecordingToolExecutor.calls, "repair 失败后工具仍应执行"
+    assert _RecordingToolExecutor.calls[0]["args"] == {"query": "light"}
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("streaming", "stream_to_general", "show_reasoning"),
     [

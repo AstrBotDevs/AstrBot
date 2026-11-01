@@ -1536,6 +1536,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         llm_resp: LLMResponse,
     ) -> tuple[LLMResponse, ToolSet | None]:
         """Used in 'skills_like' tool schema mode to re-query LLM with param-only tool schemas."""
+        # Keep the response parsed in the current step: when the re-query and the
+        # repair attempt both come back empty, it is the only usable tool call.
+        original_llm_resp = llm_resp
         tool_names = llm_resp.tools_call_name
         if not tool_names:
             return llm_resp, self.req.func_tool
@@ -1558,7 +1561,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     # Stopped by the user, or every attempt returned an empty
                     # completion: keep the tool call parsed from the current step
                     # so the run survives instead of raising EmptyModelOutputError.
-                    return llm_resp, subset
+                    return original_llm_resp, subset
                 llm_resp = requery_resp
                 self._sanitize_malformed_tool_calls(llm_resp)
 
@@ -1579,9 +1582,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     repair_resp = await self._requery_text_chat(
                         repair_contexts, param_subset
                     )
-                    if repair_resp:
-                        llm_resp = repair_resp
-                        self._sanitize_malformed_tool_calls(llm_resp)
+                    if repair_resp is None:
+                        # Every repair attempt stayed empty, so the earlier
+                        # re-query response is unusable: fall back to the tool
+                        # call parsed in the current step instead of dropping it.
+                        return original_llm_resp, subset
+                    llm_resp = repair_resp
+                    self._sanitize_malformed_tool_calls(llm_resp)
 
         return llm_resp, subset
 
