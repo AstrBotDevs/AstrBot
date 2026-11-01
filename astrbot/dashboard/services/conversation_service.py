@@ -10,6 +10,7 @@ from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.umo_alias import build_umo_alias_map, parse_umo, serialize_umo_alias
+from astrbot.core.utils.session_lock import session_lock_manager
 
 
 class ConversationServiceError(Exception):
@@ -211,18 +212,20 @@ class ConversationService:
 
         history = self._normalize_history(history)
 
-        conversation = await self.conv_mgr.get_conversation(
-            unified_msg_origin=user_id,
-            conversation_id=cid,
-        )
-        if not conversation:
-            raise ConversationServiceError("对话不存在")
+        # Serialize edits and clears with agent history read-modify-write operations.
+        async with session_lock_manager.acquire_lock(user_id):
+            conversation = await self.conv_mgr.get_conversation(
+                unified_msg_origin=user_id,
+                conversation_id=cid,
+            )
+            if not conversation:
+                raise ConversationServiceError("对话不存在")
 
-        await self.conv_mgr.update_conversation(
-            unified_msg_origin=user_id,
-            conversation_id=cid,
-            history=history,
-        )
+            await self.conv_mgr.update_conversation(
+                unified_msg_origin=user_id,
+                conversation_id=cid,
+                history=history,
+            )
 
         return {"message": "对话历史更新成功"}
 

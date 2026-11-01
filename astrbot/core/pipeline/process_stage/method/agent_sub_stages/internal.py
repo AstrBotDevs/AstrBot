@@ -9,6 +9,7 @@ from astrbot.core.agent.message import (
     CheckpointData,
     CheckpointMessageSegment,
     Message,
+    TextPart,
     dump_messages_with_checkpoints,
 )
 from astrbot.core.agent.response import AgentStats
@@ -463,6 +464,40 @@ class InternalAgentSubStage(Stage):
             if message.role in ["assistant", "user"] and message._no_save:
                 continue
             messages_to_save.append(message)
+
+        if isinstance(event, AgentWakeupEvent):
+            # Final snapshots must retain confirmed tool deliveries. Tool-call
+            # arguments alone may be removed when preparing the next request.
+            insertion_index = len(messages_to_save)
+            final_text = None
+            if (
+                messages_to_save
+                and messages_to_save[-1].role == "assistant"
+                and not messages_to_save[-1].tool_calls
+            ):
+                insertion_index -= 1
+                content = messages_to_save[-1].content
+                final_text = (
+                    content
+                    if isinstance(content, str)
+                    else "".join(
+                        part.text
+                        for part in (content or [])
+                        if isinstance(part, TextPart)
+                    )
+                )
+                final_text = final_text.strip()
+            for text in event.get_extra(
+                "_send_message_to_user_current_session_plain_texts", []
+            ):
+                if text == final_text:
+                    # RespondStage suppresses a final reply already sent by the tool.
+                    final_text = None
+                    continue
+                messages_to_save.insert(
+                    insertion_index, Message(role="assistant", content=text)
+                )
+                insertion_index += 1
 
         checkpoint_id = event.get_extra("llm_checkpoint_id")
         has_checkpoint = isinstance(checkpoint_id, str) and bool(checkpoint_id)

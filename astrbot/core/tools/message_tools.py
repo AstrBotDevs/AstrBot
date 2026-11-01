@@ -1,3 +1,4 @@
+import asyncio
 import csv
 import io
 import json
@@ -16,8 +17,10 @@ from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.computer.computer_client import get_booter
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.tools.computer_tools.fs import _remote_basename
 from astrbot.core.tools.computer_tools.util import (
     check_admin_permission,
@@ -129,6 +132,35 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             "required": ["messages"],
         }
     )
+
+    async def _persist_proactive_delivery(
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        conversation_id: str,
+        text: str,
+    ) -> None:
+        """Append confirmed text inside the wakeup pipeline's existing session lock.
+
+        Kept as one awaitable so cancellation can shield both the read and write.
+        The caller must wait for it before releasing the pipeline's lock.
+
+        Args:
+            context: Tool context for the active wakeup.
+            conversation_id: Conversation bound to the running agent request.
+            text: Plain text successfully delivered to the current session.
+        """
+        event = context.context.event
+        manager = context.context.context.conversation_manager
+        conversation = await manager.get_conversation(
+            event.unified_msg_origin, conversation_id
+        )
+        if conversation is None:
+            return
+        history = json.loads(conversation.history or "[]")
+        history.append({"role": "assistant", "content": text})
+        await manager.update_conversation(
+            event.unified_msg_origin, conversation_id, history=history
+        )
 
     async def _resolve_path_from_sandbox(
         self,
@@ -361,6 +393,36 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     "_send_message_to_user_current_session_plain_texts",
                     sent_plain_texts,
                 )
+                event = context.context.event
+                req = event.get_extra("provider_request")
+                if (
+                    isinstance(event, AgentWakeupEvent)
+                    and isinstance(req, ProviderRequest)
+                    and req.conversation
+                ):
+                    # The pipeline owns the non-reentrant session lock already.
+                    # Finish the write before propagating cancellation and releasing it.
+                    save_task = asyncio.create_task(
+                        self._persist_proactive_delivery(
+                            context, req.conversation.cid, sent_plain_text
+                        )
+                    )
+                    cancelled = False
+                    try:
+                        while not save_task.done():
+                            try:
+                                await asyncio.shield(save_task)
+                            except asyncio.CancelledError:
+                                cancelled = True
+                        save_task.result()
+                    except Exception:
+                        # Delivery succeeded; reporting a send failure could resend it.
+                        logger.error(
+                            "Failed to persist proactive delivery", exc_info=True
+                        )
+                    finally:
+                        if cancelled:
+                            raise asyncio.CancelledError()
         return f"Message sent to session {target_session}"
 
 
