@@ -522,6 +522,159 @@ class ShellInstallerTests(unittest.TestCase):
                     [str(self.root / "bin/uv"), str(wrapper_bin / "astrbot")],
                 )
 
+    def test_legacy_uv_repeated_install_is_already_configured(self):
+        # uv 0.10.0 omits backticks around directories in these diagnostics.
+        (self.root / "fake-uv").write_bytes(FAKE_UV.replace(b"`%s`", b"%s"))
+        for tool_bin, entries in ((self.root / "bin", 1), (self.root / "tool bin", 2)):
+            with self.subTest(tool_bin=tool_bin):
+                (self.root / ".bashrc").write_text("")
+                self.env["UV_TOOL_BIN_DIR"] = str(tool_bin)
+                for _ in range(2):
+                    status, output = self.run_installer(["--non-interactive"])
+                    self.assertEqual(status, 0, output)
+                    self.assertNotIn("[WARN]", output)
+                    self.assertNotIn("tool update-shell", output)
+                self.assertEqual(
+                    len((self.root / ".bashrc").read_text().splitlines()), entries
+                )
+
+    def test_legacy_uv_genuine_errors_are_not_suppressed(self):
+        (self.root / "fake-uv").write_bytes(FAKE_UV.replace(b"`%s`", b"%s"))
+        for failure, diagnostic in (
+            ("1", "Cannot write shell configuration"),
+            ("mixed", "current shell could not be determined"),
+        ):
+            with self.subTest(failure=failure):
+                self.env["TEST_UPDATE_SHELL_FAIL"] = failure
+                status, output = self.run_installer(["--non-interactive"])
+                self.assertEqual(status, 0, output)
+                self.assertIn(diagnostic, output)
+                self.assertIn("[WARN]", output)
+                self.assertIn(" tool update-shell", output)
+
+    def test_relative_tool_bin_is_rejected_before_astrbot_install(self):
+        install_tmp = self.root / "install-temp"
+        install_tmp.mkdir()
+        self.env["TMPDIR"] = str(install_tmp)
+        for language, diagnostic in (
+            ("en-US", "The tool executable directory must be an absolute path"),
+            ("zh-CN", "工具可执行文件目录必须是绝对路径"),
+            ("ja-JP", "ツールの実行ファイルディレクトリは絶対パスで指定してください"),
+        ):
+            for directory in ("relative bin", "./tools", "../tools", "."):
+                with self.subTest(language=language, directory=directory):
+                    self.env["UV_TOOL_BIN_DIR"] = directory
+                    status, output = self.run_installer(
+                        ["--language", language, "--non-interactive"]
+                    )
+                    self.assertEqual(status, 2, output)
+                    self.assertIn(diagnostic, output)
+                    self.assertIn(directory, output)
+                    self.assertIn("UV_TOOL_BIN_DIR", output)
+                    self.assertFalse((self.root / "uv-args").exists())
+                    self.assertFalse((self.root / "uv-update-shell").exists())
+                    self.assertEqual((self.root / ".bashrc").read_text(), "")
+
+    def test_wrapper_relative_tool_bin_is_rejected_before_astrbot_install(self):
+        with (self.root / "env.sh").open("a") as fixture:
+            fixture.write(
+                '\nunset -f command\n'
+                'uv() { UV_TOOL_BIN_DIR="relative tools" command uv "$@"; }\n'
+            )
+        status, output = self.run_installer(["--non-interactive"])
+        self.assertEqual(status, 2, output)
+        self.assertIn("relative tools", output)
+        self.assertFalse((self.root / "uv-args").exists())
+        self.assertEqual((self.root / ".bashrc").read_text(), "")
+
+    def test_shell_path_messages_follow_selected_language(self):
+        self.env["UV_TOOL_BIN_DIR"] = str(self.root / "tool bin")
+        for language, configured, tool_failure, uv_failure in (
+            (
+                "en-US",
+                "Shell PATH is already configured.",
+                "Could not update shell PATH.",
+                "Could not add the uv installation directory to shell PATH.",
+            ),
+            (
+                "zh-CN",
+                "Shell PATH 已配置。",
+                "无法更新 Shell PATH。",
+                "无法将 uv 安装目录添加到 Shell PATH。",
+            ),
+            (
+                "ja-JP",
+                "シェルの PATH は設定済みです。",
+                "シェルの PATH を更新できませんでした。",
+                "uv のインストール先をシェルの PATH に追加できませんでした。",
+            ),
+        ):
+            with self.subTest(language=language):
+                args = ["--language", language, "--non-interactive"]
+                self.env.pop("TEST_UPDATE_SHELL_FAIL", None)
+                (self.root / ".bashrc").write_text("")
+                for _ in range(2):
+                    status, output = self.run_installer(args)
+                    self.assertEqual(status, 0, output)
+                    self.assertNotIn("[WARN]", output)
+                self.assertEqual(output.count(configured), 2, output)
+                self.env["TEST_UPDATE_SHELL_FAIL"] = "1"
+                status, output = self.run_installer(args)
+                self.assertEqual(status, 0, output)
+                self.assertIn(tool_failure, output)
+                self.assertIn(uv_failure, output)
+                self.assertIn("Cannot write shell configuration", output)
+                self.assertEqual(output.count(" tool update-shell"), 2, output)
+
+    @unittest.skipUnless(shutil.which("uv"), "Real uv is not installed")
+    def test_real_uv_shell_setup_survives_repeated_install(self):
+        # Stub only package installation; use real uv for directory and shell setup.
+        uv_bin = self.root / "bin"
+        uv_bin.mkdir()
+        shutil.copy2(shutil.which("uv"), uv_bin / "uv")
+        self.env.update(
+            SHELL="/bin/bash",
+            XDG_CONFIG_HOME=str(self.root / ".config"),
+            UV_TOOL_BIN_DIR=str(self.root / "tool bin"),
+        )
+        with (self.root / "env.sh").open("a") as fixture:
+            fixture.write(
+                '\nunset -f command\n'
+                'uv() {\n'
+                '  if [ "$1" = tool ] && [ "$2" = install ]; then\n'
+                '    "$TEST_DIR/fake-uv" "$@"\n'
+                '  else\n'
+                '    command uv "$@"\n'
+                '  fi\n'
+                '}\n'
+            )
+        for _ in range(2):
+            status, output = self.run_installer(["--non-interactive"], existing=False)
+            self.assertEqual(status, 0, output)
+            self.assertNotIn("[WARN]", output)
+        shell_env = self.env.copy()
+        shell_env.pop("BASH_ENV")
+        shell_env.pop("UV_TOOL_BIN_DIR")
+        result = subprocess.run(
+            [
+                "/bin/bash",
+                "--noprofile",
+                "--norc",
+                "-c",
+                'source "$HOME/.bashrc"; command -v uv; command -v astrbot',
+            ],
+            cwd="/",
+            env=shell_env,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            result.stdout.splitlines(),
+            [str(uv_bin / "uv"), str(self.root / "tool bin/astrbot")],
+        )
+
     def test_chinese_defaults_to_all_china_mirrors(self):
         status, output = self.run_installer(
             ["--language", "zh-CN", "--non-interactive"]
