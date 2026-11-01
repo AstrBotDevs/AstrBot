@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from astrbot import logger
+from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -79,7 +80,6 @@ def test_wakeup_keeps_target_identity_separate_from_its_source(source, message_t
     assert event.get_sender_name() == "System"
     assert event.role == "member"
     assert event.is_wake and event.is_at_or_wake_command
-    assert event.get_extra("enable_streaming") is False
 
 
 def test_wakeup_preserves_the_resolved_permission_role(wakeup_event):
@@ -133,30 +133,67 @@ def test_wakeup_rejects_invalid_origin_or_target(source, platform_id, error):
 @pytest.mark.parametrize(
     "outcomes", [[False], [True], [False, True], [True, False], [False, False]]
 )
-@pytest.mark.parametrize("streaming", [False, True])
-async def test_send_accounting_respects_context_result(
-    wakeup_event, outcomes, streaming
-):
+async def test_send_accounting_respects_context_result(wakeup_event, outcomes):
     event, send, metric = wakeup_event
     send.side_effect = outcomes
 
-    async def chunks():
-        for _ in outcomes:
-            yield MessageChain().message("result")
-
-    if streaming:
-        await event.send_streaming(chunks())
-    else:
-        sent = False
-        for outcome in outcomes:
-            assert await event.send(MessageChain().message("result")) is None
-            sent = sent or outcome
-            assert event._has_send_oper is sent
+    sent = False
+    for outcome in outcomes:
+        assert await event.send(MessageChain().message("result")) is None
+        sent = sent or outcome
+        assert event._has_send_oper is sent
     await asyncio.sleep(0)
 
     assert event._has_send_oper is any(outcomes)
     assert send.await_count == len(outcomes)
     assert metric.await_count == sum(outcomes)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("use_fallback", [False, True])
+@pytest.mark.parametrize("delivered", [False, True])
+async def test_streaming_buffers_chunks_before_sending(
+    wakeup_event, use_fallback, delivered
+):
+    """Merge text and retain media without sending partial chunks."""
+    event, send, metric = wakeup_event
+    send.return_value = delivered
+    image = Image.fromURL("https://example.com/result.png")
+
+    async def chunks():
+        yield MessageChain(type="break")
+        yield MessageChain().message("Hello ")
+        send.assert_not_awaited()
+        yield MessageChain().message("world")
+        yield MessageChain(chain=[image])
+        send.assert_not_awaited()
+
+    await event.send_streaming(chunks(), use_fallback=use_fallback)
+    await asyncio.sleep(0)
+
+    send.assert_awaited_once()
+    session, message = send.await_args.args
+    assert session == event.session
+    assert message.get_plain_text() == "Hello world"
+    assert len(message.chain) == 2 and message.chain[1] is image
+    assert event._has_send_oper is delivered
+    assert metric.await_count == int(delivered)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("empty_chunk", [False, True])
+async def test_empty_stream_does_not_send(wakeup_event, empty_chunk):
+    """Do not record a delivery for an empty stream or an empty break frame."""
+    event, send, metric = wakeup_event
+
+    async def chunks():
+        if empty_chunk:
+            yield MessageChain(type="break")
+
+    await event.send_streaming(chunks())
+    send.assert_not_awaited()
+    metric.assert_not_awaited()
+    assert event._has_send_oper is False
 
 
 @pytest.mark.asyncio
