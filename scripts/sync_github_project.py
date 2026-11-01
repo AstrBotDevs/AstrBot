@@ -6,6 +6,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.request
 from functools import cache
@@ -212,6 +213,12 @@ def tags_containing(commit):
     """
     if not re.fullmatch(r"[0-9a-f]{40}", commit):
         raise ValueError("Invalid implementation commit")
+    started = time.monotonic()
+    print(
+        f"Project sync: release ancestry start commit={commit[:12]}",
+        file=sys.stderr,
+        flush=True,
+    )
     result = subprocess.run(
         ["git", "tag", "--contains", commit],
         cwd=ROOT,
@@ -224,7 +231,14 @@ def tags_containing(commit):
         raise RuntimeError(
             "Cannot verify release tag ancestry; fetch full history and tags"
         )
-    return frozenset(result.stdout.splitlines())
+    tags = frozenset(result.stdout.splitlines())
+    print(
+        f"Project sync: release ancestry complete commit={commit[:12]} tags={len(tags)} "
+        f"seconds={time.monotonic() - started:.2f}",
+        file=sys.stderr,
+        flush=True,
+    )
+    return tags
 
 
 def delivery(content, current, linked, releases, mainline):
