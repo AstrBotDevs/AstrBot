@@ -12,7 +12,7 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
-from astrbot.core.message.components import Image
+from astrbot.core.message.components import Image, Record
 from astrbot.core.provider.func_tool_manager import (
     FunctionToolManager,
     _PermissionGuardedTool,
@@ -817,3 +817,114 @@ async def test_external_runner_cancel_closes_pending_tool_executor():
             task.cancel()
         await asyncio.gather(task, return_exceptions=True)
         await results.aclose()
+
+
+def test_handoff_tool_default_parameters_expose_audio_urls():
+    handoff = HandoffTool(Agent(name="child"))
+
+    assert "audio_urls" in handoff.parameters["properties"]
+
+
+@pytest.mark.asyncio
+async def test_collect_handoff_audio_urls_collects_event_record(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    async def _fake_convert_to_file_path(self):
+        return "/tmp/event_voice.wav"
+
+    monkeypatch.setattr(Record, "convert_to_file_path", _fake_convert_to_file_path)
+
+    run_context = _build_run_context([Record(file="file:///tmp/original.amr")])
+    audio_urls = await FunctionToolExecutor._collect_handoff_audio_urls(
+        run_context,
+        None,
+    )
+
+    assert audio_urls == ["/tmp/event_voice.wav"]
+
+
+@pytest.mark.asyncio
+async def test_collect_handoff_audio_urls_merges_args_and_event_audio(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    async def _fake_convert_to_file_path(self):
+        return "/tmp/event_voice.wav"
+
+    monkeypatch.setattr(Record, "convert_to_file_path", _fake_convert_to_file_path)
+
+    run_context = _build_run_context([Record(file="file:///tmp/original.amr")])
+    audio_urls = await FunctionToolExecutor._collect_handoff_audio_urls(
+        run_context,
+        " https://example.com/a.wav ",
+    )
+
+    assert audio_urls == ["https://example.com/a.wav", "/tmp/event_voice.wav"]
+
+
+@pytest.mark.asyncio
+async def test_collect_handoff_audio_urls_skips_failed_event_audio_conversion(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    async def _fake_convert_to_file_path(self):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(Record, "convert_to_file_path", _fake_convert_to_file_path)
+
+    run_context = _build_run_context([Record(file="file:///tmp/original.amr")])
+    audio_urls = await FunctionToolExecutor._collect_handoff_audio_urls(
+        run_context,
+        ["/tmp/voice.wav"],
+    )
+
+    assert audio_urls == ["/tmp/voice.wav"]
+
+
+@pytest.mark.asyncio
+async def test_execute_handoff_forwards_audio_urls_to_tool_loop_agent(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    captured: dict = {}
+
+    async def _fake_convert_to_file_path(self):
+        return "/tmp/event_voice.wav"
+
+    async def _fake_get_current_chat_provider_id(_umo):
+        return "provider-id"
+
+    async def _fake_tool_loop_agent(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(completion_text="ok")
+
+    monkeypatch.setattr(Record, "convert_to_file_path", _fake_convert_to_file_path)
+
+    context = SimpleNamespace(
+        get_current_chat_provider_id=_fake_get_current_chat_provider_id,
+        tool_loop_agent=_fake_tool_loop_agent,
+        get_config=lambda **_kwargs: {"provider_settings": {}},
+    )
+    event = _DummyEvent([Record(file="file:///tmp/original.amr")])
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
+    tool = SimpleNamespace(
+        name="transfer_to_subagent",
+        provider_id=None,
+        agent=SimpleNamespace(
+            name="subagent",
+            tools=[],
+            instructions="subagent-instructions",
+            begin_dialogs=[],
+            run_hooks=None,
+        ),
+    )
+
+    results = []
+    async for result in FunctionToolExecutor._execute_handoff(
+        tool,
+        run_context,
+        input="what is in this clip",
+    ):
+        results.append(result)
+
+    assert captured["audio_urls"] == ["/tmp/event_voice.wav"]
+    assert captured["prompt"] == "what is in this clip"
+    assert len(results) == 1
+    assert results[0].content[0].text == "ok"

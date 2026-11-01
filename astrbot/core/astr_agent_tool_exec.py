@@ -23,7 +23,7 @@ from astrbot.core.astr_main_agent_resources import (
 )
 from astrbot.core.config.agent_runner import resolve_context_compression_config
 from astrbot.core.cron.events import CronMessageEvent
-from astrbot.core.message.components import Image
+from astrbot.core.message.components import Image, Record
 from astrbot.core.message.message_event_result import (
     CommandResult,
     MessageChain,
@@ -131,6 +131,64 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 dropped_count,
             )
         return sanitized
+
+    @classmethod
+    def _collect_audio_urls_from_args(cls, audio_urls_raw: T.Any) -> list[str]:
+        if audio_urls_raw is None:
+            return []
+
+        if isinstance(audio_urls_raw, str):
+            return [audio_urls_raw]
+
+        if isinstance(audio_urls_raw, (Sequence, AbstractSet)) and not isinstance(
+            audio_urls_raw, (str, bytes, bytearray)
+        ):
+            return [item for item in audio_urls_raw if isinstance(item, str)]
+
+        logger.debug(
+            "Unsupported audio_urls type in handoff tool args: %s",
+            type(audio_urls_raw).__name__,
+        )
+        return []
+
+    @classmethod
+    async def _collect_audio_urls_from_message(
+        cls, run_context: ContextWrapper[AstrAgentContext]
+    ) -> list[str]:
+        urls: list[str] = []
+        event = getattr(run_context.context, "event", None)
+        message_obj = getattr(event, "message_obj", None)
+        message = getattr(message_obj, "message", None)
+        if message:
+            for idx, component in enumerate(message):
+                if not isinstance(component, Record):
+                    continue
+                try:
+                    path = await component.convert_to_file_path()
+                except Exception as e:
+                    logger.error(
+                        "Failed to convert handoff audio component at index %d: %s",
+                        idx,
+                        e,
+                        exc_info=True,
+                    )
+                    continue
+                if path:
+                    urls.append(path)
+        return urls
+
+    @classmethod
+    async def _collect_handoff_audio_urls(
+        cls,
+        run_context: ContextWrapper[AstrAgentContext],
+        audio_urls_raw: T.Any,
+    ) -> list[str]:
+        candidates: list[str] = []
+        candidates.extend(cls._collect_audio_urls_from_args(audio_urls_raw))
+        candidates.extend(await cls._collect_audio_urls_from_message(run_context))
+        if not candidates:
+            return []
+        return normalize_and_dedupe_strings(candidates)
 
     @classmethod
     async def execute(cls, tool, run_context, **tool_args):
@@ -327,6 +385,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         run_context: ContextWrapper[AstrAgentContext],
         *,
         image_urls_prepared: bool = False,
+        audio_urls_prepared: bool = False,
         **tool_args: T.Any,
     ):
         tool_args = dict(tool_args)
@@ -347,6 +406,23 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 tool_args.get("image_urls"),
             )
         tool_args["image_urls"] = image_urls
+
+        if audio_urls_prepared:
+            prepared_audio_urls = tool_args.get("audio_urls")
+            if isinstance(prepared_audio_urls, list):
+                audio_urls = prepared_audio_urls
+            else:
+                logger.debug(
+                    "Expected prepared handoff audio_urls as list[str], got %s.",
+                    type(prepared_audio_urls).__name__,
+                )
+                audio_urls = []
+        else:
+            audio_urls = await cls._collect_handoff_audio_urls(
+                run_context,
+                tool_args.get("audio_urls"),
+            )
+        tool_args["audio_urls"] = audio_urls
 
         # Build handoff toolset from registered tools plus runtime computer tools.
         toolset = cls._build_handoff_toolset(run_context, tool.agent.tools)
@@ -390,6 +466,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             chat_provider_id=prov_id,
             prompt=input_,
             image_urls=image_urls,
+            audio_urls=audio_urls,
             system_prompt=tool.agent.instructions,
             tools=toolset,
             contexts=contexts,
@@ -463,11 +540,16 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             run_context,
             tool_args.get("image_urls"),
         )
+        tool_args["audio_urls"] = await cls._collect_handoff_audio_urls(
+            run_context,
+            tool_args.get("audio_urls"),
+        )
         try:
             async for r in cls._execute_handoff(
                 tool,
                 run_context,
                 image_urls_prepared=True,
+                audio_urls_prepared=True,
                 **tool_args,
             ):
                 if isinstance(r, mcp.types.CallToolResult):
