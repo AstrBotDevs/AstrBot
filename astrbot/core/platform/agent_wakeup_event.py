@@ -88,6 +88,7 @@ class AgentWakeupEvent(AstrMessageEvent):
         # The supplied UMO is already the final target, including any isolation.
         self.set_extra("_session_resolved", True)
         self.set_extra("_role_resolved", True)
+        self.set_extra("enable_streaming", False)
 
     async def send(self, message: MessageChain) -> None:
         """Deliver through the target session and account only for successful sends.
