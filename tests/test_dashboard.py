@@ -10,8 +10,10 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
-from urllib.parse import parse_qs, urlsplit, urlunsplit
+from unittest.mock import AsyncMock, MagicMock
+from urllib.parse import parse_qs, urlsplit
 
+import jwt
 import pyotp
 import pytest
 import pytest_asyncio
@@ -45,6 +47,7 @@ from astrbot.dashboard.server import AstrBotDashboard
 from astrbot.dashboard.services.auth_service import DASHBOARD_JWT_COOKIE_NAME
 from astrbot.dashboard.services.plugin_page_service import PluginPageService
 from astrbot.dashboard.services.plugin_service import PluginService
+from astrbot.dashboard.services.skills_service import SkillsService
 from tests.fixtures.helpers import (
     MockPluginBuilder,
     create_mock_updater_install,
@@ -56,13 +59,72 @@ PLUGIN_PAGE_DEMO_NAME = "astrbot_plugin_page_demo"
 PLUGIN_PAGE_DEMO_PAGE_NAME = "bridge-demo"
 
 
+def test_skills_service_marks_inactive_plugin_skills(monkeypatch):
+    skills = [
+        SimpleNamespace(
+            name="local-skill",
+            source_type="local_only",
+            plugin_name="",
+        ),
+        SimpleNamespace(
+            name="active-plugin-skill",
+            source_type="plugin",
+            plugin_name="astrbot_plugin_active",
+        ),
+        SimpleNamespace(
+            name="inactive-plugin-skill",
+            source_type="plugin",
+            plugin_name="astrbot_plugin_inactive",
+        ),
+    ]
+    skill_manager = SimpleNamespace(
+        list_skills=MagicMock(return_value=skills),
+        get_sandbox_skills_cache_status=lambda: {},
+    )
+    plugins = [
+        StarMetadata(
+            name="active",
+            display_name="Active Plugin",
+            root_dir_name="astrbot_plugin_active",
+            activated=True,
+        ),
+        StarMetadata(
+            name="inactive",
+            display_name="Inactive Plugin",
+            root_dir_name="astrbot_plugin_inactive",
+            activated=False,
+        ),
+    ]
+    core_lifecycle = SimpleNamespace(
+        astrbot_config={"provider_settings": {}},
+        plugin_manager=SimpleNamespace(
+            context=SimpleNamespace(get_all_stars=lambda: plugins)
+        ),
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.skills_service.SkillManager",
+        lambda: skill_manager,
+    )
+
+    result = SkillsService(core_lifecycle).get_skills()
+
+    assert result["runtime"] == "none"
+    skill_manager.list_skills.assert_called_once_with(
+        active_only=False, runtime="none", show_sandbox_path=False
+    )
+    assert [skill["name"] for skill in result["skills"]] == [
+        "local-skill",
+        "active-plugin-skill",
+        "inactive-plugin-skill",
+    ]
+    assert result["skills"][1]["plugin_display_name"] == "Active Plugin"
+    assert result["skills"][1]["plugin_active"] is True
+    assert result["skills"][2]["plugin_display_name"] == "Inactive Plugin"
+    assert result["skills"][2]["plugin_active"] is False
+
+
 def _removed_md5_hint_alias_key() -> str:
     return "le" + "gacy_pwd_hint"
-
-
-def _strip_query(url: str) -> str:
-    parsed = urlsplit(url)
-    return urlunsplit(("", "", parsed.path, "", parsed.fragment))
 
 
 def _assert_cookie_samesite_strict(cookie_header: str) -> None:
@@ -269,24 +331,34 @@ def test_dashboard_uses_bundled_dist_when_data_dist_is_stale(
     monkeypatch,
     tmp_path,
 ):
+    from astrbot.core.config.default import VERSION
+
     data_dir = tmp_path / "data"
     user_dist = data_dir / "dist"
     bundled_dist = tmp_path / "bundled-dist"
     user_dist.mkdir(parents=True)
     bundled_dist.mkdir()
-    (bundled_dist / "index.html").write_text("bundled", encoding="utf-8")
+    (bundled_dist / "index.html").write_text(
+        '<script type="module" src="/assets/app.js"></script>',
+        encoding="utf-8",
+    )
+    (bundled_dist / "assets").mkdir()
+    (bundled_dist / "assets" / "app.js").write_text(
+        "export {};",
+        encoding="utf-8",
+    )
+    (bundled_dist / "assets" / "version").write_text(
+        f"v{VERSION}",
+        encoding="utf-8",
+    )
 
     monkeypatch.setattr(
-        "astrbot.dashboard.server.get_astrbot_data_path",
+        "astrbot.core.dashboard_assets.get_astrbot_data_path",
         lambda: str(data_dir),
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.server.get_bundled_dashboard_dist_path",
+        "astrbot.core.dashboard_assets._get_bundled_dist_path",
         lambda: bundled_dist,
-    )
-    monkeypatch.setattr(
-        "astrbot.dashboard.server.should_use_bundled_dashboard_dist",
-        lambda *_args, **_kwargs: True,
     )
 
     shutdown_event = asyncio.Event()
@@ -308,11 +380,11 @@ def test_dashboard_falls_back_to_mismatched_data_dist_without_bundled(
     (user_dist / "index.html").write_text("stale", encoding="utf-8")
 
     monkeypatch.setattr(
-        "astrbot.dashboard.server.get_astrbot_data_path",
+        "astrbot.core.dashboard_assets.get_astrbot_data_path",
         lambda: str(data_dir),
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.server.get_bundled_dashboard_dist_path",
+        "astrbot.core.dashboard_assets._get_bundled_dist_path",
         lambda: bundled_dist,
     )
 
@@ -334,11 +406,11 @@ def test_dashboard_ignores_incomplete_mismatched_data_dist_without_bundled(
     (user_dist / "assets" / "version").write_text("v0.0.1", encoding="utf-8")
 
     monkeypatch.setattr(
-        "astrbot.dashboard.server.get_astrbot_data_path",
+        "astrbot.core.dashboard_assets.get_astrbot_data_path",
         lambda: str(data_dir),
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.server.get_bundled_dashboard_dist_path",
+        "astrbot.core.dashboard_assets._get_bundled_dist_path",
         lambda: bundled_dist,
     )
 
@@ -430,6 +502,121 @@ async def test_auth_login(
     assert "HttpOnly" in jwt_cookie_header
     _assert_cookie_samesite_strict(jwt_cookie_header)
     assert "Secure" not in jwt_cookie_header
+
+
+@pytest.mark.asyncio
+async def test_desktop_session_issues_jwt_without_password(
+    app: FastAPIAppAdapter,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    secret = "desktop-session-secret-" * 2
+    monkeypatch.setenv("ASTRBOT_DESKTOP_MANAGED", "1")
+    monkeypatch.setenv("ASTRBOT_DESKTOP_SESSION_SECRET", secret)
+    app._dashboard_server._rate_limiter_registry.clear()
+
+    response = await app.test_client().post(
+        "/api/v1/auth/desktop-session",
+        headers={"X-AstrBot-Desktop-Session": secret},
+        json={},
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "ok"
+    assert (
+        data["data"]["username"]
+        == core_lifecycle_td.astrbot_config["dashboard"]["username"]
+    )
+    token = data["data"]["token"]
+    payload = jwt.decode(
+        token,
+        core_lifecycle_td.astrbot_config["dashboard"]["jwt_secret"],
+        algorithms=["HS256"],
+    )
+    assert payload["auth_source"] == "desktop"
+
+
+@pytest.mark.asyncio
+async def test_desktop_session_rejects_wrong_secret(
+    app: FastAPIAppAdapter,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ASTRBOT_DESKTOP_MANAGED", "1")
+    monkeypatch.setenv("ASTRBOT_DESKTOP_SESSION_SECRET", "a" * 64)
+    app._dashboard_server._rate_limiter_registry.clear()
+
+    response = await app.test_client().post(
+        "/api/v1/auth/desktop-session",
+        headers={"X-AstrBot-Desktop-Session": "b" * 64},
+        json={},
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 401
+    assert data["status"] == "error"
+    assert "token" not in (data.get("data") or {})
+
+
+@pytest.mark.asyncio
+async def test_desktop_session_endpoint_is_hidden_when_not_managed(
+    app: FastAPIAppAdapter,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.delenv("ASTRBOT_DESKTOP_MANAGED", raising=False)
+    monkeypatch.delenv("ASTRBOT_DESKTOP_SESSION_SECRET", raising=False)
+    app._dashboard_server._rate_limiter_registry.clear()
+
+    response = await app.test_client().post(
+        "/api/v1/auth/desktop-session",
+        headers={"X-AstrBot-Desktop-Session": "a" * 64},
+        json={},
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 404
+    assert data["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_desktop_session_suppresses_password_setup_and_warnings(
+    app: FastAPIAppAdapter,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    secret = "desktop-session-secret-" * 2
+    monkeypatch.setenv("ASTRBOT_DESKTOP_MANAGED", "1")
+    monkeypatch.setenv("ASTRBOT_DESKTOP_SESSION_SECRET", secret)
+    app._dashboard_server._rate_limiter_registry.clear()
+    await _set_dashboard_password_change_required(core_lifecycle_td, True)
+
+    try:
+        client = app.test_client()
+        setup_response = await client.get("/api/v1/auth/setup-status")
+        setup_data = await setup_response.get_json()
+        assert setup_data["data"] == {
+            "setup_required": False,
+            "skip_default_password_auth": False,
+            "password_upgrade_required": False,
+        }
+
+        session_response = await client.post(
+            "/api/v1/auth/desktop-session",
+            headers={"X-AstrBot-Desktop-Session": secret},
+            json={},
+        )
+        session_data = await session_response.get_json()
+        token = session_data["data"]["token"]
+        version_response = await client.get(
+            "/api/v1/stats/version",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        version_data = await version_response.get_json()
+        assert version_data["data"]["change_pwd_hint"] is False
+        assert version_data["data"]["md5_pwd_hint"] is False
+        assert version_data["data"]["password_upgrade_required"] is False
+    finally:
+        await _set_dashboard_password_change_required(core_lifecycle_td, False)
 
 
 @pytest.mark.asyncio
@@ -1658,18 +1845,18 @@ async def test_plugin_web_api_supports_dynamic_route(
     assert calls == ["example"]
 
 
-def test_plugin_page_content_path_escapes_plugin_name():
+def test_plugin_page_view_content_path_escapes_plugin_name():
     assert (
-        PluginPageService.build_plugin_page_content_path(
-            "plugin with space", "main page"
+        PluginPageService.build_plugin_page_view_content_path(
+            "plugin with space", "main page", "token"
         )
-        == "/api/plugin/page/content/plugin%20with%20space/main%20page/"
+        == "/api/v1/plugins/plugin%20with%20space/views/main%20page/_t/token/"
     )
     assert (
-        PluginPageService.build_plugin_page_content_path(
-            "plugin with space", "main page", "assets/main file.js"
+        PluginPageService.build_plugin_page_view_content_path(
+            "plugin with space", "main page", "token", "assets/main file.js"
         )
-        == "/api/plugin/page/content/plugin%20with%20space/main%20page/assets/main%20file.js"
+        == "/api/v1/plugins/plugin%20with%20space/views/main%20page/_t/token/assets/main%20file.js"
     )
 
 
@@ -1750,27 +1937,87 @@ async def test_plugin_page_entry_returns_signed_content_path(
     assert data["data"]["title"] == PLUGIN_PAGE_DEMO_PAGE_NAME
     assert data["data"]["i18n_key"] == f"pages.{PLUGIN_PAGE_DEMO_PAGE_NAME}"
     assert data["data"]["content_path"].startswith(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
+        f"/api/v1/plugins/{PLUGIN_PAGE_DEMO_NAME}/views/{PLUGIN_PAGE_DEMO_PAGE_NAME}/_t/"
     )
     assert "asset_token=" in data["data"]["content_path"]
 
 
 @pytest.mark.asyncio
-async def test_plugin_page_content_requires_auth(
+async def test_plugin_page_view_token_path_serves_raw_assets(
     app: FastAPIAppAdapter,
+    authenticated_header: dict,
     registered_plugin_page: StarMetadata,
 ):
+    """Path-token view URLs serve assets without content rewriting."""
     test_client = app.test_client()
-    response = await test_client.get(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
+    entry_response = await test_client.get(
+        (
+            f"/api/plugin/page/entry?name={PLUGIN_PAGE_DEMO_NAME}"
+            f"&page={PLUGIN_PAGE_DEMO_PAGE_NAME}"
+        ),
+        headers=authenticated_header,
     )
-    assert response.status_code == 401
-    data = await response.get_json()
-    assert data["status"] == "error"
+    assert entry_response.status_code == 200
+    content_path = (await entry_response.get_json())["data"]["content_path"]
+
+    # The signed entry document is fetchable anonymously via its path token.
+    anonymous_client = app.test_client()
+    html_response = await anonymous_client.get(content_path)
+    assert html_response.status_code == 200
+    html_text = (await html_response.get_data()).decode("utf-8")
+    assert "Single plugin Page with internal navigation" in html_text
+    # Bridge SDK is still injected and carries the token for its own fetch.
+    bridge_sdk_url = re.search(
+        r'src="([^"]+/bridge-sdk\.js[^"]*)"',
+        html_text,
+    )
+    assert bridge_sdk_url is not None
+    assert "asset_token=" in bridge_sdk_url.group(1)
+    # Relative asset URLs are NOT rewritten on the path-token route.
+    app_js_url = re.search(
+        r'src="([^"]*app\.js[^"]*)"',
+        html_text,
+    )
+    assert app_js_url is not None
+    assert "/api/plugin/page/content/" not in app_js_url.group(1)
+
+    # A relative asset resolves under the path-token prefix and is served raw.
+    asset_response = await anonymous_client.get(urlsplit(content_path).path + "app.js")
+    assert asset_response.status_code == 200
+
+    # A token scoped to another plugin is rejected.
+    other_path = urlsplit(content_path).path.replace(
+        f"/plugins/{PLUGIN_PAGE_DEMO_NAME}/",
+        "/plugins/another_plugin/",
+    )
+    other_response = await anonymous_client.get(other_path)
+    assert other_response.status_code == 401
+
+    # No token at all is rejected.
+    no_token_response = await anonymous_client.get(
+        f"/api/v1/plugins/{PLUGIN_PAGE_DEMO_NAME}/views/"
+        f"{PLUGIN_PAGE_DEMO_PAGE_NAME}/_t//app.js"
+    )
+    assert no_token_response.status_code in (401, 404)
 
 
 @pytest.mark.asyncio
-async def test_plugin_page_content_supports_cookie_auth(
+async def test_plugin_page_legacy_content_route_is_removed(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    registered_plugin_page: StarMetadata,
+):
+    """The query-token content route was replaced by path-token view URLs."""
+    test_client = app.test_client()
+    response = await test_client.get(
+        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/",
+        headers=authenticated_header,
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_plugin_page_view_supports_cookie_auth(
     app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
     registered_plugin_page: StarMetadata,
@@ -1785,38 +2032,39 @@ async def test_plugin_page_content_supports_cookie_auth(
     )
     assert login_response.status_code == 200
 
-    response = await test_client.get(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
+    entry_response = await test_client.get(
+        (
+            f"/api/plugin/page/entry?name={PLUGIN_PAGE_DEMO_NAME}"
+            f"&page={PLUGIN_PAGE_DEMO_PAGE_NAME}"
+        ),
     )
+    assert entry_response.status_code == 200
+    content_path = (await entry_response.get_json())["data"]["content_path"]
+
+    response = await test_client.get(content_path)
     assert response.status_code == 200
     content = (await response.get_data()).decode("utf-8")
     assert "Single plugin Page with internal navigation" in content
     assert response.headers["X-Frame-Options"] == "SAMEORIGIN"
     assert response.headers["Cache-Control"] == "no-store"
     assert "frame-ancestors 'self'" in response.headers["Content-Security-Policy"]
-    assert "asset_token=" in content
 
-    asset_url_match = re.search(
-        r'src="([^"]+/app\.js[^"]*)"',
-        content,
-    )
+    # Relative asset URLs stay untouched and resolve under the token path.
+    asset_url_match = re.search(r'src="([^"]*app\.js[^"]*)"', content)
     assert asset_url_match is not None
-    asset_response = await test_client.get(asset_url_match.group(1))
+    asset_response = await test_client.get(
+        urlsplit(content_path).path + asset_url_match.group(1)
+    )
     assert asset_response.status_code == 200
     asset_content = (await asset_response.get_data()).decode("utf-8")
     assert "renderTabs" in asset_content
     assert 'from "react"' in asset_content
-    assert (
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/shared/common.js"
-        in asset_content
-    )
-    assert "asset_token=" in asset_content
+    assert "shared/common.js" in asset_content
+    assert "/api/plugin/page/content/" not in asset_content
 
-    bridge_url_match = re.search(
-        r'src="([^"]+/bridge-sdk\.js[^"]*)"',
-        content,
-    )
+    bridge_url_match = re.search(r'src="([^"]+/bridge-sdk\.js[^"]*)"', content)
     assert bridge_url_match is not None
+    assert "asset_token=" in bridge_url_match.group(1)
     bridge_response = await test_client.get(bridge_url_match.group(1))
     assert bridge_response.status_code == 200
     bridge_content = (await bridge_response.get_data()).decode("utf-8")
@@ -1824,75 +2072,56 @@ async def test_plugin_page_content_supports_cookie_auth(
 
 
 @pytest.mark.asyncio
-async def test_plugin_page_content_issues_scoped_asset_token(
+async def test_plugin_page_view_issues_scoped_asset_token(
     app: FastAPIAppAdapter,
     authenticated_header: dict,
     registered_plugin_page: StarMetadata,
 ):
-    authorized_client = app.test_client()
-    response = await authorized_client.get(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/",
+    test_client = app.test_client()
+    entry_response = await test_client.get(
+        (
+            f"/api/plugin/page/entry?name={PLUGIN_PAGE_DEMO_NAME}"
+            f"&page={PLUGIN_PAGE_DEMO_PAGE_NAME}"
+        ),
         headers=authenticated_header,
     )
-    assert response.status_code == 200
-    html_text = (await response.get_data()).decode("utf-8")
+    assert entry_response.status_code == 200
+    content_path = (await entry_response.get_json())["data"]["content_path"]
+    asset_token = parse_qs(urlsplit(content_path).query).get("asset_token", [""])[0]
+    assert asset_token
 
-    app_js_url = re.search(
-        r'src="([^"]+/app\.js[^"]*)"',
-        html_text,
-    )
+    html_response = await test_client.get(content_path)
+    assert html_response.status_code == 200
+    html_text = (await html_response.get_data()).decode("utf-8")
     bridge_sdk_url = re.search(
         r'src="([^"]+/bridge-sdk\.js[^"]*)"',
         html_text,
     )
-    css_url = re.search(
-        r'href="([^"]+/base\.css[^"]*)"',
-        html_text,
-    )
-    assert app_js_url is not None
     assert bridge_sdk_url is not None
-    assert css_url is not None
-    assert "asset_token=" in app_js_url.group(1)
     assert "asset_token=" in bridge_sdk_url.group(1)
-    assert "asset_token=" in css_url.group(1)
-
-    query = parse_qs(urlsplit(app_js_url.group(1)).query)
-    asset_token = query.get("asset_token", [""])[0]
-    assert asset_token
 
     anonymous_client = app.test_client()
-    app_js_response = await anonymous_client.get(app_js_url.group(1))
-    assert app_js_response.status_code == 200
     bridge_response = await anonymous_client.get(bridge_sdk_url.group(1))
     assert bridge_response.status_code == 200
     bridge_js = (await bridge_response.get_data()).decode("utf-8")
-    assert "window.AstrBotPluginPage?.__setInitialContext" in bridge_js
+    assert "window.AstrBotPluginView?.__setInitialContext" in bridge_js
+    assert "window.AstrBotPluginPage = window.AstrBotPluginView;" in bridge_js
     assert '"locale": "zh-CN"' in bridge_js
     assert '"displayName": "插件页面演示"' in bridge_js
     assert '"pageTitle": "Bridge 演示页"' in bridge_js
-    css_response = await anonymous_client.get(css_url.group(1))
-    assert css_response.status_code == 200
 
+    # A stale dashboard cookie does not block a valid view token.
     stale_cookie_response = await anonymous_client.get(
-        app_js_url.group(1),
+        bridge_sdk_url.group(1),
         headers={"Cookie": f"{DASHBOARD_JWT_COOKIE_NAME}=stale.dashboard.token"},
     )
     assert stale_cookie_response.status_code == 200
 
+    # Scoped view tokens are rejected outside plugin view paths.
     out_of_scope_response = await anonymous_client.get(
         f"/api/plugin/get?asset_token={asset_token}"
     )
     assert out_of_scope_response.status_code == 401
-
-    cross_plugin_response = await anonymous_client.get(
-        f"/api/plugin/page/content/another_plugin/{PLUGIN_PAGE_DEMO_PAGE_NAME}/app.js?asset_token={asset_token}"
-    )
-    assert cross_plugin_response.status_code == 401
-
-    cross_page_response = await anonymous_client.get(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/another-page/app.js?asset_token={asset_token}"
-    )
-    assert cross_page_response.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -1903,10 +2132,16 @@ async def test_plugin_page_bridge_sdk_includes_is_dark_when_theme_param_provided
 ):
     """Bridge SDK initial context should include isDark based on ?theme= query param."""
     authorized_client = app.test_client()
-    response = await authorized_client.get(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/",
+    entry_response = await authorized_client.get(
+        (
+            f"/api/plugin/page/entry?name={PLUGIN_PAGE_DEMO_NAME}"
+            f"&page={PLUGIN_PAGE_DEMO_PAGE_NAME}"
+        ),
         headers=authenticated_header,
     )
+    assert entry_response.status_code == 200
+    content_path = (await entry_response.get_json())["data"]["content_path"]
+    response = await authorized_client.get(content_path)
     assert response.status_code == 200
     html_text = (await response.get_data()).decode("utf-8")
     bridge_sdk_url = re.search(
@@ -1947,61 +2182,45 @@ async def test_plugin_page_bridge_sdk_includes_is_dark_when_theme_param_provided
 
 
 @pytest.mark.asyncio
-async def test_plugin_page_content_propagates_theme_in_rewritten_urls(
+async def test_plugin_page_view_propagates_theme(
     app: FastAPIAppAdapter,
     authenticated_header: dict,
     registered_plugin_page: StarMetadata,
 ):
-    """Theme query param should be propagated through rewritten asset and bridge URLs."""
+    """The theme query param reaches the view HTML and the bridge SDK URL."""
     test_client = app.test_client()
-    response = await test_client.get(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
-        "?asset_token=&theme=dark",
+    entry_response = await test_client.get(
+        (
+            f"/api/plugin/page/entry?name={PLUGIN_PAGE_DEMO_NAME}"
+            f"&page={PLUGIN_PAGE_DEMO_PAGE_NAME}"
+        ),
         headers=authenticated_header,
     )
-    assert response.status_code == 200
-    html_text = (await response.get_data()).decode("utf-8")
+    assert entry_response.status_code == 200
+    content_path = (await entry_response.get_json())["data"]["content_path"]
 
-    # Verify theme=dark appears in bridge SDK URL in rewritten HTML
-    bridge_sdk_url_match = re.search(
+    # theme=dark -> data-theme and color-scheme on <html>, theme on bridge URL
+    dark_response = await test_client.get(content_path + "&theme=dark")
+    assert dark_response.status_code == 200
+    dark_html = (await dark_response.get_data()).decode("utf-8")
+    assert 'data-theme="dark"' in dark_html
+    assert '<meta name="color-scheme" content="dark">' in dark_html
+    bridge_sdk_url = re.search(
         r'src="([^"]+/bridge-sdk\.js[^"]*)"',
-        html_text,
+        dark_html,
     )
-    assert bridge_sdk_url_match is not None
-    bridge_query = parse_qs(urlsplit(bridge_sdk_url_match.group(1)).query)
-    assert bridge_query.get("theme") == ["dark"]
+    assert bridge_sdk_url is not None
+    assert parse_qs(urlsplit(bridge_sdk_url.group(1)).query).get("theme") == ["dark"]
 
-    # Verify theme=dark appears in CSS asset URL in rewritten HTML
-    css_url_match = re.search(
-        r'href="([^"]+/base\.css[^"]*)"',
-        html_text,
-    )
-    assert css_url_match is not None
-    css_query = parse_qs(urlsplit(css_url_match.group(1)).query)
-    assert css_query.get("theme") == ["dark"]
-
-    # Verify data-theme is injected on <html> tag to prevent flash
-    assert 'data-theme="dark"' in html_text
-    # Verify color-scheme meta tag is injected for browser-level default styles
-    assert '<meta name="color-scheme" content="dark">' in html_text
-
-    # theme=light → data-theme="light" on <html> and color-scheme meta
-    light_response = await test_client.get(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
-        "?asset_token=&theme=light",
-        headers=authenticated_header,
-    )
+    # theme=light -> data-theme="light" and matching color-scheme meta
+    light_response = await test_client.get(content_path + "&theme=light")
     assert light_response.status_code == 200
     light_html = (await light_response.get_data()).decode("utf-8")
     assert 'data-theme="light"' in light_html
     assert '<meta name="color-scheme" content="light">' in light_html
 
-    # no theme param → no data-theme or color-scheme meta on <html>
-    no_theme_response = await test_client.get(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
-        "?asset_token=",
-        headers=authenticated_header,
-    )
+    # no theme param -> no data-theme or color-scheme meta on <html>
+    no_theme_response = await test_client.get(content_path)
     assert no_theme_response.status_code == 200
     no_theme_html = (await no_theme_response.get_data()).decode("utf-8")
     assert "data-theme=" not in no_theme_html
@@ -2009,48 +2228,25 @@ async def test_plugin_page_content_propagates_theme_in_rewritten_urls(
 
 
 @pytest.mark.asyncio
-async def test_plugin_page_assets_require_dashboard_auth(
-    app: FastAPIAppAdapter,
-    authenticated_header: dict,
-    registered_plugin_page: StarMetadata,
-):
-    authorized_client = app.test_client()
-    response = await authorized_client.get(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/",
-        headers=authenticated_header,
-    )
-    assert response.status_code == 200
-    html_text = (await response.get_data()).decode("utf-8")
-
-    app_js_url = re.search(
-        r'src="([^"]+/app\.js[^"]*)"',
-        html_text,
-    )
-    bridge_sdk_url = re.search(
-        r'src="([^"]+/bridge-sdk\.js[^"]*)"',
-        html_text,
-    )
-    assert app_js_url is not None
-    assert bridge_sdk_url is not None
-
-    anonymous_client = app.test_client()
-    app_js_response = await anonymous_client.get(_strip_query(app_js_url.group(1)))
-    assert app_js_response.status_code == 401
-    bridge_response = await anonymous_client.get(_strip_query(bridge_sdk_url.group(1)))
-    assert bridge_response.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_plugin_page_content_blocks_path_traversal(
+async def test_plugin_page_view_blocks_path_traversal(
     app: FastAPIAppAdapter,
     authenticated_header: dict,
     registered_plugin_page: StarMetadata,
 ):
     test_client = app.test_client()
-    response = await test_client.get(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/..%2Fmain.py",
+    entry_response = await test_client.get(
+        (
+            f"/api/plugin/page/entry?name={PLUGIN_PAGE_DEMO_NAME}"
+            f"&page={PLUGIN_PAGE_DEMO_PAGE_NAME}"
+        ),
         headers=authenticated_header,
     )
+    assert entry_response.status_code == 200
+    content_path = urlsplit(
+        (await entry_response.get_json())["data"]["content_path"]
+    ).path
+
+    response = await test_client.get(f"{content_path}..%2Fmain.py")
     assert response.status_code == 404
 
 
@@ -2070,13 +2266,12 @@ async def test_logout_clears_cookie_for_plugin_page(
     )
     assert response.status_code == 200
 
-    response = await test_client.get(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
+    entry_url = (
+        f"/api/plugin/page/entry?name={PLUGIN_PAGE_DEMO_NAME}"
+        f"&page={PLUGIN_PAGE_DEMO_PAGE_NAME}"
     )
+    response = await test_client.get(entry_url)
     assert response.status_code == 200
-    html_text = (await response.get_data()).decode("utf-8")
-    asset_url_match = re.search(r'src="([^"]+/app\.js[^"]*)"', html_text)
-    assert asset_url_match is not None
 
     logout_response = await test_client.post("/api/auth/logout")
     assert logout_response.status_code == 200
@@ -2093,12 +2288,10 @@ async def test_logout_clears_cookie_for_plugin_page(
     assert "Max-Age=0" in clear_cookie_header
     _assert_cookie_samesite_strict(clear_cookie_header)
 
-    response = await test_client.get(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
-    )
+    response = await test_client.get(entry_url)
     assert response.status_code == 401
-    asset_response = await test_client.get(_strip_query(asset_url_match.group(1)))
-    assert asset_response.status_code == 401
+    bridge_response = await test_client.get("/api/plugin/page/bridge-sdk.js")
+    assert bridge_response.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -2368,7 +2561,7 @@ async def test_plugins(
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
 ):
-    """测试插件 API 端点，使用 Mock 避免真实网络调用。"""
+    """Test plugin endpoints with mocked marketplace and repository operations."""
     test_client = app.test_client()
 
     # 已经安装的插件
@@ -2385,7 +2578,15 @@ async def test_plugins(
         assert isinstance(installed_at, str)
         datetime.fromisoformat(installed_at)
 
-    # 插件市场
+    # Keep marketplace requests independent of external services and local caches.
+    market_plugins = {
+        "test/market-plugin": {
+            "name": "market-plugin",
+            "repo": "https://github.com/test/market-plugin",
+        }
+    }
+    get_online_plugins = AsyncMock(return_value=(market_plugins, None))
+    monkeypatch.setattr(PluginService, "get_online_plugins", get_online_plugins)
     response = await test_client.get(
         "/api/plugin/market_list",
         headers=authenticated_header,
@@ -2393,6 +2594,10 @@ async def test_plugins(
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "ok"
+    assert data["data"] == market_plugins
+    get_online_plugins.assert_awaited_once_with(
+        custom_registry=None, force_refresh=False
+    )
 
     # 使用 MockPluginBuilder 创建测试插件
     plugin_store_path = core_lifecycle_td.plugin_manager.plugin_store_path
@@ -2411,9 +2616,11 @@ async def test_plugins(
 
     # 设置 Mock
     monkeypatch.setattr(
-        core_lifecycle_td.plugin_manager.updator, "install", mock_install
+        core_lifecycle_td.plugin_manager._updater, "install", mock_install
     )
-    monkeypatch.setattr(core_lifecycle_td.plugin_manager.updator, "update", mock_update)
+    monkeypatch.setattr(
+        core_lifecycle_td.plugin_manager._updater, "update", mock_update
+    )
 
     try:
         # 插件安装
@@ -2445,7 +2652,7 @@ async def test_plugins(
         installed_at = target["installed_at"]
         assert installed_at is not None
         datetime.fromisoformat(installed_at)
-        assert target["install_source"]["install_method"] == "github"
+        assert target["install_source"]["install_method"] == "repository"
         assert target["install_source"]["repo"] == test_repo_url
         assert target["updates_enabled"] is True
         assert target["update_disabled_reason"] == ""
@@ -2791,7 +2998,7 @@ async def test_check_update(
         return f"v{VERSION}"  # 返回当前版本
 
     monkeypatch.setattr(
-        core_lifecycle_td.astrbot_updator,
+        core_lifecycle_td.astrbot_updater,
         "check_update",
         mock_check_update,
     )
@@ -2805,6 +3012,46 @@ async def test_check_update(
     data = await response.get_json()
     assert data["status"] == "success"
     assert data["data"]["has_new_version"] is False
+
+
+@pytest.mark.asyncio
+async def test_get_releases_serializes_release_info_at_api_boundary(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    from astrbot.core.zip_updater import ReleaseInfo
+
+    async def mock_get_releases():
+        return [
+            ReleaseInfo(
+                version="v99.0.0",
+                published_at="2026-08-01T00:00:00Z",
+                body="release notes",
+            )
+        ]
+
+    monkeypatch.setattr(
+        core_lifecycle_td.astrbot_updater,
+        "get_releases",
+        mock_get_releases,
+    )
+
+    response = await app.test_client().get(
+        "/api/update/releases",
+        headers=authenticated_header,
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["data"] == [
+        {
+            "tag_name": "v99.0.0",
+            "published_at": "2026-08-01T00:00:00Z",
+            "body": "release notes",
+        }
+    ]
 
 
 @pytest.mark.asyncio
@@ -2842,64 +3089,36 @@ async def test_do_update(
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
-    tmp_path_factory,
 ):
     test_client = app.test_client()
-
-    # Use a temporary path for the mock update to avoid side effects
-    temp_release_dir = tmp_path_factory.mktemp("release")
-    release_path = temp_release_dir / "astrbot"
     calls = []
 
-    async def mock_download_core(*args, **kwargs):
-        calls.append("download-core")
+    async def mock_update(*args, **kwargs):
+        from astrbot.core.updater import UpdateProgress
+
+        calls.append((args, kwargs))
         callback = kwargs.get("progress_callback")
         if callback:
-            callback({"downloaded": 10, "total": 10, "percent": 1, "speed": 1})
-        zip_path = kwargs["path"]
-        with zipfile.ZipFile(zip_path, "w") as zf:
-            zf.writestr("AstrBot-main/README.md", "core")
-        return zip_path
-
-    def mock_apply_core(*args, **kwargs):
-        del args, kwargs
-        calls.append("apply-core")
-        os.makedirs(release_path, exist_ok=True)
-
-    async def mock_download_dashboard(*args, **kwargs):
-        calls.append("download-dashboard")
-        callback = kwargs.get("progress_callback")
-        if callback:
-            callback({"downloaded": 10, "total": 10, "percent": 1, "speed": 1})
-        with zipfile.ZipFile(kwargs["path"], "w") as zf:
-            zf.writestr("dist/index.html", "dashboard")
-        return
-
-    def mock_extract_dashboard(*args, **kwargs):
-        del args, kwargs
-        calls.append("apply-dashboard")
+            await callback(
+                UpdateProgress(
+                    stage="core",
+                    status="done",
+                    message="prepared",
+                    overall_percent=92,
+                    downloaded_bytes=10,
+                    total_bytes=10,
+                    speed_kib_per_second=1,
+                )
+            )
 
     async def mock_pip_install(*args, **kwargs):
         """Mocks pip install to prevent actual installation."""
         return
 
     monkeypatch.setattr(
-        core_lifecycle_td.astrbot_updator,
-        "download_update_package",
-        mock_download_core,
-    )
-    monkeypatch.setattr(
-        core_lifecycle_td.astrbot_updator,
-        "apply_update_package",
-        mock_apply_core,
-    )
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.update_service.download_dashboard",
-        mock_download_dashboard,
-    )
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.update_service.extract_dashboard",
-        mock_extract_dashboard,
+        core_lifecycle_td.astrbot_updater,
+        "update",
+        mock_update,
     )
     monkeypatch.setattr(
         "astrbot.dashboard.services.update_service.pip_installer.install",
@@ -2921,13 +3140,10 @@ async def test_do_update(
         authenticated_header,
         "test-progress",
     )
-    assert os.path.exists(release_path)
-    assert calls[:4] == [
-        "download-dashboard",
-        "download-core",
-        "apply-core",
-        "apply-dashboard",
-    ]
+    assert len(calls) == 1
+    assert calls[0][0] == ()
+    assert calls[0][1]["version"] == "v3.4.0"
+    assert callable(calls[0][1]["progress_callback"])
 
     assert progress_data["status"] == "ok"
     assert progress_data["data"]["status"] == "success"
@@ -2935,7 +3151,7 @@ async def test_do_update(
 
 
 @pytest.mark.asyncio
-async def test_do_update_does_not_apply_files_when_core_download_fails(
+async def test_do_update_reports_updater_failure(
     app: FastAPIAppAdapter,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
@@ -2944,42 +3160,15 @@ async def test_do_update_does_not_apply_files_when_core_download_fails(
     test_client = app.test_client()
     calls = []
 
-    async def mock_download_dashboard(*args, **kwargs):
-        calls.append("download-dashboard")
-        callback = kwargs.get("progress_callback")
-        if callback:
-            callback({"downloaded": 10, "total": 10, "percent": 1, "speed": 1})
-
-    async def mock_download_core(*args, **kwargs):
+    async def mock_update(*args, **kwargs):
         del args, kwargs
-        calls.append("download-core")
-        raise RuntimeError("core download failed")
-
-    def mock_apply_core(*args, **kwargs):
-        del args, kwargs
-        calls.append("apply-core")
-
-    def mock_extract_dashboard(*args, **kwargs):
-        del args, kwargs
-        calls.append("apply-dashboard")
+        calls.append("update")
+        raise RuntimeError("update failed")
 
     monkeypatch.setattr(
-        core_lifecycle_td.astrbot_updator,
-        "download_update_package",
-        mock_download_core,
-    )
-    monkeypatch.setattr(
-        core_lifecycle_td.astrbot_updator,
-        "apply_update_package",
-        mock_apply_core,
-    )
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.update_service.download_dashboard",
-        mock_download_dashboard,
-    )
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.update_service.extract_dashboard",
-        mock_extract_dashboard,
+        core_lifecycle_td.astrbot_updater,
+        "update",
+        mock_update,
     )
 
     response = await test_client.post(
@@ -2997,7 +3186,7 @@ async def test_do_update_does_not_apply_files_when_core_download_fails(
         "atomic-fail",
     )
     assert progress_data["data"]["status"] == "error"
-    assert calls == ["download-dashboard", "download-core"]
+    assert calls == ["update"]
 
 
 @pytest.mark.asyncio
@@ -3010,18 +3199,18 @@ async def test_do_update_rejects_desktop_managed_backend(
     test_client = app.test_client()
     calls = []
 
-    async def mock_download_core(*args, **kwargs):
+    async def mock_update(*args, **kwargs):
         del args, kwargs
-        calls.append("download-core")
+        calls.append("update")
 
     async def mock_restart():
         calls.append("restart")
 
     monkeypatch.setenv("ASTRBOT_DESKTOP_MANAGED", "1")
     monkeypatch.setattr(
-        core_lifecycle_td.astrbot_updator,
-        "download_update_package",
-        mock_download_core,
+        core_lifecycle_td.astrbot_updater,
+        "update",
+        mock_update,
     )
     monkeypatch.setattr(core_lifecycle_td, "restart", mock_restart)
 
@@ -3038,76 +3227,8 @@ async def test_do_update_rejects_desktop_managed_backend(
     assert calls == []
 
 
-@pytest.mark.asyncio
-async def test_do_update_does_not_apply_files_when_package_verification_fails(
-    app: FastAPIAppAdapter,
-    authenticated_header: dict,
-    core_lifecycle_td: AstrBotCoreLifecycle,
-    monkeypatch,
-):
-    test_client = app.test_client()
-    calls = []
-
-    async def mock_download_dashboard(*args, **kwargs):
-        del args
-        calls.append("download-dashboard")
-        Path(kwargs["path"]).write_bytes(b"not a zip")
-
-    async def mock_download_core(*args, **kwargs):
-        del args
-        calls.append("download-core")
-        zip_path = kwargs["path"]
-        with zipfile.ZipFile(zip_path, "w") as zf:
-            zf.writestr("AstrBot-main/README.md", "core")
-        return zip_path
-
-    def mock_apply_core(*args, **kwargs):
-        del args, kwargs
-        calls.append("apply-core")
-
-    def mock_extract_dashboard(*args, **kwargs):
-        del args, kwargs
-        calls.append("apply-dashboard")
-
-    monkeypatch.setattr(
-        core_lifecycle_td.astrbot_updator,
-        "download_update_package",
-        mock_download_core,
-    )
-    monkeypatch.setattr(
-        core_lifecycle_td.astrbot_updator,
-        "apply_update_package",
-        mock_apply_core,
-    )
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.update_service.download_dashboard",
-        mock_download_dashboard,
-    )
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.update_service.extract_dashboard",
-        mock_extract_dashboard,
-    )
-
-    response = await test_client.post(
-        "/api/update/do",
-        headers=authenticated_header,
-        json={"version": "v3.4.0", "reboot": False, "progress_id": "invalid-zip"},
-    )
-    data = await response.get_json()
-
-    assert response.status_code == 200
-    assert data["status"] == "ok"
-    progress_data = await _wait_for_update_progress(
-        test_client,
-        authenticated_header,
-        "invalid-zip",
-    )
-    assert progress_data["data"]["status"] == "error"
-    assert calls == ["download-dashboard", "download-core"]
-
-
 def test_extract_dashboard_rejects_zip_path_traversal(tmp_path: Path):
-    from astrbot.core.utils.io import extract_dashboard
+    from astrbot.core.dashboard_assets import _extract_package
 
     archive_path = tmp_path / "dashboard.zip"
     extract_path = tmp_path / "data"
@@ -3115,26 +3236,205 @@ def test_extract_dashboard_rejects_zip_path_traversal(tmp_path: Path):
         zf.writestr("../evil.txt", "unsafe")
 
     with pytest.raises(ValueError, match="Unsafe dashboard archive path"):
-        extract_dashboard(archive_path, extract_path)
+        _extract_package(archive_path, extract_path)
 
     assert not (tmp_path / "evil.txt").exists()
+
+
+def test_extract_dashboard_replaces_dist_only_after_validation(tmp_path: Path):
+    from astrbot.core.dashboard_assets import _extract_package
+
+    archive_path = tmp_path / "dashboard.zip"
+    extract_path = tmp_path / "data"
+    old_dist = extract_path / "dist"
+    (old_dist / "assets").mkdir(parents=True)
+    (old_dist / "index.html").write_text("old", encoding="utf-8")
+    (old_dist / "assets" / "old.js").write_text("old", encoding="utf-8")
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr(
+            "dist/index.html",
+            '<script type="module" src="/assets/new.js"></script>',
+        )
+        archive.writestr("dist/assets/new.js", "export {};")
+        archive.writestr("dist/assets/version", "v9.9.9")
+
+    _extract_package(archive_path, extract_path, expected_version="v9.9.9")
+
+    assert "new.js" in (old_dist / "index.html").read_text(encoding="utf-8")
+    assert (old_dist / "assets" / "new.js").is_file()
+    assert not (old_dist / "assets" / "old.js").exists()
+
+
+@pytest.mark.parametrize(
+    ("index_html", "version", "error"),
+    [
+        (
+            '<script type="module" src="/assets/missing.js"></script>',
+            "v9.9.9",
+            "incomplete",
+        ),
+        (
+            '<script type="module" src="/assets/new.js"></script>',
+            "v9.9.8",
+            "does not match",
+        ),
+    ],
+)
+def test_extract_dashboard_keeps_existing_dist_when_validation_fails(
+    tmp_path: Path,
+    index_html: str,
+    version: str,
+    error: str,
+):
+    from astrbot.core.dashboard_assets import _extract_package
+
+    archive_path = tmp_path / "dashboard.zip"
+    extract_path = tmp_path / "data"
+    old_dist = extract_path / "dist"
+    old_dist.mkdir(parents=True)
+    (old_dist / "index.html").write_text("old", encoding="utf-8")
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr("dist/index.html", index_html)
+        if "new.js" in index_html:
+            archive.writestr("dist/assets/new.js", "export {};")
+        archive.writestr("dist/assets/version", version)
+
+    with pytest.raises(RuntimeError, match=error):
+        _extract_package(archive_path, extract_path, expected_version="v9.9.9")
+
+    assert (old_dist / "index.html").read_text(encoding="utf-8") == "old"
+
+
+def test_extract_dashboard_rolls_back_when_replacement_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    from astrbot.core.dashboard_assets import _extract_package
+
+    archive_path = tmp_path / "dashboard.zip"
+    extract_path = tmp_path / "data"
+    old_dist = extract_path / "dist"
+    old_dist.mkdir(parents=True)
+    (old_dist / "index.html").write_text("old", encoding="utf-8")
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr(
+            "dist/index.html",
+            '<script type="module" src="/assets/new.js"></script>',
+        )
+        archive.writestr("dist/assets/new.js", "export {};")
+        archive.writestr("dist/assets/version", "v9.9.9")
+
+    original_replace = Path.replace
+
+    def fail_staged_replace(path: Path, target: Path):
+        if path.name == "dist" and path.parent.name.startswith(".dashboard-stage-"):
+            raise OSError("simulated replacement failure")
+        return original_replace(path, target)
+
+    monkeypatch.setattr(Path, "replace", fail_staged_replace)
+
+    with pytest.raises(OSError, match="simulated replacement failure"):
+        _extract_package(archive_path, extract_path, expected_version="v9.9.9")
+
+    assert (old_dist / "index.html").read_text(encoding="utf-8") == "old"
+
+
+def test_extract_dashboard_preserves_backup_when_rollback_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    from astrbot.core.dashboard_assets import _extract_package
+
+    archive_path = tmp_path / "dashboard.zip"
+    extract_path = tmp_path / "data"
+    old_dist = extract_path / "dist"
+    old_dist.mkdir(parents=True)
+    (old_dist / "index.html").write_text("old", encoding="utf-8")
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr(
+            "dist/index.html",
+            '<script type="module" src="/assets/new.js"></script>',
+        )
+        archive.writestr("dist/assets/new.js", "export {};")
+        archive.writestr("dist/assets/version", "v9.9.9")
+
+    original_replace = Path.replace
+
+    def fail_replacement_and_rollback(path: Path, target: Path):
+        if path.name == "dist" and path.parent.name.startswith(".dashboard-stage-"):
+            raise OSError("simulated replacement failure")
+        if path.name == "previous-dist":
+            raise OSError("simulated rollback failure")
+        return original_replace(path, target)
+
+    monkeypatch.setattr(Path, "replace", fail_replacement_and_rollback)
+
+    with pytest.raises(RuntimeError, match="must be restored from"):
+        _extract_package(archive_path, extract_path, expected_version="v9.9.9")
+
+    staging_dirs = list(extract_path.glob(".dashboard-stage-*"))
+    assert len(staging_dirs) == 1
+    preserved_backup = staging_dirs[0] / "previous-dist" / "index.html"
+    assert preserved_backup.read_text(encoding="utf-8") == "old"
+
+
+def test_extract_dashboard_preserves_backup_when_target_reappears(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    from astrbot.core.dashboard_assets import _extract_package
+
+    archive_path = tmp_path / "dashboard.zip"
+    extract_path = tmp_path / "data"
+    target_dist = extract_path / "dist"
+    target_dist.mkdir(parents=True)
+    (target_dist / "index.html").write_text("old", encoding="utf-8")
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr(
+            "dist/index.html",
+            '<script type="module" src="/assets/new.js"></script>',
+        )
+        archive.writestr("dist/assets/new.js", "export {};")
+        archive.writestr("dist/assets/version", "v9.9.9")
+
+    original_replace = Path.replace
+
+    def recreate_target_before_failure(path: Path, target: Path):
+        if path.name == "dist" and path.parent.name.startswith(".dashboard-stage-"):
+            target.mkdir(parents=True)
+            (target / "index.html").write_text("concurrent", encoding="utf-8")
+            raise OSError("simulated replacement failure")
+        return original_replace(path, target)
+
+    monkeypatch.setattr(Path, "replace", recreate_target_before_failure)
+
+    with pytest.raises(RuntimeError, match="must be restored from"):
+        _extract_package(archive_path, extract_path, expected_version="v9.9.9")
+
+    staging_dirs = list(extract_path.glob(".dashboard-stage-*"))
+    assert len(staging_dirs) == 1
+    preserved_backup = staging_dirs[0] / "previous-dist" / "index.html"
+    assert preserved_backup.read_text(encoding="utf-8") == "old"
+    assert (target_dist / "index.html").read_text(encoding="utf-8") == "concurrent"
 
 
 @pytest.mark.asyncio
 async def test_do_update_hides_internal_error_message_in_response_and_progress(
     app: FastAPIAppAdapter,
     authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
 ):
     test_client = app.test_client()
 
-    async def mock_download_dashboard(*args, **kwargs):
+    async def mock_update(*args, **kwargs):
         del args, kwargs
         raise RuntimeError("secret stack trace")
 
     monkeypatch.setattr(
-        "astrbot.dashboard.services.update_service.download_dashboard",
-        mock_download_dashboard,
+        core_lifecycle_td.astrbot_updater,
+        "update",
+        mock_update,
     )
 
     response = await test_client.post(
@@ -3596,6 +3896,7 @@ async def test_skill_file_browser_and_editor_security(
     authenticated_header: dict,
     monkeypatch,
     tmp_path,
+    require_symlink,
 ):
     async def _fake_sync_skills_to_active_sandboxes():
         return

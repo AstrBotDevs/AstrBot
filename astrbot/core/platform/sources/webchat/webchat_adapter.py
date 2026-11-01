@@ -256,6 +256,7 @@ class WebChatAdapter(Platform):
         if isinstance(raw_message, tuple) and len(raw_message) >= 3:
             payload = raw_message[2]
             if isinstance(payload, dict):
+                message_event.set_extra("locale", payload.get("locale"))
                 flags = resolve_webchat_request_flags(payload)
                 message_event.set_extra("flags", flags)
                 for key, value in flags.items():
@@ -271,6 +272,12 @@ class WebChatAdapter(Platform):
                 message_event.set_extra(
                     "thread_selected_text", payload.get("thread_selected_text")
                 )
+                api_key_allow_admin_role = payload.get("_api_key_allow_admin_role")
+                if isinstance(api_key_allow_admin_role, bool):
+                    message_event.set_extra(
+                        "_api_key_allow_admin_role",
+                        api_key_allow_admin_role,
+                    )
 
         return message_event
 

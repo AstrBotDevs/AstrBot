@@ -4,16 +4,15 @@
 
 进入 `机器人` 页，点击 `+ 创建机器人`，找到 Slack 并点击进入 Slack 配置页。
 
-![image](https://files.astrbot.app/docs/source/images/slack/image-1.png)
-
-在弹出的配置对话框中点击 `启用`。
+![选择 Slack 消息平台](/slack/image-1.png?v=2)
 
 ## 在 Slack 创建 App
 
 Slack 支持两种接入方式：`Webhook` 与 `Socket`。如果您没有公网服务器并且消息业务量的规模较小，我们建议您使用 `socket` 方式。如果您有公网服务器（或者有一定的技术背景，了解如何设置 Tunnel，如 Cloudflare Tunnel），可以选择 `webhook` 方式。`socket` 方式部署相对简单。
 
 1. 创建 [Slack](https://slack.com/signin) 账号和一个工作区（Workspace）。
-2. 前往 [应用后台](https://api.slack.com/apps)，点击「Create New App」->「From Scratch」，输入 `应用名称` 和要添加到的工作区，然后点击「Create App」。  
+2. 前往 [应用后台](https://api.slack.com/apps)，点击「Create New App」->「Blank app」->「Continue」。输入 `应用名称` 和要添加到的工作区，然后点击「Create」。
+
 3. （仅 Webhook 需要）获取 `Signing Secret`，在左边栏 Basic Information 页下，找到 App Credentials 的 `Signing Secret`，点击 Show 并且复制到平台适配器配置的 signing_secret 处。
 
 ![image](https://files.astrbot.app/docs/source/images/slack/image.png)
@@ -37,9 +36,12 @@ Slack 支持两种接入方式：`Webhook` 与 `Socket`。如果您没有公网�
    - im:history
    - im:read
    - im:write
+   - mpim:read
    - reactions:read
    - reactions:write
    - users:read
+
+   订阅 `member_joined_channel` 事件时，Slack 会自动要求 `mpim:read`，用于读取机器人已加入的群组私聊的基本信息。
 
 6. 在左边栏 OAuth & Permissions 页下，在 Oauth Token 处点击 `Install to xxx`（xxx 是您工作区的名字）。然后复制生成的 Bot User OAuth Token 到平台适配器配置的 bot_token 处。
 
@@ -63,9 +65,7 @@ Slack 支持两种接入方式：`Webhook` 与 `Socket`。如果您没有公网�
 
 如果您使用的是 Webhook 模式：
 
-- 如果开启了 `统一 Webhook 模式`，点击保存之后，AstrBot 将会自动为你生成唯一的 Webhook 回调链接，你可以在日志中或者 WebUI 的机器人页的卡片上找到，将该链接填入 `Request URL` 输入框中。
-
-![unified_webhook](https://files.astrbot.app/docs/source/images/use/unified-webhook.png)
+- 如果开启了 `统一 Webhook 模式`，点击保存之后，AstrBot 将会自动为你生成唯一的 Webhook 回调链接，你可以在 `数据与日志 → 日志` 中查看，或在 `机器人` 页选中该机器人，点击 `查看 Webhook 链接`，将该链接填入 `Request URL` 输入框中。
 
 - 如果没有开启 `统一 Webhook 模式`，请在 `Request URL` 输入框中输入 `https://您的域名/astrbot-slack-webhook/callback`。
 
@@ -85,6 +85,8 @@ Slack 支持两种接入方式：`Webhook` 与 `Socket`。如果您没有公网�
 9. reaction_added
 10. reaction_removed
 11. team_join
+
+添加完成后，点击页面底部的 `Save Changes` 保存事件订阅，再进行下面的测试。
 
 ## 测试成功性
 

@@ -15,7 +15,23 @@ _KNOWLEDGE_BASE_TOOL_CONFIG = {
 
 
 def check_all_kb(kb_list: list[KBHelper | None]) -> bool:
-    """检查是否所有的知识库都为空"""
+    """检查是否所有的知识库都为空
+
+    Args:
+        kb_list: 知识库实例列表，可能包含 None（未找到的知识库）
+
+    Returns:
+        bool: True 表示所有知识库都为空或未找到
+    """
+    # 检查是否有未找到的知识库（None）
+    none_count = sum(1 for kb in kb_list if kb is None)
+    if none_count > 0:
+        logger.warning(
+            f"[知识库] {none_count}/{len(kb_list)} 个知识库未找到或未加载，"
+            "请检查配置中的知识库名称或 ID 是否正确"
+        )
+
+    # 检查是否所有非 None 的知识库都为空
     return not any(
         kb and (kb.kb.doc_count != 0 or kb.kb.chunk_count != 0) for kb in kb_list
     )

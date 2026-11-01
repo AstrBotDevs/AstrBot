@@ -206,6 +206,7 @@ const defaultValueMap = {
   list: [],
   file: [],
   object: {},
+  dict: {},
   template_list: []
 }
 

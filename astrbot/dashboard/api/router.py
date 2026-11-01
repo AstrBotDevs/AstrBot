@@ -1,8 +1,10 @@
 """FastAPI HTTP API surface for the AstrBot dashboard."""
 
 from fastapi import APIRouter
+from fastapi.routing import APIRoute
 
 from .api_keys import router as api_keys_router
+from .auth import ScopeDependency
 from .auth import router as auth_router
 from .backups import router as backups_router
 from .bots import router as bots_router
@@ -34,30 +36,62 @@ API_V1_PREFIX = "/api/v1"
 
 def build_api_router() -> APIRouter:
     router = APIRouter(prefix=API_V1_PREFIX)
-    router.include_router(auth_router)
-    router.include_router(backups_router)
-    router.include_router(config_profiles_router)
-    router.include_router(api_keys_router)
-    router.include_router(bots_router)
-    router.include_router(providers_router)
-    router.include_router(plugins_router)
-    router.include_router(chat_router)
-    router.include_router(chat_projects_router)
-    router.include_router(conversations_router)
-    router.include_router(cron_router)
-    router.include_router(files_router)
-    router.include_router(knowledge_bases_router)
-    router.include_router(extensions_router)
-    router.include_router(skills_router)
-    router.include_router(sessions_router)
-    router.include_router(subagents_router)
-    router.include_router(logs_router)
-    router.include_router(stats_router)
-    router.include_router(tools_router)
-    router.include_router(platform_router)
-    router.include_router(t2i_router)
-    router.include_router(personas_router)
-    router.include_router(updates_router)
-    router.include_router(open_api_router)
-    router.include_router(live_chat_router)
+    child_routers = (
+        auth_router,
+        backups_router,
+        config_profiles_router,
+        api_keys_router,
+        bots_router,
+        providers_router,
+        plugins_router,
+        chat_router,
+        chat_projects_router,
+        conversations_router,
+        cron_router,
+        files_router,
+        knowledge_bases_router,
+        extensions_router,
+        skills_router,
+        sessions_router,
+        subagents_router,
+        logs_router,
+        stats_router,
+        tools_router,
+        platform_router,
+        t2i_router,
+        personas_router,
+        updates_router,
+        open_api_router,
+        live_chat_router,
+    )
+    for child_router in child_routers:
+        for route in child_router.routes:
+            if not isinstance(route, APIRoute) or not route.include_in_schema:
+                continue
+            required_scopes = {
+                dependency.call.scope
+                for dependency in route.dependant.dependencies
+                if isinstance(dependency.call, ScopeDependency)
+            }
+            if len(required_scopes) != 1:
+                continue
+            required_scope = required_scopes.pop()
+            route.openapi_extra = {
+                **(route.openapi_extra or {}),
+                "x-astrbot-scope": required_scope,
+            }
+            scope_description = f"**Required scope:** `{required_scope}`"
+            sensitive_scopes = route.openapi_extra.get("x-astrbot-sensitive-scopes", [])
+            if sensitive_scopes:
+                formatted_scopes = ", ".join(f"`{scope}`" for scope in sensitive_scopes)
+                scope_description += (
+                    "\n\n**Conditional sensitive scope:** " + formatted_scopes
+                )
+            if scope_description not in route.description:
+                route.description = "\n\n".join(
+                    part
+                    for part in (route.description.strip(), scope_description)
+                    if part
+                )
+        router.include_router(child_router)
     return router

@@ -39,7 +39,7 @@ class Stage(abc.ABC):
         Args:
             event (AstrMessageEvent): 事件对象，包含事件的相关信息
         Returns:
-            Union[None, AsyncGenerator[None, None]]: 处理结果，可能是 None 或者异步生成器, 如果为 None 则表示不需要继续处理, 如果为异步生成器则表示需要继续处理(进入下一个阶段)
+            None | AsyncGenerator[None]: 处理结果，可能是 None 或者异步生成器, 如果为 None 则表示不需要继续处理, 如果为异步生成器则表示需要继续处理(进入下一个阶段)
 
         """
         raise NotImplementedError

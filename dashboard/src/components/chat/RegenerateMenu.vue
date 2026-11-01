@@ -8,21 +8,14 @@
     @update:model-value="handleMenuToggle"
   >
     <template #activator="{ props: menuProps }">
-      <v-btn
-        v-bind="menuProps"
-        icon="mdi-refresh"
-        size="x-small"
-        variant="text"
-      />
+      <v-btn v-bind="menuProps" icon size="x-small" variant="text">
+        <RotateCw :size="14" :stroke-width="2" />
+      </v-btn>
     </template>
 
-    <v-list-item
-      class="styled-menu-item"
-      rounded="md"
-      @click="emit('retry')"
-    >
+    <v-list-item class="styled-menu-item" rounded="md" @click="emit('retry')">
       <template #prepend>
-        <v-icon size="18">mdi-refresh</v-icon>
+        <RotateCw :size="18" :stroke-width="2" />
       </template>
       <v-list-item-title>{{ tm("actions.retry") }}</v-list-item-title>
     </v-list-item>
@@ -44,7 +37,9 @@
           <template #prepend>
             <v-icon size="18">mdi-creation</v-icon>
           </template>
-          <v-list-item-title>{{ tm("actions.retryWithModel") }}</v-list-item-title>
+          <v-list-item-title>{{
+            tm("actions.retryWithModel")
+          }}</v-list-item-title>
           <template #append>
             <v-progress-circular
               v-if="loadingProviders"
@@ -97,7 +92,9 @@
                   <span>{{ item.tooltip }}</span>
                 </v-tooltip>
                 <v-tooltip
-                  v-if="formatContextLimit(provider, metadataForProvider(provider))"
+                  v-if="
+                    formatContextLimit(provider, metadataForProvider(provider))
+                  "
                   location="top"
                   max-width="320"
                 >
@@ -107,7 +104,12 @@
                       class="regenerate-model-context-badge"
                       @click.stop
                     >
-                      {{ formatContextLimit(provider, metadataForProvider(provider)) }}
+                      {{
+                        formatContextLimit(
+                          provider,
+                          metadataForProvider(provider),
+                        )
+                      }}
                     </span>
                   </template>
                   <span>{{
@@ -123,7 +125,10 @@
             </v-list-item-subtitle>
           </v-list-item>
 
-          <div v-if="!loadingProviders && !providerConfigs.length" class="regenerate-empty">
+          <div
+            v-if="!loadingProviders && !providerConfigs.length"
+            class="regenerate-empty"
+          >
             {{ tm("actions.noAvailableModels") }}
           </div>
         </v-list>
@@ -134,6 +139,7 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
+import { RotateCw } from "@lucide/vue";
 import { providerApi } from "@/api/v1";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import { useModuleI18n } from "@/i18n/composables";
@@ -173,9 +179,10 @@ async function loadProviderConfigs(force = false) {
   try {
     const response = await providerApi.listByProviderType("chat_completion");
     if (response.data.status === "ok") {
-      modelMetadata.value = (
-        response.data.model_metadata || {}
-      ) as Record<string, ProviderModelMetadata>;
+      modelMetadata.value = (response.data.model_metadata || {}) as Record<
+        string,
+        ProviderModelMetadata
+      >;
       providerConfigs.value = (
         (response.data.data || []) as unknown as ProviderConfig[]
       ).filter((provider: ProviderConfig) => provider.enable !== false);

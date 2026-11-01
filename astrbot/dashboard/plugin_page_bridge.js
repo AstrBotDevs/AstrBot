@@ -204,7 +204,7 @@
     }
   });
 
-  window.AstrBotPluginPage = {
+  window.AstrBotPluginView = {
     ready() {
       return readyPromise;
     },
@@ -283,6 +283,9 @@
       return makeRequest("sse:unsubscribe", { subscriptionId });
     },
   };
+
+  // "Views" is the preferred naming; AstrBotPluginPage stays as an alias.
+  window.AstrBotPluginPage = window.AstrBotPluginView;
 
   send("ready");
 })();

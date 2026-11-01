@@ -5,7 +5,8 @@ The `main.py` file in the plugin template is a minimal plugin instance.
 ```python
 from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
 from astrbot.api.star import Context, Star
-from astrbot.api import logger # Use the logger interface provided by AstrBot
+from astrbot.api import logger  # Use the logger interface provided by AstrBot
+
 
 class MyPlugin(Star):
     def __init__(self, context: Context):
@@ -14,14 +15,14 @@ class MyPlugin(Star):
     # Decorator to register a command. The command name is "helloworld". Once registered, sending `/helloworld` will trigger this command and respond with `Hello, {user_name}!`
     @filter.command("helloworld")
     async def helloworld(self, event: AstrMessageEvent):
-        '''This is a hello world command''' # This is the handler's description, which will be parsed to help users understand the plugin's functionality. Highly recommended to provide.
+        """This is a hello world command"""  # This is the handler's description, which will be parsed to help users understand the plugin's functionality. Highly recommended to provide.
         user_name = event.get_sender_name()
-        message_str = event.message_str # Get the plain text content of the message
+        message_str = event.message_str  # Get the plain text content of the message
         logger.info("Hello world command triggered!")
-        yield event.plain_result(f"Hello, {user_name}!") # Send a plain text message
+        yield event.plain_result(f"Hello, {user_name}!")  # Send a plain text message
 
     async def terminate(self):
-        '''Optionally implement the terminate function, which will be called when the plugin is uninstalled/disabled.'''
+        """Optionally implement the terminate function, which will be called when the plugin is uninstalled/disabled."""
 ```
 
 Explanation:

@@ -12,5 +12,5 @@ AstrBot Documentation: [![wakatime](https://wakatime.com/badge/user/915e5316-99c
 
 ## Next...
 
-If you're reading this, it means you have successfully deployed the messaging platform and sent/received your first command. Next, you can configure large language models or add plugins. Please refer to the `Configuration - Integrating LLM Services` section.
+If you're reading this, it means you have successfully deployed the messaging platform and sent/received your first command. Next, add a model under `Providers`, select it in the bot's configuration profile under `Config`, or install plugins under `Extensions → Plugins → AstrBot Plugin Market`. See [Model Providers](../providers/start.md) and [Plugins](../use/plugin.md).
 

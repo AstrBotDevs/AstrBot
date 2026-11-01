@@ -5,10 +5,15 @@ import copy
 import inspect
 import os
 import traceback
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from astrbot.core import file_token_service, logger
+from astrbot.core.computer import computer_client
+from astrbot.core.computer.booters.local import LocalShellComponent
+from astrbot.core.config.agent_runner import normalize_agent_runner
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import (
     CONFIG_METADATA_2,
@@ -16,6 +21,7 @@ from astrbot.core.config.default import (
     CONFIG_METADATA_3_SYSTEM,
     DEFAULT_CONFIG,
     DEFAULT_VALUE_MAP,
+    get_local_permission_defaults,
 )
 from astrbot.core.config.i18n_utils import ConfigMetadataI18n
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -30,9 +36,12 @@ from astrbot.core.utils.totp import (
     set_pending_totp_secret,
     verify_configured_2fa_code,
 )
+from astrbot.core.utils.upload import UploadTooLargeError
 from astrbot.core.utils.webhook_utils import ensure_platform_webhook_config
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import ApiError
+from astrbot.dashboard.schemas import BotCleanupTarget
+from astrbot.dashboard.services.bot_cleanup_service import delete_bot_data
 
 PROTECTED_2FA_CONFIG_PATHS = (
     ("dashboard", "totp", "enable"),
@@ -200,7 +209,24 @@ def sanitize_filename(name: str) -> str:
     return _sanitize_filename(name)
 
 
-def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]:
+def validate_config(
+    data,
+    schema: dict,
+    is_core: bool,
+    *,
+    runtime: dict | None = None,
+) -> tuple[list[str], dict]:
+    """Validate configuration values and normalize linked Local permissions.
+
+    Args:
+        data: Submitted configuration, normalized in place.
+        schema: Configuration metadata used for validation.
+        is_core: Whether this is a core configuration rather than a plugin.
+        runtime: Startup runtime snapshot for platform-specific defaults.
+
+    Returns:
+        Validation errors and the normalized configuration.
+    """
     errors = []
 
     def validate(data: dict, metadata: dict = schema, path="") -> None:
@@ -208,6 +234,14 @@ def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]
             if key not in metadata:
                 continue
             meta = metadata[key]
+            if (
+                is_core
+                and path == "provider."
+                and key == "key"
+                and data.get("type") == "system_one_decision"
+            ):
+                # System One uses a single key within the shared provider schema.
+                meta = {**meta, "type": "string"}
             if "type" not in meta:
                 logger.debug(f"配置项 {path}{key} 没有类型定义, 跳过校验")
                 continue
@@ -299,6 +333,46 @@ def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]
             **schema["misc_config_group"]["metadata"],
         }
         validate(data, meta_all)
+        provider_settings = data.get("provider_settings", {})
+        defaults = get_local_permission_defaults(runtime.get("os") if runtime else None)
+        permissions = (
+            provider_settings.get("computer_use_local_permissions", {})
+            if isinstance(provider_settings, dict)
+            else {}
+        )
+        if not isinstance(permissions, dict):
+            errors.append("Local computer permissions must be an object.")
+        else:
+            for role in ("member", "admin"):
+                if role not in permissions:
+                    continue
+                policy = permissions[role]
+                if not isinstance(policy, dict):
+                    errors.append(
+                        f"Local computer permissions for {role} must be an object."
+                    )
+                    continue
+                for key in ("allow_execution", "allow_network"):
+                    if key in policy and not isinstance(policy[key], bool):
+                        errors.append(
+                            f"Local permission {role}.{key} must be a boolean."
+                        )
+                scope = policy.get(
+                    "filesystem_scope", defaults[role]["filesystem_scope"]
+                )
+                if scope not in ("none", "workspace", "host"):
+                    errors.append(
+                        f"Invalid local filesystem scope for {role}: {scope}."
+                    )
+                if scope == "none":
+                    policy["allow_execution"] = False
+                    policy["allow_network"] = False
+                elif (
+                    policy.get("allow_execution", defaults[role]["allow_execution"])
+                    is False
+                ):
+                    policy["allow_network"] = False
+
     else:
         validate(data, schema)
 
@@ -323,6 +397,23 @@ def _log_computer_config_changes(
             old_runtime,
             new_runtime,
         )
+
+    old_permissions = old_ps.get("computer_use_local_permissions", {})
+    new_permissions = new_ps.get("computer_use_local_permissions", {})
+    for role in ("member", "admin"):
+        old_role = old_permissions.get(role, {})
+        new_role = new_permissions.get(role, {})
+        for key in ("allow_execution", "allow_network", "filesystem_scope"):
+            old_value = old_role.get(key)
+            new_value = new_role.get(key)
+            if old_value != new_value:
+                log_info(
+                    "[Computer] Config changed: local_permissions.%s.%s %s -> %s",
+                    role,
+                    key,
+                    old_value,
+                    new_value,
+                )
 
     old_sandbox = old_ps.get("sandbox", {})
     new_sandbox = new_ps.get("sandbox", {})
@@ -422,9 +513,24 @@ def save_config(
     post_config: dict,
     config: AstrBotConfig,
     is_core: bool = False,
+    *,
+    runtime: dict | None = None,
 ) -> None:
+    """Validate and persist a dashboard configuration update.
+
+    Args:
+        post_config: Submitted configuration to validate and save.
+        config: Existing configuration and persistence target.
+        is_core: Whether this is a core configuration rather than a plugin.
+        runtime: Startup runtime snapshot supplied by the profile service.
+
+    Raises:
+        ValueError: If configuration validation fails.
+    """
     if is_core:
-        _log_computer_config_changes(dict(config), post_config)
+        post_config["agent_runner"] = normalize_agent_runner(
+            post_config.get("agent_runner")
+        )
 
     try:
         if is_core:
@@ -432,6 +538,7 @@ def save_config(
                 post_config,
                 CONFIG_METADATA_2,
                 is_core,
+                runtime=runtime,
             )
         else:
             errors, post_config = validate_config(
@@ -446,6 +553,8 @@ def save_config(
     if errors:
         raise ValueError(f"格式校验未通过: {errors}")
 
+    if is_core:
+        _log_computer_config_changes(dict(config), post_config)
     config.save_config(post_config)
 
 
@@ -454,10 +563,13 @@ class ConfigProfileService:
         self,
         core_lifecycle: AstrBotCoreLifecycle,
         db: BaseDatabase | None = None,
+        *,
+        runtime: dict,
     ) -> None:
         self.core_lifecycle = core_lifecycle
         self.acm = core_lifecycle.astrbot_config_mgr
         self.db = db
+        self.runtime = runtime
 
     def get_profile_schema(self) -> dict:
         return {
@@ -474,13 +586,77 @@ class ConfigProfileService:
         }
 
     def get_system_config(self) -> dict:
-        return self.get_system_schema()
+        """Return the system configuration with the server's effective time.
+
+        Returns:
+            System configuration metadata, an aware UTC timestamp, and the
+            effective UTC offset in minutes.
+        """
+        data = self.get_system_schema()
+        server_utc_time = datetime.now(timezone.utc)
+        timezone_name = str(data["config"].get("timezone") or "").strip()
+        if timezone_name:
+            try:
+                configured_time = server_utc_time.astimezone(ZoneInfo(timezone_name))
+            except (ValueError, ZoneInfoNotFoundError):
+                configured_time = server_utc_time.astimezone()
+        else:
+            configured_time = server_utc_time.astimezone()
+        utc_offset = configured_time.utcoffset()
+        data["server_utc_time"] = server_utc_time.isoformat()
+        data["server_utc_offset_minutes"] = (
+            int(utc_offset.total_seconds() / 60) if utc_offset else 0
+        )
+        return data
 
     def list_profiles(self) -> dict:
         return {"info_list": self.acm.get_conf_list()}
 
-    async def create_profile(self, name: str | None, config: dict | None) -> dict:
-        conf_id = self.acm.create_conf(name=name, config=config or DEFAULT_CONFIG)
+    async def create_profile(
+        self,
+        name: str | None,
+        config: dict | None,
+        *,
+        allow_admin_id_change: bool = True,
+    ) -> dict:
+        """Create a config profile with explicit admin-ID permission.
+
+        Args:
+            name: Display name for the new profile.
+            config: Optional initial config content.
+            allow_admin_id_change: Whether caller may define non-default admin IDs.
+
+        Returns:
+            Identifier of the created config profile.
+
+        Raises:
+            ApiError: If caller attempts to define administrator IDs without scope.
+            ValueError: If configuration validation fails.
+        """
+        if (
+            not allow_admin_id_change
+            and isinstance(config, dict)
+            and config.get("admins_id", DEFAULT_CONFIG.get("admins_id"))
+            != DEFAULT_CONFIG.get("admins_id")
+        ):
+            raise ApiError(
+                "config:edit_admin scope is required to change admins_id",
+                status_code=403,
+            )
+        profile_config = copy.deepcopy(config or DEFAULT_CONFIG)
+        if "agent_runner" in profile_config:
+            profile_config["agent_runner"] = normalize_agent_runner(
+                profile_config["agent_runner"]
+            )
+        errors, profile_config = validate_config(
+            profile_config, CONFIG_METADATA_2, is_core=True, runtime=self.runtime
+        )
+        if errors:
+            raise ValueError(f"Configuration validation failed: {errors}")
+        conf_id = await self.acm.create_conf(
+            name=name,
+            config=profile_config,
+        )
         await self.core_lifecycle.reload_pipeline_scheduler(conf_id)
         return {"conf_id": conf_id}
 
@@ -528,7 +704,23 @@ class ConfigProfileService:
         config: dict,
         *,
         two_factor_code: str | None = None,
+        allow_admin_id_change: bool = True,
     ) -> str | None:
+        """Update a config profile with explicit admin-ID permission.
+
+        Args:
+            config_id: Identifier of the profile to update.
+            config: Complete replacement config content.
+            two_factor_code: Optional TOTP code for protected dashboard changes.
+            allow_admin_id_change: Whether caller may change administrator IDs.
+
+        Returns:
+            Success message, optionally including a connectivity warning.
+
+        Raises:
+            ApiError: If admin IDs change without permission or TOTP is invalid.
+            ValueError: If the profile does not exist or validation fails.
+        """
         if config_id not in self.acm.confs:
             raise ValueError(f"Config file {config_id} does not exist")
         config = copy.deepcopy(config)
@@ -538,6 +730,15 @@ class ConfigProfileService:
                 config[key] = default_conf.get(key, [])
 
         current_config = self.acm.confs[config_id]
+        if (
+            not allow_admin_id_change
+            and "admins_id" in config
+            and config.get("admins_id") != current_config.get("admins_id")
+        ):
+            raise ApiError(
+                "config:edit_admin scope is required to change admins_id",
+                status_code=403,
+            )
         protected_2fa_changed = _protected_2fa_config_changed(current_config, config)
         if (
             is_totp_enabled(current_config)
@@ -555,7 +756,12 @@ class ConfigProfileService:
             _set_nested_value(config, ("dashboard", "totp", "recovery_code_hash"), "")
 
         set_pending_totp_secret(None)
-        save_config(config, self.acm.confs[config_id], is_core=True)
+        save_config(
+            config, self.acm.confs[config_id], is_core=True, runtime=self.runtime
+        )
+        booter = computer_client.local_booter
+        if booter is not None and isinstance(booter.shell, LocalShellComponent):
+            await booter.shell.shutdown_sessions(invalid_only=True)
         if protected_2fa_changed and self.db is not None:
             await revoke_user_trusted_devices(self.db)
         await self.core_lifecycle.reload_pipeline_scheduler(config_id)
@@ -600,33 +806,33 @@ class ConfigProfileService:
             )
         )
 
-    def rename_profile(self, config_id: str, name: str | None) -> None:
-        if not self.acm.update_conf_info(config_id, name=name):
+    async def rename_profile(self, config_id: str, name: str | None) -> None:
+        if not await self.acm.update_conf_info(config_id, name=name):
             raise ValueError("Failed to update config profile")
 
-    def rename_profile_from_dashboard_payload(self, payload: object) -> str:
+    async def rename_profile_from_dashboard_payload(self, payload: object) -> str:
         data = payload if isinstance(payload, dict) else {}
         if not data:
             raise ValueError("缺少配置数据")
         conf_id = data.get("id")
         if not conf_id:
             raise ValueError("缺少配置文件 ID")
-        self.rename_profile(str(conf_id), name=data.get("name"))
+        await self.rename_profile(str(conf_id), name=data.get("name"))
         return "更新成功"
 
-    def delete_profile(self, config_id: str) -> None:
-        if not self.acm.delete_conf(config_id):
+    async def delete_profile(self, config_id: str) -> None:
+        if not await self.acm.delete_conf(config_id):
             raise ValueError("Failed to delete config profile")
         self.core_lifecycle.pipeline_scheduler_mapping.pop(config_id, None)
 
-    def delete_profile_from_dashboard_payload(self, payload: object) -> str:
+    async def delete_profile_from_dashboard_payload(self, payload: object) -> str:
         data = payload if isinstance(payload, dict) else {}
         if not data:
             raise ValueError("缺少配置数据")
         conf_id = data.get("id")
         if not conf_id:
             raise ValueError("缺少配置文件 ID")
-        self.delete_profile(str(conf_id))
+        await self.delete_profile(str(conf_id))
         return "删除成功"
 
 
@@ -783,38 +989,49 @@ class ConfigDisplayService:
         return result
 
     async def register_platform_logo(self, platform, platform_default_tmpl) -> None:
+        """Attach a reusable logo token to a platform's configuration template.
+
+        Args:
+            platform: Registered adapter metadata including its logo path.
+            platform_default_tmpl: Configuration templates updated with the token.
+        """
         if not platform.logo_path:
             return
 
         try:
             cache_key = f"{platform.name}:{platform.logo_path}"
-            if cache_key in self._logo_token_cache:
-                self._set_platform_logo_token(
-                    platform_default_tmpl,
-                    platform.name,
-                    self._logo_token_cache[cache_key],
-                )
-                logger.debug(f"Using cached logo token for platform {platform.name}")
-                return
+            if cached_token := self._logo_token_cache.get(cache_key):
+                if not await file_token_service.check_token_expired(cached_token):
+                    self._set_platform_logo_token(
+                        platform_default_tmpl,
+                        platform.name,
+                        cached_token,
+                    )
+                    logger.debug(
+                        f"Using cached logo token for platform {platform.name}"
+                    )
+                    return
+                self._logo_token_cache.pop(cache_key, None)
 
             platform_cls = platform_cls_map.get(platform.name)
             if not platform_cls:
                 logger.warning(f"Platform class not found for {platform.name}")
                 return
 
-            module_file = inspect.getfile(platform_cls)
-            plugin_dir = os.path.dirname(module_file)
-            logo_file_path = os.path.join(plugin_dir, platform.logo_path)
+            logo_file_path = (
+                Path(inspect.getfile(platform_cls)).parent / platform.logo_path
+            )
 
-            if not os.path.exists(logo_file_path):
+            if not logo_file_path.exists():
                 logger.warning(
                     f"Platform {platform.name} logo file not found: {logo_file_path}",
                 )
                 return
 
             logo_token = await file_token_service.register_file(
-                logo_file_path,
+                str(logo_file_path),
                 timeout=3600,
+                single_use=False,
             )
             self._set_platform_logo_token(
                 platform_default_tmpl,
@@ -925,7 +1142,21 @@ class ConfigFileService:
         if errors:
             raise ValueError(f"格式校验未通过: {errors}")
         metadata.config.save_config(post_configs)
-        await self.core_lifecycle.plugin_manager.reload(plugin_name)
+        try:
+            success, error_message = await self.core_lifecycle.plugin_manager.reload(
+                plugin_name
+            )
+        except Exception as exc:
+            logger.exception(
+                f"Failed to reload plugin {plugin_name} after saving its configuration."
+            )
+            raise ValueError(
+                f"插件 {plugin_name} 配置已保存，但重载失败: {str(exc) or '未知错误，请查看日志'}"
+            ) from exc
+        if not success:
+            raise ValueError(
+                f"插件 {plugin_name} 配置已保存，但重载失败: {error_message or '未知错误，请查看日志'}"
+            )
 
     async def save_plugin_configs_from_dashboard_payload(
         self,
@@ -987,9 +1218,9 @@ class ConfigFileService:
                 continue
 
             save_path.parent.mkdir(parents=True, exist_ok=True)
-            await file.save(str(save_path))
-            if save_path.is_file() and save_path.stat().st_size > MAX_FILE_BYTES:
-                save_path.unlink()
+            try:
+                await file.save(str(save_path), max_bytes=MAX_FILE_BYTES)
+            except UploadTooLargeError:
                 errors.append(f"File too large: {filename}")
                 continue
             uploaded.append(rel_path)
@@ -1186,6 +1417,8 @@ class BotConfigService:
         ensure_platform_webhook_config(config)
         self.config["platform"].append(config)
         save_config(self.config, self.config, is_core=True)
+        if event_bus := getattr(self.core_lifecycle, "event_bus", None):
+            event_bus.stopped_platforms.discard(bot_id)
         await self.core_lifecycle.platform_manager.load_platform(config)
 
     async def update_bot(self, bot_id: str, config: dict) -> None:
@@ -1208,14 +1441,45 @@ class BotConfigService:
         new_config["enable"] = enabled
         await self.update_bot(bot_id, new_config)
 
-    async def delete_bot(self, bot_id: str) -> None:
-        for idx, bot in enumerate(self.config.get("platform", [])):
-            if bot.get("id") == bot_id:
-                del self.config["platform"][idx]
+    async def delete_bot(
+        self, bot_id: str, *, cleanup: list[BotCleanupTarget] | None = None
+    ) -> None:
+        """Stop an adapter and delete only explicitly selected associated data.
+
+        Args:
+            bot_id: Exact platform instance ID.
+            cleanup: Data categories to remove; omitted categories are retained.
+
+        Raises:
+            ValueError: The bot or a cleanup category is invalid.
+            Exception: Cleanup or configuration persistence fails.
+        """
+        bot = self._find_bot(bot_id)
+        if bot is None:
+            raise ValueError(f"Bot {bot_id} not found")
+        targets = set(cleanup or [])
+        if targets - set(get_args(BotCleanupTarget)):
+            raise ValueError("Invalid bot cleanup category")
+        event_bus = getattr(self.core_lifecycle, "event_bus", None)
+        await self.core_lifecycle.platform_manager.terminate_platform(bot_id)
+        try:
+            if event_bus:
+                await event_bus.stop_platform(bot_id)
+            if targets:
+                await delete_bot_data(self.core_lifecycle, bot_id, targets)
+            self.config["platform"].remove(bot)
+            try:
                 save_config(self.config, self.config, is_core=True)
-                await self.core_lifecycle.platform_manager.terminate_platform(bot_id)
-                return
-        raise ValueError(f"Bot {bot_id} not found")
+            except Exception:
+                self.config["platform"].append(bot)
+                raise
+        except Exception:
+            # Keep the adapter available for inspection or retry after a failure.
+            if event_bus:
+                event_bus.stopped_platforms.discard(bot_id)
+            if bot.get("enable"):
+                await self.core_lifecycle.platform_manager.load_platform(bot)
+            raise
 
     def list_platforms_for_dashboard(self) -> dict:
         return {"platforms": self.list_bots()["bots"]}
@@ -1266,17 +1530,31 @@ class BotConfigService:
 class ProviderConfigService:
     CAPABILITY_TO_PROVIDER_TYPE = {
         "chat": "chat_completion",
-        "agent": "agent_runner",
         "stt": "speech_to_text",
         "tts": "text_to_speech",
         "embedding": "embedding",
         "rerank": "rerank",
+        "decision": "decision",
     }
 
     def __init__(self, core_lifecycle: AstrBotCoreLifecycle) -> None:
         self.core_lifecycle = core_lifecycle
         self.config = core_lifecycle.astrbot_config
         self.provider_manager = core_lifecycle.provider_manager
+
+    @staticmethod
+    def _strip_legacy_reasoning_metadata(provider: dict) -> dict:
+        """Remove reasoning metadata accidentally stored as provider configuration.
+
+        Args:
+            provider: Provider configuration to sanitize in place.
+
+        Returns:
+            The sanitized provider configuration.
+        """
+        if provider.get("provider_source_id"):
+            provider.pop("reasoning", None)
+        return provider
 
     def get_provider_schema(self) -> dict:
         provider_metadata = ConfigMetadataI18n.convert_to_i18n_keys(
@@ -1297,11 +1575,16 @@ class ProviderConfigService:
         for provider in provider_registry:
             if provider.default_config_tmpl:
                 provider_default_tmpl[provider.type] = provider.default_config_tmpl
-        providers = copy.deepcopy(self.config.get("provider", []))
+        providers = [
+            copy.deepcopy(provider)
+            for provider in self.config.get("provider", [])
+            if provider.get("provider_type") != "agent_runner"
+        ]
         from astrbot.core.utils.llm_metadata import LLM_METADATAS
 
         model_metadata = {}
         for provider in providers:
+            self._strip_legacy_reasoning_metadata(provider)
             model_id = provider.get("model")
             if isinstance(model_id, str) and model_id in LLM_METADATAS:
                 model_metadata[model_id] = LLM_METADATAS[model_id]
@@ -1562,6 +1845,8 @@ class ProviderConfigService:
             for source in self.provider_manager.provider_sources_config
         }
         for provider in self.provider_manager.providers_config:
+            if provider.get("provider_type") == "agent_runner":
+                continue
             if source_id and provider.get("provider_source_id") != source_id:
                 continue
             if enabled is not None and bool(provider.get("enable", False)) != enabled:
@@ -1579,6 +1864,7 @@ class ProviderConfigService:
                 )
             else:
                 provider_response = copy.deepcopy(provider)
+            self._strip_legacy_reasoning_metadata(provider_response)
             model_id = provider_response.get("model")
             if isinstance(model_id, str) and model_id in LLM_METADATAS:
                 model_metadata[model_id] = LLM_METADATAS[model_id]
@@ -1614,6 +1900,7 @@ class ProviderConfigService:
         if provider is None:
             raise ValueError(f"Provider {provider_id} not found")
         provider_response = copy.deepcopy(provider)
+        self._strip_legacy_reasoning_metadata(provider_response)
         from astrbot.core.utils.llm_metadata import LLM_METADATAS
 
         model_id = provider_response.get("model")
@@ -1626,11 +1913,14 @@ class ProviderConfigService:
         config = copy.deepcopy(config)
         if source_id:
             config["provider_source_id"] = source_id
+        self._strip_legacy_reasoning_metadata(config)
         await self.provider_manager.create_provider(config)
 
     async def update_provider(self, provider_id: str, config: dict) -> None:
+        config = copy.deepcopy(config)
         if not config.get("id"):
             config["id"] = provider_id
+        self._strip_legacy_reasoning_metadata(config)
         await self.provider_manager.update_provider(provider_id, config)
 
     async def set_provider_enabled(self, provider_id: str, enabled: bool) -> None:
@@ -1686,7 +1976,7 @@ class ProviderConfigService:
             await target.test()
             result["status"] = "available"
         except Exception as exc:
-            result["error"] = str(exc)
+            result["error"] = str(exc) or type(exc).__name__
         return result
 
     async def test_provider_from_dashboard_args(self, args) -> dict:

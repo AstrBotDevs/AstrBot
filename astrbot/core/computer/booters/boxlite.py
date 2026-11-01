@@ -12,7 +12,7 @@ from astrbot.api import logger
 
 from ..olayer import FileSystemComponent, PythonComponent, ShellComponent
 from .base import ComputerBooter
-from .shipyard import ShipyardFileSystemWrapper
+from .shipyard import ShipyardFileSystemWrapper, ShipyardShellWrapper
 
 
 class MockShipyardSandboxClient:
@@ -161,6 +161,10 @@ class BoxliteBooter(ComputerBooter):
             ship_id=self.box.id,
             session_id=session_id,
         )
+        # Boxlite talks to the same Shipyard exec API, so its results carry the
+        # same `data` envelope; wrap the shell before handing it to the file
+        # system wrapper (file search reuses the shell) and to callers.
+        self._shell = ShipyardShellWrapper(self._shell)
         self._ship_fs = ShipyardFileSystemComponent(
             client=self.mocked,  # type: ignore
             ship_id=self.box.id,

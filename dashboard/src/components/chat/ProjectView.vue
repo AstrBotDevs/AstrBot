@@ -22,10 +22,6 @@
       </div>
     </section>
 
-    <div class="project-input-slot">
-      <slot></slot>
-    </div>
-
     <section class="project-sessions-list">
       <div v-if="sessions.length > 0" class="project-session-list">
         <button
@@ -74,6 +70,10 @@
         <p>{{ tm("project.noSessions") }}</p>
       </div>
     </section>
+
+    <div class="project-input-slot">
+      <slot></slot>
+    </div>
   </div>
 </template>
 
@@ -142,14 +142,16 @@ async function handleDeleteSession(session: Session) {
 <style scoped>
 .project-sessions-container {
   height: 100%;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: clamp(44px, 8vh, 88px) 32px 48px;
-  overflow-y: auto;
+  padding: clamp(44px, 8vh, 88px) 32px 24px;
+  overflow: hidden;
 }
 
 .project-header {
+  flex: 0 0 auto;
   width: var(--chat-content-width, 76%);
   max-width: var(--chat-content-max-width, 760px);
   margin: 0 auto 18px;
@@ -214,13 +216,17 @@ async function handleDeleteSession(session: Session) {
 }
 
 .project-input-slot {
+  flex: 0 0 auto;
   width: 100%;
-  margin-bottom: 30px;
+  padding-top: 18px;
 }
 
 .project-sessions-list {
+  flex: 1;
+  min-height: 0;
   width: var(--chat-content-width, 76%);
   max-width: var(--chat-content-max-width, 760px);
+  overflow-y: auto;
   background-color: transparent !important;
 }
 
@@ -241,7 +247,7 @@ async function handleDeleteSession(session: Session) {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 8px 10px 8px 0;
+  padding: 8px 10px;
   cursor: pointer;
   text-align: left;
 }
@@ -326,7 +332,7 @@ async function handleDeleteSession(session: Session) {
 
 @media (max-width: 768px) {
   .project-sessions-container {
-    padding: 28px 14px 32px;
+    padding: 28px 14px 16px;
   }
 
   .project-header,

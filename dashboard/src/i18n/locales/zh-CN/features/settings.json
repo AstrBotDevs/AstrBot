@@ -61,11 +61,10 @@
       "tempStorage": {
         "title": "缓存",
         "subtitle": "临时目录自动清理阈值。"
-      },
-      "t2iRendering": {
-        "title": "文本转图像",
-        "subtitle": "文本转图像渲染策略、端点和自定义模板。"
       }
+    },
+    "timePreview": {
+      "label": "AstrBot 当前时间"
     },
     "messages": {
       "loadFailed": "加载系统配置失败",
@@ -80,14 +79,39 @@
       "subtitle": "设置下载插件或者更新 AstrBot 时所用的 GitHub 加速地址。这在中国大陆的网络环境有效。可以自定义，输入结果实时生效。所有地址均不保证稳定性，如果在更新插件/项目时出现报错，请首先检查加速地址是否能正常使用。",
       "label": "选择 GitHub 加速地址"
     },
-    "proxySelector": {
-      "title": "GitHub 加速",
-      "noProxy": "不使用 GitHub 加速",
-      "useProxy": "使用 GitHub 加速",
-      "testConnection": "测试代理连通性",
-      "available": "可用",
+    "pypiMirror": {
+      "title": "PyPI 软件仓库地址",
+      "subtitle": "安装 AstrBot 的 Python 依赖时使用的 PyPI 源。可选择国内镜像加速或自定义地址；修改后需重启 AstrBot 生效。",
+      "label": "选择 PyPI 源",
+      "custom": "自定义",
+      "customPlaceholder": "https://example.com/pypi/simple",
+      "testConnection": "测试连通性",
+      "testTip": {
+        "serial": "点击：从选中项开始逐个串行测试",
+        "single": "Ctrl / ⌘ + 点击：只测试当前选中项",
+        "parallel": "Shift + 点击：并行测试全部"
+      },
       "unavailable": "不可用",
-      "custom": "自定义"
+      "presets": {
+        "official": "官方",
+        "aliyun": "阿里云",
+        "ustc": "中科大",
+        "tsinghua": "清华大学",
+        "tencent": "腾讯云"
+      }
+    },
+    "proxySelector": {
+      "title": "选择 GitHub 镜像源",
+      "noProxy": "不使用 GitHub 镜像",
+      "testConnection": "测试连通性",
+      "testTip": {
+        "serial": "点击：从选中项开始逐个串行测试",
+        "single": "Ctrl / ⌘ + 点击：只测试当前选中项",
+        "parallel": "Shift + 点击：并行测试全部"
+      },
+      "unavailable": "不可用",
+      "custom": "自定义",
+      "customPlaceholder": "https://example.com"
     }
   },
   "theme": {
@@ -114,7 +138,7 @@
       "button": "备份管理"
     },
     "cleanup": {
-      "title": "日志与缓存清理",
+      "title": "日志、缓存与追踪清理",
       "subtitle": "查看当前日志和缓存占用，并一键清理。",
       "refresh": "刷新占用",
       "clean": "清理",
@@ -128,7 +152,8 @@
       "targetNames": {
         "cache": "缓存",
         "logs": "日志",
-        "all": "日志和缓存"
+        "all": "日志、缓存和追踪数据",
+        "traces": "追踪数据"
       },
       "targets": {
         "cache": {
@@ -140,23 +165,25 @@
           "title": "日志",
           "subtitle": "清理历史日志，并清空当前正在写入的日志文件内容。",
           "button": "清理日志"
+        },
+        "traces": {
+          "title": "追踪",
+          "subtitle": "清除历史追踪数据，保留运行中的追踪。",
+          "button": "清理追踪数据"
         }
       },
       "messages": {
         "statusFailed": "加载存储占用失败",
         "cleanupSuccess": "已清理 {count} 个文件，释放 {size}",
-        "cleanupFailed": "清理失败"
-      }
-    }
-  },
-  "sidebar": {
-    "title": "侧边栏",
-    "customize": {
-      "title": "自定义侧边栏",
-      "subtitle": "拖拽以调整模块顺序，或者将模块移入/移出\"更多功能\"分组。设置仅保存在浏览器本地。",
-      "reset": "恢复默认",
-      "mainItems": "主要模块",
-      "moreItems": "更多功能"
+        "cleanupFailed": "清理失败",
+        "cleanupTracesSuccess": "已清理 {count} 条追踪，释放 {size}",
+        "cleanupWithTracesSuccess": "已清理 {count} 个文件和 {traces} 条追踪，释放 {size}"
+      },
+      "confirmWithTraces": "确定要清理 {target} 吗？历史追踪数据将无法恢复，运行中的追踪会保留。"
+    },
+    "diagnostics": {
+      "title": "诊断",
+      "subtitle": "导出诊断包，帮助排查 AstrBot 运行问题。"
     }
   },
   "backup": {
@@ -170,8 +197,8 @@
     },
     "export": {
       "title": "创建备份",
-      "description": "将所有数据导出为 ZIP 备份文件，包括数据库、知识库、配置、附件和 Skills。",
-      "includes": "备份包含：主数据库、知识库（元数据+向量索引+文档）、配置文件、附件文件、Skills",
+      "description": "将所有数据导出为 ZIP 备份文件，包括数据库、知识库、配置、附件和技能。",
+      "includes": "备份包含：主数据库、知识库（元数据+向量索引+文档）、配置文件、附件文件、技能",
       "button": "开始导出",
       "processing": "正在导出...",
       "wait": "请稍候，正在打包数据...",
@@ -206,12 +233,13 @@
       "restartNow": "立即重启",
       "failed": "导入失败",
       "retry": "重试",
+      "resumeUpload": "继续上传",
       "version": {
         "backupVersion": "备份版本",
         "currentVersion": "当前版本",
         "backupTime": "备份时间",
         "matchTitle": "✅ 版本匹配",
-        "matchMessage": "导入将会清空并覆盖现有的所有数据，包括：\n• 主数据库（对话记录、配置等）\n• 知识库数据\n• 插件及插件数据\n• 配置文件\n• Skills\n\n此操作不可撤销！是否确认继续？",
+        "matchMessage": "导入将会清空并覆盖现有的所有数据，包括：\n• 主数据库（对话记录、配置等）\n• 知识库数据\n• 插件及插件数据\n• 配置文件\n• 技能\n\n此操作不可撤销！是否确认继续？",
         "minorDiffTitle": "⚠️ 版本差异警告",
         "minorDiffMessage": "小版本差异通常是兼容的，但可能存在少量数据结构变化。\n导入将会清空并覆盖现有的所有数据！\n\n是否确认继续导入？",
         "majorDiffTitle": "⛔ 无法导入",
@@ -249,6 +277,25 @@
     },
     "permanentWarning": "永久有效的 API Key 风险较高，请妥善保存并建议仅在必要场景使用。",
     "scopes": "权限范围",
+    "sensitiveSubscope": "敏感子权限",
+    "chatAdminWarning": "chat:admin 允许 API Key 使用已配置的管理员 ID，并执行管理员操作。请仅授予完全可信的调用方。",
+    "createConfirm": "确认创建具有以下权限的 API Key 吗？\n\n{scopes}",
+    "sensitiveCreateConfirm": "即将创建包含以下高风险权限的 API Key：\n\n{scopes}\n\n持有者可能获得管理员能力。确认继续吗？",
+    "scopeDescriptions": {
+      "bot": "读取和管理机器人及平台配置。",
+      "provider": "读取和管理模型服务提供商。",
+      "persona": "读取和管理人格设定。",
+      "im": "访问即时通讯相关接口。",
+      "config": "读取和管理系统及配置文件；会同时包含 bot 和 provider 权限。",
+      "editAdmin": "允许修改 admins_id，这可能授予用户管理员权限。",
+      "chat": "创建会话、发送消息和管理 ChatUI 项目。",
+      "chatAdmin": "允许 username 使用配置中的管理员 ID，并获得对应的管理员权限。",
+      "data": "访问统计信息和运行数据。",
+      "file": "上传和访问 API 文件。",
+      "plugin": "读取和管理插件。",
+      "mcp": "读取和管理 MCP 服务。",
+      "skill": "读取和管理技能。"
+    },
     "create": "创建 API Key",
     "revoke": "吊销",
     "delete": "删除",

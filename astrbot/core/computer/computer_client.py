@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import shutil
+import sys
 import time
 import uuid
 from dataclasses import dataclass
@@ -16,7 +17,7 @@ from astrbot.core.utils.astrbot_path import (
 )
 
 from .booters.base import ComputerBooter
-from .booters.local import LocalBooter
+from .booters.local import LocalBooter, resolve_windows_shell
 
 session_booter: dict[str, ComputerBooter] = {}
 local_booter: ComputerBooter | None = None
@@ -100,16 +101,20 @@ def _list_local_skill_dirs(skills_root: Path) -> list[Path]:
 
 def _collect_sync_skill_dirs() -> list[tuple[str, Path]]:
     """Collect local and plugin-provided skills that should be synced."""
-    skills_root = Path(get_astrbot_skills_path())
-    if not skills_root.is_dir():
-        return []
+    from astrbot.core.star.star import star_registry
 
+    skills_root = Path(get_astrbot_skills_path())
     try:
         skill_manager = SkillManager(skills_root=str(skills_root))
     except OSError as exc:
         logger.warning("[Computer] Failed to initialize skill manager: %s", exc)
         return []
 
+    active_plugin_root_names = {
+        plugin.root_dir_name
+        for plugin in star_registry
+        if plugin.activated and plugin.root_dir_name
+    }
     sync_dirs: list[tuple[str, Path]] = []
     for skill in skill_manager.list_skills(
         active_only=False,
@@ -117,6 +122,11 @@ def _collect_sync_skill_dirs() -> list[tuple[str, Path]]:
         show_sandbox_path=False,
     ):
         if skill.source_type == "sandbox_only":
+            continue
+        if (
+            skill.source_type == "plugin"
+            and skill.plugin_name not in active_plugin_root_names
+        ):
             continue
         skill_md = Path(skill.path)
         if not skill_md.is_file():
@@ -504,7 +514,8 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
             for skill_name, skill_dir in sync_skill_dirs:
                 shutil.copytree(skill_dir, bundle_root / skill_name)
             shutil.make_archive(str(zip_base), "zip", str(bundle_root))
-            remote_zip = Path(SANDBOX_SKILLS_ROOT) / "skills.zip"
+            # Force forward slashes for sandbox compatibility.
+            remote_zip = (Path(SANDBOX_SKILLS_ROOT) / "skills.zip").as_posix()
             logger.info("Uploading skills bundle to sandbox...")
             await booter.shell.exec(f"mkdir -p {SANDBOX_SKILLS_ROOT}")
             upload_result = await booter.upload_file(str(zip_path), str(remote_zip))
@@ -545,7 +556,7 @@ async def get_booter(
 ) -> ComputerBooter:
     config = context.get_config(umo=session_id)
 
-    runtime = config.get("provider_settings", {}).get("computer_use_runtime", "local")
+    runtime = config.get("provider_settings", {}).get("computer_use_runtime", "none")
     if runtime == "local":
         return get_local_booter()
     elif runtime == "none":
@@ -679,4 +690,22 @@ def get_local_booter() -> ComputerBooter:
     global local_booter
     if local_booter is None:
         local_booter = LocalBooter()
+        if sys.platform == "win32":
+            logger.info(
+                "[Computer] Windows local runtime shell: %s",
+                resolve_windows_shell(),
+            )
     return local_booter
+
+
+async def shutdown_local_booter() -> None:
+    """Shut down managed local computer resources without creating a booter."""
+    global local_booter
+    if local_booter is None:
+        return
+    booter = local_booter
+    local_booter = None
+    try:
+        await booter.shutdown()
+    except Exception as exc:
+        logger.warning("[Computer] Failed to shut down local booter: %s", exc)

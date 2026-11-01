@@ -17,7 +17,7 @@ from astrbot.dashboard.services.session_management_service import (
     SessionManagementServiceError,
 )
 
-from .auth import AuthContext, require_dashboard_user, require_scope
+from .auth import AuthContext, ScopeDependency, require_dashboard_user
 
 router = APIRouter(tags=["Sessions"])
 legacy_router = APIRouter(
@@ -31,8 +31,7 @@ def get_service(request: Request) -> SessionManagementService:
     return request.app.state.services.sessions
 
 
-async def require_data_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "data")
+require_data_scope = ScopeDependency("data")
 
 
 async def _json_or_empty(request: Request) -> dict:
@@ -100,15 +99,44 @@ async def list_sessions(
 
 @router.get("/sessions/active-umos")
 async def list_active_umos(
+    platform_id: str = Query(""),
     _auth: AuthContext = Depends(require_data_scope),
     service: SessionManagementService = Depends(get_service),
 ):
     try:
-        return ok(await service.list_active_umos())
+        return ok(await service.list_active_umos(platform_id=platform_id))
     except SessionManagementServiceError as exc:
         return _service_error(exc)
     except Exception as exc:
         return _unexpected_error("获取 UMO 列表失败", exc)
+
+
+@router.get("/sessions/senders")
+async def list_session_senders(
+    search: str = Query("", max_length=512),
+    limit: int = Query(50, ge=1, le=100),
+    page: int = Query(1, ge=1),
+    sender_ids: list[str] | None = Query(None, max_length=100),
+    _auth: AuthContext = Depends(require_data_scope),
+    service: SessionManagementService = Depends(get_service),
+):
+    """Search known senders for ID selection.
+
+    Args:
+        search: Substring matched against sender and session metadata.
+        limit: Maximum number of suggestions per page.
+        page: One-based page of deduplicated suggestions.
+        sender_ids: Resolve the latest record for each exact sender ID.
+        _auth: Authenticated caller with the data scope.
+        service: Session management service.
+
+    Returns:
+        Response envelope containing sender suggestions.
+    """
+    return await _run(
+        lambda: service.list_senders(search, limit, sender_ids, page),
+        label="Failed to list session senders",
+    )
 
 
 @router.get("/sessions/rules")
@@ -203,7 +231,7 @@ async def list_session_groups(
     service: SessionManagementService = Depends(get_service),
 ):
     try:
-        return ok(service.list_groups())
+        return ok(await service.list_groups())
     except SessionManagementServiceError as exc:
         return _service_error(exc)
     except Exception as exc:
@@ -217,7 +245,7 @@ async def create_session_group(
     service: SessionManagementService = Depends(get_service),
 ):
     try:
-        return ok(service.create_group(payload.model_dump(exclude_none=True)))
+        return ok(await service.create_group(payload.model_dump(exclude_none=True)))
     except SessionManagementServiceError as exc:
         return _service_error(exc)
     except Exception as exc:
@@ -233,7 +261,7 @@ async def update_session_group(
 ):
     try:
         body = payload.model_dump(exclude_none=True)
-        return ok(service.update_group({"group_id": group_id, **body}))
+        return ok(await service.update_group({"group_id": group_id, **body}))
     except SessionManagementServiceError as exc:
         return _service_error(exc)
     except Exception as exc:
@@ -247,7 +275,7 @@ async def delete_session_group(
     service: SessionManagementService = Depends(get_service),
 ):
     try:
-        return ok(service.delete_group({"group_id": group_id}))
+        return ok(await service.delete_group({"group_id": group_id}))
     except SessionManagementServiceError as exc:
         return _service_error(exc)
     except Exception as exc:
