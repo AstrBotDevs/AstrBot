@@ -293,6 +293,59 @@ for (const resume of [false, true]) {
 }
 
 for (const handler of ["sse", "thread"]) {
+  for (const withBody of [false, true]) {
+    test(`${handler}: a button-first reply owns its message and ID (body=${withBody})`, () => {
+      const records = reactive([
+        { id: "initial", content: { type: "bot", message: [] } },
+      ]);
+      const connection = {
+        sessionId: "session",
+        messageId: "run",
+        botRecord: records[0],
+      };
+      const context = vm.createContext({
+        exports: {},
+        reactive,
+        messagesBySession: { session: records },
+        messages: { value: records },
+        activeConnections: { run: connection },
+      });
+      vm.runInContext(compiledFunctions, context);
+      const button = { id: "next", label: "Next" };
+      for (const payload of [
+        { type: "plain", data: "First.", streaming: false },
+        { type: "complete", data: "", streaming: false },
+        { type: "message_saved", data: { id: 1 } },
+        { type: "actionrow", data: { buttons: [button] }, streaming: false },
+        ...(withBody
+          ? [{ type: "plain", data: "Second.", streaming: false }]
+          : []),
+        { type: "complete", data: "", streaming: false },
+        { type: "message_saved", data: { id: 2 } },
+        { type: "end", data: "" },
+      ]) {
+        if (handler === "thread") {
+          context.processPayload(connection, undefined, payload);
+        } else {
+          context.processStreamPayload(
+            connection.botRecord,
+            payload,
+            undefined,
+            connection,
+          );
+        }
+      }
+      assert.deepEqual(records.map((record) => record.id), [1, 2]);
+      assert.deepEqual(
+        records.map((record) =>
+          Array.from(record.content.message, (part) => part.type),
+        ),
+        [["plain"], withBody ? ["actionrow", "plain"] : ["actionrow"]],
+      );
+      assert.equal(records[1].content.message[0].buttons[0].id, button.id);
+      assert.equal(connection.botRecord, records[1]);
+    });
+  }
   for (const mediaType of ["image", "file"]) {
     test(`${handler}: text and ${mediaType} share a message until complete`, async () => {
       const bot = { content: { type: "bot", message: [] } };

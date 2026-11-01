@@ -325,7 +325,7 @@ function processPayload(
 
   if (
     replyState.messageSaved &&
-    ["plain", "image", "record", "file", "video"].includes(type) &&
+    ["plain", "image", "record", "file", "video", "actionrow"].includes(type) &&
     chainType !== "agent_stats" &&
     (type !== "plain" || payloadText(data))
   ) {

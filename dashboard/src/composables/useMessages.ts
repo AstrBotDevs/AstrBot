@@ -1239,7 +1239,7 @@ export function useMessages(options: UseMessagesOptions) {
 
     if (
       connection?.messageSaved &&
-      ["plain", "image", "record", "file", "video"].includes(msgType) &&
+      ["plain", "image", "record", "file", "video", "actionrow"].includes(msgType) &&
       chainType !== "agent_stats" &&
       (msgType !== "plain" || payloadText(data))
     ) {
