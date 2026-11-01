@@ -14,7 +14,7 @@ from astrbot.core.agent.runners.deerflow.deerflow_agent_runner import (
 )
 from astrbot.core.agent.runners.dify.dify_agent_runner import DifyAgentRunner
 from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
-from astrbot.core.astr_main_agent import _matches_provider_wake_prefix
+from astrbot.core.astr_main_agent.request import matches_provider_wake_prefix
 from astrbot.core.message.components import Image, Record
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -282,7 +282,7 @@ class ThirdPartyAgentSubStage(Stage):
     ) -> AsyncGenerator[None, None]:
         req: ProviderRequest | None = None
 
-        if not _matches_provider_wake_prefix(
+        if not matches_provider_wake_prefix(
             event,
             provider_wake_prefix,
         ):
@@ -292,8 +292,11 @@ class ThirdPartyAgentSubStage(Stage):
         req = ProviderRequest()
         req.session_id = event.unified_msg_origin
         req.prompt = event.message_str
-        if provider_wake_prefix and event.message_str.startswith(provider_wake_prefix):
-            req.prompt = event.message_str[len(provider_wake_prefix) :]
+        prefix_text = event.message_str
+        if event.get_platform_name() == "lark":
+            prefix_text = prefix_text.lstrip()
+        if provider_wake_prefix and prefix_text.startswith(provider_wake_prefix):
+            req.prompt = prefix_text[len(provider_wake_prefix) :]
         for comp in event.message_obj.message:
             if isinstance(comp, Image):
                 try:
@@ -317,7 +320,10 @@ class ThirdPartyAgentSubStage(Stage):
                     continue
                 req.audio_urls.append(audio_path)
 
-        if not req.prompt and not req.image_urls and not req.audio_urls:
+        empty_prompt = not req.prompt or (
+            event.get_platform_name() == "lark" and not req.prompt.strip()
+        )
+        if empty_prompt and not req.image_urls and not req.audio_urls:
             return
 
         custom_error_message = await self._resolve_persona_custom_error_message(event)

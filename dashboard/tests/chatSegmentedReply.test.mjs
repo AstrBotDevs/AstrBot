@@ -18,6 +18,7 @@ const thread = readFileSync(
 const names = new Set([
   "processStreamPayload",
   "processPayload",
+  "handleButtonClick",
   "appendPlain",
   "appendReasoningPart",
   "markMessageStarted",
@@ -53,6 +54,53 @@ for (const source of [messages, thread]) {
 }
 assert.equal(functions.length, names.size);
 const compiledFunctions = ts.transpile(functions.join("\n"));
+
+for (const outcome of ["segmented", "empty", "error"]) {
+  test(`thread button reply: ${outcome}`, async () => {
+    const records = reactive([]);
+    const context = vm.createContext({
+      exports: {},
+      crypto: { randomUUID: () => "button-run" },
+      props: { thread: { thread_id: "thread" } },
+      sending: { value: false },
+      messages: { value: records },
+      scrollToBottom() {},
+      console: { error() {} },
+      chatApi: { sendThreadMessageUrl: () => "/thread" },
+      fetchWithAuth: async () => ({ ok: true, body: {} }),
+      readSseStream: async (_body, receive) => {
+        receive({ type: "user_message_saved", data: { id: 99 } });
+        assert.equal(records.length, 0);
+        if (outcome !== "empty") {
+          for (const [index, text] of ["First.", "Second."].entries()) {
+            receive({ type: "plain", data: text, streaming: false });
+            receive({ type: "message_saved", data: { id: index + 1 } });
+          }
+        }
+        if (outcome === "error") throw new Error("Connection lost");
+        receive({ type: "end", data: "" });
+      },
+    });
+    vm.runInContext(compiledFunctions, context);
+    await context.handleButtonClick({
+      message: { id: 10 },
+      callbackData: "callback",
+    });
+    assert.equal(context.sending.value, false);
+    assert.equal(records.length, outcome === "empty" ? 0 : 2);
+    if (outcome !== "empty") {
+      assert.deepEqual(records.map((record) => record.id), [1, 2]);
+      assert.equal(records[0].content.message[0].text, "First.");
+      const lastText = records[1].content.message
+        .map((part) => part.text || "")
+        .join("");
+      assert.equal(
+        lastText,
+        outcome === "error" ? "Second.\n\nConnection lost" : "Second.",
+      );
+    }
+  });
+}
 
 for (const { accepted, segmented } of [
   { accepted: true, segmented: true },
@@ -99,6 +147,7 @@ for (const { accepted, segmented } of [
       messagesBySession: reactive({ session: records }),
       activeConnections: {},
       options: {},
+      locale: { value: "en-US" },
       console: { error() {} },
       chatApi: {
         regenerateMessageUrl: (_session, id) => {

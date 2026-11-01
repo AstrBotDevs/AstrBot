@@ -184,15 +184,17 @@ onMounted(() => {
   overflow: hidden;
 }
 
+/* The shell is sized with dynamic viewport units: the mobile browsers' URL/toolbar
+   area is excluded, so the bottom of the shell is never painted underneath it. */
 :global(.v-application),
 :global(.v-application__wrap) {
-  height: 100vh;
+  height: 100dvh;
   min-height: 0;
   overflow: hidden;
 }
 
 :global(.v-main) {
-  height: calc(100vh - var(--astrbot-toolbar-height, 40px)) !important;
+  height: calc(100dvh - var(--astrbot-toolbar-height, 40px)) !important;
   padding-top: 0 !important;
   overflow: hidden !important;
   /* The document no longer scrolls; the content area does. Sticky offsets that were
@@ -203,7 +205,7 @@ onMounted(() => {
 /* Keep the card frame fixed while its content scrolls inside the rounded edges. */
 :global(.page-wrapper) {
   --astrbot-content-gap: 6px;
-  height: calc(100vh - var(--astrbot-toolbar-height, 40px) - var(--astrbot-content-gap)) !important;
+  height: calc(100dvh - var(--astrbot-toolbar-height, 40px) - var(--astrbot-content-gap)) !important;
   width: calc(100% - var(--astrbot-content-gap));
   min-height: 0;
   margin: 0;

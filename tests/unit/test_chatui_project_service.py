@@ -2,10 +2,19 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
+import pytest_asyncio
+from fastapi import FastAPI
 
 from astrbot.core.db.sqlite import SQLiteDatabase
-from astrbot.core.workspace import resolve_project_workspace_root
+from astrbot.core.workspace import (
+    default_workspace_root,
+    resolve_project_workspace_root,
+    resolve_workspace_root_for_umo,
+)
+from astrbot.dashboard.api import chat_projects
+from astrbot.dashboard.api.auth import AuthContext
 from astrbot.dashboard.services.chatui_project_service import (
     ChatUIProjectService,
     ChatUIProjectServiceError,
@@ -391,6 +400,203 @@ def workspace_service(tmp_path, monkeypatch):
         lambda _project, *, fallback_umo: tmp_path,
     )
     return ChatUIProjectService(db)
+
+
+@pytest_asyncio.fixture
+async def session_workspace_service(tmp_path, monkeypatch):
+    """Create owned and unrelated sessions with real project associations.
+
+    Args:
+        tmp_path: Temporary database and workspace directory.
+        monkeypatch: Pytest monkeypatch fixture.
+
+    Yields:
+        Project service and the project whose session files are being browsed.
+    """
+    monkeypatch.setattr(
+        "astrbot.core.workspace.get_astrbot_workspaces_path", lambda: str(tmp_path)
+    )
+    db = SQLiteDatabase(str(tmp_path / "sessions.db"))
+    try:
+        await db.initialize()
+        project = await db.create_chatui_project(
+            creator="alice", title="Session files", workspace_type="session"
+        )
+        other_project = await db.create_chatui_project(
+            creator="alice", title="Other project", workspace_type="session"
+        )
+        for session_id, creator, project_id in (
+            ("session-a", "alice", project.project_id),
+            ("session-b", "alice", project.project_id),
+            ("other-project-session", "alice", other_project.project_id),
+            ("unassigned-session", "alice", None),
+            ("bob-session", "bob", None),
+        ):
+            await db.create_platform_session(creator=creator, session_id=session_id)
+            if project_id:
+                await db.add_session_to_project(session_id, project_id)
+        yield ChatUIProjectService(db), project
+    finally:
+        await db.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_session_workspace_files_follow_session_context(session_workspace_service):
+    """Listing, preview and download must use the same root as session tools.
+
+    Args:
+        session_workspace_service: Service with two sessions in the same project.
+    """
+    service, project = session_workspace_service
+    default_root = default_workspace_root("webchat:FriendMessage:webchat!alice!default")
+    default_root.mkdir()
+    (default_root / "default-only.txt").write_text("default", encoding="utf-8")
+    (default_root / "output.txt").write_text("wrong content", encoding="utf-8")
+
+    for session_id in ("session-a", "session-b"):
+        root = await resolve_workspace_root_for_umo(
+            f"webchat:FriendMessage:webchat!alice!{session_id}", service.db
+        )
+        root.mkdir()
+        (root / "output.txt").write_text(session_id, encoding="utf-8")
+
+    for session_id in ("session-a", "session-b"):
+        listing = await service.list_workspace_files(
+            "alice", project.project_id, session_id=session_id
+        )
+        assert [entry["name"] for entry in listing["entries"]] == ["output.txt"]
+        preview = await service.get_workspace_file(
+            "alice", project.project_id, "output.txt", session_id=session_id
+        )
+        assert preview["content"] == session_id
+        root, download = await service.get_workspace_file_location(
+            "alice", project.project_id, "output.txt", session_id=session_id
+        )
+        assert download.parent == root
+        assert download.read_text(encoding="utf-8") == session_id
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("session_id", [None, "", "session-a", "session-b"])
+async def test_workspace_routes_use_session_query(session_workspace_service, session_id):
+    """Keep legacy defaults and select explicit sessions through all file routes.
+
+    Args:
+        session_workspace_service: Service backed by actual session associations.
+        session_id: Optional session query; omitted or empty uses the legacy root.
+    """
+    service, project = session_workspace_service
+    app = FastAPI()
+    app.include_router(chat_projects.router, prefix="/api/v1")
+    app.dependency_overrides[chat_projects.get_service] = lambda: service
+    app.dependency_overrides[chat_projects.require_chat_scope] = lambda: AuthContext(
+        username="alice", scopes=["chat"]
+    )
+    for workspace_session in ("default", "session-a", "session-b"):
+        root = default_workspace_root(
+            f"webchat:FriendMessage:webchat!alice!{workspace_session}"
+        )
+        root.mkdir()
+        (root / "output.txt").write_text(workspace_session, encoding="utf-8")
+        (root / f"{workspace_session}-only.txt").write_text("marker", encoding="utf-8")
+
+    expected_session = session_id or "default"
+    query = {} if session_id is None else {"session_id": session_id}
+    base = f"/api/v1/chat/projects/{project.project_id}/workspace"
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        listing = await client.get(f"{base}/files", params=query)
+        assert listing.status_code == 200
+        assert {entry["name"] for entry in listing.json()["data"]["entries"]} == {
+            "output.txt",
+            f"{expected_session}-only.txt",
+        }
+        query["path"] = "output.txt"
+        preview = await client.get(f"{base}/file", params=query)
+        assert preview.status_code == 200
+        assert preview.json()["data"]["content"] == expected_session
+        download = await client.get(f"{base}/file/download", params=query)
+        assert download.status_code == 200
+        assert download.text == expected_session
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("workspace_type", "workspace_path"),
+    [("project", None), ("custom", "configured"), ("custom", None)],
+)
+async def test_non_session_workspace_ignores_session_query(
+    session_workspace_service, workspace_type, workspace_path
+):
+    """Session parameters must not redirect non-session workspace file operations.
+
+    Args:
+        session_workspace_service: Service with owned sessions in another project.
+        workspace_type: Shared or custom project workspace mode.
+        workspace_path: Custom directory, or None to cover legacy missing paths.
+    """
+    service, _ = session_workspace_service
+    project = await service.db.create_chatui_project(
+        creator="alice",
+        title="Non-session files",
+        workspace_type=workspace_type,
+        workspace_path=workspace_path,
+    )
+    root = resolve_project_workspace_root(
+        project, fallback_umo="webchat:FriendMessage:webchat!alice!default"
+    )
+    root.mkdir()
+    (root / "output.txt").write_text("project content", encoding="utf-8")
+    session_root = default_workspace_root("webchat:FriendMessage:webchat!alice!session-a")
+    session_root.mkdir()
+    (session_root / "other-session.txt").write_text("private content", encoding="utf-8")
+
+    for session_id in (None, "", "session-a", "missing-session"):
+        listing = await service.list_workspace_files(
+            "alice", project.project_id, session_id=session_id
+        )
+        assert [entry["name"] for entry in listing["entries"]] == ["output.txt"]
+        preview = await service.get_workspace_file(
+            "alice", project.project_id, "output.txt", session_id=session_id
+        )
+        assert preview["content"] == "project content"
+        workspace_root, download = await service.get_workspace_file_location(
+            "alice", project.project_id, "output.txt", session_id=session_id
+        )
+        assert workspace_root == root
+        assert download.read_text(encoding="utf-8") == "project content"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "method",
+    ["list_workspace_files", "get_workspace_file", "get_workspace_file_location"],
+)
+@pytest.mark.parametrize(
+    ("session_id", "error"),
+    [
+        ("bob-session", "Permission denied"),
+        ("other-project-session", "Session does not belong to this project"),
+        ("unassigned-session", "Session does not belong to this project"),
+        ("missing-session", "Session missing-session not found"),
+    ],
+)
+async def test_session_workspace_requires_owned_project_session(
+    session_workspace_service, method, session_id, error
+):
+    """File APIs must reject nonexistent, foreign and unrelated explicit sessions.
+
+    Args:
+        session_workspace_service: Service with owned and unrelated sessions.
+        method: Workspace operation to exercise.
+        session_id: Nonexistent or unauthorized explicit session context.
+        error: Expected validation message.
+    """
+    service, project = session_workspace_service
+    with pytest.raises(ChatUIProjectServiceError, match=error):
+        await getattr(service, method)(
+            "alice", project.project_id, "output.txt", session_id=session_id
+        )
 
 
 @pytest.mark.asyncio

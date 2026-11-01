@@ -45,6 +45,10 @@ export function resolveDefaultTab(value?: string) {
     return 'rerank'
   }
 
+  if (normalized.includes('decision')) {
+    return 'decision'
+  }
+
   return 'chat_completion'
 }
 
@@ -87,6 +91,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     { value: 'chat_completion', label: tm('providers.tabs.chatCompletion'), icon: 'mdi-message-text' },
     { value: 'speech_to_text', label: tm('providers.tabs.speechToText'), icon: 'mdi-microphone-message' },
     { value: 'text_to_speech', label: tm('providers.tabs.textToSpeech'), icon: 'mdi-volume-high' },
+    { value: 'decision', label: tm('providers.tabs.decision'), icon: 'mdi-scale-balance' },
     { value: 'embedding', label: tm('providers.tabs.embedding'), icon: 'mdi-code-json' },
     { value: 'rerank', label: tm('providers.tabs.rerank'), icon: 'mdi-compare-vertical' }
   ])
@@ -350,7 +355,9 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
   function getModelMetadata(modelName?: string) {
     if (!modelName) return null
-    return modelMetadata.value?.[modelName] || null
+    // Schema refreshes only include configured models; retain fetched candidate metadata.
+    const availableModel = availableModels.value.find((item) => item?.name === modelName)
+    return availableModel?.metadata || modelMetadata.value?.[modelName] || null
   }
 
   function supportsImageInput(meta: any) {
@@ -403,7 +410,8 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       dashscope_tts: 'text_to_speech',
       azure_tts: 'text_to_speech',
       minimax_tts_api: 'text_to_speech',
-      volcengine_tts: 'text_to_speech'
+      volcengine_tts: 'text_to_speech',
+      system_one_decision: 'decision'
     }
     return oldVersionProviderTypeMapping[provider.type]
   }

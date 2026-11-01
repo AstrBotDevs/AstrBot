@@ -26,7 +26,7 @@ AstrBot 内置 AI 支持让 Agent 通过执行代码、读写文件等方式访�
 
 具体的权限支持按普通成员和管理员分别设置，以矩阵的形式展示，见下图。
 
-![本地权限策略矩阵](./images/config-local-permissions-zh.png)
+![本地权限策略矩阵](./images/config-local-permissions-zh.jpg)
 
 当勾选 “允许执行代码” 时，AstrBot 会为 Agent 提供 `astrbot_execute_shell` 和 `astrbot_execute_python` 两个工具，以让 Agent 在本机环境中执行 Shell 和 Python 代码。
 
@@ -48,6 +48,17 @@ AstrBot 内置 AI 支持让 Agent 通过执行代码、读写文件等方式访�
 - **整个环境**：Agent 可以访问本机环境内的**所有文件**，文件工具可以在整个环境中操作。
 
 AstrBot 为 Agent 提供的文件工具包括 `astrbot_file_read_tool`, `astrbot_file_write_tool`, `astrbot_file_edit_tool` 和 `astrbot_grep_tool`，分别对应文件的读取、写入、编辑和搜索功能。Agent 可以通过这些工具访问本机环境内的文件。
+
+新安装的 Windows、Linux 和 macOS 使用相同的默认权限：
+
+| 用户身份 | 允许执行代码 | 允许执行环境联网 | 文件访问范围 |
+| --- | --- | --- | --- |
+| 普通成员 | 否 | 否 | 工作区 |
+| 管理员 | 是 | 是 | 整个环境 |
+
+这两组默认权限均不依赖本机进程隔离能力。已有配置中保存的权限保持不变。
+
+已勾选的执行权限暂时无法生效时，复选框保留勾选并显示“未生效”；悬浮或点击旁边的问号可查看原因。
 
 以下是上述权限矩阵的一些逻辑上的限制：
 

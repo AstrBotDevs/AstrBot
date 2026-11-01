@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import enum
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TypeAlias
 
 from anthropic.types import Message as AnthropicMessage
 from deprecated import deprecated
@@ -36,6 +37,104 @@ class ProviderType(enum.Enum):
     TEXT_TO_SPEECH = "text_to_speech"
     EMBEDDING = "embedding"
     RERANK = "rerank"
+    DECISION = "decision"
+
+
+@dataclass(frozen=True, slots=True)
+class DecisionChoiceQuestion:
+    """A decision question with a fixed set of choices.
+
+    Attributes:
+        instructions: The question or instruction evaluated by the model.
+        criteria: Mapping of option IDs to descriptions. At least two entries are required.
+    """
+
+    instructions: str
+    criteria: Mapping[str, str]
+
+
+@dataclass(frozen=True, slots=True)
+class DecisionBooleanQuestion:
+    """A decision question that asks for the probability of a statement being true.
+
+    Attributes:
+        instructions: The statement or question evaluated by the model.
+    """
+
+    instructions: str
+
+
+@dataclass(frozen=True, slots=True)
+class DecisionScoreQuestion:
+    """A decision question scored against ordered levels.
+
+    Attributes:
+        instructions: The question or instruction evaluated by the model.
+        criteria: Two to ten level descriptions, ordered from lowest to highest.
+    """
+
+    instructions: str
+    criteria: list[str]
+
+
+DecisionQuestion: TypeAlias = (
+    DecisionChoiceQuestion | DecisionBooleanQuestion | DecisionScoreQuestion
+)
+DecisionState: TypeAlias = str | list[Any] | dict[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
+class DecisionChoiceAnswer:
+    """The normalized answer for a choice question.
+
+    Attributes:
+        choice: Selected option ID.
+        probability: Probability of the selected option.
+        probabilities: Full probability distribution over option IDs.
+        confidence: Model confidence in the selected option.
+    """
+
+    choice: str
+    probability: float
+    probabilities: Mapping[str, float]
+    confidence: float
+
+
+@dataclass(frozen=True, slots=True)
+class DecisionBooleanAnswer:
+    """The normalized answer for a boolean question.
+
+    Attributes:
+        probability: Probability of the statement being true.
+    """
+
+    probability: float
+
+
+@dataclass(frozen=True, slots=True)
+class DecisionScoreAnswer:
+    """The normalized answer for a score question.
+
+    Attributes:
+        score: Probability-weighted level number, possibly fractional.
+        legend: Mapping of string level numbers to descriptions.
+        probabilities: Full probability distribution over string level numbers.
+        confidence: Model confidence in the score.
+    """
+
+    score: float
+    legend: Mapping[str, str]
+    probabilities: Mapping[str, float]
+    confidence: float
+
+
+DecisionAnswer: TypeAlias = (
+    DecisionChoiceAnswer | DecisionBooleanAnswer | DecisionScoreAnswer
+)
+
+
+class DecisionError(RuntimeError):
+    """Raised when a decision provider is unavailable or returns an invalid answer."""
 
 
 @dataclass
