@@ -477,7 +477,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         await wake_main_agent(
             ctx=run_context.context.context,
-            session_str=event.unified_msg_origin,
+            umo=event.unified_msg_origin,
             source="background_task",
             source_id=task_id,
             user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
@@ -526,7 +526,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         await wake_main_agent(
             ctx=run_context.context.context,
-            session_str=event.unified_msg_origin,
+            umo=event.unified_msg_origin,
             source="background_task",
             source_id=task_id,
             user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(

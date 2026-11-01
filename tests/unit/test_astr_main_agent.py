@@ -86,6 +86,11 @@ def mock_context():
     """Create a mock Context."""
     ctx = MagicMock()
     ctx.get_config.return_value = {}
+    ctx.get_platform_inst.return_value = SimpleNamespace(
+        meta=lambda: PlatformMetadata(
+            id="test", name="test_platform", description="Test"
+        )
+    )
     ctx.get_using_provider_async = AsyncMock(
         side_effect=lambda *args, **kwargs: ctx.get_using_provider(*args, **kwargs)
     )
@@ -241,7 +246,7 @@ async def test_proactive_agent_uses_session_fallback_models(
             manager.ctx = mock_context
             await wake_main_agent(
                 manager.ctx,
-                session_str=mock_event.unified_msg_origin,
+                umo=mock_event.unified_msg_origin,
                 source="cron",
                 user_prompt=PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
                     cron_job=json.dumps(
@@ -258,7 +263,7 @@ async def test_proactive_agent_uses_session_fallback_models(
             )
             await wake_main_agent(
                 wakeup_context.context.context,
-                session_str=wakeup_context.context.event.unified_msg_origin,
+                umo=wakeup_context.context.event.unified_msg_origin,
                 source="background_task",
                 user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
                     background_task_result=json.dumps(
@@ -391,7 +396,7 @@ async def test_proactive_agent_respects_runtime_and_safety_settings(
             manager.ctx = mock_context
             await wake_main_agent(
                 manager.ctx,
-                session_str=mock_event.unified_msg_origin,
+                umo=mock_event.unified_msg_origin,
                 source="cron",
                 user_prompt=PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
                     cron_job=json.dumps(
@@ -408,7 +413,7 @@ async def test_proactive_agent_respects_runtime_and_safety_settings(
             )
             await wake_main_agent(
                 wakeup_context.context.context,
-                session_str=wakeup_context.context.event.unified_msg_origin,
+                umo=wakeup_context.context.event.unified_msg_origin,
                 source="background_task",
                 user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
                     background_task_result=json.dumps(
@@ -3872,7 +3877,7 @@ async def test_all_triggers_share_persona_tools_and_structured_history(
         elif entrypoint == "cron":
             await wake_main_agent(
                 mock_context,
-                session_str=mock_event.unified_msg_origin,
+                umo=mock_event.unified_msg_origin,
                 source="cron",
                 user_prompt=PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
                     cron_job=json.dumps(
@@ -3887,7 +3892,7 @@ async def test_all_triggers_share_persona_tools_and_structured_history(
             )
             await wake_main_agent(
                 wakeup_context.context.context,
-                session_str=wakeup_context.context.event.unified_msg_origin,
+                umo=wakeup_context.context.event.unified_msg_origin,
                 source="background_task",
                 user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
                     background_task_result=json.dumps(
@@ -4353,7 +4358,7 @@ async def test_wakeup_preserves_the_conversation_prefix(
             ):
                 await wake_main_agent(
                     mock_context,
-                    session_str=mock_event.unified_msg_origin,
+                    umo=mock_event.unified_msg_origin,
                     source=source,
                     source_id=source_id,
                     user_prompt=user_prompt,
@@ -4377,6 +4382,30 @@ async def test_wakeup_preserves_the_conversation_prefix(
                 assert mock_conversation.history == stored_history
                 assert current_message_event.get() is None
                 assert not get_current_span().get_span_context().is_valid
+
+
+@pytest.mark.asyncio
+async def test_wakeup_rejects_a_missing_platform_before_loading_history(mock_context):
+    """Fail explicitly instead of constructing internal metadata for a missing adapter.
+
+    Args:
+        mock_context: Services with no adapter for the requested UMO.
+    """
+    umo = "missing:FriendMessage:target"
+    mock_context.get_platform_inst.return_value = None
+    with patch.object(ama, "build_main_agent", AsyncMock()) as build:
+        with pytest.raises(ValueError, match="Platform adapter 'missing' not found"):
+            await wake_main_agent(
+                mock_context,
+                umo=umo,
+                user_prompt="Continue the task.",
+                source="plugin",
+            )
+        build.assert_not_awaited()
+    mock_context.get_config.assert_not_called()
+    mock_context.conversation_manager.get_curr_conversation_id.assert_not_called()
+    mock_context.conversation_manager.update_conversation.assert_not_called()
+    assert umo not in active_event_registry._events
 
 
 @pytest.mark.asyncio
@@ -4410,7 +4439,7 @@ async def test_wakeup_waits_for_the_existing_conversation_turn(mock_context, sto
             task = asyncio.create_task(
                 wake_main_agent(
                     mock_context,
-                    session_str=umo,
+                    umo=umo,
                     source="plugin",
                     user_prompt="Triggered turn",
                     stop_signal=signal,
@@ -4429,7 +4458,5 @@ async def test_wakeup_waits_for_the_existing_conversation_turn(mock_context, sto
             event = build.await_args.kwargs["event"]
             assert event.unified_msg_origin == umo
             assert event.source == "plugin"
-            assert event.get_platform_name() == "internal"
-            assert not event.platform_meta.support_proactive_message
-            assert not event.platform_meta.support_streaming_message
+            assert event.get_platform_name() == "test_platform"
     assert umo not in active_event_registry._events

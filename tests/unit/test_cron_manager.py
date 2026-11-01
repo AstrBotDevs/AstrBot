@@ -18,6 +18,7 @@ from astrbot.core.cron.manager import (
     _normalize_crontab_day_of_week,
 )
 from astrbot.core.db.po import CronJob
+from astrbot.core.platform.platform_metadata import PlatformMetadata
 
 
 @pytest.fixture
@@ -36,6 +37,11 @@ def mock_db():
 def mock_context():
     """Create a mock Context."""
     ctx = MagicMock()
+    ctx.get_platform_inst.return_value = SimpleNamespace(
+        meta=lambda: PlatformMetadata(
+            id="test", name="test_platform", description="Test"
+        )
+    )
     ctx.get_config = MagicMock(return_value={"admins_id": []})
     ctx.conversation_manager = MagicMock()
     return ctx
@@ -664,6 +670,33 @@ class TestRunJob:
 
 
 class TestRunActiveAgentJob:
+    """Tests for active agent cron job execution."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("session", [None, "", "   "])
+    async def test_job_requires_a_target_umo(
+        self, cron_manager, sample_cron_job, mock_context, monkeypatch, session
+    ):
+        """Reject missing targets without manufacturing a cron session.
+
+        Args:
+            cron_manager: Scheduler under test.
+            sample_cron_job: Job whose payload lacks a usable target.
+            mock_context: Agent services that must remain unused.
+            monkeypatch: Pytest patch manager.
+            session: Missing or blank target session value.
+        """
+        wake = AsyncMock()
+        monkeypatch.setattr("astrbot.core.astr_agent_wakeup.wake_main_agent", wake)
+        cron_manager.ctx = mock_context
+        sample_cron_job.payload = {"session": session}
+        with pytest.raises(ValueError, match="has no target UMO"):
+            await cron_manager._run_active_agent_job(
+                sample_cron_job, datetime(2026, 11, 1, tzinfo=timezone.utc)
+            )
+        wake.assert_not_awaited()
+        mock_context.get_config.assert_not_called()
+
     @pytest.mark.asyncio
     @pytest.mark.parametrize("origin", ["tool", "api"])
     async def test_job_supplies_its_wakeup_source(
@@ -690,13 +723,11 @@ class TestRunActiveAgentJob:
             sample_cron_job, datetime(2026, 11, 1, tzinfo=timezone.utc)
         )
         kwargs = wake.await_args.kwargs
-        assert kwargs["session_str"] == "target:GroupMessage:group-id"
+        assert kwargs["umo"] == "target:GroupMessage:group-id"
         assert kwargs["source"] == "cron"
         assert kwargs["source_id"] == sample_cron_job.job_id
         assert kwargs["role"] == ("admin" if origin == "api" else "member")
         assert "Continue the scheduled task." in kwargs["user_prompt"]
-
-    """Tests for active agent cron job execution."""
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
@@ -725,6 +756,11 @@ class TestRunActiveAgentJob:
         )
 
         ctx = MagicMock()
+        ctx.get_platform_inst.return_value = SimpleNamespace(
+            meta=lambda: PlatformMetadata(
+                id="test", name="test_platform", description="Test"
+            )
+        )
         ctx.get_config.return_value = session_config
         cron_manager.ctx = ctx
         registry = StarHandlerRegistry()
@@ -776,7 +812,7 @@ class TestRunActiveAgentJob:
         ):
             await wake_main_agent(
                 cron_manager.ctx,
-                session_str="test:GroupMessage:group123",
+                umo="test:GroupMessage:group123",
                 source="cron",
                 user_prompt=PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
                     cron_job=json.dumps(
@@ -811,6 +847,11 @@ class TestRunActiveAgentJob:
             "fallback_chat_models": ["fallback-provider"],
         }
         ctx = MagicMock()
+        ctx.get_platform_inst.return_value = SimpleNamespace(
+            meta=lambda: PlatformMetadata(
+                id="test", name="test_platform", description="Test"
+            )
+        )
         ctx.get_config.return_value = {
             "admins_id": [],
             "provider_settings": provider_settings,
@@ -882,7 +923,7 @@ class TestRunActiveAgentJob:
             for started_at in started_ats:
                 await wake_main_agent(
                     cron_manager.ctx,
-                    session_str="test:FriendMessage:user123",
+                    umo="test:FriendMessage:user123",
                     source="cron",
                     user_prompt=PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
                         cron_job=json.dumps(
@@ -970,6 +1011,11 @@ class TestRunActiveAgentJob:
                 return None
 
         ctx = MagicMock()
+        ctx.get_platform_inst.return_value = SimpleNamespace(
+            meta=lambda: PlatformMetadata(
+                id="test", name="test_platform", description="Test"
+            )
+        )
         ctx.get_config.return_value = {
             "admins_id": [],
             "provider_settings": {},
@@ -1005,7 +1051,7 @@ class TestRunActiveAgentJob:
         ):
             await wake_main_agent(
                 cron_manager.ctx,
-                session_str="test:FriendMessage:user123",
+                umo="test:FriendMessage:user123",
                 source="cron",
                 user_prompt=PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
                     cron_job=json.dumps(
@@ -1032,7 +1078,10 @@ class TestRunActiveAgentJob:
             cron_expression="0 9 * * *",
             enabled=True,
             persistent=True,
-            payload={"note": "check something"},
+            payload={
+                "note": "check something",
+                "session": "test:FriendMessage:user123",
+            },
         )
         mock_db.get_cron_job.return_value = job
         cron_manager.ctx = mock_context
@@ -1078,7 +1127,10 @@ class TestRunActiveAgentJob:
             cron_expression="0 9 * * *",
             enabled=True,
             persistent=True,
-            payload={"note": "check something"},
+            payload={
+                "note": "check something",
+                "session": "test:FriendMessage:user123",
+            },
         )
         mock_db.get_cron_job.return_value = job
         cron_manager.ctx = mock_context

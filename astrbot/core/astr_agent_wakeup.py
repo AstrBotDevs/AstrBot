@@ -9,7 +9,6 @@ from astrbot.core.log import log_context
 from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent, WakeupSource
 from astrbot.core.platform.astr_message_event import event_context
 from astrbot.core.platform.message_session import MessageSession
-from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.star.context import Context
 from astrbot.core.utils.active_event_registry import active_event_registry
@@ -22,7 +21,7 @@ from astrbot.core.utils.trace import trace_execution
 async def wake_main_agent(
     ctx: Context,
     *,
-    session_str: str,
+    umo: str,
     user_prompt: str,
     source: WakeupSource,
     source_id: str | None = None,
@@ -33,7 +32,7 @@ async def wake_main_agent(
 
     Args:
         ctx: Session configuration and agent services.
-        session_str: UMO whose current conversation supplies the existing context.
+        umo: UMO whose current conversation supplies the existing context.
         user_prompt: Trigger instructions and data, exclusively for this user turn.
         source: Trigger mechanism, independent of the target session's platform.
         source_id: Cron job ID, background task ID, or invoking plugin ID.
@@ -42,29 +41,23 @@ async def wake_main_agent(
 
     Raises:
         RuntimeError: If construction or execution fails.
-        ValueError: If the source, target session, or stored history is invalid.
+        ValueError: If the source, target session, or stored history is invalid,
+            or the target platform adapter is unavailable.
     """
     from astrbot.core.astr_main_agent import MainAgentBuildConfig, build_main_agent
 
     if stop_signal is not None and stop_signal.is_set():
         return
-    session = MessageSession.from_str(session_str)
-    metadata = PlatformMetadata(
-        id=session.platform_id,
-        name="internal",
-        description="Agent wakeup target without an active platform adapter",
-        support_proactive_message=False,
-        support_streaming_message=False,
-    )
+    session = MessageSession.from_str(umo)
     platform = ctx.get_platform_inst(session.platform_id)
-    if platform is not None:
-        platform_metadata = platform.meta()
-        if isinstance(platform_metadata, PlatformMetadata):
-            metadata = platform_metadata
+    if platform is None:
+        raise ValueError(
+            f"Platform adapter {session.platform_id!r} not found for wakeup UMO {umo!r}."
+        )
     event = AgentWakeupEvent(
         context=ctx,
         session=session,
-        platform_meta=metadata,
+        platform_meta=platform.meta(),
         prompt=user_prompt,
         source=source,
         source_id=source_id,

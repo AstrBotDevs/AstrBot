@@ -13,8 +13,6 @@ from apscheduler.triggers.date import DateTrigger
 from astrbot import logger
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import CronJob
-from astrbot.core.platform.message_session import MessageSession
-from astrbot.core.platform.message_type import MessageType
 
 if TYPE_CHECKING:
     from astrbot.core.star.context import Context
@@ -426,14 +424,9 @@ class CronJobManager:
 
     async def _run_active_agent_job(self, job: CronJob, start_time: datetime) -> None:
         payload = job.payload or {}
-        delivery_session_str = str(payload.get("session") or "").strip()
-        session_str = delivery_session_str or str(
-            MessageSession(
-                platform_name="cron",
-                message_type=MessageType.OTHER_MESSAGE,
-                session_id=job.job_id,
-            )
-        )
+        umo = str(payload.get("session") or "").strip()
+        if not umo:
+            raise ValueError(f"Cron job {job.job_id!r} has no target UMO.")
         note = payload.get("note") or job.description or job.name
 
         extras = {
@@ -448,7 +441,7 @@ class CronJobManager:
                 "run_at": (
                     job.payload.get("run_at") if isinstance(job.payload, dict) else None
                 ),
-                "session": delivery_session_str,
+                "session": umo,
             },
             "cron_payload": payload,
         }
@@ -458,7 +451,7 @@ class CronJobManager:
             PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT,
         )
 
-        cfg = self.ctx.get_config(umo=session_str)
+        cfg = self.ctx.get_config(umo=umo)
         role = (
             "admin"
             if (
@@ -469,7 +462,7 @@ class CronJobManager:
         )
         await wake_main_agent(
             self.ctx,
-            session_str=session_str,
+            umo=umo,
             source="cron",
             source_id=job.job_id,
             user_prompt=PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(

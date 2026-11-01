@@ -18,6 +18,7 @@ from astrbot.core.astr_main_agent_resources import (
     BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT,
 )
 from astrbot.core.message.components import Image
+from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider.func_tool_manager import (
     FunctionToolManager,
     _PermissionGuardedTool,
@@ -115,7 +116,11 @@ def test_build_handoff_toolset_keeps_permission_guards_for_default_tools(runtime
     event = _DummyEvent()
     provider_settings = {} if runtime is None else {"computer_use_runtime": runtime}
     context = SimpleNamespace(
-        get_platform_inst=lambda _platform_id: None,
+        get_platform_inst=lambda platform_id: SimpleNamespace(
+            meta=lambda: PlatformMetadata(
+                id=platform_id, name="webchat", description="Test"
+            )
+        ),
         get_config=lambda **_kwargs: {"provider_settings": provider_settings},
         get_llm_tool_manager=lambda: mgr,
     )
@@ -299,7 +304,11 @@ async def test_execute_handoff_skips_renormalize_when_image_urls_prepared(
     context = SimpleNamespace(
         get_current_chat_provider_id=_fake_get_current_chat_provider_id,
         tool_loop_agent=_fake_tool_loop_agent,
-        get_platform_inst=lambda _platform_id: None,
+        get_platform_inst=lambda platform_id: SimpleNamespace(
+            meta=lambda: PlatformMetadata(
+                id=platform_id, name="webchat", description="Test"
+            )
+        ),
         get_config=lambda **_kwargs: {"provider_settings": {}},
     )
     event = _DummyEvent([])
@@ -398,7 +407,11 @@ async def test_execute_handoff_passes_tool_call_timeout_to_tool_loop_agent(
     context = SimpleNamespace(
         get_current_chat_provider_id=_fake_get_current_chat_provider_id,
         tool_loop_agent=_fake_tool_loop_agent,
-        get_platform_inst=lambda _platform_id: None,
+        get_platform_inst=lambda platform_id: SimpleNamespace(
+            meta=lambda: PlatformMetadata(
+                id=platform_id, name="webchat", description="Test"
+            )
+        ),
         get_config=lambda **_kwargs: {"provider_settings": {}},
     )
     event = _DummyEvent([])
@@ -490,7 +503,11 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
         parameters={"type": "object", "properties": {}},
     )
     context = SimpleNamespace(
-        get_platform_inst=lambda _platform_id: None,
+        get_platform_inst=lambda platform_id: SimpleNamespace(
+            meta=lambda: PlatformMetadata(
+                id=platform_id, name="webchat", description="Test"
+            )
+        ),
         get_config=lambda **_kwargs: {"provider_settings": provider_settings},
         get_llm_tool_manager=lambda: SimpleNamespace(
             get_builtin_tool=lambda _tool_cls: send_tool
@@ -508,7 +525,7 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
 
     await wake_main_agent(
         (run_context).context.context,
-        session_str=(run_context).context.event.unified_msg_origin,
+        umo=(run_context).context.event.unified_msg_origin,
         source="background_task",
         user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
             background_task_result=json.dumps(
@@ -602,7 +619,11 @@ async def test_background_wakeup_applies_max_agent_step(
         parameters={"type": "object", "properties": {}},
     )
     context = SimpleNamespace(
-        get_platform_inst=lambda _platform_id: None,
+        get_platform_inst=lambda platform_id: SimpleNamespace(
+            meta=lambda: PlatformMetadata(
+                id=platform_id, name="webchat", description="Test"
+            )
+        ),
         get_config=lambda **_kwargs: {
             "provider_settings": {},
             "agent_runner": {
@@ -624,7 +645,7 @@ async def test_background_wakeup_applies_max_agent_step(
 
     await wake_main_agent(
         (run_context).context.context,
-        session_str=(run_context).context.event.unified_msg_origin,
+        umo=(run_context).context.event.unified_msg_origin,
         source="background_task",
         user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
             background_task_result=json.dumps(
@@ -663,7 +684,11 @@ async def test_background_wakeup_allows_completion_without_user_delivery(
     send_tool = SendMessageToUserTool()
     send_message = AsyncMock(return_value=True)
     context = SimpleNamespace(
-        get_platform_inst=lambda _platform_id: None,
+        get_platform_inst=lambda platform_id: SimpleNamespace(
+            meta=lambda: PlatformMetadata(
+                id=platform_id, name="webchat", description="Test"
+            )
+        ),
         get_config=lambda **_kwargs: {},
         get_llm_tool_manager=lambda: SimpleNamespace(
             get_builtin_tool=lambda _tool_cls: send_tool
@@ -719,7 +744,7 @@ async def test_background_wakeup_allows_completion_without_user_delivery(
 
     await wake_main_agent(
         (run_context).context.context,
-        session_str=(run_context).context.event.unified_msg_origin,
+        umo=(run_context).context.event.unified_msg_origin,
         source="background_task",
         user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
             background_task_result=json.dumps(

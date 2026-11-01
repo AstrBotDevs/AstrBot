@@ -21,6 +21,7 @@ from astrbot.core.cron.manager import CronJobManager
 from astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal import (
     InternalAgentSubStage,
 )
+from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.utils.active_event_registry import active_event_registry
 
@@ -120,6 +121,11 @@ async def test_wakeup_uses_same_compression_settings_as_chat(
     conf["provider_settings"]["proactive_capability"] = {"add_cron_tools": False}
     conf["provider_settings"]["max_quoted_fallback_images"] = 3
     ctx = MagicMock()
+    ctx.get_platform_inst.return_value = SimpleNamespace(
+        meta=lambda: PlatformMetadata(
+            id="test", name="test_platform", description="Test"
+        )
+    )
     ctx.get_config.return_value = conf
     stage = InternalAgentSubStage()
     await stage.initialize(
@@ -164,7 +170,7 @@ async def test_wakeup_uses_same_compression_settings_as_chat(
         if entrypoint == "cron":
             await wake_main_agent(
                 manager.ctx,
-                session_str="test:FriendMessage:user123",
+                umo="test:FriendMessage:user123",
                 source="cron",
                 user_prompt=PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
                     cron_job=json.dumps(
@@ -198,7 +204,7 @@ async def test_wakeup_uses_same_compression_settings_as_chat(
             )
             await wake_main_agent(
                 wakeup_context.context.context,
-                session_str=wakeup_context.context.event.unified_msg_origin,
+                umo=wakeup_context.context.event.unified_msg_origin,
                 source="background_task",
                 user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
                     background_task_result=json.dumps(

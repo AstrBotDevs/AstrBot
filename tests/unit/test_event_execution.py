@@ -361,7 +361,7 @@ async def test_wakeup_uses_event_scope(frames, monkeypatch, failure_at, trigger)
         prompt = "Continue processing the plugin result."
     execution = wake_main_agent(
         manager.ctx,
-        session_str="test:FriendMessage:cron-execution-test",
+        umo="test:FriendMessage:cron-execution-test",
         source=trigger,
         source_id="trigger-id",
         user_prompt=prompt,
