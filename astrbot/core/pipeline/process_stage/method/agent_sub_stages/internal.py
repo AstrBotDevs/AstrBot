@@ -483,7 +483,7 @@ class InternalAgentSubStage(Stage):
                     else "".join(
                         part.text
                         for part in (content or [])
-                        if isinstance(part, TextPart)
+                        if isinstance(part, TextPart) and not part._no_save
                     )
                 )
                 final_text = final_text.strip()

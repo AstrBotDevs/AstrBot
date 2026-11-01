@@ -594,3 +594,31 @@ async def test_proactive_delivery_stays_bound_to_its_original_conversation(
             "conversation",
             history=[{"role": "assistant", "content": "Take your medicine"}],
         )
+
+
+@pytest.mark.asyncio
+async def test_temporary_final_text_cannot_replace_a_confirmed_delivery(
+    runtime, monkeypatch
+):
+    """Only persisted final content may suppress the delivered assistant record."""
+    runtime.tool_delivery = True
+    runtime.completion = "Take your medicine"
+
+    async def mark_final_text_temporary(self, run_context, llm_response):
+        for part in run_context.messages[-1].content:
+            part.mark_as_temp()
+
+    monkeypatch.setattr(BaseAgentRunHooks, "on_agent_done", mark_final_text_temporary)
+    await wake_main_agent(
+        runtime.context,
+        umo="target:FriendMessage:user",
+        user_prompt="Send a reminder",
+        source="plugin",
+    )
+    await asyncio.wait_for(runtime.drain(), 1)
+    assert (
+        json.loads(runtime.conversation.history).count(
+            {"role": "assistant", "content": "Take your medicine"}
+        )
+        == 1
+    )
