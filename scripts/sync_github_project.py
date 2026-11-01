@@ -489,6 +489,17 @@ def read_subject(repository, number):
             initial=content[field],
             id=content["id"],
         )
+    for item in content["projectItems"]:
+        item["fieldValues"] = connection(
+            """query($id:ID!,$cursor:String){node(id:$id){... on ProjectV2Item{
+              fieldValues(first:100,after:$cursor){nodes{
+                ... on ProjectV2ItemFieldSingleSelectValue{name field{... on ProjectV2SingleSelectField{name}}}
+                ... on ProjectV2ItemFieldTextValue{text field{... on ProjectV2Field{name}}}
+              }pageInfo{hasNextPage endCursor}}}}} """.strip(),
+            ("node", "fieldValues"),
+            initial=item["fieldValues"],
+            id=item["id"],
+        )
     return content
 
 
