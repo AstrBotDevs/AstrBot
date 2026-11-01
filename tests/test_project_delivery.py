@@ -375,6 +375,9 @@ class DeliveryTests(unittest.TestCase):
                 )
             self.assertIn("release ancestry start", output.getvalue())
             self.assertIn("release ancestry complete", output.getvalue())
+            self.assertIn(f"commit={second[:12]}", output.getvalue())
+            self.assertRegex(output.getvalue(), r"tags=\d+")
+            self.assertRegex(output.getvalue(), r"seconds=\d+\.\d{2}")
 
     def test_tag_containment_failure_fails_closed(self):
         sync.tags_containing.cache_clear()
