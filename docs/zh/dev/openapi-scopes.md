@@ -41,6 +41,7 @@ outline: deep
 | `PUT` | `/api/v1/provider-sources/by-id` | — |
 | `DELETE` | `/api/v1/provider-sources/by-id` | — |
 | `GET` | `/api/v1/provider-sources/models` | — |
+| `PUT` | `/api/v1/provider-sources/order` | — |
 | `GET` | `/api/v1/provider-sources/providers` | — |
 | `POST` | `/api/v1/provider-sources/providers` | — |
 | `GET` | `/api/v1/provider-sources/{source_id}` | — |
