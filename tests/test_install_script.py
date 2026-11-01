@@ -552,40 +552,12 @@ class ShellInstallerTests(unittest.TestCase):
                 self.assertIn("[WARN]", output)
                 self.assertIn(" tool update-shell", output)
 
-    def test_relative_tool_bin_is_rejected_before_astrbot_install(self):
-        install_tmp = self.root / "install-temp"
-        install_tmp.mkdir()
-        self.env["TMPDIR"] = str(install_tmp)
-        for language, diagnostic in (
-            ("en-US", "The tool executable directory must be an absolute path"),
-            ("zh-CN", "工具可执行文件目录必须是绝对路径"),
-            ("ja-JP", "ツールの実行ファイルディレクトリは絶対パスで指定してください"),
-        ):
-            for directory in ("relative bin", "./tools", "../tools", "."):
-                with self.subTest(language=language, directory=directory):
-                    self.env["UV_TOOL_BIN_DIR"] = directory
-                    status, output = self.run_installer(
-                        ["--language", language, "--non-interactive"]
-                    )
-                    self.assertEqual(status, 2, output)
-                    self.assertIn(diagnostic, output)
-                    self.assertIn(directory, output)
-                    self.assertIn("UV_TOOL_BIN_DIR", output)
-                    self.assertFalse((self.root / "uv-args").exists())
-                    self.assertFalse((self.root / "uv-update-shell").exists())
-                    self.assertEqual((self.root / ".bashrc").read_text(), "")
-
-    def test_wrapper_relative_tool_bin_is_rejected_before_astrbot_install(self):
-        with (self.root / "env.sh").open("a") as fixture:
-            fixture.write(
-                '\nunset -f command\n'
-                'uv() { UV_TOOL_BIN_DIR="relative tools" command uv "$@"; }\n'
-            )
+    def test_relative_tool_bin_is_passed_through_to_uv(self):
+        self.env["UV_TOOL_BIN_DIR"] = "relative tools"
         status, output = self.run_installer(["--non-interactive"])
-        self.assertEqual(status, 2, output)
-        self.assertIn("relative tools", output)
-        self.assertFalse((self.root / "uv-args").exists())
-        self.assertEqual((self.root / ".bashrc").read_text(), "")
+        self.assertEqual(status, 0, output)
+        self.assert_install(OFFICIAL_INDEX, [""])
+        self.assertTrue((self.root / "relative tools/astrbot").is_file())
 
     def test_shell_path_messages_follow_selected_language(self):
         self.env["UV_TOOL_BIN_DIR"] = str(self.root / "tool bin")

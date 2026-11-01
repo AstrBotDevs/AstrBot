@@ -36,9 +36,6 @@ Usage: bash install.sh [options]
   --pypi-index-url HTTPS-URL         PyPI simple index for custom sources
   --python-install-mirror HTTPS-URL  Optional Python interpreter download mirror
   --non-interactive                 Skip all menus (defaults: English; source follows language)
-
-Environment:
-  UV_TOOL_BIN_DIR                  Absolute directory for installed tool executables
 HELP
       exit 0
       ;;
@@ -136,7 +133,6 @@ message() {
     zh-CN:ShellPathConfigured) format='Shell PATH 已配置。请重新加载终端以使其生效。' ;;
     zh-CN:ShellPathUpdateFailed) format='无法更新 Shell PATH。请运行以下命令，然后重新加载终端：' ;;
     zh-CN:UvPathUpdateFailed) format='无法将 uv 安装目录添加到 Shell PATH。请运行以下命令，然后重新加载终端：' ;;
-    zh-CN:ToolBinMustBeAbsolute) format='工具可执行文件目录必须是绝对路径：%s。请将 UV_TOOL_BIN_DIR 设为绝对路径后重试。' ;;
     en-US:ChooseSource) format='Select a download source' ;;
     en-US:China) format='Mainland China accelerated download mirrors' ;;
     en-US:Official) format='Official sources' ;;
@@ -170,7 +166,6 @@ message() {
     en-US:ShellPathConfigured) format='Shell PATH is already configured. Reload your shell to apply it.' ;;
     en-US:ShellPathUpdateFailed) format='Could not update shell PATH. Run the following command, then reload your shell:' ;;
     en-US:UvPathUpdateFailed) format='Could not add the uv installation directory to shell PATH. Run the following command, then reload your shell:' ;;
-    en-US:ToolBinMustBeAbsolute) format='The tool executable directory must be an absolute path: %s. Set UV_TOOL_BIN_DIR to an absolute path and retry.' ;;
     ja-JP:ChooseSource) format='ダウンロード元を選択してください' ;;
     ja-JP:China) format='中国本土向け高速ダウンロードミラー' ;;
     ja-JP:Official) format='公式ソース' ;;
@@ -204,7 +199,6 @@ message() {
     ja-JP:ShellPathConfigured) format='シェルの PATH は設定済みです。シェルを再読み込みして反映してください。' ;;
     ja-JP:ShellPathUpdateFailed) format='シェルの PATH を更新できませんでした。次のコマンドを実行してからシェルを再読み込みしてください：' ;;
     ja-JP:UvPathUpdateFailed) format='uv のインストール先をシェルの PATH に追加できませんでした。次のコマンドを実行してからシェルを再読み込みしてください：' ;;
-    ja-JP:ToolBinMustBeAbsolute) format='ツールの実行ファイルディレクトリは絶対パスで指定してください：%s。UV_TOOL_BIN_DIR を絶対パスに設定して再試行してください。' ;;
     *) printf 'Unknown message: %s\n' "$key" >&2; return 1 ;;
   esac
   printf "$format\n" "$@"
@@ -432,14 +426,6 @@ if [ -n "$python_install_mirror" ]; then
 else
   info "$(message PythonDefault)"
 fi
-# Resolve through the same provider as installation, including shell wrappers.
-# Relative tool directories change meaning when installation switches to TMPDIR
-# and cannot be persisted safely for shells opened in another directory.
-tool_bin_dir="$(uv tool dir --bin)" || tool_bin_dir="${UV_TOOL_BIN_DIR:-}"
-case "$tool_bin_dir" in
-  ''|/*) ;;
-  *) err "$(message ToolBinMustBeAbsolute "$tool_bin_dir")"; exit 2 ;;
-esac
 info "$(message InstallingAstrBot)"
 # Use a valid working directory even if the caller's directory has been removed.
 # The subshell scopes Python mirror settings to this installation only.
@@ -477,6 +463,8 @@ if [ "$(type -t uv)" = 'function' ]; then
   # Keep wrapper settings consistent with the preceding tool installation.
   uv_executable='uv'
 fi
+# Preserve invocation-only settings in the retry command, including wrapper overrides.
+tool_bin_dir="$("$uv_executable" tool dir --bin)" || tool_bin_dir="${UV_TOOL_BIN_DIR:-}"
 # uv uses an error exit even when its shell configuration is already correct.
 # Older uv releases omit backticks around the directory in this diagnostic.
 # Match only that single-line diagnostic; preserve other errors and retry commands.
