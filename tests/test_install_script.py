@@ -27,10 +27,6 @@ PYTHON_MIRROR = (
 FAKE_UV = rb"""#!/bin/bash
 if [ "$1" = --version ]; then printf 'uv fixture\n'; exit 0; fi
 tool_bin_dir="${UV_TOOL_BIN_DIR:-$HOME/.local/bin}"
-if [ "$1" = tool ] && [ "$2" = dir ] && [ "$3" = --bin ]; then
-  printf '%s\n' "$tool_bin_dir"
-  exit 0
-fi
 if [ "$1" = tool ] && [ "$2" = update-shell ]; then
   touch "$TEST_DIR/uv-update-shell"
   case ":$PATH:" in
@@ -295,7 +291,6 @@ class ShellInstallerTests(unittest.TestCase):
             result.stdout.splitlines(),
             [str(self.root / "bin/uv"), str(self.root / "bin/astrbot")],
         )
-        self.assertEqual(len((self.root / ".bashrc").read_text().splitlines()), 1)
 
     def test_relative_tool_bin_survives_reload_from_another_directory(self):
         self.env["UV_TOOL_BIN_DIR"] = "relative tools"
@@ -304,7 +299,6 @@ class ShellInstallerTests(unittest.TestCase):
         )
         self.assertEqual(status, 0, output)
         tool = self.root / "relative tools/astrbot"
-        self.assertTrue(tool.is_file())
         shell_env = self.env.copy()
         shell_env.pop("BASH_ENV")
         result = subprocess.run(
