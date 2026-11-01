@@ -33,3 +33,5 @@ class ContextConfig:
     """Custom token counting method. If None, the default method is used."""
     custom_compressor: ContextCompressor | None = None
     """Custom context compression method. If None, the default method is used."""
+    llm_compress_reuse_tools: bool = False
+    """Whether the default summary compressor reuses current tool definitions."""

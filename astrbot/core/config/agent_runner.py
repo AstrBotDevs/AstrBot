@@ -24,6 +24,7 @@ AGENT_RUNNER_CONFIG_DEFAULTS: dict[str, dict[str, Any]] = {
             "overflow_strategy": "llm_compress",
             "instruction": "",
             "keep_recent_ratio": 0.15,
+            "reuse_tools": False,
             "provider_id": "",
             "fallback_max_tokens": 128000,
         },
@@ -125,6 +126,7 @@ def resolve_context_compression_config(
         "llm_compress_keep_recent_ratio": compression_config.get(
             "keep_recent_ratio", 0.15
         ),
+        "llm_compress_reuse_tools": compression_config.get("reuse_tools", False),
         "llm_compress_provider_id": compression_config.get("provider_id", ""),
         "max_context_length": max_turns,
         "dequeue_context_length": max(1, dequeue_turns),

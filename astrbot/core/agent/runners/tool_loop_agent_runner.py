@@ -232,6 +232,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         request_max_retries: int | None = None,
         tool_result_overflow_dir: str | None = None,
         read_tool: FunctionTool | None = None,
+        llm_compress_reuse_tools: bool = False,
         **kwargs: T.Any,
     ) -> None:
         self.req = request
@@ -256,6 +257,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             llm_compress_instruction=self.llm_compress_instruction,
             llm_compress_keep_recent_ratio=self.llm_compress_keep_recent_ratio,
             llm_compress_provider=self.llm_compress_provider,
+            llm_compress_reuse_tools=llm_compress_reuse_tools,
             custom_token_counter=self.custom_token_counter,
             custom_compressor=self.custom_compressor,
         )
@@ -826,11 +828,14 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         # Process request-time context before sending it to the provider.
         token_usage = self.req.conversation.token_usage if self.req.conversation else 0
+        compression_kwargs: dict[str, T.Any] = {"trusted_token_usage": token_usage}
+        if self.request_context_manager_config.llm_compress_reuse_tools:
+            compression_kwargs["func_tool"] = self._func_tool_for_provider()
         self._simple_print_message_role("[BefCompact]", self.run_context.messages)
         processed_messages = await self._await_or_stop(
             self.request_context_manager.process(
                 self.run_context.messages,
-                trusted_token_usage=token_usage,
+                **compression_kwargs,
             )
         )
         if processed_messages is None:

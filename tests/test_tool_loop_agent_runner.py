@@ -1047,6 +1047,54 @@ async def test_runner_builds_placeholder_for_unsupported_request_image(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("schema_mode", ["full", "skills_like"])
+@pytest.mark.parametrize("supports_tools", [False, True])
+async def test_summary_reuses_current_effective_tools(
+    runner,
+    provider_request,
+    mock_hooks,
+    mock_tool_executor,
+    schema_mode,
+    supports_tools,
+):
+    provider = CapturingProvider(
+        modalities=["text", "tool_use"] if supports_tools else ["text"]
+    )
+    provider.provider_config["max_context_tokens"] = 100
+    summary_provider = CapturingProvider(modalities=["text", "tool_use"])
+    summary_provider.text_chat = AsyncMock(
+        return_value=LLMResponse(role="assistant", completion_text="Summary.")
+    )
+    provider_request.contexts = [
+        {"role": "user", "content": "a" * 500},
+        {"role": "assistant", "content": "b" * 500},
+    ]
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        llm_compress_provider=summary_provider,
+        llm_compress_reuse_tools=True,
+        tool_schema_mode=schema_mode,
+    )
+    # Replace the reset-time tools to verify the next request uses the current set.
+    current_tools = ToolSet(tools=list(provider_request.func_tool.tools))
+    provider_request.func_tool = current_tools
+
+    async for _ in runner.step_until_done(1):
+        pass
+
+    summary_provider.text_chat.assert_awaited_once()
+    summary_tools = summary_provider.text_chat.await_args.kwargs.get("func_tool")
+    assert summary_tools is (current_tools if supports_tools else None)
+    assert summary_tools is provider.received_func_tools[0]
+    if supports_tools and schema_mode == "skills_like":
+        assert summary_tools.tools[0].parameters == {"type": "object", "properties": {}}
+
+
+@pytest.mark.asyncio
 async def test_runner_clears_tools_for_provider_without_tool_use(
     runner, provider_request, mock_hooks, mock_tool_executor
 ):
