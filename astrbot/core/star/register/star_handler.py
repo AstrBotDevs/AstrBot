@@ -753,13 +753,7 @@ def register_llm_tool(
                 registering_agent._agent.tools = []
 
             desc = docstring.description.strip() if docstring.description else ""
-            tool = llm_tools.spec_to_func(
-                llm_tool_name,
-                args,
-                desc,
-                awaitable,
-                declared_permission_type=declared_permission_type,
-            )
+            tool = llm_tools.spec_to_func(llm_tool_name, args, desc, awaitable)
             registering_agent._agent.tools.append(tool)
 
         return awaitable

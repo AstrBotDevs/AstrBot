@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import enum
 import json
 import os
 import threading
@@ -477,15 +478,22 @@ class FunctionToolManager:
         """
         resolved = tool if tool is not None else self.get_func(tool_name)
         declared = getattr(resolved, "declared_permission_type", None)
+        # Tools built with a stdlib ``@dataclass`` bypass the pydantic field
+        # validation, so normalize enum members here and never fall back to
+        # "member" for an unrecognized value: an invalid declaration must not
+        # silently drop the protection the author asked for.
+        if isinstance(declared, enum.Enum):
+            declared = declared.name.lower()
         if declared in ("admin", "member"):
             return declared
         if declared is not None:
-            logger.warning(
-                "Tool %s declared an unsupported permission %r; "
-                "falling back to member.",
+            logger.error(
+                "Tool %s declared an unsupported permission %r; treating it as "
+                "admin-only (fail closed).",
                 tool_name,
                 declared,
             )
+            return "admin"
         return "member"
 
     async def _check_tool_permission(

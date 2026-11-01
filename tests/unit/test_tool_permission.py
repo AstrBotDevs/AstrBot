@@ -1,5 +1,6 @@
 """Tests for per-tool permission management."""
 
+from dataclasses import dataclass
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -462,13 +463,13 @@ def test_default_permission_uses_declared_admin():
     assert mgr._default_permission("declared_admin_tool") == "admin"
 
 
-def test_default_permission_falls_back_on_unexpected_declared_value():
+def test_default_permission_fails_closed_on_unexpected_declared_value():
     mgr = FunctionToolManager()
     tool = _dummy_tool("invalid_declared_tool")
     tool.declared_permission_type = "admim"  # intentionally invalid
     mgr.func_list.append(tool)
 
-    assert mgr._default_permission("invalid_declared_tool") == "member"
+    assert mgr._default_permission("invalid_declared_tool") == "admin"
 
 
 def test_decorator_registers_declared_admin_permission():
@@ -629,6 +630,48 @@ def test_dataclass_declared_permission_rejects_invalid_values(value):
             parameters={"type": "object", "properties": {}},
             declared_permission_type=value,
         )
+
+
+@dataclass
+class _EnumDeclaredDataclassTool(FunctionTool):
+    """Stdlib dataclass tool whose declaration bypasses pydantic validation."""
+
+    declared_permission_type: str | None = PermissionType.ADMIN
+
+
+def test_default_permission_normalizes_enum_from_stdlib_dataclass():
+    mgr = FunctionToolManager()
+    tool = _EnumDeclaredDataclassTool(
+        name="stdlib_dataclass_admin_tool",
+        description="A test tool",
+        parameters={"type": "object", "properties": {}},
+    )
+    mgr.func_list.append(tool)
+
+    assert tool.declared_permission_type is PermissionType.ADMIN
+    assert mgr._default_permission("stdlib_dataclass_admin_tool") == "admin"
+
+
+@pytest.mark.asyncio
+async def test_executor_denies_member_for_stdlib_dataclass_declared_admin():
+    from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+
+    await _clear_tool_permissions()
+    tool = _EnumDeclaredDataclassTool(
+        name="stdlib_dataclass_exec_tool",
+        description="A test tool",
+        parameters={"type": "object", "properties": {}},
+    )
+
+    results = [
+        result
+        async for result in FunctionToolExecutor.execute(
+            tool, _make_context(role="member")
+        )
+    ]
+
+    assert results
+    assert "requires admin" in results[0].content[0].text
 
 
 @pytest.mark.asyncio

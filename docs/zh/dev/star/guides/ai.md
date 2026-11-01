@@ -211,7 +211,7 @@ async def restart_server(self, event: AstrMessageEvent) -> MessageEventResult:
 - 仅接受 `filter.PermissionType.ADMIN` 和 `filter.PermissionType.MEMBER`，且必须以关键字参数传入。
 - 该声明只是默认值：管理员在管理面板（插件 → 管理行为 → 函数工具）中为该工具设置权限后，以面板设置为准。
 - 校验发生在工具执行时，与工具来自默认工具集、人格的工具列表还是子 Agent 的显式工具列表无关。
-- 通过 `@dataclass` 定义的 Tool 可以直接设置 `declared_permission_type` 字段（`"admin"` / `"member"`，或 `filter.PermissionType.ADMIN` / `filter.PermissionType.MEMBER`），无效值会在构造时抛出 `ValueError`；通过 `Agent.llm_tool()` 注册的工具不支持该声明。
+- 通过 `@dataclass` 定义的 Tool 可以直接设置 `declared_permission_type` 字段，建议写成字符串 `"admin"` / `"member"`；也接受 `filter.PermissionType.ADMIN` / `MEMBER`，运行时会归一化。无法识别的值会被当作「仅管理员」处理并在日志中报错，不会回落到所有人可用。由于标准库 `@dataclass` 不经过构造期校验，请直接在定义处写合法值。通过 `Agent.llm_tool()` 注册的工具不支持该声明。
 
 ## 调用 Agent
 

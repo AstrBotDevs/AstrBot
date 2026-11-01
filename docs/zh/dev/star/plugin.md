@@ -1491,7 +1491,7 @@ class MyPlugin(Star):
         tool_mgr.func_list.append(HelloWorldTool())
 ```
 
-如果用 `@dataclass` 定义工具，可以直接声明 `declared_permission_type` 字段（`"admin"` / `"member"`，或 `filter.PermissionType.ADMIN` / `filter.PermissionType.MEMBER`）作为工具默认权限；未在管理面板中配置时生效，面板中的设置优先。
+如果用 `@dataclass` 定义工具，可以直接声明 `declared_permission_type` 字段作为工具默认权限，建议写字符串 `"admin"` / `"member"`（也接受 `filter.PermissionType.ADMIN` / `MEMBER`，运行时会归一化）；无法识别的值会按「仅管理员」处理并记录错误日志。未在管理面板中配置时生效，面板中的设置优先。
 
 ##### 以装饰器的形式
 
