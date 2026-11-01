@@ -145,7 +145,7 @@
     "cron": "Cron 式 *",
     "cronPlaceholder": "0 9 * * *",
     "runAt": "実行時刻 *",
-    "session": "配信先（任意）",
+    "session": "配信先（任意、複数選択可）",
     "noUmos": "利用可能なセッションがありません",
     "timezone": "タイムゾーン（任意、例：Asia/Shanghai）",
     "enabled": "有効"
