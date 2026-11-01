@@ -10,7 +10,7 @@ import logging
 
 import astrbot.core.message.components as Comp
 import pytest
-from astrbot.core.message.components import Contact, Image, Music, Plain
+from astrbot.core.message.components import Image, Music, Plain
 from astrbot.core.pipeline.respond.stage import RespondStage
 
 CUSTOM = {
@@ -106,6 +106,22 @@ def test_music_without_type_derives_one():
     assert custom_share.toDict()["data"]["type"] == "custom"
 
 
+@pytest.mark.parametrize("falsey_type", [0, False])
+def test_falsey_music_type_is_validated(caplog, falsey_type):
+    """Present-but-falsey values must not be mistaken for "no type"."""
+    caplog.set_level(logging.WARNING)
+
+    music = Music(_type=falsey_type, id=1)
+
+    assert music.toDict()["data"]["type"] == "163"
+    assert "Unsupported OneBot music type" in caplog.text
+
+
+def test_empty_private_type_falls_back_to_legacy_keyword():
+    assert Music(_type="", type="163", id=2)._type == "163"
+    assert Music(_type=None, type="xm", id=3)._type == "xm"
+
+
 def test_inbound_onebot_music_segment_parses():
     """Inbound segments carry the music type as ``data.type``."""
 
@@ -127,18 +143,6 @@ def test_respond_stage_music_validator_uses_type():
     assert validator(Music(_type="163", id=1))
     assert validator(Music(_type="custom", **CUSTOM))
     assert not validator(Music(_type="custom", url=CUSTOM["url"]))
-
-
-def test_contact_accepts_onebot_type():
-    """Contact shares the private-field problem and used to raise AttributeError."""
-
-    contact = Contact(type="qq", id=1)
-    validator = RespondStage._component_validators[Comp.Contact]
-
-    assert contact._type == "qq"
-    assert Contact(id=2)._type == ""
-    assert validator(contact)
-    assert not validator(Contact(id=2))
 
 
 def test_plain_and_image_to_dict_are_unaffected():

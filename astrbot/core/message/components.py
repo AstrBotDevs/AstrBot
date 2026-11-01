@@ -596,6 +596,10 @@ class Share(BaseMessageComponent):
         super().__init__(**_)
 
 
+_CONTACT_TYPES = frozenset({"qq", "group"})
+"""OneBot V11 contact ``data.type`` values that are recognized as-is."""
+
+
 class Contact(BaseMessageComponent):  # TODO
     type: ComponentType = ComponentType.Contact
     # OneBot contact segments carry their own ``type`` (qq / group), but ``type``
@@ -604,13 +608,47 @@ class Contact(BaseMessageComponent):  # TODO
     id: int | None = 0
 
     def __init__(self, **_) -> None:
-        # pydantic v1 drops underscore-prefixed keyword arguments; accept the
-        # inbound OneBot ``type`` key explicitly so callers such as the
-        # respond-stage validator can read it instead of raising AttributeError.
-        contact_type = _.pop("type", None)
+        # pydantic v1 drops underscore-prefixed keyword arguments; accept both the
+        # inbound OneBot ``type`` key and the private ``_type`` spelling here so
+        # callers such as the respond-stage validator can read the subtype.
+        legacy_type = _.pop("type", None)
+        raw_type = _.pop("_type", None)
         super().__init__(**_)
-        if contact_type is not None:
-            self._type = str(contact_type)
+        contact_type = raw_type if raw_type not in (None, "") else legacy_type
+        if contact_type is None or contact_type == "":
+            self._type = ""
+            return
+        normalized = str(contact_type).strip().lower()
+        if normalized not in _CONTACT_TYPES:
+            # Keep the received value instead of inventing a different subtype:
+            # guessing here would silently target the wrong contact type.
+            logger.warning(
+                "Unsupported OneBot contact type %r, keeping it as received",
+                contact_type,
+            )
+        self._type = normalized
+
+    def toDict(self) -> dict:
+        """Serialize this component to an OneBot V11 contact segment.
+
+        The base implementation only walks model fields, which cannot include the
+        private ``_type``, so an already parsed contact used to be re-serialized
+        without its subtype. ``data.type`` is therefore added explicitly.
+
+        The subtype is normalized (``strip().lower()``) and recognized values are
+        ``qq`` and ``group``. Unrecognized values are kept as received and only
+        logged, because fabricating a subtype would silently send the wrong
+        contact type; an empty subtype is omitted rather than invented.
+
+        Returns:
+            The ``{"type": "contact", "data": {...}}`` segment.
+        """
+        data: dict[str, Any] = {}
+        if self._type:
+            data["type"] = self._type
+        if self.id is not None:
+            data["id"] = str(self.id)
+        return {"type": "contact", "data": data}
 
 
 class Location(BaseMessageComponent):  # TODO
@@ -626,6 +664,9 @@ class Location(BaseMessageComponent):  # TODO
 
 _MUSIC_TYPES = frozenset({"qq", "163", "xm", "custom"})
 """OneBot V11 music ``data.type`` values that are emitted as-is."""
+
+_ABSENT = object()
+"""Sentinel marking a keyword argument that was not provided at all."""
 
 
 class Music(BaseMessageComponent):
@@ -647,21 +688,26 @@ class Music(BaseMessageComponent):
         # always consumed: leaving it in ``_`` would make the base model validate
         # it against ``ComponentType`` and fail.
         legacy_type = _.pop("type", None)
-        music_type = _.pop("_type", None) or legacy_type
+        raw_type = _.pop("_type", _ABSENT)
+        # Only a missing (or explicitly empty) private value falls back to the
+        # inbound key. Falsey-but-present values such as ``0`` or ``False`` must
+        # reach the validation branch below instead of silently becoming "no type".
+        if raw_type is _ABSENT or raw_type is None or raw_type == "":
+            raw_type = legacy_type
         super().__init__(**_)
-        if not music_type:
+        if raw_type is None or raw_type == "":
             # Derive a usable type so the segment never carries an empty
             # ``data.type``; payloads with custom fields are custom shares.
             self._type = "custom" if (self.url or self.audio) else "163"
-        elif str(music_type) in _MUSIC_TYPES:
-            self._type = str(music_type)
+        elif str(raw_type) in _MUSIC_TYPES:
+            self._type = str(raw_type)
         else:
             # A mispassed value (for example a ComponentType member) would make
             # the segment invalid, so log it and fall back to a usable type.
             self._type = "custom" if (self.url or self.audio) else "163"
             logger.warning(
                 "Unsupported OneBot music type %r, falling back to %r",
-                music_type,
+                raw_type,
                 self._type,
             )
 
