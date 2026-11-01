@@ -5,7 +5,6 @@ import json
 import os
 import shlex
 import uuid
-from contextlib import nullcontext
 from pathlib import Path
 
 from pydantic import Field
@@ -18,8 +17,10 @@ from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.computer.computer_client import get_booter
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.tools.computer_tools.fs import _remote_basename
 from astrbot.core.tools.computer_tools.util import (
     check_admin_permission,
@@ -33,11 +34,6 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_system_tmp_path,
     get_astrbot_temp_path,
 )
-from astrbot.core.utils.history_saver import (
-    PROACTIVE_CONVERSATION_ID_KEY,
-    persist_agent_message,
-)
-from astrbot.core.utils.session_lock import session_lock_manager
 
 
 def _file_send_allowed_roots(
@@ -137,6 +133,35 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         }
     )
 
+    async def _persist_proactive_delivery(
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        conversation_id: str,
+        text: str,
+    ) -> None:
+        """Append confirmed text inside the wakeup pipeline's existing session lock.
+
+        Kept as one awaitable so cancellation can shield both the read and write.
+        The caller must wait for it before releasing the pipeline's lock.
+
+        Args:
+            context: Tool context for the active wakeup.
+            conversation_id: Conversation bound to the running agent request.
+            text: Plain text successfully delivered to the current session.
+        """
+        event = context.context.event
+        manager = context.context.context.conversation_manager
+        conversation = await manager.get_conversation(
+            event.unified_msg_origin, conversation_id
+        )
+        if conversation is None:
+            return
+        history = json.loads(conversation.history or "[]")
+        history.append({"role": "assistant", "content": text})
+        await manager.update_conversation(
+            event.unified_msg_origin, conversation_id, history=history
+        )
+
     async def _resolve_path_from_sandbox(
         self,
         context: ContextWrapper[AstrAgentContext],
@@ -216,15 +241,6 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
     async def call(
         self, context: ContextWrapper[AstrAgentContext], **kwargs
     ) -> ToolExecResult:
-        """Send a message and immediately record current-session proactive text.
-
-        Args:
-            context: Agent context containing the event and application services.
-            **kwargs: Message components and optional destination session.
-
-        Returns:
-            Delivery confirmation or a description of the send failure.
-        """
         # Security: only AstrBot admins can send messages to other sessions.
         # Non-admin users are always restricted to their own session.
         # See https://github.com/AstrBotDevs/AstrBot/issues/7822
@@ -353,73 +369,60 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                 return f"error: invalid session: {session}"
 
         message_chain = MessageChain(chain=components)
-        event = context.context.event
-        sent_plain_text = message_chain.get_plain_text().strip()
-        conversation_id = event.get_extra(PROACTIVE_CONVERSATION_ID_KEY)
-        persist_delivery = (
-            str(target_session) == current_session
-            and isinstance(conversation_id, str)
-            and bool(conversation_id)
-            and bool(sent_plain_text)
-        )
-        # Ordinary agent runs already own this lock. Only proactive runs bind
-        # this ID, and they release the lock between deliveries.
-        async with (
-            session_lock_manager.acquire_lock(current_session)
-            if persist_delivery
-            else nullcontext()
-        ):
-            try:
-                sent = await context.context.context.send_message(
-                    target_session,
-                    message_chain,
+        try:
+            sent = await context.context.context.send_message(
+                target_session,
+                message_chain,
+            )
+        except Exception as exc:
+            return f"error: failed to send message to session {target_session}: {exc}"
+        if not sent:
+            return f"error: failed to find platform for session {target_session}."
+        if str(target_session) == current_session:
+            context.context.event._has_send_oper = True
+            sent_plain_text = message_chain.get_plain_text().strip()
+            if sent_plain_text:
+                sent_plain_texts = context.context.event.get_extra(
+                    "_send_message_to_user_current_session_plain_texts",
+                    [],
                 )
-            except Exception as exc:
-                return (
-                    f"error: failed to send message to session {target_session}: {exc}"
+                if not isinstance(sent_plain_texts, list):
+                    sent_plain_texts = []
+                sent_plain_texts.append(sent_plain_text)
+                context.context.event.set_extra(
+                    "_send_message_to_user_current_session_plain_texts",
+                    sent_plain_texts,
                 )
-            if not sent:
-                return f"error: failed to find platform for session {target_session}."
-            if str(target_session) == current_session:
-                event._has_send_oper = True
-                if sent_plain_text:
-                    sent_plain_texts = event.get_extra(
-                        "_send_message_to_user_current_session_plain_texts",
-                        [],
+                event = context.context.event
+                req = event.get_extra("provider_request")
+                if (
+                    isinstance(event, AgentWakeupEvent)
+                    and isinstance(req, ProviderRequest)
+                    and req.conversation
+                ):
+                    # The pipeline owns the non-reentrant session lock already.
+                    # Finish the write before propagating cancellation and releasing it.
+                    save_task = asyncio.create_task(
+                        self._persist_proactive_delivery(
+                            context, req.conversation.cid, sent_plain_text
+                        )
                     )
-                    if not isinstance(sent_plain_texts, list):
-                        sent_plain_texts = []
-                    sent_plain_texts.append(sent_plain_text)
-                    event.set_extra(
-                        "_send_message_to_user_current_session_plain_texts",
-                        sent_plain_texts,
-                    )
-            if persist_delivery:
-                save_task = asyncio.create_task(
-                    persist_agent_message(
-                        context.context.context.conversation_manager,
-                        event=event,
-                        conversation_id=conversation_id,
-                        text=sent_plain_text,
-                    )
-                )
-                cancelled = False
-                try:
-                    # Keep the lock until the confirmed delivery is recorded,
-                    # even if a timeout or repeated stop requests cancel us.
-                    while not save_task.done():
-                        try:
-                            await asyncio.shield(save_task)
-                        except asyncio.CancelledError:
-                            cancelled = True
-                    save_task.result()
-                except Exception:
-                    # Delivery succeeded; reporting a send failure could cause
-                    # the model to retry and send the same message again.
-                    logger.exception("Failed to save delivered proactive message")
-                finally:
-                    if cancelled:
-                        raise asyncio.CancelledError
+                    cancelled = False
+                    try:
+                        while not save_task.done():
+                            try:
+                                await asyncio.shield(save_task)
+                            except asyncio.CancelledError:
+                                cancelled = True
+                        save_task.result()
+                    except Exception:
+                        # Delivery succeeded; reporting a send failure could resend it.
+                        logger.error(
+                            "Failed to persist proactive delivery", exc_info=True
+                        )
+                    finally:
+                        if cancelled:
+                            raise asyncio.CancelledError()
         return f"Message sent to session {target_session}"
 
 

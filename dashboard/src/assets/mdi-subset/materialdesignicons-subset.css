@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 266 icons */
+/* Auto-generated MDI subset – 267 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -882,6 +882,10 @@
 
 .mdi-routes::before {
   content: "\F046A";
+}
+
+.mdi-scale-balance::before {
+  content: "\F05D1";
 }
 
 .mdi-select-multiple::before {

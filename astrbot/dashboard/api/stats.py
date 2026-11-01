@@ -4,7 +4,11 @@ from fastapi import APIRouter, Depends, Query, Request
 
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import ApiError, ok
-from astrbot.dashboard.schemas import GhProxyTestRequest, StorageCleanupRequest
+from astrbot.dashboard.schemas import (
+    GhProxyTestRequest,
+    PypiIndexTestRequest,
+    StorageCleanupRequest,
+)
 from astrbot.dashboard.services.stat_service import StatService, StatServiceError
 
 from .auth import AuthContext, require_dashboard_user, require_scope
@@ -102,6 +106,33 @@ async def test_ghproxy_connection(
     service: StatService = Depends(get_service),
 ):
     return await _run(service.test_ghproxy_connection(payload.proxy_url))
+
+
+@router.post("/stats/pypi-index/test")
+async def test_pypi_index_connection(
+    payload: PypiIndexTestRequest,
+    _auth: AuthContext = Depends(require_system_scope),
+    service: StatService = Depends(get_service),
+):
+    return await _run(service.test_pypi_index_connection(payload.index_url))
+
+
+@router.post("/stats/pypi-index/speed")
+async def measure_pypi_index_speed(
+    payload: PypiIndexTestRequest,
+    _auth: AuthContext = Depends(require_system_scope),
+    service: StatService = Depends(get_service),
+):
+    return await _run(service.measure_pypi_index_speed(payload.index_url))
+
+
+@router.post("/stats/ghproxy/speed")
+async def measure_ghproxy_speed(
+    payload: GhProxyTestRequest,
+    _auth: AuthContext = Depends(require_system_scope),
+    service: StatService = Depends(get_service),
+):
+    return await _run(service.measure_ghproxy_speed(payload.proxy_url))
 
 
 @router.get("/changelogs")

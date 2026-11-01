@@ -20,6 +20,11 @@ from astrbot.core.agent.message import (
     TextPart,
     dump_messages_with_checkpoints,
 )
+from astrbot.core.agent.tool import FunctionTool, ToolSet
+from astrbot.core.astr_main_agent import builder as builder_build
+from astrbot.core.astr_main_agent import knowledge_base as knowledge_base_build
+from astrbot.core.astr_main_agent import providers as providers_build
+from astrbot.core.astr_main_agent import request as request_build
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.message.components import Image, Plain, Reply
 from astrbot.core.pipeline.preprocess_stage import stage as preprocess
@@ -34,6 +39,7 @@ from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest
 from astrbot.core.provider.provider import Provider
 from astrbot.core.star.star_handler import EventType
+from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
 from astrbot.core.utils import image_input
 from astrbot.core.utils import media_utils as media
 
@@ -95,7 +101,7 @@ def harness(tmp_path, monkeypatch):
             "enable": True,
         }
     )
-    context = MagicMock(spec=main.Context)
+    context = MagicMock(spec=builder_build.Context)
     context.persona_manager = MagicMock()
     context.conversation_manager = MagicMock()
     context.get_config.return_value = config
@@ -144,10 +150,11 @@ def harness(tmp_path, monkeypatch):
         return False
 
     monkeypatch.setattr(internal, "call_event_hook", hook)
+    monkeypatch.setattr(builder_build, "call_event_hook", hook)
     monkeypatch.setattr(internal, "try_capture_follow_up", lambda event: None)
     monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
     monkeypatch.setattr(internal.Metric, "upload", AsyncMock())
-    monkeypatch.setattr(main, "retrieve_knowledge_base", AsyncMock(return_value=None))
+    monkeypatch.setattr(knowledge_base_build, "retrieve_knowledge_base", AsyncMock(return_value=None))
     from astrbot.core.pipeline.process_stage.method.agent_request import (
         SessionServiceManager,
     )
@@ -390,6 +397,125 @@ async def test_profile_reload_and_concurrent_requests(harness, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_subagent_hot_reload_reuses_initialized_stage(harness):
+    """Apply live routing and deduplication changes without reinitializing the stage.
+
+    Args:
+        harness: Pipeline services and captured main-agent runs.
+    """
+    tools = [
+        FunctionTool(name=name, description=name, parameters={"type": "object"})
+        for name in ("tool_a", "tool_b")
+    ]
+    tool_mgr = harness.context.get_llm_tool_manager.return_value
+    tool_mgr.func_list = tools
+    tool_mgr.get_full_tool_set.side_effect = lambda: ToolSet(tools.copy())
+    harness.context.persona_manager.get_persona_v3_by_id.return_value = None
+    orchestrator = SubAgentOrchestrator(tool_mgr, harness.context.persona_manager)
+    harness.context.subagent_orchestrator = orchestrator
+    harness.config["provider_settings"]["proactive_capability"]["add_cron_tools"] = False
+    stage = None
+    previous_router = None
+
+    for enabled, dedupe, assigned, router, expected in [
+        (False, True, "tool_a", "Router initial", ["tool_a", "tool_b"]),
+        (True, True, "tool_a", "Router enabled", ["tool_b", "transfer_to_worker"]),
+        (True, True, "tool_b", "Router reassigned", ["tool_a", "transfer_to_worker"]),
+        (
+            True,
+            False,
+            "tool_b",
+            "Router shared",
+            ["tool_a", "tool_b", "transfer_to_worker"],
+        ),
+        (False, False, "tool_b", "Router disabled", ["tool_a", "tool_b"]),
+    ]:
+        config = {
+            "main_enable": enabled,
+            "remove_main_duplicate_tools": dedupe,
+            "router_system_prompt": router,
+            "agents": [{"name": "worker", "tools": [assigned]}],
+        }
+        # The dashboard replaces the global policy and reloads only the orchestrator.
+        harness.config["subagent_orchestrator"] = config
+        await orchestrator.reload_from_config(config)
+        event = make_event()
+        event.platform_meta.support_proactive_message = False
+        stage = await process_event(harness, event, stage=stage)
+        req = harness.captured[-1].req
+        assert req.func_tool.names() == expected
+        assert (router in req.system_prompt) is enabled
+        if previous_router:
+            assert previous_router not in req.system_prompt
+        previous_router = router
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("global_enabled", [False, True])
+@pytest.mark.parametrize("session_enabled", [False, True])
+async def test_subagent_uses_global_policy_for_session_profile(
+    harness, global_enabled, session_enabled
+):
+    """Keep routing policy in the same configuration scope as actual handoffs.
+
+    Args:
+        harness: Pipeline services and captured main-agent runs.
+        global_enabled: Whether the global orchestrator is enabled for main agents.
+        session_enabled: Conflicting or matching enablement in the session profile.
+    """
+    tools = [
+        FunctionTool(name=name, description=name, parameters={"type": "object"})
+        for name in ("global_tool", "session_tool")
+    ]
+    tool_mgr = harness.context.get_llm_tool_manager.return_value
+    tool_mgr.func_list = tools
+    tool_mgr.get_full_tool_set.side_effect = lambda: ToolSet(tools.copy())
+    harness.context.persona_manager.get_persona_v3_by_id.return_value = None
+    orchestrator = SubAgentOrchestrator(tool_mgr, harness.context.persona_manager)
+    harness.context.subagent_orchestrator = orchestrator
+    harness.config["provider_settings"]["proactive_capability"]["add_cron_tools"] = False
+    harness.config["subagent_orchestrator"] = {
+        "main_enable": global_enabled,
+        "remove_main_duplicate_tools": True,
+        "router_system_prompt": "Global router",
+        "agents": [{"name": "global_worker", "tools": ["global_tool"]}],
+    }
+    await orchestrator.reload_from_config(harness.config["subagent_orchestrator"])
+    session_config = copy.deepcopy(harness.config)
+    session_config["provider_settings"]["prompt_prefix"] = "Session: "
+    session_config["subagent_orchestrator"] = {
+        "main_enable": session_enabled,
+        "remove_main_duplicate_tools": True,
+        "router_system_prompt": "Session router",
+        "agents": [{"name": "session_worker", "tools": ["session_tool"]}],
+    }
+    harness.context.get_config.side_effect = (
+        lambda umo=None: harness.config if umo is None else session_config
+    )
+    stage = ProcessStage()
+    await stage.initialize(
+        SimpleNamespace(
+            astrbot_config=session_config, plugin_manager=harness.ctx.plugin_manager
+        )
+    )
+
+    event = make_event()
+    event.platform_meta.support_proactive_message = False
+    await process_event(harness, event, stage=stage)
+
+    req = harness.captured[-1].req
+    expected = (
+        ["session_tool", "transfer_to_global_worker"]
+        if global_enabled
+        else ["global_tool", "session_tool"]
+    )
+    assert req.func_tool.names() == expected
+    assert ("Global router" in req.system_prompt) is global_enabled
+    assert "Session router" not in req.system_prompt
+    assert req.prompt == "Session: hello"
+
+
+@pytest.mark.asyncio
 async def test_plugin_request_extra_metadata_hook_and_history(
     harness, tmp_path, monkeypatch
 ):
@@ -449,6 +575,7 @@ async def test_plugin_request_extra_metadata_hook_and_history(
         return False
 
     monkeypatch.setattr(internal, "call_event_hook", hook)
+    monkeypatch.setattr(builder_build, "call_event_hook", hook)
     await process_event(harness, event)
     assert seen == [EventType.OnWaitingLLMRequestEvent, EventType.OnLLMRequestEvent]
     assert convert.await_count == 2
@@ -542,6 +669,7 @@ async def test_provider_and_history_keep_bounded_previews_and_original_paths(
                 return False
 
             monkeypatch.setattr(internal, "call_event_hook", hook)
+            monkeypatch.setattr(builder_build, "call_event_hook", hook)
     await process_event(harness, event, preprocess_first=True)
     req = harness.captured[0].req
     preview = Path(req.image_urls[0])
@@ -658,7 +786,7 @@ async def test_reply_fallback_limit_and_deduplication(harness, tmp_path, monkeyp
         PILImage.new("RGB", (12, 12), "red").save(path)
         paths.append(str(path))
     extract = AsyncMock(return_value=[paths[0], paths[0], paths[1], paths[2]])
-    monkeypatch.setattr(main, "extract_quoted_message_images", extract)
+    monkeypatch.setattr(request_build, "extract_quoted_message_images", extract)
     harness.config["provider_settings"]["max_quoted_fallback_images"] = 2
     event = make_event([Reply(id="one"), Reply(id="two")])
     await process_event(harness, event)
@@ -749,6 +877,7 @@ async def test_oversized_images_explain_omission_and_keep_original_path(
             return False
 
         monkeypatch.setattr(internal, "call_event_hook", hook)
+        monkeypatch.setattr(builder_build, "call_event_hook", hook)
     await process_event(harness, event, preprocess_first=True)
     req = harness.captured[0].req
     assert len(req.image_urls) == int(with_valid_image)
@@ -848,7 +977,7 @@ async def test_stage_stream_and_fallback_reuse_prepared_input(
     if fallback:
         harness.provider.text_chat.side_effect = RuntimeError("primary unavailable")
         monkeypatch.setattr(
-            main, "_get_fallback_chat_providers", lambda *args: [secondary]
+            providers_build, "resolve_fallback_providers", lambda *args: [secondary]
         )
     event = make_event([Image(file=str(source))])
     await process_event(harness, event)
@@ -875,7 +1004,7 @@ async def test_non_image_and_disabled_ai_do_not_prepare(harness, tmp_path, monke
 
 def test_image_preparation_stays_outside_agent_runner_and_providers():
     root = Path(__file__).parents[1] / "astrbot" / "core"
-    paths = [root / "astr_main_agent.py", root / "astr_agent_tool_exec.py"]
+    paths = list((root / "astr_main_agent").glob("*.py")) + [root / "astr_agent_tool_exec.py"]
     paths += list((root / "agent").rglob("*.py")) + list(
         (root / "provider").rglob("*.py")
     )
@@ -1051,6 +1180,7 @@ async def test_plugin_and_hook_image_list_normalization(harness, tmp_path, monke
         return False
 
     monkeypatch.setattr(internal, "call_event_hook", hook)
+    monkeypatch.setattr(builder_build, "call_event_hook", hook)
     await process_event(harness, event)
     assert len(harness.captured[0].req.image_urls) == 1
     assert original.image_urls[0] is None and original.image_urls[2].startswith("  ")
@@ -1101,6 +1231,7 @@ async def test_attachment_sources_survive_event_cleanup(
     monkeypatch.setattr(media, "download_file", download)
     if late:
         monkeypatch.setattr(internal, "call_event_hook", hook)
+        monkeypatch.setattr(builder_build, "call_event_hook", hook)
     await process_event(harness, event, preprocess_first=True)
     req = harness.captured[0].req
     label = "Image 1 in quoted message" if quoted else "Image 1"
@@ -1151,6 +1282,7 @@ async def test_stage_failure_preserves_sources_and_cleans_working_files(
         return False
 
     monkeypatch.setattr(internal, "call_event_hook", hook)
+    monkeypatch.setattr(builder_build, "call_event_hook", hook)
     stage = ProcessStage()
     await stage.initialize(harness.ctx)
     expectation = (
@@ -1240,12 +1372,12 @@ async def test_materialized_sources_remain_owned_when_collection_fails(
         chain.append(failing_image)
     else:
         monkeypatch.setattr(
-            main,
+            request_build,
             "_get_session_conv",
             AsyncMock(side_effect=failure("unavailable")),
         )
     with pytest.raises(failure, match="unavailable"):
-        await main.collect_initial_request(
+        await request_build.collect_initial_request(
             event, harness.context, main.MainAgentBuildConfig(tool_call_timeout=60)
         )
     assert len(event._temporary_local_files) == 1
@@ -1298,6 +1430,7 @@ async def test_final_image_labels_follow_mixed_visuals_after_hook(
         return False
 
     monkeypatch.setattr(internal, "call_event_hook", hook)
+    monkeypatch.setattr(builder_build, "call_event_hook", hook)
     await process_event(harness, event, preprocess_first=True)
     assert convert.await_count == 4
     req = harness.captured[0].req
@@ -1377,6 +1510,7 @@ async def test_captioned_quote_has_status_without_visual_index(
         return False
 
     monkeypatch.setattr(internal, "call_event_hook", hook)
+    monkeypatch.setattr(builder_build, "call_event_hook", hook)
     await process_event(harness, event, preprocess_first=True)
     assert caption.text_chat.await_count == 1
     payload = harness.provider.text_chat.await_args.kwargs["contexts"][-1]["content"]
@@ -1494,6 +1628,7 @@ async def test_hook_only_new_refs_receive_full_image_policy(
         return False
 
     monkeypatch.setattr(internal, "call_event_hook", hook)
+    monkeypatch.setattr(builder_build, "call_event_hook", hook)
     event = make_event([Image(file=str(initial))])
     await process_event(harness, event, preprocess_first=True)
     assert [call.args[0] for call in convert.await_args_list] == [
@@ -1620,6 +1755,7 @@ async def test_only_actually_captioned_images_receive_caption_status(
         return False
 
     monkeypatch.setattr(internal, "call_event_hook", hook)
+    monkeypatch.setattr(builder_build, "call_event_hook", hook)
     await process_event(harness, event)
     assert caption.text_chat.await_count == 1
     assert caption.text_chat.await_args.kwargs["image_urls"] == [str(main_image)]
