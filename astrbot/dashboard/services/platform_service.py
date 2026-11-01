@@ -5,6 +5,7 @@ import string
 
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.log import log_context
 from astrbot.core.platform import Platform
 from astrbot.core.platform.sources.dingtalk.app_registration import (
     poll_dingtalk_app_registration_once,
@@ -46,16 +47,17 @@ class PlatformService:
             logger.warning(f"未找到 webhook_uuid 为 {webhook_uuid} 的平台")
             raise PlatformServiceError("未找到对应平台", 404)
 
-        try:
-            return await platform_adapter.webhook_callback(request_obj)
-        except NotImplementedError as exc:
-            logger.error(
-                f"平台 {platform_adapter.meta().name} 未实现 webhook_callback 方法"
-            )
-            raise PlatformServiceError("平台未支持统一 Webhook 模式", 500) from exc
-        except Exception as exc:
-            logger.error(f"处理 webhook 回调时发生错误: {exc}", exc_info=True)
-            raise PlatformServiceError("处理回调失败", 500) from exc
+        meta = platform_adapter.meta()
+        platform_id = meta.id or platform_adapter.config.get("id")
+        with log_context(platform_id, meta.name):
+            try:
+                return await platform_adapter.webhook_callback(request_obj)
+            except NotImplementedError as exc:
+                logger.error(f"平台 {meta.name} 未实现 webhook_callback 方法")
+                raise PlatformServiceError("平台未支持统一 Webhook 模式", 500) from exc
+            except Exception as exc:
+                logger.error(f"处理 webhook 回调时发生错误: {exc}", exc_info=True)
+                raise PlatformServiceError("处理回调失败", 500) from exc
 
     def find_platform_by_uuid(self, webhook_uuid: str) -> Platform | None:
         for platform in self.platform_manager.platform_insts:

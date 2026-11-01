@@ -1,6 +1,7 @@
 import { reactive, shallowRef, onMounted, watch } from "vue";
 import { pluginApi } from "@/api/v1";
 import { useI18n } from "@/i18n/composables";
+import { resolvePluginI18n } from "@/utils/pluginI18n";
 import type { menu } from "@/layouts/full/vertical-sidebar/sidebarItem";
 
 const DEFAULT_ICON = "mdi-puzzle";
@@ -17,6 +18,7 @@ interface PluginEntry {
   i18n?: Record<
     string,
     {
+      metadata?: { display_name?: unknown };
       views?: Record<string, { title?: unknown }>;
       pages?: Record<string, { title?: unknown }>;
     }
@@ -54,7 +56,14 @@ function buildPageItem(
   locale: string,
   grouped: boolean,
 ): menu {
-  const displayName = p.display_name || p.name || "Unknown Plugin";
+  const displayName =
+    [
+      resolvePluginI18n(p.i18n, locale, "metadata.display_name"),
+      p.display_name,
+      p.name,
+    ]
+      .find((value) => typeof value === "string" && value.trim())
+      ?.trim() || "Unknown Plugin";
   const localeData = p.i18n?.[locale];
   const localizedTitle =
     localeData && typeof localeData === "object"
@@ -83,7 +92,14 @@ function buildPluginGroups(plugins: PluginEntry[], locale: string): menu[] {
   return plugins
     .filter((p) => p.activated && Array.isArray(p.pages) && p.pages.length > 0)
     .map((p) => {
-      const displayName = p.display_name || p.name || "Unknown Plugin";
+      const displayName =
+        [
+          resolvePluginI18n(p.i18n, locale, "metadata.display_name"),
+          p.display_name,
+          p.name,
+        ]
+          .find((value) => typeof value === "string" && value.trim())
+          ?.trim() || "Unknown Plugin";
       return {
         value: `plugin:${p.name}`,
         title: displayName,

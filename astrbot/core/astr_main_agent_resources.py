@@ -95,10 +95,17 @@ PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT = (
     "2. Use historical conversation and memory to understand you and user's relationship, preferences, and context.\n"
     "3. If messaging the user: Explain WHY you are contacting them; Reference the cron task implicitly (not technical details).\n"
     "4. Use your available tools and skills to finish the task if needed.\n"
-    "5. Use `send_message_to_user` tool to send message to user if needed."
+    "5. Use `send_message_to_user` tool to send message to user if needed.\n"
+)
+
+PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT = (
     "# CRON JOB CONTEXT\n"
     "The following object describes the scheduled task that triggered you:\n"
-    "{cron_job}"
+    "{cron_job}\n\n"
+    "You are now responding to a scheduled task. "
+    "Proceed according to your system instructions. "
+    "Output using same language as previous conversation. "
+    "After completing your task, summarize and output your actions and results."
 )
 
 BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT = (
