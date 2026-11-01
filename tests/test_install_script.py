@@ -32,7 +32,15 @@ if [ "$1" = tool ] && [ "$2" = update-shell ]; then
   case ":$PATH:" in
     *":$tool_bin_dir:"*) exit 0 ;;
   esac
+  if [ "${TEST_UPDATE_SHELL_FAIL:-0}" = 1 ]; then
+    printf 'Cannot write shell configuration\n' >&2
+    exit 2
+  fi
   line="$(printf 'export PATH=%q:\"$PATH\"' "$tool_bin_dir")"
+  if grep -Fqx "$line" "$HOME/.bashrc"; then
+    printf 'error: The executable directory %s is not in PATH, but the Bash configuration files are already up-to-date\n' "$tool_bin_dir" >&2
+    exit 2
+  fi
   printf '%s\n' "$line" >> "$HOME/.bashrc"
   exit 0
 fi
@@ -268,28 +276,26 @@ class ShellInstallerTests(unittest.TestCase):
             output,
         )
 
-    def test_fresh_install_commands_available_after_bash_reload(self):
-        status, output = self.run_installer(["--non-interactive"], existing=False)
-        self.assertEqual(status, 0, output)
+    def assert_reloaded_commands(self, *paths):
         shell_env = self.env.copy()
         shell_env.pop("BASH_ENV")
         result = subprocess.run(
-            [
-                "/bin/bash",
-                "--noprofile",
-                "--norc",
-                "-c",
-                'source "$HOME/.bashrc"; command -v uv; command -v astrbot',
-            ],
+            ["/bin/bash", "--noprofile", "--norc", "-c",
+             'source "$HOME/.bashrc"; command -v uv; command -v astrbot'],
+            cwd="/",
             env=shell_env,
             capture_output=True,
             text=True,
             timeout=15,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(
-            result.stdout.splitlines(),
-            [str(self.root / "bin/uv"), str(self.root / "bin/astrbot")],
+        self.assertEqual(result.stdout.splitlines(), list(paths))
+
+    def test_fresh_install_commands_available_after_bash_reload(self):
+        status, output = self.run_installer(["--non-interactive"], existing=False)
+        self.assertEqual(status, 0, output)
+        self.assert_reloaded_commands(
+            str(self.root / "bin/uv"), str(self.root / "bin/astrbot")
         )
 
     def test_relative_tool_bin_survives_reload_from_another_directory(self):
@@ -298,25 +304,9 @@ class ShellInstallerTests(unittest.TestCase):
             ["--non-interactive"], existing=False, cwd=self.root
         )
         self.assertEqual(status, 0, output)
-        tool = self.root / "relative tools/astrbot"
-        shell_env = self.env.copy()
-        shell_env.pop("BASH_ENV")
-        result = subprocess.run(
-            [
-                "/bin/bash",
-                "--noprofile",
-                "--norc",
-                "-c",
-                'source "$HOME/.bashrc"; command -v astrbot',
-            ],
-            cwd="/",
-            env=shell_env,
-            capture_output=True,
-            text=True,
-            timeout=15,
+        self.assert_reloaded_commands(
+            str(self.root / "bin/uv"), str(self.root / "relative tools/astrbot")
         )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.strip(), str(tool))
 
     def test_separate_uv_and_tool_directories_survive_shell_reload(self):
         uv_bin = self.root / "uv bin"
@@ -325,25 +315,54 @@ class ShellInstallerTests(unittest.TestCase):
         self.env["UV_TOOL_BIN_DIR"] = str(tool_bin)
         status, output = self.run_installer(["--non-interactive"], existing=False)
         self.assertEqual(status, 0, output)
-        shell_env = self.env.copy()
-        shell_env.pop("BASH_ENV")
-        result = subprocess.run(
-            [
-                "/bin/bash",
-                "--noprofile",
-                "--norc",
-                "-c",
-                'source "$HOME/.bashrc"; command -v uv; command -v astrbot',
-            ],
-            env=shell_env,
-            capture_output=True,
-            text=True,
-            timeout=15,
+        self.assert_reloaded_commands(str(uv_bin / "uv"), str(tool_bin / "astrbot"))
+
+    def test_uv_function_wrapper_preserves_tool_directory(self):
+        (self.root / "env.sh").write_text(
+            (self.root / "env.sh").read_text()
+            + '\nuv() { UV_TOOL_BIN_DIR="$TEST_DIR/wrapped bin" command uv "$@"; }\n'
         )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(
-            result.stdout.splitlines(), [str(uv_bin / "uv"), str(tool_bin / "astrbot")]
+        status, output = self.run_installer(["--non-interactive"])
+        self.assertEqual(status, 0, output)
+        self.assert_reloaded_commands(
+            str(self.root / "bin/uv"), str(self.root / "wrapped bin/astrbot")
         )
+
+    def test_uv_shell_function_without_path_binary_completes(self):
+        (self.root / "env.sh").write_text(
+            (self.root / "env.sh").read_text()
+            + '\nunset -f command\nuv() { "$TEST_DIR/fake-uv" "$@"; }\n'
+        )
+        self.env["UV_UNMANAGED_INSTALL"] = str(self.root / "missing-bin")
+        status, output = self.run_installer(["--non-interactive"], existing=False)
+        self.assertEqual(status, 0, output)
+        self.assertIn("Reload the environment for your shell:", output)
+        self.assert_reloaded_commands(str(self.root / "bin/astrbot"))
+
+    def test_relative_uv_install_directory_survives_shell_reload(self):
+        self.env["UV_UNMANAGED_INSTALL"] = "relative uv"
+        status, output = self.run_installer(
+            ["--non-interactive"], existing=False, cwd=self.root
+        )
+        self.assertEqual(status, 0, output)
+        self.assert_reloaded_commands(
+            str(self.root / "relative uv/uv"), str(self.root / "bin/astrbot")
+        )
+
+    def test_shell_configuration_write_failure_is_reported(self):
+        self.env["TEST_UPDATE_SHELL_FAIL"] = "1"
+        status, output = self.run_installer(["--non-interactive"])
+        self.assertEqual(status, 0, output)
+        self.assertIn("Cannot write shell configuration", output)
+        self.assertIn("[WARN]", output)
+        self.assertEqual((self.root / ".bashrc").read_text(), "")
+
+    def test_repeated_install_does_not_warn_for_existing_shell_config(self):
+        for _ in range(2):
+            status, output = self.run_installer(["--non-interactive"])
+            self.assertEqual(status, 0, output)
+            self.assertNotIn("[WARN]", output)
+        self.assertEqual(len((self.root / ".bashrc").read_text().splitlines()), 1)
 
     def test_chinese_defaults_to_all_china_mirrors(self):
         status, output = self.run_installer(
