@@ -448,7 +448,9 @@ ok "$(message Installed)"
 # uv must remain executable while uv checks the unmodified caller PATH.
 uv_binary="$(type -P uv)"
 PATH="$original_path" "$uv_binary" tool update-shell >/dev/null 2>&1 || true
-PATH="$original_path" UV_TOOL_BIN_DIR="${uv_binary%/*}" "$uv_binary" tool update-shell >/dev/null 2>&1 || true
+if [ "$("$uv_binary" tool dir --bin)" != "${uv_binary%/*}" ]; then
+  PATH="$original_path" UV_TOOL_BIN_DIR="${uv_binary%/*}" "$uv_binary" tool update-shell >/dev/null 2>&1 || true
+fi
 printf '\n%s%s\n' "$indent" "$(message ReloadShell)"
 printf '%s  Bash: source ~/.bashrc\n' "$indent"
 printf '%s  Zsh: source ~/.zshrc\n' "$indent"

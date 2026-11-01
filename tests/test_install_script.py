@@ -295,6 +295,7 @@ class ShellInstallerTests(unittest.TestCase):
             result.stdout.splitlines(),
             [str(self.root / "bin/uv"), str(self.root / "bin/astrbot")],
         )
+        self.assertEqual(len((self.root / ".bashrc").read_text().splitlines()), 1)
 
     def test_relative_tool_bin_survives_reload_from_another_directory(self):
         self.env["UV_TOOL_BIN_DIR"] = "relative tools"
