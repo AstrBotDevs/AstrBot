@@ -8,7 +8,7 @@ import {
   watch,
 } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
-import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
+import { LazyMonacoEditor as VueMonacoEditor } from '@/components/shared/LazyMonacoEditor';
 import {
   Bot,
   Braces,
@@ -27,6 +27,7 @@ import {
   X,
 } from "@lucide/vue";
 import { conversationApi } from "@/api/v1";
+import UmoSelector from "@/components/shared/UmoSelector.vue";
 import ConversationHistoryPreview from "@/components/conversation/ConversationHistoryPreview.vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
@@ -854,31 +855,14 @@ function changePage(nextPage: number) {
         </div>
 
         <div class="filter-block">
-          <label class="filter-label" for="conversation-umo">
+          <div class="filter-label">
             {{ tm("workspace.filters.umo") }}
-          </label>
-          <v-text-field
-            id="conversation-umo"
+          </div>
+          <UmoSelector
             v-model="umoQuery"
-            :placeholder="tm('workspace.filters.umoPlaceholder')"
-            density="compact"
-            variant="solo-filled"
-            flat
-            hide-details
-          >
-            <template #append-inner>
-              <button
-                v-if="umoQuery"
-                type="button"
-                class="filter-input-clear"
-                :aria-label="tm('workspace.filters.reset')"
-                @mousedown.prevent
-                @click.stop="clearUmoQuery"
-              >
-                <X :size="18" aria-hidden="true" />
-              </button>
-            </template>
-          </v-text-field>
+            :label="tm('workspace.filters.umo')"
+            @update:model-value="value => { if (!value) clearUmoQuery() }"
+          />
         </div>
 
         <div class="filter-block filter-block--last">

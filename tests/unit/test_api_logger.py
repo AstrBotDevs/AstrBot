@@ -1,5 +1,6 @@
 """Tests for the plugin-aware logger exposed by ``astrbot.api``."""
 
+import asyncio
 import json
 import logging
 from pathlib import Path
@@ -8,9 +9,83 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 import astrbot.api as api
-from astrbot.core.log import LogBroker, LogManager, LogQueueHandler
+from astrbot.core.log import LogBroker, LogManager, LogQueueHandler, log_context
 from astrbot.core.star import Star
 from astrbot.core.star.star import StarMetadata, star_map
+
+
+def test_queue_log_contains_structured_source_and_platform_fields() -> None:
+    """Ensure queue entries expose fields used by Dashboard log filters."""
+    broker = LogBroker()
+    plugin_logger = logging.Logger("astrbot.plugin.weather")
+    LogManager.set_queue_handler(plugin_logger, broker)
+
+    with log_context("qq-bot-1", "aiocqhttp"):
+        plugin_logger.info("Weather updated", extra={"category": "user_chat"})
+
+    entry = broker.log_cache[-1]
+    assert entry["source"] == "plugin"
+    assert entry["plugin_name"] == "weather"
+    assert entry["platform_id"] == "qq-bot-1"
+    assert entry["platform_type"] == "aiocqhttp"
+    assert entry["category"] == "user_chat"
+
+
+@pytest.mark.asyncio
+async def test_detached_task_does_not_keep_expired_log_context() -> None:
+    """Ensure a detached task cannot retain an event's expired platform."""
+    broker = LogBroker()
+    core_logger = logging.Logger("astrbot.context_test")
+    LogManager.set_queue_handler(core_logger, broker)
+    release_task = asyncio.Event()
+
+    async def emit_after_context_exit() -> None:
+        """Emit a log after the parent context has ended."""
+        await release_task.wait()
+        core_logger.info("Background task completed")
+
+    with log_context("telegram-bot-1", "telegram"):
+        task = asyncio.create_task(emit_after_context_exit())
+
+    release_task.set()
+    await task
+
+    entry = broker.log_cache[-1]
+    assert entry["source"] == "core"
+    assert entry["plugin_name"] is None
+    assert entry["platform_id"] is None
+    assert entry["platform_type"] is None
+
+
+@pytest.mark.asyncio
+async def test_concurrent_log_contexts_do_not_mix_platforms() -> None:
+    """Ensure concurrent message tasks retain their own platform metadata."""
+    broker = LogBroker()
+    core_logger = logging.Logger("astrbot.concurrent_context_test")
+    LogManager.set_queue_handler(core_logger, broker)
+
+    async def emit_for_platform(platform_id: str, platform_type: str) -> None:
+        """Emit one log inside a platform context.
+
+        Args:
+            platform_id: Unique platform instance ID.
+            platform_type: Platform adapter type.
+        """
+        with log_context(platform_id, platform_type):
+            await asyncio.sleep(0)
+            core_logger.info(platform_id)
+
+    await asyncio.gather(
+        emit_for_platform("qq-bot-1", "aiocqhttp"),
+        emit_for_platform("telegram-bot-1", "telegram"),
+    )
+
+    qq_entry = next(entry for entry in broker.log_cache if "qq-bot-1" in entry["data"])
+    telegram_entry = next(
+        entry for entry in broker.log_cache if "telegram-bot-1" in entry["data"]
+    )
+    assert qq_entry["platform_type"] == "aiocqhttp"
+    assert telegram_entry["platform_type"] == "telegram"
 
 
 def test_plugin_logger_cache_refreshes_after_plugin_rename(

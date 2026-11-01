@@ -6,7 +6,7 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.session_llm_manager import SessionServiceManager
 
 from ...context import PipelineContext
-from ..stage import Stage
+from ...stage import Stage
 from .agent_sub_stages.internal import InternalAgentSubStage
 from .agent_sub_stages.third_party import ThirdPartyAgentSubStage
 
@@ -49,5 +49,32 @@ class AgentRequestSubStage(Stage):
             )
             return
 
-        async for resp in self.agent_sub_stage.process(event, self.prov_wake_prefix):
-            yield resp
+        agent_config = self.config.get("agent_runner", {})
+        event.trace.record(
+            "agent_start",
+            kind="agent",
+            status="running",
+            runner_type=agent_config.get("runner_type", "local"),
+            provider_wake_prefix=self.prov_wake_prefix,
+        )
+        try:
+            async for resp in self.agent_sub_stage.process(
+                event, self.prov_wake_prefix
+            ):
+                yield resp
+        except BaseException as exc:
+            event.trace.record(
+                "agent_end",
+                kind="agent",
+                status="error",
+                error=str(exc),
+                runner_type=agent_config.get("runner_type", "local"),
+            )
+            raise
+        else:
+            event.trace.record(
+                "agent_end",
+                kind="agent",
+                status="success",
+                runner_type=agent_config.get("runner_type", "local"),
+            )

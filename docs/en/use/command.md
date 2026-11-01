@@ -46,8 +46,8 @@ In group chats, if `unique_session` is enabled, `/sid` also shows the current gr
 
 Common uses:
 
-- Add an admin: run `/sid` to get the `UID`, then add it in WebUI under `Config -> Platform -> General -> Administrator IDs`.
-- Configure allowlists: use `UMO` or group ID to control which sessions can use the bot.
+- Add an admin: run `/sid` to get the `UID`, then add it in WebUI under `Config -> Access Control -> Administrators -> Administrator IDs`.
+- Configure allowlists: select the profile used by your bot in `Config`, then add the `UMO` or group ID under `Access Control -> Whitelist -> Whitelist ID List` to control which sessions can use the bot.
 - Configure routing rules: use `UMO` to distinguish different platforms, groups, or private chats.
 
 ### `/name`
@@ -176,4 +176,4 @@ Install or enable the `builtin_commands_extension` plugin if you need these exte
 
 Some commands require AstrBot admin permission, such as `/dashboard_update`, `/name`, `/op`, `/deop`, `/provider`, `/model`, and `/persona`.
 
-You can use `/sid` to get a user ID, then add it in WebUI under `Config -> Platform -> General -> Administrator IDs`.
+You can use `/sid` to get a user ID, then add it in WebUI under `Config -> Access Control -> Administrators -> Administrator IDs`.

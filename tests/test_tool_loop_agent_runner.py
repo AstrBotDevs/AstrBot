@@ -2797,3 +2797,31 @@ async def test_skills_like_media_only_requery_is_meaningful(runner, mock_hooks):
     # call 1 picks the tool, call 2 is the re-query; a third call would mean
     # the media-only reply was misjudged and the stronger-instruction repair ran.
     assert provider.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_context_token_limit_is_isolated_per_run(
+    mock_provider, mock_tool_executor, mock_hooks
+):
+    """A session override must not leak through a shared provider to another run."""
+    mock_provider.provider_config["max_context_tokens"] = 32000
+    limited, default = ToolLoopAgentRunner(), ToolLoopAgentRunner()
+    common = {
+        "provider": mock_provider,
+        "tool_executor": mock_tool_executor,
+        "agent_hooks": mock_hooks,
+    }
+    await limited.reset(
+        **common,
+        request=ProviderRequest(prompt="limited"),
+        run_context=ContextWrapper(context=None),
+        max_context_tokens=4096,
+    )
+    await default.reset(
+        **common,
+        request=ProviderRequest(prompt="default"),
+        run_context=ContextWrapper(context=None),
+    )
+    assert limited.request_context_manager_config.max_context_tokens == 4096
+    assert default.request_context_manager_config.max_context_tokens == 32000
+    assert mock_provider.provider_config["max_context_tokens"] == 32000

@@ -4,6 +4,17 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+BotCleanupTarget = Literal[
+    "custom_rules",
+    "preferences",
+    "routing",
+    "cron_jobs",
+    "conversations",
+    "message_history",
+    "traces",
+    "stats",
+]
+
 
 class OpenModel(BaseModel):
     model_config = ConfigDict(extra="allow")
@@ -143,6 +154,7 @@ class ChatFlags(BaseModel):
 
 
 class ChatMessageRegenerateRequest(OpenModel):
+    locale: str | None = None
     selected_provider: str | None = None
     selected_model: str | None = None
     enable_streaming: bool | None = None
@@ -156,6 +168,7 @@ class ChatThreadCreateRequest(OpenModel):
 
 
 class ChatThreadMessageRequest(OpenModel):
+    locale: str | None = None
     message: Any
     selected_provider: str | None = None
     selected_model: str | None = None
@@ -202,14 +215,19 @@ class TraceSettingsRequest(BaseModel):
 
 
 class StorageCleanupRequest(BaseModel):
-    target: str = "all"
+    target: Literal["logs", "cache", "traces", "all"] = "all"
 
 
 class GhProxyTestRequest(BaseModel):
     proxy_url: str | None = None
 
 
+class PypiIndexTestRequest(BaseModel):
+    index_url: str | None = None
+
+
 class OpenApiChatRequest(OpenModel):
+    locale: str | None = None
     message: Any = None
     session_id: str | None = None
     conversation_id: str | None = None
@@ -542,6 +560,7 @@ class ProviderConfigRequest(OpenModel):
                 "tts": "text_to_speech",
                 "embedding": "embedding",
                 "rerank": "rerank",
+                "decision": "decision",
             }
             config["provider_type"] = capability_map.get(
                 self.capability, self.capability
