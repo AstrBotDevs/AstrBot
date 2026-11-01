@@ -31,7 +31,7 @@
 
 | 提供商 | Key 申请入口 | AstrBot 提供的能力 |
 | --- | --- | --- |
-| <span id="serpapi">[SerpApi](./websearch/serpapi.md)</span> | [SerpApi API Key](https://serpapi.com/manage-api-key) | Google 网页搜索、Images Light 图片搜索、Finance 金融查询、Scholar 学术搜索 |
+| <span id="serpapi">[SerpApi](./websearch/serpapi.md)</span> | [SerpApi API Key](https://serpapi.com/manage-api-key) | Google 网页搜索、News 新闻、Images Light 图片搜索、Finance 金融查询、Scholar 学术搜索 |
 | <span id="deepseek">[DeepSeek Search API](./websearch/deepseek.md)</span> | [DeepSeek 开放平台](https://platform.deepseek.com/api_keys) / [搜索文档](https://api-docs.deepseek.com/zh-cn/guides/search) | 网页搜索、按 URL 提取网页正文 |
 | <span id="tavily">Tavily</span> | [Tavily 控制台](https://app.tavily.com/home) | 网页搜索、按 URL 提取网页正文 |
 | <span id="bocha">Bocha</span> | [博查](https://bochaai.com/) | 网页搜索 |

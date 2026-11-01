@@ -116,14 +116,6 @@ def _cleanup_added_root_handlers(original_handlers: list[logging.Handler]) -> No
                 handler.close()
 
 
-def _get_trusted_host_for_index_url(index_url: str) -> str | None:
-    parsed = urlparse(index_url if "://" in index_url else f"//{index_url}")
-    host = parsed.hostname
-    if host == "mirrors.aliyun.com":
-        return host
-    return None
-
-
 def _normalize_sensitive_pip_key(raw_key: str) -> str:
     return raw_key.lstrip("-").replace("-", "_").lower()
 
@@ -1005,10 +997,10 @@ class PipInstaller:
         )
 
         if not _package_specs_override_index([*args[1:], *pip_install_args]):
+            # Never bypass TLS verification for the configured index. Users of
+            # self-signed/private-CA mirrors can opt in explicitly through
+            # pip_install_arg (e.g. --cert /path/to/ca.pem or --trusted-host).
             index_url = mirror or self.pypi_index_url or "https://pypi.org/simple"
-            trusted_host = _get_trusted_host_for_index_url(index_url)
-            if trusted_host:
-                args.extend(["--trusted-host", trusted_host])
             args.extend(["-i", index_url])
 
         if pip_install_args:

@@ -28,10 +28,12 @@ from astrbot.core.platform.astr_message_event import (
 )
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
+from astrbot.core.provider.decision import DecisionService
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, ProviderType
 from astrbot.core.provider.func_tool_manager import FunctionTool, FunctionToolManager
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.provider.provider import (
+    DecisionProvider,
     EmbeddingProvider,
     Provider,
     RerankProvider,
@@ -176,6 +178,8 @@ class Context:
         self.cron_manager = cron_manager
         """Cron job manager, initialized by core lifecycle."""
         self.subagent_orchestrator = subagent_orchestrator
+        self.decision = DecisionService(provider_manager)
+        """Decision service backed by the configured decision provider."""
 
     async def llm_generate(
         self,
@@ -453,7 +457,13 @@ class Context:
         self,
         provider_id: str,
     ) -> (
-        Provider | TTSProvider | STTProvider | EmbeddingProvider | RerankProvider | None
+        Provider
+        | TTSProvider
+        | STTProvider
+        | EmbeddingProvider
+        | RerankProvider
+        | DecisionProvider
+        | None
     ):
         """通过 ID 获取对应的 LLM Provider。
 

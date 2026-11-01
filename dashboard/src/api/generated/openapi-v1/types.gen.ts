@@ -604,7 +604,7 @@ export type PluginVersionSupportRequest = {
     astrbot_version?: string;
 };
 
-export type ProviderCapability = 'chat' | 'agent' | 'stt' | 'tts' | 'embedding' | 'rerank';
+export type ProviderCapability = 'chat' | 'agent' | 'stt' | 'tts' | 'embedding' | 'rerank' | 'decision';
 
 export type ProviderConfigRequest = {
     id?: string;
@@ -617,6 +617,10 @@ export type ProviderConfigRequest = {
 export type ProviderSourceConfigRequest = {
     id?: string;
     config: DynamicConfig;
+};
+
+export type PypiIndexTestRequest = {
+    index_url: string;
 };
 
 export type RenameRequest = {
@@ -1643,6 +1647,10 @@ export type ListChatProjectWorkspaceFilesData = {
     };
     query?: {
         path?: string;
+        /**
+         * Optional for per-session workspaces; must belong to this project and user when provided. Omitted or empty values use the legacy default workspace.
+         */
+        session_id?: string;
     };
 };
 
@@ -1656,6 +1664,10 @@ export type GetChatProjectWorkspaceFileData = {
     };
     query: {
         path: string;
+        /**
+         * Optional for per-session workspaces; must belong to this project and user when provided. Omitted or empty values use the legacy default workspace.
+         */
+        session_id?: string;
     };
 };
 
@@ -1669,6 +1681,10 @@ export type DownloadChatProjectWorkspaceFileData = {
     };
     query: {
         path: string;
+        /**
+         * Optional for per-session workspaces; must belong to this project and user when provided. Omitted or empty values use the legacy default workspace.
+         */
+        session_id?: string;
     };
 };
 
@@ -3504,6 +3520,30 @@ export type TestGhproxyConnectionData = {
 export type TestGhproxyConnectionResponse = (SuccessEnvelope);
 
 export type TestGhproxyConnectionError = unknown;
+
+export type TestPypiIndexConnectionData = {
+    body: PypiIndexTestRequest;
+};
+
+export type TestPypiIndexConnectionResponse = (SuccessEnvelope);
+
+export type TestPypiIndexConnectionError = unknown;
+
+export type MeasurePypiIndexSpeedData = {
+    body: PypiIndexTestRequest;
+};
+
+export type MeasurePypiIndexSpeedResponse = (SuccessEnvelope);
+
+export type MeasurePypiIndexSpeedError = unknown;
+
+export type MeasureGhproxySpeedData = {
+    body: GhproxyTestRequest;
+};
+
+export type MeasureGhproxySpeedResponse = (SuccessEnvelope);
+
+export type MeasureGhproxySpeedError = unknown;
 
 export type ListChangelogVersionsResponse = (SuccessEnvelope);
 

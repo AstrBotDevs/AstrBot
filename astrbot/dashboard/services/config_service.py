@@ -234,6 +234,14 @@ def validate_config(
             if key not in metadata:
                 continue
             meta = metadata[key]
+            if (
+                is_core
+                and path == "provider."
+                and key == "key"
+                and data.get("type") == "system_one_decision"
+            ):
+                # System One uses a single key within the shared provider schema.
+                meta = {**meta, "type": "string"}
             if "type" not in meta:
                 logger.debug(f"配置项 {path}{key} 没有类型定义, 跳过校验")
                 continue
@@ -1134,7 +1142,21 @@ class ConfigFileService:
         if errors:
             raise ValueError(f"格式校验未通过: {errors}")
         metadata.config.save_config(post_configs)
-        await self.core_lifecycle.plugin_manager.reload(plugin_name)
+        try:
+            success, error_message = await self.core_lifecycle.plugin_manager.reload(
+                plugin_name
+            )
+        except Exception as exc:
+            logger.exception(
+                f"Failed to reload plugin {plugin_name} after saving its configuration."
+            )
+            raise ValueError(
+                f"插件 {plugin_name} 配置已保存，但重载失败: {str(exc) or '未知错误，请查看日志'}"
+            ) from exc
+        if not success:
+            raise ValueError(
+                f"插件 {plugin_name} 配置已保存，但重载失败: {error_message or '未知错误，请查看日志'}"
+            )
 
     async def save_plugin_configs_from_dashboard_payload(
         self,
@@ -1512,6 +1534,7 @@ class ProviderConfigService:
         "tts": "text_to_speech",
         "embedding": "embedding",
         "rerank": "rerank",
+        "decision": "decision",
     }
 
     def __init__(self, core_lifecycle: AstrBotCoreLifecycle) -> None:
@@ -1953,7 +1976,7 @@ class ProviderConfigService:
             await target.test()
             result["status"] = "available"
         except Exception as exc:
-            result["error"] = str(exc)
+            result["error"] = str(exc) or type(exc).__name__
         return result
 
     async def test_provider_from_dashboard_args(self, args) -> dict:
