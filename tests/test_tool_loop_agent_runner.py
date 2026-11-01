@@ -1794,8 +1794,10 @@ def _tool_call_response(args: dict[str, Any], call_id: str) -> LLMResponse:
     )
 
 
-async def _run_skills_like_requery(script: list[Any]) -> _ScriptedSkillsLikeProvider:
-    """跑一轮 skills_like 模式的 step，返回 provider 供断言使用。"""
+async def _run_skills_like_requery(
+    script: list[Any],
+) -> tuple[_ScriptedSkillsLikeProvider, ToolLoopAgentRunner]:
+    """Run one skills_like step and return its provider and runner."""
     _RecordingToolExecutor.reset()
     provider = _ScriptedSkillsLikeProvider(script)
     tool = FunctionTool(
@@ -1825,15 +1827,15 @@ async def _run_skills_like_requery(script: list[Any]) -> _ScriptedSkillsLikeProv
     async for _ in runner.step():
         pass
 
-    return provider
+    return provider, runner
 
 
 @pytest.mark.asyncio
 async def test_skills_like_requery_retries_empty_completion():
     """re-query 返回空 completion 时应重试，而不是中断整轮 Agent（#issue）"""
-    provider = await _run_skills_like_requery(
+    provider, _ = await _run_skills_like_requery(
         [
-            _tool_call_response({"query": "light"}, "call_1"),
+            _tool_call_response({}, "call_1"),
             EmptyModelOutputError("OpenAI completion has no usable output. 1"),
             EmptyModelOutputError("OpenAI completion has no usable output. 2"),
             _tool_call_response({"query": "requery"}, "call_2"),
@@ -1847,30 +1849,38 @@ async def test_skills_like_requery_retries_empty_completion():
 
 
 @pytest.mark.asyncio
-async def test_skills_like_requery_degrades_when_all_attempts_empty():
-    """re-query 重试全部为空时应降级沿用本轮已有工具调用，而不是抛异常"""
-    provider = await _run_skills_like_requery(
+async def test_skills_like_requery_reports_failure_without_executing_light_call():
+    """Exhausted re-query attempts must not execute invalid light-schema arguments."""
+    provider, runner = await _run_skills_like_requery(
         [
-            _tool_call_response({"query": "light"}, "call_1"),
+            _tool_call_response({}, "call_1"),
             EmptyModelOutputError("OpenAI completion has no usable output. 1"),
             EmptyModelOutputError("OpenAI completion has no usable output. 2"),
             EmptyModelOutputError("OpenAI completion has no usable output. 3"),
         ]
     )
 
-    # 1 次 light 调用 + 3 次全部失败的 re-query 尝试，全程没有抛异常
     assert provider.text_chat_calls == 4
-    assert _RecordingToolExecutor.calls, "降级后工具仍应执行"
-    assert _RecordingToolExecutor.calls[0]["args"] == {"query": "light"}
+    assert _RecordingToolExecutor.calls == []
+    notice = runner.run_context.messages[-1]
+    assert notice.role == "user"
+    assert "test_tool" in notice.content
+    assert "No tool was executed" in notice.content
+
+    # The agent can reconsider the request in its next step.
+    async for _ in runner.step():
+        pass
+    assert provider.text_chat_calls == 5
+    assert runner.final_llm_resp.completion_text == "最终回复"
+    assert _RecordingToolExecutor.calls == []
 
 
 @pytest.mark.asyncio
-async def test_skills_like_requery_degrades_when_repair_attempts_are_empty():
-    """re-query 返回空回复、repair 又全部为空时，仍应执行本轮已解析的工具调用"""
-    provider = await _run_skills_like_requery(
+async def test_skills_like_requery_reports_failure_after_empty_repair():
+    """When repair attempts fail, the empty original light call must not run."""
+    provider, runner = await _run_skills_like_requery(
         [
-            _tool_call_response({"query": "light"}, "call_1"),
-            # 初查成功返回，但既没有工具调用也没有有效正文 → 触发 repair
+            _tool_call_response({}, "call_1"),
             LLMResponse(
                 role="assistant",
                 completion_text="",
@@ -1882,10 +1892,24 @@ async def test_skills_like_requery_degrades_when_repair_attempts_are_empty():
         ]
     )
 
-    # 1 次 light 调用 + 1 次空回复的初查 + 3 次全部失败的 repair
     assert provider.text_chat_calls == 5
-    assert _RecordingToolExecutor.calls, "repair 失败后工具仍应执行"
-    assert _RecordingToolExecutor.calls[0]["args"] == {"query": "light"}
+    assert _RecordingToolExecutor.calls == []
+    assert "No tool was executed" in runner.run_context.messages[-1].content
+
+
+@pytest.mark.asyncio
+async def test_skills_like_requery_reports_failure_after_semantically_empty_repair():
+    """An empty non-exception repair is still unusable tool output."""
+    provider, runner = await _run_skills_like_requery(
+        [
+            _tool_call_response({}, "call_1"),
+            LLMResponse(role="assistant", completion_text=""),
+            LLMResponse(role="assistant", completion_text=""),
+        ]
+    )
+    assert provider.text_chat_calls == 3
+    assert _RecordingToolExecutor.calls == []
+    assert "No tool was executed" in runner.run_context.messages[-1].content
 
 
 @pytest.mark.asyncio

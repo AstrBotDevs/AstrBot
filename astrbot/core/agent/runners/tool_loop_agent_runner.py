@@ -954,6 +954,23 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 if self._is_stop_requested():
                     yield await self._finalize_aborted_step()
                     return
+                if requery_resp is None:
+                    logger.warning(
+                        "skills_like tool parameter generation failed; no tool was executed."
+                    )
+                    self.run_context.messages.append(
+                        Message(
+                            role="user",
+                            content=(
+                                "Tool parameter generation failed for "
+                                f"{', '.join(llm_resp.tools_call_name)} after repeated empty "
+                                "model responses. No tool was executed. Decide whether "
+                                "to retry with complete parameters or explain the failure "
+                                "to the user."
+                            ),
+                        )
+                    )
+                    return
                 if not requery_resp.tools_call_name:
                     llm_resp = requery_resp
                     logger.warning(
@@ -1487,9 +1504,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         The main step loop already retries ``EmptyModelOutputError`` and switches
         to a fallback provider, but the skills_like re-query used to call
         ``text_chat`` directly, so a single empty completion raised out of the
-        runner and aborted the whole agent run. Retry here with the same policy
-        and return None when every attempt stayed empty, letting the caller
-        degrade instead of killing the turn.
+        runner and aborted the whole agent run. Retry empty completions with
+        the main loop's retry timing, without switching providers mid-re-query.
+        On exhaustion, notify the agent without executing unvalidated arguments.
         """
         retrying = AsyncRetrying(
             retry=retry_if_exception_type(EmptyModelOutputError),
@@ -1534,11 +1551,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     async def _resolve_tool_exec(
         self,
         llm_resp: LLMResponse,
-    ) -> tuple[LLMResponse, ToolSet | None]:
+    ) -> tuple[LLMResponse | None, ToolSet | None]:
         """Used in 'skills_like' tool schema mode to re-query LLM with param-only tool schemas."""
-        # Keep the response parsed in the current step: when the re-query and the
-        # repair attempt both come back empty, it is the only usable tool call.
-        original_llm_resp = llm_resp
         tool_names = llm_resp.tools_call_name
         if not tool_names:
             return llm_resp, self.req.func_tool
@@ -1558,10 +1572,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 contexts = self._build_tool_requery_context(tool_names)
                 requery_resp = await self._requery_text_chat(contexts, param_subset)
                 if requery_resp is None:
-                    # Stopped by the user, or every attempt returned an empty
-                    # completion: keep the tool call parsed from the current step
-                    # so the run survives instead of raising EmptyModelOutputError.
-                    return original_llm_resp, subset
+                    return None, subset
                 llm_resp = requery_resp
                 self._sanitize_malformed_tool_calls(llm_resp)
 
@@ -1583,12 +1594,14 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         repair_contexts, param_subset
                     )
                     if repair_resp is None:
-                        # Every repair attempt stayed empty, so the earlier
-                        # re-query response is unusable: fall back to the tool
-                        # call parsed in the current step instead of dropping it.
-                        return original_llm_resp, subset
+                        return None, subset
                     llm_resp = repair_resp
                     self._sanitize_malformed_tool_calls(llm_resp)
+                    if (
+                        not llm_resp.tools_call_name
+                        and not self._has_meaningful_assistant_reply(llm_resp)
+                    ):
+                        return None, subset
 
         return llm_resp, subset
 
