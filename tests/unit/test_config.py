@@ -1371,6 +1371,22 @@ class TestDictTypeConfigIntegrity:
         assert has_new is True
         assert conf["structured"] == {"keep": 2}
 
+    def test_segmented_reply_max_segments_added_to_legacy_config(self):
+        """Legacy segmented reply configs receive the unlimited default."""
+        refer_conf = copy.deepcopy(
+            DEFAULT_CONFIG["platform_settings"]["segmented_reply"],
+        )
+        conf = copy.deepcopy(refer_conf)
+        conf.pop("max_segments")
+        conf["words_count_threshold"] = 75
+
+        config = AstrBotConfig.__new__(AstrBotConfig)
+        has_new = config.check_config_integrity(refer_conf, conf)
+
+        assert has_new is True
+        assert conf["max_segments"] == 0
+        assert conf["words_count_threshold"] == 75
+
     def test_dict_type_config_non_dict_value_reset_to_default(self, temp_config_path):
         """Test that a non-dict value stored in a dict item is reset to default."""
         schema = {

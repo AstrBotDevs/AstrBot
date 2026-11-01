@@ -1187,7 +1187,11 @@
           },
           "words_count_threshold": {
             "description": "Segmented Reply Word Count Threshold",
-            "hint": "Segmented reply word count threshold. Only messages with less than this number of words will be segmented, and messages with more than this number of words will be sent directly (not segmented)."
+            "hint": "Segment an original text segment only when it does not exceed this word count; longer text is sent directly. Defaults to 150."
+          },
+          "max_segments": {
+            "description": "Maximum Segments",
+            "hint": "Maximum number of segments produced from each original text segment. Content beyond the limit is merged into the final segment. Set to 0 for no limit. Defaults to 0."
           },
           "split_mode": {
             "description": "Split Mode",
