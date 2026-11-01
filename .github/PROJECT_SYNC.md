@@ -47,6 +47,15 @@ or deletes source Issues/PRs.
   reject stalled cursors, and serialize runs. Apply mode prints the plan first;
   on failure it reports confirmed, outcome-unknown and unattempted mutation counts,
   with affected item/field, so partial writes can be reconciled.
+- Full scans log phase/page and candidate progress to the Actions log. Stable
+  release membership is determined with one `git tag --contains` graph walk per
+  distinct merge commit instead of one `git merge-base` process per commit/tag
+  pair; missing fetched tags fail closed.
+- Local microbenchmark against the full checkout: 237 version tags and 20 sampled
+  tag commits (version order used as a proxy for publication order). Pairwise
+  `merge-base` checks ran 2,110 processes in 31.67 s; `tag --contains` ran 20 in
+  0.35 s (90x on this sample). This measures Git ancestry only, not GraphQL or
+  full-workflow wall time.
 - Privileged jobs run trusted default-branch code only, use full Git history/tags,
   and never execute PR code. PR tests use no Project secret.
 

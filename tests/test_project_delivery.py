@@ -1,6 +1,8 @@
 """Network-free tests for full Project delivery reconciliation."""
 
 import importlib.util
+import io
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -235,14 +237,22 @@ class DeliveryTests(unittest.TestCase):
                 "isPrerelease": False,
             }
         ]
-        with patch.object(
-            sync,
-            "ancestor",
-            side_effect=lambda commit, ref: ref == "c" * 40 or commit == "a" * 40,
+        with (
+            patch.object(sync, "ancestor", return_value=True),
+            patch.object(sync, "tag_names", return_value={"v1"}),
+            patch.object(
+                sync,
+                "tags_containing",
+                side_effect=lambda commit: {"v1"} if commit == "a" * 40 else set(),
+            ) as tags_containing,
         ):
             desired = sync.delivery(issue, {}, prs, releases, "c" * 40)
         self.assertEqual(desired["发布版本"], "")
         self.assertEqual(desired["Status"], "Needs verification")
+        self.assertEqual(
+            {call.args[0] for call in tags_containing.call_args_list},
+            {"a" * 40, "b" * 40},
+        )
 
     def test_open_implementation_prevents_released_delivery(self):
         issue = {"__typename": "Issue", "state": "OPEN", "labels": []}
@@ -300,6 +310,110 @@ class DeliveryTests(unittest.TestCase):
                 sync.ancestor("a" * 40, "refs/tags/missing")
         with self.assertRaises(ValueError):
             sync.ancestor("--bad-option", "refs/tags/v1")
+
+    def test_tags_containing_commit_handles_annotated_lightweight_and_divergent_tags(
+        self,
+    ):
+        self.addCleanup(sync.tag_names.cache_clear)
+        self.addCleanup(sync.tags_containing.cache_clear)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            def git(*args):
+                return sync.subprocess.run(
+                    ["git", *args], cwd=root, capture_output=True, text=True, check=True
+                ).stdout.strip()
+
+            git("init", "-b", "master")
+            git("config", "user.email", "test@example.com")
+            git("config", "user.name", "Test")
+            (root / "file").write_text("base")
+            git("add", "file")
+            git("commit", "-m", "base")
+            base = git("rev-parse", "HEAD")
+            git("tag", "v1")
+            (root / "file").write_text("release two")
+            git("commit", "-am", "release two")
+            second = git("rev-parse", "HEAD")
+            git("tag", "-a", "v2", "-m", "annotated")
+            (root / "file").write_text("release three")
+            git("commit", "-am", "release three")
+            git("tag", "v3")
+            with patch.object(sync, "ROOT", root):
+                sync.tag_names.cache_clear()
+                sync.tags_containing.cache_clear()
+                self.assertEqual(sync.tags_containing(base), {"v1", "v2", "v3"})
+                self.assertEqual(sync.tags_containing(second), {"v2", "v3"})
+                releases = [
+                    {
+                        "tagName": tag,
+                        "publishedAt": date,
+                        "url": tag,
+                        "isDraft": False,
+                        "isPrerelease": False,
+                    }
+                    for tag, date in [
+                        ("v1", "2026-01-01"),
+                        ("v2", "2026-02-01"),
+                        ("v3", "2026-03-01"),
+                    ]
+                ]
+                pr = {
+                    "__typename": "PullRequest",
+                    "state": "MERGED",
+                    "mergeCommit": {"oid": second},
+                    "url": "pr",
+                }
+                self.assertEqual(
+                    sync.delivery(pr, {}, [], releases, git("rev-parse", "HEAD"))[
+                        "发布版本"
+                    ],
+                    "v2",
+                )
+
+    def test_tag_containment_failure_fails_closed(self):
+        sync.tags_containing.cache_clear()
+        with patch.object(sync.subprocess, "run", return_value=Mock(returncode=128)):
+            with self.assertRaisesRegex(RuntimeError, "tags"):
+                sync.tags_containing("a" * 40)
+
+    def test_missing_stable_release_tag_fails_closed(self):
+        pr = {
+            "__typename": "PullRequest",
+            "state": "MERGED",
+            "mergeCommit": {"oid": "a" * 40},
+            "url": "pr",
+        }
+        releases = [
+            {
+                "tagName": "v1",
+                "publishedAt": "2026-01-01",
+                "url": "release",
+                "isDraft": False,
+                "isPrerelease": False,
+            }
+        ]
+        with (
+            patch.object(sync, "ancestor", return_value=True),
+            patch.object(sync, "tag_names", return_value=set()),
+            patch.object(sync, "tags_containing") as containing,
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError, "Stable release tags are missing"
+            ):
+                sync.delivery(pr, {}, [], releases, "b" * 40)
+            containing.assert_not_called()
+
+    def test_connection_logs_page_progress_only_when_requested(self):
+        data = {"page": {"nodes": [1], "pageInfo": {"hasNextPage": False}}}
+        with (
+            patch.object(sync, "graphql", return_value=data),
+            patch("sys.stderr", new_callable=io.StringIO) as output,
+        ):
+            self.assertEqual(
+                sync.connection("query", ("page",), progress="Issues"), [1]
+            )
+        self.assertIn("Issues, page 1, 1 items", output.getvalue())
 
     def test_missing_recovery_boundary_fails_before_mutations(self):
         for metadata in (
@@ -448,16 +562,23 @@ class DeliveryTests(unittest.TestCase):
                 "isPrerelease": False,
             },
         ]
-        with patch.object(sync, "ancestor", side_effect=[True, False, True]):
+        with (
+            patch.object(sync, "ancestor", return_value=True),
+            patch.object(sync, "tag_names", return_value={"v1", "v2"}),
+            patch.object(sync, "tags_containing", return_value={"v2"}),
+        ):
             desired = sync.delivery(merged, {}, [], releases, "b" * 40)
         self.assertEqual(desired["发布版本"], "v2")
         self.assertEqual(desired["发布说明"], "release2")
         self.assertEqual(desired["交付进度"], "已发布")
-        with patch.object(sync, "ancestor", return_value=False) as ancestor:
+        with (
+            patch.object(sync, "ancestor", return_value=True),
+            patch.object(sync, "tag_names", return_value={"v1", "v2"}),
+            patch.object(sync, "tags_containing", return_value=set()),
+        ):
             self.assertEqual(
                 sync.delivery(merged, {}, [], releases, "b" * 40)["发布版本"], ""
             )
-            self.assertEqual(ancestor.call_count, 1)
 
     def test_prerelease_and_draft_are_not_stable_delivery(self):
         merged = {
@@ -475,7 +596,10 @@ class DeliveryTests(unittest.TestCase):
             }
             for draft, pre in [(True, False), (False, True)]
         ]
-        with patch.object(sync, "ancestor", return_value=True):
+        with (
+            patch.object(sync, "ancestor", return_value=True),
+            patch.object(sync, "tag_names", return_value=set()),
+        ):
             desired = sync.delivery(merged, {}, [], releases, "b" * 40)
         self.assertEqual(desired["交付进度"], "已合入待发布")
         self.assertEqual(desired["发布版本"], "")
