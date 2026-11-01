@@ -285,7 +285,7 @@ async def test_background_real_generator_cancel_closes_before_return(monkeypatch
         wakeups.append(kwargs)
 
     monkeypatch.setattr(
-        FunctionToolExecutor, "_wake_main_agent_for_background_result", wake
+        "astrbot.core.astr_agent_tool_exec.wake_background_agent", wake
     )
     context = ContextWrapper(context=SimpleNamespace(event=SimpleNamespace()))
     tool = FunctionTool(

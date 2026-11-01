@@ -12,6 +12,7 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+from astrbot.core.astr_agent_wakeup import wake_background_agent
 from astrbot.core.message.components import Image
 from astrbot.core.provider.func_tool_manager import (
     FunctionToolManager,
@@ -242,7 +243,7 @@ async def test_do_handoff_background_reports_prepared_image_urls(
             content=[mcp.types.TextContent(type="text", text="ok")]
         )
 
-    async def _fake_wake(cls, run_context, **kwargs):
+    async def _fake_wake(run_context, **kwargs):
         captured.update(kwargs)
 
     monkeypatch.setattr(
@@ -250,13 +251,10 @@ async def test_do_handoff_background_reports_prepared_image_urls(
         "_execute_handoff",
         classmethod(_fake_execute_handoff),
     )
-    monkeypatch.setattr(
-        FunctionToolExecutor,
-        "_wake_main_agent_for_background_result",
-        classmethod(_fake_wake),
-    )
-
     run_context = _build_run_context()
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_tool_exec.wake_background_agent", _fake_wake
+    )
     await FunctionToolExecutor._do_handoff_background(
         tool=_DummyTool(),
         run_context=run_context,
@@ -436,19 +434,22 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
     ]
     captured: dict = {}
 
-    async def _fake_get_session_conv(**_kwargs):
+    async def _fake_get_session_conv(*_args, **_kwargs):
         if stop_phase == "history":
             stop_signal.set()
         return SimpleNamespace(history=json.dumps(history))
 
     async def _fake_build_main_agent(**kwargs):
+        from astrbot.core.astr_main_agent.request import prepare_request
+        await prepare_request(kwargs["event"], kwargs["plugin_context"], kwargs["config"],
+            SimpleNamespace(provider_config={"modalities": ["image"]}), kwargs["req"])
         captured.update(kwargs)
         if stop_phase == "build":
             stop_signal.set()
         return SimpleNamespace(agent_runner=_DoneRunner())
 
     monkeypatch.setattr(
-        "astrbot.core.astr_main_agent._get_session_conv",
+        "astrbot.core.astr_main_agent.request._get_session_conv",
         _fake_get_session_conv,
     )
     monkeypatch.setattr(
@@ -457,7 +458,7 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
     )
     persist = AsyncMock()
     monkeypatch.setattr(
-        "astrbot.core.astr_agent_tool_exec.persist_agent_history",
+        "astrbot.core.astr_agent_wakeup.persist_agent_history",
         persist,
     )
 
@@ -482,7 +483,7 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
     if stop_phase == "before":
         stop_signal.set()
 
-    await FunctionToolExecutor._wake_main_agent_for_background_result(
+    await wake_background_agent(
         run_context,
         task_id="task-id",
         tool_name="long_tool",
@@ -492,7 +493,7 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
         summary_name="BackgroundTask",
     )
 
-    if stop_phase in ("before", "history"):
+    if stop_phase == "before":
         assert not captured
         persist.assert_not_awaited()
         return
@@ -507,7 +508,7 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
     assert request.contexts == history
     assert captured["event"].get_extra("_background_stop_signal") is stop_signal
     assert "_background_stop_signal" not in request.system_prompt
-    assert persist.await_count == (0 if stop_phase == "build" else 1)
+    assert persist.await_count == (0 if stop_phase in ("history", "build") else 1)
 
 
 @pytest.mark.asyncio
@@ -547,7 +548,7 @@ async def test_background_wakeup_applies_max_agent_step(
         return SimpleNamespace(agent_runner=runner)
 
     monkeypatch.setattr(
-        "astrbot.core.astr_main_agent._get_session_conv",
+        "astrbot.core.astr_main_agent.request._get_session_conv",
         _fake_get_session_conv,
     )
     monkeypatch.setattr(
@@ -555,7 +556,7 @@ async def test_background_wakeup_applies_max_agent_step(
         _fake_build_main_agent,
     )
     monkeypatch.setattr(
-        "astrbot.core.astr_agent_tool_exec.persist_agent_history",
+        "astrbot.core.astr_agent_wakeup.persist_agent_history",
         AsyncMock(),
     )
 
@@ -584,7 +585,7 @@ async def test_background_wakeup_applies_max_agent_step(
         tool_call_timeout=120,
     )
 
-    await FunctionToolExecutor._wake_main_agent_for_background_result(
+    await wake_background_agent(
         run_context,
         task_id="task-id",
         tool_name="long_tool",
@@ -642,7 +643,7 @@ async def test_background_wakeup_warns_when_result_is_not_sent_to_user(
         return SimpleNamespace(agent_runner=_Runner(kwargs["event"]))
 
     monkeypatch.setattr(
-        "astrbot.core.astr_main_agent._get_session_conv",
+        "astrbot.core.astr_main_agent.request._get_session_conv",
         _fake_get_session_conv,
     )
     monkeypatch.setattr(
@@ -650,17 +651,17 @@ async def test_background_wakeup_warns_when_result_is_not_sent_to_user(
         _fake_build_main_agent,
     )
     monkeypatch.setattr(
-        "astrbot.core.astr_agent_tool_exec.persist_agent_history",
+        "astrbot.core.astr_agent_wakeup.persist_agent_history",
         AsyncMock(),
     )
     logger = MagicMock()
-    monkeypatch.setattr("astrbot.core.astr_agent_tool_exec.logger", logger)
+    monkeypatch.setattr("astrbot.core.astr_agent_wakeup.logger", logger)
     run_context = ContextWrapper(
         context=SimpleNamespace(event=_DummyEvent([]), context=context),
         tool_call_timeout=120,
     )
 
-    await FunctionToolExecutor._wake_main_agent_for_background_result(
+    await wake_background_agent(
         run_context,
         task_id="task-id",
         tool_name="long_tool",
@@ -734,7 +735,7 @@ async def test_background_execution_lifecycle(
 
     wakeup = AsyncMock(side_effect=wake)
     monkeypatch.setattr(
-        FunctionToolExecutor, "_wake_main_agent_for_background_result", wakeup
+        "astrbot.core.astr_agent_tool_exec.wake_background_agent", wakeup
     )
     monkeypatch.setattr(
         FunctionToolExecutor,

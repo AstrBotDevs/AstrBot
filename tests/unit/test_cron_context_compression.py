@@ -1,3 +1,5 @@
+from astrbot.core.astr_agent_wakeup import wake_background_agent, wake_cron_agent
+
 """Regression tests for session compression in chat, Cron and background wakeups."""
 
 import copy
@@ -9,7 +11,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from astrbot.core.agent.tool import FunctionTool
-from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.astr_main_agent import MainAgentBuildConfig
 from astrbot.core.config.agent_runner import resolve_context_compression_config
 from astrbot.core.config.default import DEFAULT_CONFIG
@@ -108,6 +109,12 @@ async def test_wakeup_uses_same_compression_settings_as_chat(
     """Resolve compression from the bound session without changing its history."""
     conf = copy.deepcopy(DEFAULT_CONFIG)
     conf["agent_runner"]["config"]["compression"] = compression or {}
+    conf["agent_runner"]["config"]["model"]["request_max_retries"] = 2
+    conf["agent_runner"]["config"]["misc"]["tool_schema_mode"] = "skills_like"
+    conf["kb_agentic_mode"] = True
+    conf["provider_settings"]["file_extract"] = {"enable": True, "provider": "test"}
+    conf["provider_settings"]["proactive_capability"] = {"add_cron_tools": False}
+    conf["provider_settings"]["max_quoted_fallback_images"] = 3
     ctx = MagicMock()
     ctx.get_config.return_value = conf
     stage = InternalAgentSubStage()
@@ -140,18 +147,18 @@ async def test_wakeup_uses_same_compression_settings_as_chat(
     ctx.get_config.reset_mock()
     with (
         patch(
-            "astrbot.core.astr_main_agent._get_session_conv",
+            'astrbot.core.astr_main_agent.request._get_session_conv',
             AsyncMock(return_value=conv),
         ),
         patch(
-            "astrbot.core.astr_main_agent.build_main_agent",
+            'astrbot.core.astr_main_agent.build_main_agent',
             AsyncMock(return_value=SimpleNamespace(agent_runner=runner)),
         ) as build,
-        patch("astrbot.core.cron.manager.persist_agent_history", AsyncMock()),
-        patch("astrbot.core.astr_agent_tool_exec.persist_agent_history", AsyncMock()),
+        patch("astrbot.core.astr_agent_wakeup.persist_agent_history", AsyncMock()),
+        patch("astrbot.core.astr_agent_wakeup.persist_agent_history", AsyncMock()),
     ):
         if entrypoint == "cron":
-            await manager._woke_main_agent(
+            await wake_cron_agent(manager.ctx,
                 message="Run the scheduled task",
                 session_str="test:FriendMessage:user123",
                 extras={"cron_job": {"id": "job-1"}, "cron_payload": {}},
@@ -165,7 +172,7 @@ async def test_wakeup_uses_same_compression_settings_as_chat(
                     parameters={"type": "object", "properties": {}},
                 )
             )
-            await FunctionToolExecutor._wake_main_agent_for_background_result(
+            await wake_background_agent(
                 SimpleNamespace(
                     context=SimpleNamespace(
                         event=SimpleNamespace(
@@ -203,9 +210,22 @@ async def test_wakeup_uses_same_compression_settings_as_chat(
     )
     assert tuple(getattr(wakeup_config, name) for name in fields) == expected
     assert tuple(getattr(stage.main_agent_cfg, name) for name in fields) == expected
+    for name in (
+        "request_max_retries",
+        "tool_schema_mode",
+        "kb_agentic_mode",
+        "file_extract_enabled",
+        "file_extract_prov",
+        "add_cron_tools",
+        "max_quoted_fallback_images",
+        "provider_settings",
+    ):
+        assert getattr(wakeup_config, name) == getattr(stage.main_agent_cfg, name)
     assert wakeup_config.streaming_response is False
+    assert wakeup_config.call_request_hook is False
     request = build.await_args.kwargs["req"]
-    assert request.contexts == history
+    assert wakeup_config.load_session_history is True
+    assert request.contexts == []  # The builder, not the trigger adapter, loads history.
     assert "An earlier request" not in request.system_prompt
     assert conf == original_conf
     assert json.loads(conv.history) == history

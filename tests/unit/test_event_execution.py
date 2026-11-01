@@ -1,3 +1,5 @@
+from astrbot.core.astr_agent_wakeup import wake_cron_agent
+
 """Shared event lifecycle regression coverage for messages and Cron jobs."""
 
 import asyncio
@@ -9,6 +11,7 @@ import pytest
 from opentelemetry.trace import format_trace_id, get_current_span
 
 from astrbot.core.agent.runners.base import AgentState
+from astrbot.core.astr_main_agent import request as request_build
 from astrbot.core.cron.manager import CronJobManager
 from astrbot.core.log import _log_context, log_context
 from astrbot.core.pipeline import scheduler as scheduler_module
@@ -266,7 +269,6 @@ async def test_cron_uses_event_scope(frames, monkeypatch, failure_at):
         failure_at: Optional execution step that fails.
     """
     from astrbot.core import astr_main_agent
-    from astrbot.core.cron import manager as cron_module
 
     ctx = MagicMock()
     ctx.get_config.return_value = {"admins_id": []}
@@ -276,8 +278,8 @@ async def test_cron_uses_event_scope(frames, monkeypatch, failure_at):
     manager.ctx = ctx
     captured = {}
 
-    async def conversation(**kwargs):
-        captured["event"] = kwargs["event"]
+    async def conversation(event, plugin_context):
+        captured["event"] = event
         assert (
             format_trace_id(get_current_span().get_span_context().trace_id)
             == captured["event"].trace.trace_id
@@ -309,6 +311,11 @@ async def test_cron_uses_event_scope(frames, monkeypatch, failure_at):
         assert _log_context.get().platform_type == "cron"
         if failure_at == "build":
             raise RuntimeError("build failed")
+        if failure_at != "empty":
+            await request_build.prepare_request(
+                kwargs["event"], kwargs["plugin_context"], kwargs["config"],
+                SimpleNamespace(provider_config={"modalities": ["image"]}), kwargs["req"],
+            )
         return None if failure_at == "empty" else SimpleNamespace(agent_runner=runner)
 
     async def persist(*args, **kwargs):
@@ -320,11 +327,11 @@ async def test_cron_uses_event_scope(frames, monkeypatch, failure_at):
         if failure_at == "history":
             raise RuntimeError("history failed")
 
-    monkeypatch.setattr(astr_main_agent, "_get_session_conv", conversation)
+    monkeypatch.setattr(request_build, "_get_session_conv", conversation)
     monkeypatch.setattr(astr_main_agent, "build_main_agent", build)
     save = AsyncMock(side_effect=persist)
-    monkeypatch.setattr(cron_module, "persist_agent_history", save)
-    execution = manager._woke_main_agent(
+    monkeypatch.setattr("astrbot.core.astr_agent_wakeup.persist_agent_history", save)
+    execution = wake_cron_agent(manager.ctx,
         message="Scheduled task",
         session_str="test:FriendMessage:cron-execution-test",
         extras={"cron_job": {"id": "test-job"}},

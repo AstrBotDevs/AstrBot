@@ -1,3 +1,5 @@
+from astrbot.core.astr_agent_wakeup import wake_cron_agent
+
 """Tests for CronJobManager."""
 
 import asyncio
@@ -681,7 +683,7 @@ class TestRunActiveAgentJob:
         """Apply the session plugin policy to cron response hooks and tools."""
         from astrbot.core.agent.tool import FunctionTool, ToolSet
         from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
-        from astrbot.core.astr_main_agent import _plugin_tool_fix
+        from astrbot.core.astr_main_agent.plugins import filter_tools
         from astrbot.core.pipeline import context_utils
         from astrbot.core.star.star import StarMetadata, star_map
         from astrbot.core.star.star_handler import (
@@ -731,16 +733,16 @@ class TestRunActiveAgentJob:
         runner.get_final_llm_resp.return_value = None
         with (
             patch(
-                "astrbot.core.astr_main_agent._get_session_conv",
+                'astrbot.core.astr_main_agent.request._get_session_conv',
                 AsyncMock(return_value=SimpleNamespace(history="[]")),
             ),
             patch(
-                "astrbot.core.astr_main_agent.build_main_agent",
+                'astrbot.core.astr_main_agent.build_main_agent',
                 AsyncMock(return_value=SimpleNamespace(agent_runner=runner)),
             ) as build_agent,
-            patch("astrbot.core.cron.manager.persist_agent_history", AsyncMock()),
+            patch("astrbot.core.astr_agent_wakeup.persist_agent_history", AsyncMock()),
         ):
-            await cron_manager._woke_main_agent(
+            await wake_cron_agent(cron_manager.ctx,
                 message="run scheduled task",
                 session_str="test:GroupMessage:group123",
                 extras={"cron_job": {"id": "job-1"}, "cron_payload": {}},
@@ -750,7 +752,7 @@ class TestRunActiveAgentJob:
         event = build_agent.call_args.kwargs["event"]
         req = build_agent.call_args.kwargs["req"]
         req.func_tool = tools
-        _plugin_tool_fix(event, req)
+        filter_tools(event, req)
         await MAIN_AGENT_HOOKS.on_agent_done(
             SimpleNamespace(context=SimpleNamespace(event=event)),
             SimpleNamespace(reasoning_content=""),
@@ -806,6 +808,9 @@ class TestRunActiveAgentJob:
         )
 
         async def fake_build_main_agent(*, event, plugin_context, config, req):
+            from astrbot.core.astr_main_agent.request import prepare_request
+            await prepare_request(event, plugin_context, config,
+                SimpleNamespace(provider_config={"modalities": ["image"]}), req)
             captured["config"] = config
             captured["req"] = req
             captured["requests"].append(req)
@@ -816,20 +821,20 @@ class TestRunActiveAgentJob:
 
         with (
             patch(
-                "astrbot.core.astr_main_agent._get_session_conv",
+                'astrbot.core.astr_main_agent.request._get_session_conv',
                 AsyncMock(return_value=conv),
             ),
             patch(
-                "astrbot.core.astr_main_agent.build_main_agent",
+                'astrbot.core.astr_main_agent.build_main_agent',
                 side_effect=fake_build_main_agent,
             ),
             patch(
-                "astrbot.core.cron.manager.persist_agent_history",
+                "astrbot.core.astr_agent_wakeup.persist_agent_history",
                 side_effect=fake_persist_agent_history,
             ),
         ):
             for started_at in started_ats:
-                await cron_manager._woke_main_agent(
+                await wake_cron_agent(cron_manager.ctx,
                     message="run scheduled task",
                     session_str="test:FriendMessage:user123",
                     extras={
@@ -844,7 +849,8 @@ class TestRunActiveAgentJob:
 
         config = captured["config"]
         assert config.tool_call_timeout == 77
-        assert config.provider_settings is provider_settings
+        assert config.provider_settings == provider_settings
+        assert config.provider_settings is not provider_settings
         assert config.provider_settings["fallback_chat_models"] == ["fallback-provider"]
         request = captured["req"]
         assert "old question" not in request.system_prompt
@@ -925,19 +931,19 @@ class TestRunActiveAgentJob:
 
         with (
             patch(
-                "astrbot.core.astr_main_agent._get_session_conv",
+                'astrbot.core.astr_main_agent.request._get_session_conv',
                 AsyncMock(return_value=conv),
             ),
             patch(
-                "astrbot.core.astr_main_agent.build_main_agent",
+                'astrbot.core.astr_main_agent.build_main_agent',
                 side_effect=fake_build_main_agent,
             ),
             patch(
-                "astrbot.core.cron.manager.persist_agent_history",
+                "astrbot.core.astr_agent_wakeup.persist_agent_history",
                 AsyncMock(),
             ),
         ):
-            await cron_manager._woke_main_agent(
+            await wake_cron_agent(cron_manager.ctx,
                 message="run scheduled task",
                 session_str="test:FriendMessage:user123",
                 extras={"cron_job": {"id": "job-1"}, "cron_payload": {}},
@@ -978,11 +984,11 @@ class TestRunActiveAgentJob:
         fake_result = SimpleNamespace(agent_runner=FakeRunner())
         with (
             patch(
-                "astrbot.core.astr_main_agent.build_main_agent",
+                'astrbot.core.astr_main_agent.build_main_agent',
                 new=AsyncMock(return_value=fake_result),
             ),
             patch(
-                "astrbot.core.astr_main_agent._get_session_conv",
+                'astrbot.core.astr_main_agent.request._get_session_conv',
                 new=AsyncMock(return_value=SimpleNamespace(history="[]")),
             ),
         ):
@@ -1010,11 +1016,11 @@ class TestRunActiveAgentJob:
         cron_manager.ctx = mock_context
         with (
             patch(
-                "astrbot.core.astr_main_agent.build_main_agent",
+                'astrbot.core.astr_main_agent.build_main_agent',
                 new=AsyncMock(return_value=None),
             ),
             patch(
-                "astrbot.core.astr_main_agent._get_session_conv",
+                'astrbot.core.astr_main_agent.request._get_session_conv',
                 new=AsyncMock(return_value=SimpleNamespace(history="[]")),
             ),
         ):

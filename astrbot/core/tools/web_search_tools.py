@@ -180,8 +180,8 @@ def normalize_legacy_web_search_config(cfg) -> None:
             provider_settings[setting_name] = [value] if value else []
             changed = True
 
-    if changed:
-        cfg.save_config()
+    if changed and callable(save_config := getattr(cfg, "save_config", None)):
+        save_config()
 
 
 def _get_runtime(context) -> tuple[dict, dict, str]:
