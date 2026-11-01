@@ -13,8 +13,9 @@ from astrbot.core.agent.runners.deerflow.deerflow_agent_runner import (
     DeerFlowAgentRunner,
 )
 from astrbot.core.agent.runners.dify.dify_agent_runner import DifyAgentRunner
-from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
+from astrbot.core.astr_agent_hooks import MainAgentHooks
 from astrbot.core.astr_main_agent import _matches_provider_wake_prefix
+from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.message.components import Image, Record
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -207,21 +208,24 @@ class ThirdPartyAgentSubStage(Stage):
         aggregator = _RunnerResultAggregator()
 
         async def _stream_runner_chain() -> AsyncGenerator[MessageChain, None]:
-            mark_stream_consumed()
+            responses = run_third_party_agent(
+                runner,
+                stream_to_general=False,
+                custom_error_message=custom_error_message,
+            )
             try:
-                async for chain, is_error in run_third_party_agent(
-                    runner,
-                    stream_to_general=False,
-                    custom_error_message=custom_error_message,
-                ):
+                mark_stream_consumed()
+                async for chain, is_error in responses:
                     aggregator.add_chunk(chain, is_error)
                     if is_error:
                         event.set_extra(THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY, True)
                     yield chain
             finally:
-                # Streaming runner cleanup must happen after consumer
-                # finishes iterating to avoid tearing down active streams.
-                await close_runner_once()
+                # Close the response iterator before settling its owning runner.
+                try:
+                    await responses.aclose()
+                finally:
+                    await close_runner_once()
 
         event.set_result(
             MessageEventResult()
@@ -329,8 +333,23 @@ class ThirdPartyAgentSubStage(Stage):
         custom_error_message = await self._resolve_persona_custom_error_message(event)
         set_persona_custom_error_message_on_event(event, custom_error_message)
 
+        event_writer = None
+        manager = self.ctx.plugin_manager.context.conversation_manager
+        if isinstance(manager, ConversationManager):
+            cid = await manager.get_curr_conversation_id(event.unified_msg_origin)
+            if not cid:
+                cid = await manager.new_conversation(
+                    event.unified_msg_origin, event.get_platform_id()
+                )
+            event_writer = await manager._event_writer(
+                cid, unified_msg_origin=event.unified_msg_origin
+            )
+            event_writer.request = req
+
         # call event hook
-        if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
+        if await call_event_hook(
+            event, EventType.OnLLMRequestEvent, req, writer=event_writer
+        ):
             return
 
         if self.runner_type == "dify":
@@ -370,7 +389,28 @@ class ThirdPartyAgentSubStage(Stage):
             if runner_closed:
                 return
             runner_closed = True
-            await _close_runner_if_supported(runner)
+            try:
+                if event_writer and event_writer.turn_id:
+                    final = runner.get_final_llm_resp()
+                    status = (
+                        "completed" if final and final.role == "assistant" else "failed"
+                    )
+                    if event.is_stopped() or not runner.done():
+                        status = "cancelled"
+                    if status == "completed":
+                        history = [entry["message"] for entry in event_writer._entries]
+                        history.append(await req.assemble_context())
+                        if final.completion_text:
+                            history.append(
+                                {
+                                    "role": "assistant",
+                                    "content": final.completion_text,
+                                }
+                            )
+                        await event_writer.save_history(history)
+                    await event_writer.finish_turn(status)
+            finally:
+                await _close_runner_if_supported(runner)
 
         def mark_stream_consumed() -> None:
             nonlocal stream_consumed
@@ -379,13 +419,24 @@ class ThirdPartyAgentSubStage(Stage):
                 stream_watchdog_task.cancel()
 
         try:
+            if event_writer:
+                turn_id = event.get_extra("turn_id")
+                await event_writer.start_turn(
+                    {
+                        "kind": "im_wake",
+                        "umo": event.unified_msg_origin,
+                        "runner": self.runner_type,
+                        "context_mode": "transcript_only",
+                    },
+                    event_id=turn_id if isinstance(turn_id, str) else None,
+                )
             await runner.reset(
                 request=req,
                 run_context=AgentContextWrapper(
                     context=astr_agent_ctx,
                     tool_call_timeout=120,
                 ),
-                agent_hooks=MAIN_AGENT_HOOKS,
+                agent_hooks=MainAgentHooks(event_writer),
                 provider_config=self.runner_config,
                 streaming=streaming_response,
             )

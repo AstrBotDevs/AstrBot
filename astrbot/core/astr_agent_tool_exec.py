@@ -641,38 +641,66 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         )
 
         result = await build_main_agent(
-            event=cron_event, plugin_context=ctx, config=config, req=req
+            event=cron_event,
+            plugin_context=ctx,
+            config=config,
+            req=req,
+            apply_reset=False,
         )
-        if stop_signal.is_set():
-            return
         if not result:
             logger.error(f"Failed to build main agent for background task {tool_name}.")
             return
 
         runner = result.agent_runner
-        async for _ in runner.step_until_done(agent_max_step):
-            # agent will send message to user via using tools
-            pass
-        llm_resp = runner.get_final_llm_resp()
-        task_meta = extras.get("background_task_result", {})
-        summary_note = (
-            f"[BackgroundTask] {summary_name} "
-            f"(task_id={task_meta.get('task_id', task_id)}) finished. "
-            f"Result: {task_meta.get('result') or result_text or 'no content'}"
-        )
-        if llm_resp and llm_resp.completion_text:
-            summary_note += (
-                f"I finished the task, here is the result: {llm_resp.completion_text}"
-            )
-        await persist_agent_history(
-            ctx.conversation_manager,
-            event=cron_event,
-            req=req,
-            summary_note=summary_note,
-        )
-        if not llm_resp:
-            logger.warning("background task agent got no response")
+        event_writer = result.conversation_events
+        reset_coro = result.reset_coro
+        if stop_signal.is_set():
+            if reset_coro is not None:
+                reset_coro.close()
             return
+        status = "failed"
+        try:
+            if reset_coro is not None:
+                await reset_coro
+                reset_coro = None
+            if event_writer is not None:
+                event_writer.runtime_context = runner.run_context
+            async with aclosing(runner.step_until_done(agent_max_step)) as responses:
+                async for response in responses:
+                    if event_writer is not None:
+                        await event_writer.consume(response)
+            llm_resp = runner.get_final_llm_resp()
+            task_meta = extras.get("background_task_result", {})
+            summary_note = (
+                f"[BackgroundTask] {summary_name} "
+                f"(task_id={task_meta.get('task_id', task_id)}) finished. "
+                f"Result: {task_meta.get('result') or result_text or 'no content'}"
+            )
+            if llm_resp and llm_resp.completion_text:
+                summary_note += f"I finished the task, here is the result: {llm_resp.completion_text}"
+            await persist_agent_history(
+                ctx.conversation_manager,
+                event=cron_event,
+                req=req,
+                summary_note=summary_note,
+                conversation_events=event_writer,
+            )
+            status = (
+                "completed" if llm_resp and llm_resp.role == "assistant" else "failed"
+            )
+            if not llm_resp:
+                logger.warning("background task agent got no response")
+                return
+        except asyncio.CancelledError:
+            status = "cancelled"
+            raise
+        finally:
+            try:
+                if event_writer is not None:
+                    await event_writer.finish_turn(status)
+            finally:
+                if reset_coro is not None:
+                    reset_coro.close()
         # Set once anything reaches this session, e.g. via send_message_to_user.
         if not cron_event._has_send_oper:
             logger.warning(

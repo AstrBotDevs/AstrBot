@@ -9,7 +9,7 @@ from sqlmodel import col, func, select
 from astrbot.core import logger, sp
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
-from astrbot.core.db.po import ConversationV2, Preference, UmoAlias, UmoSender
+from astrbot.core.db.po import ConversationV3, Preference, UmoAlias, UmoSender
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.umo_alias import build_umo_alias_map, parse_umo, serialize_umo_alias
 
@@ -63,8 +63,8 @@ class SessionManagementService:
         """
         sources = (
             select(
-                col(ConversationV2.user_id).label("umo"),
-                col(ConversationV2.updated_at).label("updated_at"),
+                col(ConversationV3.umo).label("umo"),
+                col(ConversationV3.updated_at).label("updated_at"),
             )
             .union_all(
                 select(UmoSender.umo, UmoSender.updated_at),

@@ -11,6 +11,7 @@ from tenacity import (
 )
 
 from astrbot import logger
+from astrbot.core.agent.event_stream import RequestEventRecorder
 from astrbot.core.utils.config_number import coerce_int_config
 from astrbot.core.utils.network_utils import is_connection_error
 
@@ -114,6 +115,7 @@ async def retry_provider_request(
     *,
     retry_rate_limits: bool = True,
     max_attempts: int | None = None,
+    request_event_recorder: RequestEventRecorder | None = None,
 ) -> T:
     retrying = _build_retrying(
         provider_label,
@@ -123,7 +125,15 @@ async def retry_provider_request(
 
     async for attempt in retrying:
         with attempt:
-            return await request_factory()
+            recorder = request_event_recorder
+            if recorder:
+                await recorder.before_network_attempt()
+            try:
+                return await request_factory()
+            except Exception as exc:
+                if recorder:
+                    await recorder.finish("failed", error_code=type(exc).__name__)
+                raise
 
     raise RuntimeError("Provider request retry loop exited unexpectedly.")
 
@@ -135,6 +145,7 @@ async def retry_provider_request_context(
     *,
     retry_rate_limits: bool = True,
     max_attempts: int | None = None,
+    request_event_recorder: RequestEventRecorder | None = None,
 ) -> AsyncIterator[T]:
     manager: AbstractAsyncContextManager[T] | None = None
 
@@ -148,6 +159,7 @@ async def retry_provider_request_context(
         _enter_context,
         retry_rate_limits=retry_rate_limits,
         max_attempts=max_attempts,
+        request_event_recorder=request_event_recorder,
     )
 
     if manager is None:

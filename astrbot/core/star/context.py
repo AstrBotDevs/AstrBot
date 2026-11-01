@@ -165,8 +165,10 @@ class Context:
         """模型提供商管理器"""
         self.platform_manager = platform_manager
         """平台适配器管理器"""
-        self.conversation_manager = conversation_manager
-        """会话管理器"""
+        self.conversations = conversation_manager
+        """Conversation operations available to plugins."""
+        self.conversation_manager = self.conversations
+        """Compatibility alias for plugins using the previous entry point."""
         self.message_history_manager = message_history_manager
         """平台消息历史管理器"""
         self.persona_manager = persona_manager

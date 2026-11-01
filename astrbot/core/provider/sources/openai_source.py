@@ -18,6 +18,10 @@ from openai.types.completion_usage import CompletionUsage
 import astrbot.core.message.components as Comp
 from astrbot import logger
 from astrbot.api.provider import Provider
+from astrbot.core.agent.event_stream import (
+    RequestEventRecorder,
+    request_recorder_kwargs,
+)
 from astrbot.core.agent.message import (
     AudioURLPart,
     ContentPart,
@@ -535,6 +539,7 @@ class ProviderOpenAIOfficial(Provider):
         tools: ToolSet | None,
         *,
         request_max_retries: int | None = None,
+        request_event_recorder: RequestEventRecorder | None = None,
         conversation_id: str | None = None,
     ) -> LLMResponse:
         if tools:
@@ -576,6 +581,7 @@ class ProviderOpenAIOfficial(Provider):
                 extra_headers=build_conversation_headers(conversation_id),
             ),
             max_attempts=request_max_retries,
+            request_event_recorder=request_event_recorder,
         )
 
         if not isinstance(completion, ChatCompletion):
@@ -595,6 +601,7 @@ class ProviderOpenAIOfficial(Provider):
         tools: ToolSet | None,
         *,
         request_max_retries: int | None = None,
+        request_event_recorder: RequestEventRecorder | None = None,
         conversation_id: str | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式查询API，逐步返回结果"""
@@ -637,6 +644,7 @@ class ProviderOpenAIOfficial(Provider):
                 stream_options={"include_usage": True},
             ),
             max_attempts=request_max_retries,
+            request_event_recorder=request_event_recorder,
         )
 
         llm_response = LLMResponse("assistant", is_chunk=True)
@@ -1203,6 +1211,7 @@ class ProviderOpenAIOfficial(Provider):
         extra_user_content_parts=None,
         tool_choice: Literal["auto", "required"] = "auto",
         request_max_retries: int | None = None,
+        request_event_recorder: RequestEventRecorder | None = None,
         **kwargs,
     ) -> LLMResponse:
         conversation_id = kwargs.pop("conversation_id", None)
@@ -1238,6 +1247,7 @@ class ProviderOpenAIOfficial(Provider):
                     payloads,
                     func_tool,
                     request_max_retries=request_max_retries,
+                    **request_recorder_kwargs(self._query, request_event_recorder),
                     **query_kwargs,
                 )
                 break
@@ -1285,6 +1295,7 @@ class ProviderOpenAIOfficial(Provider):
         model=None,
         tool_choice: Literal["auto", "required"] = "auto",
         request_max_retries: int | None = None,
+        request_event_recorder: RequestEventRecorder | None = None,
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式对话，与服务商交互并逐步返回结果"""
@@ -1319,6 +1330,9 @@ class ProviderOpenAIOfficial(Provider):
                     payloads,
                     func_tool,
                     request_max_retries=request_max_retries,
+                    **request_recorder_kwargs(
+                        self._query_stream, request_event_recorder
+                    ),
                     **query_kwargs,
                 ):
                     yield response

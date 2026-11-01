@@ -139,7 +139,7 @@ def harness(tmp_path, monkeypatch):
     captured = []
     hooks = []
 
-    async def hook(event, kind, *args):
+    async def hook(event, kind, *args, writer=None):
         hooks.append(kind)
         return False
 
@@ -434,7 +434,7 @@ async def test_plugin_request_extra_metadata_hook_and_history(
     monkeypatch.setattr(image_input, "prepare_model_image", convert)
     seen = []
 
-    async def hook(event, kind, *args):
+    async def hook(event, kind, *args, writer=None):
         seen.append(kind)
         if kind == EventType.OnLLMRequestEvent:
             req = args[0]
@@ -532,7 +532,7 @@ async def test_provider_and_history_keep_bounded_previews_and_original_paths(
             event.set_extra("provider_request", original_request)
         else:
 
-            async def hook(event, kind, *args):
+            async def hook(event, kind, *args, writer=None):
                 if kind == EventType.OnLLMRequestEvent:
                     request = args[0]
                     request.image_urls = original_request.image_urls
@@ -743,7 +743,7 @@ async def test_oversized_images_explain_omission_and_keep_original_path(
         )
     else:
 
-        async def hook(event, kind, *args):
+        async def hook(event, kind, *args, writer=None):
             if kind == EventType.OnLLMRequestEvent:
                 args[0].image_urls.extend(refs)
             return False
@@ -1045,7 +1045,7 @@ async def test_plugin_and_hook_image_list_normalization(harness, tmp_path, monke
     )
     event.set_extra("provider_request", original)
 
-    async def hook(event, kind, *args):
+    async def hook(event, kind, *args, writer=None):
         if kind == EventType.OnLLMRequestEvent and event.session_id == "images":
             args[0].image_urls.extend([None, "  ", "  " + str(source) + "  "])
         return False
@@ -1093,7 +1093,7 @@ async def test_attachment_sources_survive_event_cleanup(
     async def download(url, target):
         Path(target).write_bytes(original)
 
-    async def hook(event, kind, *args):
+    async def hook(event, kind, *args, writer=None):
         if kind == EventType.OnWaitingLLMRequestEvent:
             event.message_obj.message.append(attachment)
         return False
@@ -1145,7 +1145,7 @@ async def test_stage_failure_preserves_sources_and_cleans_working_files(
     await preprocess_stage.initialize(harness.ctx)
     await preprocess_stage.process(event)
 
-    async def hook(event, kind, *args):
+    async def hook(event, kind, *args, writer=None):
         if kind == EventType.OnLLMRequestEvent:
             raise failure("request interrupted")
         return False
@@ -1278,7 +1278,7 @@ async def test_final_image_labels_follow_mixed_visuals_after_hook(
     convert = AsyncMock(wraps=image_input.prepare_model_image)
     monkeypatch.setattr(image_input, "prepare_model_image", convert)
 
-    async def hook(event, kind, *args):
+    async def hook(event, kind, *args, writer=None):
         if kind == EventType.OnLLMRequestEvent:
             req = args[0]
             if rewrite_text_parts:
@@ -1371,7 +1371,7 @@ async def test_captioned_quote_has_status_without_visual_index(
     event = make_event([Reply(id="quoted", chain=[Image(file=str(source))])])
     inserted = source_image(tmp_path, "JPEG")
 
-    async def hook(event, kind, *args):
+    async def hook(event, kind, *args, writer=None):
         if kind == EventType.OnLLMRequestEvent and add_uncaptioned_image:
             args[0].image_urls.append(str(inserted))
         return False
@@ -1473,7 +1473,7 @@ async def test_hook_only_new_refs_receive_full_image_policy(
     convert = AsyncMock(wraps=image_input.prepare_model_image)
     monkeypatch.setattr(image_input, "prepare_model_image", convert)
 
-    async def hook(event, kind, *args):
+    async def hook(event, kind, *args, writer=None):
         if kind == EventType.OnLLMRequestEvent:
             req = args[0]
             assert convert.await_count == 1
@@ -1609,7 +1609,7 @@ async def test_only_actually_captioned_images_receive_caption_status(
         ),
     )
 
-    async def hook(event, kind, *args):
+    async def hook(event, kind, *args, writer=None):
         if kind == EventType.OnLLMRequestEvent and drop_extra_in_hook:
             req = args[0]
             req.extra_user_content_parts = [

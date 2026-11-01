@@ -7,12 +7,22 @@
 import json
 from collections.abc import Awaitable, Callable
 
-from deprecated import deprecated
-
 from astrbot.core import sp
-from astrbot.core.agent.message import AssistantMessageSegment, UserMessageSegment
+from astrbot.core.agent.conversation_events import ConversationEventWriter
+from astrbot.core.agent.message import (
+    AssistantMessageSegment,
+    ContentPart,
+    UserMessageSegment,
+    dump_messages_with_checkpoints,
+)
 from astrbot.core.db import BaseDatabase
-from astrbot.core.db.po import Conversation, ConversationV2
+from astrbot.core.db.conversation import ConversationConflictError, ConversationStore
+from astrbot.core.db.po import (
+    Conversation,
+    ConversationData,
+    ConversationRead,
+    ConversationRevision,
+)
 from astrbot.core.utils.datetime_utils import to_utc_timestamp
 
 
@@ -26,6 +36,142 @@ class ConversationManager:
 
         # 会话删除回调函数列表（用于级联清理，如知识库配置）
         self._on_session_deleted_callbacks: list[Callable[[str], Awaitable[None]]] = []
+
+    async def _event_writer(
+        self,
+        conversation_id: str,
+        *,
+        unified_msg_origin: str | None = None,
+        expected_revision: ConversationRevision | None = None,
+    ) -> ConversationEventWriter:
+        """Create a writer for an explicitly selected conversation revision.
+
+        Args:
+            conversation_id: Public conversation identity.
+            unified_msg_origin: Optional explicit owner UMO for host access checks.
+            expected_revision: Revision used to prepare the host's request.
+
+        Returns:
+            A new writer owned by the caller, independent of other executions.
+
+        Raises:
+            ValueError: The identity is invalid, missing, or owned by another UMO.
+            ConversationConflictError: The prepared revision is no longer current.
+        """
+        if not isinstance(conversation_id, str) or not conversation_id:
+            raise ValueError("Provide a nonempty cid explicitly")
+        snapshot = await self.db.conversation_store.read(conversation_id)
+        if snapshot is None or (
+            unified_msg_origin is not None
+            and snapshot.conversation.umo != unified_msg_origin
+        ):
+            raise ValueError("Conversation is not accessible")
+        writer = ConversationEventWriter(self.db.conversation_store, snapshot)
+        if expected_revision is not None and (
+            expected_revision.head_seq != writer.head_seq
+            or expected_revision.leaf_event_id != writer.leaf_event_id
+        ):
+            raise ConversationConflictError(
+                "Conversation changed while preparing the request"
+            )
+        return writer
+
+    async def append_message(
+        self,
+        content: str | list[ContentPart | dict],
+        *,
+        cid: str,
+        message_id: str | None = None,
+    ) -> str:
+        """Append plugin-supplied content as a user message.
+
+        Args:
+            content: Text or AstrBot content parts. The host supplies the user role.
+            cid: Explicit target conversation. This operation does not modify
+                any running agent's working context.
+            message_id: Optional stable identity for idempotent submission retries.
+
+        Returns:
+            Identity of the committed message.
+
+        Raises:
+            ValueError: The conversation is inaccessible or the input is invalid.
+            ConversationConflictError: The conversation changed before the write.
+            ConversationPersistenceError: The write could not be acknowledged.
+        """
+        if message_id is not None and (
+            not isinstance(message_id, str) or not message_id
+        ):
+            raise ValueError("message_id must be a nonempty string")
+        if not isinstance(content, (str, list)):
+            raise ValueError("content must be text or a list of content parts")
+        message = UserMessageSegment(content=content)
+        serialized = dump_messages_with_checkpoints([message], include_temporary=True)[
+            0
+        ]
+        writer = await self._event_writer(conversation_id=cid)
+        saved = await writer.append_message(serialized, event_id=message_id)
+        return saved.event_id
+
+    async def append_plugin_event(
+        self,
+        event_type: str,
+        data: dict,
+        *,
+        cid: str,
+        event_id: str | None = None,
+    ) -> str:
+        """Persist a custom conversation record without changing model context.
+
+        Args:
+            event_type: Plugin-prefixed name, such as ``my_plugin.retrieval_completed``.
+            data: JSON-serializable object containing the plugin's event data.
+            cid: Explicit target conversation. This operation does not modify
+                any running agent's working context.
+            event_id: Optional stable identity for idempotent submission retries.
+
+        Returns:
+            Identity of the committed plugin event.
+
+        Raises:
+            ValueError: The conversation is inaccessible or the input is invalid.
+            ConversationConflictError: The conversation changed before the write.
+            ConversationPersistenceError: The write could not be acknowledged.
+        """
+        if (
+            not isinstance(event_type, str)
+            or not event_type
+            or any(
+                not (c.isascii() and (c.isalnum() or c in "_.-")) for c in event_type
+            )
+        ):
+            raise ValueError("event_type must be a nonempty plugin-prefixed name")
+        if not isinstance(data, dict):
+            raise ValueError("data must be a JSON object")
+        if event_id is not None and (not isinstance(event_id, str) or not event_id):
+            raise ValueError("event_id must be a nonempty string")
+        writer = await self._event_writer(conversation_id=cid)
+        saved = await writer.append(f"plugin.{event_type}", data, event_id=event_id)
+        return saved.event_id
+
+    async def fork_conversation(
+        self, unified_msg_origin: str, source_event_id: str
+    ) -> str:
+        """Create a side conversation with an independent context snapshot.
+
+        Args:
+            unified_msg_origin: Owner UMO.
+            source_event_id: Accessible historical position to copy.
+
+        Returns:
+            Public identity of the new conversation; selection is unchanged.
+        """
+        conv = await self.db.conversation_store.create(
+            umo=unified_msg_origin,
+            platform_id=unified_msg_origin.split(":", 1)[0],
+            source_event_id=source_event_id,
+        )
+        return conv.conversation_id
 
     def register_on_session_deleted(
         self,
@@ -59,34 +205,35 @@ class ConversationManager:
                     f"会话删除回调执行失败 (session: {unified_msg_origin}): {e}",
                 )
 
-    def _convert_conv_from_v2_to_v1(
+    def _to_conversation(
         self,
-        conv_v2: ConversationV2,
+        record: ConversationData,
         include_history: bool = True,
     ) -> Conversation:
-        """Convert a ConversationV2 object into the legacy Conversation object.
+        """Convert a database read result into the plugin-facing conversation.
 
         Args:
-            conv_v2: Database conversation object.
+            record: Detached database read result or legacy conversation data.
             include_history: Whether to access and serialize the full history.
 
         Returns:
             Legacy-compatible conversation object.
         """
-        created_ts = to_utc_timestamp(conv_v2.created_at)
-        updated_ts = to_utc_timestamp(conv_v2.updated_at)
+        created_ts = to_utc_timestamp(record.created_at)
+        updated_ts = to_utc_timestamp(record.updated_at)
         created_at = int(created_ts) if created_ts is not None else 0
         updated_at = int(updated_ts) if updated_ts is not None else 0
         return Conversation(
-            platform_id=conv_v2.platform_id,
-            user_id=conv_v2.user_id,
-            cid=conv_v2.conversation_id,
-            history=json.dumps(conv_v2.content or []) if include_history else "[]",
-            title=conv_v2.title,
-            persona_id=conv_v2.persona_id,
+            platform_id=record.platform_id,
+            user_id=record.user_id,
+            cid=record.conversation_id,
+            history=json.dumps(record.content or []) if include_history else "[]",
+            title=record.title,
+            persona_id=record.persona_id,
             created_at=created_at,
             updated_at=updated_at,
-            token_usage=conv_v2.token_usage,
+            token_usage=record.token_usage,
+            revision=record.revision if isinstance(record, ConversationRead) else None,
         )
 
     async def new_conversation(
@@ -210,7 +357,7 @@ class ConversationManager:
             conv = await self.db.get_conversation_by_id(cid=conversation_id)
         conv_res = None
         if conv:
-            conv_res = self._convert_conv_from_v2_to_v1(conv)
+            conv_res = self._to_conversation(conv)
         return conv_res
 
     async def get_conversations(
@@ -233,7 +380,7 @@ class ConversationManager:
         )
         convs_res = []
         for conv in convs:
-            conv_res = self._convert_conv_from_v2_to_v1(conv)
+            conv_res = self._to_conversation(conv)
             convs_res.append(conv_res)
         return convs_res
 
@@ -269,7 +416,7 @@ class ConversationManager:
         convs, cnt = await self.db.get_filtered_conversations(**query_kwargs)
         convs_res = []
         for conv in convs:
-            conv_res = self._convert_conv_from_v2_to_v1(
+            conv_res = self._to_conversation(
                 conv,
                 include_history=include_history,
             )
@@ -306,54 +453,6 @@ class ConversationManager:
                 token_usage=token_usage,
             )
 
-    @deprecated(reason="Use update_conversation() with the title parameter instead.")
-    async def update_conversation_title(
-        self,
-        unified_msg_origin: str,
-        title: str,
-        conversation_id: str | None = None,
-    ) -> None:
-        """更新会话的对话标题.
-
-        Args:
-            unified_msg_origin (str): 统一的消息来源字符串。格式为 platform_name:message_type:session_id
-            title (str): 对话标题
-            conversation_id (str): 对话 ID, 是 uuid 格式的字符串
-        Deprecated:
-            Use `update_conversation` with `title` parameter instead.
-
-        """
-        await self.update_conversation(
-            unified_msg_origin=unified_msg_origin,
-            conversation_id=conversation_id,
-            title=title,
-        )
-
-    @deprecated(
-        reason="Use update_conversation() with the persona_id parameter instead."
-    )
-    async def update_conversation_persona_id(
-        self,
-        unified_msg_origin: str,
-        persona_id: str,
-        conversation_id: str | None = None,
-    ) -> None:
-        """更新会话的对话 Persona ID.
-
-        Args:
-            unified_msg_origin (str): 统一的消息来源字符串。格式为 platform_name:message_type:session_id
-            persona_id (str): 对话 Persona ID
-            conversation_id (str): 对话 ID, 是 uuid 格式的字符串
-        Deprecated:
-            Use `update_conversation` with `persona_id` parameter instead.
-
-        """
-        await self.update_conversation(
-            unified_msg_origin=unified_msg_origin,
-            conversation_id=conversation_id,
-            persona_id=persona_id,
-        )
-
     async def add_message_pair(
         self,
         cid: str,
@@ -370,24 +469,33 @@ class ConversationManager:
         Raises:
             Exception: If the conversation with the given ID is not found
         """
+        if isinstance(self.db.conversation_store, ConversationStore):
+            snapshot = await self.db.conversation_store.read(cid)
+            if snapshot is None:
+                raise ValueError(f"Conversation with id {cid} not found")
+            messages = [
+                m.model_dump() if hasattr(m, "model_dump") else m
+                for m in (user_message, assistant_message)
+            ]
+            await self.db.conversation_store.append(
+                cid,
+                [
+                    {"type": "message.appended", "payload": {"message": message}}
+                    for message in messages
+                ],
+                expected_head=snapshot.conversation.head_seq,
+                expected_leaf=snapshot.conversation.leaf_event_id,
+            )
+            return
         conv = await self.db.get_conversation_by_id(cid=cid)
-        if not conv:
-            raise Exception(f"Conversation with id {cid} not found")
+        if conv is None:
+            raise ValueError(f"Conversation with id {cid} not found")
         history = conv.content or []
-        if isinstance(user_message, UserMessageSegment):
-            user_msg_dict = user_message.model_dump()
-        else:
-            user_msg_dict = user_message
-        if isinstance(assistant_message, AssistantMessageSegment):
-            assistant_msg_dict = assistant_message.model_dump()
-        else:
-            assistant_msg_dict = assistant_message
-        history.append(user_msg_dict)
-        history.append(assistant_msg_dict)
-        await self.db.update_conversation(
-            cid=cid,
-            content=history,
+        history.extend(
+            m.model_dump() if hasattr(m, "model_dump") else m
+            for m in (user_message, assistant_message)
         )
+        await self.db.update_conversation(cid=cid, content=history)
 
     async def get_human_readable_context(
         self,

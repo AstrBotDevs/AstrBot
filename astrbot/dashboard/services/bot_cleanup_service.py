@@ -7,7 +7,8 @@ from sqlmodel import col, delete, func, select
 from astrbot.core import sp
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.po import (
-    ConversationV2,
+    ConversationEvent,
+    ConversationV3,
     PlatformMessageHistory,
     Preference,
     ProviderStat,
@@ -121,8 +122,16 @@ async def delete_bot_data(
     async with core.db.get_db() as session:
         async with session.begin():
             if "conversations" in targets:
+                conversation_ids = select(ConversationV3.id).where(
+                    ConversationV3.platform_id == bot_id
+                )
                 await session.execute(
-                    delete(ConversationV2).where(ConversationV2.platform_id == bot_id)
+                    delete(ConversationEvent).where(
+                        col(ConversationEvent.conversation_ref).in_(conversation_ids)
+                    )
+                )
+                await session.execute(
+                    delete(ConversationV3).where(ConversationV3.platform_id == bot_id)
                 )
             if "message_history" in targets:
                 await session.execute(

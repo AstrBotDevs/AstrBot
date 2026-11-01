@@ -203,6 +203,7 @@ async def test_lark_post_preserves_formatting(
         )
         assert request.prompt == expected_prompt
         third_party_stage = third_party.ThirdPartyAgentSubStage()
+        third_party_stage.ctx = MagicMock()
         third_party_stage._resolve_persona_custom_error_message = AsyncMock(
             return_value=None
         )

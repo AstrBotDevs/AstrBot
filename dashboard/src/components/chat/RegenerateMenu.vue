@@ -8,9 +8,18 @@
     @update:model-value="handleMenuToggle"
   >
     <template #activator="{ props: menuProps }">
-      <v-btn v-bind="menuProps" icon size="x-small" variant="text">
-        <RotateCw :size="14" :stroke-width="2" />
-      </v-btn>
+      <span :title="unavailableReason || tm('actions.retry')">
+        <v-btn
+          v-bind="menuProps"
+          icon
+          size="x-small"
+          variant="text"
+          :disabled="disabled"
+          :aria-label="unavailableReason || tm('actions.retry')"
+        >
+          <RotateCw :size="14" :stroke-width="2" />
+        </v-btn>
+      </span>
     </template>
 
     <v-list-item class="styled-menu-item" rounded="md" @click="emit('retry')">
@@ -160,6 +169,14 @@ export interface RegenerateModelSelection {
   providerId: string;
   modelName: string;
 }
+
+withDefaults(
+  defineProps<{ disabled?: boolean; unavailableReason?: string }>(),
+  {
+    disabled: false,
+    unavailableReason: "",
+  },
+);
 
 const emit = defineEmits<{
   retry: [];
