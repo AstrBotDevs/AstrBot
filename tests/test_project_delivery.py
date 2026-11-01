@@ -339,7 +339,10 @@ class DeliveryTests(unittest.TestCase):
             (root / "file").write_text("release three")
             git("commit", "-am", "release three")
             git("tag", "v3")
-            with patch.object(sync, "ROOT", root):
+            with (
+                patch.object(sync, "ROOT", root),
+                patch("sys.stderr", new_callable=io.StringIO) as output,
+            ):
                 sync.tag_names.cache_clear()
                 sync.tags_containing.cache_clear()
                 self.assertEqual(sync.tags_containing(base), {"v1", "v2", "v3"})
@@ -370,6 +373,11 @@ class DeliveryTests(unittest.TestCase):
                     ],
                     "v2",
                 )
+            self.assertIn("release ancestry start", output.getvalue())
+            self.assertIn("release ancestry complete", output.getvalue())
+            self.assertIn(f"commit={second[:12]}", output.getvalue())
+            self.assertRegex(output.getvalue(), r"tags=\d+")
+            self.assertRegex(output.getvalue(), r"seconds=\d+\.\d{2}")
 
     def test_tag_containment_failure_fails_closed(self):
         sync.tags_containing.cache_clear()
