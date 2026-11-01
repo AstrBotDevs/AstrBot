@@ -287,6 +287,51 @@ async def test_convert_audio_format_keeps_failure_cleanup(tmp_path, monkeypatch)
     assert not output_path.exists()
 
 
+@pytest.mark.asyncio
+async def test_convert_audio_format_keeps_only_stderr_tail(tmp_path, monkeypatch):
+    stderr = "\n".join(f"err-{index:02d}" for index in range(1, 11)).encode()
+    fake = FakeProcess(returncode=1, stderr=stderr)
+    _install_fake_process(monkeypatch, fake)
+
+    with pytest.raises(Exception) as excinfo:
+        await media_utils.convert_audio_format(
+            str(tmp_path / "source.mp3"),
+            output_format="wav",
+            output_path=str(tmp_path / "converted.wav"),
+        )
+
+    message = str(excinfo.value)
+    assert "err-10" in message
+    assert "err-06" in message
+    assert "err-05" not in message
+
+
+@pytest.mark.asyncio
+async def test_convert_video_format_reports_unknown_error_without_stderr(
+    tmp_path, monkeypatch
+):
+    fake = FakeProcess(returncode=1, stderr=b"")
+    _install_fake_process(monkeypatch, fake)
+
+    with pytest.raises(Exception, match="ffmpeg conversion failed: unknown error"):
+        await media_utils.convert_video_format(
+            str(tmp_path / "source.mp4"),
+            output_format="webm",
+            output_path=str(tmp_path / "converted.webm"),
+        )
+
+
+def test_format_ffmpeg_error_trims_and_falls_back():
+    stderr = b"\n err-01 \n\nerr-02\nerr-03\nerr-04\nerr-05\nerr-06\n"
+
+    assert media_utils._format_ffmpeg_error(stderr) == (
+        "err-02\nerr-03\nerr-04\nerr-05\nerr-06"
+    )
+    assert media_utils._format_ffmpeg_error(stderr, max_lines=2) == ("err-05\nerr-06")
+    assert media_utils._format_ffmpeg_error(b"") == "unknown error"
+    assert media_utils._format_ffmpeg_error(None) == "unknown error"
+
+
 def test_timeout_constant_is_bounded_by_platform_api_timeouts():
     # The media limit must be long enough for real transcodes but below the
     # platform API timeout (OneBot calls are usually bounded at 180 s or more),

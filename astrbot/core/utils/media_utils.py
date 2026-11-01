@@ -51,6 +51,9 @@ MODEL_IMAGE_MAX_INPUT_BYTES = 64 * 1024 * 1024
 # consuming the caller's budget and dropping the request.
 FFMPEG_TIMEOUT_SECONDS = 120.0
 
+# Number of trailing ffmpeg stderr lines kept in raised conversion errors.
+FFMPEG_ERROR_TAIL_LINES = 5
+
 MEDIA_MIME_EXTENSIONS = {
     "audio/wav": ".wav",
     "audio/wave": ".wav",
@@ -1474,6 +1477,30 @@ async def _communicate_with_timeout(
         raise
 
 
+def _format_ffmpeg_error(
+    stderr: bytes | None,
+    *,
+    max_lines: int = FFMPEG_ERROR_TAIL_LINES,
+) -> str:
+    """Format the tail of ffmpeg stderr for logs and raised errors.
+
+    ffmpeg is verbose on failure, and embedding the whole decoder log hides the
+    actual reason and bloats error messages, so only the last lines are kept.
+
+    Args:
+        stderr: Captured stderr bytes, or ``None``.
+        max_lines: Number of trailing non-empty lines to keep.
+
+    Returns:
+        The trimmed stderr text, or ``"unknown error"`` when it is empty.
+    """
+    text = (stderr or b"").decode(errors="replace").strip()
+    if not text:
+        return "unknown error"
+    lines = [line for line in text.splitlines() if line.strip()]
+    return "\n".join(lines[-max_lines:])
+
+
 async def get_media_duration(file_path: str) -> int | None:
     """Probe media duration with ffprobe.
 
@@ -1622,7 +1649,7 @@ async def convert_video_format(
                         e,
                     )
 
-            error_msg = stderr.decode() if stderr else "unknown error"
+            error_msg = _format_ffmpeg_error(stderr)
             logger.error("ffmpeg video conversion failed: %s", error_msg)
             raise Exception(f"ffmpeg conversion failed: {error_msg}")
 
@@ -1738,7 +1765,7 @@ async def convert_audio_format(
                         "Failed to remove failed audio output file: %s",
                         e,
                     )
-            error_msg = stderr.decode() if stderr else "unknown error"
+            error_msg = _format_ffmpeg_error(stderr)
             raise Exception(f"ffmpeg conversion failed: {error_msg}")
         logger.debug(
             "Audio converted successfully: %s -> %s",
@@ -2049,7 +2076,7 @@ async def extract_video_cover(
                         "Failed to remove failed video cover file: %s",
                         e,
                     )
-            error_msg = stderr.decode() if stderr else "unknown error"
+            error_msg = _format_ffmpeg_error(stderr)
             raise Exception(f"ffmpeg extract cover failed: {error_msg}")
         return output_path
     except FileNotFoundError:
