@@ -1,4 +1,5 @@
 import asyncio
+import json
 import re
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
@@ -452,14 +453,27 @@ class CronJobManager:
             "cron_payload": payload,
         }
 
-        from astrbot.core.astr_agent_wakeup import wake_cron_agent
+        from astrbot.core.astr_agent_wakeup import wake_main_agent
+        from astrbot.core.astr_main_agent_resources import (
+            PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT,
+        )
 
-        await wake_cron_agent(
+        cfg = self.ctx.get_config(umo=session_str)
+        role = (
+            "admin"
+            if (
+                payload.get("origin", "tool") == "api"
+                or payload.get("sender_id") in (cfg.get("admins_id") or [])
+            )
+            else "member"
+        )
+        await wake_main_agent(
             self.ctx,
-            message=note,
             session_str=session_str,
-            extras=extras,
-            delivery_session_str=delivery_session_str,
+            user_prompt=PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
+                cron_job=json.dumps(extras["cron_job"], ensure_ascii=False)
+            ),
+            role=role,
         )
 
 

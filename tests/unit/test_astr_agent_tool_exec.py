@@ -9,17 +9,24 @@ import pytest
 from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.runners.base import AgentState
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
-from astrbot.core.astr_agent_wakeup import wake_background_agent
+from astrbot.core.astr_agent_wakeup import wake_main_agent
+from astrbot.core.astr_main_agent_resources import (
+    BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT,
+)
 from astrbot.core.message.components import Image
 from astrbot.core.provider.func_tool_manager import (
     FunctionToolManager,
     _PermissionGuardedTool,
 )
 from astrbot.core.tools.computer_tools.shell import ShellSessionTool
-from astrbot.core.utils.active_event_registry import ActiveEventRegistry
+from astrbot.core.utils.active_event_registry import (
+    ActiveEventRegistry,
+    active_event_registry,
+)
 
 
 class _DummyEvent:
@@ -84,6 +91,8 @@ async def test_shell_session_wait_fits_inside_tool_timeout(
 
 
 class _DoneRunner:
+    state = AgentState.DONE
+
     async def step_until_done(self, _max_step):
         for item in ():
             yield item
@@ -106,6 +115,7 @@ def test_build_handoff_toolset_keeps_permission_guards_for_default_tools(runtime
     event = _DummyEvent()
     provider_settings = {} if runtime is None else {"computer_use_runtime": runtime}
     context = SimpleNamespace(
+        get_platform_inst=lambda _platform_id: None,
         get_config=lambda **_kwargs: {"provider_settings": provider_settings},
         get_llm_tool_manager=lambda: mgr,
     )
@@ -243,7 +253,7 @@ async def test_do_handoff_background_reports_prepared_image_urls(
             content=[mcp.types.TextContent(type="text", text="ok")]
         )
 
-    async def _fake_wake(run_context, **kwargs):
+    async def _fake_wake(ctx, **kwargs):
         captured.update(kwargs)
 
     monkeypatch.setattr(
@@ -252,9 +262,7 @@ async def test_do_handoff_background_reports_prepared_image_urls(
         classmethod(_fake_execute_handoff),
     )
     run_context = _build_run_context()
-    monkeypatch.setattr(
-        "astrbot.core.astr_agent_tool_exec.wake_background_agent", _fake_wake
-    )
+    monkeypatch.setattr("astrbot.core.astr_agent_tool_exec.wake_main_agent", _fake_wake)
     await FunctionToolExecutor._do_handoff_background(
         tool=_DummyTool(),
         run_context=run_context,
@@ -263,7 +271,11 @@ async def test_do_handoff_background_reports_prepared_image_urls(
         image_urls="https://example.com/raw.png",
     )
 
-    assert captured["tool_args"]["image_urls"] == ["https://example.com/raw.png"]
+    prompt = captured["user_prompt"]
+    assert prompt.startswith("<system_reminder>\n")
+    assert prompt.endswith("\n</system_reminder>")
+    payload = json.loads(prompt.removesuffix("\n</system_reminder>").rsplit("\n", 1)[1])
+    assert payload["tool_args"]["image_urls"] == ["https://example.com/raw.png"]
 
 
 @pytest.mark.asyncio
@@ -285,6 +297,7 @@ async def test_execute_handoff_skips_renormalize_when_image_urls_prepared(
     context = SimpleNamespace(
         get_current_chat_provider_id=_fake_get_current_chat_provider_id,
         tool_loop_agent=_fake_tool_loop_agent,
+        get_platform_inst=lambda _platform_id: None,
         get_config=lambda **_kwargs: {"provider_settings": {}},
     )
     event = _DummyEvent([])
@@ -383,6 +396,7 @@ async def test_execute_handoff_passes_tool_call_timeout_to_tool_loop_agent(
     context = SimpleNamespace(
         get_current_chat_provider_id=_fake_get_current_chat_provider_id,
         tool_loop_agent=_fake_tool_loop_agent,
+        get_platform_inst=lambda _platform_id: None,
         get_config=lambda **_kwargs: {"provider_settings": {}},
     )
     event = _DummyEvent([])
@@ -441,8 +455,14 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
 
     async def _fake_build_main_agent(**kwargs):
         from astrbot.core.astr_main_agent.request import prepare_request
-        await prepare_request(kwargs["event"], kwargs["plugin_context"], kwargs["config"],
-            SimpleNamespace(provider_config={"modalities": ["image"]}), kwargs["req"])
+
+        await prepare_request(
+            kwargs["event"],
+            kwargs["plugin_context"],
+            kwargs["config"],
+            SimpleNamespace(provider_config={"modalities": ["image"]}),
+            kwargs["req"],
+        )
         captured.update(kwargs)
         if stop_phase == "build":
             stop_signal.set()
@@ -468,6 +488,7 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
         parameters={"type": "object", "properties": {}},
     )
     context = SimpleNamespace(
+        get_platform_inst=lambda _platform_id: None,
         get_config=lambda **_kwargs: {"provider_settings": provider_settings},
         get_llm_tool_manager=lambda: SimpleNamespace(
             get_builtin_tool=lambda _tool_cls: send_tool
@@ -483,14 +504,24 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
     if stop_phase == "before":
         stop_signal.set()
 
-    await wake_background_agent(
-        run_context,
-        task_id="task-id",
-        tool_name="long_tool",
-        result_text="ok",
-        tool_args={},
-        note="task finished",
-        summary_name="BackgroundTask",
+    await wake_main_agent(
+        (run_context).context.context,
+        session_str=(run_context).context.event.unified_msg_origin,
+        user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
+            background_task_result=json.dumps(
+                {
+                    "task_id": "task-id",
+                    "tool_name": "long_tool",
+                    "result": "ok",
+                    "tool_args": {},
+                },
+                ensure_ascii=False,
+            )
+        ),
+        role=(run_context).context.event.role,
+        stop_signal=active_event_registry.get_background_stop_signal(
+            (run_context).context.event
+        ),
     )
 
     if stop_phase == "before":
@@ -498,7 +529,7 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
         persist.assert_not_awaited()
         return
     config = captured["config"]
-    assert config.tool_call_timeout == 456
+    assert config.tool_call_timeout == 120
     assert config.streaming_response == provider_settings["stream"]
     assert config.provider_settings == provider_settings
     assert config.provider_settings["fallback_chat_models"] == ["fallback-provider"]
@@ -528,6 +559,8 @@ async def test_background_wakeup_applies_max_agent_step(
     expected_max_step: int,
 ):
     class _StepCapturingRunner:
+        state = AgentState.DONE
+
         def __init__(self):
             self.captured_max_step = None
 
@@ -566,6 +599,7 @@ async def test_background_wakeup_applies_max_agent_step(
         parameters={"type": "object", "properties": {}},
     )
     context = SimpleNamespace(
+        get_platform_inst=lambda _platform_id: None,
         get_config=lambda **_kwargs: {
             "provider_settings": {},
             "agent_runner": {
@@ -585,14 +619,24 @@ async def test_background_wakeup_applies_max_agent_step(
         tool_call_timeout=120,
     )
 
-    await wake_background_agent(
-        run_context,
-        task_id="task-id",
-        tool_name="long_tool",
-        result_text="ok",
-        tool_args={},
-        note="task finished",
-        summary_name="BackgroundTask",
+    await wake_main_agent(
+        (run_context).context.context,
+        session_str=(run_context).context.event.unified_msg_origin,
+        user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
+            background_task_result=json.dumps(
+                {
+                    "task_id": "task-id",
+                    "tool_name": "long_tool",
+                    "result": "ok",
+                    "tool_args": {},
+                },
+                ensure_ascii=False,
+            )
+        ),
+        role=(run_context).context.event.role,
+        stop_signal=active_event_registry.get_background_stop_signal(
+            (run_context).context.event
+        ),
     )
 
     assert runner.captured_max_step == expected_max_step
@@ -610,6 +654,7 @@ async def test_background_wakeup_warns_when_result_is_not_sent_to_user(
     send_tool = SendMessageToUserTool()
     send_message = AsyncMock(return_value=True)
     context = SimpleNamespace(
+        get_platform_inst=lambda _platform_id: None,
         get_config=lambda **_kwargs: {},
         get_llm_tool_manager=lambda: SimpleNamespace(
             get_builtin_tool=lambda _tool_cls: send_tool
@@ -619,6 +664,8 @@ async def test_background_wakeup_warns_when_result_is_not_sent_to_user(
     )
 
     class _Runner:
+        state = AgentState.DONE
+
         def __init__(self, event):
             self.event = event
 
@@ -661,19 +708,29 @@ async def test_background_wakeup_warns_when_result_is_not_sent_to_user(
         tool_call_timeout=120,
     )
 
-    await wake_background_agent(
-        run_context,
-        task_id="task-id",
-        tool_name="long_tool",
-        result_text="ok",
-        tool_args={},
-        note="task finished",
-        summary_name="BackgroundTask",
+    await wake_main_agent(
+        (run_context).context.context,
+        session_str=(run_context).context.event.unified_msg_origin,
+        user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
+            background_task_result=json.dumps(
+                {
+                    "task_id": "task-id",
+                    "tool_name": "long_tool",
+                    "result": "ok",
+                    "tool_args": {},
+                },
+                ensure_ascii=False,
+            )
+        ),
+        role=(run_context).context.event.role,
+        stop_signal=active_event_registry.get_background_stop_signal(
+            (run_context).context.event
+        ),
     )
 
     assert send_message.await_count == int(delivered)
     warned = any(
-        "long_tool" in call.args[0] and "task_id=task-id" in call.args[0]
+        "without user delivery" in call.args[0]
         for call in logger.warning.call_args_list
     )
     assert warned is not delivered
@@ -734,9 +791,7 @@ async def test_background_execution_lifecycle(
         delivered.set()
 
     wakeup = AsyncMock(side_effect=wake)
-    monkeypatch.setattr(
-        "astrbot.core.astr_agent_tool_exec.wake_background_agent", wakeup
-    )
+    monkeypatch.setattr("astrbot.core.astr_agent_tool_exec.wake_main_agent", wakeup)
     monkeypatch.setattr(
         FunctionToolExecutor,
         "_execute_local" if kind == "tool" else "_execute_handoff",
@@ -772,7 +827,7 @@ async def test_background_execution_lifecycle(
         assert delivered.is_set() != cancelled
         assert wakeup.await_count == (0 if phase == "tool" else 1)
         if phase == "failure":
-            assert "tool failed" in wakeup.call_args.kwargs["result_text"]
+            assert "tool failed" in wakeup.call_args.kwargs["user_prompt"]
         assert not registry._background_tasks
         if cancelled:
             assert [

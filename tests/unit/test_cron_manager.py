@@ -1,5 +1,3 @@
-from astrbot.core.astr_agent_wakeup import wake_cron_agent
-
 """Tests for CronJobManager."""
 
 import asyncio
@@ -12,6 +10,8 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from astrbot.core.agent.runners.base import AgentState
+from astrbot.core.astr_agent_wakeup import wake_main_agent
+from astrbot.core.astr_main_agent_resources import PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT
 from astrbot.core.cron.manager import (
     CronJobManager,
     CronJobSchedulingError,
@@ -733,19 +733,26 @@ class TestRunActiveAgentJob:
         runner.get_final_llm_resp.return_value = None
         with (
             patch(
-                'astrbot.core.astr_main_agent.request._get_session_conv',
+                "astrbot.core.astr_main_agent.request._get_session_conv",
                 AsyncMock(return_value=SimpleNamespace(history="[]")),
             ),
             patch(
-                'astrbot.core.astr_main_agent.build_main_agent',
+                "astrbot.core.astr_main_agent.build_main_agent",
                 AsyncMock(return_value=SimpleNamespace(agent_runner=runner)),
             ) as build_agent,
             patch("astrbot.core.astr_agent_wakeup.persist_agent_history", AsyncMock()),
         ):
-            await wake_cron_agent(cron_manager.ctx,
-                message="run scheduled task",
+            await wake_main_agent(
+                cron_manager.ctx,
                 session_str="test:GroupMessage:group123",
-                extras={"cron_job": {"id": "job-1"}, "cron_payload": {}},
+                user_prompt=PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
+                    cron_job=json.dumps(
+                        ({"cron_job": {"id": "job-1"}, "cron_payload": {}}).get(
+                            "cron_job", {}
+                        ),
+                        ensure_ascii=False,
+                    )
+                ),
             )
 
         ctx.get_config.assert_called_once_with(umo="test:GroupMessage:group123")
@@ -809,8 +816,14 @@ class TestRunActiveAgentJob:
 
         async def fake_build_main_agent(*, event, plugin_context, config, req):
             from astrbot.core.astr_main_agent.request import prepare_request
-            await prepare_request(event, plugin_context, config,
-                SimpleNamespace(provider_config={"modalities": ["image"]}), req)
+
+            await prepare_request(
+                event,
+                plugin_context,
+                config,
+                SimpleNamespace(provider_config={"modalities": ["image"]}),
+                req,
+            )
             captured["config"] = config
             captured["req"] = req
             captured["requests"].append(req)
@@ -821,11 +834,11 @@ class TestRunActiveAgentJob:
 
         with (
             patch(
-                'astrbot.core.astr_main_agent.request._get_session_conv',
+                "astrbot.core.astr_main_agent.request._get_session_conv",
                 AsyncMock(return_value=conv),
             ),
             patch(
-                'astrbot.core.astr_main_agent.build_main_agent',
+                "astrbot.core.astr_main_agent.build_main_agent",
                 side_effect=fake_build_main_agent,
             ),
             patch(
@@ -834,17 +847,24 @@ class TestRunActiveAgentJob:
             ),
         ):
             for started_at in started_ats:
-                await wake_cron_agent(cron_manager.ctx,
-                    message="run scheduled task",
+                await wake_main_agent(
+                    cron_manager.ctx,
                     session_str="test:FriendMessage:user123",
-                    extras={
-                        "cron_job": {
-                            "id": "job-1",
-                            "note": "提醒喝水",
-                            "run_started_at": started_at,
-                        },
-                        "cron_payload": {},
-                    },
+                    user_prompt=PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
+                        cron_job=json.dumps(
+                            (
+                                {
+                                    "cron_job": {
+                                        "id": "job-1",
+                                        "note": "提醒喝水",
+                                        "run_started_at": started_at,
+                                    },
+                                    "cron_payload": {},
+                                }
+                            ).get("cron_job", {}),
+                            ensure_ascii=False,
+                        )
+                    ),
                 )
 
         config = captured["config"]
@@ -863,7 +883,13 @@ class TestRunActiveAgentJob:
         for request, started_at in zip(captured["requests"], started_ats, strict=True):
             assert "# CRON JOB CONTEXT" not in request.system_prompt
             assert "run_started_at" not in request.system_prompt
-            context, instruction = request.prompt.split("\n\n", 1)
+            assert request.prompt.startswith("<system_reminder>\n")
+            assert request.prompt.endswith("\n</system_reminder>")
+            context, instruction = (
+                request.prompt.removeprefix("<system_reminder>\n")
+                .removesuffix("\n</system_reminder>")
+                .split("\n\n", 1)
+            )
             assert context.startswith("# CRON JOB CONTEXT\n")
             job = json.loads(context.split("\n", 2)[2])
             assert job == {
@@ -931,11 +957,11 @@ class TestRunActiveAgentJob:
 
         with (
             patch(
-                'astrbot.core.astr_main_agent.request._get_session_conv',
+                "astrbot.core.astr_main_agent.request._get_session_conv",
                 AsyncMock(return_value=conv),
             ),
             patch(
-                'astrbot.core.astr_main_agent.build_main_agent',
+                "astrbot.core.astr_main_agent.build_main_agent",
                 side_effect=fake_build_main_agent,
             ),
             patch(
@@ -943,10 +969,17 @@ class TestRunActiveAgentJob:
                 AsyncMock(),
             ),
         ):
-            await wake_cron_agent(cron_manager.ctx,
-                message="run scheduled task",
+            await wake_main_agent(
+                cron_manager.ctx,
                 session_str="test:FriendMessage:user123",
-                extras={"cron_job": {"id": "job-1"}, "cron_payload": {}},
+                user_prompt=PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
+                    cron_job=json.dumps(
+                        ({"cron_job": {"id": "job-1"}, "cron_payload": {}}).get(
+                            "cron_job", {}
+                        ),
+                        ensure_ascii=False,
+                    )
+                ),
             )
 
         assert runner.captured_max_step == expected_max_step
@@ -984,11 +1017,11 @@ class TestRunActiveAgentJob:
         fake_result = SimpleNamespace(agent_runner=FakeRunner())
         with (
             patch(
-                'astrbot.core.astr_main_agent.build_main_agent',
+                "astrbot.core.astr_main_agent.build_main_agent",
                 new=AsyncMock(return_value=fake_result),
             ),
             patch(
-                'astrbot.core.astr_main_agent.request._get_session_conv',
+                "astrbot.core.astr_main_agent.request._get_session_conv",
                 new=AsyncMock(return_value=SimpleNamespace(history="[]")),
             ),
         ):
@@ -1016,11 +1049,11 @@ class TestRunActiveAgentJob:
         cron_manager.ctx = mock_context
         with (
             patch(
-                'astrbot.core.astr_main_agent.build_main_agent',
+                "astrbot.core.astr_main_agent.build_main_agent",
                 new=AsyncMock(return_value=None),
             ),
             patch(
-                'astrbot.core.astr_main_agent.request._get_session_conv',
+                "astrbot.core.astr_main_agent.request._get_session_conv",
                 new=AsyncMock(return_value=SimpleNamespace(history="[]")),
             ),
         ):

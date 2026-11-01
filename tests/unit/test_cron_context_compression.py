@@ -1,5 +1,3 @@
-from astrbot.core.astr_agent_wakeup import wake_background_agent, wake_cron_agent
-
 """Regression tests for session compression in chat, Cron and background wakeups."""
 
 import copy
@@ -11,7 +9,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from astrbot.core.agent.tool import FunctionTool
+from astrbot.core.astr_agent_wakeup import wake_main_agent
 from astrbot.core.astr_main_agent import MainAgentBuildConfig
+from astrbot.core.astr_main_agent_resources import (
+    BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT,
+    PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT,
+)
 from astrbot.core.config.agent_runner import resolve_context_compression_config
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.cron.manager import CronJobManager
@@ -19,6 +22,7 @@ from astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal import
     InternalAgentSubStage,
 )
 from astrbot.core.provider.entities import LLMResponse
+from astrbot.core.utils.active_event_registry import active_event_registry
 
 
 def test_explicit_build_settings_and_per_request_overrides_are_preserved():
@@ -147,21 +151,28 @@ async def test_wakeup_uses_same_compression_settings_as_chat(
     ctx.get_config.reset_mock()
     with (
         patch(
-            'astrbot.core.astr_main_agent.request._get_session_conv',
+            "astrbot.core.astr_main_agent.request._get_session_conv",
             AsyncMock(return_value=conv),
         ),
         patch(
-            'astrbot.core.astr_main_agent.build_main_agent',
+            "astrbot.core.astr_main_agent.build_main_agent",
             AsyncMock(return_value=SimpleNamespace(agent_runner=runner)),
         ) as build,
         patch("astrbot.core.astr_agent_wakeup.persist_agent_history", AsyncMock()),
         patch("astrbot.core.astr_agent_wakeup.persist_agent_history", AsyncMock()),
     ):
         if entrypoint == "cron":
-            await wake_cron_agent(manager.ctx,
-                message="Run the scheduled task",
+            await wake_main_agent(
+                manager.ctx,
                 session_str="test:FriendMessage:user123",
-                extras={"cron_job": {"id": "job-1"}, "cron_payload": {}},
+                user_prompt=PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
+                    cron_job=json.dumps(
+                        ({"cron_job": {"id": "job-1"}, "cron_payload": {}}).get(
+                            "cron_job", {}
+                        ),
+                        ensure_ascii=False,
+                    )
+                ),
             )
         else:
             event_extras: dict[str, object] = {}
@@ -172,25 +183,36 @@ async def test_wakeup_uses_same_compression_settings_as_chat(
                     parameters={"type": "object", "properties": {}},
                 )
             )
-            await wake_background_agent(
-                SimpleNamespace(
-                    context=SimpleNamespace(
-                        event=SimpleNamespace(
-                            unified_msg_origin="test:FriendMessage:user123",
-                            role="member",
-                            get_extra=event_extras.get,
-                            set_extra=event_extras.__setitem__,
-                        ),
-                        context=ctx,
+            wakeup_context = SimpleNamespace(
+                context=SimpleNamespace(
+                    event=SimpleNamespace(
+                        unified_msg_origin="test:FriendMessage:user123",
+                        role="member",
+                        get_extra=event_extras.get,
+                        set_extra=event_extras.__setitem__,
                     ),
-                    tool_call_timeout=120,
+                    context=ctx,
                 ),
-                task_id="task-1",
-                tool_name="background-tool",
-                result_text="Task completed.",
-                tool_args={},
-                note="Background task finished",
-                summary_name="BackgroundTask",
+                tool_call_timeout=120,
+            )
+            await wake_main_agent(
+                wakeup_context.context.context,
+                session_str=wakeup_context.context.event.unified_msg_origin,
+                user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
+                    background_task_result=json.dumps(
+                        {
+                            "task_id": "task-1",
+                            "tool_name": "background-tool",
+                            "result": "Task completed.",
+                            "tool_args": {},
+                        },
+                        ensure_ascii=False,
+                    )
+                ),
+                role=wakeup_context.context.event.role,
+                stop_signal=active_event_registry.get_background_stop_signal(
+                    wakeup_context.context.event
+                ),
             )
             assert (
                 build.await_args.kwargs["event"].get_extra("_background_stop_signal")
@@ -222,10 +244,13 @@ async def test_wakeup_uses_same_compression_settings_as_chat(
     ):
         assert getattr(wakeup_config, name) == getattr(stage.main_agent_cfg, name)
     assert wakeup_config.streaming_response is False
-    assert wakeup_config.call_request_hook is False
+    assert wakeup_config.call_request_hook is True
+    assert wakeup_config.validate_provider_endpoint is True
     request = build.await_args.kwargs["req"]
     assert wakeup_config.load_session_history is True
-    assert request.contexts == []  # The builder, not the trigger adapter, loads history.
+    assert (
+        request.contexts == []
+    )  # The builder, not the trigger adapter, loads history.
     assert "An earlier request" not in request.system_prompt
     assert conf == original_conf
     assert json.loads(conv.history) == history

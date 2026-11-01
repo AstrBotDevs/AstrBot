@@ -1,5 +1,3 @@
-from astrbot.core.astr_agent_wakeup import wake_cron_agent
-
 """Shared event lifecycle regression coverage for messages and Cron jobs."""
 
 import asyncio
@@ -11,7 +9,12 @@ import pytest
 from opentelemetry.trace import format_trace_id, get_current_span
 
 from astrbot.core.agent.runners.base import AgentState
+from astrbot.core.astr_agent_wakeup import wake_main_agent
 from astrbot.core.astr_main_agent import request as request_build
+from astrbot.core.astr_main_agent_resources import (
+    BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT,
+    PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT,
+)
 from astrbot.core.cron.manager import CronJobManager
 from astrbot.core.log import _log_context, log_context
 from astrbot.core.pipeline import scheduler as scheduler_module
@@ -246,6 +249,7 @@ async def test_scheduler_uses_event_scope(event, frames, monkeypatch, failure_at
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("trigger", ["cron", "background"])
 @pytest.mark.parametrize(
     "failure_at",
     [
@@ -260,18 +264,19 @@ async def test_scheduler_uses_event_scope(event, frames, monkeypatch, failure_at
         "cancel",
     ],
 )
-async def test_cron_uses_event_scope(frames, monkeypatch, failure_at):
-    """Cover Cron construction, execution, saving, failure, and cancellation.
+async def test_wakeup_uses_event_scope(frames, monkeypatch, failure_at, trigger):
+    """Cover both triggers' execution, saving, failure, and cancellation scopes.
 
     Args:
         frames: Captured trace snapshots.
         monkeypatch: Pytest patch manager.
         failure_at: Optional execution step that fails.
+        trigger: User-turn source; execution scopes must be identical.
     """
     from astrbot.core import astr_main_agent
 
     ctx = MagicMock()
-    ctx.get_config.return_value = {"admins_id": []}
+    ctx.get_config.return_value = {"admins_id": [], "plugin_set": ["allowed"]}
     if failure_at == "config":
         ctx.get_config.side_effect = RuntimeError("config failed")
     manager = CronJobManager(MagicMock())
@@ -309,12 +314,16 @@ async def test_cron_uses_event_scope(frames, monkeypatch, failure_at):
         )
         assert _log_context.get().platform_id == "test"
         assert _log_context.get().platform_type == "cron"
+        assert kwargs["event"].plugins_name == ["allowed"]
         if failure_at == "build":
             raise RuntimeError("build failed")
         if failure_at != "empty":
             await request_build.prepare_request(
-                kwargs["event"], kwargs["plugin_context"], kwargs["config"],
-                SimpleNamespace(provider_config={"modalities": ["image"]}), kwargs["req"],
+                kwargs["event"],
+                kwargs["plugin_context"],
+                kwargs["config"],
+                SimpleNamespace(provider_config={"modalities": ["image"]}),
+                kwargs["req"],
             )
         return None if failure_at == "empty" else SimpleNamespace(agent_runner=runner)
 
@@ -331,10 +340,17 @@ async def test_cron_uses_event_scope(frames, monkeypatch, failure_at):
     monkeypatch.setattr(astr_main_agent, "build_main_agent", build)
     save = AsyncMock(side_effect=persist)
     monkeypatch.setattr("astrbot.core.astr_agent_wakeup.persist_agent_history", save)
-    execution = wake_cron_agent(manager.ctx,
-        message="Scheduled task",
+    prompt = (
+        PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(cron_job='{"id":"test-job"}')
+        if trigger == "cron"
+        else BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
+            background_task_result='{"task_id":"test-task"}'
+        )
+    )
+    execution = wake_main_agent(
+        manager.ctx,
         session_str="test:FriendMessage:cron-execution-test",
-        extras={"cron_job": {"id": "test-job"}},
+        user_prompt=prompt,
     )
     if failure_at:
         with pytest.raises(

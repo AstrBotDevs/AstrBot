@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from astrbot import logger
 from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.message_session import MessageSession
@@ -24,7 +25,9 @@ def cron_event(monkeypatch):
     """
     send = AsyncMock(return_value=True)
     metric = AsyncMock()
-    monkeypatch.setattr("astrbot.core.platform.astr_message_event.Metric.upload", metric)
+    monkeypatch.setattr(
+        "astrbot.core.platform.astr_message_event.Metric.upload", metric
+    )
     event = CronMessageEvent(
         context=SimpleNamespace(send_message=send),
         session=MessageSession.from_str("test:FriendMessage:session-1"),
@@ -90,7 +93,9 @@ async def test_none_message_does_not_send(cron_event):
 
 
 @pytest.mark.asyncio
-async def test_missing_platform_does_not_record_send(cron_event, caplog):
+async def test_missing_platform_does_not_record_send(cron_event, caplog, monkeypatch):
+    # AstrBot disables propagation, so attach pytest's handler directly.
+    monkeypatch.setattr(logger, "handlers", [*logger.handlers, caplog.handler])
     event, _, metric = cron_event
     context = object.__new__(Context)
     context.platform_manager = SimpleNamespace(platform_insts=[])

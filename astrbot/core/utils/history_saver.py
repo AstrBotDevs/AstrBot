@@ -1,9 +1,8 @@
 import json
 
-from astrbot import logger
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.provider.entities import ProviderRequest
+from astrbot.core.provider.entities import LLMResponse, ProviderRequest
 
 
 async def persist_agent_history(
@@ -11,19 +10,28 @@ async def persist_agent_history(
     *,
     event: AstrMessageEvent,
     req: ProviderRequest,
-    summary_note: str,
+    response: LLMResponse | None,
 ) -> None:
-    """Persist agent interaction into conversation history."""
+    """Append the real wakeup turn without rewriting any stored history entries.
+
+    Args:
+        conversation_manager: Service owning the current conversation.
+        event: Event identifying the session.
+        req: Request with its original conversation snapshot and current user turn.
+        response: Final assistant response, if the agent produced one.
+
+    Raises:
+        ValueError: If stored history cannot be parsed as a message list.
+    """
     if not req or not req.conversation:
         return
 
-    history = []
-    try:
-        history = json.loads(req.conversation.history or "[]")
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Failed to parse conversation history: %s", exc)
-    history.append({"role": "user", "content": "Output your last task result below."})
-    history.append({"role": "assistant", "content": summary_note})
+    history = json.loads(req.conversation.history or "[]")
+    if not isinstance(history, list):
+        raise ValueError("Conversation history must be a message list.")
+    history.append({"role": "user", "content": req.prompt})
+    if response and response.role == "assistant":
+        history.append({"role": "assistant", "content": response.completion_text})
     await conversation_manager.update_conversation(
         event.unified_msg_origin,
         req.conversation.cid,

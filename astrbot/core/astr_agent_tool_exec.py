@@ -1,5 +1,6 @@
 import asyncio
 import inspect
+import json
 import traceback
 import typing as T
 import uuid
@@ -17,7 +18,10 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
 from astrbot.core.astr_agent_context import AstrAgentContext
-from astrbot.core.astr_agent_wakeup import wake_background_agent
+from astrbot.core.astr_agent_wakeup import wake_main_agent
+from astrbot.core.astr_main_agent_resources import (
+    BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT,
+)
 from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import (
     CommandResult,
@@ -471,18 +475,24 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         event = run_context.context.event
 
-        await wake_background_agent(
-            run_context=run_context,
-            task_id=task_id,
-            tool_name=tool.name,
-            result_text=result_text,
-            tool_args=tool_args,
-            note=(
-                event.get_extra("background_note")
-                or f"Background task for subagent '{tool.agent.name}' finished."
+        await wake_main_agent(
+            ctx=run_context.context.context,
+            session_str=event.unified_msg_origin,
+            user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
+                background_task_result=json.dumps(
+                    {
+                        "task_id": task_id,
+                        "tool_name": tool.name,
+                        "result": result_text,
+                        "tool_args": tool_args,
+                        "subagent_name": tool.agent.name,
+                        "note": event.get_extra("background_note"),
+                    },
+                    ensure_ascii=False,
+                )
             ),
-            summary_name=f"Dedicated to subagent `{tool.agent.name}`",
-            extra_result_fields={"subagent_name": tool.agent.name},
+            role=event.role,
+            stop_signal=active_event_registry.get_background_stop_signal(event),
         )
 
     @classmethod
@@ -512,17 +522,23 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         event = run_context.context.event
 
-        await wake_background_agent(
-            run_context=run_context,
-            task_id=task_id,
-            tool_name=tool.name,
-            result_text=result_text,
-            tool_args=tool_args,
-            note=(
-                event.get_extra("background_note")
-                or f"Background task {tool.name} finished."
+        await wake_main_agent(
+            ctx=run_context.context.context,
+            session_str=event.unified_msg_origin,
+            user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
+                background_task_result=json.dumps(
+                    {
+                        "task_id": task_id,
+                        "tool_name": tool.name,
+                        "result": result_text,
+                        "tool_args": tool_args,
+                        "note": event.get_extra("background_note"),
+                    },
+                    ensure_ascii=False,
+                )
             ),
-            summary_name=tool.name,
+            role=event.role,
+            stop_signal=active_event_registry.get_background_stop_signal(event),
         )
 
     @classmethod

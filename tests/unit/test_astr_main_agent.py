@@ -1,9 +1,8 @@
-from astrbot.core.astr_agent_wakeup import wake_background_agent, wake_cron_agent
-
 """Tests for astr_main_agent ama."""
 
 import asyncio
 import datetime
+import json
 import os
 from contextlib import nullcontext
 from pathlib import Path
@@ -20,16 +19,21 @@ from astrbot.core.agent.message import Message, dump_messages_with_checkpoints
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.base import AgentState
 from astrbot.core.agent.tool import FunctionTool, ToolSet
+from astrbot.core.astr_agent_wakeup import wake_main_agent
 from astrbot.core.astr_main_agent import builder as builder_build
 from astrbot.core.astr_main_agent import computer_use as computer_use_build
 from astrbot.core.astr_main_agent import knowledge_base as knowledge_base_build
+from astrbot.core.astr_main_agent import persona as persona_build
 from astrbot.core.astr_main_agent import plugins as plugins_build
+from astrbot.core.astr_main_agent import providers as providers_build
+from astrbot.core.astr_main_agent import request as request_build
 from astrbot.core.astr_main_agent import subagent as subagent_build
 from astrbot.core.astr_main_agent import web_search as web_search_build
 from astrbot.core.astr_main_agent import workspace as workspace_build
-from astrbot.core.astr_main_agent import persona as persona_build
-from astrbot.core.astr_main_agent import providers as providers_build
-from astrbot.core.astr_main_agent import request as request_build
+from astrbot.core.astr_main_agent_resources import (
+    BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT,
+    PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT,
+)
 from astrbot.core.config.agent_runner import resolve_context_compression_config
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.cron.manager import CronJobManager
@@ -46,6 +50,7 @@ from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.skills.skill_manager import SkillInfo
 from astrbot.core.star.context import Context
 from astrbot.core.star.star import StarMetadata
+from astrbot.core.utils.active_event_registry import active_event_registry
 
 
 async def _apply_persona_capabilities(req, cfg, context, event):
@@ -203,7 +208,7 @@ async def test_proactive_agent_uses_session_fallback_models(
     )
     mock_context.get_config.return_value = {
         "agent_runner": {"config": {"model": model}},
-        "provider_settings": {},
+        "provider_settings": {"streaming_response": False},
     }
     mock_context.get_using_provider_async.side_effect = None
     mock_context.get_using_provider_async.return_value = mock_provider
@@ -213,8 +218,8 @@ async def test_proactive_agent_uses_session_fallback_models(
     runner = builder_build.AgentRunner()
     failed = scenario in ("all-fail", "unconfigured")
     expectation = (
-        pytest.raises(RuntimeError, match="Cron agent run ended in ERROR")
-        if entrypoint == "cron" and failed
+        pytest.raises(RuntimeError, match="Wakeup agent run ended in ERROR")
+        if failed
         else nullcontext()
     )
     with (
@@ -223,9 +228,7 @@ async def test_proactive_agent_uses_session_fallback_models(
             "_get_session_conv",
             AsyncMock(return_value=mock_conversation),
         ),
-        patch.object(
-            persona_build, "apply_persona", AsyncMock(return_value=None)
-        ),
+        patch.object(persona_build, "apply_persona", AsyncMock(return_value=None)),
         patch.object(knowledge_base_build, "apply_knowledge_base", AsyncMock()),
         patch.object(builder_build, "MAIN_AGENT_HOOKS", BaseAgentRunHooks()),
         patch.object(builder_build, "AgentRunner", return_value=runner),
@@ -236,23 +239,40 @@ async def test_proactive_agent_uses_session_fallback_models(
         if entrypoint == "cron":
             manager = CronJobManager(MagicMock())
             manager.ctx = mock_context
-            await wake_cron_agent(
+            await wake_main_agent(
                 manager.ctx,
-                message="Run the scheduled task",
                 session_str=mock_event.unified_msg_origin,
-                extras={"cron_job": {"id": "job-1"}, "cron_payload": {}},
+                user_prompt=PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
+                    cron_job=json.dumps(
+                        ({"cron_job": {"id": "job-1"}, "cron_payload": {}}).get(
+                            "cron_job", {}
+                        ),
+                        ensure_ascii=False,
+                    )
+                ),
             )
         else:
-            await wake_background_agent(
-                ContextWrapper(
-                    context=SimpleNamespace(event=mock_event, context=mock_context)
+            wakeup_context = ContextWrapper(
+                context=SimpleNamespace(event=mock_event, context=mock_context)
+            )
+            await wake_main_agent(
+                wakeup_context.context.context,
+                session_str=wakeup_context.context.event.unified_msg_origin,
+                user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
+                    background_task_result=json.dumps(
+                        {
+                            "task_id": "task-1",
+                            "tool_name": "background-tool",
+                            "result": "Work finished.",
+                            "tool_args": {},
+                        },
+                        ensure_ascii=False,
+                    )
                 ),
-                task_id="task-1",
-                tool_name="background-tool",
-                result_text="Work finished.",
-                tool_args={},
-                note="Background task finished",
-                summary_name="BackgroundTask",
+                role=wakeup_context.context.event.role,
+                stop_signal=active_event_registry.get_background_stop_signal(
+                    wakeup_context.context.event
+                ),
             )
 
     expected_calls = (
@@ -337,9 +357,7 @@ async def test_proactive_agent_respects_runtime_and_safety_settings(
             "_get_session_conv",
             AsyncMock(return_value=mock_conversation),
         ),
-        patch.object(
-            persona_build, "apply_persona", AsyncMock(return_value=None)
-        ),
+        patch.object(persona_build, "apply_persona", AsyncMock(return_value=None)),
         patch.object(knowledge_base_build, "apply_knowledge_base", AsyncMock()),
         patch.object(
             persona_build,
@@ -363,24 +381,40 @@ async def test_proactive_agent_respects_runtime_and_safety_settings(
         if entrypoint == "cron":
             manager = CronJobManager(MagicMock())
             manager.ctx = mock_context
-            await wake_cron_agent(
+            await wake_main_agent(
                 manager.ctx,
-                message="run scheduled task",
                 session_str=mock_event.unified_msg_origin,
-                delivery_session_str=mock_event.unified_msg_origin,
-                extras={"cron_job": {"id": "job-1"}, "cron_payload": {}},
+                user_prompt=PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
+                    cron_job=json.dumps(
+                        ({"cron_job": {"id": "job-1"}, "cron_payload": {}}).get(
+                            "cron_job", {}
+                        ),
+                        ensure_ascii=False,
+                    )
+                ),
             )
         else:
-            await wake_background_agent(
-                ContextWrapper(
-                    context=MagicMock(context=mock_context, event=mock_event)
+            wakeup_context = ContextWrapper(
+                context=MagicMock(context=mock_context, event=mock_event)
+            )
+            await wake_main_agent(
+                wakeup_context.context.context,
+                session_str=wakeup_context.context.event.unified_msg_origin,
+                user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
+                    background_task_result=json.dumps(
+                        {
+                            "task_id": "task-1",
+                            "tool_name": "long_tool",
+                            "result": "done",
+                            "tool_args": {},
+                        },
+                        ensure_ascii=False,
+                    )
                 ),
-                task_id="task-1",
-                tool_name="long_tool",
-                result_text="done",
-                tool_args={},
-                note="task finished",
-                summary_name="BackgroundTask",
+                role=wakeup_context.context.event.role,
+                stop_signal=active_event_registry.get_background_stop_signal(
+                    wakeup_context.context.event
+                ),
             )
 
         runner.reset.assert_awaited_once()
@@ -438,7 +472,8 @@ def test_append_system_reminders_includes_weekday(mock_event):
 def test_local_mode_prompt_uses_windows_powershell_51():
     with (
         patch(
-            "astrbot.core.astr_main_agent.computer_use.platform.system", return_value="Windows"
+            "astrbot.core.astr_main_agent.computer_use.platform.system",
+            return_value="Windows",
         ),
         patch(
             "astrbot.core.astr_main_agent.computer_use.resolve_windows_shell",
@@ -455,7 +490,8 @@ def test_local_mode_prompt_uses_windows_powershell_51():
 def test_local_mode_prompt_hints_pwsh_when_resolved():
     with (
         patch(
-            "astrbot.core.astr_main_agent.computer_use.platform.system", return_value="Windows"
+            "astrbot.core.astr_main_agent.computer_use.platform.system",
+            return_value="Windows",
         ),
         patch(
             "astrbot.core.astr_main_agent.computer_use.resolve_windows_shell",
@@ -472,7 +508,8 @@ def test_local_mode_prompt_hints_pwsh_when_resolved():
 def test_local_mode_prompt_ignores_pwsh_on_non_windows():
     with (
         patch(
-            "astrbot.core.astr_main_agent.computer_use.platform.system", return_value="Linux"
+            "astrbot.core.astr_main_agent.computer_use.platform.system",
+            return_value="Linux",
         ),
         patch(
             "astrbot.core.astr_main_agent.computer_use.resolve_windows_shell",
@@ -488,7 +525,8 @@ def test_local_mode_prompt_ignores_pwsh_on_non_windows():
 
 def test_local_mode_prompt_keeps_posix_shell_guidance():
     with patch(
-        "astrbot.core.astr_main_agent.computer_use.platform.system", return_value="Linux"
+        "astrbot.core.astr_main_agent.computer_use.platform.system",
+        return_value="Linux",
     ):
         prompt = computer_use_build._build_local_mode_prompt()
 
@@ -746,7 +784,9 @@ class TestApplyKb:
             "astrbot.core.astr_main_agent.knowledge_base.retrieve_knowledge_base",
             AsyncMock(return_value="KB result"),
         ):
-            await knowledge_base_build.apply_knowledge_base(mock_event, req, mock_context, config)
+            await knowledge_base_build.apply_knowledge_base(
+                mock_event, req, mock_context, config
+            )
 
         assert req.system_prompt == "System prompt"
         assert len(req.extra_user_content_parts) == 1
@@ -782,7 +822,9 @@ class TestApplyKb:
         req = ProviderRequest(prompt=None, system_prompt="System")
         config = ama.MainAgentBuildConfig(tool_call_timeout=60, kb_agentic_mode=False)
 
-        await knowledge_base_build.apply_knowledge_base(mock_event, req, mock_context, config)
+        await knowledge_base_build.apply_knowledge_base(
+            mock_event, req, mock_context, config
+        )
 
         assert req.system_prompt == "System"
 
@@ -795,9 +837,12 @@ class TestApplyKb:
         retrieve = AsyncMock(return_value="KB result")
 
         with patch(
-            "astrbot.core.astr_main_agent.knowledge_base.retrieve_knowledge_base", retrieve
+            "astrbot.core.astr_main_agent.knowledge_base.retrieve_knowledge_base",
+            retrieve,
         ):
-            await knowledge_base_build.apply_knowledge_base(mock_event, req, mock_context, config)
+            await knowledge_base_build.apply_knowledge_base(
+                mock_event, req, mock_context, config
+            )
 
         retrieve.assert_not_awaited()
         assert req.system_prompt == "System"
@@ -812,7 +857,9 @@ class TestApplyKb:
             "astrbot.core.astr_main_agent.knowledge_base.retrieve_knowledge_base",
             AsyncMock(return_value=None),
         ):
-            await knowledge_base_build.apply_knowledge_base(mock_event, req, mock_context, config)
+            await knowledge_base_build.apply_knowledge_base(
+                mock_event, req, mock_context, config
+            )
 
         assert req.system_prompt == "System"
 
@@ -823,7 +870,9 @@ class TestApplyKb:
         req = ProviderRequest(prompt="test", func_tool=existing_tools)
         config = ama.MainAgentBuildConfig(tool_call_timeout=60, kb_agentic_mode=True)
 
-        await knowledge_base_build.apply_knowledge_base(mock_event, req, mock_context, config)
+        await knowledge_base_build.apply_knowledge_base(
+            mock_event, req, mock_context, config
+        )
 
         assert req.func_tool is not None
 
@@ -840,7 +889,10 @@ class TestBuiltinToolInjection:
         }
 
         web_search_build.apply_web_search(
-            req, mock_context, mock_context.get_config()["provider_settings"], mock_event
+            req,
+            mock_context,
+            mock_context.get_config()["provider_settings"],
+            mock_event,
         )
 
         assert req.func_tool.names() == [
@@ -878,7 +930,10 @@ class TestBuiltinToolInjection:
         mock_context.get_llm_tool_manager.return_value = tool_mgr
 
         web_search_build.apply_web_search(
-            req, mock_context, mock_context.get_config()["provider_settings"], mock_event
+            req,
+            mock_context,
+            mock_context.get_config()["provider_settings"],
+            mock_event,
         )
 
         tool_mgr.get_builtin_tool.assert_called_once_with(
@@ -934,7 +989,10 @@ class TestBuiltinToolInjection:
         mock_context.get_llm_tool_manager.return_value = tool_mgr
 
         web_search_build.apply_web_search(
-            req, mock_context, mock_context.get_config()["provider_settings"], mock_event
+            req,
+            mock_context,
+            mock_context.get_config()["provider_settings"],
+            mock_event,
         )
 
         assert tool_mgr.get_builtin_tool.call_args_list == [
@@ -965,7 +1023,9 @@ class TestBuiltinToolInjection:
         req.func_tool.add_tool(search_tool)
         mock_event.get_platform_name.return_value = "webchat"
 
-        req.system_prompt += web_search_build._get_citation_instructions(mock_event, req)
+        req.system_prompt += web_search_build._get_citation_instructions(
+            mock_event, req
+        )
 
         assert web_search_build.WEB_SEARCH_CITATION_PROMPT in req.system_prompt
 
@@ -977,8 +1037,12 @@ class TestBuiltinToolInjection:
         req.func_tool.add_tool(search_tool)
         mock_event.get_platform_name.return_value = "webchat"
 
-        req.system_prompt += web_search_build._get_citation_instructions(mock_event, req)
-        req.system_prompt += web_search_build._get_citation_instructions(mock_event, req)
+        req.system_prompt += web_search_build._get_citation_instructions(
+            mock_event, req
+        )
+        req.system_prompt += web_search_build._get_citation_instructions(
+            mock_event, req
+        )
 
         assert req.system_prompt.count(web_search_build.WEB_SEARCH_CITATION_PROMPT) == 1
 
@@ -990,7 +1054,9 @@ class TestBuiltinToolInjection:
         req.func_tool.add_tool(search_tool)
         mock_event.get_platform_name.return_value = "test_platform"
 
-        req.system_prompt += web_search_build._get_citation_instructions(mock_event, req)
+        req.system_prompt += web_search_build._get_citation_instructions(
+            mock_event, req
+        )
 
         assert web_search_build.WEB_SEARCH_CITATION_PROMPT not in req.system_prompt
 
@@ -1012,7 +1078,8 @@ class TestBuiltinToolInjection:
         with (
             patch.object(builder_build, "AgentRunner") as runner,
             patch.object(
-                builder_build, "AstrAgentContext",
+                builder_build,
+                "AstrAgentContext",
                 side_effect=lambda **kwargs: SimpleNamespace(**kwargs),
             ),
         ):
@@ -1217,7 +1284,10 @@ class TestEnsurePersonaAndSkills:
         await _apply_persona_capabilities(req, {}, mock_context, mock_event)
 
         assert "You are helpful." in req.system_prompt
-        assert "<persona_instructions>\nYou are helpful.\n</persona_instructions>" in req.system_prompt
+        assert (
+            "<persona_instructions>\nYou are helpful.\n</persona_instructions>"
+            in req.system_prompt
+        )
         mock_event.set_extra.assert_any_call("_trace_persona_id", "test-persona")
         assert not any(
             call.args[0] == "sel_persona"
@@ -1257,9 +1327,9 @@ class TestEnsurePersonaAndSkills:
 
         assert "Custom persona." in req.system_prompt
         assert persona_build.CHATUI_INLINE_GENUI_SYSTEM_PROMPT in req.system_prompt
-        assert req.system_prompt.index("</genui_instructions>") < req.system_prompt.index(
-            "<persona_instructions>"
-        )
+        assert req.system_prompt.index(
+            "</genui_instructions>"
+        ) < req.system_prompt.index("<persona_instructions>")
 
     @pytest.mark.asyncio
     async def test_inline_genui_prompt_does_not_require_conversation(
@@ -1447,7 +1517,10 @@ class TestEnsurePersonaAndSkills:
         """
         selected = {"prompt": "Persona marker", "tools": [], "skills": allowed}
         mock_context.persona_manager.resolve_selected_persona.return_value = (
-            "persona", selected, None, False
+            "persona",
+            selected,
+            None,
+            False,
         )
         req = ProviderRequest(conversation=MagicMock(persona_id="persona"))
         with patch.object(persona_build, "SkillManager") as manager:
@@ -1979,7 +2052,9 @@ class TestPluginToolFix:
 
         assert "mcp_tool" in req.func_tool.names()
 
-    def test_filter_plugin_tools_preserves_tools_without_plugin_origin(self, mock_event):
+    def test_filter_plugin_tools_preserves_tools_without_plugin_origin(
+        self, mock_event
+    ):
         """Tools without handler_module_path should not be filtered out."""
         handoff_tool = FunctionTool(
             name="transfer_to_demo_agent",
@@ -3452,10 +3527,12 @@ class TestApplyLlmSafetyMode:
 
         persona_build.apply_safety_instructions(config, req)
 
-        assert req.system_prompt.startswith("<safety_instructions>\nYou are running in Safe Mode")
-        assert req.system_prompt.index("</safety_instructions>") < req.system_prompt.index(
-            "My custom prompt"
+        assert req.system_prompt.startswith(
+            "<safety_instructions>\nYou are running in Safe Mode"
         )
+        assert req.system_prompt.index(
+            "</safety_instructions>"
+        ) < req.system_prompt.index("My custom prompt")
         assert "My custom prompt" in req.system_prompt
 
     def test_apply_llm_safety_mode_with_none_system_prompt(self):
@@ -3513,7 +3590,9 @@ class TestApplySandboxTools:
         )
         req = ProviderRequest(prompt="Test", func_tool=None)
 
-        req.system_prompt = (req.system_prompt or "") + computer_use_build._apply_sandbox_tools(config, req, "session-123")
+        req.system_prompt = (
+            req.system_prompt or ""
+        ) + computer_use_build._apply_sandbox_tools(config, req, "session-123")
 
         assert req.func_tool is not None
         assert isinstance(req.func_tool, ToolSet)
@@ -3527,7 +3606,9 @@ class TestApplySandboxTools:
         )
         req = ProviderRequest(prompt="Test", func_tool=None)
 
-        req.system_prompt = (req.system_prompt or "") + computer_use_build._apply_sandbox_tools(config, req, "session-123")
+        req.system_prompt = (
+            req.system_prompt or ""
+        ) + computer_use_build._apply_sandbox_tools(config, req, "session-123")
 
         tool_names = req.func_tool.names()
         assert "astrbot_execute_shell" in tool_names
@@ -3544,7 +3625,9 @@ class TestApplySandboxTools:
         )
         req = ProviderRequest(prompt="Test", system_prompt="Original prompt")
 
-        req.system_prompt = (req.system_prompt or "") + computer_use_build._apply_sandbox_tools(config, req, "session-123")
+        req.system_prompt = (
+            req.system_prompt or ""
+        ) + computer_use_build._apply_sandbox_tools(config, req, "session-123")
 
         assert "sandboxed environment" in req.system_prompt
 
@@ -3557,7 +3640,9 @@ class TestApplySandboxTools:
         )
         req = ProviderRequest(prompt="Test", system_prompt="Original prompt")
 
-        req.system_prompt = (req.system_prompt or "") + computer_use_build._apply_sandbox_tools(config, req, "session-123")
+        req.system_prompt = (
+            req.system_prompt or ""
+        ) + computer_use_build._apply_sandbox_tools(config, req, "session-123")
 
         assert req.func_tool is not None
         tool_names = req.func_tool.names()
@@ -3593,7 +3678,9 @@ class TestApplySandboxTools:
         monkeypatch.delenv("SHIPYARD_ENDPOINT", raising=False)
         monkeypatch.delenv("SHIPYARD_ACCESS_TOKEN", raising=False)
 
-        req.system_prompt = (req.system_prompt or "") + computer_use_build._apply_sandbox_tools(config, req, "session-123")
+        req.system_prompt = (
+            req.system_prompt or ""
+        ) + computer_use_build._apply_sandbox_tools(config, req, "session-123")
 
         assert os.environ.get("SHIPYARD_ENDPOINT") == "https://shipyard.example.com"
         assert os.environ.get("SHIPYARD_ACCESS_TOKEN") == "test-token"
@@ -3612,7 +3699,9 @@ class TestApplySandboxTools:
         req = ProviderRequest(prompt="Test", func_tool=None)
 
         with patch("astrbot.core.astr_main_agent.computer_use.logger") as mock_logger:
-            req.system_prompt = (req.system_prompt or "") + computer_use_build._apply_sandbox_tools(config, req, "session-123")
+            req.system_prompt = (
+                req.system_prompt or ""
+            ) + computer_use_build._apply_sandbox_tools(config, req, "session-123")
 
         mock_logger.error.assert_called_once()
         assert (
@@ -3634,7 +3723,9 @@ class TestApplySandboxTools:
         req = ProviderRequest(prompt="Test", func_tool=None)
 
         with patch("astrbot.core.astr_main_agent.computer_use.logger") as mock_logger:
-            req.system_prompt = (req.system_prompt or "") + computer_use_build._apply_sandbox_tools(config, req, "session-123")
+            req.system_prompt = (
+                req.system_prompt or ""
+            ) + computer_use_build._apply_sandbox_tools(config, req, "session-123")
 
         mock_logger.error.assert_called_once()
 
@@ -3651,7 +3742,9 @@ class TestApplySandboxTools:
         existing_toolset.add_tool(existing_tool)
         req = ProviderRequest(prompt="Test", func_tool=existing_toolset)
 
-        req.system_prompt = (req.system_prompt or "") + computer_use_build._apply_sandbox_tools(config, req, "session-123")
+        req.system_prompt = (
+            req.system_prompt or ""
+        ) + computer_use_build._apply_sandbox_tools(config, req, "session-123")
 
         assert "existing_tool" in req.func_tool.names()
         assert "astrbot_execute_shell" in req.func_tool.names()
@@ -3665,7 +3758,9 @@ class TestApplySandboxTools:
         )
         req = ProviderRequest(prompt="Test", system_prompt="Base prompt")
 
-        req.system_prompt = (req.system_prompt or "") + computer_use_build._apply_sandbox_tools(config, req, "session-123")
+        req.system_prompt = (
+            req.system_prompt or ""
+        ) + computer_use_build._apply_sandbox_tools(config, req, "session-123")
 
         assert req.system_prompt.startswith("Base prompt")
         assert "sandboxed environment" in req.system_prompt
@@ -3679,7 +3774,9 @@ class TestApplySandboxTools:
         )
         req = ProviderRequest(prompt="Test", system_prompt=None)
 
-        req.system_prompt = (req.system_prompt or "") + computer_use_build._apply_sandbox_tools(config, req, "session-123")
+        req.system_prompt = (
+            req.system_prompt or ""
+        ) + computer_use_build._apply_sandbox_tools(config, req, "session-123")
 
         assert isinstance(req.system_prompt, str)
         assert "sandboxed environment" in req.system_prompt
@@ -3695,15 +3792,27 @@ async def test_all_triggers_share_persona_tools_and_structured_history(
     import json
 
     registered = [
-        FunctionTool(name=name, description=name, parameters={"type": "object"}, active=active)
+        FunctionTool(
+            name=name, description=name, parameters={"type": "object"}, active=active
+        )
         for name, active in [("chosen", True), ("other", True), ("disabled", False)]
     ]
     tmgr = mock_context.get_llm_tool_manager.return_value
     tmgr.get_full_tool_set.side_effect = lambda: ToolSet(list(registered))
-    tmgr.get_func.side_effect = lambda name: next((t for t in registered if t.name == name), None)
+    tmgr.get_func.side_effect = lambda name: next(
+        (t for t in registered if t.name == name), None
+    )
     selected = {"prompt": "Shared persona", "tools": allowed, "skills": []}
-    mock_context.persona_manager.resolve_selected_persona.return_value = ("selected", selected, None, False)
-    history = [{"role": "user", "content": "Earlier question"}, {"role": "assistant", "content": "Earlier answer"}]
+    mock_context.persona_manager.resolve_selected_persona.return_value = (
+        "selected",
+        selected,
+        None,
+        False,
+    )
+    history = [
+        {"role": "user", "content": "Earlier question"},
+        {"role": "assistant", "content": "Earlier answer"},
+    ]
     mock_conversation.history = json.dumps(history)
     mock_context.get_using_provider_async.side_effect = None
     mock_context.get_using_provider_async.return_value = mock_provider
@@ -3716,23 +3825,62 @@ async def test_all_triggers_share_persona_tools_and_structured_history(
     runner = MagicMock(state=AgentState.DONE)
     runner.reset = AsyncMock()
     runner.step_until_done.return_value.__aiter__.return_value = []
-    runner.get_final_llm_resp.return_value = LLMResponse(role="assistant", completion_text="Done")
+    runner.get_final_llm_resp.return_value = LLMResponse(
+        role="assistant", completion_text="Done"
+    )
     with (
-        patch.object(request_build, "_get_session_conv", AsyncMock(return_value=mock_conversation)),
+        patch.object(
+            request_build,
+            "_get_session_conv",
+            AsyncMock(return_value=mock_conversation),
+        ),
         patch.object(builder_build, "AgentRunner", return_value=runner),
-        patch.object(builder_build, "AstrAgentContext", side_effect=lambda **kw: SimpleNamespace(**kw)),
+        patch.object(
+            builder_build,
+            "AstrAgentContext",
+            side_effect=lambda **kw: SimpleNamespace(**kw),
+        ),
         patch("astrbot.core.astr_agent_wakeup.persist_agent_history", AsyncMock()),
     ):
         if entrypoint == "chat":
-            await ama.build_main_agent(event=mock_event, plugin_context=mock_context, config=ama.MainAgentBuildConfig.from_config(conf))
+            await ama.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=ama.MainAgentBuildConfig.from_config(conf),
+            )
         elif entrypoint == "cron":
-            await wake_cron_agent(mock_context, message="Scheduled task", session_str=mock_event.unified_msg_origin,
-                delivery_session_str=mock_event.unified_msg_origin, extras={"cron_job": {"id": "job"}})
+            await wake_main_agent(
+                mock_context,
+                session_str=mock_event.unified_msg_origin,
+                user_prompt=PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
+                    cron_job=json.dumps(
+                        ({"cron_job": {"id": "job"}}).get("cron_job", {}),
+                        ensure_ascii=False,
+                    )
+                ),
+            )
         else:
-            await wake_background_agent(
-                ContextWrapper(context=SimpleNamespace(event=mock_event, context=mock_context)),
-                task_id="task", tool_name="worker", result_text="Result", tool_args={},
-                note="Task finished", summary_name="Worker",
+            wakeup_context = ContextWrapper(
+                context=SimpleNamespace(event=mock_event, context=mock_context)
+            )
+            await wake_main_agent(
+                wakeup_context.context.context,
+                session_str=wakeup_context.context.event.unified_msg_origin,
+                user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
+                    background_task_result=json.dumps(
+                        {
+                            "task_id": "task",
+                            "tool_name": "worker",
+                            "result": "Result",
+                            "tool_args": {},
+                        },
+                        ensure_ascii=False,
+                    )
+                ),
+                role=wakeup_context.context.event.role,
+                stop_signal=active_event_registry.get_background_stop_signal(
+                    wakeup_context.context.event
+                ),
             )
     req = runner.reset.await_args.kwargs["request"]
     expected = {"chosen", "other"} if allowed is None else set(allowed)
@@ -3749,14 +3897,26 @@ async def test_endpoint_validation_does_not_depend_on_hook_dispatch(
 ):
     mock_provider.provider_config["api_base"] = "https://kourichat.example/v1"
     with (
-        patch.object(builder_build, "call_event_hook", AsyncMock(return_value=False)) as hook,
+        patch.object(
+            builder_build, "call_event_hook", AsyncMock(return_value=False)
+        ) as hook,
         patch.object(builder_build, "AgentRunner") as runner,
-        patch.object(builder_build, "AstrAgentContext", side_effect=lambda **kw: SimpleNamespace(**kw)),
+        patch.object(
+            builder_build,
+            "AstrAgentContext",
+            side_effect=lambda **kw: SimpleNamespace(**kw),
+        ),
     ):
         result = await ama.build_main_agent(
-            event=mock_event, plugin_context=mock_context, provider=mock_provider,
+            event=mock_event,
+            plugin_context=mock_context,
+            provider=mock_provider,
             req=ProviderRequest(prompt="Hello"),
-            config=ama.MainAgentBuildConfig(tool_call_timeout=60, call_request_hook=call_hook, validate_provider_endpoint=True),
+            config=ama.MainAgentBuildConfig(
+                tool_call_timeout=60,
+                call_request_hook=call_hook,
+                validate_provider_endpoint=True,
+            ),
         )
     assert result is None
     hook.assert_not_awaited()
@@ -3785,7 +3945,9 @@ async def test_stopping_during_history_loading_does_not_initialize_an_agent(
             plugin_context=mock_context,
             provider=mock_provider,
             req=ProviderRequest(prompt="Background completion"),
-            config=ama.MainAgentBuildConfig(tool_call_timeout=60, load_session_history=True),
+            config=ama.MainAgentBuildConfig(
+                tool_call_timeout=60, load_session_history=True
+            ),
         )
     assert result is None
     runner.assert_not_called()
@@ -3860,7 +4022,9 @@ async def test_feature_composition_preserves_tool_scope_and_instruction_order(
     config = ama.MainAgentBuildConfig.from_config(
         {
             "kb_agentic_mode": agentic_kb,
-            "agent_runner": {"config": {"misc": {"tool_schema_mode": tool_schema_mode}}},
+            "agent_runner": {
+                "config": {"misc": {"tool_schema_mode": tool_schema_mode}}
+            },
             "provider_settings": {
                 "computer_use_runtime": runtime,
                 "sandbox": {"booter": booter},
@@ -3966,7 +4130,9 @@ async def test_feature_composition_preserves_tool_scope_and_instruction_order(
         "Workspace marker",
         "Local computer tools are available"
         if runtime == "local"
-        else "CUA Desktop Control" if booter == "cua" else "Shipyard Neo File Path Rule",
+        else "CUA Desktop Control"
+        if booter == "cua"
+        else "Shipyard Neo File Path Rule",
     ]
     if runtime == "local":
         markers.append(f"Current workspace: `{workspace_root}`")
@@ -3983,7 +4149,10 @@ async def test_feature_composition_preserves_tool_scope_and_instruction_order(
     positions = [req.system_prompt.index(marker) for marker in markers]
     assert positions == sorted(positions)
     for name in (
-        "safety_instructions", "genui_instructions", "persona_instructions", "skills_instructions"
+        "safety_instructions",
+        "genui_instructions",
+        "persona_instructions",
+        "skills_instructions",
     ):
         assert req.system_prompt.count(f"<{name}>") == 1
         assert req.system_prompt.count(f"</{name}>") == 1
@@ -3999,13 +4168,15 @@ async def test_feature_composition_preserves_tool_scope_and_instruction_order(
     instructions = req.system_prompt.split("<tool_use_instructions>", 1)[1].split(
         "</tool_use_instructions>", 1
     )[0]
-    assert f"<tool_use_instructions>{instructions}</tool_use_instructions>" == tool_prompt
+    assert (
+        f"<tool_use_instructions>{instructions}</tool_use_instructions>" == tool_prompt
+    )
     assert req.system_prompt.count("</execution_environment>") == 1
     assert req.system_prompt.count("<tool_use_instructions>") == 1
     assert req.system_prompt.count("</tool_use_instructions>") == 1
-    assert req.system_prompt.index("</execution_environment>") < req.system_prompt.index(
-        "<tool_use_instructions>"
-    )
+    assert req.system_prompt.index(
+        "</execution_environment>"
+    ) < req.system_prompt.index("<tool_use_instructions>")
     assert "Persona marker" not in environment
     assert "Workspace marker" not in environment
     if runtime == "local":
@@ -4017,3 +4188,202 @@ async def test_feature_composition_preserves_tool_scope_and_instruction_order(
         assert "sandboxed environment" in environment
         assert "Current workspace:" not in environment
         assert "Local execution policy:" not in environment
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("platform_name", ["webchat", "test_platform"])
+async def test_wakeup_preserves_the_conversation_prefix(
+    mock_context, mock_event, mock_provider, mock_conversation, platform_name
+):
+    """Keep ordinary and triggered requests identical before their current user turn.
+
+    Args:
+        mock_context: Shared provider, conversation, persona, and tool services.
+        mock_event: Ordinary message used to build the reference request.
+        mock_provider: Provider used by both the ordinary and triggered requests.
+        mock_conversation: Stored conversation whose prefix must remain unchanged.
+        platform_name: Original adapter type used for persona selection.
+    """
+    from copy import deepcopy
+    from dataclasses import replace
+
+    from opentelemetry.trace import format_trace_id, get_current_span
+
+    from astrbot.core.log import _log_context
+    from astrbot.core.platform.astr_message_event import current_message_event
+
+    history = [
+        {"role": "user", "content": "Original question", "custom": {"keep": True}},
+        {"role": "assistant", "content": "Original answer"},
+        {"role": "_checkpoint", "content": {"id": "existing-checkpoint"}},
+    ]
+    mock_conversation.history = json.dumps(history)
+    stored_history = mock_conversation.history
+    config_source = {
+        "provider_settings": {"streaming_response": False, "identifier": True},
+        "plugin_set": ["allowed"],
+    }
+    mock_context.get_config.return_value = config_source
+    metadata = PlatformMetadata(
+        id=platform_name, name=platform_name, description="Adapter"
+    )
+    mock_event.platform_meta = metadata
+    mock_event.get_platform_name.return_value = platform_name
+    mock_event.unified_msg_origin = f"{platform_name}:FriendMessage:prefix-test"
+    mock_context.persona_manager.resolve_selected_persona.return_value = (
+        ("_chatui_default_", None, None, True)
+        if platform_name == "webchat"
+        else ("persona", {"prompt": "Stable persona", "tools": None}, None, False)
+    )
+    mock_context.get_platform_inst.return_value = SimpleNamespace(meta=lambda: metadata)
+    mock_context.get_llm_tool_manager.return_value.get_full_tool_set.side_effect = (
+        ToolSet
+    )
+    mock_context.get_using_provider_async.side_effect = None
+    mock_context.get_using_provider_async.return_value = mock_provider
+    mock_context.conversation_manager.get_curr_conversation_id = AsyncMock(
+        return_value="conv-id"
+    )
+    mock_context.conversation_manager.get_conversation = AsyncMock(
+        return_value=mock_conversation
+    )
+    mock_context.conversation_manager.update_conversation = AsyncMock()
+    runner = MagicMock(state=AgentState.DONE)
+    runner.reset = AsyncMock()
+    runner.step_until_done.return_value.__aiter__.return_value = []
+    runner.get_final_llm_resp.return_value = LLMResponse(
+        role="assistant", completion_text="Completed"
+    )
+    built = []
+    original_build = ama.build_main_agent
+
+    async def build(**kwargs):
+        event = kwargs["event"]
+        assert kwargs["req"].system_prompt == ""
+        assert current_message_event.get() is event
+        assert (
+            format_trace_id(get_current_span().get_span_context().trace_id)
+            == event.trace.trace_id
+        )
+        assert _log_context.get().platform_type == platform_name
+        assert event.plugins_name == ["allowed"]
+        result = await original_build(**kwargs)
+        built.append(result.provider_request)
+        return result
+
+    config = replace(
+        ama.MainAgentBuildConfig.from_config(config_source),
+        call_request_hook=True,
+        validate_provider_endpoint=True,
+    )
+    with (
+        patch.object(builder_build, "AgentRunner", return_value=runner),
+        patch.object(builder_build, "call_event_hook", AsyncMock(return_value=False)),
+        patch.object(
+            builder_build,
+            "AstrAgentContext",
+            side_effect=lambda **kw: SimpleNamespace(**kw),
+        ),
+        patch.object(persona_build, "SkillManager") as skills,
+        patch.object(
+            knowledge_base_build,
+            "retrieve_knowledge_base",
+            AsyncMock(return_value=None),
+        ),
+    ):
+        skills.return_value.list_skills.return_value = []
+        reference = await original_build(
+            event=mock_event,
+            plugin_context=mock_context,
+            provider=mock_provider,
+            config=config,
+            req=ProviderRequest(
+                prompt="Ordinary request",
+                conversation=mock_conversation,
+                contexts=deepcopy(history),
+            ),
+        )
+        with patch.object(ama, "build_main_agent", side_effect=build):
+            for user_prompt in (
+                PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
+                    cron_job='{"id":"job","run_started_at":"first"}'
+                ),
+                PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
+                    cron_job='{"id":"job","run_started_at":"second"}'
+                ),
+                BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
+                    background_task_result='{"task_id":"task","result":"done"}'
+                ),
+            ):
+                await wake_main_agent(
+                    mock_context,
+                    session_str=mock_event.unified_msg_origin,
+                    user_prompt=user_prompt,
+                )
+                actual = built[-1]
+                assert actual.system_prompt == reference.provider_request.system_prompt
+                assert actual.contexts == reference.provider_request.contexts == history
+                assert (
+                    actual.func_tool.names()
+                    == reference.provider_request.func_tool.names()
+                )
+                assert actual.prompt == user_prompt
+                saved = mock_context.conversation_manager.update_conversation.await_args.kwargs[
+                    "history"
+                ]
+                assert saved[: len(history)] == history
+                assert saved[len(history) :] == [
+                    {"role": "user", "content": user_prompt},
+                    {"role": "assistant", "content": "Completed"},
+                ]
+                assert mock_conversation.history == stored_history
+                assert current_message_event.get() is None
+                assert not get_current_span().get_span_context().is_valid
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stopped", [False, True])
+async def test_wakeup_waits_for_the_existing_conversation_turn(mock_context, stopped):
+    """Read the latest conversation after the foreground turn releases its lock.
+
+    Args:
+        mock_context: Services whose history reads must wait for the session lock.
+        stopped: Whether cancellation arrives while the wakeup waits for its turn.
+    """
+    from astrbot.core.utils.session_lock import session_lock_manager
+
+    umo = "test:FriendMessage:locked-wakeup"
+    signal = asyncio.Event()
+    mock_context.get_config.return_value = {}
+    runner = MagicMock(state=AgentState.DONE)
+    runner.step_until_done.return_value.__aiter__.return_value = []
+    runner.get_final_llm_resp.return_value = None
+    with (
+        patch.object(
+            ama,
+            "build_main_agent",
+            AsyncMock(return_value=SimpleNamespace(agent_runner=runner)),
+        ) as build,
+        patch(
+            "astrbot.core.astr_agent_wakeup.persist_agent_history", AsyncMock()
+        ) as persist,
+    ):
+        async with session_lock_manager.acquire_lock(umo):
+            task = asyncio.create_task(
+                wake_main_agent(
+                    mock_context,
+                    session_str=umo,
+                    user_prompt="Triggered turn",
+                    stop_signal=signal,
+                )
+            )
+            await asyncio.sleep(0)
+            build.assert_not_awaited()
+            mock_context.get_config.assert_not_called()
+            assert umo in active_event_registry._events
+            if stopped:
+                signal.set()
+        await asyncio.wait_for(task, timeout=1)
+        assert build.await_count == int(not stopped)
+        assert persist.await_count == int(not stopped)
+    assert umo not in active_event_registry._events

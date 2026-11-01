@@ -98,39 +98,34 @@ LIVE_MODE_SYSTEM_PROMPT = (
     "\n</live_mode_instructions>"
 )
 
-PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT = (
-    "You are an autonomous proactive agent.\n\n"
-    "You are awakened by a scheduled cron job, not by a user message.\n"
-    "# IMPORTANT RULES\n"
-    "1. This is NOT a chat turn. Do NOT greet the user. Do NOT ask the user questions unless strictly necessary.\n"
-    "2. Use historical conversation and memory to understand you and user's relationship, preferences, and context.\n"
-    "3. If messaging the user: Explain WHY you are contacting them; Reference the cron task implicitly (not technical details).\n"
-    "4. Use your available tools and skills to finish the task if needed.\n"
-    "5. Use `send_message_to_user` tool to send message to user if needed.\n"
-)
-
 PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT = (
+    "<system_reminder>\n"
     "# CRON JOB CONTEXT\n"
     "The following object describes the scheduled task that triggered you:\n"
     "{cron_job}\n\n"
     "You are now responding to a scheduled task. "
+    "Do not greet the user or ask questions unless strictly necessary. "
+    "Use the existing conversation and available tools to complete the task. "
+    "If contacting the user, explain why and refer to the task naturally. "
+    "Use `send_message_to_user` to deliver any message; your final response alone is not delivered. "
     "Proceed according to your system instructions. "
     "Output using same language as previous conversation. "
     "After completing your task, summarize and output your actions and results."
+    "\n</system_reminder>"
 )
 
-BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT = (
-    "You are an autonomous proactive agent.\n\n"
-    "You are awakened by the completion of a background task you initiated earlier.\n"
-    "# IMPORTANT RULES\n"
-    "1. This is NOT a chat turn. Do NOT greet the user. Do NOT ask the user questions unless strictly necessary. Do NOT respond if no meaningful action is required."
-    "2. Use historical conversation and memory to understand you and user's relationship, preferences, and context."
-    "3. If messaging the user: Explain WHY you are contacting them; Reference the background task implicitly (not technical details)."
-    "4. You can use your available tools and skills to finish the task if needed.\n"
-    "5. Use `send_message_to_user` tool to send message to user if needed."
+BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT = (
+    "<system_reminder>\n"
+    "A background task you initiated has completed. "
+    "Use the existing conversation to decide what to do next. "
+    "Do not greet the user, ask unnecessary questions, or send a message if no meaningful action is required. "
+    "If contacting the user, explain why and refer to the task naturally. "
+    "Use `send_message_to_user` to deliver any message; your final response alone is not delivered. "
+    "Output in the same language as the previous conversation.\n\n"
     "# BACKGROUND TASK CONTEXT\n"
     "The following object describes the background task that completed:\n"
     "{background_task_result}"
+    "\n</system_reminder>"
 )
 
 # we prevent astrbot from connecting to known malicious hosts
