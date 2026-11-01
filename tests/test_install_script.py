@@ -24,16 +24,33 @@ PYTHON_MIRROR = (
     "https://mirrors.ustc.edu.cn/github-release/astral-sh/python-build-standalone/"
 )
 
-FAKE_UV = b"""#!/bin/bash
-if [ "$1" = --version ]; then printf 'uv fixture\\n'; exit 0; fi
-if [ "$1" = tool ] && [ "$2" = update-shell ]; then touch "$TEST_DIR/uv-update-shell"; exit 0; fi
-printf '%s\\n' "$@" > "$TEST_DIR/uv-args"
-printf '%s\\n' "${UV_PYTHON_INSTALL_MIRROR:-}" >> "$TEST_DIR/python-mirrors"
+FAKE_UV = rb"""#!/bin/bash
+if [ "$1" = --version ]; then printf 'uv fixture\n'; exit 0; fi
+if [ "$1" = tool ] && [ "$2" = update-shell ]; then
+  touch "$TEST_DIR/uv-update-shell"
+  printf '%s\n' "$PATH" > "$TEST_DIR/update-shell-path"
+  if [ "${TEST_UPDATE_SHELL_FAIL:-0}" = 1 ]; then
+    printf 'Cannot write shell configuration\n' >&2
+    exit 1
+  fi
+  case ":$PATH:" in
+    *":$UV_UNMANAGED_INSTALL:"*) exit 0 ;;
+  esac
+  line="$(printf 'export PATH=%q:\"$PATH\"' "$UV_UNMANAGED_INSTALL")"
+  if ! grep -Fqx "$line" "$HOME/.bashrc"; then
+    printf '%s\n' "$line" >> "$HOME/.bashrc"
+  fi
+  exit 0
+fi
+printf '%s\n' "$@" > "$TEST_DIR/uv-args"
+printf '%s\n' "${UV_PYTHON_INSTALL_MIRROR:-}" >> "$TEST_DIR/python-mirrors"
 if [ "${TEST_FAIL_ONCE:-0}" = 1 ] && [ ! -f "$TEST_DIR/failed-once" ]; then
   touch "$TEST_DIR/failed-once"
   exit 1
 fi
-exit "${TEST_INSTALL_EXIT:-0}"
+if [ "${TEST_INSTALL_EXIT:-0}" != 0 ]; then exit "$TEST_INSTALL_EXIT"; fi
+printf '#!/bin/bash\nexit 0\n' > "$UV_UNMANAGED_INSTALL/astrbot"
+chmod +x "$UV_UNMANAGED_INSTALL/astrbot"
 """
 
 # BASH_ENV supplies only fixture commands; uv itself is a real fixture executable.
@@ -116,6 +133,7 @@ class ShellInstallerTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory(prefix="astrbot-shell-test-")
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
+        (self.root / ".bashrc").touch()
         (self.root / "fake-uv").write_bytes(FAKE_UV)
         (self.root / "fake-uv").chmod(0o755)
         (self.root / "env.sh").write_text(MOCK_ENV)
@@ -138,6 +156,8 @@ class ShellInstallerTests(unittest.TestCase):
         ):
             self.env.pop(key, None)
         self.env.update(
+            HOME=str(self.root),
+            PATH="/usr/bin:/bin",
             BASH_ENV=str(self.root / "env.sh"),
             TEST_DIR=str(self.root),
             UV_UNMANAGED_INSTALL=str(self.root / "bin"),
@@ -249,6 +269,62 @@ class ShellInstallerTests(unittest.TestCase):
             "    astrbot run\n",
             output,
         )
+
+    def test_fresh_install_commands_available_after_bash_reload(self):
+        status, output = self.run_installer(["--non-interactive"], existing=False)
+        self.assertEqual(status, 0, output)
+        shell_env = self.env.copy()
+        shell_env.pop("BASH_ENV")
+        result = subprocess.run(
+            [
+                "/bin/bash",
+                "--noprofile",
+                "--norc",
+                "-c",
+                'source "$HOME/.bashrc"; command -v uv; command -v astrbot',
+            ],
+            env=shell_env,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            result.stdout.splitlines(),
+            [str(self.root / "bin/uv"), str(self.root / "bin/astrbot")],
+        )
+
+    def test_recovered_uv_updates_shell_with_original_path(self):
+        # Spaces in the install directory must survive executable lookup.
+        install_dir = self.root / "custom bin"
+        install_dir.mkdir()
+        shutil.copy2(self.root / "fake-uv", install_dir / "uv")
+        self.env["UV_UNMANAGED_INSTALL"] = str(install_dir)
+        self.env["PATH"] += ":/custom/bin"
+        for _ in range(2):
+            status, output = self.run_installer(["--non-interactive"], existing=False)
+            self.assertEqual(status, 0, output)
+            self.assertEqual(
+                (self.root / "update-shell-path").read_text().strip(),
+                self.env["PATH"],
+            )
+        self.assertEqual(len((self.root / ".bashrc").read_text().splitlines()), 1)
+        self.assertFalse((self.root / "requests").exists())
+
+    def test_existing_path_does_not_modify_shell_configuration(self):
+        self.env["PATH"] = f"{self.root / 'bin'}:{self.env['PATH']}"
+        status, output = self.run_installer(["--non-interactive"])
+        self.assertEqual(status, 0, output)
+        self.assertEqual((self.root / ".bashrc").read_text(), "")
+
+    def test_shell_update_failure_shows_diagnostic_and_retry_command(self):
+        self.env["TEST_UPDATE_SHELL_FAIL"] = "1"
+        status, output = self.run_installer(["--non-interactive"])
+        self.assertEqual(status, 0, output)
+        self.assertIn("AstrBot has been installed", output)
+        self.assertIn("Cannot write shell configuration", output)
+        self.assertIn("[WARN]", output)
+        self.assertIn(f"{self.root / 'bin/uv'} tool update-shell", output)
 
     def test_chinese_defaults_to_all_china_mirrors(self):
         status, output = self.run_installer(

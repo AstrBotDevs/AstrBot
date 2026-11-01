@@ -400,6 +400,7 @@ install_uv() {
 }
 
 # Recover an existing installation before downloading uv again.
+original_path="$PATH"
 refresh_uv_path
 if ! has uv; then install_uv; fi
 if ! has uv; then err "$(message UvFailed)"; exit 1; fi
@@ -439,7 +440,13 @@ if [ "$tool_install_exit_code" -ne 0 ]; then
   exit "$tool_install_exit_code"
 fi
 ok "$(message Installed)"
-uv tool update-shell >/dev/null 2>&1 || true
+# uv skips shell configuration when its tool directory is already on PATH.
+# Use the caller's PATH and resolve uv before removing our temporary additions.
+uv_executable="$(type -P uv)"
+if ! PATH="$original_path" "$uv_executable" tool update-shell; then
+  warn 'Could not update shell PATH. Run the following command, then reload your shell:'
+  printf '%s  %q tool update-shell\n' "$indent" "$uv_executable"
+fi
 printf '\n%s%s\n' "$indent" "$(message ReloadShell)"
 printf '%s  Bash: source ~/.bashrc\n' "$indent"
 printf '%s  Zsh: source ~/.zshrc\n' "$indent"
