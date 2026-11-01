@@ -1,5 +1,7 @@
 import asyncio
+import base64
 import json
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -12,12 +14,14 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
-from astrbot.core.message.components import Image
+from astrbot.core.message.components import Image, Plain, Record
+from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.provider.func_tool_manager import (
     FunctionToolManager,
     _PermissionGuardedTool,
 )
 from astrbot.core.tools.computer_tools.shell import ShellSessionTool
+from astrbot.core.utils import media_utils
 from astrbot.core.utils.active_event_registry import ActiveEventRegistry
 
 
@@ -45,6 +49,262 @@ def _build_run_context(message_components: list[object] | None = None):
     event = _DummyEvent(message_components=message_components)
     ctx = SimpleNamespace(event=event, context=SimpleNamespace())
     return ContextWrapper(context=ctx)
+
+
+@pytest.fixture
+def audio_handoff(monkeypatch):
+    """Provide a handoff with the real executor and an isolated model boundary.
+
+    Args:
+        monkeypatch: Fixture used to replace background result delivery.
+
+    Returns:
+        The tool, execution context, and background delivery mock.
+    """
+    run_context = _build_run_context()
+    run_context.context.context = SimpleNamespace(
+        get_current_chat_provider_id=AsyncMock(return_value="audio-provider"),
+        tool_loop_agent=AsyncMock(
+            return_value=SimpleNamespace(completion_text="heard")
+        ),
+        get_config=lambda **_kwargs: {"provider_settings": {}},
+    )
+    wake = AsyncMock()
+    monkeypatch.setattr(
+        FunctionToolExecutor, "_wake_main_agent_for_background_result", wake
+    )
+    return HandoffTool(Agent(name="audio", tools=[])), run_context, wake
+
+
+def test_handoff_audio_schema_is_optional_and_preserves_custom_schema():
+    tool = HandoffTool(Agent(name="audio"))
+    assert tool.parameters["properties"]["audio_urls"]["items"] == {"type": "string"}
+    assert "audio_urls" not in tool.parameters.get("required", [])
+    custom = {"type": "object", "properties": {"input": {"type": "string"}}}
+    assert HandoffTool(Agent(name="custom"), parameters=custom).parameters == custom
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        (None, []),
+        ([], []),
+        (" https://example.com/audio.wav ", ["https://example.com/audio.wav"]),
+        ([" a.wav ", "a.wav", "", 123, None, "b.wav"], ["a.wav", "b.wav"]),
+        (("a.wav", "b.wav"), ["a.wav", "b.wav"]),
+        ({"a.wav"}, ["a.wav"]),
+        (b"audio.wav", []),
+        (123, []),
+    ],
+)
+async def test_handoff_forwards_normalized_audio(audio_handoff, raw, expected):
+    tool, run_context, _ = audio_handoff
+    results = [
+        result
+        async for result in FunctionToolExecutor.execute(
+            tool, run_context, input="listen", audio_urls=raw
+        )
+    ]
+    request = run_context.context.context.tool_loop_agent.await_args.kwargs
+    assert request["audio_urls"] == expected
+    assert request["prompt"] == "listen"
+    assert request["chat_provider_id"] == "audio-provider"
+    assert results[0].content[0].text == "heard"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("background", [False, True])
+async def test_handoff_collects_audio_once_in_both_paths(
+    monkeypatch, audio_handoff, background
+):
+    tool, run_context, wake = audio_handoff
+    run_context.context.event.message_obj.message = [
+        Plain("listen"),
+        Record(file="bad"),
+        Record(file="good"),
+        Record(file="empty"),
+    ]
+    resolve = AsyncMock(side_effect=[RuntimeError("unavailable"), "/tmp/voice.wav", ""])
+    monkeypatch.setattr(Record, "_resolve_file_source", resolve)
+    args = {"input": "listen", "audio_urls": [" /tmp/voice.wav ", "/tmp/other.wav"]}
+    if background:
+        registry = ActiveEventRegistry()
+        monkeypatch.setattr(
+            "astrbot.core.astr_agent_tool_exec.active_event_registry", registry
+        )
+        results = [
+            r
+            async for r in FunctionToolExecutor.execute(
+                tool, run_context, background_task=True, **args
+            )
+        ]
+        task = next(
+            iter(registry._background_tasks[run_context.context.event.unified_msg_origin])
+        )
+        await task
+        assert "submitted" in results[0].content[0].text
+        wake.assert_awaited_once()
+        assert "heard" in wake.await_args.kwargs["result_text"]
+    else:
+        _ = [r async for r in FunctionToolExecutor.execute(tool, run_context, **args)]
+        wake.assert_not_awaited()
+    assert resolve.await_count == 3
+    request = run_context.context.context.tool_loop_agent.await_args.kwargs
+    assert request["audio_urls"] == ["/tmp/voice.wav", "/tmp/other.wav"]
+    assert args["audio_urls"] == [" /tmp/voice.wav ", "/tmp/other.wav"]
+
+
+@pytest.mark.asyncio
+async def test_handoff_collects_event_audio_without_explicit_sources(
+    monkeypatch, audio_handoff
+):
+    tool, run_context, _ = audio_handoff
+    run_context.context.event.message_obj.message = [Record(file="voice")]
+    resolve = AsyncMock(return_value="/tmp/voice.wav")
+    monkeypatch.setattr(Record, "_resolve_file_source", resolve)
+    _ = [
+        r async for r in FunctionToolExecutor.execute(tool, run_context, input="listen")
+    ]
+    resolve.assert_awaited_once()
+    request = run_context.context.context.tool_loop_agent.await_args.kwargs
+    assert request["audio_urls"] == ["/tmp/voice.wav"]
+
+
+@pytest.mark.asyncio
+async def test_background_handoff_submits_before_audio_ready_and_can_cancel(
+    monkeypatch, audio_handoff
+):
+    tool, run_context, wake = audio_handoff
+    run_context.context.event.message_obj.message = [Record(file="voice")]
+    started, release, closed = asyncio.Event(), asyncio.Event(), asyncio.Event()
+
+    async def resolve(_record):
+        started.set()
+        try:
+            await release.wait()
+            return "/tmp/voice.wav"
+        finally:
+            closed.set()
+
+    registry = ActiveEventRegistry()
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_tool_exec.active_event_registry", registry
+    )
+    monkeypatch.setattr(Record, "_resolve_file_source", resolve)
+    results = [
+        r
+        async for r in FunctionToolExecutor.execute(
+            tool, run_context, input="listen", background_task=True
+        )
+    ]
+    assert "submitted" in results[0].content[0].text
+    task = next(
+        iter(registry._background_tasks[run_context.context.event.unified_msg_origin])
+    )
+    started_waiter = asyncio.create_task(started.wait())
+    try:
+        done, _ = await asyncio.wait(
+            (started_waiter, task), return_when=asyncio.FIRST_COMPLETED
+        )
+        assert started_waiter in done
+        assert not release.is_set()
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        assert task.cancelled() and closed.is_set()
+        run_context.context.context.tool_loop_agent.assert_not_awaited()
+        wake.assert_not_awaited()
+    finally:
+        task.cancel()
+        started_waiter.cancel()
+        await asyncio.gather(task, started_waiter, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_handoff_audio_source_resolution_cancellation_propagates(
+    monkeypatch, audio_handoff
+):
+    tool, run_context, _ = audio_handoff
+    run_context.context.event.message_obj.message = [Record(file="voice")]
+    monkeypatch.setattr(
+        Record, "_resolve_file_source", AsyncMock(side_effect=asyncio.CancelledError)
+    )
+    with pytest.raises(asyncio.CancelledError):
+        _ = [
+            r
+            async for r in FunctionToolExecutor.execute(
+                tool, run_context, input="listen"
+            )
+        ]
+    run_context.context.context.tool_loop_agent.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("background", [False, True])
+@pytest.mark.parametrize("source_kind", ["remote", "data", "local", "failed_remote"])
+async def test_handoff_deduplicates_sources_and_leaves_cleanup_to_request(
+    monkeypatch, tmp_path, audio_handoff, background, source_kind
+):
+    tool, run_context, _ = audio_handoff
+    audio_bytes = b"RIFF\x24\x00\x00\x00WAVEfmt " + b"\x00" * 16
+    data_url = f"data:audio/wav;base64,{base64.b64encode(audio_bytes).decode()}"
+    original = tmp_path / "original.wav"
+    original.write_bytes(audio_bytes)
+    temp_dir = tmp_path / "temp"
+    temp_dir.mkdir()
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(temp_dir))
+    source = (
+        str(original)
+        if source_kind == "local"
+        else data_url
+        if source_kind == "data"
+        else "https://example.com/voice.amr"
+    )
+
+    async def download(_url, path):
+        Path(path).write_bytes(audio_bytes)
+        if source_kind == "failed_remote":
+            raise OSError("download failed")
+
+    async def convert(path):
+        converted = Path(path).with_suffix(".wav")
+        converted.write_bytes(audio_bytes)
+        return str(converted)
+
+    download_mock = AsyncMock(side_effect=download)
+    monkeypatch.setattr(media_utils, "download_file", download_mock)
+    monkeypatch.setattr(media_utils, "ensure_wav", convert)
+    records = [Record(file="voice.amr", url=source), Record(file=source)]
+    if source_kind == "failed_remote":
+        records.append(Record(file=data_url))
+    run_context.context.event.message_obj.message = records
+
+    async def run_agent(**kwargs):
+        expected = [source, data_url] if source_kind == "failed_remote" else [source]
+        assert kwargs["audio_urls"] == expected
+        assert not list(temp_dir.iterdir())
+        payload = await ProviderRequest(
+            audio_urls=kwargs["audio_urls"]
+        ).assemble_context()
+        audio_parts = [
+            part for part in payload["content"] if part["type"] == "audio_url"
+        ]
+        assert len(audio_parts) == 1
+        assert audio_parts[0]["audio_url"]["url"] == data_url
+        assert not list(temp_dir.iterdir())
+        return SimpleNamespace(completion_text="heard")
+
+    run_context.context.context.tool_loop_agent = AsyncMock(side_effect=run_agent)
+    args = {"input": "listen", "audio_urls": [f" {source} "]}
+    if background:
+        await FunctionToolExecutor._do_handoff_background(
+            tool, run_context, task_id="source-test", **args
+        )
+    else:
+        _ = [r async for r in FunctionToolExecutor.execute(tool, run_context, **args)]
+    assert download_mock.await_count == (1 if "remote" in source_kind else 0)
+    assert not list(temp_dir.iterdir())
+    assert original.read_bytes() == audio_bytes
 
 
 @pytest.mark.asyncio
