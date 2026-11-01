@@ -1,5 +1,6 @@
 import asyncio
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -95,3 +96,31 @@ async def test_simulated_stream_tts_leaves_audio_for_deferred_cleanup(tmp_path):
     assert await audio_queue.get() == ("hello", b"audio")
     assert await audio_queue.get() is None
     assert audio_path.exists()
+
+
+@pytest.mark.asyncio
+async def test_silent_execution_suppresses_automatic_webchat_frames():
+    """Run tool status, statistics, and model output without sending UI messages."""
+    runner = _StreamingErrorRunner("")
+    event = runner.run_context.context.event
+    event.get_platform_name = lambda: "webchat"
+    event.send, event.set_result = AsyncMock(), MagicMock()
+    event.trace = SimpleNamespace(record=MagicMock())
+
+    async def steps():
+        for kind in (
+            "tool_call",
+            "tool_call_result",
+            "agent_stats",
+            "streaming_delta",
+            "llm_result",
+        ):
+            yield AgentResponse(
+                type=kind, data={"chain": MessageChain().message("Output")}
+            )
+        runner.finished = True
+
+    runner.step = steps
+    assert [chain async for chain in run_agent(runner, emit_output=False)] == []
+    event.send.assert_not_awaited()
+    event.set_result.assert_not_called()

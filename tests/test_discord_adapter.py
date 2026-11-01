@@ -78,7 +78,7 @@ async def test_discord_reply_body_reaches_model_request(source):
     Args:
         source: Where the referenced Discord message is available.
     """
-    from astrbot.core.astr_main_agent import _process_quote_message
+    from astrbot.core.astr_main_agent.media import append_quoted_content
     from astrbot.core.provider.entities import ProviderRequest
 
     adapter = DiscordPlatformAdapter.__new__(DiscordPlatformAdapter)
@@ -109,7 +109,7 @@ async def test_discord_reply_body_reaches_model_request(source):
 
     abm = await adapter.convert_message({"message": message})
     req = ProviderRequest(prompt=abm.message_str)
-    await _process_quote_message(SimpleNamespace(message_obj=abm), req, "", Mock())
+    await append_quoted_content(SimpleNamespace(message_obj=abm), req, "", Mock())
 
     assert req.prompt == "What is the quoted code?"
     quoted_text = "\n".join(part.text for part in req.extra_user_content_parts)
