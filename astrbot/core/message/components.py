@@ -598,11 +598,19 @@ class Share(BaseMessageComponent):
 
 class Contact(BaseMessageComponent):  # TODO
     type: ComponentType = ComponentType.Contact
-    _type: str  # type 字段冲突
+    # OneBot contact segments carry their own ``type`` (qq / group), but ``type``
+    # is already the component name, so it is kept as a private field.
+    _type: str = PrivateAttr(default="")
     id: int | None = 0
 
     def __init__(self, **_) -> None:
+        # pydantic v1 drops underscore-prefixed keyword arguments; accept the
+        # inbound OneBot ``type`` key explicitly so callers such as the
+        # respond-stage validator can read it instead of raising AttributeError.
+        contact_type = _.pop("type", None)
         super().__init__(**_)
+        if contact_type is not None:
+            self._type = str(contact_type)
 
 
 class Location(BaseMessageComponent):  # TODO
@@ -616,10 +624,16 @@ class Location(BaseMessageComponent):  # TODO
         super().__init__(**_)
 
 
+_MUSIC_TYPES = frozenset({"qq", "163", "xm", "custom"})
+"""OneBot V11 music ``data.type`` values that are emitted as-is."""
+
+
 class Music(BaseMessageComponent):
     type: ComponentType = ComponentType.Music
-    _type: str
-    id: int | None = 0
+    # OneBot music segments need ``data.type`` (qq / 163 / xm / custom), but
+    # ``type`` is already the component name, so it is kept as a private field.
+    _type: str = PrivateAttr(default="")
+    id: int | str | None = 0
     url: str | None = ""
     audio: str | None = ""
     title: str | None = ""
@@ -627,10 +641,50 @@ class Music(BaseMessageComponent):
     image: str | None = ""
 
     def __init__(self, **_) -> None:
-        # for k in _.keys():
-        #     if k == "_type" and _[k] not in ["qq", "163", "xm", "custom"]:
-        #         logger.warn(f"Protocol: {k}={_[k]} doesn't match values")
+        # pydantic v1 drops underscore-prefixed keyword arguments and rejects
+        # setting them through __setattr__, so accept both the plugin-facing
+        # ``_type`` keyword and the inbound OneBot ``type`` key here. ``type`` is
+        # always consumed: leaving it in ``_`` would make the base model validate
+        # it against ``ComponentType`` and fail.
+        legacy_type = _.pop("type", None)
+        music_type = _.pop("_type", None) or legacy_type
         super().__init__(**_)
+        if not music_type:
+            # Derive a usable type so the segment never carries an empty
+            # ``data.type``; payloads with custom fields are custom shares.
+            self._type = "custom" if (self.url or self.audio) else "163"
+        elif str(music_type) in _MUSIC_TYPES:
+            self._type = str(music_type)
+        else:
+            # A mispassed value (for example a ComponentType member) would make
+            # the segment invalid, so log it and fall back to a usable type.
+            self._type = "custom" if (self.url or self.audio) else "163"
+            logger.warning(
+                "Unsupported OneBot music type %r, falling back to %r",
+                music_type,
+                self._type,
+            )
+
+    def toDict(self) -> dict:
+        """Serialize this component to an OneBot V11 music segment.
+
+        The base implementation only walks model fields, which cannot include the
+        private ``_type``, so the required ``data.type`` key is added explicitly.
+        ``qq`` / ``163`` / ``xm`` segments reference a song by ``id``, while a
+        ``custom`` segment carries the share URLs and display fields.
+
+        Returns:
+            The ``{"type": "music", "data": {...}}`` segment.
+        """
+        data: dict[str, Any] = {"type": self._type}
+        if self._type == "custom":
+            for key in ("url", "audio", "title", "content", "image"):
+                value = getattr(self, key)
+                if value:
+                    data[key] = value
+        elif self.id:
+            data["id"] = str(self.id)
+        return {"type": "music", "data": data}
 
 
 class Image(BaseMessageComponent):
