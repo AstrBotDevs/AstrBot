@@ -266,27 +266,7 @@ class InternalAgentSubStage(Stage):
                     )
 
                     # 检测 Live Mode
-                    if is_wakeup:
-                        async for _ in run_agent(
-                            agent_runner, self.max_step, emit_output=False
-                        ):
-                            pass
-                        if (
-                            event.is_stopped()
-                            or active_event_registry.get_background_stop_signal(
-                                event
-                            ).is_set()
-                        ):
-                            raise asyncio.CancelledError()
-                        response = agent_runner.get_final_llm_resp()
-                        if agent_runner.state == AgentState.ERROR or (
-                            response is not None and response.role == "err"
-                        ):
-                            detail = f": {response.completion_text}" if response else ""
-                            raise RuntimeError(
-                                f"Wakeup agent run ended in ERROR state{detail}"
-                            )
-                    elif action_type == "live":
+                    if action_type == "live":
                         # Live Mode: 使用 run_live_agent
                         logger.info(
                             "[Internal Agent] Live Mode detected; enabling TTS processing."
@@ -382,6 +362,23 @@ class InternalAgentSubStage(Stage):
                             yield
 
                     final_resp = agent_runner.get_final_llm_resp()
+                    if is_wakeup:
+                        if (
+                            event.is_stopped()
+                            or active_event_registry.get_background_stop_signal(
+                                event
+                            ).is_set()
+                        ):
+                            raise asyncio.CancelledError()
+                        if agent_runner.state == AgentState.ERROR or (
+                            final_resp is not None and final_resp.role == "err"
+                        ):
+                            detail = (
+                                f": {final_resp.completion_text}" if final_resp else ""
+                            )
+                            raise RuntimeError(
+                                f"Wakeup agent run ended in ERROR state{detail}"
+                            )
 
                     event.trace.record(
                         "astr_agent_complete",
