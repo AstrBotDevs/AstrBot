@@ -456,13 +456,21 @@ if [ "$(type -t uv)" = 'function' ]; then
 fi
 # Preserve invocation-only settings in the retry command, including wrapper overrides.
 tool_bin_dir="$("$uv_executable" tool dir --bin)" || tool_bin_dir="${UV_TOOL_BIN_DIR:-}"
-if ! (
+# uv uses an error exit even when its shell configuration is already correct.
+# Match only that diagnostic; preserve all other errors and their retry commands.
+if shell_update_output="$(
   export PATH="$original_path"
   # Wrappers using `command uv` must still find a recovered binary, while uv
   # itself must see the original PATH when deciding whether to update the shell.
   if [ -n "$uv_binary" ]; then hash -p "$uv_binary" uv; fi
-  "$uv_executable" tool update-shell
-); then
+  "$uv_executable" tool update-shell --color never 2>&1
+)"; then
+  [ -z "$shell_update_output" ] || printf '%s\n' "$shell_update_output" >&2
+elif [[ "$shell_update_output" != *$'\n'* &&
+        "$shell_update_output" == 'error: The executable directory `'*'` is not in PATH, but the '*' configuration files are already up-to-date' ]]; then
+  info 'Shell PATH is already configured. Reload your shell to apply it.'
+else
+  [ -z "$shell_update_output" ] || printf '%s\n' "$shell_update_output" >&2
   warn 'Could not update shell PATH. Run the following command, then reload your shell:'
   if [ -n "$tool_bin_dir" ]; then
     # An assignment also works with shell functions, unlike invoking through env.
@@ -476,7 +484,13 @@ fi
 if [ -n "$uv_binary" ] && [ -n "$tool_bin_dir" ] && \
    [ "${uv_binary%/*}" != "$tool_bin_dir" ]; then
   uv_bin_dir="${uv_binary%/*}"
-  if ! PATH="$original_path" UV_TOOL_BIN_DIR="$uv_bin_dir" "$uv_binary" tool update-shell; then
+  if shell_update_output="$(PATH="$original_path" UV_TOOL_BIN_DIR="$uv_bin_dir" "$uv_binary" tool update-shell --color never 2>&1)"; then
+    [ -z "$shell_update_output" ] || printf '%s\n' "$shell_update_output" >&2
+  elif [[ "$shell_update_output" != *$'\n'* &&
+          "$shell_update_output" == 'error: The executable directory `'*'` is not in PATH, but the '*' configuration files are already up-to-date' ]]; then
+    info 'Shell PATH is already configured. Reload your shell to apply it.'
+  else
+    [ -z "$shell_update_output" ] || printf '%s\n' "$shell_update_output" >&2
     warn 'Could not add the uv installation directory to shell PATH. Run the following command, then reload your shell:'
     printf '%s  env UV_TOOL_BIN_DIR=%q %q tool update-shell\n' "$indent" "$uv_bin_dir" "$uv_binary"
   fi

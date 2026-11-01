@@ -34,17 +34,24 @@ fi
 if [ "$1" = tool ] && [ "$2" = update-shell ]; then
   touch "$TEST_DIR/uv-update-shell"
   printf '%s\n' "$PATH" > "$TEST_DIR/update-shell-path"
+  if [ "${TEST_UPDATE_SHELL_FAIL:-0}" = mixed ]; then
+    printf 'error: The executable directory `%s` is not in PATH, but the current shell could not be determined\n' "$tool_bin_dir" >&2
+    printf 'error: The executable directory `%s` is not in PATH, but the Bash configuration files are already up-to-date\n' "$tool_bin_dir" >&2
+    exit 2
+  fi
   if [ "${TEST_UPDATE_SHELL_FAIL:-0}" = 1 ]; then
     printf 'Cannot write shell configuration\n' >&2
-    exit 1
+    exit 2
   fi
   case ":$PATH:" in
     *":$tool_bin_dir:"*) exit 0 ;;
   esac
   line="$(printf 'export PATH=%q:\"$PATH\"' "$tool_bin_dir")"
-  if ! grep -Fqx "$line" "$HOME/.bashrc"; then
-    printf '%s\n' "$line" >> "$HOME/.bashrc"
+  if grep -Fqx "$line" "$HOME/.bashrc"; then
+    printf 'error: The executable directory `%s` is not in PATH, but the Bash configuration files are already up-to-date\n' "$tool_bin_dir" >&2
+    exit 2
   fi
+  printf '%s\n' "$line" >> "$HOME/.bashrc"
   exit 0
 fi
 printf '%s\n' "$@" > "$TEST_DIR/uv-args"
@@ -306,16 +313,25 @@ class ShellInstallerTests(unittest.TestCase):
         install_dir.mkdir()
         shutil.copy2(self.root / "fake-uv", install_dir / "uv")
         self.env["UV_UNMANAGED_INSTALL"] = str(install_dir)
-        self.env["UV_TOOL_BIN_DIR"] = str(install_dir)
         self.env["PATH"] += ":/custom/bin"
-        for _ in range(2):
-            status, output = self.run_installer(["--non-interactive"], existing=False)
-            self.assertEqual(status, 0, output)
-            self.assertEqual(
-                (self.root / "update-shell-path").read_text().strip(),
-                self.env["PATH"],
-            )
-        self.assertEqual(len((self.root / ".bashrc").read_text().splitlines()), 1)
+        for tool_bin, entries in ((install_dir, 1), (self.root / "tool bin", 2)):
+            with self.subTest(tool_bin=tool_bin):
+                (self.root / ".bashrc").write_text("")
+                self.env["UV_TOOL_BIN_DIR"] = str(tool_bin)
+                for _ in range(2):
+                    status, output = self.run_installer(
+                        ["--non-interactive"], existing=False
+                    )
+                    self.assertEqual(status, 0, output)
+                    self.assertNotIn("[WARN]", output)
+                    self.assertNotIn("tool update-shell", output)
+                    self.assertEqual(
+                        (self.root / "update-shell-path").read_text().strip(),
+                        self.env["PATH"],
+                    )
+                self.assertEqual(
+                    len((self.root / ".bashrc").read_text().splitlines()), entries
+                )
         self.assertFalse((self.root / "requests").exists())
 
     def test_existing_path_does_not_modify_shell_configuration(self):
@@ -325,13 +341,18 @@ class ShellInstallerTests(unittest.TestCase):
         self.assertEqual((self.root / ".bashrc").read_text(), "")
 
     def test_shell_update_failure_shows_diagnostic_and_retry_command(self):
-        self.env["TEST_UPDATE_SHELL_FAIL"] = "1"
-        status, output = self.run_installer(["--non-interactive"])
-        self.assertEqual(status, 0, output)
-        self.assertIn("AstrBot has been installed", output)
-        self.assertIn("Cannot write shell configuration", output)
-        self.assertIn("[WARN]", output)
-        self.assertIn(f"{self.root / 'bin/uv'} tool update-shell", output)
+        for failure, diagnostic in (
+            ("1", "Cannot write shell configuration"),
+            ("mixed", "current shell could not be determined"),
+        ):
+            with self.subTest(failure=failure):
+                self.env["TEST_UPDATE_SHELL_FAIL"] = failure
+                status, output = self.run_installer(["--non-interactive"])
+                self.assertEqual(status, 0, output)
+                self.assertIn("AstrBot has been installed", output)
+                self.assertIn(diagnostic, output)
+                self.assertIn("[WARN]", output)
+                self.assertIn(f"{self.root / 'bin/uv'} tool update-shell", output)
 
     def test_exported_uv_function_reaches_shell_setup(self):
         with (self.root / "env.sh").open("a") as fixture:
@@ -387,7 +408,7 @@ class ShellInstallerTests(unittest.TestCase):
         tool_bin = self.root / "tool bin"
         self.env["UV_UNMANAGED_INSTALL"] = str(uv_bin)
         self.env["UV_TOOL_BIN_DIR"] = str(tool_bin)
-        for fail_update in ("0", "1"):
+        for fail_update in ("0", "1", "mixed"):
             with self.subTest(fail_update=fail_update):
                 (self.root / ".bashrc").write_text("")
                 self.env["TEST_UPDATE_SHELL_FAIL"] = fail_update
@@ -399,7 +420,7 @@ class ShellInstallerTests(unittest.TestCase):
                 shell_env.pop("BASH_ENV")
                 shell_env.pop("TEST_UPDATE_SHELL_FAIL")
                 shell_env.pop("UV_TOOL_BIN_DIR")
-                if fail_update == "1":
+                if fail_update != "0":
                     retries = [
                         line.strip()
                         for line in output.splitlines()
