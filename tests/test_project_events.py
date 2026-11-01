@@ -263,6 +263,9 @@ class EventTests(unittest.TestCase):
         )
         self.assertEqual(graphql.call_count, 2)
         self.assertEqual(graphql.call_args_list[1].args[1]["cursor"], "CURSOR")
+        self.assertEqual(graphql.call_args_list[1].args[1]["id"], "ITEM")
+        self.assertIn("ProjectV2Item", graphql.call_args_list[1].args[0])
+        self.assertIn("fieldValues", graphql.call_args_list[1].args[0])
 
     def test_apply_failure_reports_confirmed_unknown_and_unattempted(self):
         plan = [
