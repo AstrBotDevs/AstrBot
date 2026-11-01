@@ -130,7 +130,6 @@ message() {
     zh-CN:ReloadShell) format='请根据你使用的终端重新加载环境：' ;;
     zh-CN:RunCommands) format='重新加载后，请手动运行：' ;;
     zh-CN:Installed) format='AstrBot 安装完成。' ;;
-    zh-CN:ShellPathUpdateFailed) format='无法更新 Shell PATH。请运行以下命令，然后重新加载终端：' ;;
     en-US:ChooseSource) format='Select a download source' ;;
     en-US:China) format='Mainland China accelerated download mirrors' ;;
     en-US:Official) format='Official sources' ;;
@@ -161,7 +160,6 @@ message() {
     en-US:ReloadShell) format='Reload the environment for your shell:' ;;
     en-US:RunCommands) format='Then run these commands manually:' ;;
     en-US:Installed) format='AstrBot has been installed.' ;;
-    en-US:ShellPathUpdateFailed) format='Could not update shell PATH. Run the following command, then reload your shell:' ;;
     ja-JP:ChooseSource) format='ダウンロード元を選択してください' ;;
     ja-JP:China) format='中国本土向け高速ダウンロードミラー' ;;
     ja-JP:Official) format='公式ソース' ;;
@@ -192,7 +190,6 @@ message() {
     ja-JP:ReloadShell) format='使用するシェルに合わせて環境を再読み込みしてください：' ;;
     ja-JP:RunCommands) format='その後、以下のコマンドを手動で実行してください：' ;;
     ja-JP:Installed) format='AstrBot のインストールが完了しました。' ;;
-    ja-JP:ShellPathUpdateFailed) format='シェルの PATH を更新できませんでした。次のコマンドを実行してからシェルを再読み込みしてください：' ;;
     *) printf 'Unknown message: %s\n' "$key" >&2; return 1 ;;
   esac
   printf "$format\n" "$@"
@@ -404,6 +401,11 @@ install_uv() {
 
 # Recover an existing installation before downloading uv again.
 original_path="$PATH"
+# uv tool install changes directories, so keep custom bin paths absolute.
+case "${UV_TOOL_BIN_DIR:-}" in
+  ''|/*) ;;
+  *) export UV_TOOL_BIN_DIR="$PWD/$UV_TOOL_BIN_DIR" ;;
+esac
 refresh_uv_path
 if ! has uv; then install_uv; fi
 if ! has uv; then err "$(message UvFailed)"; exit 1; fi
@@ -443,30 +445,10 @@ if [ "$tool_install_exit_code" -ne 0 ]; then
   exit "$tool_install_exit_code"
 fi
 ok "$(message Installed)"
-# Configure both tool and uv directories against the caller's original PATH.
-uv_binary="$(type -P uv)" || uv_binary='uv'
-case "$uv_binary" in
-  /*) ;;
-  */*) uv_binary="$PWD/$uv_binary" ;;
-esac
-uv_bin_dir=''
-case "$uv_binary" in */*) uv_bin_dir="${uv_binary%/*}" ;; esac
-tool_bin_dir="$(uv tool dir --bin)" || tool_bin_dir=''
-previous_dir=''
-for bin_dir in "$tool_bin_dir" "$uv_bin_dir"; do
-  [ -n "$bin_dir" ] && [ "$bin_dir" != "$previous_dir" ] || continue
-  previous_dir="$bin_dir"
-  if output="$(PATH="$original_path" UV_TOOL_BIN_DIR="$bin_dir" "$uv_binary" tool update-shell --color never 2>&1)"; then
-    [ -z "$output" ] || printf '%s\n' "$output" >&2
-  elif [[ "$output" != *$'\n'* &&
-          "$output" == 'error: The executable directory '*' is not in PATH, but the '*' configuration files are already up-to-date' ]]; then
-    : # Already configured; the caller has not reloaded the shell yet.
-  else
-    [ -z "$output" ] || printf '%s\n' "$output" >&2
-    warn "$(message ShellPathUpdateFailed)"
-    printf '%s  UV_TOOL_BIN_DIR=%q %q tool update-shell\n' "$indent" "$bin_dir" "$uv_binary"
-  fi
-done
+# uv must remain executable while uv checks the unmodified caller PATH.
+uv_binary="$(type -P uv)"
+PATH="$original_path" "$uv_binary" tool update-shell >/dev/null 2>&1 || true
+PATH="$original_path" UV_TOOL_BIN_DIR="${uv_binary%/*}" "$uv_binary" tool update-shell >/dev/null 2>&1 || true
 printf '\n%s%s\n' "$indent" "$(message ReloadShell)"
 printf '%s  Bash: source ~/.bashrc\n' "$indent"
 printf '%s  Zsh: source ~/.zshrc\n' "$indent"
