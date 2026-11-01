@@ -5,7 +5,7 @@ from collections import OrderedDict
 from typing import TYPE_CHECKING
 
 from astrbot import logger
-from astrbot.core.umo_alias import get_event_auto_name
+from astrbot.core.umo_alias import get_event_auto_name, normalize_umo_name
 
 if TYPE_CHECKING:
     from astrbot.core.db import BaseDatabase
@@ -15,7 +15,7 @@ MAX_UMO_AUTO_NAME_CACHE_SIZE = 10_000
 
 
 class UmoAutoNameRecorder:
-    """Persist changed UMO names without blocking the waking stage."""
+    """Persist changed session and sender names without blocking waking."""
 
     def __init__(
         self,
@@ -32,10 +32,14 @@ class UmoAutoNameRecorder:
         self.config_id = config_id
         self._cache: OrderedDict[str, str] = OrderedDict()
         self._pending: OrderedDict[str, tuple[str, str]] = OrderedDict()
+        self._sender_cache: OrderedDict[tuple[str, str], str] = OrderedDict()
+        self._sender_pending: OrderedDict[tuple[str, str], tuple[str, str]] = (
+            OrderedDict()
+        )
         self._writer_task: asyncio.Task[None] | None = None
 
     def schedule(self, event: AstrMessageEvent) -> None:
-        """Queue a changed automatic name from an awakened event.
+        """Queue changed session and sender names from an awakened event.
 
         Args:
             event: Awakened event containing the UMO and display metadata.
@@ -45,25 +49,36 @@ class UmoAutoNameRecorder:
 
         umo = event.unified_msg_origin
         auto_name = get_event_auto_name(event, fallback_to_id=False)
-        if not auto_name:
-            return
-        if self._cache.get(umo) == auto_name:
-            self._cache.move_to_end(umo)
-            return
+        sender_id = str(event.get_sender_id() or "")
+        sender_name = normalize_umo_name(event.get_sender_name())
+        # Sender changes must be recorded even when the group name is unchanged.
+        for key, name, cache, pending in (
+            (umo, auto_name, self._cache, self._pending),
+            ((umo, sender_id), sender_name, self._sender_cache, self._sender_pending),
+        ):
+            is_sender = isinstance(key, tuple)
+            if (is_sender and not sender_id) or (not is_sender and not name):
+                continue
+            cached_name = cache.get(key)
+            if cached_name == name or (not name and cached_name):
+                cache.move_to_end(key)
+                continue
 
-        self._cache[umo] = auto_name
-        self._cache.move_to_end(umo)
-        if len(self._cache) > MAX_UMO_AUTO_NAME_CACHE_SIZE:
-            self._cache.popitem(last=False)
+            cache[key] = name
+            cache.move_to_end(key)
+            if len(cache) > MAX_UMO_AUTO_NAME_CACHE_SIZE:
+                cache.popitem(last=False)
 
-        self._pending[umo] = (str(event.get_sender_id() or ""), auto_name)
-        self._pending.move_to_end(umo)
-        if len(self._pending) > MAX_UMO_AUTO_NAME_CACHE_SIZE:
-            dropped_umo, (_, dropped_name) = self._pending.popitem(last=False)
-            if self._cache.get(dropped_umo) == dropped_name:
-                self._cache.pop(dropped_umo, None)
+            pending[key] = (sender_id, name)
+            pending.move_to_end(key)
+            if len(pending) > MAX_UMO_AUTO_NAME_CACHE_SIZE:
+                dropped_key, (_, dropped_name) = pending.popitem(last=False)
+                if cache.get(dropped_key) == dropped_name:
+                    cache.pop(dropped_key, None)
 
-        if self._writer_task is None or self._writer_task.done():
+        if (self._pending or self._sender_pending) and (
+            self._writer_task is None or self._writer_task.done()
+        ):
             task = asyncio.create_task(
                 self._flush(),
                 name=f"umo_auto_name_writer:{self.config_id}",
@@ -72,27 +87,34 @@ class UmoAutoNameRecorder:
             task.add_done_callback(self._on_writer_done)
 
     async def _flush(self) -> None:
-        """Persist queued names sequentially, coalescing changes per UMO."""
+        """Persist queued names sequentially, coalescing changes per identity."""
         if self.db_helper is None:
             return
 
         try:
-            while self._pending:
-                umo, (creator_sender_id, auto_name) = self._pending.popitem(last=False)
+            while self._pending or self._sender_pending:
+                is_sender = not self._pending
+                pending = self._sender_pending if is_sender else self._pending
+                cache = self._sender_cache if is_sender else self._cache
+                key, (sender_id, name) = pending.popitem(last=False)
+                umo = key[0] if is_sender else key
                 try:
-                    await self.db_helper.upsert_umo_auto_name(
-                        umo=umo,
-                        creator_sender_id=creator_sender_id,
-                        auto_name=auto_name,
-                    )
+                    if is_sender:
+                        await self.db_helper.upsert_umo_sender(
+                            umo=umo, sender_id=sender_id, sender_name=name
+                        )
+                    else:
+                        await self.db_helper.upsert_umo_auto_name(
+                            umo=umo, creator_sender_id=sender_id, auto_name=name
+                        )
                 except Exception as exc:
                     logger.warning(
-                        "Failed to persist automatic UMO name for %s: %s",
-                        umo,
+                        "Failed to persist session or sender name for %s: %s",
+                        key,
                         exc,
                     )
-                    if umo not in self._pending and self._cache.get(umo) == auto_name:
-                        self._cache.pop(umo, None)
+                    if key not in pending and cache.get(key) == name:
+                        cache.pop(key, None)
         finally:
             self._writer_task = None
 

@@ -45,6 +45,8 @@ export type BatchSessionServiceRequest = UmoListRequest & {
     tts_enabled?: boolean;
 };
 
+export type BotCleanupTarget = 'custom_rules' | 'preferences' | 'routing' | 'cron_jobs' | 'conversations' | 'message_history' | 'traces' | 'stats';
+
 export type BotConfigRequest = {
     id?: string;
     name?: string;
@@ -102,6 +104,10 @@ export type ChatMessagePatchRequest = {
 };
 
 export type ChatMessageRegenerateRequest = {
+    /**
+     * UI locale for built-in LLM error messages. Omitted or unsupported locales fall back to zh-CN.
+     */
+    locale?: string;
     selected_provider?: string;
     selected_model?: string;
     /**
@@ -132,6 +138,10 @@ export type ChatProjectRequest = {
 export type workspace_type = 'session' | 'project' | 'custom';
 
 export type ChatRequest = {
+    /**
+     * UI locale for built-in LLM error messages. Omitted or unsupported locales fall back to zh-CN.
+     */
+    locale?: string;
     /**
      * Caller-declared WebChat sender/session owner. Configured AstrBot administrator IDs require the chat:admin API key sub-scope.
      */
@@ -185,6 +195,10 @@ export type ChatThreadCreateRequest = {
 };
 
 export type ChatThreadMessageRequest = {
+    /**
+     * UI locale for built-in LLM error messages. Omitted or unsupported locales fall back to zh-CN.
+     */
+    locale?: string;
     message: (string | Array<MessagePart>);
     selected_provider?: string;
     selected_model?: string;
@@ -420,6 +434,11 @@ export type ParameterAttachmentId = string;
 
 export type ParameterAttachmentIdQuery = string;
 
+/**
+ * Data categories to permanently remove for this adapter. Omit to retain all associated data. Shared resources and cross-platform routing rules are preserved.
+ */
+export type ParameterBotCleanup = Array<BotCleanupTarget>;
+
 export type ParameterBotId = string;
 
 export type ParameterChunkId = string;
@@ -585,7 +604,7 @@ export type PluginVersionSupportRequest = {
     astrbot_version?: string;
 };
 
-export type ProviderCapability = 'chat' | 'agent' | 'stt' | 'tts' | 'embedding' | 'rerank';
+export type ProviderCapability = 'chat' | 'agent' | 'stt' | 'tts' | 'embedding' | 'rerank' | 'decision';
 
 export type ProviderConfigRequest = {
     id?: string;
@@ -598,6 +617,10 @@ export type ProviderConfigRequest = {
 export type ProviderSourceConfigRequest = {
     id?: string;
     config: DynamicConfig;
+};
+
+export type PypiIndexTestRequest = {
+    index_url: string;
 };
 
 export type RenameRequest = {
@@ -677,6 +700,12 @@ export type SkillUploadRequest = {
     file: (Blob | File);
     overwrite?: boolean;
 };
+
+export type StorageCleanupRequest = {
+    target?: 'logs' | 'cache' | 'traces' | 'all';
+};
+
+export type target = 'logs' | 'cache' | 'traces' | 'all';
 
 export type SuccessEnvelope = {
     status: "ok";
@@ -991,6 +1020,10 @@ export type UpdateBotByIdError = unknown;
 export type DeleteBotByIdData = {
     query: {
         bot_id: string;
+        /**
+         * Data categories to permanently remove for this adapter. Omit to retain all associated data. Shared resources and cross-platform routing rules are preserved.
+         */
+        cleanup?: Array<BotCleanupTarget>;
     };
 };
 
@@ -1043,6 +1076,12 @@ export type UpdateBotError = unknown;
 export type DeleteBotData = {
     path: {
         bot_id: string;
+    };
+    query?: {
+        /**
+         * Data categories to permanently remove for this adapter. Omit to retain all associated data. Shared resources and cross-platform routing rules are preserved.
+         */
+        cleanup?: Array<BotCleanupTarget>;
     };
 };
 
@@ -1608,6 +1647,10 @@ export type ListChatProjectWorkspaceFilesData = {
     };
     query?: {
         path?: string;
+        /**
+         * Optional for per-session workspaces; must belong to this project and user when provided. Omitted or empty values use the legacy default workspace.
+         */
+        session_id?: string;
     };
 };
 
@@ -1621,6 +1664,10 @@ export type GetChatProjectWorkspaceFileData = {
     };
     query: {
         path: string;
+        /**
+         * Optional for per-session workspaces; must belong to this project and user when provided. Omitted or empty values use the legacy default workspace.
+         */
+        session_id?: string;
     };
 };
 
@@ -1634,6 +1681,10 @@ export type DownloadChatProjectWorkspaceFileData = {
     };
     query: {
         path: string;
+        /**
+         * Optional for per-session workspaces; must belong to this project and user when provided. Omitted or empty values use the legacy default workspace.
+         */
+        session_id?: string;
     };
 };
 
@@ -3192,9 +3243,34 @@ export type ListSessionsResponse = (SuccessEnvelope);
 
 export type ListSessionsError = unknown;
 
+export type ListActiveUmosData = {
+    query?: {
+        /**
+         * Exact platform instance ID; omit to list all instances.
+         */
+        platform_id?: string;
+    };
+};
+
 export type ListActiveUmosResponse = (SuccessEnvelope);
 
 export type ListActiveUmosError = unknown;
+
+export type ListSessionSendersData = {
+    query?: {
+        limit?: number;
+        page?: number;
+        search?: string;
+        /**
+         * Resolve the latest record per exact sender ID instead of returning all source sessions.
+         */
+        sender_ids?: Array<(string)>;
+    };
+};
+
+export type ListSessionSendersResponse = (SuccessEnvelope);
+
+export type ListSessionSendersError = unknown;
 
 export type ListSessionRulesData = {
     query?: {
@@ -3445,6 +3521,30 @@ export type TestGhproxyConnectionResponse = (SuccessEnvelope);
 
 export type TestGhproxyConnectionError = unknown;
 
+export type TestPypiIndexConnectionData = {
+    body: PypiIndexTestRequest;
+};
+
+export type TestPypiIndexConnectionResponse = (SuccessEnvelope);
+
+export type TestPypiIndexConnectionError = unknown;
+
+export type MeasurePypiIndexSpeedData = {
+    body: PypiIndexTestRequest;
+};
+
+export type MeasurePypiIndexSpeedResponse = (SuccessEnvelope);
+
+export type MeasurePypiIndexSpeedError = unknown;
+
+export type MeasureGhproxySpeedData = {
+    body: GhproxyTestRequest;
+};
+
+export type MeasureGhproxySpeedResponse = (SuccessEnvelope);
+
+export type MeasureGhproxySpeedError = unknown;
+
 export type ListChangelogVersionsResponse = (SuccessEnvelope);
 
 export type ListChangelogVersionsError = unknown;
@@ -3468,7 +3568,7 @@ export type GetStorageStatusResponse = (SuccessEnvelope);
 export type GetStorageStatusError = unknown;
 
 export type CleanupStorageData = {
-    body?: DynamicConfig;
+    body?: StorageCleanupRequest;
 };
 
 export type CleanupStorageResponse = (SuccessEnvelope);
@@ -3712,6 +3812,56 @@ export type StreamLiveLogsError = unknown;
 export type GetLogHistoryResponse = (string);
 
 export type GetLogHistoryError = unknown;
+
+export type ExportLogsData = {
+    query?: {
+        /**
+         * Inclusive maximum log timestamp or trace start time, in Unix seconds. Omit for no upper bound. Must not be before start_time. Matching traces retain their complete details.
+         */
+        end_time?: number;
+        /**
+         * Mask recognized credentials. Disable only for private diagnosis.
+         */
+        redact?: boolean;
+        /**
+         * Inclusive minimum log timestamp or trace start time, in Unix seconds. Omit for no lower bound. Undated standalone log content is excluded when a time bound is set.
+         */
+        start_time?: number;
+    };
+};
+
+export type ExportLogsResponse = ((Blob | File));
+
+export type ExportLogsError = unknown;
+
+export type ListTracesData = {
+    query?: {
+        /**
+         * Legacy keyset cursor; use page for numbered pagination.
+         */
+        cursor?: string;
+        errors?: boolean;
+        limit?: number;
+        models?: boolean;
+        page?: number;
+        plugins?: boolean;
+        query?: string;
+    };
+};
+
+export type ListTracesResponse = (SuccessEnvelope);
+
+export type ListTracesError = unknown;
+
+export type GetTraceDetailData = {
+    path: {
+        trace_id: string;
+    };
+};
+
+export type GetTraceDetailResponse = (SuccessEnvelope);
+
+export type GetTraceDetailError = (unknown);
 
 export type GetTraceSettingsResponse = (SuccessEnvelope);
 

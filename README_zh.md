@@ -102,7 +102,7 @@ uv tool upgrade astrbot --python 3.12
 
 **更多部署方式**
 
-若你需要面板化或更高自定义部署，可参考 [宝塔面板](https://docs.astrbot.app/deploy/astrbot/btpanel.html)（BT Panel 应用商店安装）、[1Panel](https://docs.astrbot.app/deploy/astrbot/1panel.html)（1Panel 应用商店安装）、[CasaOS](https://docs.astrbot.app/deploy/astrbot/casaos.html)（NAS / 家庭服务器可视化部署）和 [手动部署](https://docs.astrbot.app/deploy/astrbot/cli.html)（基于源码与 `uv` 的完整自定义安装）。
+若你需要面板化或更高自定义部署，可参考 [宝塔面板](https://docs.astrbot.app/deploy/astrbot/btpanel.html)、[1Panel](https://docs.astrbot.app/deploy/astrbot/1panel.html)、[CasaOS](https://docs.astrbot.app/deploy/astrbot/casaos.html) 和 [源码部署](https://docs.astrbot.app/deploy/astrbot/cli.html)。
 
 ## ❤️ 赞助商
 
@@ -153,6 +153,7 @@ uv tool upgrade astrbot --python 3.12
 | Ollama (本地部署) | LLM |
 | LM Studio (本地部署) | LLM |
 | [MiraRouter](https://mirarouter.com/) | LLM (API 网关, 支持所有模型) |
+| [胜算云](https://www.shengsuanyun.com/?from=CH_T70U2X9L) | LLM |
 | [AIHubMix](https://aihubmix.com/?aff=4bfH) | LLM (API 网关, 支持所有模型) |
 | [优云智算](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74) | LLM (API 网关, 支持所有模型) |
 | [302.AI](https://share.302.ai/rr1M3l) | LLM (API 网关, 支持所有模型)|
@@ -212,7 +213,7 @@ pre-commit install
 特别感谢所有 Contributors 和插件开发者对 AstrBot 的贡献 ❤️
 
 <a href="https://github.com/AstrBotDevs/AstrBot/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=AstrBotDevs/AstrBot&max=300&columns=15" />
+  <img src="https://contrib.rocks/image?repo=AstrBotDevs/AstrBot&max=500&columns=17" />
 </a>
 
 开源伙伴 ❤️

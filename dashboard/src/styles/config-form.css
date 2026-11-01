@@ -1,0 +1,103 @@
+.config-form :deep(.config-row) {
+  margin: 0;
+  align-items: center;
+  min-height: 60px;
+  padding: 12px 16px;
+  border-radius: 0;
+}
+
+.config-form :deep(.config-row:hover) {
+  background: transparent;
+}
+
+.config-form :deep(.property-info) {
+  padding: 0 16px 0 0;
+}
+
+.config-form :deep(.property-info .v-list-item) {
+  padding: 0;
+}
+
+.config-form :deep(.property-name) {
+  color: rgb(var(--v-theme-on-surface));
+  font-size: 0.88rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.4;
+  white-space: normal;
+}
+
+.config-form :deep(.property-hint) {
+  margin-top: 4px;
+  color: rgba(var(--v-theme-on-surface), 0.76) !important;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  opacity: 1 !important;
+  white-space: normal;
+}
+
+.config-form :deep(.property-hint *) {
+  opacity: 1 !important;
+}
+
+.config-form :deep(.property-hint a) {
+  color: rgb(var(--v-theme-primary)) !important;
+  text-decoration: none;
+}
+
+.config-form :deep(.config-input) {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+  padding: 0;
+}
+
+.config-form :deep(.config-input > :not(.config-field--full-width)) {
+  width: 100%;
+  max-width: 270px;
+}
+
+.config-form :deep(.config-input .v-switch) {
+  display: flex;
+  justify-content: flex-end;
+  width: auto;
+  max-width: none;
+  margin-left: auto;
+}
+
+.config-form :deep(.config-input .v-switch .v-input__control) {
+  margin-left: auto;
+}
+
+.config-form :deep(.config-input .v-switch .v-selection-control) {
+  justify-content: flex-end;
+}
+
+.config-form :deep(.v-field) {
+  border-radius: 10px;
+  background: transparent;
+}
+
+.config-form :deep(.config-divider) {
+  margin: 0;
+  border-color: var(--config-form-divider, rgba(var(--v-theme-on-surface), 0.09));
+}
+
+@media (max-width: 720px) {
+  .config-form :deep(.config-row) {
+    padding: 14px 16px;
+  }
+
+  .config-form :deep(.property-info) {
+    padding-right: 0;
+  }
+
+  .config-form :deep(.config-input) {
+    justify-content: stretch;
+    padding-top: 10px;
+  }
+
+  .config-form :deep(.config-input > :not(.config-field--full-width)) {
+    max-width: none;
+  }
+}
