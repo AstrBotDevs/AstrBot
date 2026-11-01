@@ -102,7 +102,6 @@ async def test_admin_group_only_blocks_its_own_commands(message, blocked, monkey
             "plugin_set": ["*"],
         }
     )
-    stage.unique_session = False
     stage.ignore_bot_self_message = False
     stage.friend_message_needs_wake_prefix = False
     stage.ignore_at_all = False
@@ -117,6 +116,7 @@ async def test_admin_group_only_blocks_its_own_commands(message, blocked, monkey
     event.is_admin.return_value = False
     event.get_sender_id.return_value = "member-user"
     event.get_messages.return_value = []
+    event.is_button_interaction.return_value = False
     event.is_private_chat.return_value = True
     event.get_platform_name.return_value = "aiocqhttp"
     event.get_extra.side_effect = lambda key=None, default=None: default

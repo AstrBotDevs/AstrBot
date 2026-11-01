@@ -59,7 +59,10 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
         "Use action='create' to schedule a recurring cron task or one-time run_at task. "
         "Use action='edit' to update an existing task. "
         "Use action='list' to inspect existing tasks. "
-        "Use action='delete' to remove a task by job_id."
+        "Use action='delete' to remove a task by job_id. "
+        "Group members can list all tasks in the current group, including their creators. "
+        "Only task creators can edit tasks. Group members can delete only their own tasks, "
+        "while AstrBot admins can also delete other members' tasks in the current group."
     )
     parameters: dict = Field(
         default_factory=lambda: {
@@ -191,8 +194,9 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
             )
             return f"Scheduled future task {job.job_id} ({job.name}) {suffix}."
 
-        current_umo = context.context.event.unified_msg_origin
-        current_sender_id = str(context.context.event.get_sender_id())
+        event = context.context.event
+        current_umo = event.unified_msg_origin
+        current_sender_id = str(event.get_sender_id())
         if action == "edit":
             job_id = kwargs.get("job_id")
             if not job_id:
@@ -218,8 +222,7 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
                     )
                 if (
                     same_session
-                    and context.context.event.get_message_type()
-                    == MessageType.GROUP_MESSAGE
+                    and event.get_message_type() == MessageType.GROUP_MESSAGE
                 ):
                     return (
                         f"error: cron job {job_id} was created by another member of "
@@ -296,8 +299,15 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
             job = await cron_mgr.db.get_cron_job(str(job_id))
             if not job:
                 return f"error: cron job {job_id} not found."
-            if not _job_belongs_to_current_sender(job, current_umo, current_sender_id):
-                same_session = _extract_job_session(job) == current_umo
+            same_session = _extract_job_session(job) == current_umo
+            can_delete = _job_belongs_to_current_sender(
+                job, current_umo, current_sender_id
+            ) or (
+                same_session
+                and event.get_message_type() == MessageType.GROUP_MESSAGE
+                and event.is_admin()
+            )
+            if not can_delete:
                 if same_session and not _extract_job_sender(job):
                     # Dashboard / legacy rows have a session but no member as
                     # their creator, so blaming another member would be wrong.
@@ -308,13 +318,13 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
                     )
                 if (
                     same_session
-                    and context.context.event.get_message_type()
-                    == MessageType.GROUP_MESSAGE
+                    and event.get_message_type() == MessageType.GROUP_MESSAGE
                 ):
                     return (
                         f"error: cron job {job_id} was created by another member of "
                         "this group chat, so you cannot delete it. Only the member who "
-                        "created it can delete it; tell the user to ask that member."
+                        "created it or an AstrBot admin can delete it; tell the user "
+                        "to ask that member."
                     )
                 return (
                     f"error: cron job {job_id} was not created by you, so you cannot "
@@ -325,26 +335,29 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
 
         if action == "list":
             all_jobs = await cron_mgr.list_jobs()
+            is_group = event.get_message_type() == MessageType.GROUP_MESSAGE
             jobs = [
                 job
                 for job in all_jobs
                 if _job_belongs_to_current_sender(job, current_umo, current_sender_id)
+                or (is_group and _extract_job_session(job) == current_umo)
             ]
-            # Tasks in this session that were created by somebody else stay
-            # out of the result. Saying so stops an agent from reading "No cron
-            # jobs found." as "the task no longer exists".
+            # Private chats retain sender isolation. Explain hidden tasks so
+            # the agent does not mistake a filtered list for a missing task.
             hidden_note = ""
-            for job in all_jobs:
-                if _extract_job_session(job) != current_umo:
-                    continue
-                if _job_belongs_to_current_sender(job, current_umo, current_sender_id):
-                    continue
-                hidden_note = (
-                    "\n\nNote: tasks in this chat that were not created by you "
-                    "are not listed here, and can only be edited or deleted by "
-                    "whoever created them."
-                )
-                break
+            if not is_group:
+                for job in all_jobs:
+                    if _extract_job_session(job) != current_umo:
+                        continue
+                    if _job_belongs_to_current_sender(
+                        job, current_umo, current_sender_id
+                    ):
+                        continue
+                    hidden_note = (
+                        "\n\nNote: tasks in this chat that were not created by you "
+                        "are not listed here. Only their creators can edit or delete them."
+                    )
+                    break
             if not jobs:
                 return "No cron jobs found." + hidden_note
             tz_name = str(
@@ -374,9 +387,14 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
                     next_run = (
                         next_run.astimezone(tzinfo) if tzinfo else next_run.astimezone()
                     )
-                lines.append(
-                    f"{j.job_id} | {j.name} | {j.job_type} | run_once={getattr(j, 'run_once', False)} | enabled={j.enabled} | next={next_run}"
+                line = (
+                    f"{j.job_id} | {j.name} | {j.job_type} | "
+                    f"run_once={getattr(j, 'run_once', False)} | enabled={j.enabled} | "
+                    f"next={next_run}"
                 )
+                if is_group:
+                    line += f" | creator={_extract_job_sender(j) or 'unknown'}"
+                lines.append(line)
             return "\n".join(lines) + hidden_note
 
         return "error: action must be one of create, edit, delete, or list."

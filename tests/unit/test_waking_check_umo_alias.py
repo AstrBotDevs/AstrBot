@@ -34,6 +34,7 @@ def make_group_event(group_id: str, group_name: str | None, message: str = "/hel
     event.role = "member"
     event.get_group_id.return_value = group_id
     event.get_sender_id.return_value = "sender-1"
+    event.get_sender_name.return_value = "Alice"
     event.get_self_id.return_value = "bot-1"
     event.get_messages.return_value = [MagicMock()]
     event.is_private_chat.return_value = False
@@ -73,6 +74,7 @@ async def make_stage(db_helper: MagicMock) -> WakingCheckStage:
 async def test_waking_stage_records_only_awakened_events(monkeypatch):
     """Record a name immediately after waking and ignore ambient messages."""
     db_helper = MagicMock()
+    db_helper.upsert_umo_sender = AsyncMock()
     db_helper.upsert_umo_auto_name = AsyncMock()
     stage = await make_stage(db_helper)
     monkeypatch.setattr(
@@ -110,6 +112,7 @@ async def test_waking_stage_records_only_awakened_events(monkeypatch):
 async def test_waking_stage_coalesces_auto_name_changes():
     """Persist only the latest name from an event burst for one UMO."""
     db_helper = MagicMock()
+    db_helper.upsert_umo_sender = AsyncMock()
     db_helper.upsert_umo_auto_name = AsyncMock()
     recorder = UmoAutoNameRecorder(db_helper, "test-conf-id")
 
@@ -131,6 +134,7 @@ async def test_waking_stage_coalesces_auto_name_changes():
 async def test_waking_stage_skips_missing_group_and_sender_names():
     """Do not persist ID fallbacks when platform names are unavailable."""
     db_helper = MagicMock()
+    db_helper.upsert_umo_sender = AsyncMock()
     db_helper.upsert_umo_auto_name = AsyncMock()
     recorder = UmoAutoNameRecorder(db_helper, "test-conf-id")
 
@@ -144,7 +148,8 @@ async def test_waking_stage_skips_missing_group_and_sender_names():
     friend_event.get_sender_id.return_value = "sender-2"
     recorder.schedule(friend_event)
 
-    assert recorder._writer_task is None
+    assert recorder._writer_task is not None
+    await recorder._writer_task
     assert not recorder._cache
     db_helper.upsert_umo_auto_name.assert_not_awaited()
 
@@ -153,6 +158,7 @@ async def test_waking_stage_skips_missing_group_and_sender_names():
 async def test_waking_stage_bounds_auto_name_cache():
     """Evict old UMO names when the per-stage cache reaches its bound."""
     db_helper = MagicMock()
+    db_helper.upsert_umo_sender = AsyncMock()
     db_helper.upsert_umo_auto_name = AsyncMock()
     recorder = UmoAutoNameRecorder(db_helper, "test-conf-id")
 
@@ -178,6 +184,7 @@ async def test_waking_stage_bounds_auto_name_cache():
 async def test_waking_stage_retries_after_database_failure():
     """Evict a failed cache entry so a later wake retries the write."""
     db_helper = MagicMock()
+    db_helper.upsert_umo_sender = AsyncMock()
     db_helper.upsert_umo_auto_name = AsyncMock(
         side_effect=[RuntimeError("database unavailable"), None]
     )
@@ -211,6 +218,7 @@ async def test_waking_stage_writer_does_not_block_processing():
         await release_database.wait()
 
     db_helper = MagicMock()
+    db_helper.upsert_umo_sender = AsyncMock()
     db_helper.upsert_umo_auto_name = AsyncMock(side_effect=block_database_write)
     recorder = UmoAutoNameRecorder(db_helper, "test-conf-id")
     recorder.schedule(make_group_event("group-1", "Engineering"))
@@ -220,3 +228,71 @@ async def test_waking_stage_writer_does_not_block_processing():
     writer_task = recorder._writer_task
     if writer_task is not None:
         await writer_task
+
+
+@pytest.mark.asyncio
+async def test_sender_recording_is_independent_of_group_names():
+    """Record every sender and changed card even if the group name is unchanged."""
+    db_helper = MagicMock()
+    db_helper.upsert_umo_auto_name = AsyncMock()
+    db_helper.upsert_umo_sender = AsyncMock()
+    recorder = UmoAutoNameRecorder(db_helper, "test-conf-id")
+    first = make_group_event("group-1", "Engineering")
+    recorder.schedule(first)
+    await recorder._writer_task
+
+    second = make_group_event("group-1", "Engineering")
+    second.get_sender_id.return_value = "sender-2"
+    second.get_sender_name.return_value = "Bob"
+    recorder.schedule(second)
+    second.get_sender_name.return_value = "Robert"
+    recorder.schedule(second)
+    await recorder._writer_task
+    db_helper.upsert_umo_auto_name.assert_awaited_once()
+    assert db_helper.upsert_umo_sender.await_count == 2
+    db_helper.upsert_umo_sender.assert_awaited_with(
+        umo=second.unified_msg_origin, sender_id="sender-2", sender_name="Robert"
+    )
+
+    second.get_sender_name.return_value = ""
+    recorder.schedule(second)
+    assert recorder._writer_task is None
+    assert recorder._sender_cache[(second.unified_msg_origin, "sender-2")] == "Robert"
+
+
+@pytest.mark.asyncio
+async def test_sender_recording_retries_failure_without_rewriting_group():
+    """A sender write failure is retried on the next wake independently."""
+    db_helper = MagicMock()
+    db_helper.upsert_umo_auto_name = AsyncMock()
+    db_helper.upsert_umo_sender = AsyncMock(side_effect=[RuntimeError("busy"), None])
+    recorder = UmoAutoNameRecorder(db_helper, "test-conf-id")
+    event = make_group_event("group-1", "Engineering")
+    recorder.schedule(event)
+    await recorder._writer_task
+    assert not recorder._sender_cache
+    recorder.schedule(event)
+    await recorder._writer_task
+    assert db_helper.upsert_umo_sender.await_count == 2
+    db_helper.upsert_umo_auto_name.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_sender_cache_is_bounded_and_skips_missing_ids():
+    """Bound pending sender writes independently and reject missing sender IDs."""
+    db_helper = MagicMock()
+    db_helper.upsert_umo_auto_name = AsyncMock()
+    db_helper.upsert_umo_sender = AsyncMock()
+    recorder = UmoAutoNameRecorder(db_helper, "test-conf-id")
+    with patch(
+        "astrbot.core.pipeline.waking_check.umo_auto_name.MAX_UMO_AUTO_NAME_CACHE_SIZE", 2
+    ):
+        for sender_id in ("sender-1", "sender-2", "sender-3", None):
+            event = make_group_event("group-1", None)
+            event.get_sender_id.return_value = sender_id
+            recorder.schedule(event)
+        await recorder._writer_task
+    assert len(recorder._sender_cache) == 2
+    assert db_helper.upsert_umo_sender.await_count == 2
+    assert not recorder._sender_pending
+    db_helper.upsert_umo_auto_name.assert_not_awaited()

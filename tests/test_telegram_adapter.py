@@ -5,10 +5,15 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from telegram import Message
+from telegram import Message, MessageEntity, TextQuote
 
 import astrbot.api.message_components as Comp
+from astrbot.api.event import MessageChain
 from astrbot.api.platform import Group
+from astrbot.core.platform.button_interaction import (
+    decode_button_callback,
+    encode_button_callback,
+)
 from astrbot.core.platform.register import unregister_platform_adapters_by_module
 from tests.fixtures.helpers import (
     NoopAwaitable,
@@ -497,6 +502,120 @@ async def test_telegram_reply_without_quote_text_uses_full_message(quote_text):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("in_caption", [False, True], ids=["text", "caption"])
+async def test_telegram_hidden_links_survive_conversion_and_reply(in_caption):
+    """Preserve linked text and URLs in messages and full replies.
+
+    Args:
+        in_caption: Whether the linked text is a photo caption.
+    """
+    adapter = _load_telegram_adapter()(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    text = "😀 查看文档 和 示例"
+    entities = [
+        MessageEntity("bold", 3, 4),
+        MessageEntity("text_link", 3, 4, url="https://example.com/docs"),
+        MessageEntity("text_link", 10, 2, url="https://example.com/demo"),
+    ]
+    update = create_mock_update(
+        message_text=None if in_caption else text,
+        entities=None if in_caption else entities,
+        caption=text if in_caption else None,
+        caption_entities=entities if in_caption else None,
+        photo=[create_mock_file()] if in_caption else None,
+    )
+    expected = (
+        "😀 查看文档 (https://example.com/docs) 和 示例 (https://example.com/demo)"
+    )
+
+    result = await adapter.convert_message(update, _build_context())
+    assert result.message_str == expected
+    assert [part.text for part in result.message if isinstance(part, Comp.Plain)] == [
+        expected
+    ]
+
+    reply_update = create_mock_update(
+        message_text="Which link?", reply_to_message=update.message
+    )
+    result = await adapter.convert_message(reply_update, _build_context())
+    reply = result.message[0]
+    assert reply.message_str == reply.text == expected
+    assert [part.text for part in reply.chain if isinstance(part, Comp.Plain)] == [
+        expected
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("position", [5, 0], ids=["matched", "stale"])
+async def test_telegram_partial_quote_preserves_only_overlapping_links(position):
+    """Recover a quoted link without including links outside the selected text.
+
+    Args:
+        position: UTF-16 quote offset, either matching the source or stale.
+    """
+    adapter = _load_telegram_adapter()(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    original = create_mock_update(
+        message_text="😀 查看文档 和 示例",
+        entities=[
+            MessageEntity("text_link", 3, 4, url="https://example.com/docs"),
+            MessageEntity("text_link", 10, 2, url="https://example.com/demo"),
+        ],
+    )
+    update = create_mock_update(
+        reply_to_message=original.message,
+        quote=TextQuote(text="文档", position=position),
+    )
+
+    result = await adapter.convert_message(update, _build_context())
+
+    expected = "文档 (https://example.com/docs)" if position == 5 else "文档"
+    reply = result.message[0]
+    assert reply.message_str == reply.text == expected
+    assert reply.chain == [Comp.Plain(expected)]
+
+
+@pytest.mark.asyncio
+async def test_telegram_hidden_links_and_mentions_use_original_offsets():
+    """Keep link positions intact when self mentions are removed."""
+    adapter = _load_telegram_adapter()(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    text = "😀 @test_bot 文档 @test_bot https://example.com"
+    sdk_message = Message.de_json(
+        {
+            "message_id": 1,
+            "date": 0,
+            "chat": {"id": 123, "type": "private"},
+            "text": text,
+            "entities": [
+                {"type": "mention", "offset": 3, "length": 9},
+                MessageEntity(
+                    "text_link", 13, 2, url="https://example.com/docs"
+                ).to_dict(),
+                {"type": "mention", "offset": 16, "length": 9},
+                {"type": "url", "offset": 26, "length": 19},
+            ],
+        },
+        bot=None,
+    )
+    update = create_mock_update(message_text=text, entities=sdk_message.entities)
+    update.message.parse_entity = sdk_message.parse_entity
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert (
+        result.message_str == "😀  文档 (https://example.com/docs)  https://example.com"
+    )
+    assert [part.qq for part in result.message if isinstance(part, Comp.At)] == [
+        "test_bot",
+        "test_bot",
+    ]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("text", "entities", "expected", "names"),
     [
@@ -885,6 +1004,217 @@ async def test_telegram_audio_caption_populates_message_text_and_plain(tmp_path)
     assert result.message[0].url == str(wav_path)
     assert isinstance(result.message[1], Comp.Plain)
     assert result.message[1].text == "这首歌是什么"
+
+
+@pytest.mark.asyncio
+async def test_telegram_renders_common_buttons_as_inline_keyboard():
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    client = MockTelegramBuilder.create_bot()
+    inline_button = MagicMock(
+        side_effect=lambda text, **kwargs: {"text": text, **kwargs}
+    )
+    inline_markup = MagicMock(side_effect=lambda rows: {"inline_keyboard": rows})
+    message = MessageChain(
+        [
+            Comp.Plain("Pick one"),
+            Comp.ActionRow(
+                buttons=[
+                    Comp.Button(
+                        id="approve",
+                        label="Approve",
+                        action=Comp.Button.CallbackAction(data={"request_id": 7}),
+                    ),
+                    Comp.Button(
+                        id="docs",
+                        label="Docs",
+                        action=Comp.Button.UrlAction(url="https://example.com/docs"),
+                    ),
+                ]
+            ),
+        ]
+    )
+
+    with patch.dict(
+        TelegramPlatformEvent._build_inline_keyboard.__func__.__globals__,
+        {
+            "InlineKeyboardButton": inline_button,
+            "InlineKeyboardMarkup": inline_markup,
+        },
+    ):
+        await TelegramPlatformEvent.send_with_client(client, message, "123456")
+
+    client.send_message.assert_awaited_once()
+    reply_markup = client.send_message.await_args.kwargs["reply_markup"]
+    callback_button, url_button = reply_markup["inline_keyboard"][0]
+    assert callback_button["text"] == "Approve"
+    assert decode_button_callback(callback_button["callback_data"]) == (
+        "approve",
+        {"request_id": 7},
+    )
+    assert url_button == {
+        "text": "Docs",
+        "url": "https://example.com/docs",
+    }
+
+
+@pytest.mark.asyncio
+async def test_telegram_callback_data_uses_compact_token_without_data_loss():
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    inline_button = MagicMock(
+        side_effect=lambda text, **kwargs: {"text": text, **kwargs}
+    )
+    inline_markup = MagicMock(side_effect=lambda rows: {"inline_keyboard": rows})
+    row = Comp.ActionRow(
+        buttons=[
+            Comp.Button(
+                id="approve",
+                label="Approve",
+                action=Comp.Button.CallbackAction(data={"value": "x" * 100}),
+            )
+        ]
+    )
+
+    with patch.dict(
+        TelegramPlatformEvent._build_inline_keyboard.__func__.__globals__,
+        {
+            "InlineKeyboardButton": inline_button,
+            "InlineKeyboardMarkup": inline_markup,
+        },
+    ):
+        markup = TelegramPlatformEvent._build_inline_keyboard([row])
+
+    assert markup is not None
+    callback_data = markup["inline_keyboard"][0][0]["callback_data"]
+    assert len(callback_data.encode("utf-8")) <= 64
+    assert decode_button_callback(callback_data) == (
+        "approve",
+        {"value": "x" * 100},
+    )
+
+
+@pytest.mark.asyncio
+async def test_telegram_button_only_message_uses_fallback_text():
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    client = MockTelegramBuilder.create_bot()
+    inline_button = MagicMock(
+        side_effect=lambda text, **kwargs: {"text": text, **kwargs}
+    )
+    inline_markup = MagicMock(side_effect=lambda rows: {"inline_keyboard": rows})
+    message = MessageChain(
+        [
+            Comp.ActionRow(
+                buttons=[
+                    Comp.Button(
+                        id="retry",
+                        label="Retry",
+                        action=Comp.Button.CallbackAction(),
+                    )
+                ],
+                fallback_text="Try again?",
+            )
+        ]
+    )
+
+    with patch.dict(
+        TelegramPlatformEvent._build_inline_keyboard.__func__.__globals__,
+        {
+            "InlineKeyboardButton": inline_button,
+            "InlineKeyboardMarkup": inline_markup,
+        },
+    ):
+        await TelegramPlatformEvent.send_with_client(client, message, "123456")
+
+    client.send_message.assert_awaited_once()
+    assert client.send_message.await_args.kwargs["text"] == "Try again?"
+    assert "reply_markup" in client.send_message.await_args.kwargs
+
+
+@pytest.mark.asyncio
+async def test_telegram_callback_query_becomes_button_interaction():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    adapter.handle_msg = AsyncMock()
+    chat = MagicMock(id=-100123, type="supergroup")
+    source_message = MagicMock(
+        chat=chat,
+        message_id=77,
+        is_topic_message=False,
+        message_thread_id=None,
+    )
+    sender = MagicMock(id=1001, username="alice")
+    query = MagicMock(
+        id="callback-1",
+        data=encode_button_callback("approve", {"request_id": 7}),
+        message=source_message,
+        from_user=sender,
+    )
+    query.answer = AsyncMock()
+    update = MagicMock(callback_query=query, effective_chat=chat)
+
+    await adapter.callback_query_handler(update, _build_context())
+
+    query.answer.assert_awaited_once_with()
+    adapter.handle_msg.assert_awaited_once()
+    message = adapter.handle_msg.await_args.args[0]
+    assert message.session_id == "-100123"
+    assert message.group_id == "-100123"
+    assert message.message_id == "callback-1"
+    assert len(message.message) == 1
+    interaction = message.message[0]
+    assert isinstance(interaction, Comp.ButtonInteraction)
+    assert interaction.action_id == "approve"
+    assert interaction.data == {"request_id": 7}
+    assert interaction.interaction_id == "callback-1"
+    assert interaction.source_message_id == "77"
+    assert interaction.callback_data == query.data
+
+
+@pytest.mark.asyncio
+async def test_telegram_expired_button_shows_bilingual_alert(monkeypatch):
+    from astrbot.core.platform import button_interaction
+
+    clock = [100.0]
+    monkeypatch.setattr(button_interaction.time, "time", lambda: clock[0])
+    adapter = object.__new__(_load_telegram_adapter())
+    adapter.handle_msg = AsyncMock()
+    query = MagicMock(data=encode_button_callback("approve", expires_at=160))
+    query.answer = AsyncMock()
+    clock[0] = 160.0
+
+    for _ in range(2):
+        await adapter.callback_query_handler(
+            MagicMock(callback_query=query), _build_context()
+        )
+
+    assert query.answer.await_count == 2
+    query.answer.assert_awaited_with(
+        text="按钮已过期，请重新发起操作。 / This button has expired. Please start again.",
+        show_alert=True,
+    )
+    adapter.handle_msg.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_telegram_foreign_callback_query_is_answered_and_ignored():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    adapter.handle_msg = AsyncMock()
+    query = MagicMock(data="foreign-callback")
+    query.answer = AsyncMock()
+    update = MagicMock(callback_query=query)
+
+    await adapter.callback_query_handler(update, _build_context())
+
+    query.answer.assert_awaited_once_with()
+    adapter.handle_msg.assert_not_awaited()
 
 
 @pytest.mark.asyncio
