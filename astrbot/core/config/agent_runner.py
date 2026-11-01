@@ -22,6 +22,7 @@ AGENT_RUNNER_CONFIG_DEFAULTS: dict[str, dict[str, Any]] = {
             "max_turns": -1,
             "trim_turns": 1,
             "overflow_strategy": "llm_compress",
+            "trigger_ratio": 0.82,
             "instruction": "",
             "keep_recent_ratio": 0.15,
             "provider_id": "",
@@ -126,6 +127,7 @@ def resolve_context_compression_config(
             "keep_recent_ratio", 0.15
         ),
         "llm_compress_provider_id": compression_config.get("provider_id", ""),
+        "context_compression_threshold": compression_config.get("trigger_ratio", 0.82),
         "max_context_length": max_turns,
         "dequeue_context_length": max(1, dequeue_turns),
         "fallback_max_context_tokens": compression_config.get(
@@ -192,6 +194,8 @@ def normalize_agent_runner(agent_runner: object) -> dict[str, Any]:
     if runner_type == "local":
         ratio = normalized["compression"]["keep_recent_ratio"]
         normalized["compression"]["keep_recent_ratio"] = min(0.3, max(0.0, ratio))
+        trigger = normalized["compression"]["trigger_ratio"]
+        normalized["compression"]["trigger_ratio"] = min(0.95, max(0.1, trigger))
         if normalized["model"]["request_max_retries"] < 1:
             normalized["model"]["request_max_retries"] = 1
         if normalized["misc"]["max_steps"] < 1:

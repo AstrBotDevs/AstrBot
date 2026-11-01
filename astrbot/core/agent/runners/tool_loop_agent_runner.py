@@ -232,6 +232,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         request_max_retries: int | None = None,
         tool_result_overflow_dir: str | None = None,
         read_tool: FunctionTool | None = None,
+        # share of the context window that triggers compression
+        context_compression_threshold: float = 0.82,
         **kwargs: T.Any,
     ) -> None:
         self.req = request
@@ -240,6 +242,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.llm_compress_instruction = llm_compress_instruction
         self.llm_compress_keep_recent_ratio = llm_compress_keep_recent_ratio
         self.llm_compress_provider = llm_compress_provider
+        self.context_compression_threshold = context_compression_threshold
         self.truncate_turns = truncate_turns
         self.custom_token_counter = custom_token_counter
         self.custom_compressor = custom_compressor
@@ -256,6 +259,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             llm_compress_instruction=self.llm_compress_instruction,
             llm_compress_keep_recent_ratio=self.llm_compress_keep_recent_ratio,
             llm_compress_provider=self.llm_compress_provider,
+            compression_threshold=self.context_compression_threshold,
             custom_token_counter=self.custom_token_counter,
             custom_compressor=self.custom_compressor,
         )

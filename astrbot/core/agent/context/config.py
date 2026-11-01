@@ -33,3 +33,5 @@ class ContextConfig:
     """Custom token counting method. If None, the default method is used."""
     custom_compressor: ContextCompressor | None = None
     """Custom context compression method. If None, the default method is used."""
+    compression_threshold: float = 0.82
+    """Share of max_context_tokens above which the context is compressed. Clamped to 0.1-0.95."""

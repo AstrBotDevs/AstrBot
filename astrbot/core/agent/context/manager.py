@@ -29,6 +29,7 @@ class ContextManager:
         self.token_counter = config.custom_token_counter or EstimateTokenCounter()
         self.truncator = ContextTruncator()
 
+        threshold = min(max(float(config.compression_threshold), 0.1), 0.95)
         if config.custom_compressor:
             self.compressor = config.custom_compressor
         elif config.llm_compress_provider:
@@ -36,11 +37,13 @@ class ContextManager:
                 provider=config.llm_compress_provider,
                 keep_recent_ratio=config.llm_compress_keep_recent_ratio,
                 instruction_text=config.llm_compress_instruction,
+                compression_threshold=threshold,
                 token_counter=self.token_counter,
             )
         else:
             self.compressor = TruncateByTurnsCompressor(
-                truncate_turns=config.truncate_turns
+                truncate_turns=config.truncate_turns,
+                compression_threshold=threshold,
             )
 
     async def process(

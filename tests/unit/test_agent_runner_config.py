@@ -8,6 +8,7 @@ from astrbot.core.config.agent_runner import (
     AGENT_RUNNER_CONFIG_DEFAULTS,
     get_agent_runner_config_default,
     normalize_agent_runner,
+    resolve_context_compression_config,
 )
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import DEFAULT_CONFIG
@@ -155,6 +156,7 @@ def test_local_legacy_fields_are_fully_migrated():
                 "max_turns": 20,
                 "trim_turns": 3,
                 "overflow_strategy": "truncate_by_turns",
+                "trigger_ratio": 0.82,
                 "instruction": "Summarize",
                 "keep_recent_ratio": 0.2,
                 "provider_id": "compressor",
@@ -235,6 +237,7 @@ def test_local_migration_replaces_default_root_inserted_before_version_bump():
                 "max_turns": 24,
                 "trim_turns": 4,
                 "overflow_strategy": "llm_compress",
+                "trigger_ratio": 0.82,
                 "instruction": "Keep decisions",
                 "keep_recent_ratio": 0.15,
                 "provider_id": "compressor",
@@ -588,3 +591,27 @@ def test_new_agent_runner_config_is_authoritative_and_opaque_on_reload(tmp_path)
     assert loaded["agent_runner"]["config"]["dify_api_key"] == "saved-key"
     assert loaded["agent_runner"]["config"]["variables"] == {"nested": {"value": 1}}
     assert "agent_runner_type" not in loaded["provider_settings"]
+
+
+@pytest.mark.parametrize(
+    ("configured", "expected"),
+    [(0.6, 0.6), (0.01, 0.1), (1.5, 0.95), ("bad", 0.82), (None, 0.82)],
+)
+def test_compression_trigger_ratio_is_normalized_and_mapped(configured, expected):
+    config = get_agent_runner_config_default("local")
+    config["compression"]["trigger_ratio"] = configured
+
+    normalized = normalize_agent_runner({"runner_type": "local", "config": config})
+    compression = normalized["config"]["compression"]
+
+    assert compression["trigger_ratio"] == expected
+    assert (
+        resolve_context_compression_config(compression)["context_compression_threshold"]
+        == expected
+    )
+
+
+def test_compression_trigger_ratio_defaults_when_section_is_empty():
+    assert resolve_context_compression_config({})["context_compression_threshold"] == (
+        0.82
+    )

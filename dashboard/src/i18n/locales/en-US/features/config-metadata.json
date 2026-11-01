@@ -440,6 +440,10 @@
           "description": "Recent Context Token Ratio to Keep",
           "hint": "Keep recent exact context by current context token ratio, from 0-0.3. 0.15 means keeping 15%; values above 0 keep at least the latest round."
         },
+        "trigger_ratio": {
+          "description": "Context Usage Ratio That Triggers Compression",
+          "hint": "When context tokens before a request exceed this share of the model context window, the strategy above runs. Range 0.1-0.95, default 0.82. Lower values compress earlier but more often."
+        },
         "provider_id": {
           "description": "Compression Model",
           "hint": "The model used for context compression. Defaults to the current chat model."
