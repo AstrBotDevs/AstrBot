@@ -263,6 +263,29 @@ API Key、访问令牌和密码等敏感字符串应设置 `"secret": true`。�
 
 <img width="1000" alt="image" src="https://github.com/user-attachments/assets/74876d30-11a4-491b-a7a0-8ebe8d603782" />
 
+#### 嵌套模板列表
+
+模板的 `items` 可以直接包含另一个 `template_list` 字段，也可以将它放在 `object` 字段中。每层列表定义自己的 `templates`，保存的每个子条目也保留自己的 `__template_key`。例如，在上方 schema 的 `templates.template_1.items` 中添加以下字段：
+
+```json
+{
+  "children": {
+    "type": "template_list",
+    "default": [],
+    "templates": {
+      "child": {
+        "name": "Child",
+        "items": {
+          "name": {"type": "string", "default": ""}
+        }
+      }
+    }
+  }
+}
+```
+
+在插件配置窗口中，展开父条目，在嵌套列表内添加条目并编辑字段，然后保存插件配置。重新打开配置后，嵌套条目会保留。更深层的模板列表也可以按相同步骤编辑。
+
 ## 在插件中使用配置
 
 AstrBot 在载入插件时会检测插件目录下是否有 `_conf_schema.json` 文件，如果有，会自动解析配置并保存在 `data/config/<plugin_name>_config.json` 下（依照 Schema 创建的配置文件实体），并在实例化插件类时传入给 `__init__()`。
