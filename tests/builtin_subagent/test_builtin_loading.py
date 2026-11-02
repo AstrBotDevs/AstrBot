@@ -20,10 +20,11 @@ async def _probe_builtin_loading(root: Path) -> None:
     from astrbot.core import sp
     from astrbot.core.agent.run_context import ContextWrapper
     from astrbot.core.astr_agent_context import AstrAgentContext
-    from astrbot.core.cron.events import CronMessageEvent
     from astrbot.core.db.sqlite import SQLiteDatabase
     from astrbot.core.pipeline.context_utils import call_event_hook
+    from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
     from astrbot.core.platform.message_session import MessageSession
+    from astrbot.core.platform.platform_metadata import PlatformMetadata
     from astrbot.core.provider.entities import LLMResponse, ProviderRequest
     from astrbot.core.provider.register import llm_tools
     from astrbot.core.star.context import Context
@@ -61,6 +62,11 @@ async def _probe_builtin_loading(root: Path) -> None:
         MagicMock(),
     )
     context.get_config = lambda **kwargs: {}
+    context.platform_manager.platform_insts = [
+        SimpleNamespace(
+            meta=lambda: PlatformMetadata(id="test", name="test", description="Test")
+        )
+    ]
     context.get_current_chat_provider_id = AsyncMock(return_value="model")
     context.tool_loop_agent = AsyncMock(
         return_value=LLMResponse(
@@ -103,12 +109,16 @@ async def _probe_builtin_loading(root: Path) -> None:
                 "/astrbot_plugin_subagent/runtime",
                 "/astrbot_plugin_subagent/experts",
             }
-            event = CronMessageEvent(
+            event = AgentWakeupEvent(
                 context=context,
                 session=MessageSession.from_str(conversation.user_id),
-                message_type=MessageSession.from_str(conversation.user_id).message_type,
-                message="Delegate a task",
+                platform_meta=context.get_platform_inst("test").meta(),
+                source="plugin",
+                prompt="Delegate a task",
             )
+            event.message_obj.sender.user_id = MessageSession.from_str(
+                conversation.user_id
+            ).session_id
             request = ProviderRequest(conversation=conversation)
             await call_event_hook(event, EventType.OnLLMRequestEvent, request)
             wrapper = ContextWrapper(

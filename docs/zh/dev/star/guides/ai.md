@@ -29,6 +29,84 @@ llm_resp = await self.context.llm_generate(
 # print(llm_resp.completion_text) # 获取返回的文本
 ```
 
+## 结构化判断
+
+判断提供商（Decision Provider）用于低延迟的结构化选择，例如是否回复、回复哪条消息或选择执行分支。先在 WebUI 的「模型提供商」→「判断」中配置提供商，插件通过 `self.context.decision` 调用，它与聊天模型互不影响。
+
+一次请求可以同时回答多个问题。`state` 会原样传给判断模型，类型为 `str | list | dict`：
+
+```py
+from astrbot.api.provider import (
+    DecisionBooleanQuestion,
+    DecisionChoiceAnswer,
+    DecisionChoiceQuestion,
+    DecisionScoreQuestion,
+)
+
+
+recent_messages = [
+    {"role": "user", "content": "I cannot log in; every request returns 500."},
+]
+
+answers = await self.context.decision.ask(
+    {
+        "should_reply": DecisionChoiceQuestion(
+            instructions="Should the assistant reply to this message?",
+            criteria={"reply": "Reply now", "ignore": "Stay silent"},
+        ),
+        "target": DecisionChoiceQuestion(
+            instructions="Which message should the reply focus on?",
+            criteria={"latest": "Latest message", "previous": "Previous message"},
+        ),
+        "needs_tool": DecisionBooleanQuestion(
+            "Does this request require a tool call?"
+        ),
+        "severity": DecisionScoreQuestion(
+            instructions="How severe is the reported problem?",
+            criteria=[
+                "No impact on normal use",
+                "Some features fail, but a workaround exists",
+                "Core features are unavailable with no workaround",
+            ],
+        ),
+    },
+    state={"messages": recent_messages},
+)
+
+should_reply = answers["should_reply"]
+if (
+    isinstance(should_reply, DecisionChoiceAnswer)
+    and should_reply.choice == "reply"
+    and should_reply.probability >= 0.7
+):
+    target = answers["target"]
+    # 使用 target.choice 和 answers["needs_tool"].probability 执行后续业务逻辑
+```
+
+`DecisionChoiceQuestion.criteria` 是选项 ID 到选项描述的映射，与 System One 请求中的 `criteria` 对应。选择类结果的 `choice` 是选项 ID，`probabilities` 包含完整概率分布，`confidence` 是模型置信度；布尔类结果使用 `probability` 表示陈述为真的概率。主动回复阈值等业务规则由调用方决定。
+
+返回结果按题型分别是 `DecisionChoiceAnswer`、`DecisionBooleanAnswer` 和 `DecisionScoreAnswer`，它们是三个独立的冻结数据类。`DecisionAnswer` 是这三个类的联合类型。调用 `ask()` 后，可使用 `isinstance()` 确认结果类型再读取对应字段；`choose()` 明确返回 `DecisionChoiceAnswer`，`yes_no()` 返回 `bool`。
+
+评分类 `DecisionScoreQuestion.criteria` 是由低到高排列的 2～10 个字符串等级，等级从 0 编号。`DecisionScoreAnswer.score` 是概率加权评分，可以为小数，范围是 `0` 到 `len(criteria) - 1`；`legend` 和 `probabilities` 分别以字符串等级编号（如 `"0"`）映射到描述和概率，`confidence` 表示置信度。评分结果仅包含这四个字段。三种题型可以通过同一次 `ask()` 调用混合提交。
+
+对于单个问题，可以使用以下快捷方法：
+
+```py
+choice = await self.context.decision.choose(
+    question="Which reply strategy should be used?",
+    criteria={"short": "A brief reply", "detailed": "A detailed reply"},
+    state=recent_messages,
+)
+
+should_reply = await self.context.decision.yes_no(
+    question="Should the assistant reply now?",
+    state=recent_messages,
+    threshold=0.7,
+)
+```
+
+如需指定已配置的判断提供商，传入 `provider_id="provider_id"`；省略时使用默认判断提供商。提供商未配置、请求超时、连接失败、HTTP 错误、响应不是合法 JSON，或返回的选项与概率不符合请求契约时，统一抛出 `DecisionError`；底层异常详情会写入 AstrBot 日志。插件应捕获该异常并决定跳过本次判断或降级处理。
+
 ## 定义 Tool
 
 Tool 是大语言模型调用外部工具的能力。

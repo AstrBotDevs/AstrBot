@@ -14,8 +14,8 @@ from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import ToolSet
-from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.message.components import Image
+from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.star.star import star_map
 from astrbot.core.utils.active_event_registry import active_event_registry
@@ -517,18 +517,24 @@ class SubAgentExecutor:
                 if not runtime._pending_results:
                     return
                 session = MessageSession.from_str(root.event.unified_msg_origin)
-                event = CronMessageEvent(
+                platform = root.context.get_platform_inst(session.platform_id)
+                if platform is None:
+                    raise ValueError(
+                        f"Platform adapter {session.platform_id!r} not found for subagent wakeup."
+                    )
+                event = AgentWakeupEvent(
                     context=root.context,
                     session=session,
-                    message_type=session.message_type,
-                    message="Delegated tasks have finished. Review their results and continue the original task.",
-                    extras={
-                        "_subagent_wakeup": runtime.storage_scope,
-                        "_background_stop_signal": signal,
-                        "_api_key_allow_admin_role": root.event.get_extra(
-                            "_api_key_allow_admin_role"
-                        ),
-                    },
+                    platform_meta=platform.meta(),
+                    prompt="Delegated tasks have finished. Review their results and continue the original task.",
+                    source="plugin",
+                    source_id="astrbot_plugin_subagent",
+                )
+                event.set_extra("_subagent_wakeup", runtime.storage_scope)
+                event.set_extra("_background_stop_signal", signal)
+                event.set_extra(
+                    "_api_key_allow_admin_role",
+                    root.event.get_extra("_api_key_allow_admin_role"),
                 )
                 event.message_obj.sender = copy.copy(root.event.message_obj.sender)
                 event.message_obj.group = copy.copy(root.event.message_obj.group)

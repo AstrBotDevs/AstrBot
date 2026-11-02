@@ -15,6 +15,7 @@ Data subdirectories:
 
 import os
 import tempfile
+from pathlib import Path
 
 from astrbot.core.utils.runtime_env import is_packaged_desktop_runtime
 
@@ -88,8 +89,22 @@ def get_astrbot_workspaces_path() -> str:
 
 
 def get_astrbot_system_tmp_path() -> str:
-    """Return the shared system temporary directory used by local tools."""
-    return os.path.realpath(os.path.join(tempfile.gettempdir(), ".astrbot"))
+    """Return the shared system temporary directory used by local tools.
+
+    The directory is the ``.astrbot`` entry of the system temporary
+    directory. When the system temporary directory is unusable, Python falls
+    back to the current working directory, which is where ``astrbot init``
+    leaves the ``.astrbot`` marker file. In that case a sibling directory is
+    used so the marker file is never shadowed by a directory.
+
+    Returns:
+        Absolute path of the shared system temporary directory.
+    """
+    system_tmp = Path(tempfile.gettempdir())
+    candidate = system_tmp / ".astrbot"
+    if candidate.is_file():
+        candidate = system_tmp / ".astrbot-tmp"
+    return os.path.realpath(str(candidate))
 
 
 def get_astrbot_site_packages_path() -> str:

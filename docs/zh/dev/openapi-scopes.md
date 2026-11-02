@@ -192,6 +192,7 @@ outline: deep
 | `GET` | `/api/v1/sessions/rules` | — |
 | `POST` | `/api/v1/sessions/rules` | — |
 | `POST` | `/api/v1/sessions/rules/delete` | — |
+| `GET` | `/api/v1/sessions/senders` | — |
 | `PATCH` | `/api/v1/sessions/service` | — |
 
 ## `file`

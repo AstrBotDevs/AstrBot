@@ -16,7 +16,7 @@ from astrbot.core.agent.message import (
 )
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool
-from astrbot.core.cron.events import CronMessageEvent
+from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
 from astrbot.core.platform.astrbot_message import Group, MessageMember
 from astrbot.core.platform.message_session import MessageSession
 
@@ -356,11 +356,18 @@ class SubAgentStore:
                 if conv.user_id != scope[0]:
                     raise ValueError("Subagent conversation belongs to another session")
                 session = MessageSession.from_str(scope[0])
-                event = CronMessageEvent(
+                platform = context.get_platform_inst(session.platform_id)
+                if platform is None:
+                    raise ValueError(
+                        f"Platform adapter {session.platform_id!r} not found for subagent recovery."
+                    )
+                event = AgentWakeupEvent(
                     context=context,
                     session=session,
-                    message="Subagent recovery",
-                    message_type=session.message_type,
+                    platform_meta=platform.meta(),
+                    prompt="Subagent recovery",
+                    source="plugin",
+                    source_id="astrbot_plugin_subagent",
                 )
                 event.message_obj.sender = MessageMember(
                     user_id=scope[2], nickname=data.get("sender_name")

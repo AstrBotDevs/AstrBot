@@ -7,9 +7,10 @@ import pytest_asyncio
 
 from astrbot.builtin_stars.astrbot_plugin_subagent.context import SubAgentContext
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.db.sqlite import SQLiteDatabase
+from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
 from astrbot.core.platform.message_session import MessageSession
+from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
 from astrbot.core.star.context import Context
 from astrbot.core.star.star import star_map
@@ -46,6 +47,11 @@ async def environment(tmp_path, request):
         MagicMock(),
     )
     context.get_config = lambda **kwargs: {}
+    context.platform_manager.platform_insts = [
+        SimpleNamespace(
+            meta=lambda: PlatformMetadata(id="test", name="test", description="Test")
+        )
+    ]
     context.get_current_chat_provider_id = AsyncMock(return_value="model")
     context.provider_manager.provider_insts = [
         SimpleNamespace(
@@ -54,12 +60,16 @@ async def environment(tmp_path, request):
         )
         for provider_id in ("model", "alternate")
     ]
-    event = CronMessageEvent(
+    event = AgentWakeupEvent(
         context=context,
         session=MessageSession.from_str(conversation.user_id),
-        message_type=MessageSession.from_str(conversation.user_id).message_type,
-        message="Original task",
+        platform_meta=context.get_platform_inst("test").meta(),
+        source="plugin",
+        prompt="Original task",
     )
+    event.message_obj.sender.user_id = MessageSession.from_str(
+        conversation.user_id
+    ).session_id
     config = {"enabled": True, "agents": []}
     module = importlib.import_module(
         "astrbot.builtin_stars.astrbot_plugin_subagent.main"
