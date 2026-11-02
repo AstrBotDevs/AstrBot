@@ -282,6 +282,7 @@
     "createConfirm": "确认创建具有以下权限的 API Key 吗？\n\n{scopes}",
     "sensitiveCreateConfirm": "即将创建包含以下高风险权限的 API Key：\n\n{scopes}\n\n持有者可能获得管理员能力。确认继续吗？",
     "scopeDescriptions": {
+      "stats": "读取运行状态和 Token 使用统计（包括插件和会话明细）。",
       "bot": "读取和管理机器人及平台配置。",
       "provider": "读取和管理模型服务提供商。",
       "persona": "读取和管理人格设定。",
