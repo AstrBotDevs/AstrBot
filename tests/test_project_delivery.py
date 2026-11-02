@@ -648,7 +648,7 @@ class DeliveryTests(unittest.TestCase):
             api.call_args_list[1].args[1]["value"], {"singleSelectOptionId": "D"}
         )
 
-    def test_apply_uses_eight_workers_and_keeps_each_item_mutations_sequential(self):
+    def test_apply_uses_four_workers_and_keeps_each_item_mutations_sequential(self):
         plan = [
             {
                 "content": f"C{index}",
@@ -664,7 +664,7 @@ class DeliveryTests(unittest.TestCase):
         }
         active, maximum, active_per_item, maximum_per_item = 0, 0, {}, {}
         queries, lock = [], threading.Lock()
-        first_mutations = threading.Barrier(8)
+        first_mutations = threading.Barrier(4)
 
         def api(query, variables):
             nonlocal active, maximum
@@ -689,8 +689,8 @@ class DeliveryTests(unittest.TestCase):
 
         with patch.object(sync, "graphql", side_effect=api):
             sync.apply_plan("P", fields, plan, apply=True)
-        self.assertEqual(sync.APPLY_WORKERS, 8)
-        self.assertEqual(maximum, 8)
+        self.assertEqual(sync.APPLY_WORKERS, 4)
+        self.assertEqual(maximum, 4)
         self.assertEqual(set(maximum_per_item.values()), {1})
         self.assertEqual(len(queries), 16)
 

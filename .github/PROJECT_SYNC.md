@@ -46,7 +46,7 @@ or deletes source Issues/PRs.
   skip unchanged values and clear stale text. Paginate every GraphQL connection,
   reject stalled cursors, and serialize runs. Apply mode prints the plan first;
   on failure it reports confirmed, outcome-unknown and unattempted mutation counts,
-  with affected item/field, so partial writes can be reconciled. Apply uses eight
+  with affected item/field, so partial writes can be reconciled. Apply uses four
   workers across distinct Project items; mutations within each item stay ordered.
   This is bounded concurrency, not a guarantee against GitHub rate limits.
   The synchronization job has a 120-minute total execution budget, including
