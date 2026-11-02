@@ -62,6 +62,9 @@ class CommandFilter(HandlerFilter):
                 label = v.__name__
             elif isinstance(v, types.UnionType) or typing.get_origin(v) is typing.Union:
                 label = str(v)
+            elif typing.get_origin(v) is not None:
+                # Generic aliases such as list[str] render their full form
+                label = str(v)
             elif v is inspect.Parameter.empty:
                 label = "any"
             else:
@@ -126,59 +129,93 @@ class CommandFilter(HandlerFilter):
             The converted parameter value.
 
         Raises:
-            ValueError: When the raw value cannot be converted to the target.
+            ValueError: When the raw value cannot be converted to the target
+                type, or when the declared annotation is not supported.
         """
-        try:
-            if (
-                target is None
-                or target is inspect.Parameter.empty
-                or target is typing.Any
-            ):
-                # No type constraint: keep the legacy heuristic that parses
-                # digit strings as int.
-                return int(raw_value) if raw_value.isdigit() else raw_value
-            origin = typing.get_origin(target)
-            if origin in (typing.Union, types.UnionType):
-                # Union annotation: when only one non-None type remains after
-                # unwrapping Optional, convert to it; otherwise keep the raw
-                # value (no type validation for multi-type unions yet).
-                non_none_types = unwrap_optional(target)
-                if len(non_none_types) == 1:
-                    return self._convert_param(param_name, raw_value, non_none_types[0])
-                return raw_value
-            if target is str:
-                # str is the raw value itself, no conversion needed
-                return raw_value
-            if target is bool:
-                # Accept true/false, yes/no, 1/0
-                lower_value = str(raw_value).lower()
-                if lower_value in ("true", "yes", "1"):
-                    return True
-                if lower_value in ("false", "no", "0"):
-                    return False
+        if target is None or target is inspect.Parameter.empty or target is typing.Any:
+            # No type constraint: keep the legacy heuristic that parses
+            # digit strings as int.
+            return int(raw_value) if raw_value.isdigit() else raw_value
+
+        origin = typing.get_origin(target)
+        if origin in (typing.Union, types.UnionType):
+            members = unwrap_optional(target)
+            # Validate every member first so an unsupported annotation always
+            # raises, even when another member could accept the raw value.
+            for member in members:
+                if member in (str, int, float, bool, typing.Any):
+                    continue
                 raise ValueError(
-                    f"参数 {param_name} 必须是布尔值（true/false, yes/no, 1/0）。",
+                    f"参数 {param_name} 的联合类型注解 {target!r} 包含不支持的类型 "
+                    f"{member!r}。目前支持 str、int、float、bool 以及它们的 "
+                    "Union/Optional 组合。",
                 )
-            if isinstance(target, type):
-                # Plain type: convert via its constructor (int/float/custom)
-                return target(raw_value)
-            # No annotation: infer the target from the default value type
-            if isinstance(target, bool):
-                # bool first since it is a subclass of int
-                return self._convert_param(param_name, raw_value, bool)
-            if isinstance(target, str):
+            # Try every non-None member in declaration order and use the first
+            # one that accepts the raw value. str accepts everything, so it is
+            # only used as a last resort; this keeps "str | int" converting
+            # "2" to int.
+            for member in members:
+                if member is str:
+                    continue
+                try:
+                    return self._convert_param(param_name, raw_value, member)
+                except ValueError:
+                    continue
+            if str in members:
                 return raw_value
-            if isinstance(target, int):
-                return int(raw_value)
-            if isinstance(target, float):
-                return float(raw_value)
-            if callable(target):
-                return target(raw_value)
-            return raw_value
-        except (ValueError, TypeError):
             raise ValueError(
                 f"参数 {param_name} 类型错误。完整参数: {self.print_types()}",
             )
+
+        if target is str:
+            # str is the raw value itself, no conversion needed
+            return raw_value
+        if target is bool:
+            # Accept true/false, yes/no, 1/0
+            lower_value = str(raw_value).lower()
+            if lower_value in ("true", "yes", "1"):
+                return True
+            if lower_value in ("false", "no", "0"):
+                return False
+            raise ValueError(
+                f"参数 {param_name} 必须是布尔值（true/false, yes/no, 1/0）。",
+            )
+        if target is int or target is float:
+            try:
+                return target(raw_value)
+            except (ValueError, TypeError):
+                raise ValueError(
+                    f"参数 {param_name} 类型错误。完整参数: {self.print_types()}",
+                ) from None
+
+        # Anything that still looks like a type annotation is not supported:
+        # converting it may silently produce wrong values (e.g. list("abc")),
+        # so report it explicitly instead of falling back to the raw string.
+        if isinstance(target, type) or origin is not None:
+            raise ValueError(
+                f"参数 {param_name} 的类型注解 {target!r} 不支持，无法进行类型转换。"
+                "目前支持 str、int、float、bool 以及它们的 Union/Optional 组合。",
+            )
+
+        # No annotation: infer the target from the runtime type of the default
+        # value, keeping the legacy behavior for unannotated parameters.
+        if isinstance(target, bool):
+            # bool first since it is a subclass of int
+            return self._convert_param(param_name, raw_value, bool)
+        if isinstance(target, str):
+            return raw_value
+        if isinstance(target, int):
+            return self._convert_param(param_name, raw_value, int)
+        if isinstance(target, float):
+            return self._convert_param(param_name, raw_value, float)
+        if callable(target):
+            try:
+                return target(raw_value)
+            except (ValueError, TypeError):
+                raise ValueError(
+                    f"参数 {param_name} 类型错误。完整参数: {self.print_types()}",
+                ) from None
+        return raw_value
 
     def validate_and_convert_params(
         self,
