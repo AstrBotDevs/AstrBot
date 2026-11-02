@@ -432,7 +432,11 @@ class ProviderAnthropic(Provider):
                 for block in content:
                     if isinstance(block, dict) and block.get("type") == "tool_result":
                         tool_use_id = block.get("tool_use_id")
-                        if tool_use_id in pending_tool_use_ids:
+                        if (
+                            isinstance(tool_use_id, str)
+                            and tool_use_id
+                            and tool_use_id in pending_tool_use_ids
+                        ):
                             tool_results.append(block)
                             pending_tool_use_ids.remove(tool_use_id)
                         continue
