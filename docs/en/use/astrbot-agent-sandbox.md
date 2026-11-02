@@ -6,12 +6,12 @@ AstrBot's built-in AI lets the Agent access a computer environment by executing 
 
 Agent Computer Use currently supports two runtime environments:
 
-- **Local environment**: AstrBot Agent executes code and reads and writes files **in the environment running AstrBot**. You can set file access, code execution, and network permissions separately for members and administrators.
+- **Local environment**: AstrBot Agent executes code and file operations **directly in the environment running AstrBot**, accessing its files and commands. Using `Seatbelt` on macOS or `bubblewrap (bwrap)` on Linux, AstrBot can provide **restricted file access and code execution**, limiting file access scope and network permissions for different bot users to improve the security of the local environment.
 - **Third-party sandbox environment**: AstrBot Agent executes code and file operations in a **separate environment**, avoiding direct access to files and commands on the host or inside the AstrBot container. This separation can provide stronger isolation, with file access, networking, and isolation between users depending on the sandbox's capabilities and configuration. Third-party sandboxes usually require additional deployment and configuration, as well as more computing resources.
 
 Open **Config → AI → Capabilities → Agent Computer Use** and set **Computer Use Runtime** to **Local machine** or **Third-party sandbox**.
 
-For Local machine, follow the instructions for your operating system under [Local environment](#local-environment). AstrBot checks that the environment is ready when it starts.
+For Local machine, AstrBot attempts to enable isolation in its runtime environment. Availability depends on the operating system, kernel, account permissions, and system security policies. See [Local environment](#local-environment) below.
 
 For Third-party sandbox, also select a **Sandbox Driver** and configure its endpoint, access token, and other settings. See [Third-party sandbox environment](#third-party-sandbox-environment) below.
 
@@ -63,13 +63,22 @@ The permission matrix applies these dependencies:
 - When **Execute code** is unchecked, **Allow network during execution** cannot be checked, because **network permissions only apply during code execution**.
 - When **File access scope** is **Disabled**, neither execution nor networking can be enabled, because **code execution and network access require file access**.
 
-If **Allow code execution** is checked but the isolation environment it needs is not ready, an **Inactive** badge appears beside the execution option. Unchecked execution options do not show this badge. You can still save your configuration and follow these steps:
+Saving configuration succeeds even when Local isolation is unavailable, including selecting **Yes** for computer access on the welcome page. Tools check isolation availability when resolving access. If bubblewrap is missing, the startup probe fails (including timeout or container restrictions), or isolation is unsupported, **execution policies that require isolation fail closed for both members and administrators**:
 
-- Hover over, focus, or select the **Inactive** badge to see the cause. Complete the setup for your operating system, then restart AstrBot.
-- Saved permissions are kept and take effect again once the environment is ready. You can also uncheck **Allow code execution**.
-- File access continues to follow your configured scope. Workspace file operations without execution, and entire-environment execution with networking, remain available.
+- Code execution and execution network access are disabled. The saved file scope stays unchanged; workspace access never expands to the entire environment.
+- Policies that need no isolation, including workspace files without execution and entire-environment execution with networking, stay effective as configured. Explicitly disabled file access stays disabled.
+- Saved permissions are not overwritten. After restoring isolation and restarting AstrBot, tools use the saved execution policy again.
+- The permission matrix preserves saved execution checkboxes and marks unavailable execution as **Inactive**. Hover over, focus, or select the **Inactive** badge to see the cause; the permission can still be unchecked. The LLM receives the explanation in rejected Shell, Python, and shell-session tool responses; it is not added to the system prompt. Missing dependencies, unsupported platforms, and startup failures have distinct messages; startup failures include the probe diagnostic.
 
 The permission matrix hides the network column when isolation is unavailable. The former isolation setup link in the bottom-left corner of the matrix has been removed; use the operating system and Docker instructions below instead.
+
+For example, if an administrator saved workspace-only execution and bubblewrap is missing, the LLM receives this Shell tool response:
+
+```text
+error: Local isolation unavailable. Shell execution was blocked. The saved execution restrictions require isolation, but bubblewrap is not installed. Code execution and execution network access are disabled; file access keeps its configured scope (workspace). Saved permissions have not been changed. Ask the administrator to restore isolation and restart AstrBot. Do not bypass this restriction using another tool, command, or runtime.
+```
+
+The same rule applies to administrators and members. Role defaults apply only when a role has no saved policy; they never replace an incompatible saved policy.
 
 ![Restricted administrator execution disabled after an isolation probe failure](./images/config-local-permissions-isolation-unavailable-en.jpg)
 
@@ -146,7 +155,9 @@ Installing bwrap is only one part of the setup. Enabling local isolation inside 
 
 ### Windows users {#local-windows}
 
-On Windows 10/11, including Home editions, AstrBot can use the local environment to read and write files and execute code.
+Windows supports workspace-scoped file reading, writing, and editing through native file handles using Python standard-library modules. File operations reject symbolic links, directory junctions, and multiply linked files. Ordinary members can use workspace file tools without an execution sandbox.
+
+On Windows 10/11, including Home editions, AstrBot supports local isolation for code execution.
 
 1. Open **Config → AI → Capabilities → Agent Computer Use** and set **Computer Use Runtime** to **Local machine**.
 2. Under **Local Permission Policies**, select **Workspace** for the role that needs computer access.
