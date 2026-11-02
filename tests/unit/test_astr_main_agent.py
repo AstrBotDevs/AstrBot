@@ -234,6 +234,8 @@ def test_local_mode_prompt_uses_windows_powershell_51():
     assert "Windows PowerShell 5.1 (powershell.exe)" in prompt
     assert "PowerShell 7-only syntax" in prompt
     assert "cmd.exe" not in prompt
+    assert "Restricted Windows execution uses AppContainer" in prompt
+    assert "Workspace:\\" in prompt
 
 
 def test_local_mode_prompt_hints_pwsh_when_resolved():
@@ -253,6 +255,7 @@ def test_local_mode_prompt_hints_pwsh_when_resolved():
     assert "PowerShell 7 (pwsh.exe)" in prompt
     assert "Windows PowerShell 5.1" not in prompt
     assert "Unix-like" not in prompt
+    assert "Restricted Windows execution uses AppContainer" in prompt
 
 
 def test_local_mode_prompt_ignores_pwsh_on_non_windows():
@@ -272,6 +275,7 @@ def test_local_mode_prompt_ignores_pwsh_on_non_windows():
     assert "Unix-like" in prompt
     assert "POSIX-compatible" in prompt
     assert "PowerShell" not in prompt
+    assert "AppContainer" not in prompt
 
 
 def test_local_mode_prompt_keeps_posix_shell_guidance():

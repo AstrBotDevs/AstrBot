@@ -68,7 +68,7 @@ Saving configuration succeeds even when Local isolation is unavailable, includin
 - Code execution and execution network access are disabled. The saved file scope stays unchanged; workspace access never expands to the entire environment.
 - Policies that need no isolation, including workspace files without execution and entire-environment execution with networking, stay effective as configured. Explicitly disabled file access stays disabled.
 - Saved permissions are not overwritten. After restoring isolation and restarting AstrBot, tools use the saved execution policy again.
-- The permission matrix preserves saved execution checkboxes and marks unavailable execution as **Inactive**. Hover over or select the adjacent help icon to see the cause; the permission can still be unchecked. The LLM receives the explanation in rejected Shell, Python, and shell-session tool responses; it is not added to the system prompt. Missing dependencies, unsupported platforms, and startup failures have distinct messages; startup failures include the probe diagnostic.
+- The permission matrix preserves saved execution checkboxes and marks unavailable execution as **Inactive**. Hover over, focus, or select the **Inactive** badge to see the cause; the permission can still be unchecked. The LLM receives the explanation in rejected Shell, Python, and shell-session tool responses; it is not added to the system prompt. Missing dependencies, unsupported platforms, and startup failures have distinct messages; startup failures include the probe diagnostic.
 
 The permission matrix hides the network column when isolation is unavailable. The former isolation setup link in the bottom-left corner of the matrix has been removed; use the operating system and Docker instructions below instead.
 
@@ -157,7 +157,24 @@ Installing bwrap is only one part of the setup. Enabling local isolation inside 
 
 Windows supports workspace-scoped file reading, writing, and editing through native file handles using Python standard-library modules. File operations reject symbolic links, directory junctions, and multiply linked files. Ordinary members can use workspace file tools without an execution sandbox.
 
-Local process isolation is currently unsupported on native Windows. Administrators can execute code with entire-environment access and networking enabled. For isolated code execution, use a [third-party sandbox environment](#third-party-sandbox-environment).
+On Windows 10/11, including Home editions, AstrBot supports local isolation for code execution.
+
+1. Open **Config → AI → Capabilities → Agent Computer Use** and set **Computer Use Runtime** to **Local machine**.
+2. Under **Local Permission Policies**, select **Workspace** for the role that needs computer access.
+3. Check **Allow code execution** to let that role run code. Check **Allow execution network access** if the code needs network access. Leave execution unchecked if only file access is needed.
+4. Save the configuration and restart AstrBot. If Windows asks for permission during startup, select **Yes** to complete setup. Later startups usually need no further confirmation.
+
+Once setup is complete, you can ask AstrBot in chat to create files, process data, or run code.
+
+![Windows workspace with networking disabled](/windows-sandbox/workspace-en.jpg)
+
+To access files outside the workspace, select **Entire environment**. AstrBot will access files using the permissions of the account running it. Code execution with this scope shows an **Always on** networking badge with a lock icon. Hover over, focus, or select the badge for an explanation. Choose **Workspace** to turn execution networking on or off yourself.
+
+![Windows entire-environment networking explanation](/windows-sandbox/network-en.png)
+
+If you see a sandbox setup message or an **Inactive** badge, select the badge or expand **View diagnostic details** to see the cause. If you previously declined the Windows permission prompt, restart AstrBot and approve it to complete setup.
+
+![Windows sandbox initialization prompt](/windows-sandbox/setup-zh.jpg)
 
 ## Third-party sandbox environment {#third-party-sandbox-environment}
 
