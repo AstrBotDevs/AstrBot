@@ -238,9 +238,9 @@ def validate_config(
                 is_core
                 and path == "provider."
                 and key == "key"
-                and data.get("type") == "system_one_decision"
+                and data.get("type") in {"system_one_decision", "openai_decision"}
             ):
-                # System One uses a single key within the shared provider schema.
+                # Decision providers use a single key within the shared provider schema.
                 meta = {**meta, "type": "string"}
             if "type" not in meta:
                 logger.debug(f"配置项 {path}{key} 没有类型定义, 跳过校验")
