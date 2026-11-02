@@ -448,6 +448,7 @@
         "modes": {
           "none": "無効"
         },
+        "networkAlwaysOn": "常に有効",
         "windowsHostNetworkHint": "Windows では「環境全体」でコードを実行する場合、通信だけを無効にはできません。「ワークスペース」に切り替えると無効にできます。",
         "runtimeUnknown": "実行環境の情報を取得できません。",
         "memberWarning": "一般メンバーにネットワーク接続または環境全体へのアクセスが許可されています。",

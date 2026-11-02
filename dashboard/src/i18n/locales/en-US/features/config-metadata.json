@@ -360,6 +360,7 @@
         "modes": {
           "none": "Disabled"
         },
+        "networkAlwaysOn": "Always on",
         "windowsHostNetworkHint": "Windows cannot disable networking while executing code with entire-environment access. Switch to workspace access to disable networking.",
         "runtimeUnknown": "Runtime information is unavailable.",
         "memberWarning": "Members have network access or file access across the entire environment.",

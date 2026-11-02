@@ -376,6 +376,7 @@
         "modes": {
           "none": "关闭"
         },
+        "networkAlwaysOn": "始终开启",
         "windowsHostNetworkHint": "Windows 暂不支持在“整个环境”执行代码时单独禁网。切换到“工作区”后可关闭联网。",
         "runtimeUnknown": "运行环境信息不可用。",
         "memberWarning": "普通成员已获得联网或整个环境访问权限。",
