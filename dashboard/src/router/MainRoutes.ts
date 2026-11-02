@@ -97,9 +97,18 @@ const MainRoutes = {
       ]
     },
     {
-      name: 'PluginPage',
+      name: 'PluginView',
+      path: '/plugin-view/:pluginName/:pageName',
+      component: () => import('@/views/PluginViewPage.vue')
+    },
+    {
+      // Legacy alias of the plugin view route.
       path: '/plugin-page/:pluginName/:pageName',
-      component: () => import('@/views/PluginPagePage.vue')
+      redirect: (to: RouteLocationNormalized) => ({
+        name: 'PluginView',
+        params: to.params,
+        query: to.query,
+      })
     },
     {
       path: '/extension/:pluginId',
@@ -166,7 +175,13 @@ const MainRoutes = {
       name: 'Data',
       path: '/data',
       component: () => import('@/views/DataPage.vue'),
-      redirect: redirectToDataTab('Stats'),
+      // Reopen the last visited tab, falling back to Statistics by default.
+      redirect: (to: RouteLocationNormalized) => {
+        const lastTab = localStorage.getItem('data_last_tab');
+        return redirectToDataTab(
+          lastTab && ['Stats', 'Conversation', 'Console', 'Trace'].includes(lastTab) ? lastTab : 'Stats'
+        )(to);
+      },
       children: [
         {
           name: 'Stats',

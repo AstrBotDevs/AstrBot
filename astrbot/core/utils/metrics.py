@@ -1,5 +1,6 @@
 import asyncio
 import os
+import platform
 import socket
 import sys
 import uuid
@@ -192,6 +193,7 @@ class Metric:
         payload_metrics = dict(metrics_data)
         payload_metrics["v"] = VERSION
         payload_metrics["os"] = sys.platform
+        payload_metrics["python_version"] = platform.python_version()
         try:
             payload_metrics["hn"] = socket.gethostname()
         except Exception:

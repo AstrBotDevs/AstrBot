@@ -1,3 +1,5 @@
+import mirarouterIcon from '@/assets/images/provider_logos/mirarouter.svg?no-inline';
+
 /**
  * 提供商相关的工具函数
  */
@@ -9,13 +11,14 @@
  */
 export function getProviderIcon(type) {
   const icons = {
+    'mirarouter': mirarouterIcon,
     'openai': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/openai.svg',
     'azure': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/azure.svg',
     'xai': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/xai.svg',
     'anthropic': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/anthropic.svg',
     'ollama': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/ollama.svg',
     'google': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/gemini-color.svg',
-    'deepseek': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/deepseek.svg',
+    'deepseek': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/deepseek-color.svg',
     'modelscope': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/modelscope.svg',
     'zhipu': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/zhipu.svg',
     'nvidia': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/nvidia-color.svg',
@@ -43,6 +46,8 @@ export function getProviderIcon(type) {
     'groq': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/groq.svg',
     'aihubmix': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/aihubmix-color.svg',
     'openrouter': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/openrouter.svg',
+    'typesafe': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/typesafeai.svg',
+    'vercel': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/vercel.svg',
     'ssycloud': 'https://admin.shengsuanyun.com/assets/logo-BoujJhP-.png',
     "tokenpony": "https://tokenpony.cn/tokenpony-web/logo.png",
     "compshare": "https://compshare.cn/favicon.ico",
@@ -70,7 +75,6 @@ export function isMonochromeProviderIcon(type) {
     'xai',
     'anthropic',
     'ollama',
-    'deepseek',
     'modelscope',
     'zhipu',
     'siliconflow',
@@ -84,7 +88,16 @@ export function isMonochromeProviderIcon(type) {
     'mimo',
     'xiaomi',
     'xiaomi-token-plan',
-    'openrouter'
+    'openrouter',
+    'typesafe',
+    'vercel',
+    'groq',
+    'microsoft',
+    'fishaudio',
+    'vllm',
+    'huggingface',
+    'coze',
+    'deerflow'
   ].includes(type);
 }
 

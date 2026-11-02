@@ -18,8 +18,8 @@ Please refer to each implementation project's deployment documentation.
 ## 1. Configure OneBot v11
 
 1. Open AstrBot's WebUI
-2. Click `Bots` in the left sidebar
-3. In the right panel, click `+ Create Bot`
+2. Click `Platforms` in the left sidebar
+3. Click `Add Adapter` above the bot list
 4. Select `OneBot v11`
 
 Fill in the form:
@@ -43,5 +43,5 @@ Notes:
 
 ## 3. Verify
 
-Go to `Data` -> `Logs` in the AstrBot WebUI. If a blue log appears saying `aiocqhttp(OneBot v11) adapter connected.`, the connection is successful.
+Go to `Data & Logs` -> `Logs` in the AstrBot WebUI. If a blue log appears saying `aiocqhttp(OneBot v11) adapter connected.`, the connection is successful.
 If after a few seconds you see `aiocqhttp adapter has been closed`, it means the connection timed out (failed). Please double-check your configuration.

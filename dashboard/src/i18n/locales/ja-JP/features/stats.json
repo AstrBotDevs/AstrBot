@@ -1,0 +1,98 @@
+{
+  "header": {
+    "eyebrow": "ダッシュボード",
+    "title": "システム統計",
+    "subtitle": "プラットフォーム、メッセージ、モデル呼び出しを一元的に表示します。",
+    "notUpdated": "未更新"
+  },
+  "ranges": {
+    "oneDay": "1 日",
+    "threeDays": "3 日",
+    "oneWeek": "1 週間"
+  },
+  "rangeLabels": {
+    "oneDay": "直近 1 日",
+    "threeDays": "直近 3 日",
+    "oneWeek": "直近 1 週間"
+  },
+  "overviewCards": {
+    "platformCount": {
+      "label": "プラットフォームインスタンス数",
+      "note": "設定済みで現在稼働中のプラットフォームインスタンス"
+    },
+    "messageCount": {
+      "label": "メッセージ総数",
+      "note": "累計メッセージ数"
+    },
+    "todayModelCalls": {
+      "label": "本日のモデル呼び出し",
+      "note": "トークン"
+    },
+    "cpu": {
+      "label": "CPU",
+      "note": "プログラムの CPU 使用率"
+    },
+    "memory": {
+      "label": "プロセスメモリ",
+      "note": "システムメモリ {systemMemory}"
+    },
+    "uptime": {
+      "label": "稼働時間",
+      "note": "起動時刻 {startTime}"
+    }
+  },
+  "messageOverview": {
+    "title": "メッセージ"
+  },
+  "messageTrend": {
+    "title": "メッセージの推移",
+    "totalMessages": "メッセージ総数"
+  },
+  "platformRanking": {
+    "title": "プラットフォーム別メッセージランキング"
+  },
+  "modelCalls": {
+    "title": "AI モデル"
+  },
+  "modelTrend": {
+    "title": "モデル呼び出しの推移"
+  },
+  "modelTotal": {
+    "title": "{range}のモデル呼び出し合計",
+    "callCount": "合計 {count} 回",
+    "avgTtft": "最初のトークンまでの平均時間（TTFT）",
+    "avgDuration": "平均応答時間",
+    "avgTpm": "平均出力速度（TPM）",
+    "successRate": "呼び出し成功率"
+  },
+  "modelRanking": {
+    "title": "モデル使用量ランキング"
+  },
+  "sessionRanking": {
+    "title": "{range}のセッション別モデル使用量上位 10 件",
+    "openConversation": "会話を見る"
+  },
+  "empty": {
+    "platformStats": "プラットフォーム別メッセージ統計データはありません。",
+    "modelCalls": "{range}のモデル呼び出しデータはありません。",
+    "sessionCalls": "{range}のセッション呼び出しデータはありません。"
+  },
+  "chart": {
+    "messages": "メッセージ",
+    "others": "その他"
+  },
+  "units": {
+    "tokens": "トークン",
+    "tpm": "TPM",
+    "gb": "GB",
+    "mb": "MB",
+    "ms": "ms",
+    "hoursShort": "h",
+    "minutesShort": "m",
+    "secondsShort": "s"
+  },
+  "errors": {
+    "loadFailed": "統計データを読み込めませんでした。しばらくしてからもう一度お試しください。",
+    "rangeFailed": "統計範囲を切り替えられませんでした。しばらくしてからもう一度お試しください。"
+  }
+}

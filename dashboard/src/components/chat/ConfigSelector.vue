@@ -42,7 +42,7 @@
                             variant="text"
                             @click="tempSelectedConfig = config.id"
                         >
-                            <v-list-item-title>{{ config.name }}</v-list-item-title>
+                            <v-list-item-title>{{ configDisplayName(config) }}</v-list-item-title>
                             <v-list-item-subtitle class="text-caption text-grey">
                                 {{ config.id }}
                             </v-list-item-subtitle>
@@ -109,6 +109,7 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{ 'config-changed': [ConfigChangedPayload] }>();
 
 const { tm } = useModuleI18n('features/chat');
+const { tm: tmConfig } = useModuleI18n('features/config');
 
 const configOptions = ref<ConfigInfo[]>([]);
 const loadingConfigs = ref(false);
@@ -148,9 +149,17 @@ const targetUmo = computed(() => {
     return `${props.platformId}:${messageType.value}:${sessionKey.value}`;
 });
 
+function configDisplayName(config: ConfigInfo): string {
+    if (config.id === 'default') {
+        return tmConfig('configSelection.defaultConfig');
+    }
+    return config.name || config.id;
+}
+
 const selectedConfigLabel = computed(() => {
-    const target = configOptions.value.find((item) => item.id === selectedConfigId.value);
-    return target?.name || selectedConfigId.value || 'default';
+    const id = selectedConfigId.value || 'default';
+    const target = configOptions.value.find((item) => item.id === id);
+    return configDisplayName(target ?? { id, name: id });
 });
 
 function openDialog() {
@@ -220,7 +229,7 @@ async function getAgentRunnerType(confId: string): Promise<string> {
     try {
         const res = await configProfileApi.get(confId);
         const config = ((res.data.data as any).config || {}) as any;
-        const type = config?.provider_settings?.agent_runner_type || 'local';
+        const type = config?.agent_runner?.runner_type || 'local';
         configCache.value[confId] = type;
         return type;
     } catch (error) {

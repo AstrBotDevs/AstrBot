@@ -8,6 +8,7 @@ from astrbot.api import logger
 from astrbot.api.event import MessageChain
 from astrbot.api.platform import (
     AstrBotMessage,
+    Group,
     Platform,
     PlatformMetadata,
     register_platform_adapter,
@@ -720,6 +721,13 @@ class MisskeyPlatformAdapter(Platform):
             is_chat=False,
             room_id=room_id,
         )
+        room_data = raw_data.get("toRoom")
+        if message.group and isinstance(room_data, dict):
+            message.group = Group(
+                group_id=message.group.group_id,
+                group_name=room_data.get("name") or None,
+                group_owner=str(room_data.get("ownerId") or "") or None,
+            )
 
         cache_user_info(
             self._user_cache,

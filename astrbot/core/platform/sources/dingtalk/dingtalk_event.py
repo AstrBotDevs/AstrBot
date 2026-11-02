@@ -2,6 +2,7 @@ from typing import Any
 
 from astrbot import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
+from astrbot.core.platform.astr_message_event import MessageSesion
 
 
 class DingtalkMessageEvent(AstrMessageEvent):
@@ -22,10 +23,21 @@ class DingtalkMessageEvent(AstrMessageEvent):
         if not self.adapter:
             logger.error("钉钉消息发送失败: 缺少 adapter")
             return
-        await self.adapter.send_message_chain_with_incoming(
-            incoming_message=self.message_obj.raw_message,
-            message_chain=message,
-        )
+        raw_message = self.message_obj.raw_message
+        if hasattr(raw_message, "conversation_type"):
+            await self.adapter.send_message_chain_with_incoming(
+                incoming_message=raw_message,
+                message_chain=message,
+            )
+        else:
+            await self.adapter.send_by_session(
+                MessageSesion(
+                    platform_name=self.platform_meta.id,
+                    message_type=self.get_message_type(),
+                    session_id=self.session_id,
+                ),
+                message,
+            )
         await super().send(message)
 
     async def send_streaming(self, generator, use_fallback: bool = False):

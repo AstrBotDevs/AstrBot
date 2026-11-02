@@ -42,8 +42,9 @@ class Main(star.Star):
         await self.name_c.name(event, alias)
 
     @filter.command("reset")
+    @filter.permission_type(filter.PermissionType.SHARED_GROUP_ADMIN)
     async def reset(self, message: AstrMessageEvent) -> None:
-        """Reset conversation history"""
+        """Clear the context of the current conversation."""
         await self.conversation_c.reset(message)
 
     @filter.command("stop")
@@ -52,8 +53,9 @@ class Main(star.Star):
         await self.conversation_c.stop(message)
 
     @filter.command("new")
+    @filter.permission_type(filter.PermissionType.SHARED_GROUP_ADMIN)
     async def new_conv(self, message: AstrMessageEvent) -> None:
-        """Create new conversation"""
+        """Create a new conversation."""
         await self.conversation_c.new_conv(message)
 
     @filter.command("stats")

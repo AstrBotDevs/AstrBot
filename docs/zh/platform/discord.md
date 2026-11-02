@@ -2,12 +2,7 @@
 
 ## 创建 AstrBot Discord 平台适配器
 
-进入机器人，点击新增适配器，找到 Discord 并点击进入 Discord 配置页。
-> 旧版本`机器人`为`消息平台`
-![点击创建机器人，选择discord类型](https://files.astrbot.app/docs/source/images/discord/image.png)
-
-![选项从上到下依次是 1.机器人名称 2. 启用 3. Bot token 4. Discord 代理地址 5. 是否自动将插件指令注册为 Discord 斜杠指令 6. discord_guild_id_for_debug 7.Discord 活动名称](https://files.astrbot.app/docs/source/images/discord/image-3.png)
-> 本次教程只用管1,2,3,5项
+进入 WebUI 的 `机器人` 页，点击 `创建机器人`，选择 `Discord`。填写以下配置，获取 Token 后点击 `保存`。
 
 - 机器人名称：自定义，方便区分不同适配器
 - 启用：勾选后启用该适配器
@@ -62,7 +57,7 @@
 
 Discord 支持预回应表情功能。启用后，机器人在处理消息时会先添加一个表情反应，让用户知道机器人正在处理消息。
 
-在管理面板的「配置」页面中，找到 `平台特定配置 -> Discord -> 预回应表情`：
+进入 `配置文件`，选择该机器人使用的配置文件，点击搜索按钮并搜索 `platform_specific.discord.pre_ack_emoji`。修改后点击 `保存配置`：
 
 - **启用预回应表情**：开启后，机器人收到消息时会自动添加表情反应
 - **表情列表**：填写 Unicode 表情符号，例如：👍、🤔、⏳。可填写多个，机器人会随机选择一个使用

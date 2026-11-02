@@ -31,7 +31,7 @@ class TEIRerankProvider(RerankProvider):
         self.raw_scores = provider_config.get("tei_rerank_raw_scores", False)
         self.return_text = provider_config.get("tei_rerank_return_text", False)
 
-        h = {}
+        h = self.request_headers.copy()
         if self.api_key:
             h["Authorization"] = f"Bearer {self.api_key}"
         self.client = aiohttp.ClientSession(

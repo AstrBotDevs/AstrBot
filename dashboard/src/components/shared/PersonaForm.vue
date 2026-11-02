@@ -149,7 +149,7 @@
 
       <v-card-actions class="persona-form-actions">
         <v-btn
-          v-if="editingPersona"
+          v-if="editingPersona && editingPersona.persona_id !== 'default'"
           color="error"
           variant="text"
           @click="deletePersona"

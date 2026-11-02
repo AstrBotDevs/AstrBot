@@ -1,0 +1,203 @@
+{
+  "title": "設定ファイル",
+  "subtitle": "システム設定を管理します。",
+  "editor": {
+    "visual": "ビジュアル編集",
+    "code": "コード編集",
+    "revertCode": "変更前のコードに戻す",
+    "applyConfig": "この設定を適用",
+    "applyTip": "`この設定を適用` をクリックすると、設定が一時保存されてビジュアル編集に反映されます。保存するには、右下の保存ボタンをクリックしてください。"
+  },
+  "actions": {
+    "save": "設定を保存",
+    "delete": "この項目を削除",
+    "add": "追加",
+    "reset": "デフォルトに戻す",
+    "export": "設定をエクスポート",
+    "import": "設定をインポート",
+    "validate": "設定を検証"
+  },
+  "help": {
+    "documentation": "公式ドキュメント",
+    "support": "サポートコミュニティ",
+    "helpText": "設定について不明な点がある場合は、{documentation} または {support} をご覧ください。",
+    "helpPrefix": "設定について不明な点がある場合は、",
+    "helpMiddle": "または",
+    "helpSuffix": "をご覧ください。"
+  },
+  "messages": {
+    "configApplied": "設定を適用しました。保存するには、右下の保存ボタンをクリックしてください。",
+    "configApplyError": "設定を適用できませんでした。JSON の形式が正しくありません。",
+    "unsavedChangesNotice": "まだ保存されていません。右下のボタンをクリックして保存してください。",
+    "saveSuccess": "設定を保存しました。",
+    "saveError": "設定を保存できませんでした。",
+    "loadError": "設定を読み込めませんでした。",
+    "deleteSuccess": "削除しました。",
+    "deleteError": "削除できませんでした。",
+    "updateSuccess": "更新しました。",
+    "updateError": "更新できませんでした。"
+  },
+  "sections": {
+    "general": "一般設定",
+    "advanced": "詳細設定",
+    "security": "セキュリティ設定",
+    "appearance": "外観設定",
+    "notification": "通知設定",
+    "moreConfig": "その他の設定"
+  },
+  "general": {
+    "botName": "ボット名",
+    "language": "インターフェース言語",
+    "timezone": "タイムゾーン",
+    "autoSave": "自動保存",
+    "debugMode": "デバッグモード"
+  },
+  "advanced": {
+    "logLevel": "ログレベル",
+    "maxConnections": "最大接続数",
+    "timeout": "タイムアウト",
+    "retryAttempts": "再試行回数",
+    "cacheSize": "キャッシュサイズ"
+  },
+  "security": {
+    "apiKey": "API キー",
+    "allowedHosts": "許可するホスト",
+    "rateLimit": "レート制限",
+    "encryption": "暗号化設定"
+  },
+  "aiSettings": {
+    "title": "AI",
+    "enable": "AI を有効化",
+    "more": "その他の操作",
+    "changeRunner": "実行方式を変更",
+    "localSettingsTitle": "AstrBot 組み込み AI",
+    "settingsSuffix": "設定",
+    "tabs": {
+      "model": "モデル",
+      "persona": "ペルソナ",
+      "capabilities": "機能",
+      "advanced": "詳細設定"
+    },
+    "groups": {
+      "model": "モデル",
+      "modelHint": "組み込み AI で使用する会話モデルと再試行ポリシーを選択します。",
+      "execution": "実行設定",
+      "executionHint": "ツール呼び出しループと実行プロセスを設定します。",
+      "media": "画像と音声",
+      "mediaHint": "画像認識、音声認識、音声合成を設定します。",
+      "behavior": "メッセージ処理",
+      "behaviorHint": "これらの設定は、現在の設定ファイル内のすべての実行方式に適用されます。"
+    },
+    "common": {
+      "title": "共通設定",
+      "subtitle": "これらの設定は実行方式を切り替えても変更されません。"
+    },
+    "disabled": {
+      "title": "AI は無効です",
+      "subtitle": "モデルを必要とするメッセージを処理するには、AI を有効にしてください。"
+    },
+    "runnerDialog": {
+      "title": "実行方式を変更",
+      "subtitle": "外部 AI アプリケーションに接続する場合にのみ変更してください。ほとんどのユーザーには組み込み AI が適しています。",
+      "warningPrefix": "切り替えると、新しい実行方式のデフォルト設定が使用されます。現在の実行方式の設定は",
+      "warningEmphasis": "引き継がれません",
+      "warningSuffix": "。",
+      "confirm": "この方式を使用"
+    },
+    "runners": {
+      "local": {
+        "title": "組み込み AI",
+        "summary": "モデル、ペルソナ、ナレッジベース、ツールなど、AstrBot の AI 機能を設定します。",
+        "description": "モデル、ペルソナ、ナレッジベース、ツールに対応した AstrBot 組み込み AI を使用します。"
+      },
+      "dify": {
+        "title": "Dify",
+        "summary": "現在、AI 会話は Dify アプリケーションによって処理されています。",
+        "description": "Dify アプリケーションに接続し、アクセス設定を行います。"
+      },
+      "coze": {
+        "title": "Coze",
+        "summary": "現在、AI 会話は Coze Bot によって処理されています。",
+        "description": "Coze Bot に接続し、アクセス設定を行います。"
+      },
+      "dashscope": {
+        "title": "Alibaba Cloud Model Studio",
+        "summary": "現在、AI 会話は Alibaba Cloud Model Studio アプリケーションによって処理されています。",
+        "description": "Alibaba Cloud Model Studio アプリケーションに接続し、アクセス設定を行います。"
+      },
+      "deerflow": {
+        "title": "DeerFlow",
+        "summary": "現在、AI 会話は DeerFlow によって処理されています。",
+        "description": "DeerFlow サービスに接続し、実行設定を行います。"
+      }
+    }
+  },
+  "configSelection": {
+    "selectConfig": "設定ファイルを選択",
+    "defaultConfig": "デフォルト設定ファイル",
+    "search": "設定ファイルを検索",
+    "noResults": "一致する設定ファイルがありません",
+    "normalConfig": "一般",
+    "systemConfig": "システム"
+  },
+  "search": {
+    "placeholder": "設定項目を検索（フィールド名／説明／ヒント）",
+    "noResult": "一致する設定項目が見つかりません"
+  },
+  "configManagement": {
+    "title": "設定ファイル管理",
+    "description": "AstrBot では、ボットごとに個別の設定ファイルを使用できます。デフォルトでは `default` 設定が使用されます。",
+    "newConfig": "設定ファイルを新規作成",
+    "copyConfig": "設定ファイルをコピー",
+    "editConfig": "設定ファイルを編集",
+    "manageConfigs": "設定ファイルを管理…",
+    "configName": "名前",
+    "fillConfigName": "設定ファイル名を入力",
+    "confirmDelete": "設定ファイル「{name}」を削除しますか？この操作は元に戻せません。",
+    "pleaseEnterName": "設定名を入力してください。",
+    "nameExists": "同じ名前の設定ファイルがすでに存在します。別の名前を使用してください。",
+    "createFailed": "設定ファイルを新規作成できませんでした。",
+    "copyFailed": "設定ファイルをコピーできませんでした。",
+    "deleteFailed": "設定ファイルを削除できませんでした。",
+    "updateFailed": "設定ファイルを更新できませんでした。"
+  },
+  "buttons": {
+    "cancel": "キャンセル",
+    "create": "作成",
+    "update": "更新"
+  },
+  "codeEditor": {
+    "title": "設定ファイルを編集"
+  },
+  "fileUpload": {
+    "button": "ファイルを管理",
+    "dialogTitle": "アップロード済みファイル",
+    "dropzone": "新しいファイルをアップロード",
+    "allowedTypes": "許可される形式：{types}",
+    "empty": "アップロード済みのファイルはありません",
+    "statusMissing": "ファイルが見つかりません",
+    "statusUnconfigured": "設定に追加されていません",
+    "uploadSuccess": "{count} 個のファイルをアップロードしました。",
+    "uploadFailed": "アップロードできませんでした。",
+    "loadFailed": "ファイル一覧を取得できませんでした。",
+    "fileTooLarge": "ファイルが大きすぎます（上限 {max} MB）：{name}",
+    "deleteSuccess": "ファイルを削除しました。",
+    "deleteFailed": "削除できませんでした。",
+    "addToConfig": "設定に追加しました。",
+    "fileCount": "ファイル：{count}",
+    "done": "完了"
+  },
+  "unsavedChangesWarning": {
+    "dialogTitle": "未保存の変更",
+    "leavePage": "現在の設定に未保存の変更があります。移動する前に保存しますか？",
+    "switchConfig": "設定ファイルを切り替えると、現在の未保存の変更は失われます。先に保存しますか？",
+    "options": {
+      "save": "保存",
+      "saveAndSwitch": "保存して切り替える",
+      "discardAndSwitch": "変更を破棄して切り替える",
+      "closeCard": "ポップアップを閉じる",
+      "confirm": "確定",
+      "cancel": "キャンセル"
+    }
+  }
+}

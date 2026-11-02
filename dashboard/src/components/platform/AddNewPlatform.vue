@@ -552,59 +552,14 @@
                         }"
                         style="min-width: 250px"
                       >
-                        <v-autocomplete
-                          v-if="
-                            isEditingRoutes &&
-                            updatingMode &&
-                            getRouteSourceMode(item) === 'known'
-                          "
+                        <UmoSelector
+                          v-if="isEditingRoutes && updatingMode && getRouteSourceMode(item) === 'known'"
                           v-model="item.sourceUmo"
-                          :items="filteredKnownRouteUmoItems"
-                          :loading="loadingKnownRouteUmos"
-                          variant="outlined"
-                          density="compact"
-                          hide-details
-                          clearable
-                          :placeholder="
-                            tm('createDialog.routeSource.selectPlaceholder')
-                          "
-                          :no-data-text="tm('createDialog.routeSource.noData')"
-                          style="min-width: 260px"
-                          @update:model-value="
-                            applyKnownRouteSource(item, $event)
-                          "
-                          @focus="loadKnownRouteUmos"
-                        >
-                          <template v-slot:item="{ props, item: sourceItem }">
-                            <v-list-item v-bind="props">
-                              <template v-slot:title>
-                                <UmoDisplay
-                                  v-bind="
-                                    getKnownRouteUmoDisplayProps(sourceItem.raw)
-                                  "
-                                  compact
-                                  :show-info="false"
-                                />
-                              </template>
-                            </v-list-item>
-                          </template>
-                          <template v-slot:selection="{ item: sourceItem }">
-                            <v-chip
-                              v-if="
-                                sourceItem &&
-                                getKnownRouteUmoSelectionText(sourceItem.raw)
-                              "
-                              size="small"
-                              variant="tonal"
-                              color="primary"
-                              class="umo-selection-chip"
-                            >
-                              {{
-                                getKnownRouteUmoSelectionText(sourceItem.raw)
-                              }}
-                            </v-chip>
-                          </template>
-                        </v-autocomplete>
+                          :platform-id="routePlatformId"
+                          :allow-manual="false"
+                          :label="tm('createDialog.routeSource.selectPlaceholder')"
+                          @update:model-value="applyKnownRouteSource(item, $event)"
+                        />
                         <template v-else>
                           <v-select
                             v-if="isEditingRoutes"
@@ -815,42 +770,14 @@
     </v-card>
   </v-dialog>
 
-  <v-overlay
+  <ConfigProfileDrawer
     v-model="showConfigDrawer"
-    class="config-drawer-overlay"
-    location="right"
-    transition="slide-x-reverse-transition"
-    :scrim="true"
-    @click:outside="closeConfigDrawer"
-  >
-    <v-card class="config-drawer-card" elevation="12">
-      <div class="config-drawer-header">
-        <div>
-          <span class="text-h6">{{
-            tm("createDialog.configDrawerTitle")
-          }}</span>
-          <div v-if="configDrawerTargetId" class="text-caption text-grey">
-            {{ tm("createDialog.configDrawerIdLabel") }}:
-            {{ configDrawerTargetId }}
-          </div>
-        </div>
-        <v-btn icon variant="text" @click="closeConfigDrawer">
-          <v-icon>mdi-close</v-icon>
-        </v-btn>
-      </div>
-      <v-divider></v-divider>
-      <div class="config-drawer-content">
-        <ConfigPage
-          v-if="showConfigDrawer"
-          :initial-config-id="configDrawerTargetId"
-        />
-      </div>
-    </v-card>
-  </v-overlay>
+    :config-id="configDrawerTargetId || ''"
+  />
 </template>
 
 <script>
-import { botApi, configProfileApi, configRouteApi, fileApi, sessionApi } from "@/api/v1";
+import { botApi, configProfileApi, configRouteApi, fileApi } from "@/api/v1";
 import { useModuleI18n } from "@/i18n/composables";
 import {
   getPlatformIcon,
@@ -859,18 +786,18 @@ import {
 } from "@/utils/platformUtils";
 import AstrBotConfig from "@/components/shared/AstrBotConfig.vue";
 import AstrBotCoreConfigWrapper from "@/components/config/AstrBotCoreConfigWrapper.vue";
-import ConfigPage from "@/views/ConfigPage.vue";
+import ConfigProfileDrawer from "@/components/config/ConfigProfileDrawer.vue";
 import PlatformRegistrationAction from "@/components/platform/PlatformRegistrationAction.vue";
-import UmoDisplay from "@/components/shared/UmoDisplay.vue";
+import UmoSelector from "@/components/shared/UmoSelector.vue";
 
 export default {
   name: "AddNewPlatform",
   components: {
     AstrBotConfig,
     AstrBotCoreConfigWrapper,
-    ConfigPage,
+    ConfigProfileDrawer,
     PlatformRegistrationAction,
-    UmoDisplay,
+    UmoSelector,
   },
   emits: ["update:show", "show-toast", "refresh-config"],
   props: {
@@ -924,9 +851,6 @@ export default {
       // 平台路由表
       platformRoutes: [],
       isEditingRoutes: false, // 编辑模式开关
-      knownRouteUmos: [],
-      knownRouteUmoInfoMap: {},
-      loadingKnownRouteUmos: false,
 
       // ID冲突确认对话框
       showIdConflictDialog: false,
@@ -1097,13 +1021,6 @@ export default {
       }
       return this.selectedPlatformConfig?.id || "";
     },
-    filteredKnownRouteUmoItems() {
-      const platformId = this.routePlatformId;
-      return this.knownRouteUmos.filter((umo) => {
-        const parsed = this.parseUmop(umo);
-        return parsed && parsed.platform === platformId;
-      });
-    },
     isLarkPlatform() {
       return this.selectedPlatformConfig?.type === "lark";
     },
@@ -1249,9 +1166,6 @@ export default {
 
       this.showConfigSection = false;
       this.isEditingRoutes = false; // 重置编辑模式
-      this.knownRouteUmos = [];
-      this.knownRouteUmoInfoMap = {};
-      this.loadingKnownRouteUmos = false;
 
       this.showConfigDrawer = false;
       this.configDrawerTargetId = null;
@@ -1323,9 +1237,6 @@ export default {
 
       this.configDrawerTargetId = targetId;
       this.showConfigDrawer = true;
-    },
-    closeConfigDrawer() {
-      this.showConfigDrawer = false;
     },
     newPlatform() {
       this.loading = true;
@@ -1675,88 +1586,6 @@ export default {
       }
     },
 
-    async loadKnownRouteUmos() {
-      if (this.loadingKnownRouteUmos) {
-        return;
-      }
-
-      this.loadingKnownRouteUmos = true;
-      try {
-        const res = await sessionApi.activeUmos();
-        if (res.data.status === "ok") {
-          const umos = Array.isArray(res.data.data?.umos)
-            ? res.data.data.umos
-            : [];
-          this.knownRouteUmos = Array.from(
-            new Set([...this.knownRouteUmos, ...umos]),
-          );
-          this.mergeKnownRouteUmoInfos(res.data.data?.umo_infos || []);
-        }
-      } catch (err) {
-        console.error("获取已有消息来源失败:", err);
-      } finally {
-        this.loadingKnownRouteUmos = false;
-      }
-    },
-
-    mergeKnownRouteUmoInfos(infos = []) {
-      const next = { ...this.knownRouteUmoInfoMap };
-      for (const info of infos) {
-        if (info?.umo) {
-          next[info.umo] = { ...(next[info.umo] || {}), ...info };
-        }
-      }
-      this.knownRouteUmoInfoMap = next;
-    },
-
-    getKnownRouteUmoInfo(umo) {
-      const parsed = this.parseUmop(umo);
-      return (
-        this.knownRouteUmoInfoMap[umo] || {
-          umo,
-          platform: parsed?.platform || "",
-          message_type: parsed?.messageType || "",
-          session_id: parsed?.sessionId || umo,
-          auto_name: "",
-          user_alias: "",
-          display_name: umo,
-        }
-      );
-    },
-
-    getKnownRouteUmoDisplayProps(umo) {
-      const info = this.getKnownRouteUmoInfo(umo);
-      const parsed = this.parseUmop(umo);
-      return {
-        umo,
-        platform: info.platform || parsed?.platform || "",
-        messageType: info.message_type || parsed?.messageType || "",
-        sessionId: info.session_id || parsed?.sessionId || "",
-        autoName: info.auto_name || "",
-        userAlias: info.user_alias || "",
-      };
-    },
-
-    getKnownRouteUmoSelectionText(umo) {
-      if (!umo) return "";
-      const info = this.getKnownRouteUmoInfo(umo);
-      const parsed = this.parseUmop(umo);
-      const aliasName = info.user_alias || "";
-      const autoName = info.auto_name || "";
-      if (aliasName && autoName && aliasName !== autoName) {
-        return `${aliasName}（${autoName}）`;
-      }
-      return (
-        aliasName ||
-        autoName ||
-        (parsed
-          ? `${this.getMessageTypeLabel(parsed.messageType)}:${
-              parsed.sessionId
-            }`
-          : umo)
-      );
-    },
-
     getRouteSourceMode(route) {
       return route.sourceMode || "manual";
     },
@@ -1771,9 +1600,6 @@ export default {
       const nextMode =
         this.getRouteSourceMode(route) === "known" ? "manual" : "known";
       route.sourceMode = nextMode;
-      if (nextMode === "known") {
-        this.loadKnownRouteUmos();
-      }
     },
 
     applyKnownRouteSource(route, umo) {
@@ -1977,32 +1803,6 @@ export default {
   font-size: 12px;
 }
 
-.config-drawer-overlay {
-  align-items: stretch;
-  justify-content: flex-end;
-}
-
-.config-drawer-card {
-  width: clamp(320px, 60vw, 820px);
-  height: calc(100vh - 32px);
-  display: flex;
-  flex-direction: column;
-  margin: 16px;
-}
-
-.config-drawer-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px 12px 20px;
-}
-
-.config-drawer-content {
-  flex: 1;
-  overflow-y: auto;
-  padding: 16px 16px 24px 16px;
-}
-
 .platform-action-row {
   display: flex;
   align-items: center;
@@ -2045,15 +1845,6 @@ export default {
   text-decoration: underline;
 }
 
-.umo-selection-chip {
-  max-width: 100%;
-}
-
-.umo-selection-chip .v-chip__content {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
 .registration-inline {
   display: flex;

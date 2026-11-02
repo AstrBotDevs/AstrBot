@@ -1,6 +1,8 @@
+from io import BytesIO
 from pathlib import Path
+from zipfile import ZipFile
 
-from astrbot.cli.utils.plugin import PluginStatus, build_plug_list
+from astrbot.cli.utils.plugin import PluginStatus, build_plug_list, download_repository
 
 
 class FakeResponse:
@@ -34,6 +36,44 @@ class FakeClient:
     def get(self, url):
         assert url == "https://api.soulter.top/astrbot/plugins"
         return FakeResponse()
+
+
+def test_download_repository_uses_head_without_metadata_lookup(
+    monkeypatch, tmp_path, capsys
+):
+    archive = BytesIO()
+    with ZipFile(archive, "w") as zip_file:
+        zip_file.writestr("plugin-commit/main.py", "VALUE = 1\n")
+    requested_urls = []
+
+    class ArchiveResponse:
+        content = archive.getvalue()
+
+        def raise_for_status(self):
+            return None
+
+    class ArchiveClient:
+        def __init__(self, **kwargs):
+            assert kwargs == {"follow_redirects": True, "trust_env": True}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def get(self, url):
+            requested_urls.append(url)
+            return ArchiveResponse()
+
+    monkeypatch.setattr("astrbot.cli.utils.plugin.httpx.Client", ArchiveClient)
+
+    target_path = tmp_path / "plugin"
+    download_repository("https://github.com/example/plugin", target_path)
+
+    assert requested_urls == ["https://github.com/example/plugin/archive/HEAD.zip"]
+    assert (target_path / "main.py").read_text(encoding="utf-8") == "VALUE = 1\n"
+    assert "default reference HEAD" in capsys.readouterr().out
 
 
 def write_metadata(plugin_dir: Path, name: str, version: str) -> None:

@@ -53,6 +53,7 @@ ruff check .
 8. When updating the project version, keep `[project].version` in `pyproject.toml` and `__version__` in `astrbot/__init__.py` in sync. `VERSION` in `astrbot/core/config/default.py` should derive from `astrbot.__version__` instead of hardcoding a separate version string.
 9. When designing WebUI dialogs, use `text-h3 pa-4 pb-0 pl-6` as the base class for dialog titles, and use `variant="text"` or `variant="tonal"` for dialog buttons.
 10. Consider cross-platform compatibility (e.g., Windows, macOS, and Linux, as well as Arm64 and x86 CPU architectures) and compatibility with Python 3.10+.
+11. When changing WebUI navigation, page structure, or terminology, update the affected instructions and screenshots in `docs/zh` and `docs/en` in the same PR. For renamed, moved, or merged entry points, include an old-to-new mapping in the relevant docs and changelog. Keep layout redesigns separate from feature additions where practical, and explain necessary navigation changes in the PR. See `CONTRIBUTING.md` for the review checklist.
 
 ### KISS and First Principles
 

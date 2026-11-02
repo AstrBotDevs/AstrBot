@@ -137,7 +137,23 @@
             hide-details
             :disabled="!routesReady"
             class="route-default-card__select"
-          />
+          >
+            <template #item="{ props: itemProps, item }">
+              <v-list-item v-bind="itemProps">
+                <template #append>
+                  <v-btn
+                    variant="text"
+                    size="x-small"
+                    class="route-config-edit-btn"
+                    :aria-label="sharedTm('configProfileDrawer.title')"
+                    @click.stop.prevent="openConfigDrawer(item.value)"
+                  >
+                    <ArrowUpRight :size="16" />
+                  </v-btn>
+                </template>
+              </v-list-item>
+            </template>
+          </v-select>
         </div>
 
         <div class="route-builder">
@@ -151,44 +167,16 @@
           </div>
 
           <div class="route-builder__controls">
-            <v-autocomplete
+            <UmoSelector
+              v-if="originalPlatformId"
               v-model="pendingSessionUmo"
-              :items="availableSessionUmos"
-              :loading="loadingSessions"
+              :platform-id="originalPlatformId"
+              :excluded-umos="[...boundSessionSet]"
+              :allow-manual="false"
               :label="tm('workspace.routes.sessionLabel')"
-              :no-data-text="tm('workspace.routes.noSessions')"
-              density="compact"
-              variant="outlined"
-              hide-details
-              clearable
               :disabled="!routesReady"
-            >
-              <template #item="{ props: itemProps, item }">
-                <v-list-item v-bind="itemProps">
-                  <template #title>
-                    <UmoDisplay
-                      v-bind="getSessionDisplayProps(item.raw)"
-                      compact
-                      :show-info="false"
-                      :show-platform="false"
-                      :show-meta="false"
-                      :show-raw-title="false"
-                    />
-                  </template>
-                </v-list-item>
-              </template>
-              <template #selection="{ item }">
-                <UmoDisplay
-                  v-if="item"
-                  v-bind="getSessionDisplayProps(item.raw)"
-                  compact
-                  :show-info="false"
-                  :show-platform="false"
-                  :show-meta="false"
-                  :show-raw-title="false"
-                />
-              </template>
-            </v-autocomplete>
+              @loaded="infos => knownSessionInfo = Object.fromEntries(infos.map(info => [info.umo, info]))"
+            />
 
             <v-select
               v-model="pendingConfigId"
@@ -200,7 +188,23 @@
               variant="outlined"
               hide-details
               :disabled="!routesReady"
-            />
+            >
+              <template #item="{ props: itemProps, item }">
+                <v-list-item v-bind="itemProps">
+                  <template #append>
+                    <v-btn
+                      variant="text"
+                      size="x-small"
+                      class="route-config-edit-btn"
+                      :aria-label="sharedTm('configProfileDrawer.title')"
+                      @click.stop.prevent="openConfigDrawer(item.value)"
+                    >
+                      <ArrowUpRight :size="16" />
+                    </v-btn>
+                  </template>
+                </v-list-item>
+              </template>
+            </v-select>
 
             <v-btn
               color="primary"
@@ -356,6 +360,10 @@
       </section>
     </div>
   </div>
+  <ConfigProfileDrawer
+    v-model="configDrawerOpen"
+    :config-id="configDrawerId"
+  />
 </template>
 
 <script setup>
@@ -365,10 +373,12 @@ import {
   configProfileApi,
   configRouteApi,
   fileApi,
-  sessionApi,
 } from "@/api/v1";
 import AstrBotConfig from "@/components/shared/AstrBotConfig.vue";
+import ConfigProfileDrawer from "@/components/config/ConfigProfileDrawer.vue";
+import UmoSelector from "@/components/shared/UmoSelector.vue";
 import UmoDisplay from "@/components/shared/UmoDisplay.vue";
+import { ArrowUpRight } from "@lucide/vue";
 import { useModuleI18n } from "@/i18n/composables";
 import { getPlatformIcon, getTutorialLink } from "@/utils/platformUtils";
 
@@ -402,6 +412,17 @@ const emit = defineEmits([
 ]);
 
 const { tm } = useModuleI18n("features/platform");
+const { tm: sharedTm } = useModuleI18n("core/shared");
+
+const configDrawerOpen = ref(false);
+const configDrawerId = ref("");
+
+function openConfigDrawer(configId) {
+  // The sentinel means "system default", which is the "default" profile.
+  const realId = configId === SYSTEM_DEFAULT_CONFIG ? "default" : configId;
+  configDrawerId.value = realId;
+  configDrawerOpen.value = true;
+}
 
 const draft = ref({});
 const originalPlatformId = ref("");
@@ -411,10 +432,8 @@ const loading = ref(false);
 const saving = ref(false);
 const routesReady = ref(false);
 const routeLoadFailed = ref(false);
-const loadingSessions = ref(false);
 const fullRoutingTable = ref({});
 const configProfiles = ref([]);
-const knownSessionUmos = ref([]);
 const knownSessionInfo = ref({});
 const simpleBindings = ref([]);
 const advancedRoutes = ref([]);
@@ -449,10 +468,6 @@ const defaultConfigOptions = computed(() => [
 
 const boundSessionSet = computed(
   () => new Set(simpleBindings.value.map((binding) => binding.umo)),
-);
-
-const availableSessionUmos = computed(() =>
-  knownSessionUmos.value.filter((umo) => !boundSessionSet.value.has(umo)),
 );
 
 const currentRouteSnapshot = computed(() =>
@@ -608,30 +623,6 @@ async function initialize(platform) {
   } else {
     fullRoutingTable.value = {};
     routeLoadFailed.value = true;
-  }
-
-  loadingSessions.value = true;
-  try {
-    const sessionsResponse = await sessionApi.activeUmos();
-    if (version === loadVersion && sessionsResponse.data.status === "ok") {
-      knownSessionUmos.value = (sessionsResponse.data.data?.umos || []).filter(
-        (umo) => parseUmo(umo)?.platform === originalPlatformId.value,
-      );
-      knownSessionInfo.value = Object.fromEntries(
-        (sessionsResponse.data.data?.umo_infos || [])
-          .filter((info) => info?.umo)
-          .map((info) => [info.umo, info]),
-      );
-    }
-  } catch (error) {
-    if (version === loadVersion) {
-      knownSessionUmos.value = [];
-      knownSessionInfo.value = {};
-    }
-  } finally {
-    if (version === loadVersion) {
-      loadingSessions.value = false;
-    }
   }
 
   if (version !== loadVersion) return;
@@ -1003,6 +994,23 @@ function showError(error) {
 .route-default-card__select {
   flex: 0 1 280px;
   min-width: 220px;
+}
+
+.route-config-edit-btn {
+  min-width: 28px;
+  padding: 0 4px;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: rgba(var(--v-theme-on-surface), 0.55);
+}
+
+.route-config-edit-btn:hover {
+  background: transparent !important;
+  color: rgba(var(--v-theme-on-surface), 0.9);
+}
+
+.route-config-edit-btn :deep(.v-btn__overlay) {
+  opacity: 0 !important;
 }
 
 .route-builder {

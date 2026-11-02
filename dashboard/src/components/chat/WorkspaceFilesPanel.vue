@@ -1,6 +1,6 @@
 <template>
-  <transition name="workspace-panel-slide">
-    <aside v-if="modelValue" class="workspace-files-panel">
+  <transition name="chat-panel">
+    <aside v-if="modelValue" class="workspace-files-panel chat-side-panel">
       <div class="workspace-toolbar">
         <div class="workspace-filter">
           <Search :size="17" />
@@ -60,9 +60,11 @@
         </div>
         <div v-else-if="!visibleEntries.length" class="workspace-state">
           {{
-            filterQuery
-              ? tm("workspaceFiles.noMatches")
-              : tm("workspaceFiles.empty")
+            needsSession
+              ? tm("workspaceFiles.selectSession")
+              : filterQuery
+                ? tm("workspaceFiles.noMatches")
+                : tm("workspaceFiles.empty")
           }}
         </div>
         <template v-else>
@@ -152,13 +154,22 @@
         <div v-else-if="fileError" class="workspace-preview-state">
           {{ fileError }}
         </div>
+        <div
+          v-else-if="highlightedContent"
+          class="workspace-preview-content"
+          v-html="highlightedContent"
+        />
         <pre
           v-else
           class="workspace-preview-content"
         ><code>{{ fileContent }}</code></pre>
       </section>
 
-      <v-dialog v-model="previewDialog" max-width="1000" width="calc(100% - 32px)">
+      <v-dialog
+        v-model="previewDialog"
+        max-width="1000"
+        width="calc(100% - 32px)"
+      >
         <v-card class="workspace-dialog-preview">
           <header class="workspace-dialog-preview-header">
             <div class="workspace-preview-path" :title="selectedFilePath">
@@ -190,6 +201,11 @@
           <div v-else-if="fileError" class="workspace-preview-state">
             {{ fileError }}
           </div>
+          <div
+            v-else-if="highlightedContent"
+            class="workspace-preview-content workspace-dialog-preview-content"
+            v-html="highlightedContent"
+          />
           <pre
             v-else
             class="workspace-preview-content workspace-dialog-preview-content"
@@ -201,7 +217,9 @@
 </template>
 
 <script setup lang="ts">
+import "@/components/chat/chatPanelTransition.css";
 import { computed, ref, watch } from "vue";
+import { useTheme } from "vuetify";
 import {
   ChevronDown,
   ChevronRight,
@@ -231,7 +249,8 @@ interface WorkspaceEntry {
 const props = defineProps<{
   modelValue: boolean;
   projectId: string;
-  projectTitle?: string;
+  workspaceType?: "session" | "project" | "custom";
+  sessionId?: string;
 }>();
 
 const emit = defineEmits<{
@@ -239,19 +258,23 @@ const emit = defineEmits<{
 }>();
 
 const { tm } = useModuleI18n("features/chat");
+const theme = useTheme();
 const rootEntries = ref<WorkspaceEntry[]>([]);
-const loadedProjectId = ref("");
 const rootLoading = ref(false);
 const treeError = ref("");
 const filterQuery = ref("");
 const selectedFilePath = ref("");
 const fileContent = ref("");
+const highlightedContent = ref("");
 const fileLoading = ref(false);
 const fileError = ref("");
 const fileDownloading = ref(false);
 const previewDialog = ref(false);
 const treeGeneration = ref(0);
 const fileGeneration = ref(0);
+const needsSession = computed(
+  () => (props.workspaceType || "session") === "session" && !props.sessionId,
+);
 
 const visibleEntries = computed(() => {
   const query = filterQuery.value.trim().toLocaleLowerCase();
@@ -277,19 +300,48 @@ const visibleEntries = computed(() => {
 });
 
 watch(
-  () => [props.modelValue, props.projectId] as const,
-  async ([open, projectId], previous) => {
-    if (!open || !projectId) return;
-    const previousProjectId = previous?.[1];
-    if (
-      projectId !== previousProjectId ||
-      loadedProjectId.value !== projectId
-    ) {
-      resetPanel();
+  () =>
+    [props.modelValue, props.projectId, props.sessionId, props.workspaceType] as const,
+  async ([open, projectId]) => {
+    resetPanel();
+    if (open && projectId) {
       await loadDirectory("");
     }
   },
   { immediate: true },
+);
+
+watch(
+  [fileContent, selectedFilePath, () => theme.global.current.value.dark],
+  async ([content, path, dark], _, onCleanup) => {
+    let cancelled = false;
+    onCleanup(() => {
+      cancelled = true;
+    });
+    highlightedContent.value = "";
+    if (!content || !path) return;
+
+    try {
+      const { getShikiHighlighter, renderShikiCode } = await import(
+        "@/utils/shiki"
+      );
+      const highlighter = await getShikiHighlighter();
+      if (cancelled) return;
+
+      const name = path.split("/").pop()?.toLowerCase() || "";
+      const language = name.startsWith("dockerfile.")
+        ? "dockerfile"
+        : name.split(".").pop();
+      highlightedContent.value = renderShikiCode(
+        highlighter,
+        content,
+        language,
+        dark ? "dark" : "light",
+      );
+    } catch (error) {
+      if (!cancelled) console.warn("Failed to highlight workspace file", error);
+    }
+  },
 );
 
 function close() {
@@ -299,8 +351,8 @@ function close() {
 function resetPanel() {
   treeGeneration.value += 1;
   rootEntries.value = [];
-  loadedProjectId.value = "";
   rootLoading.value = false;
+  fileDownloading.value = false;
   treeError.value = "";
   filterQuery.value = "";
   clearPreview();
@@ -323,8 +375,11 @@ async function refreshTree() {
 }
 
 async function loadDirectory(path: string, parent?: WorkspaceEntry) {
-  if (!props.projectId || rootLoading.value || parent?.loading) return;
+  if (!props.projectId || needsSession.value || rootLoading.value || parent?.loading) {
+    return;
+  }
   const projectId = props.projectId;
+  const sessionId = props.sessionId;
   const generation = treeGeneration.value;
   if (parent) {
     parent.loading = true;
@@ -333,7 +388,11 @@ async function loadDirectory(path: string, parent?: WorkspaceEntry) {
   }
   treeError.value = "";
   try {
-    const response = await chatApi.listProjectWorkspaceFiles(projectId, path);
+    const response = await chatApi.listProjectWorkspaceFiles(
+      projectId,
+      path,
+      sessionId,
+    );
     if (generation !== treeGeneration.value || projectId !== props.projectId) {
       return;
     }
@@ -349,7 +408,6 @@ async function loadDirectory(path: string, parent?: WorkspaceEntry) {
       parent.children = entries;
     } else {
       rootEntries.value = entries;
-      loadedProjectId.value = projectId;
     }
   } catch (error) {
     if (generation !== treeGeneration.value || projectId !== props.projectId) {
@@ -399,6 +457,7 @@ async function openEntry(entry: WorkspaceEntry) {
     const response = await chatApi.getProjectWorkspaceFile(
       projectId,
       entry.path,
+      props.sessionId,
     );
     if (generation !== fileGeneration.value || projectId !== props.projectId) {
       return;
@@ -425,31 +484,33 @@ async function openEntry(entry: WorkspaceEntry) {
 }
 
 async function downloadSelectedFile() {
-  if (
-    !props.projectId ||
-    !selectedFilePath.value ||
-    fileDownloading.value
-  ) {
+  if (!props.projectId || !selectedFilePath.value || fileDownloading.value) {
     return;
   }
   fileDownloading.value = true;
+  const generation = treeGeneration.value;
+  const path = selectedFilePath.value;
   try {
     const response = await chatApi.downloadProjectWorkspaceFile(
       props.projectId,
-      selectedFilePath.value,
+      path,
+      props.sessionId,
     );
+    // Finish requested downloads even when the panel changes or closes.
     const url = URL.createObjectURL(response.data);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = selectedFilePath.value.split("/").pop() || "download";
+    anchor.download = path.split("/").pop() || "download";
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
     setTimeout(() => URL.revokeObjectURL(url), 0);
   } catch {
-    fileError.value = tm("workspaceFiles.downloadFailed");
+    if (generation === treeGeneration.value) {
+      fileError.value = tm("workspaceFiles.downloadFailed");
+    }
   } finally {
-    fileDownloading.value = false;
+    if (generation === treeGeneration.value) fileDownloading.value = false;
   }
 }
 
@@ -462,7 +523,8 @@ function formatSize(size: number) {
 
 <style scoped>
 .workspace-files-panel {
-  width: clamp(340px, 29vw, 440px);
+  --chat-side-panel-width: clamp(340px, 29vw, 440px);
+  width: var(--chat-side-panel-width);
   height: calc(100% - var(--chat-panel-top-offset, 0px));
   margin-top: var(--chat-panel-top-offset, 0px);
   border-left: 1px solid var(--chat-border, rgba(var(--v-border-color), 0.14));
@@ -472,19 +534,6 @@ function formatSize(size: number) {
   flex-direction: column;
   flex: 0 0 auto;
   min-width: 0;
-}
-
-.workspace-panel-slide-enter-active,
-.workspace-panel-slide-leave-active {
-  transition:
-    transform 0.2s ease,
-    opacity 0.2s ease;
-}
-
-.workspace-panel-slide-enter-from,
-.workspace-panel-slide-leave-to {
-  transform: translateX(100%);
-  opacity: 0;
 }
 
 .workspace-preview-header {
@@ -691,6 +740,15 @@ function formatSize(size: number) {
   line-height: 1.55;
   tab-size: 2;
   white-space: pre;
+}
+
+.workspace-preview-content :deep(pre),
+.workspace-preview-content :deep(code) {
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  tab-size: inherit;
+  background: transparent !important;
 }
 
 .workspace-dialog-preview {

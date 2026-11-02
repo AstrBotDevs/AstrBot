@@ -15,9 +15,10 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_skills_path,
     get_astrbot_temp_path,
 )
+from astrbot.core.utils.runtime_env import resolve_windows_shell
 
 from .booters.base import ComputerBooter
-from .booters.local import LocalBooter, resolve_windows_shell
+from .booters.local import LocalBooter
 
 session_booter: dict[str, ComputerBooter] = {}
 local_booter: ComputerBooter | None = None
@@ -514,7 +515,8 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
             for skill_name, skill_dir in sync_skill_dirs:
                 shutil.copytree(skill_dir, bundle_root / skill_name)
             shutil.make_archive(str(zip_base), "zip", str(bundle_root))
-            remote_zip = Path(SANDBOX_SKILLS_ROOT) / "skills.zip"
+            # Force forward slashes for sandbox compatibility.
+            remote_zip = (Path(SANDBOX_SKILLS_ROOT) / "skills.zip").as_posix()
             logger.info("Uploading skills bundle to sandbox...")
             await booter.shell.exec(f"mkdir -p {SANDBOX_SKILLS_ROOT}")
             upload_result = await booter.upload_file(str(zip_path), str(remote_zip))
@@ -555,7 +557,7 @@ async def get_booter(
 ) -> ComputerBooter:
     config = context.get_config(umo=session_id)
 
-    runtime = config.get("provider_settings", {}).get("computer_use_runtime", "local")
+    runtime = config.get("provider_settings", {}).get("computer_use_runtime", "none")
     if runtime == "local":
         return get_local_booter()
     elif runtime == "none":

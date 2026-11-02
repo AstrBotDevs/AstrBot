@@ -1,44 +1,59 @@
 import asyncio
-import os
 import time
 import uuid
+from pathlib import Path
 
 
 class FileTokenService:
-    """维护一个简单的基于令牌的文件下载服务，支持超时和懒清除。"""
+    """Serve token-authorized file downloads with expiration and lazy cleanup."""
 
     def __init__(self, default_timeout: float = 300) -> None:
         self.lock = asyncio.Lock()
-        self.staged_files = {}  # token: (file_path, expire_time)
+        self.staged_files = {}  # token: (file_path, expire_time, single_use)
         self.default_timeout = default_timeout
 
     async def _cleanup_expired_tokens(self) -> None:
-        """清理过期的令牌"""
+        """Remove expired tokens."""
         now = time.time()
         expired_tokens = [
-            token for token, (_, expire) in self.staged_files.items() if expire < now
+            token for token, (_, expire, _) in self.staged_files.items() if expire < now
         ]
         for token in expired_tokens:
             self.staged_files.pop(token, None)
 
     async def check_token_expired(self, file_token: str) -> bool:
+        """Check whether a token is expired, consumed, or missing.
+
+        Args:
+            file_token: The token returned when registering a file.
+
+        Returns:
+            Whether the token is unavailable for file access.
+        """
         async with self.lock:
             await self._cleanup_expired_tokens()
             return file_token not in self.staged_files
 
-    async def register_file(self, file_path: str, timeout: float | None = None) -> str:
-        """向令牌服务注册一个文件。
+    async def register_file(
+        self,
+        file_path: str,
+        timeout: float | None = None,
+        *,
+        single_use: bool = True,
+    ) -> str:
+        """Register a file for token-authorized access.
 
         Args:
-            file_path(str): 文件路径
-            timeout(float): 超时时间，单位秒（可选）
+            file_path: The local file path or file URI.
+            timeout: The token lifetime in seconds, or the default lifetime.
+            single_use: Whether to consume the token on its first file access.
+                Set to False for resources that need repeated access until expiry.
 
         Returns:
-            str: 一个单次令牌
+            The token used to access the file.
 
         Raises:
-            FileNotFoundError: 当路径不存在时抛出
-
+            FileNotFoundError: If the file path does not exist.
         """
         try:
             from astrbot.core.utils.media_utils import file_uri_to_path, is_file_uri
@@ -53,7 +68,7 @@ class FileTokenService:
         async with self.lock:
             await self._cleanup_expired_tokens()
 
-            if not os.path.exists(local_path):
+            if not Path(local_path).exists():
                 raise FileNotFoundError(
                     f"File does not exist: {local_path} (original input: {file_path})",
                 )
@@ -62,23 +77,21 @@ class FileTokenService:
             expire_time = time.time() + (
                 timeout if timeout is not None else self.default_timeout
             )
-            # 存储转换后的真实路径
-            self.staged_files[file_token] = (local_path, expire_time)
+            self.staged_files[file_token] = (local_path, expire_time, single_use)
             return file_token
 
     async def handle_file(self, file_token: str) -> str:
-        """根据令牌获取文件路径，使用后令牌失效。
+        """Resolve a file path, consuming the token only when it is single-use.
 
         Args:
-            file_token(str): 注册时返回的令牌
+            file_token: The token returned when registering a file.
 
         Returns:
-            str: 文件路径
+            The registered local file path.
 
         Raises:
-            KeyError: 当令牌不存在或已过期时抛出
-            FileNotFoundError: 当文件本身已被删除时抛出
-
+            KeyError: If the token is missing, consumed, or expired.
+            FileNotFoundError: If the registered file has been deleted.
         """
         async with self.lock:
             await self._cleanup_expired_tokens()
@@ -86,7 +99,9 @@ class FileTokenService:
             if file_token not in self.staged_files:
                 raise KeyError(f"Invalid or expired file token: {file_token}")
 
-            file_path, _ = self.staged_files.pop(file_token)
-            if not os.path.exists(file_path):
+            file_path, _, single_use = self.staged_files[file_token]
+            if single_use:
+                self.staged_files.pop(file_token)
+            if not Path(file_path).exists():
                 raise FileNotFoundError(f"File does not exist: {file_path}")
             return file_path

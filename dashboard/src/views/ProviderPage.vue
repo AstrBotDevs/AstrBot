@@ -67,9 +67,12 @@
               <div class="provider-config-header">
                 <div class="provider-config-headline">
                   <div class="provider-config-title">{{ selectedProviderSource.id }}</div>
-                  <div class="provider-config-subtitle">
-                    {{ selectedProviderSource.api_base || 'N/A' }}
-                  </div>
+                  <ProviderSourceSubtitle
+                    class="provider-config-subtitle"
+                    :api-base="selectedProviderSource.api_base"
+                    :sponsor="selectedSponsor"
+                    :tm="tm"
+                  />
                 </div>
 
                 <div class="provider-config-actions">
@@ -90,7 +93,7 @@
               <v-divider></v-divider>
 
               <div class="provider-config-body">
-                <section class="provider-section">
+                <section class="provider-section config-form">
                   <div class="provider-section-head">
                     <div class="provider-section-title">{{ tm('providers.settings') }}</div>
                   </div>
@@ -105,17 +108,24 @@
 
                 <v-divider v-if="advancedSourceConfig"></v-divider>
 
-                <section v-if="advancedSourceConfig" class="provider-section">
-                  <div class="provider-section-head">
-                    <div class="provider-section-title">{{ tm('providerSources.advancedConfig') }}</div>
+                <details
+                  v-if="advancedSourceConfig"
+                  :key="selectedProviderSource.id"
+                  class="provider-section provider-section--advanced config-form"
+                >
+                  <summary class="provider-section-head provider-section-title">
+                    {{ tm('providerSources.advancedConfig') }}
+                    <v-icon class="provider-section-chevron" size="20">mdi-chevron-right</v-icon>
+                  </summary>
+                  <div class="provider-section-content">
+                    <AstrBotConfig
+                      :iterable="advancedSourceConfig"
+                      :metadata="providerSourceSchema"
+                      metadataKey="provider"
+                      :is-editing="true"
+                    />
                   </div>
-                  <AstrBotConfig
-                    :iterable="advancedSourceConfig"
-                    :metadata="providerSourceSchema"
-                    metadataKey="provider"
-                    :is-editing="true"
-                  />
-                </section>
+                </details>
 
                 <v-divider></v-divider>
 
@@ -199,17 +209,38 @@
               <v-divider></v-divider>
 
               <div class="provider-config-body">
-                <section class="provider-section">
+                <section class="provider-section config-form">
                   <div class="provider-section-head">
                     <div class="provider-section-title">{{ tm('providers.settings') }}</div>
                   </div>
                   <AstrBotConfig
-                    :iterable="newSelectedProviderConfig"
-                    :metadata="configSchema"
+                    :iterable="legacyConfigSections.basic"
+                    :metadata="legacyConfigSchema"
                     metadataKey="provider"
                     :is-editing="updatingMode"
                   />
                 </section>
+
+                <v-divider v-if="legacyConfigSections.advanced"></v-divider>
+
+                <details
+                  v-if="legacyConfigSections.advanced"
+                  :key="selectedLegacyProvider.id"
+                  class="provider-section provider-section--advanced config-form"
+                >
+                  <summary class="provider-section-head provider-section-title">
+                    {{ tm('providerSources.advancedConfig') }}
+                    <v-icon class="provider-section-chevron" size="20">mdi-chevron-right</v-icon>
+                  </summary>
+                  <div class="provider-section-content">
+                    <AstrBotConfig
+                      :iterable="legacyConfigSections.advanced"
+                      :metadata="legacyConfigSchema"
+                      metadataKey="provider"
+                      :is-editing="updatingMode"
+                    />
+                  </div>
+                </details>
               </div>
             </div>
 
@@ -259,7 +290,7 @@
         <v-card-title class="text-h3 pa-4 pb-0 pl-6">
           {{ providerEditDialogTitle }}
         </v-card-title>
-        <v-card-text class="py-4">
+        <v-card-text class="py-4 config-form">
           <AstrBotConfig
             v-if="providerEditData"
             :iterable="providerEditData"
@@ -293,38 +324,16 @@
       {{ snackbar.message }}
     </v-snackbar>
 
-    <v-dialog v-model="showAgentRunnerDialog" max-width="520" persistent>
-      <v-card>
-        <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
-          <v-icon start class="me-2">mdi-information</v-icon>
-          请前往「配置文件」页测试 Agent 执行器
-        </v-card-title>
-        <v-card-text class="py-4 text-body-1 text-medium-emphasis">
-          Agent 执行器的测试请在「配置文件」页进行。
-          <ol class="ml-4 mt-4 mb-4">
-            <li>找到对应的配置文件并打开。</li>
-            <li>找到 Agent 执行方式部分，修改执行器后点击保存。</li>
-            <li>点击右下角的 💬 聊天按钮进行测试。</li>
-          </ol>
-          要让机器人应用这个 Agent 执行器，你也需要前往修改 Agent 执行器。
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer></v-spacer>
-          <v-btn color="grey" variant="text" @click="showAgentRunnerDialog = false">好的</v-btn>
-          <v-btn color="primary" variant="tonal" @click="goToConfigPage">点击前往</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
   </div>
 </template>
 
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { providerApi } from '@/api/v1'
 import { useModuleI18n } from '@/i18n/composables'
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue'
 import ProviderModelsPanel from '@/components/provider/ProviderModelsPanel.vue'
+import ProviderSourceSubtitle from '@/components/provider/ProviderSourceSubtitle.vue'
 import ProviderSourcesPanel from '@/components/provider/ProviderSourcesPanel.vue'
 import { useProviderModelConfigDialog } from '@/composables/useProviderModelConfigDialog'
 import { useProviderSources } from '@/composables/useProviderSources'
@@ -337,7 +346,6 @@ const props = defineProps({
 })
 
 const { tm } = useModuleI18n('features/provider')
-const router = useRouter()
 
 const snackbar = ref({
   show: false,
@@ -353,6 +361,7 @@ const {
   providers,
   selectedProviderType,
   selectedProviderSource,
+  selectedSponsor,
   availableModels,
   loadingSources,
   loadingModels,
@@ -397,6 +406,24 @@ const {
   showMessage
 })
 
+const legacyConfigSchema = computed(() => {
+  const schema = JSON.parse(JSON.stringify(configSchema.value || {}))
+  if (selectedLegacyProvider.value?.type !== 'system_one_decision') return schema
+
+  const items = schema.provider?.items
+  if (!items) return schema
+  if (items.key) {
+    items.key.type = 'string'
+    delete items.key.items
+  }
+  if (items.api_base) items.api_base.hint = tm('providers.decisionHints.apiBase')
+  if (items.model) items.model.hint = tm('providers.decisionHints.model')
+  if (items.custom_headers) {
+    items.custom_headers.hint = tm('providers.decisionHints.customHeaders')
+  }
+  return schema
+})
+
 const unsavedLegacyProviderMarker = Symbol('unsavedLegacyProvider')
 const legacyProviderDrafts = ref([])
 const selectedLegacyProvider = ref(null)
@@ -405,7 +432,31 @@ const newProviderOriginalId = ref('')
 const updatingMode = ref(false)
 const loading = ref(false)
 const isLegacyProviderModified = ref(false)
-const showAgentRunnerDialog = ref(false)
+const legacyConfigSections = computed(() => {
+  const config = newSelectedProviderConfig.value
+  if (config.type !== 'system_one_decision') return { basic: config, advanced: null }
+
+  const advancedFields = new Set([
+    'timeout', 'total_timeout', 'max_concurrency',
+    'proxy', 'custom_headers'
+  ])
+  const basic = {}
+  const advanced = {}
+  for (const key of Object.keys(config)) {
+    const property = {
+      get() {
+        return config[key]
+      },
+      set(value) {
+        config[key] = value
+      }
+    }
+    // Keep hidden fields accessible to schema conditions in both sections.
+    Object.defineProperty(basic, key, { ...property, enumerable: !advancedFields.has(key) })
+    Object.defineProperty(advanced, key, { ...property, enumerable: advancedFields.has(key) })
+  }
+  return { basic, advanced }
+})
 const showManualModelDialog = ref(false)
 let suppressLegacyProviderWatch = false
 
@@ -579,6 +630,9 @@ function selectLegacyProvider(provider) {
   if (defaultConfig) {
     mergeConfigWithOrder(newSelectedProviderConfig.value, provider, defaultConfig)
   }
+  if (provider.type === 'system_one_decision') {
+    delete newSelectedProviderConfig.value.probability_tolerance
+  }
 
   updatingMode.value = !provider[unsavedLegacyProviderMarker]
   isLegacyProviderModified.value = Boolean(provider[unsavedLegacyProviderMarker])
@@ -663,20 +717,7 @@ async function testSingleProvider(provider) {
     showMessage('该提供商未被用户启用', 'error')
     return
   }
-  if (
-    provider.provider_type === 'agent_runner' ||
-    selectedProviderType.value === 'agent_runner'
-  ) {
-    showAgentRunnerDialog.value = true
-    return
-  }
-
   await testProvider(provider)
-}
-
-function goToConfigPage() {
-  router.push('/config')
-  showAgentRunnerDialog.value = false
 }
 </script>
 
@@ -750,6 +791,7 @@ function goToConfigPage() {
 }
 
 .provider-content {
+  container: provider-workbench / inline-size;
   display: flex;
   flex: 1;
   margin: 0 auto;
@@ -784,19 +826,22 @@ function goToConfigPage() {
 
 .provider-workbench__main {
   display: flex;
+  overflow: auto;
 }
 
 .provider-config-shell {
+  container: provider-config / inline-size;
   flex: 1;
   min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
 }
 
 .provider-config-header {
   background: var(--provider-surface);
   display: flex;
+  flex-wrap: wrap;
   flex: 0 0 auto;
   justify-content: space-between;
   align-items: flex-start;
@@ -838,7 +883,7 @@ function goToConfigPage() {
   flex: 1;
   min-height: 0;
   overscroll-behavior: contain;
-  overflow-y: auto;
+  overflow: auto;
   scrollbar-gutter: stable;
 }
 
@@ -865,6 +910,31 @@ function goToConfigPage() {
   line-height: 1.4;
 }
 
+.provider-section--advanced > summary {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.provider-section--advanced > summary::-webkit-details-marker {
+  display: none;
+}
+
+.provider-section--advanced:not([open]) > summary {
+  margin-bottom: 0;
+}
+
+.provider-section--advanced[open] .provider-section-chevron {
+  transform: rotate(90deg);
+}
+
+.provider-section-content {
+  /* Restore Vuetify's inherited box sizing across the native details content boundary. */
+  box-sizing: border-box;
+}
+
 .provider-empty-state {
   flex: 1;
   min-height: 420px;
@@ -875,9 +945,9 @@ function goToConfigPage() {
   color: rgba(var(--v-theme-on-surface), 0.56);
 }
 
-@media (max-width: 960px) {
+@container provider-workbench (max-width: 960px) {
   .provider-workbench {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto 1px minmax(0, 1fr);
   }
 
@@ -929,3 +999,5 @@ function goToConfigPage() {
   }
 }
 </style>
+
+<style scoped src="@/styles/config-form.css"></style>
