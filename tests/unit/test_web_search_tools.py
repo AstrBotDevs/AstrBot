@@ -1720,7 +1720,7 @@ async def test_deepseek_fetch_url_length_limit(deepseek_session, length):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("status", [400, 401, 402, 403, 408, 429, 500])
+@pytest.mark.parametrize("status", [400, 403, 408, 500])
 @pytest.mark.parametrize(
     ("tool_class", "operation"),
     [
@@ -1785,3 +1785,262 @@ async def test_deepseek_fetch_reports_empty_content(deepseek_session):
     )
 
     assert result == "Error: DeepSeek fetch does not return any content."
+
+_KEY_FAILOVER_CASES = [
+    (tools._tavily_search, "tavily", 433),
+    (tools._tavily_extract, "tavily", 433),
+    (tools._firecrawl_search, "firecrawl", 402),
+    (tools._firecrawl_scrape, "firecrawl", 402),
+    (tools._exa_search, "exa", 401),
+    (tools._exa_search, "exa", 402),
+    (tools._exa_search, "exa", 429),
+    (tools._exa_get_contents, "exa", 401),
+    (tools._exa_get_contents, "exa", 402),
+    (tools._exa_get_contents, "exa", 429),
+]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("search_function", "provider", "status"), _KEY_FAILOVER_CASES)
+@pytest.mark.parametrize("exhausted", [False, True])
+@pytest.mark.parametrize("interleaved", [False, True])
+@pytest.mark.parametrize("duplicate_first", [False, True])
+async def test_search_key_errors_try_next_key(
+    monkeypatch, search_function, provider, status, exhausted, interleaved, duplicate_first
+):
+    setting_name = f"websearch_{provider}_key"
+    monkeypatch.setattr(
+        tools,
+        f"_{provider.upper()}_KEY_ROTATOR",
+        tools._KeyRotator(setting_name, provider),
+    )
+    row = {
+        "title": "Example",
+        "url": "https://example.com",
+        "content": "OK",
+        "description": "OK",
+        "text": "OK",
+    }
+    success_data = {"results": [row], "data": [row]}
+    if search_function is tools._firecrawl_scrape:
+        success_data["data"] = {"markdown": "# Example"}
+    session = _CycleSession(
+        [
+            _FakeFirecrawlResponse(status=status, text_data="first key failed"),
+            _FakeFirecrawlResponse(
+                status=status if exhausted else 200,
+                text_data="last key failed",
+                json_data=success_data,
+            ),
+        ]
+    )
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", lambda **kwargs: session)
+    keys = ["first-key", "second-key"]
+    if duplicate_first:
+        keys.insert(0, "first-key")
+    settings = {setting_name: keys}
+    if interleaved:
+        async def advance_other_request():
+            # Another request advances the shared cursor before this retry.
+            await getattr(tools, f"_{provider.upper()}_KEY_ROTATOR").get(settings)
+            return "first key failed"
+
+        monkeypatch.setattr(session.responses[0], "text", advance_other_request)
+    payload = {"query": "AstrBot", "urls": ["https://example.com"]}
+
+    if exhausted:
+        with pytest.raises(Exception, match=f"last key failed, status: {status}"):
+            await search_function(settings, payload)
+    else:
+        result = await search_function(settings, payload)
+        if search_function is tools._firecrawl_scrape:
+            assert result == {"markdown": "# Example"}
+        elif search_function in (tools._tavily_extract, tools._exa_get_contents):
+            assert result == [row]
+        else:
+            assert result == [
+                tools.SearchResult(
+                    title="Example", url="https://example.com", snippet="OK"
+                )
+            ]
+
+    header = "x-api-key" if provider == "exa" else "Authorization"
+    prefix = "" if provider == "exa" else "Bearer "
+    assert [call["headers"][header] for call in session.calls] == [
+        f"{prefix}first-key",
+        f"{prefix}second-key",
+    ]
+    assert all(call["json"] == payload for call in session.calls)
+    assert session.exited is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "search_function", [tools._exa_search, tools._exa_get_contents]
+)
+@pytest.mark.parametrize("status", [400, 500])
+async def test_exa_non_key_errors_do_not_retry(monkeypatch, search_function, status):
+    session = _CycleSession(
+        [_FakeFirecrawlResponse(status=status, text_data="search_function failed")]
+    )
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", lambda **kwargs: session)
+    monkeypatch.setattr(
+        tools, "_EXA_KEY_ROTATOR", tools._KeyRotator("websearch_exa_key", "Exa")
+    )
+
+    with pytest.raises(Exception, match=f"search_function failed, status: {status}"):
+        await search_function({"websearch_exa_key": ["first-key", "second-key"]}, {})
+
+    assert len(session.calls) == 1
+
+
+class _BraveCycleSession(_CycleSession):
+    def get(self, url, params, headers):
+        return self.post(url, params, headers)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("reason", "retry"),
+    [
+        ('{"error":{"code":"SUBSCRIPTION_TOKEN_INVALID"}}', True),
+        ('{"error":{"code":"VALIDATION"}}', False),
+        ('{"error":null}', False),
+        ('[]', False),
+        ("not JSON", False),
+    ],
+)
+@pytest.mark.parametrize("interleaved", [False, True])
+@pytest.mark.parametrize("duplicate_first", [False, True])
+async def test_brave_only_retries_invalid_subscription_token(
+    monkeypatch, reason, retry, interleaved, duplicate_first
+):
+    session = _BraveCycleSession(
+        [
+            _FakeFirecrawlResponse(status=422, text_data=reason),
+            _FakeFirecrawlResponse(
+                json_data={"web": {"results": [{"title": "Example"}]}}
+            ),
+        ]
+    )
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", lambda **kwargs: session)
+    keys = ["first-key", "second-key"]
+    if duplicate_first:
+        keys.insert(0, "first-key")
+    settings = {"websearch_brave_key": keys}
+    if interleaved:
+        async def advance_other_request():
+            await tools._BRAVE_KEY_ROTATOR.get(settings)
+            return reason
+
+        monkeypatch.setattr(session.responses[0], "text", advance_other_request)
+
+    if retry:
+        results = await tools._brave_search(settings, {"q": "AstrBot"})
+        assert results == [tools.SearchResult(title="Example", url="", snippet="")]
+    else:
+        with pytest.raises(Exception, match="status: 422"):
+            await tools._brave_search(settings, {"q": "AstrBot"})
+
+    assert [call["headers"]["X-Subscription-Token"] for call in session.calls] == (
+        ["first-key", "second-key"] if retry else ["first-key"]
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [401, 402, 429])
+@pytest.mark.parametrize("exhausted", [False, True])
+@pytest.mark.parametrize(
+    ("tool_class", "operation"),
+    [
+        (tools.DeepSeekWebSearchTool, "web search"),
+        (tools.DeepSeekFetchWebPageTool, "fetch"),
+    ],
+)
+@pytest.mark.parametrize("interleaved", [False, True])
+@pytest.mark.parametrize("duplicate_first", [False, True])
+async def test_deepseek_key_errors_try_next_key(
+    deepseek_session,
+    monkeypatch,
+    status,
+    exhausted,
+    tool_class,
+    operation,
+    interleaved,
+    duplicate_first,
+):
+    deepseek_session.responses = [
+        _FakeFirecrawlResponse(status=status, text_data="first key failed"),
+        _FakeFirecrawlResponse(
+            status=status if exhausted else 200,
+            text_data="last key failed",
+            json_data={
+                "results": [{"title": "Example", "url": "https://example.com"}],
+                "title": "Example",
+                "content": "# Example",
+            },
+        ),
+    ]
+    keys = ["first-key", "second-key"]
+    if duplicate_first:
+        keys.insert(0, "first-key")
+    settings = {"websearch_deepseek_key": keys}
+    context = _context_with_provider_settings(settings)
+    monkeypatch.setattr(tools.uuid, "uuid4", lambda: "test-reference")
+    if interleaved:
+        async def advance_other_request():
+            await tools._DEEPSEEK_KEY_ROTATOR.get(settings)
+            return "first key failed"
+
+        monkeypatch.setattr(deepseek_session.responses[0], "text", advance_other_request)
+
+    if exhausted:
+        with pytest.raises(
+            RuntimeError,
+            match=f"DeepSeek {operation} failed: last key failed, status: {status}",
+        ):
+            await tool_class().call(context, query="AstrBot", url="https://example.com")
+    else:
+        result = await tool_class().call(
+            context, query="AstrBot", url="https://example.com"
+        )
+        if tool_class is tools.DeepSeekWebSearchTool:
+            assert json.loads(result) == {
+                "results": [
+                    {
+                        "title": "Example",
+                        "url": "https://example.com",
+                        "snippet": "",
+                        "index": "test.1",
+                    }
+                ]
+            }
+        else:
+            assert result == "URL: https://example.com\nTitle: Example\nContent: # Example"
+
+    assert [call["headers"]["Authorization"] for call in deepseek_session.calls] == [
+        "Bearer first-key",
+        "Bearer second-key",
+    ]
+    assert deepseek_session.calls[0]["json"] == deepseek_session.calls[1]["json"]
+    assert deepseek_session.exited is True
+
+
+@pytest.mark.asyncio
+async def test_key_rotator_keeps_request_attempts_independent():
+    rotator = tools._KeyRotator("keys", "Test")
+    settings = {"keys": ["first", "first", "second"]}
+    first_request: set[str] = set()
+    second_request: set[str] = set()
+
+    assert await rotator.get(settings, first_request) == "first"
+    assert await rotator.get(settings, second_request) == "first"
+    assert await rotator.get(settings, second_request) == "second"
+    assert await rotator.get(settings, first_request) == "second"
+    assert first_request == second_request == {"first", "second"}
+    with pytest.raises(ValueError, match="No untried Test API keys remain"):
+        await rotator.get(settings, first_request)
+    # Omitting the request-local set preserves the ordinary round-robin API.
+    assert await rotator.get(settings) == "first"
+    assert await rotator.get(settings) == "first"
+    assert await rotator.get(settings) == "second"

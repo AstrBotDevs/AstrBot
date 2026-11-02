@@ -60,7 +60,7 @@
                             <div
                                 v-for="group in generalSystemConfigGroups"
                                 :key="group.key"
-                                class="system-config-group"
+                                class="system-config-group config-form"
                                 :class="{ 'system-config-group--with-cleanup': group.key === 'tempStorage' }"
                                 @focusout.capture="scheduleSystemConfigAutoSave"
                             >
@@ -142,7 +142,7 @@
                             <div
                                 v-for="group in networkSystemConfigGroups"
                                 :key="group.key"
-                                class="system-config-group"
+                                class="system-config-group config-form"
                                 @focusout.capture="scheduleSystemConfigAutoSave"
                             >
                                 <div class="system-config-group__title">{{ group.title }}</div>
@@ -153,6 +153,18 @@
                                 />
                             </div>
                         </template>
+
+                        <div class="settings-list-card">
+                            <div class="settings-item settings-item--stack settings-item--proxy">
+                                <div class="settings-item__label">
+                                    <div class="settings-item__title">{{ tm('network.pypiMirror.title') }}</div>
+                                    <div class="settings-item__subtitle">{{ tm('network.pypiMirror.subtitle') }}</div>
+                                </div>
+                                <div class="settings-item__control settings-item__control--proxy">
+                                    <PypiMirrorSelector v-model="systemConfigData.pypi_index_url" />
+                                </div>
+                            </div>
+                        </div>
 
                         <div class="settings-list-card">
                             <div class="settings-item settings-item--stack settings-item--proxy">
@@ -177,7 +189,7 @@
                             <div
                                 v-for="group in securitySystemConfigGroups"
                                 :key="group.key"
-                                class="system-config-group"
+                                class="system-config-group config-form"
                                 @focusout.capture="scheduleSystemConfigAutoSave"
                             >
                                 <div class="system-config-group__title">{{ group.title }}</div>
@@ -490,6 +502,7 @@ import { apiKeyApi, systemConfigApi } from '@/api/v1';
 import AstrBotConfigV4 from '@/components/shared/AstrBotConfigV4.vue';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import ProxySelector from '@/components/shared/ProxySelector.vue';
+import PypiMirrorSelector from '@/components/shared/PypiMirrorSelector.vue';
 import BackupDialog from '@/components/shared/BackupDialog.vue';
 import StorageCleanupPanel from '@/components/shared/StorageCleanupPanel.vue';
 import LogExportButton from '@/components/shared/LogExportButton.vue';
@@ -741,7 +754,7 @@ const systemConfigGroups = computed(() => {
 
     return [
         createGroup('runtime', ['timezone', 'callback_api_base']),
-        createGroup('network', ['http_proxy', 'no_proxy', 'pip_install_arg', 'pypi_index_url']),
+        createGroup('network', ['http_proxy', 'no_proxy', 'pip_install_arg']),
         createGroup('webuiSecurity', [
             'dashboard.trust_proxy_headers',
             'dashboard.ssl.enable',
@@ -1387,6 +1400,7 @@ onUnmounted(() => {
 }
 
 .system-config-group {
+    --config-form-divider: var(--settings-divider);
     margin-bottom: 30px;
 }
 
@@ -1447,90 +1461,6 @@ onUnmounted(() => {
 
 .system-config-group :deep(.config-section) {
     display: none;
-}
-
-.system-config-group :deep(.config-row) {
-    min-height: 60px;
-    padding: 12px 16px;
-    border-radius: 0;
-}
-
-.system-config-group :deep(.config-row:hover) {
-    background-color: transparent;
-}
-
-.system-config-group :deep(.property-info) {
-    padding: 0 16px 0 0;
-}
-
-.system-config-group :deep(.property-info .v-list-item) {
-    padding: 0;
-}
-
-.system-config-group :deep(.property-name) {
-    color: rgb(var(--v-theme-on-surface));
-    font-size: 0.88rem;
-    font-weight: 700;
-    letter-spacing: 0;
-    line-height: 1.4;
-    white-space: normal;
-}
-
-.system-config-group :deep(.property-hint) {
-    margin-top: 4px;
-    color: rgba(var(--v-theme-on-surface), 0.76) !important;
-    font-size: 0.78rem;
-    line-height: 1.45;
-    opacity: 1 !important;
-    white-space: normal;
-}
-
-.system-config-group :deep(.property-hint *) {
-    opacity: 1 !important;
-}
-
-.system-config-group :deep(.property-hint a) {
-    color: rgb(var(--v-theme-primary)) !important;
-    opacity: 1 !important;
-    text-decoration: none;
-}
-
-.system-config-group :deep(.config-input) {
-    display: flex;
-    justify-content: flex-end;
-    min-width: 0;
-    padding: 0;
-}
-
-.system-config-group :deep(.config-input > *) {
-    width: 100%;
-    max-width: 270px;
-}
-
-.system-config-group :deep(.config-input .v-switch) {
-    display: flex;
-    justify-content: flex-end;
-    width: auto;
-    max-width: none;
-    margin-left: auto;
-}
-
-.system-config-group :deep(.config-input .v-switch .v-input__control) {
-    margin-left: auto;
-}
-
-.system-config-group :deep(.config-input .v-switch .v-selection-control) {
-    justify-content: flex-end;
-}
-
-.system-config-group :deep(.v-field) {
-    border-radius: 10px;
-    background-color: transparent;
-}
-
-.system-config-group :deep(.config-divider) {
-    margin-left: 0;
-    border-color: var(--settings-divider);
 }
 
 .system-config-group :deep(.collapsed-config-toggle-row) {
@@ -1838,23 +1768,6 @@ onUnmounted(() => {
         justify-content: flex-start;
     }
 
-    .system-config-group :deep(.config-row) {
-        padding: 14px 16px;
-    }
-
-    .system-config-group :deep(.property-info) {
-        padding: 0;
-    }
-
-    .system-config-group :deep(.config-input) {
-        justify-content: stretch;
-        padding-top: 8px;
-    }
-
-    .system-config-group :deep(.config-input > *) {
-        max-width: none;
-    }
-
     .system-config-restart-bar__inner {
         align-items: center;
         gap: 8px;
@@ -1866,3 +1779,5 @@ onUnmounted(() => {
     }
 }
 </style>
+
+<style scoped src="@/styles/config-form.css"></style>

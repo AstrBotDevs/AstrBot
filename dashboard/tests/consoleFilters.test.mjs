@@ -5,15 +5,15 @@ import vm from "node:vm";
 import ts from "typescript";
 import { parse } from "vue/compiler-sfc";
 
-function setup(document = {}) {
+function setup(document = {}, globals = {}) {
   const source = readFileSync(new URL("../src/components/shared/ConsoleDisplayer.vue", import.meta.url), "utf8");
   const { descriptor } = parse(source);
   const ast = ts.createSourceFile("console.js", descriptor.script.content, ts.ScriptTarget.Latest, true);
   const definition = ast.statements.find(ts.isExportAssignment);
-  const context = vm.createContext({ document, translateConsole: (key) => key });
+  const context = vm.createContext({ document, translateConsole: (key) => key, ...globals });
   const component = vm.runInContext(`(${definition.expression.getText(ast)})`, context);
   const state = Object.assign(component.data(), component.methods, {
-    hideUserChat: false, $emit() {},
+    hideUserChat: false, $refs: {}, $emit() {},
   });
   return { component, state };
 }
@@ -53,6 +53,19 @@ test("plugin options prefer display names and keep stable IDs as values and subt
   assert.equal(options.find((item) => item.value === "unknown").title, "unknown");
 });
 
+test("plugin options come from the retained log cache, not the installed plugin list", () => {
+  const { component, state } = setup();
+  // Installed plugins known only by display name must not create options.
+  state.pluginDisplayNames = { weather: "Weather Forecast" };
+  assert.equal(component.computed.pluginOptions.call(state).length, 0);
+  // A plugin that is no longer installed but still has cached logs remains selectable.
+  state.localLogCache = [{ plugin_name: "uninstalled" }];
+  const options = component.computed.pluginOptions.call(state);
+  assert.equal(options.length, 1);
+  assert.equal(options[0].value, "uninstalled");
+  assert.equal(options[0].title, "uninstalled");
+});
+
 test("new logs follow the bottom without interrupting reading older entries", () => {
   const term = {
     scrollHeight: 1000, scrollTop: 900, clientHeight: 100, entries: [],
@@ -65,6 +78,7 @@ test("new logs follow the bottom without interrupting reading older entries", ()
     getElementById: () => term,
     createDocumentFragment: () => ({ childNodes: [], appendChild(node) { this.childNodes.push(node); } }),
   });
+  state.$refs.term = term;
   state.buildLogElement = (log) => log;
   state.processNewLogs([{ time: 1, level: "INFO", data: "First log" }]);
   assert.equal(term.scrollTop, term.scrollHeight);
@@ -74,4 +88,75 @@ test("new logs follow the bottom without interrupting reading older entries", ()
   state.processNewLogs([{ time: 2, level: "INFO", data: "Second log" }]);
   assert.equal(state.localLogCache.length, 2);
   assert.equal(term.entries.length, 2);
+});
+
+test("console instances render only into their own log containers", () => {
+  const sharedTerm = { entries: [], appendChild(fragment) { this.entries.push(...fragment.childNodes); } };
+  const document = {
+    getElementById: () => sharedTerm,
+    createDocumentFragment: () => ({ childNodes: [], appendChild(node) { this.childNodes.push(node); } }),
+  };
+  const first = setup(document).state;
+  const second = setup(document).state;
+  first.$refs.term = sharedTerm;
+  second.$refs.term = { ...sharedTerm, entries: [] };
+  const log = { time: 1, level: "INFO", data: "Message received" };
+  for (const state of [first, second]) {
+    state.buildLogElement = (item) => item;
+    state.processNewLogs([{ ...log }]);
+  }
+  assert.equal(first.$refs.term.entries.length, 1);
+  assert.equal(second.$refs.term.entries.length, 1);
+});
+
+for (const pendingMethod of ["fetchLogHistory", "fetchPluginDisplayNames"]) {
+  test(`unmounting during ${pendingMethod} does not open a log stream`, async () => {
+    let finishRequest;
+    let requestStarted;
+    const pendingRequest = new Promise((resolve) => { requestStarted = resolve; });
+    let connections = 0;
+    let listeners = 0;
+    const { component, state } = setup({
+      addEventListener() { listeners++; },
+      removeEventListener() {},
+    });
+    state.workspaceMode = true;
+    state.fetchLogHistory = async () => {};
+    state.fetchPluginDisplayNames = async () => {};
+    state[pendingMethod] = () => new Promise((resolve) => {
+      finishRequest = resolve;
+      requestStarted();
+    });
+    state.connectSSE = () => { connections++; };
+    const mounting = component.mounted.call(state);
+    await pendingRequest;
+    component.beforeUnmount.call(state);
+    finishRequest();
+    await mounting;
+    assert.equal(connections, 0);
+    assert.equal(listeners, 0);
+  });
+}
+
+test("a pending reconnect cannot open a stream after unmount", async () => {
+  let connections = 0;
+  let retry;
+  let finishRequest;
+  const { component, state } = setup({ removeEventListener() {} }, {
+    console: { log() {}, warn() {} },
+    localStorage: { getItem: () => null },
+    logApi: { liveUrl: () => "/logs" },
+    setTimeout(callback) { retry = callback; return 1; },
+    clearTimeout() {},
+    EventSourcePolyfill: function () { connections++; this.close = () => {}; },
+  });
+  state.connectSSE();
+  state.eventSource.onerror({});
+  state.fetchLogHistory = () => new Promise((resolve) => { finishRequest = resolve; });
+  const reconnecting = retry();
+  component.beforeUnmount.call(state);
+  finishRequest();
+  await reconnecting;
+  assert.equal(connections, 1);
+  assert.equal(state.eventSource, null);
 });

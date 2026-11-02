@@ -24,7 +24,8 @@
     "core": "系统",
     "plugins": "插件",
     "plugin": "插件",
-    "allPlugins": "全部插件",
+    "pluginsInLogs": "当前日志中的插件",
+    "pluginsInLogsHint": "此列表来自当前日志，不是已安装插件列表",
     "platform": "机器人平台",
     "allPlatforms": "全部平台",
     "unscopedPlatform": "系统 / 无平台"

@@ -269,12 +269,10 @@ async def test_send_message_partial_session_falls_back_to_current():
 
 @pytest.mark.asyncio
 async def test_cron_context_current_session_is_target_session():
-    """在 cron 场景中，current_session 就是 cron 任务的目标 session。
+    """Resolve delivery against the cron job's target session.
 
-    cron 是主动唤醒，没有用户消息触发，因此没有"正在聊天的 session"。
-    event.unified_msg_origin 来自 CronMessageEvent.session，
-    而 CronMessageEvent.session 来自 cron job payload.session，
-    即用户在 cron 配置中填写的目标会话。
+    AgentWakeupEvent.session comes from the cron payload's target session,
+    independently of the absence of an incoming user message.
     """
     tool = SendMessageToUserTool()
     # cron 任务的目标 session（用户配置的完整三段式）
@@ -356,7 +354,9 @@ async def test_restricted_role_cannot_send_arbitrary_local_absolute_file(
     tool = SendMessageToUserTool()
     ctx = _make_context(
         role=role,
-        local_permissions={role: {"filesystem_scope": scope, "allow_execution": False}} if scope else None,
+        local_permissions={role: {"filesystem_scope": scope, "allow_execution": False}}
+        if scope
+        else None,
     )
     secret_path = tmp_path / "secret.txt"
     secret_path.write_text("secret", encoding="utf-8")
