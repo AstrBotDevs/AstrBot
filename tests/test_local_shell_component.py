@@ -6,7 +6,9 @@ import shlex
 import shutil
 import subprocess
 import sys
+import threading
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
@@ -286,7 +288,7 @@ def test_process_sandbox_selects_system_implementation(
 
 
 def test_process_sandbox_fails_closed_on_unsupported_system(monkeypatch):
-    monkeypatch.setattr(process_sandbox.sys, "platform", "win32")
+    monkeypatch.setattr(process_sandbox.sys, "platform", "unsupported")
 
     with pytest.raises(RuntimeError, match="No Local process sandbox backend"):
         process_sandbox.create_process_sandbox()
@@ -908,6 +910,53 @@ async def test_sandboxed_managed_shell_delegates_launch(monkeypatch, tmp_path):
     assert calls[0][0] == "Get-ChildItem"
     assert calls[0][1].workspace == tmp_path.resolve()
     assert calls[0][2] == {"env": {}}
+
+
+@pytest.mark.asyncio
+async def test_windows_sandbox_cleanup_after_leader_exits(monkeypatch):
+    """Keep terminating sandbox descendants after the leader has exited."""
+    monkeypatch.setattr(local_booter, "os", SimpleNamespace(name="nt"))
+    process = Mock(returncode=0)
+    wait_task = asyncio.get_running_loop().create_future()
+    wait_task.set_result(0)
+    session = SimpleNamespace(
+        windows_job=None, sandboxed=True, process=process, wait_task=wait_task
+    )
+
+    await LocalShellComponent()._terminate_process(session)
+
+    process.terminate.assert_called_once_with()
+    process.kill.assert_called_once_with()
+
+
+@pytest.mark.asyncio
+async def test_sandbox_session_cleanup_waits_before_closing_process():
+    """Keep native handles open until the process waiter has completed."""
+    shell = LocalShellComponent()
+    wait_task = asyncio.get_running_loop().create_future()
+    process = Mock()
+    session = SimpleNamespace(
+        session_id="sandbox-cleanup",
+        timeout_task=None,
+        output_lock=threading.Lock(),
+        output_file=Mock(),
+        windows_job=None,
+        sandboxed=True,
+        process=process,
+        wait_task=wait_task,
+    )
+    shell._sessions[session.session_id] = session
+    cleanup_task = asyncio.create_task(shell._remove_session(session))
+    try:
+        await asyncio.sleep(0)
+        assert not cleanup_task.done()
+        process.close.assert_not_called()
+    finally:
+        wait_task.set_result(0)
+        await cleanup_task
+
+    process.close.assert_called_once_with()
+    assert session.session_id not in shell._sessions
 
 
 @pytest.mark.asyncio

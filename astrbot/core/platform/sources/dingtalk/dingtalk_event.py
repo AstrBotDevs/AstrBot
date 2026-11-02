@@ -4,6 +4,7 @@ from typing import Any
 from astrbot import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import Plain
+from astrbot.core.platform.astr_message_event import MessageSesion
 
 
 class DingtalkMessageEvent(AstrMessageEvent):
@@ -30,6 +31,7 @@ class DingtalkMessageEvent(AstrMessageEvent):
             getattr(self.adapter, "send_plain_text_as_card", False)
             and plain_text
             and incoming_message is not None
+            and hasattr(incoming_message, "conversation_type")
         ):
             if await self.adapter.send_text_card_with_incoming(
                 incoming_message=incoming_message,
@@ -55,7 +57,9 @@ class DingtalkMessageEvent(AstrMessageEvent):
             return await self._send_streaming_as_plain_text(generator)
 
         incoming_message = getattr(self.message_obj, "raw_message", None)
-        if incoming_message is None:
+        if incoming_message is None or not hasattr(
+            incoming_message, "conversation_type"
+        ):
             return await self._send_streaming_as_plain_text(generator)
 
         card_token = await self.adapter.create_message_card(
@@ -146,9 +150,20 @@ class DingtalkMessageEvent(AstrMessageEvent):
         if incoming_message is None:
             logger.error("钉钉消息发送失败: 缺少原始消息")
             return
-        await self.adapter.send_message_chain_with_incoming(
-            incoming_message=incoming_message,
-            message_chain=message,
-        )
+        if hasattr(incoming_message, "conversation_type"):
+            await self.adapter.send_message_chain_with_incoming(
+                incoming_message=incoming_message,
+                message_chain=message,
+            )
+        else:
+            # Card callbacks have no chatbot payload; preserve session routing.
+            await self.adapter.send_by_session(
+                MessageSesion(
+                    platform_name=self.platform_meta.id,
+                    message_type=self.get_message_type(),
+                    session_id=self.session_id,
+                ),
+                message,
+            )
         await super().send(message)
         return None

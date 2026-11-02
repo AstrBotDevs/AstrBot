@@ -956,26 +956,26 @@ export const chatApi = {
       openApiV1.listChatProjectSessions({ path: { project_id: projectId } }),
     );
   },
-  listProjectWorkspaceFiles(projectId: string, path = '') {
+  listProjectWorkspaceFiles(projectId: string, path = '', sessionId?: string) {
     return typed<any>(
       openApiV1.listChatProjectWorkspaceFiles({
         path: { project_id: projectId },
-        query: path ? { path } : undefined,
+        query: { path, session_id: sessionId },
       }),
     );
   },
-  getProjectWorkspaceFile(projectId: string, path: string) {
+  getProjectWorkspaceFile(projectId: string, path: string, sessionId?: string) {
     return typed<any>(
       openApiV1.getChatProjectWorkspaceFile({
         path: { project_id: projectId },
-        query: { path },
+        query: { path, session_id: sessionId },
       }),
     );
   },
-  downloadProjectWorkspaceFile(projectId: string, path: string) {
+  downloadProjectWorkspaceFile(projectId: string, path: string, sessionId?: string) {
     return openApiV1.downloadChatProjectWorkspaceFile({
       path: { project_id: projectId },
-      query: { path },
+      query: { path, session_id: sessionId },
       responseType: 'blob',
     }) as Promise<AxiosResponse<Blob>>;
   },

@@ -1,4 +1,5 @@
 import asyncio
+import json
 import threading
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, call
@@ -6,14 +7,25 @@ from unittest.mock import AsyncMock, call
 import dingtalk_stream
 import pytest
 
-from astrbot.api.message_components import At, Plain
+from astrbot.api.message_components import (
+    ActionRow,
+    At,
+    Button,
+    ButtonInteraction,
+    Plain,
+)
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.button_interaction import (
+    decode_button_callback,
+    encode_button_callback,
+)
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.platform.sources.dingtalk import dingtalk_adapter
 from astrbot.core.platform.sources.dingtalk.dingtalk_adapter import (
+    DINGTALK_BUTTON_CARD_TEMPLATE_ID,
     DINGTALK_RECONNECT_INITIAL_DELAY,
     DINGTALK_RECONNECT_MAX_DELAY,
     DingtalkPlatformAdapter,
@@ -456,7 +468,7 @@ async def test_event_streams_accumulated_content_without_consuming_generator(
     event = DingtalkMessageEvent.__new__(DingtalkMessageEvent)
     event.adapter = adapter
     event.message_obj = SimpleNamespace(
-        raw_message=object(),
+        raw_message=SimpleNamespace(conversation_type="2"),
         message_id="message-id",
     )
     base_stream_calls = []
@@ -497,7 +509,7 @@ async def test_event_card_send_does_not_duplicate_normal_message(monkeypatch):
         send_text_card_with_incoming=AsyncMock(return_value=True),
         send_message_chain_with_incoming=AsyncMock(),
     )
-    incoming_message = object()
+    incoming_message = SimpleNamespace(conversation_type="2")
     event = DingtalkMessageEvent.__new__(DingtalkMessageEvent)
     event.adapter = adapter
     event.message_obj = SimpleNamespace(
@@ -520,6 +532,80 @@ async def test_event_card_send_does_not_duplicate_normal_message(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("use_card", [False, True])
+@pytest.mark.parametrize(
+    "message_type",
+    [MessageType.GROUP_MESSAGE, MessageType.FRIEND_MESSAGE],
+)
+async def test_card_callback_reply_preserves_session_routing(
+    monkeypatch, streaming, use_card, message_type
+):
+    adapter = DingtalkPlatformAdapter.__new__(DingtalkPlatformAdapter)
+    adapter.client_id = "robot-code"
+    adapter.card_template_id = "template-id"
+    adapter.send_plain_text_as_card = use_card
+    adapter.create_message_card = AsyncMock()
+    adapter.send_text_card_with_incoming = AsyncMock()
+    adapter.send_text_card_by_session = AsyncMock(return_value=True)
+    adapter.send_message_chain_with_incoming = AsyncMock()
+    adapter.send_message_chain_to_group = AsyncMock()
+    adapter.send_message_chain_to_user = AsyncMock()
+    adapter._get_sender_staff_id = AsyncMock(return_value="staff-id")
+    monkeypatch.setattr(dingtalk_adapter.Platform, "send_by_session", AsyncMock())
+    base_send = AsyncMock()
+    monkeypatch.setattr(AstrMessageEvent, "send", base_send)
+    monkeypatch.setattr(AstrMessageEvent, "send_streaming", AsyncMock())
+
+    event = DingtalkMessageEvent.__new__(DingtalkMessageEvent)
+    event.adapter = adapter
+    event.platform_meta = SimpleNamespace(id="dingtalk")
+    event.session = MessageSession("dingtalk", message_type, "conversation-id")
+    event.message_obj = SimpleNamespace(
+        raw_message=dingtalk_stream.CallbackMessage(),
+        message_id="interaction-id",
+        type=message_type,
+    )
+    if streaming:
+
+        async def generate():
+            yield MessageChain([Plain("complete")])
+            yield MessageChain([Plain(" result")])
+
+        await event.send_streaming(generate())
+    else:
+        await event.send(MessageChain([Plain("complete result")]))
+
+    adapter.create_message_card.assert_not_awaited()
+    adapter.send_text_card_with_incoming.assert_not_awaited()
+    adapter.send_message_chain_with_incoming.assert_not_awaited()
+    base_send.assert_awaited_once()
+    if use_card:
+        adapter.send_text_card_by_session.assert_awaited_once_with(
+            MessageSession("dingtalk", message_type, "conversation-id"),
+            "complete result",
+        )
+        adapter.send_message_chain_to_group.assert_not_awaited()
+        adapter.send_message_chain_to_user.assert_not_awaited()
+    else:
+        adapter.send_text_card_by_session.assert_not_awaited()
+        if message_type == MessageType.GROUP_MESSAGE:
+            adapter.send_message_chain_to_group.assert_awaited_once_with(
+                open_conversation_id="conversation-id",
+                robot_code="robot-code",
+                message_chain=base_send.await_args.args[0],
+            )
+            adapter.send_message_chain_to_user.assert_not_awaited()
+        else:
+            adapter.send_message_chain_to_user.assert_awaited_once_with(
+                staff_id="staff-id",
+                robot_code="robot-code",
+                message_chain=base_send.await_args.args[0],
+            )
+            adapter.send_message_chain_to_group.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_event_falls_back_to_normal_message_when_card_finalize_fails(
     monkeypatch,
 ):
@@ -531,7 +617,7 @@ async def test_event_falls_back_to_normal_message_when_card_finalize_fails(
         mark_message_card_failed=AsyncMock(return_value=True),
         send_message_chain_with_incoming=AsyncMock(),
     )
-    incoming_message = object()
+    incoming_message = SimpleNamespace(conversation_type="2")
     event = DingtalkMessageEvent.__new__(DingtalkMessageEvent)
     event.adapter = adapter
     event.message_obj = SimpleNamespace(
@@ -750,3 +836,210 @@ async def test_dingtalk_rich_text_preserves_other_leading_mention():
     assert result.message[1].qq == "bot"
     assert isinstance(result.message[2], Plain)
     assert result.message[2].text == "@AnotherUser"
+
+
+def test_dingtalk_card_callback_converts_to_button_interaction():
+    adapter = DingtalkPlatformAdapter.__new__(DingtalkPlatformAdapter)
+    adapter.client_id = "robot"
+    callback = dingtalk_stream.CallbackMessage()
+    callback.headers.message_id = "interaction"
+    callback.headers.time = 1_700_000_000_000
+    callback.data = {
+        "userId": "user",
+        "spaceType": "IM_GROUP",
+        "spaceId": "conversation",
+        "outTrackId": "card-instance",
+        "content": json.dumps(
+            {
+                "cardPrivateData": {
+                    "actionIds": [encode_button_callback("approve", {"item": 1})]
+                }
+            }
+        ),
+    }
+
+    result = adapter.convert_card_callback(callback)
+
+    assert result is not None
+    assert result.session_id == "conversation"
+    assert result.group_id == "conversation"
+    assert result.message_str == "approve"
+    assert result.message_id == "interaction"
+    assert result.timestamp == 1_700_000_000
+    assert len(result.message) == 1
+    interaction = result.message[0]
+    assert isinstance(interaction, ButtonInteraction)
+    assert interaction.action_id == "approve"
+    assert interaction.data == {"item": 1}
+    assert interaction.source_message_id == "card-instance"
+
+
+def test_dingtalk_card_callback_resolves_payload_from_action_params():
+    adapter = DingtalkPlatformAdapter.__new__(DingtalkPlatformAdapter)
+    adapter.client_id = "robot"
+    callback = dingtalk_stream.CallbackMessage()
+    callback.headers.message_id = "interaction"
+    callback.data = {
+        "userId": "user",
+        "spaceType": "IM_GROUP",
+        "spaceId": "conversation",
+        "outTrackId": "card-instance",
+        "content": json.dumps(
+            {
+                "cardPrivateData": {
+                    "actionIds": ["single_button_node_ocljy2j7wg2"],
+                    "params": {
+                        "id": encode_button_callback(
+                            "approve",
+                            {"item": 1},
+                        ),
+                        "text": "Approve",
+                    },
+                }
+            }
+        ),
+    }
+
+    result = adapter.convert_card_callback(callback)
+
+    assert result is not None
+    interaction = result.message[0]
+    assert isinstance(interaction, ButtonInteraction)
+    assert interaction.action_id == "approve"
+    assert interaction.data == {"item": 1}
+
+
+def test_dingtalk_card_callback_ignores_foreign_action():
+    adapter = DingtalkPlatformAdapter.__new__(DingtalkPlatformAdapter)
+    callback = dingtalk_stream.CallbackMessage()
+    callback.data = {
+        "content": json.dumps({"cardPrivateData": {"actionIds": ["foreign-action"]}})
+    }
+
+    assert adapter.convert_card_callback(callback) is None
+
+
+@pytest.mark.asyncio
+async def test_dingtalk_button_card_maps_callback_and_url_actions(monkeypatch):
+    posted = {}
+
+    class FakeResponse:
+        status = 200
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return False
+
+        async def text(self):
+            return "OK"
+
+    class FakeSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return False
+
+        def post(self, url, *, headers, json):
+            posted.update(url=url, headers=headers, json=json)
+            return FakeResponse()
+
+    adapter = DingtalkPlatformAdapter.__new__(DingtalkPlatformAdapter)
+
+    async def get_access_token():
+        return "token"
+
+    adapter.get_access_token = get_access_token
+    monkeypatch.setattr(dingtalk_adapter.aiohttp, "ClientSession", FakeSession)
+    rows = [
+        ActionRow(
+            buttons=[
+                Button(
+                    id="approve",
+                    label="Approve",
+                    action=Button.CallbackAction(data={"item": 1}),
+                    style=Button.Style.SUCCESS,
+                ),
+                Button(
+                    id="docs",
+                    label="Docs",
+                    action=Button.UrlAction(url="https://example.com/docs"),
+                    style=Button.Style.PRIMARY,
+                ),
+            ]
+        )
+    ]
+
+    sent = await adapter._send_button_card(
+        "group",
+        "conversation",
+        "robot",
+        "Choose",
+        rows,
+    )
+
+    assert sent is True
+    payload = posted["json"]
+    assert payload["cardTemplateId"] == DINGTALK_BUTTON_CARD_TEMPLATE_ID
+    assert payload["callbackType"] == "STREAM"
+    assert payload["openSpaceId"] == "dtv1.card//IM_GROUP.conversation"
+    card_data = payload["cardData"]["cardParamMap"]
+    assert card_data["staticMsgContent"] == "Choose"
+    buttons = json.loads(card_data["sys_full_json_obj"])["msgButtons"]
+    assert decode_button_callback(buttons[0]["id"]) == (
+        "approve",
+        {"item": 1},
+    )
+    assert buttons[0]["request"] is True
+    assert buttons[0]["color"] == "green"
+    assert buttons[1]["url"] == "https://example.com/docs"
+    assert buttons[1]["iosUrl"] == "https://example.com/docs"
+    assert "request" not in buttons[1]
+
+
+@pytest.mark.asyncio
+async def test_dingtalk_buttons_fall_back_to_markdown_when_card_fails():
+    sent = []
+    adapter = DingtalkPlatformAdapter.__new__(DingtalkPlatformAdapter)
+
+    async def fail_button_card(**kwargs):
+        return False
+
+    async def capture_message(open_conversation_id, robot_code, msg_key, msg_param):
+        sent.append((msg_key, msg_param))
+
+    adapter._send_button_card = fail_button_card
+    adapter._send_group_message = capture_message
+    chain = MessageChain(
+        [
+            Plain("Choose"),
+            ActionRow(
+                buttons=[
+                    Button(
+                        id="approve",
+                        label="Approve",
+                        action=Button.CallbackAction(data={"item": 1}),
+                    ),
+                    Button(
+                        id="docs",
+                        label="Docs",
+                        action=Button.UrlAction(url="https://example.com/docs"),
+                    ),
+                ]
+            ),
+        ]
+    )
+
+    await adapter._send_message_chain("group", "conversation", "robot", chain)
+
+    assert sent == [
+        (
+            "sampleMarkdown",
+            {
+                "title": "AstrBot",
+                "text": "Choose\n[Approve]\n[Docs](https://example.com/docs)",
+            },
+        )
+    ]
