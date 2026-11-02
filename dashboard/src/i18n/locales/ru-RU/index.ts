@@ -23,9 +23,6 @@ import ruRUChart from './features/chart.json';
 import ruRUDashboard from './features/dashboard.json';
 import ruRUCron from './features/cron.json';
 import ruRUStats from './features/stats.json';
-import ruRUAlkaidIndex from './features/alkaid/index.json';
-import ruRUAlkaidKnowledgeBase from './features/alkaid/knowledge-base.json';
-import ruRUAlkaidMemory from './features/alkaid/memory.json';
 import ruRUKnowledgeBaseIndex from './features/knowledge-base/index.json';
 import ruRUKnowledgeBaseDetail from './features/knowledge-base/detail.json';
 import ruRUKnowledgeBaseDocument from './features/knowledge-base/document.json';
@@ -65,11 +62,6 @@ export default {
       dashboard: ruRUDashboard,
       cron: ruRUCron,
       stats: ruRUStats,
-      alkaid: {
-        index: ruRUAlkaidIndex,
-        'knowledge-base': ruRUAlkaidKnowledgeBase,
-        memory: ruRUAlkaidMemory
-      },
       'knowledge-base': {
         index: ruRUKnowledgeBaseIndex,
         detail: ruRUKnowledgeBaseDetail,

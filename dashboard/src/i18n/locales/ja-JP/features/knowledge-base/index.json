@@ -13,8 +13,7 @@
     "sessionConfig": "セッション設定",
     "initError": "初期化に失敗しました",
     "retry": "再試行",
-    "noDescription": "説明なし",
-    "switchLegacy": "旧版のナレッジベースに切り替える"
+    "noDescription": "説明なし"
   },
   "card": {
     "edit": "編集",

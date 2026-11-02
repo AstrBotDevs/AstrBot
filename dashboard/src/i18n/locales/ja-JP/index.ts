@@ -23,9 +23,6 @@ import jaJPChart from './features/chart.json';
 import jaJPDashboard from './features/dashboard.json';
 import jaJPCron from './features/cron.json';
 import jaJPStats from './features/stats.json';
-import jaJPAlkaidIndex from './features/alkaid/index.json';
-import jaJPAlkaidKnowledgeBase from './features/alkaid/knowledge-base.json';
-import jaJPAlkaidMemory from './features/alkaid/memory.json';
 import jaJPKnowledgeBaseIndex from './features/knowledge-base/index.json';
 import jaJPKnowledgeBaseDetail from './features/knowledge-base/detail.json';
 import jaJPKnowledgeBaseDocument from './features/knowledge-base/document.json';
@@ -65,11 +62,6 @@ export default {
       dashboard: jaJPDashboard,
       cron: jaJPCron,
       stats: jaJPStats,
-      alkaid: {
-        index: jaJPAlkaidIndex,
-        'knowledge-base': jaJPAlkaidKnowledgeBase,
-        memory: jaJPAlkaidMemory
-      },
       'knowledge-base': {
         index: jaJPKnowledgeBaseIndex,
         detail: jaJPKnowledgeBaseDetail,

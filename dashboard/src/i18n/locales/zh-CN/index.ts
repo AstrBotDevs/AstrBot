@@ -23,9 +23,6 @@ import zhCNChart from './features/chart.json';
 import zhCNDashboard from './features/dashboard.json';
 import zhCNCron from './features/cron.json';
 import zhCNStats from './features/stats.json';
-import zhCNAlkaidIndex from './features/alkaid/index.json';
-import zhCNAlkaidKnowledgeBase from './features/alkaid/knowledge-base.json';
-import zhCNAlkaidMemory from './features/alkaid/memory.json';
 import zhCNKnowledgeBaseIndex from './features/knowledge-base/index.json';
 import zhCNKnowledgeBaseDetail from './features/knowledge-base/detail.json';
 import zhCNKnowledgeBaseDocument from './features/knowledge-base/document.json';
@@ -65,11 +62,6 @@ export default {
       dashboard: zhCNDashboard,
       cron: zhCNCron,
       stats: zhCNStats,
-      alkaid: {
-        index: zhCNAlkaidIndex,
-        'knowledge-base': zhCNAlkaidKnowledgeBase,
-        memory: zhCNAlkaidMemory
-      },
       'knowledge-base': {
         index: zhCNKnowledgeBaseIndex,
         detail: zhCNKnowledgeBaseDetail,

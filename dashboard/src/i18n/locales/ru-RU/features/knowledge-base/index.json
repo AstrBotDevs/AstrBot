@@ -13,8 +13,7 @@
         "sessionConfig": "Профиль",
         "initError": "Ошибка инициализации",
         "retry": "Повторить",
-        "noDescription": "Нет описания",
-        "switchLegacy": "Перейти к старой версии базы знаний"
+        "noDescription": "Нет описания"
     },
     "card": {
         "edit": "Изменить",

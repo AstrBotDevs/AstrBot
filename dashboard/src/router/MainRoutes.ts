@@ -270,34 +270,11 @@ const MainRoutes = {
       ]
     },
 
-    // 旧版本的知识库路由
+    // Legacy Alkaid routes were retired in favor of the native knowledge base.
     {
-      name: 'KnowledgeBase',
-      path: '/alkaid/knowledge-base',
-      component: () => import('@/views/alkaid/KnowledgeBase.vue'),
+      path: '/alkaid/:pathMatch(.*)*',
+      redirect: '/knowledge-base'
     },
-    // {
-    //   name: 'Alkaid',
-    //   path: '/alkaid',
-    //   component: () => import('@/views/AlkaidPage.vue'),
-    //   children: [
-    //     {
-    //       path: 'knowledge-base',
-    //       name: 'KnowledgeBase',
-    //       component: () => import('@/views/alkaid/KnowledgeBase.vue')
-    //     },
-    //     {
-    //       path: 'long-term-memory',
-    //       name: 'LongTermMemory',
-    //       component: () => import('@/views/alkaid/LongTermMemory.vue')
-    //     },
-    //     {
-    //       path: 'other',
-    //       name: 'OtherFeatures',
-    //       component: () => import('@/views/alkaid/Other.vue')
-    //     }
-    //   ]
-    // },
     {
       name: 'Chat',
       path: '/chat',

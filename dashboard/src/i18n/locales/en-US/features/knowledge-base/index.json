@@ -13,8 +13,7 @@
     "sessionConfig": "Session Config",
     "initError": "Initialization Failed",
     "retry": "Retry",
-    "noDescription": "No description",
-    "switchLegacy": "Switch to legacy knowledge base"
+    "noDescription": "No description"
   },
   "card": {
     "edit": "Edit",

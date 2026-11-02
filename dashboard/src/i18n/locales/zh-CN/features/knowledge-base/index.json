@@ -13,8 +13,7 @@
     "sessionConfig": "会话配置",
     "initError": "初始化失败",
     "retry": "重试",
-    "noDescription": "暂无描述",
-    "switchLegacy": "切换到旧版知识库"
+    "noDescription": "暂无描述"
   },
   "card": {
     "edit": "编辑",
