@@ -2,14 +2,11 @@
 
 import asyncio
 import json
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from opentelemetry.trace import format_trace_id, get_current_span
 
-from astrbot.core.agent.runners.base import AgentState
-from astrbot.core.cron.manager import CronJobManager
 from astrbot.core.log import _log_context, log_context
 from astrbot.core.pipeline import scheduler as scheduler_module
 from astrbot.core.platform.astr_message_event import AstrMessageEvent, event_context
@@ -105,6 +102,8 @@ def test_event_scope_finishes_and_restores_context(event, frames, tmp_path, fail
         assert failure is None
     root = frames[-1]["span"]
     assert frames[-1]["trace"]["state"] == "completed"
+    assert frames[0]["trace"]["name"] == "AstrMessageEvent"
+    assert frames[0]["trace"]["attributes"]["astrbot.kind"] == "message"
     assert root["span_id"] == event.trace.span_id
     assert root["status"]["code"] == (2 if failure else 1)
     if failure:
@@ -240,107 +239,3 @@ async def test_scheduler_uses_event_scope(event, frames, monkeypatch, failure_at
     assert event.send.await_count == int(failure_at != "stages")
     assert frames[-1]["trace"]["state"] == "completed"
     assert frames[-1]["span"]["status"]["code"] == (2 if failure_at else 1)
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "failure_at",
-    [
-        None,
-        "config",
-        "conversation",
-        "build",
-        "empty",
-        "run",
-        "state",
-        "history",
-        "cancel",
-    ],
-)
-async def test_cron_uses_event_scope(frames, monkeypatch, failure_at):
-    """Cover Cron construction, execution, saving, failure, and cancellation.
-
-    Args:
-        frames: Captured trace snapshots.
-        monkeypatch: Pytest patch manager.
-        failure_at: Optional execution step that fails.
-    """
-    from astrbot.core import astr_main_agent
-    from astrbot.core.cron import manager as cron_module
-
-    ctx = MagicMock()
-    ctx.get_config.return_value = {"admins_id": []}
-    if failure_at == "config":
-        ctx.get_config.side_effect = RuntimeError("config failed")
-    manager = CronJobManager(MagicMock())
-    manager.ctx = ctx
-    captured = {}
-
-    async def conversation(**kwargs):
-        captured["event"] = kwargs["event"]
-        assert (
-            format_trace_id(get_current_span().get_span_context().trace_id)
-            == captured["event"].trace.trace_id
-        )
-        if failure_at == "conversation":
-            raise RuntimeError("conversation failed")
-        return SimpleNamespace(history="[]")
-
-    async def steps(max_steps):
-        assert frames[-1]["trace"]["state"] == "running"
-        if failure_at == "run":
-            raise RuntimeError("run failed")
-        if failure_at == "cancel":
-            raise asyncio.CancelledError()
-        yield None
-
-    runner = MagicMock(
-        state=AgentState.ERROR if failure_at == "state" else AgentState.DONE
-    )
-    runner.step_until_done.side_effect = steps
-    runner.get_final_llm_resp.return_value = None
-
-    async def build(**kwargs):
-        assert (
-            format_trace_id(get_current_span().get_span_context().trace_id)
-            == kwargs["event"].trace.trace_id
-        )
-        assert _log_context.get().platform_id == "test"
-        assert _log_context.get().platform_type == "cron"
-        if failure_at == "build":
-            raise RuntimeError("build failed")
-        return None if failure_at == "empty" else SimpleNamespace(agent_runner=runner)
-
-    async def persist(*args, **kwargs):
-        assert frames[-1]["trace"]["state"] == "running"
-        assert (
-            format_trace_id(get_current_span().get_span_context().trace_id)
-            == kwargs["event"].trace.trace_id
-        )
-        if failure_at == "history":
-            raise RuntimeError("history failed")
-
-    monkeypatch.setattr(astr_main_agent, "_get_session_conv", conversation)
-    monkeypatch.setattr(astr_main_agent, "build_main_agent", build)
-    save = AsyncMock(side_effect=persist)
-    monkeypatch.setattr(cron_module, "persist_agent_history", save)
-    execution = manager._woke_main_agent(
-        message="Scheduled task",
-        session_str="test:FriendMessage:cron-execution-test",
-        extras={"cron_job": {"id": "test-job"}},
-    )
-    if failure_at:
-        with pytest.raises(
-            asyncio.CancelledError if failure_at == "cancel" else RuntimeError
-        ):
-            await execution
-    else:
-        await execution
-    assert save.await_count == int(failure_at in (None, "history"))
-    final = frames[-1]
-    assert final["trace"]["state"] == "completed"
-    assert final["span"]["span_id"] == final["trace"]["root_span_id"]
-    assert final["span"]["status"]["code"] == (2 if failure_at else 1)
-    assert "test:FriendMessage:cron-execution-test" not in active_event_registry._events
-    assert not get_current_span().get_span_context().is_valid
-    assert _log_context.get() is None

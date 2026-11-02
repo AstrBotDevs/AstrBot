@@ -303,13 +303,20 @@ class SyncProjectTests(unittest.TestCase):
 
 
 class WorkflowSecurityTests(unittest.TestCase):
+    def test_sync_job_has_120_minute_timeout(self):
+        workflow = (
+            SCRIPT.parents[1] / ".github/workflows/project-sync.yml"
+        ).read_text()
+        job = workflow.split("  sync:\n", 1)[1].split("    steps:", 1)[0]
+        self.assertIn("    timeout-minutes: 120\n", job)
+
     def test_fork_pull_request_events_are_filtered_at_job_boundary(self):
         workflow = (
             SCRIPT.parents[1] / ".github/workflows/project-sync.yml"
         ).read_text()
-        job_condition = workflow.split("  sync:\n", 1)[1].split(
-            "    environment:", 1
-        )[0]
+        job_condition = workflow.split("  sync:\n", 1)[1].split("    environment:", 1)[
+            0
+        ]
         self.assertIn("github.event_name != 'pull_request_target'", job_condition)
         self.assertIn(
             "github.event.pull_request.head.repo.full_name == github.repository",
