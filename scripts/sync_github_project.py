@@ -23,7 +23,7 @@ STATUS_OPTIONS = (
     "Closed unmerged",
 )
 DELIVERY_OPTIONS = ("未关联实现", "尚未合入", "已合入待发布", "已发布")
-APPLY_WORKERS = 4
+APPLY_WORKERS = 8
 
 
 def connection(query, path, *, initial=None, progress=None, **variables):
