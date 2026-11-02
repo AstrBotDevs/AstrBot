@@ -101,3 +101,21 @@
     max-width: none;
   }
 }
+
+@container provider-config (max-width: 600px) {
+  .config-form :deep(.property-info),
+  .config-form :deep(.config-input) {
+    flex: 0 0 100%;
+    max-width: 100%;
+    padding-right: 0;
+  }
+
+  .config-form :deep(.config-input) {
+    justify-content: stretch;
+    padding-top: 10px;
+  }
+
+  .config-form :deep(.config-input > :not(.config-field--full-width)) {
+    max-width: none;
+  }
+}
