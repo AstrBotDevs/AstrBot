@@ -350,6 +350,72 @@ async def test_upload_document_cleans_up_on_storage_failure(
 
 
 @pytest.mark.asyncio
+async def test_upload_document_logs_stage_and_cause_on_failure(
+    tmp_path: Path,
+    stub_provider_manager_module,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A failed upload must log its stage and wrapped cause.
+
+    The sinks only render the format string, so diagnostics carried in
+    ``extra`` never reach the operator. Without the cause in the message an
+    upload failure is indistinguishable from an unknown generic error.
+
+    Args:
+        tmp_path: Temporary directory for the helper's media folder.
+        stub_provider_manager_module: Stub avoiding circular core imports.
+        caplog: Pytest log capture fixture.
+
+    Raises:
+        KnowledgeBaseUploadError: Expected; raised by the failing upload.
+    """
+    KBHelper = _import_kb_helper()
+
+    helper = KBHelper.__new__(KBHelper)
+    helper.kb = KnowledgeBase(
+        kb_name="Test KB",
+        description="",
+        embedding_provider_id="emb",
+    )
+    helper.kb_db = MagicMock()
+    helper.vec_db = AsyncMock()
+    helper.kb_medias_dir = tmp_path / "medias"
+    helper.kb_medias_dir.mkdir()
+    helper.chunker = AsyncMock()
+    helper.chunker.chunk = AsyncMock(return_value=["hello world"])
+
+    parse_result = MagicMock()
+    parse_result.text = "hello world"
+    parse_result.media = []
+
+    boom = PermissionError(13, "Permission denied", "index.faiss")
+    helper.vec_db.insert_batch = AsyncMock(side_effect=boom)
+    helper.vec_db.delete_documents = AsyncMock()
+
+    with (
+        patch(
+            "astrbot.core.knowledge_base.kb_helper.select_parser",
+            new=AsyncMock(
+                return_value=MagicMock(parse=AsyncMock(return_value=parse_result)),
+            ),
+        ),
+        patch.object(helper, "_ensure_vec_db", new=AsyncMock()),
+        caplog.at_level("WARNING", logger="astrbot"),
+        pytest.raises(KnowledgeBaseUploadError),
+    ):
+        await helper.upload_document(
+            file_name="demo.txt",
+            file_content=b"hello world",
+            file_type="txt",
+        )
+
+    messages = [r.getMessage() for r in caplog.records]
+    combined = "\n".join(messages)
+    assert "[storage]" in combined, combined
+    assert "index.faiss" in combined, combined
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("file_name", "file_type"),
     [

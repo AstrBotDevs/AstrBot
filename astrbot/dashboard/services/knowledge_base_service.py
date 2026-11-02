@@ -201,7 +201,14 @@ class KnowledgeBaseService:
                     )
                     uploaded_docs.append(doc.model_dump())
                 except Exception as exc:
-                    logger.error(f"上传文档 {file_info['file_name']} 失败: {exc}")
+                    # ``str(exc)`` on a KnowledgeBaseUploadError only yields the
+                    # user-facing message, so surface the wrapped cause here or
+                    # the operator cannot tell what actually broke.
+                    cause = getattr(exc, "details", {}).get("cause")
+                    detail = f"; cause: {cause}" if cause else ""
+                    logger.error(
+                        f"上传文档 {file_info['file_name']} 失败: {exc}{detail}"
+                    )
                     failed_docs.append(
                         {
                             "file_name": file_info["file_name"],

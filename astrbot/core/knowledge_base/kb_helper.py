@@ -496,7 +496,14 @@ class KBHelper:
             return doc
         except Exception as e:
             if isinstance(e, KnowledgeBaseUploadError):
-                logger.warning(f"上传文档失败: {e}", extra={"details": e.details})
+                # The console and file sinks render only ``message``, so an
+                # ``extra={"details": ...}`` payload never reaches the log and
+                # the underlying failure stays invisible. Append the stage and
+                # the wrapped cause to the message so failed uploads are
+                # debuggable without a debugger.
+                cause = e.details.get("cause")
+                suffix = f"; cause: {cause}" if cause else ""
+                logger.warning(f"上传文档失败[{e.stage}]: {e}{suffix}")
             else:
                 logger.error(f"上传文档失败: {e}", exc_info=True)
 
