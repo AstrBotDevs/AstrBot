@@ -202,12 +202,16 @@ class KnowledgeBaseService:
                     uploaded_docs.append(doc.model_dump())
                 except Exception as exc:
                     # ``str(exc)`` on a KnowledgeBaseUploadError only yields the
-                    # user-facing message, so surface the wrapped cause here or
-                    # the operator cannot tell what actually broke.
-                    cause = getattr(exc, "details", {}).get("cause")
+                    # user-facing message, so surface the stage and root cause
+                    # here or the operator cannot tell what actually broke. Only
+                    # the storage stage records ``details["cause"]``; the other
+                    # stages keep the reason on the exception chain.
+                    cause = getattr(exc, "details", {}).get("cause") or exc.__cause__
                     detail = f"; cause: {cause}" if cause else ""
+                    stage = getattr(exc, "stage", None)
+                    label = f"[{stage}]" if stage else ""
                     logger.error(
-                        f"上传文档 {file_info['file_name']} 失败: {exc}{detail}"
+                        f"上传文档 {file_info['file_name']} 失败{label}: {exc}{detail}"
                     )
                     failed_docs.append(
                         {

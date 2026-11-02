@@ -499,9 +499,11 @@ class KBHelper:
                 # The console and file sinks render only ``message``, so an
                 # ``extra={"details": ...}`` payload never reaches the log and
                 # the underlying failure stays invisible. Append the stage and
-                # the wrapped cause to the message so failed uploads are
-                # debuggable without a debugger.
-                cause = e.details.get("cause")
+                # the root cause to the message so failed uploads are
+                # debuggable without a debugger. Only the storage stage records
+                # ``details["cause"]``; the other stages keep the reason on the
+                # exception chain via ``raise ... from exc``.
+                cause = e.details.get("cause") or e.__cause__
                 suffix = f"; cause: {cause}" if cause else ""
                 logger.warning(f"上传文档失败[{e.stage}]: {e}{suffix}")
             else:

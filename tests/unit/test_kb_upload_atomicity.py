@@ -416,6 +416,66 @@ async def test_upload_document_logs_stage_and_cause_on_failure(
 
 
 @pytest.mark.asyncio
+async def test_upload_document_logs_chained_cause_for_non_storage_stage(
+    tmp_path: Path,
+    stub_provider_manager_module,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Stages relying on ``raise ... from exc`` must still log the reason.
+
+    Only the storage stage copies the underlying exception into
+    ``details["cause"]``. Parsing, chunking and metadata stages keep it on the
+    exception chain instead, so the log must fall back to ``__cause__`` or
+    those failures stay as opaque as before.
+
+    Args:
+        tmp_path: Temporary directory for the helper's media folder.
+        stub_provider_manager_module: Stub avoiding circular core imports.
+        caplog: Pytest log capture fixture.
+
+    Raises:
+        KnowledgeBaseUploadError: Expected; raised by the failing upload.
+    """
+    KBHelper = _import_kb_helper()
+
+    helper = KBHelper.__new__(KBHelper)
+    helper.kb = KnowledgeBase(
+        kb_name="Test KB",
+        description="",
+        embedding_provider_id="emb",
+    )
+    helper.kb_db = MagicMock()
+    helper.vec_db = AsyncMock()
+    helper.kb_medias_dir = tmp_path / "medias"
+    helper.kb_medias_dir.mkdir()
+    helper.chunker = AsyncMock()
+
+    boom = UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
+
+    with (
+        patch(
+            "astrbot.core.knowledge_base.kb_helper.select_parser",
+            new=AsyncMock(side_effect=boom),
+        ),
+        patch.object(helper, "_ensure_vec_db", new=AsyncMock()),
+        caplog.at_level("WARNING", logger="astrbot"),
+        pytest.raises(KnowledgeBaseUploadError),
+    ):
+        await helper.upload_document(
+            file_name="demo.txt",
+            file_content=b"hello world",
+            file_type="txt",
+        )
+
+    messages = [r.getMessage() for r in caplog.records]
+    combined = "\n".join(messages)
+    assert "[parsing]" in combined, combined
+    # The chained exception is rendered via str(), so match its message text
+    # rather than the exception class name.
+    assert "codec can't decode byte" in combined, combined
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("file_name", "file_type"),
     [
