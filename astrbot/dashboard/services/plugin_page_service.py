@@ -652,7 +652,9 @@ class PluginPageService:
         page_data = {
             "name": page.name,
             "title": page.title,
-            "i18n_key": f"pages.{page.name}",
+            # "views" is the canonical namespace; the dashboard resolves
+            # "views.<name>.*" first and falls back to "pages.<name>.*".
+            "i18n_key": f"views.{page.name}",
         }
         if include_content_path and asset_token:
             page_data["content_path"] = (
