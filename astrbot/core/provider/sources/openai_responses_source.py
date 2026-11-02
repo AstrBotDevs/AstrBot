@@ -528,6 +528,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         text_parts: list[str] = []
         reasoning_parts: list[str] = []
         serialized_reasoning_items: list[dict] = []
+        image_parts: list[Comp.Image] = []
 
         for item in self._field(response, "output", []) or []:
             item_type = self._field(item, "type")
@@ -562,6 +563,15 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                 reasoning_parts.extend(item_reasoning)
                 continue
 
+            if item_type == "image_generation_call":
+                # Generated images arrive base64-encoded in ``result``. Dropping
+                # them lost the picture and made an image-only reply look like
+                # empty output (#10959).
+                image_base64 = self._field(item, "result")
+                if isinstance(image_base64, str) and image_base64.strip():
+                    image_parts.append(Comp.Image.fromBase64(image_base64.strip()))
+                continue
+
             if item_type == "function_call" and tools is not None:
                 arguments = self._field(item, "arguments", "{}")
                 if isinstance(arguments, str):
@@ -581,8 +591,12 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                 )
 
         completion_text = "".join(text_parts)
-        if completion_text:
-            llm_response.result_chain = MessageChain().message(completion_text)
+        if completion_text or image_parts:
+            result_chain = MessageChain()
+            if completion_text:
+                result_chain.message(completion_text)
+            result_chain.chain.extend(image_parts)
+            llm_response.result_chain = result_chain
         if reasoning_parts:
             llm_response.reasoning_content = "\n".join(reasoning_parts)
         if serialized_reasoning_items:
@@ -612,7 +626,13 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
 
         has_text = bool((llm_response.completion_text or "").strip())
         has_reasoning = bool((llm_response.reasoning_content or "").strip())
-        if not has_text and not has_reasoning and not llm_response.tools_call_args:
+        has_image = bool(image_parts)
+        if (
+            not has_text
+            and not has_reasoning
+            and not has_image
+            and not llm_response.tools_call_args
+        ):
             raise EmptyModelOutputError(
                 "Responses API returned no usable output. "
                 f"response_id={response_id}, status={status}"
