@@ -24,6 +24,7 @@
     "description": {
       "openai": "OpenAI API と互換性のあるすべてのモデルプロバイダーにも対応しています。",
       "kimi_code": "Kimi Code の会話モデルを設定します。",
+      "opencode_go": "OpenCode Go サブスクリプション専用接続。OpenAI API 互換で、リクエストはセッションごとに分離されます。",
       "vllm_rerank": "Jina AI、Cohere、PPIO などのプロバイダーにも対応しています。",
       "default": ""
     },

@@ -55,6 +55,7 @@ export function getProviderIcon(type) {
     "bailian": "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/bailian-color.svg",
     "volcengine": 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/volcengine-color.svg',
     'huggingface': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/huggingface.svg',
+    'opencode': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/opencode.svg',
   };
   return icons[type] || '';
 }
@@ -97,7 +98,8 @@ export function isMonochromeProviderIcon(type) {
     'vllm',
     'huggingface',
     'coze',
-    'deerflow'
+    'deerflow',
+    'opencode'
   ].includes(type);
 }
 
@@ -113,6 +115,8 @@ export function getProviderDescription(template, name, tm) {
     return tm('providers.description.openai', { type: template.type });
   } else if (template.provider === 'kimi-code') {
     return tm('providers.description.kimi_code');
+  } else if (template.provider === 'opencode') {
+    return tm('providers.description.opencode_go');
   } else if (name === 'vLLM Rerank') {
     return tm('providers.description.vllm_rerank', { type: template.type });
   }

@@ -163,8 +163,8 @@ const groups = computed(() => {
   const preferredKeys = [
     'OpenAI Compatible', 'OpenAI Responses', 'Google Gemini', 'Anthropic',
     'DeepSeek', 'DeepSeek Responses', 'Moonshot', 'Kimi Coding Plan',
-    'MiniMax', 'MiniMax Token Plan', 'Zhipu', 'Xiaomi', 'Xiaomi Token Plan',
-    'xAI', 'LongCat'
+    'OpenCode Go', 'MiniMax', 'MiniMax Token Plan', 'Zhipu', 'Xiaomi',
+    'Xiaomi Token Plan', 'xAI', 'LongCat'
   ]
   const labels = {
     'Google Gemini': 'Gemini Compatible',
