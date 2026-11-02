@@ -3,6 +3,7 @@ import base64
 import json
 import logging
 import random
+import re
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Literal, cast
@@ -237,6 +238,14 @@ class ProviderGoogleGenAI(Provider):
 
         tool_list: list[types.Tool] | None = []
         model_name = cast(str, payloads.get("model", self.get_model()))
+        generation_match = re.search(
+            r"gemini-(\d+)(?:[.-](\d+))?", model_name, re.IGNORECASE
+        )
+        generation = (
+            (int(generation_match.group(1)), int(generation_match.group(2) or 0))
+            if generation_match
+            else None
+        )
         native_coderunner = self.provider_config.get("gm_native_coderunner", False)
         native_search = self.provider_config.get("gm_native_search", False)
         url_context = self.provider_config.get("gm_url_context", False)
@@ -287,7 +296,21 @@ class ProviderGoogleGenAI(Provider):
             "gemini-2.5-flash-lite-preview",
             "gemini-robotics-er-1.5-preview",
             "gemini-live-2.5-flash-preview-native-audio-09-2025",
-        ]:
+        ] or re.search(
+            # Allow-list of the thinking-capable Gemini 2.5 families (pro, flash,
+            # flash-lite) with optional preview/exp and dated suffixes. It is
+            # default-deny on purpose: the 2.5 image models and their aliases,
+            # such as gemini-2.5-flash-image and gemini-2.5-pro-image, as well as
+            # the TTS, native-audio and computer-use variants, reject every
+            # thinkingConfig with 400 INVALID_ARGUMENT. They must not receive a
+            # budget, so no model id may enter this branch by generation alone.
+            # The leading marker is matched anywhere in the id to keep covering
+            # relay-decorated aliases (for example "［抗截断］gemini-2.5-flash").
+            r"gemini-2\.5-(?:pro|flash|flash-lite)"
+            r"(?:-preview|-exp)?(?:-\d{2}(?:-\d{2,4})?)?$",
+            model_name,
+            re.IGNORECASE,
+        ):
             # The thinkingBudget parameter, introduced with the Gemini 2.5 series
             thinking_budget = self.provider_config.get("gm_thinking_config", {}).get(
                 "budget", 0
@@ -296,10 +319,10 @@ class ProviderGoogleGenAI(Provider):
                 thinking_config = types.ThinkingConfig(
                     thinking_budget=thinking_budget,
                 )
-        elif any(model_name.startswith(p) for p in ("gemini-3-", "gemini-3.")):
+        elif generation is not None and generation >= (3, 0):
             # The thinkingLevel parameter, recommended for Gemini 3 models and onwards.
-            # Use prefix match so new variants (3.1, 3-flash-lite-preview, etc.) are
-            # covered without needing to keep an exhaustive list up to date.
+            # The generation is detected anywhere in the model id, so relay aliases
+            # and new variants are covered without keeping an exhaustive list up to date.
             # Gemini 2.5 series models don't support thinkingLevel; use thinkingBudget instead.
             thinking_level = self.provider_config.get("gm_thinking_config", {}).get(
                 "level", "HIGH"
@@ -308,7 +331,9 @@ class ProviderGoogleGenAI(Provider):
                 thinking_level = thinking_level.upper()
                 allowed_levels = {"MINIMAL", "LOW", "MEDIUM", "HIGH"}
                 fallback_level = "HIGH"
-                if model_name.startswith("gemini-3.7"):
+                if generation >= (3, 7):
+                    # Gemini 3.7+ generations (including Gemini 4) only accept
+                    # LOW, MEDIUM and HIGH; MINIMAL is rejected.
                     allowed_levels = {"LOW", "MEDIUM", "HIGH"}
                     fallback_level = "MEDIUM"
                 if thinking_level not in allowed_levels:
