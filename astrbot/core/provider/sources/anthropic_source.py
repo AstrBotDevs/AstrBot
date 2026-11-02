@@ -320,7 +320,10 @@ class ProviderAnthropic(Provider):
                                 "content": converted_content,
                             }
                         )
-                elif isinstance(message.get("content"), str) and message["content"].strip():
+                elif (
+                    isinstance(message.get("content"), str)
+                    and message["content"].strip()
+                ):
                     new_messages.append(message)
             else:
                 new_messages.append(message)
