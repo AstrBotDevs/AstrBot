@@ -331,3 +331,12 @@ outline: deep
 | `GET` | `/api/v1/skills/{skill_name}/files` | — |
 | `GET` | `/api/v1/skills/{skill_name}/files/{file_path}` | — |
 | `PUT` | `/api/v1/skills/{skill_name}/files/{file_path}` | — |
+
+## `stats`
+
+读取运行状态和 Token 使用统计。
+
+| 方法 | 接口 | 条件性敏感子权限 |
+| --- | --- | --- |
+| `GET` | `/api/v1/stats` | — |
+| `GET` | `/api/v1/stats/provider-tokens` | — |
