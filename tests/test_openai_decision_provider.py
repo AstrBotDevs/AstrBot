@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import traceback
+from types import MappingProxyType
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
@@ -72,7 +73,8 @@ def _manager() -> ProviderManager:
 
 
 @pytest.mark.asyncio
-async def test_mixed_questions_share_one_request_and_match_answers_by_name():
+@pytest.mark.parametrize("criteria_type", [dict, MappingProxyType])
+async def test_mixed_questions_share_one_request_and_match_answers_by_name(criteria_type):
     requests = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -112,7 +114,9 @@ async def test_mixed_questions_share_one_request_and_match_answers_by_name():
             {
                 "decision": DecisionChoiceQuestion(
                     instructions=" Should the assistant reply? ",
-                    criteria={"respond": "Reply now", "ignore": "Stay silent"},
+                    criteria=criteria_type(
+                        {"respond": "Reply now", "ignore": "Stay silent"}
+                    ),
                 ),
                 "needs_tool": DecisionBooleanQuestion("Does this need a tool?"),
                 "severity": DecisionScoreQuestion(
@@ -308,6 +312,17 @@ async def test_rejects_state_the_api_cannot_express(state):
     "question",
     [
         DecisionBooleanQuestion("   "),
+        DecisionBooleanQuestion(None),
+        DecisionBooleanQuestion(123),
+        DecisionChoiceQuestion(None, {"a": "A", "b": "B"}),
+        DecisionChoiceQuestion(["Pick"], {"a": "A", "b": "B"}),
+        DecisionScoreQuestion(None, ["low", "high"]),
+        DecisionScoreQuestion(b"Rate", ["low", "high"]),
+        DecisionChoiceQuestion("Pick", None),
+        DecisionChoiceQuestion("Pick", 123),
+        DecisionChoiceQuestion("Pick", ["a", "b"]),
+        DecisionChoiceQuestion("Pick", ("a", "b")),
+        DecisionChoiceQuestion("Pick", "ab"),
         DecisionChoiceQuestion("Pick", {"only": "One"}),
         DecisionScoreQuestion("Rate", ["one"]),
         DecisionScoreQuestion("Rate", ["low", " "]),
@@ -322,6 +337,8 @@ async def test_rejects_unusable_questions_before_request(question):
             await provider.ask({"a": question})
     finally:
         await provider.terminate()
+
+    handler.assert_not_called()
 
 
 @pytest.mark.asyncio

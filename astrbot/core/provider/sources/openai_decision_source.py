@@ -156,10 +156,14 @@ class OpenAIDecisionProvider(DecisionProvider):
                 raise ValueError(
                     f"question {head} has unsupported type {type(question).__name__}"
                 )
+            if not isinstance(question.instructions, str):
+                raise ValueError(f"question {head} instructions must be a string")
             instructions = question.instructions.strip()
             if not instructions:
                 raise ValueError(f"question {head} must not be empty")
             if isinstance(question, DecisionChoiceQuestion):
+                if not isinstance(question.criteria, Mapping):
+                    raise ValueError(f"question {head} criteria must be a mapping")
                 if not 2 <= len(question.criteria) <= 255:
                     raise ValueError(
                         f"question {head} requires 2 to 255 criteria entries"
