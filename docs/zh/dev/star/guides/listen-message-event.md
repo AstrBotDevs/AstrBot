@@ -433,11 +433,30 @@ async def on_llm_tool_respond(
 
 > 这里不能使用 yield 来发送消息。如需发送，请直接使用 `event.send()` 方法。
 
+#### 每个 Agent Step 开始与结束时
+
+内置工具循环提供 `on_agent_step_start` 和 `on_agent_step_end`。一个 step 包括一次模型决策及其要求执行的整批工具。结束钩子触发时，整批 assistant/tool 消息和工具图片都已组装进 `run_context.messages`；最后一次不调用工具的 step 也会触发。执行中断的 step 不触发结束钩子，请使用 `on_agent_done` 收尾。
+
+```python
+@filter.on_agent_step_start()
+async def before_step(self, event: AstrMessageEvent, run_context: ContextWrapper[AstrAgentContext]):
+    # Inspect or update context before the next model decision.
+    pass
+
+
+@filter.on_agent_step_end()
+async def after_step(self, event: AstrMessageEvent, run_context: ContextWrapper[AstrAgentContext]):
+    # The complete step context is now available for checkpointing.
+    print(len(run_context.messages))
+```
+
+上述类型的导入方式见下方示例。`on_llm_request`、`on_llm_response` 不会在内置工具循环的每次模型请求时触发；`on_llm_tool_respond` 是单个工具返回后的钩子，触发时整批结果尚未写入上下文。
+
 #### Agent 运行完成时
 
-> 适用于 AstrBot 版本 > v4.23.1
+内置工具循环在本轮执行退出时触发一次 `on_agent_done`，覆盖正常完成、模型错误、未处理异常、取消和步数耗尽。它在最后一个完整 step 的结束钩子之后触发，不代表会话历史已经保存。可以读取 `run_context.run_end_reason`（`completed`、`error`、`cancelled` 或 `max_steps`）及 `run_context.run_error`（错误说明或 `None`）。进程被强制终止时无法执行清理钩子。
 
-在 Agent 运行完成后，会触发 `on_agent_done` 钩子。这个钩子会在 `on_llm_response` 之后触发。本质上和 `on_llm_response` 一样。
+没有最终响应时，`resp` 可以是 `None`，使用前需要判断。用户停止执行时可能携带合成的中断提示响应。没有模型回复的收尾及合成的中断提示不会触发 `on_llm_response`；正常回复处理早于 `on_agent_done`。需要在发送前修改回复，请使用 `on_llm_response`。
 
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
@@ -451,12 +470,14 @@ async def on_agent_done(
     self,
     event: AstrMessageEvent,
     run_context: ContextWrapper[AstrAgentContext],
-    resp: LLMResponse,
+    resp: LLMResponse | None,
 ):
-    print(resp)
+    print(run_context.run_end_reason, run_context.run_error)
+    if resp is not None:
+        print(resp.completion_text)
 ```
 
-> 这里不能使用 yield 来发送消息。如需发送，请直接使用 `event.send()` 方法。
+> 这里不能使用 yield 发送消息。如需发送，请直接使用 `event.send()`。事件被停止不会阻止后续 `on_agent_done` 清理处理函数执行，插件启用状态及会话插件选择仍然有效。
 
 #### 发送消息前
 

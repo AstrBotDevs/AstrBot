@@ -1,98 +1,58 @@
-# SubAgent Orchestration {#agent-handoff-and-subagent}
+# Subagents {#agent-handoff-and-subagent}
 
-A SubAgent is an AI assistant with a specific responsibility. The main Agent talks to the user, delegates suitable tasks to a SubAgent, and continues its response using the returned result.
+Main can delegate tasks to subagents that run concurrently in the background and return their results. Each subagent has a private history and can use its own model, persona, and tools.
 
-<span id="motivation"></span>
+The Subagent extension ships with AstrBot and provides this capability for its built-in Agent. Configure subagents for external Agent services in those services.
 
-For example, one SubAgent can research sources while another organizes files. Each uses its own Persona prompt and tool selection, and can optionally use a different chat model. This separates responsibilities and reduces the tools the main Agent must choose directly, but also adds model calls and waiting time. Simple conversations with only a few tools usually do not need orchestration.
+## Get started {#configuration}
 
-Introduced in v4.14.0, this feature is still marked **experimental**. This page covers AstrBot's built-in AI. Orchestration provided by an external AI application is configured in that application.
+Enable the Subagent extension and describe the work you want main to delegate, for example:
 
-## How it works
+> Have two subagents research the benefits and risks of this proposal separately. Continue drafting the evaluation criteria yourself, then combine their findings.
 
-1. When enabled, the main Agent receives tools named `transfer_to_<name>`, such as `transfer_to_research_assistant`, alongside its own tools.
-2. The main Agent reads each SubAgent's public description to decide whether to delegate. It passes a clear task and can include images when needed.
-3. The SubAgent uses its Persona's prompt, preset dialogue, and tools to complete the task.
-4. It returns the result to the main Agent, which organizes the response and continues the conversation.
+Main creates subagents with their initial tasks and continues independent work while they run. Ask main to send follow-up instructions or cancel a task when needed.
 
-The model decides when to delegate. Delegation is neither automatic for every message nor a fixed workflow. A SubAgent receives the delegated task and its own preset dialogue; it **does not automatically receive the main Agent's entire conversation history**. Include necessary background, file paths, and constraints in the task.
+Configure execution limits in **Extensions → Plugins → Subagent → Settings**. Open **Subagent management** on the plugin detail page for expert templates and execution records.
 
-The delegation tool also supports background execution. The main Agent can acknowledge submission first and be woken again when the SubAgent finishes. Proactive delivery still depends on the chat platform; see [Proactive Capabilities](./proactive-agent.md).
+## Expert templates
 
-## Create your first SubAgent {#configuration}
+Open **Subagent management → Expert templates** and click **Create expert**. Configure a name, description, provider, persona, system prompt, and tools.
 
-### 1. Prepare a model and Persona
+A selected persona supplies its prompt, preset dialogue, and tools. Alternatively, write a custom prompt and choose all, specific, or no tools. Saved templates become available immediately while tasks already started continue running. The list supports editing, enabling, disabling, and deleting experts.
 
-Confirm that AstrBot's built-in AI can hold a conversation and that its chat model supports tool calling. Under **Extensions → Persona** in the WebUI, create a dedicated Persona, such as “Research Assistant”:
+![Expert creation with sample settings](./images/subagent-plugin-experts-en.png)
 
-- Explain how it should collect information, verify sources, and present results.
-- Select only the tools needed for research, such as configured web search or MCP tools.
-- If it only analyzes text, it can have no tools.
+Main can select an expert template or create a generic subagent with its currently available tools. Main retains its own tools.
 
-The Persona describes **how the assistant works**. The public description explains **when the main Agent should ask for its help**.
+## Task management
 
-<span id="_2-create-a-subagent"></span>
-
-### 2. Add the SubAgent
-
-Open **Extensions → SubAgents**, click **Add SubAgent**, then click **Expand** on the new card.
-
-![Current SubAgent configuration page](./images/subagent-create-en.png)
-
-| Setting | What to enter |
+| Tool | Purpose |
 | --- | --- |
-| Agent name | For example, `research_assistant`. Start with a lowercase English letter; use only lowercase letters, numbers, and underscores. Maximum 64 characters. Names must be unique. |
-| Chat Provider (optional) | Select the SubAgent's chat model. Leave empty to use the chat provider resolved for the current conversation. This is not a separate API key field. |
-| Choose Persona | Select the Persona you created. Its preview appears on the right. Required. |
-| Description for the main LLM | Describe suitable tasks, required inputs, and expected results. Avoid vague descriptions such as “a powerful assistant.” |
-| Enable switch | Controls whether this SubAgent participates in orchestration. New SubAgents are enabled by default. |
+| `spawn_agent` | Create a subagent with its initial task and optional expert template, name, and provider; immediately return its ID, actual name, provider ID, and state |
+| `list_agents` | Read names, provider IDs, states, and completed steps within the current sender and conversation |
+| `wait_agent` | Wait for any or all subagents; a wait timeout leaves tasks running |
+| `get_agent_result` | Read results or errors repeatedly |
+| `send_message` | Steer an active turn, or automatically start another turn if input remains unconsumed or the turn has finished |
+| `cancel_agent` | Cancel one subagent independently |
 
-Example public description:
+The optional `name` sets this subagent's display name, defaulting to the expert name or `worker`. The optional `provider_id` selects a configured chat provider ID. Selection uses the call override, then the expert configuration, then the current conversation provider. Main can see available provider IDs and model names in the tool parameters. Overrides affect only this subagent and remain in effect for follow-up turns.
 
-```text
-Researches and verifies information. Delegate questions that need a comparison, recent information, or a summary of sources. Include the question and constraints. I return concise findings with source links.
-```
+Subagents do not automatically inherit main's chat history. Include the necessary context, constraints, and expected output when delegating. Follow-up instructions retain the same subagent ID and private history. Subagents cannot create further subagents.
 
-Manage tools on the **Persona** page; the SubAgent page has no separate tool selector. A Persona with all tools selected can use currently available tools. A specific selection uses only matching tools that still exist and are enabled. Computer-use tools also require the appropriate runtime and permissions.
+## Inspect progress
 
-<span id="_1-enable-subagent-mode"></span>
+Open **Extensions → Plugins → Subagent → Subagent management → Worker progress** to inspect names, provider IDs, states, turns, completed steps, results, and execution records. This tab is read-only; send instructions and request cancellation through main.
 
-### 3. Enable and save
+![Worker progress with sample records](./images/subagent-plugin-runtime-en.png)
 
-Turn on **Enable SubAgent orchestration**, then click **Save** in the upper right. Adding, editing, disabling, or deleting a SubAgent, and changing either global switch, all require saving. Saving reloads orchestration without restarting AstrBot.
+In ChatUI, expand the `spawn_agent` tool's **Result** to inspect the actual name and provider ID, including choices resolved from templates or defaults.
 
-This page manages **global orchestration settings**, rather than a separate SubAgent list for the currently selected configuration profile.
+## Execution and recovery
 
-## Deduplicate main LLM tools
+Defaults: 3 concurrent subagents per session, a 600-second timeout including queue time, and 30 steps per turn capped by main's limit. `wait_agent` accepts 0–60000 ms, with `any` to wait for one completion or `all` to wait for every requested subagent.
 
-By default, the main Agent can use its own tools directly or delegate. With **Deduplicate main LLM tools (hide tools duplicated by SubAgents)** enabled, overlapping tools assigned to enabled SubAgents are removed from the main Agent's tool list.
+An active main receives completed results; an idle main resumes to process them. Results stay bound to the original session, conversation, and sender. Switching conversations prevents automatic wakeups for the original conversation and never redirects its results. Proactive delivery depends on the platform; see [Proactive Capabilities](./proactive-agent.md).
 
-For example, if both have a search tool, the main Agent can search directly or delegate when deduplication is off. With deduplication on, it uses the research SubAgent for that search task.
+Subagent states, execution histories, and pending input persist in AstrBot's database. After restart or extension reload, unfinished tasks become `interrupted`. Main can inspect and resume them without automatically replaying tools that may already have run. Results may be delivered again after an abnormal exit.
 
-<span id="best-practices"></span>
-
-Start with deduplication off and enable it after confirming the SubAgent works. Giving every SubAgent all tools makes clear responsibilities difficult to maintain.
-
-## Verify the setup
-
-1. Check the required tools first: configure web search, connect the MCP service, and so on.
-2. Send an explicit request, such as “Ask the research assistant to compare these two options and provide source links.”
-3. Look for `transfer_to_research_assistant` and subsequent calls in the conversation's tool activity or **Data & Logs → Logs**.
-4. Check that the answer follows the Persona's instructions before adding more SubAgents.
-
-The model may still answer directly. Creating a SubAgent alone does not guarantee delegation.
-
-## Limits and troubleshooting {#known-issues}
-
-| Symptom | What to check |
-| --- | --- |
-| Cannot save | Check names, duplicates, and Persona selection, including disabled SubAgents. |
-| Main Agent never delegates | Check both enable switches and saved settings. Use a tool-capable model and a specific public description. |
-| SubAgent cannot use a tool | Check Persona tool selection, plugin/MCP status, runtime, and permissions. Selecting a disabled tool does not reactivate it. |
-| Result lacks context | Specify the background and constraints to pass. Full conversation history is not automatically shared. |
-| SubAgent model fails | Check that the selected Chat Provider exists and works, or clear it to use the conversation's model. |
-| Persona changes are not reflected | Save the SubAgent page again to reload the Persona content. |
-
-A SubAgent is not a separate container or account permission boundary. It calls tools in the current conversation's AstrBot environment. Configure file and execution isolation through [Agent Sandbox](./astrbot-agent-sandbox.md).
-
-SubAgent execution history is not persisted as an independent conversation. There is no separate Skills isolation configuration. This page does not configure multi-level delegation and should not be treated as an arbitrarily nested tree of Agents.
+Stopping a session cancels its background work. Cancelling one subagent leaves main and its siblings running. Background Shell processes started by a subagent use the Shell session tools and process timeouts.

@@ -13,10 +13,10 @@ if TYPE_CHECKING:
 
 
 class SubAgentOrchestrator:
-    """Loads subagent definitions from config and registers handoff tools.
+    """Build legacy expert definitions for plugin SDK compatibility.
 
-    This is intentionally lightweight: it does not execute agents itself.
-    Execution happens via HandoffTool in FunctionToolExecutor.
+    Plugins can discover and reload handoffs through Context. Core main does not
+    mount these tools automatically. Execution uses FunctionToolExecutor.
     """
 
     def __init__(

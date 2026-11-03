@@ -12,7 +12,6 @@
     "logs": "日志",
     "trace": "追踪"
   },
-  "subagent": "子代理编排",
   "toolUse": "MCP",
   "extension": "插件",
   "extensionTabs": {

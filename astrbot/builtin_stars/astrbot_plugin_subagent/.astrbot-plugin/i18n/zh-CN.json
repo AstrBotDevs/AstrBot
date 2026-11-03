@@ -1,0 +1,7 @@
+{
+  "metadata": {
+    "display_name": "子代理",
+    "desc": "创建专家模板、异步委派任务、追加指令和查看执行进度。"
+  },
+  "views": { "runtime": { "title": "子代理管理" } }
+}

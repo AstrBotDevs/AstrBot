@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Subagent</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div class="dashboard-shell">
+      <header class="dashboard-header">
+        <div>
+          <h1 data-i18n="title">子代理</h1>
+          <p class="subtitle" data-i18n="description">
+            配置专家模板，查看任务执行进度。
+          </p>
+        </div>
+        <div class="actions">
+          <button id="refresh" class="button text" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M17.7 6.3A8 8 0 1 0 20 12h-2a6 6 0 1 1-1.8-4.3L13 11h8V3z"
+              /></svg
+            ><span data-i18n="refresh">刷新</span>
+          </button>
+          <button id="create" class="button tonal" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z" /></svg
+            ><span data-i18n="create">创建专家</span>
+          </button>
+        </div>
+      </header>
+      <nav
+        class="tabs"
+        role="tablist"
+        aria-label="子代理"
+        data-i18n-aria="title"
+      >
+        <button
+          id="tab-experts"
+          type="button"
+          role="tab"
+          aria-selected="true"
+          aria-controls="panel-experts"
+          data-i18n="experts"
+        >
+          专家模板
+        </button>
+        <button
+          id="tab-progress"
+          type="button"
+          role="tab"
+          tabindex="-1"
+          aria-selected="false"
+          aria-controls="panel-progress"
+          data-i18n="progress"
+        >
+          执行进度
+        </button>
+      </nav>
+      <p id="error" class="alert error" role="alert" hidden></p>
+      <p id="notice" class="alert success" role="status" hidden></p>
+      <main>
+        <section
+          id="panel-experts"
+          role="tabpanel"
+          aria-labelledby="tab-experts"
+        >
+          <div class="section-head">
+            <div>
+              <h2 data-i18n="experts">专家模板</h2>
+              <p class="subtitle" data-i18n="expertHint">
+                主 Agent 可以按任务选择专家，使用对应的人格、模型和工具。
+              </p>
+            </div>
+            <span id="expert-count" class="badge"></span>
+          </div>
+          <div id="experts" class="expert-grid" aria-live="polite"></div>
+        </section>
+        <section
+          id="panel-progress"
+          role="tabpanel"
+          aria-labelledby="tab-progress"
+          hidden
+        >
+          <div class="section-head">
+            <div>
+              <h2 data-i18n="progress">执行进度</h2>
+              <p class="subtitle" data-i18n="progressHint">
+                查看委派任务和执行记录。追加指令或取消任务，请通过主 Agent
+                操作。
+              </p>
+            </div>
+          </div>
+          <div class="progress-grid">
+            <section class="card padded">
+              <h3 id="workers-label" data-i18n="workers">子代理</h3>
+              <div id="workers" aria-live="polite"></div>
+            </section>
+            <section class="card padded">
+              <h3 id="detail-label" data-i18n="detail">执行记录</h3>
+              <div id="detail"></div>
+            </section>
+          </div>
+          <footer id="updated" aria-live="polite"></footer>
+        </section>
+      </main>
+    </div>
+    <dialog id="editor" aria-labelledby="editor-title">
+      <form id="expert-form" novalidate>
+        <div class="dialog-header">
+          <h2 id="editor-title">创建专家</h2>
+          <button
+            id="close-editor"
+            class="button icon"
+            type="button"
+            aria-label="关闭"
+            data-i18n-aria="close"
+          >
+            ×
+          </button>
+        </div>
+        <div class="dialog-body">
+          <p id="form-error" class="alert error" role="alert" hidden></p>
+          <div class="form-grid">
+            <label class="field"
+              ><span data-i18n="name">名称</span
+              ><input
+                id="expert-name"
+                name="name"
+                required
+                maxlength="64"
+                pattern="[a-z][a-z0-9_]{0,63}"
+                autocomplete="off"
+                placeholder="researcher"
+              /><small data-i18n="nameHint"
+                >使用小写字母开头，可包含数字和下划线。</small
+              ></label
+            >
+            <label class="field"
+              ><span data-i18n="provider">模型提供商</span
+              ><select id="expert-provider"></select
+              ><small data-i18n="providerHint"
+                >留空时跟随主 Agent 当前使用的模型。</small
+              ></label
+            >
+            <label class="field span-2"
+              ><span data-i18n="summary">用途说明</span
+              ><textarea
+                id="expert-description"
+                rows="2"
+                data-i18n-placeholder="summaryPlaceholder"
+                placeholder="描述专家擅长的任务，帮助主 Agent 选择。"
+              ></textarea>
+            </label>
+            <label class="field span-2"
+              ><span data-i18n="persona">人格</span
+              ><select id="expert-persona"></select
+              ><small data-i18n="personaHint"
+                >选择人格后，提示词和工具继承人格配置。</small
+              ></label
+            >
+            <label class="field span-2"
+              ><span data-i18n="prompt">系统提示词</span
+              ><textarea
+                id="expert-prompt"
+                rows="6"
+                data-i18n-placeholder="promptPlaceholder"
+                placeholder="说明专家的职责、约束和输出要求。"
+              ></textarea>
+            </label>
+            <section class="field span-2">
+              <label for="expert-tool-mode" data-i18n="tools">工具</label
+              ><select id="expert-tool-mode">
+                <option value="custom" data-i18n="toolsCustom">选择工具</option>
+                <option value="all" data-i18n="toolsAll">全部可用工具</option>
+                <option value="none" data-i18n="toolsNone">
+                  不使用工具
+                </option></select
+              ><small id="tool-hint" data-i18n="toolHint"
+                >子代理只使用已启用且有权限的工具。</small
+              >
+              <div id="tool-picker">
+                <input
+                  id="tool-search"
+                  type="search"
+                  aria-label="搜索工具"
+                  data-i18n-placeholder="searchTools"
+                  data-i18n-aria="searchTools"
+                  placeholder="搜索工具"
+                />
+                <div id="tool-options" class="tool-options"></div>
+              </div>
+              <p id="inherited-tools" class="inherited" hidden></p>
+            </section>
+            <label class="switch-row span-2"
+              ><span
+                ><strong data-i18n="enabled">启用专家</strong
+                ><small data-i18n="enabledHint"
+                  >启用后，主 Agent 可通过 spawn_agent 选择此模板。</small
+                ></span
+              ><input id="expert-enabled" type="checkbox" role="switch" checked
+            /></label>
+          </div>
+        </div>
+        <div class="dialog-footer">
+          <button
+            id="cancel-editor"
+            class="button text"
+            type="button"
+            data-i18n="cancel"
+          >
+            取消</button
+          ><button
+            id="save-expert"
+            class="button tonal"
+            type="submit"
+            data-i18n="save"
+          >
+            保存专家
+          </button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="delete-dialog" aria-labelledby="delete-title">
+      <div class="dialog-header">
+        <h2 id="delete-title" data-i18n="deleteTitle">删除专家</h2>
+      </div>
+      <div class="dialog-body">
+        <p id="delete-message"></p>
+        <p class="subtitle" data-i18n="deleteHint">
+          已经启动的任务会继续执行。
+        </p>
+      </div>
+      <div class="dialog-footer">
+        <button
+          id="cancel-delete"
+          class="button text"
+          type="button"
+          data-i18n="cancel"
+        >
+          取消</button
+        ><button
+          id="confirm-delete"
+          class="button danger"
+          type="button"
+          data-i18n="delete"
+        >
+          删除
+        </button>
+      </div>
+    </dialog>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

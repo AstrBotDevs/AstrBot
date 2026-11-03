@@ -31,7 +31,6 @@ import jaJPKnowledgeBaseDetail from './features/knowledge-base/detail.json';
 import jaJPKnowledgeBaseDocument from './features/knowledge-base/document.json';
 import jaJPPersona from './features/persona.json';
 import jaJPCommand from './features/command.json';
-import jaJPSubagent from './features/subagent.json';
 import jaJPWelcome from './features/welcome.json';
 import jaJPErrors from './messages/errors.json';
 import jaJPSuccess from './messages/success.json';
@@ -77,7 +76,6 @@ export default {
       },
       persona: jaJPPersona,
       command: jaJPCommand,
-      subagent: jaJPSubagent,
       welcome: jaJPWelcome
     },
     messages: {

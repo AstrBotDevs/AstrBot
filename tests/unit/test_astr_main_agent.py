@@ -24,7 +24,6 @@ from astrbot.core.astr_main_agent import persona as persona_build
 from astrbot.core.astr_main_agent import plugins as plugins_build
 from astrbot.core.astr_main_agent import providers as providers_build
 from astrbot.core.astr_main_agent import request as request_build
-from astrbot.core.astr_main_agent import subagent as subagent_build
 from astrbot.core.astr_main_agent import web_search as web_search_build
 from astrbot.core.astr_main_agent import workspace as workspace_build
 from astrbot.core.config.agent_runner import resolve_context_compression_config
@@ -48,7 +47,6 @@ from astrbot.core.utils.active_event_registry import active_event_registry
 async def _apply_persona_capabilities(req, cfg, context, event):
     """Exercise persona selection together with the registered-tool policy."""
     await persona_build.apply_persona(req, cfg, context, event)
-    subagent_build.apply_subagents(req, context)
 
 
 @pytest.fixture
@@ -1673,10 +1671,10 @@ class TestEnsurePersonaAndSkills:
         )
 
     @pytest.mark.asyncio
-    async def test_subagent_dedupe_uses_default_persona_tools(
+    async def test_legacy_plugin_experts_are_not_mounted_by_main(
         self, mock_event, mock_context
     ):
-        """Test dedupe uses resolved default persona tools in subagent mode."""
+        """The plugin compatibility entry does not activate native main routing."""
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
             return_value=(None, None, None, False)
         )
@@ -1709,6 +1707,7 @@ class TestEnsurePersonaAndSkills:
             "subagent_orchestrator": {
                 "main_enable": True,
                 "remove_main_duplicate_tools": True,
+                "router_system_prompt": "Legacy expert routing.",
                 "agents": [
                     {
                         "name": "planner",
@@ -1725,9 +1724,11 @@ class TestEnsurePersonaAndSkills:
         await _apply_persona_capabilities(req, {}, mock_context, mock_event)
 
         assert req.func_tool is not None
-        assert "transfer_to_planner" in req.func_tool.names()
-        assert "tool_a" not in req.func_tool.names()
+        assert "transfer_to_planner" not in req.func_tool.names()
+        assert mock_context.subagent_orchestrator.handoffs == [handoff]
+        assert "tool_a" in req.func_tool.names()
         assert "tool_b" in req.func_tool.names()
+        assert "Legacy expert routing." not in req.system_prompt
 
 
 @pytest.mark.parametrize(
@@ -3640,10 +3641,9 @@ async def test_feature_composition_preserves_tool_scope_and_instruction_order(
         )
     assert result is not None
     names = req.func_tool.names()
-    assert names[:3] == ["caller", "kept", "transfer_to_worker"]
-    assert not {"delegated", "disabled_plugin", "send_message_to_user"}.intersection(
-        names
-    )
+    assert names[:4] == ["caller", "send_message_to_user", "kept", "delegated"]
+    assert not {"disabled_plugin", "transfer_to_worker"}.intersection(names)
+    assert "Router marker" not in req.system_prompt
     assert {
         "web_search_tavily",
         "astrbot_execute_shell",
@@ -3668,7 +3668,6 @@ async def test_feature_composition_preserves_tool_scope_and_instruction_order(
         "<skills_instructions>",
         "**selected-skill**",
         "</skills_instructions>",
-        "Router marker",
         "Workspace marker",
         "Local computer tools are available"
         if runtime == "local"

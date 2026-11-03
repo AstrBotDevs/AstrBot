@@ -38,7 +38,6 @@ from . import (
     plugins,
     providers,
     request,
-    subagent,
     web_search,
     workspace,
 )
@@ -67,8 +66,7 @@ async def build_main_agent(
     Args:
         event: Triggering event, including session identity and permissions.
         plugin_context: Provider, conversation, persona, and tool services.
-        config: Resolved session settings. Global subagent policy is read live
-            alongside the shared orchestrator.
+        config: Resolved session settings.
         provider: Explicit model, or None to select the session's model.
         req: Explicit request, or None to collect input from the event.
 
@@ -90,14 +88,13 @@ async def build_main_agent(
         return None
     req = prepared.request
 
-    # Seed caller capabilities before persona selection and subagent deduplication.
+    # Seed caller capabilities before persona selection.
     tool_mgr = plugin_context.get_llm_tool_manager()
     if config.enable_message_delivery:
         if req.func_tool is None:
             req.func_tool = ToolSet()
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(SendMessageToUserTool))
     await persona.apply_persona(req, config.provider_settings, plugin_context, event)
-    subagent.apply_subagents(req, plugin_context)
 
     # Add session context before capability instructions.
     request.append_system_reminders(

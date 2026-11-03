@@ -31,7 +31,6 @@ import enUSKnowledgeBaseDetail from './features/knowledge-base/detail.json';
 import enUSKnowledgeBaseDocument from './features/knowledge-base/document.json';
 import enUSPersona from './features/persona.json';
 import enUSCommand from './features/command.json';
-import enUSSubagent from './features/subagent.json';
 import enUSWelcome from './features/welcome.json';
 import enUSErrors from './messages/errors.json';
 import enUSSuccess from './messages/success.json';
@@ -77,7 +76,6 @@ export default {
       },
       persona: enUSPersona,
       command: enUSCommand,
-      subagent: enUSSubagent,
       welcome: enUSWelcome
     },
     messages: {

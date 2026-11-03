@@ -90,6 +90,16 @@ class StarHandlerRegistry(Generic[T]):
     @overload
     def get_handlers_by_event_type(
         self,
+        event_type: Literal[
+            EventType.OnAgentStepStartEvent, EventType.OnAgentStepEndEvent
+        ],
+        only_activated=True,
+        plugins_name: list[str] | None = None,
+    ) -> list[StarHandlerMetadata[Callable[..., Awaitable[Any]]]]: ...
+
+    @overload
+    def get_handlers_by_event_type(
+        self,
         event_type: Literal[EventType.OnDecoratingResultEvent],
         only_activated=True,
         plugins_name: list[str] | None = None,
@@ -231,6 +241,8 @@ class EventType(enum.Enum):
     OnLLMResponseEvent = enum.auto()  # LLM 响应后
     OnAgentBeginEvent = enum.auto()  # Agent 开始运行
     OnAgentDoneEvent = enum.auto()  # Agent 运行完成
+    OnAgentStepStartEvent = enum.auto()  # Before a complete Agent step
+    OnAgentStepEndEvent = enum.auto()  # After all step messages are assembled
     OnDecoratingResultEvent = enum.auto()  # 发送消息前
     OnCallingFuncToolEvent = enum.auto()  # 调用函数工具
     OnUsingLLMToolEvent = enum.auto()  # 使用 LLM 工具

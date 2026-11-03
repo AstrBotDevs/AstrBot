@@ -12,7 +12,6 @@
     "logs": "ログ",
     "trace": "トレース"
   },
-  "subagent": "サブエージェント編成",
   "toolUse": "MCP",
   "extension": "プラグイン",
   "extensionTabs": {

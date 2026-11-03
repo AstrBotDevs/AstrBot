@@ -154,7 +154,9 @@ def harness(tmp_path, monkeypatch):
     monkeypatch.setattr(internal, "try_capture_follow_up", lambda event: None)
     monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
     monkeypatch.setattr(internal.Metric, "upload", AsyncMock())
-    monkeypatch.setattr(knowledge_base_build, "retrieve_knowledge_base", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        knowledge_base_build, "retrieve_knowledge_base", AsyncMock(return_value=None)
+    )
     from astrbot.core.pipeline.process_stage.method.agent_request import (
         SessionServiceManager,
     )
@@ -397,8 +399,8 @@ async def test_profile_reload_and_concurrent_requests(harness, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_subagent_hot_reload_reuses_initialized_stage(harness):
-    """Apply live routing and deduplication changes without reinitializing the stage.
+async def test_legacy_subagent_reload_does_not_mount_tools(harness):
+    """Keep legacy expert reloads independent of main-agent tool composition.
 
     Args:
         harness: Pipeline services and captured main-agent runs.
@@ -413,22 +415,18 @@ async def test_subagent_hot_reload_reuses_initialized_stage(harness):
     harness.context.persona_manager.get_persona_v3_by_id.return_value = None
     orchestrator = SubAgentOrchestrator(tool_mgr, harness.context.persona_manager)
     harness.context.subagent_orchestrator = orchestrator
-    harness.config["provider_settings"]["proactive_capability"]["add_cron_tools"] = False
+    harness.config["provider_settings"]["proactive_capability"]["add_cron_tools"] = (
+        False
+    )
     stage = None
     previous_router = None
 
-    for enabled, dedupe, assigned, router, expected in [
-        (False, True, "tool_a", "Router initial", ["tool_a", "tool_b"]),
-        (True, True, "tool_a", "Router enabled", ["tool_b", "transfer_to_worker"]),
-        (True, True, "tool_b", "Router reassigned", ["tool_a", "transfer_to_worker"]),
-        (
-            True,
-            False,
-            "tool_b",
-            "Router shared",
-            ["tool_a", "tool_b", "transfer_to_worker"],
-        ),
-        (False, False, "tool_b", "Router disabled", ["tool_a", "tool_b"]),
+    for enabled, dedupe, assigned, router in [
+        (False, True, "tool_a", "Router initial"),
+        (True, True, "tool_a", "Router enabled"),
+        (True, True, "tool_b", "Router reassigned"),
+        (True, False, "tool_b", "Router shared"),
+        (False, False, "tool_b", "Router disabled"),
     ]:
         config = {
             "main_enable": enabled,
@@ -436,15 +434,15 @@ async def test_subagent_hot_reload_reuses_initialized_stage(harness):
             "router_system_prompt": router,
             "agents": [{"name": "worker", "tools": [assigned]}],
         }
-        # The dashboard replaces the global policy and reloads only the orchestrator.
+        # Legacy SDK callers can reload experts without changing main's tools.
         harness.config["subagent_orchestrator"] = config
         await orchestrator.reload_from_config(config)
         event = make_event()
         event.platform_meta.support_proactive_message = False
         stage = await process_event(harness, event, stage=stage)
         req = harness.captured[-1].req
-        assert req.func_tool.names() == expected
-        assert (router in req.system_prompt) is enabled
+        assert req.func_tool.names() == ["tool_a", "tool_b"]
+        assert router not in req.system_prompt
         if previous_router:
             assert previous_router not in req.system_prompt
         previous_router = router
@@ -453,10 +451,10 @@ async def test_subagent_hot_reload_reuses_initialized_stage(harness):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("global_enabled", [False, True])
 @pytest.mark.parametrize("session_enabled", [False, True])
-async def test_subagent_uses_global_policy_for_session_profile(
+async def test_legacy_subagent_policy_does_not_override_session_profile(
     harness, global_enabled, session_enabled
 ):
-    """Keep routing policy in the same configuration scope as actual handoffs.
+    """Keep legacy routing configuration out of native main-agent composition.
 
     Args:
         harness: Pipeline services and captured main-agent runs.
@@ -473,7 +471,9 @@ async def test_subagent_uses_global_policy_for_session_profile(
     harness.context.persona_manager.get_persona_v3_by_id.return_value = None
     orchestrator = SubAgentOrchestrator(tool_mgr, harness.context.persona_manager)
     harness.context.subagent_orchestrator = orchestrator
-    harness.config["provider_settings"]["proactive_capability"]["add_cron_tools"] = False
+    harness.config["provider_settings"]["proactive_capability"]["add_cron_tools"] = (
+        False
+    )
     harness.config["subagent_orchestrator"] = {
         "main_enable": global_enabled,
         "remove_main_duplicate_tools": True,
@@ -489,8 +489,8 @@ async def test_subagent_uses_global_policy_for_session_profile(
         "router_system_prompt": "Session router",
         "agents": [{"name": "session_worker", "tools": ["session_tool"]}],
     }
-    harness.context.get_config.side_effect = (
-        lambda umo=None: harness.config if umo is None else session_config
+    harness.context.get_config.side_effect = lambda umo=None: (
+        harness.config if umo is None else session_config
     )
     stage = ProcessStage()
     await stage.initialize(
@@ -504,13 +504,8 @@ async def test_subagent_uses_global_policy_for_session_profile(
     await process_event(harness, event, stage=stage)
 
     req = harness.captured[-1].req
-    expected = (
-        ["session_tool", "transfer_to_global_worker"]
-        if global_enabled
-        else ["global_tool", "session_tool"]
-    )
-    assert req.func_tool.names() == expected
-    assert ("Global router" in req.system_prompt) is global_enabled
+    assert req.func_tool.names() == ["global_tool", "session_tool"]
+    assert "Global router" not in req.system_prompt
     assert "Session router" not in req.system_prompt
     assert req.prompt == "Session: hello"
 
@@ -819,15 +814,15 @@ async def test_unresolved_image_ref_is_reported_not_faked(harness, origin):
     if origin == "component":
         event.message_obj.message = [Image(file=ref)]
     else:
-        event.set_extra("provider_request", ProviderRequest(prompt="", image_urls=[ref]))
+        event.set_extra(
+            "provider_request", ProviderRequest(prompt="", image_urls=[ref])
+        )
 
     await process_event(harness, event, preprocess_first=True)
 
     req = harness.captured[0].req
     payload = harness.provider.text_chat.await_args.kwargs["contexts"][-1]["content"]
-    joined = "\n".join(
-        part["text"] for part in payload if part["type"] == "text"
-    )
+    joined = "\n".join(part["text"] for part in payload if part["type"] == "text")
 
     assert req.image_urls == []
     assert str(Path(ref).resolve()) not in joined
@@ -1004,7 +999,9 @@ async def test_non_image_and_disabled_ai_do_not_prepare(harness, tmp_path, monke
 
 def test_image_preparation_stays_outside_agent_runner_and_providers():
     root = Path(__file__).parents[1] / "astrbot" / "core"
-    paths = list((root / "astr_main_agent").glob("*.py")) + [root / "astr_agent_tool_exec.py"]
+    paths = list((root / "astr_main_agent").glob("*.py")) + [
+        root / "astr_agent_tool_exec.py"
+    ]
     paths += list((root / "agent").rglob("*.py")) + list(
         (root / "provider").rglob("*.py")
     )
