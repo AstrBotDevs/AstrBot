@@ -279,6 +279,7 @@
     "scopes": "权限范围",
     "sensitiveSubscope": "敏感子权限",
     "chatAdminWarning": "chat:admin 允许 API Key 使用已配置的管理员 ID，并执行管理员操作。请仅授予完全可信的调用方。",
+    "kbWarning": "kb 权限允许读取、导入、修改和删除所有知识库、文档及文本块。请仅授予可信任的调用方。撤销密钥无法撤回此前的数据访问或恢复已删除数据。",
     "createConfirm": "确认创建具有以下权限的 API Key 吗？\n\n{scopes}",
     "sensitiveCreateConfirm": "即将创建包含以下高风险权限的 API Key：\n\n{scopes}\n\n持有者可能获得管理员能力。确认继续吗？",
     "scopeDescriptions": {
@@ -292,6 +293,7 @@
       "chatAdmin": "允许 username 使用配置中的管理员 ID，并获得对应的管理员权限。",
       "data": "访问统计信息和运行数据。",
       "file": "上传和访问 API 文件。",
+      "kb": "管理知识库、文档、文本块、导入和检索。",
       "plugin": "读取和管理插件。",
       "mcp": "读取和管理 MCP 服务。",
       "skill": "读取和管理技能。"

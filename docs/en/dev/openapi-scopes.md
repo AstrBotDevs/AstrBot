@@ -217,6 +217,29 @@ Upload and download chat attachments.
 | `DELETE` | `/api/v1/files/{attachment_id}` | — |
 | `GET` | `/api/v1/files/{attachment_id}/content` | — |
 
+## `kb`
+
+Full knowledge-base access, including reading, importing, modifying, deleting, and retrieval. Requires an explicit kb grant; default and wildcard-only keys are denied. Revocation cannot undo prior access or deletion.
+
+| Method | Endpoint | Conditional sensitive sub-scope |
+| --- | --- | --- |
+| `GET` | `/api/v1/knowledge-bases` | — |
+| `POST` | `/api/v1/knowledge-bases` | — |
+| `GET` | `/api/v1/knowledge-bases/tasks/{task_id}` | — |
+| `GET` | `/api/v1/knowledge-bases/{kb_id}` | — |
+| `PUT` | `/api/v1/knowledge-bases/{kb_id}` | — |
+| `DELETE` | `/api/v1/knowledge-bases/{kb_id}` | — |
+| `GET` | `/api/v1/knowledge-bases/{kb_id}/chunks` | — |
+| `DELETE` | `/api/v1/knowledge-bases/{kb_id}/chunks/{chunk_id}` | — |
+| `GET` | `/api/v1/knowledge-bases/{kb_id}/documents` | — |
+| `POST` | `/api/v1/knowledge-bases/{kb_id}/documents` | — |
+| `POST` | `/api/v1/knowledge-bases/{kb_id}/documents/import` | — |
+| `POST` | `/api/v1/knowledge-bases/{kb_id}/documents/import-url` | — |
+| `GET` | `/api/v1/knowledge-bases/{kb_id}/documents/{document_id}` | — |
+| `DELETE` | `/api/v1/knowledge-bases/{kb_id}/documents/{document_id}` | — |
+| `POST` | `/api/v1/knowledge-bases/{kb_id}/retrieve` | — |
+| `GET` | `/api/v1/knowledge-bases/{kb_id}/stats` | — |
+
 ## `plugin`
 
 Manage plugins, plugin configuration, plugin sources, and marketplace data.

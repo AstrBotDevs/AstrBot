@@ -3,7 +3,7 @@
   "info": {
     "title": "AstrBot OpenAPI v1",
     "version": "0.1.0",
-    "description": "Target REST contract for migrating AstrBot HTTP APIs to /api/v1. Dynamic AstrBot configuration payloads are intentionally modeled as open JSON objects because their schemas are provided at runtime by template endpoints. Developer API keys currently support these scopes only: bot, provider, persona, im, config, chat, data, file, plugin, mcp, skill, plus the sensitive config:edit_admin and chat:admin sub-scopes. The config scope also grants bot and provider access, but no parent scope grants a sensitive sub-scope.\n"
+    "description": "Target REST contract for migrating AstrBot HTTP APIs to /api/v1. Dynamic AstrBot configuration payloads are intentionally modeled as open JSON objects because their schemas are provided at runtime by template endpoints. Developer API keys currently support these scopes only: bot, provider, persona, im, config, chat, data, file, kb, plugin, mcp, skill, plus the sensitive config:edit_admin and chat:admin sub-scopes. The config scope also grants bot and provider access, but no parent scope grants a sensitive sub-scope. The kb scope requires an explicit grant and is not included in default permissions or implied by stored wildcard permissions.\n"
   },
   "x-astrbot-scope-definitions": {
     "bot": {
@@ -53,6 +53,10 @@
     "file": {
       "description": "Upload and download chat attachments.",
       "description_zh": "上传和下载对话附件。"
+    },
+    "kb": {
+      "description": "Full knowledge-base access, including reading, importing, modifying, deleting, and retrieval. Requires an explicit kb grant; default and wildcard-only keys are denied. Revocation cannot undo prior access or deletion.",
+      "description_zh": "完整的知识库访问权限，包括读取、导入、修改、删除和检索。必须显式授予 kb，默认权限及仅有通配符权限的密钥无法访问。撤销密钥无法撤回此前的访问或恢复已删除数据。"
     },
     "plugin": {
       "description": "Manage plugins, plugin configuration, plugin sources, and marketplace data.",
@@ -123,6 +127,9 @@
     },
     {
       "name": "Skills"
+    },
+    {
+      "name": "Knowledge Base"
     },
     {
       "name": "Personas"
@@ -5688,6 +5695,442 @@
         "description": "**Required scope:** `skill`"
       }
     },
+    "/api/v1/knowledge-bases": {
+      "get": {
+        "tags": [
+          "Knowledge Base"
+        ],
+        "summary": "List knowledge bases",
+        "operationId": "listKnowledgeBases",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "name": "refresh_stats",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `kb`"
+      },
+      "post": {
+        "tags": [
+          "Knowledge Base"
+        ],
+        "summary": "Create a knowledge base",
+        "operationId": "createKnowledgeBase",
+        "x-astrbot-scope": "kb",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeBaseCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `kb`"
+      }
+    },
+    "/api/v1/knowledge-bases/{kb_id}": {
+      "get": {
+        "tags": [
+          "Knowledge Base"
+        ],
+        "summary": "Get a knowledge base",
+        "operationId": "getKnowledgeBase",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `kb`"
+      },
+      "put": {
+        "tags": [
+          "Knowledge Base"
+        ],
+        "summary": "Update a knowledge base",
+        "operationId": "updateKnowledgeBase",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeBaseRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `kb`"
+      },
+      "delete": {
+        "tags": [
+          "Knowledge Base"
+        ],
+        "summary": "Delete a knowledge base",
+        "operationId": "deleteKnowledgeBase",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `kb`"
+      }
+    },
+    "/api/v1/knowledge-bases/{kb_id}/stats": {
+      "get": {
+        "tags": [
+          "Knowledge Base"
+        ],
+        "summary": "Get knowledge base stats",
+        "operationId": "getKnowledgeBaseStats",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `kb`"
+      }
+    },
+    "/api/v1/knowledge-bases/{kb_id}/documents": {
+      "get": {
+        "tags": [
+          "Knowledge Base"
+        ],
+        "summary": "List knowledge base documents",
+        "operationId": "listKnowledgeDocuments",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter documents by name (case-insensitive partial match)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `kb`"
+      },
+      "post": {
+        "tags": [
+          "Knowledge Base"
+        ],
+        "summary": "Upload a document to a knowledge base",
+        "operationId": "uploadKnowledgeDocument",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeDocumentUploadRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `kb`"
+      }
+    },
+    "/api/v1/knowledge-bases/{kb_id}/documents/import": {
+      "post": {
+        "tags": [
+          "Knowledge Base"
+        ],
+        "summary": "Import documents already available on the server",
+        "operationId": "importKnowledgeDocuments",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeDocumentImportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `kb`"
+      }
+    },
+    "/api/v1/knowledge-bases/{kb_id}/documents/import-url": {
+      "post": {
+        "tags": [
+          "Knowledge Base"
+        ],
+        "summary": "Import a document from URL",
+        "operationId": "importKnowledgeDocumentFromUrl",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeDocumentUrlImportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `kb`"
+      }
+    },
+    "/api/v1/knowledge-bases/{kb_id}/documents/{document_id}": {
+      "get": {
+        "tags": [
+          "Knowledge Base"
+        ],
+        "summary": "Get a knowledge base document",
+        "operationId": "getKnowledgeDocument",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          },
+          {
+            "$ref": "#/components/parameters/DocumentId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `kb`"
+      },
+      "delete": {
+        "tags": [
+          "Knowledge Base"
+        ],
+        "summary": "Delete a knowledge base document",
+        "operationId": "deleteKnowledgeDocument",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          },
+          {
+            "$ref": "#/components/parameters/DocumentId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `kb`"
+      }
+    },
+    "/api/v1/knowledge-bases/{kb_id}/chunks": {
+      "get": {
+        "tags": [
+          "Knowledge Base"
+        ],
+        "summary": "List document chunks",
+        "operationId": "listKnowledgeChunks",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          },
+          {
+            "name": "document_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `kb`"
+      }
+    },
+    "/api/v1/knowledge-bases/{kb_id}/chunks/{chunk_id}": {
+      "delete": {
+        "tags": [
+          "Knowledge Base"
+        ],
+        "summary": "Delete a document chunk",
+        "operationId": "deleteKnowledgeChunk",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          },
+          {
+            "$ref": "#/components/parameters/ChunkId"
+          },
+          {
+            "name": "document_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `kb`"
+      }
+    },
+    "/api/v1/knowledge-bases/{kb_id}/retrieve": {
+      "post": {
+        "tags": [
+          "Knowledge Base"
+        ],
+        "summary": "Retrieve knowledge base chunks",
+        "operationId": "retrieveKnowledgeBase",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeRetrieveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `kb`"
+      }
+    },
+    "/api/v1/knowledge-bases/tasks/{task_id}": {
+      "get": {
+        "tags": [
+          "Knowledge Base"
+        ],
+        "summary": "Get knowledge base import task progress",
+        "operationId": "getKnowledgeTask",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TaskId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `kb`"
+      }
+    },
     "/api/v1/personas/tree": {
       "get": {
         "tags": [
@@ -7052,6 +7495,14 @@
           "type": "string"
         }
       },
+      "ChunkId": {
+        "name": "chunk_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
       "ConfigId": {
         "name": "config_id",
         "in": "path",
@@ -7062,6 +7513,14 @@
       },
       "ConversationId": {
         "name": "conversation_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "DocumentId": {
+        "name": "document_id",
         "in": "path",
         "required": true,
         "schema": {
@@ -7087,6 +7546,14 @@
       },
       "GroupId": {
         "name": "group_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "KbId": {
+        "name": "kb_id",
         "in": "path",
         "required": true,
         "schema": {
@@ -7170,6 +7637,14 @@
       },
       "SourceId": {
         "name": "source_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "TaskId": {
+        "name": "task_id",
         "in": "path",
         "required": true,
         "schema": {
@@ -8037,6 +8512,135 @@
           }
         },
         "additionalProperties": true
+      },
+      "KnowledgeBaseRequest": {
+        "type": "object",
+        "properties": {
+          "kb_name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "emoji": {
+            "type": "string"
+          },
+          "embedding_provider_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rerank_provider_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "chunk_size": {
+            "type": "integer"
+          },
+          "chunk_overlap": {
+            "type": "integer"
+          },
+          "top_k_dense": {
+            "type": "integer"
+          },
+          "top_k_sparse": {
+            "type": "integer"
+          },
+          "top_m_final": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false
+      },
+      "KnowledgeBaseCreateRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/KnowledgeBaseRequest"
+          },
+          {
+            "type": "object",
+            "required": [
+              "kb_name",
+              "embedding_provider_id"
+            ],
+            "properties": {
+              "kb_name": {
+                "type": "string"
+              },
+              "embedding_provider_id": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "KnowledgeDocumentUploadRequest": {
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary"
+          }
+        }
+      },
+      "KnowledgeDocumentImportRequest": {
+        "type": "object",
+        "required": [
+          "paths"
+        ],
+        "properties": {
+          "paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "parser": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "KnowledgeDocumentUrlImportRequest": {
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "parser": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "KnowledgeRetrieveRequest": {
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "properties": {
+          "query": {
+            "type": "string"
+          },
+          "top_k": {
+            "type": "integer",
+            "default": 5
+          },
+          "score_threshold": {
+            "type": "number"
+          }
+        },
+        "additionalProperties": false
       },
       "PersonaRequest": {
         "type": "object",
