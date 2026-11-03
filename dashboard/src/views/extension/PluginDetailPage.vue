@@ -40,8 +40,8 @@ const { locale } = useI18n();
 const {
   pluginName,
   pluginDesc: resolvePluginDesc,
-  pluginPageTitle,
-  pluginPageDescription,
+  pluginViewTitle,
+  pluginViewDescription,
 } = usePluginI18n();
 
 const markdown = new MarkdownIt({
@@ -463,7 +463,7 @@ const getHandlerCommand = (handler) =>
 
 const getHandlerDisplayName = (handler, groupKey) => {
   if (groupKey === "page") {
-    return pluginPageTitle(
+    return pluginViewTitle(
       pluginData.value,
       handler,
       handler?.title ||
@@ -501,7 +501,7 @@ const getComponentDescription = (component) => {
     component?.description || component?.desc || tm("status.unknown");
   if (getComponentGroupKey(component) === "page") {
     return String(
-      pluginPageDescription(pluginData.value, component, fallback),
+      pluginViewDescription(pluginData.value, component, fallback),
     ).trim();
   }
   return String(fallback).trim();
@@ -512,7 +512,7 @@ const openComponentPage = (component) => {
   const targetPageName = component?.page_name || component?.name;
   if (!targetPluginName || !targetPageName) return;
   router.push({
-    name: "PluginPage",
+    name: "PluginView",
     params: {
       pluginName: targetPluginName,
       pageName: targetPageName,

@@ -13,6 +13,8 @@ async def _stream_sse(resp: ClientResponse) -> AsyncGenerator[dict, None]:
     buffer = ""
     async for chunk in resp.content.iter_chunked(8192):
         buffer += decoder.decode(chunk)
+        # Normalize after buffering so CRLF split across chunks is recognized.
+        buffer = buffer.replace("\r\n", "\n")
         while "\n\n" in buffer:
             block, buffer = buffer.split("\n\n", 1)
             if block.strip().startswith("data:"):

@@ -21,16 +21,25 @@ from lark_oapi.api.im.v1 import (
     CreateMessageReactionRequestBody,
     Emoji,
     GetChatMembersRequest,
-    GetChatRequest,
     ReplyMessageRequest,
     ReplyMessageRequestBody,
 )
 
 from astrbot import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import At, File, Json, Plain, Record, Video
+from astrbot.api.message_components import (
+    ActionRow,
+    At,
+    Button,
+    File,
+    Json,
+    Plain,
+    Record,
+    Video,
+)
 from astrbot.api.message_components import Image as AstrBotImage
 from astrbot.api.platform import Group, MessageMember
+from astrbot.core.platform.button_interaction import encode_button_callback
 from astrbot.core.utils.media_utils import (
     MediaResolver,
     convert_audio_to_opus,
@@ -38,6 +47,8 @@ from astrbot.core.utils.media_utils import (
     get_media_duration,
 )
 from astrbot.core.utils.metrics import Metric
+
+from .lark_group_info import get_lark_group
 
 
 class LarkMessageEvent(AstrMessageEvent):
@@ -57,7 +68,7 @@ class LarkMessageEvent(AstrMessageEvent):
         group_id: str | None = None,
         **kwargs,
     ) -> Group | None:
-        """Get Lark chat details and members.
+        """Get cached Lark chat details and fetch its current members.
 
         Args:
             group_id: Chat ID to query. Defaults to the current chat ID.
@@ -78,56 +89,11 @@ class LarkMessageEvent(AstrMessageEvent):
         ):
             basic_group = self.message_obj.group
 
-        if self.bot.im is None:
-            logger.warning("[Lark] IM API is unavailable while getting chat details")
+        group = await get_lark_group(self.bot, basic_group)
+        if group is None:
             return basic_group
 
-        try:
-            request = (
-                GetChatRequest.builder()
-                .chat_id(resolved_group_id)
-                .user_id_type("open_id")
-                .build()
-            )
-            response = await self.bot.im.v1.chat.aget(request)
-        except Exception as exc:
-            logger.warning(
-                "[Lark] Failed to get chat details for %s: %s",
-                resolved_group_id,
-                exc,
-            )
-            return basic_group
-
-        if not response.success() or response.data is None:
-            logger.warning(
-                "[Lark] Failed to get chat details for %s (%s): %s",
-                resolved_group_id,
-                response.code,
-                response.msg,
-            )
-            return basic_group
-
-        chat_data = response.data
-        member_count = None
-        if chat_data.user_count is not None:
-            try:
-                member_count = int(chat_data.user_count)
-            except (TypeError, ValueError):
-                logger.warning(
-                    "[Lark] Chat %s returned an invalid user count: %r",
-                    resolved_group_id,
-                    chat_data.user_count,
-                )
-
-        group = Group(
-            group_id=resolved_group_id,
-            group_name=chat_data.name or basic_group.group_name,
-            group_avatar=chat_data.avatar or basic_group.group_avatar,
-            group_owner=chat_data.owner_id or basic_group.group_owner,
-            group_admins=list(chat_data.user_manager_id_list or []),
-            member_count=member_count,
-        )
-
+        group.members = None
         members: list[MessageMember] = []
         members_complete = False
         page_token: str | None = None
@@ -517,6 +483,92 @@ class LarkMessageEvent(AstrMessageEvent):
         )
 
     @staticmethod
+    def _build_button_card(
+        components: list[Plain | ActionRow],
+        message_type: str | None = None,
+    ) -> dict:
+        """Build a Card JSON 2.0 payload for portable buttons.
+
+        Args:
+            components: Plain text and button rows to render in order.
+            message_type: AstrBot message type used to restore click context.
+
+        Returns:
+            A Lark Card JSON 2.0 object.
+        """
+        style_map = {
+            Button.Style.DEFAULT: "default",
+            Button.Style.PRIMARY: "primary",
+            Button.Style.SUCCESS: "primary",
+            Button.Style.DANGER: "danger",
+        }
+        elements: list[dict] = []
+        for component in components:
+            if isinstance(component, Plain):
+                if component.text:
+                    elements.append({"tag": "markdown", "content": component.text})
+                continue
+
+            columns: list[dict] = []
+            for button in component.buttons:
+                lark_button = {
+                    "tag": "button",
+                    "type": style_map[button.style],
+                    "text": {
+                        "tag": "plain_text",
+                        "content": button.label,
+                    },
+                }
+                if isinstance(button.action, Button.CallbackAction):
+                    callback = encode_button_callback(
+                        button.id,
+                        button.action.data,
+                        expires_at=component.action_expires_at,
+                    )
+                    callback_value = {"astrbot_callback": callback}
+                    if message_type:
+                        callback_value["astrbot_message_type"] = message_type
+                    lark_button["behaviors"] = [
+                        {
+                            "type": "callback",
+                            "value": callback_value,
+                        }
+                    ]
+                elif isinstance(button.action, Button.UrlAction):
+                    lark_button["behaviors"] = [
+                        {
+                            "type": "open_url",
+                            "default_url": button.action.url,
+                        }
+                    ]
+
+                columns.append(
+                    {
+                        "tag": "column",
+                        "width": "auto",
+                        "vertical_align": "top",
+                        "elements": [lark_button],
+                    }
+                )
+
+            if columns:
+                elements.append(
+                    {
+                        "tag": "column_set",
+                        "flex_mode": "flow",
+                        "horizontal_spacing": "8px",
+                        "columns": columns,
+                    }
+                )
+
+        return {
+            "schema": "2.0",
+            "body": {
+                "elements": elements,
+            },
+        }
+
+    @staticmethod
     async def _send_interactive_card(
         card_json: dict,
         lark_client: lark.Client,
@@ -597,6 +649,7 @@ class LarkMessageEvent(AstrMessageEvent):
         reply_message_id: str | None = None,
         receive_id: str | None = None,
         receive_id_type: str | None = None,
+        message_type: str | None = None,
         fallback_chat_id: str | None = None,
     ) -> None:
         """Send each message component with an optional private chat fallback.
@@ -607,6 +660,7 @@ class LarkMessageEvent(AstrMessageEvent):
             reply_message_id: Message to reply to, when sending a reply.
             receive_id: Recipient for proactive messages.
             receive_id_type: Recipient ID type for proactive messages.
+            message_type: AstrBot message type embedded in callback context.
             fallback_chat_id: Known private chat to use if open ID is rejected.
 
         Raises:
@@ -656,6 +710,40 @@ class LarkMessageEvent(AstrMessageEvent):
                 fallback_chat_id=fallback_chat_id,
             ):
                 return
+
+        button_components = [
+            comp for comp in other_components if isinstance(comp, (Plain, ActionRow))
+        ]
+        action_rows = [
+            comp for comp in button_components if isinstance(comp, ActionRow)
+        ]
+        if action_rows:
+            other_components = [
+                comp
+                for comp in other_components
+                if not isinstance(comp, (Plain, ActionRow))
+            ]
+            card_json = LarkMessageEvent._build_button_card(
+                button_components,
+                message_type,
+            )
+            if not await LarkMessageEvent._send_interactive_card(
+                card_json,
+                lark_client=lark_client,
+                reply_message_id=reply_message_id,
+                receive_id=receive_id,
+                receive_id_type=receive_id_type,
+                fallback_chat_id=fallback_chat_id,
+            ):
+                for component in button_components:
+                    if isinstance(component, Plain):
+                        other_components.append(component)
+                        continue
+                    fallback = component.fallback_text or " / ".join(
+                        button.label for button in component.buttons
+                    )
+                    if fallback:
+                        other_components.append(Plain(fallback))
 
         # 先发送非文件内容（如果有）
         if other_components:
@@ -758,6 +846,7 @@ class LarkMessageEvent(AstrMessageEvent):
             message,
             self.bot,
             reply_message_id=self.message_obj.message_id,
+            message_type=self.message_obj.type.value,
         )
         await super().send(message)
 
