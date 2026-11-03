@@ -48,6 +48,7 @@
     "filterSource": "プロバイダーソースで絞り込む",
     "notSelected": "未選択",
     "defaultModel": "デフォルトモデル",
+    "defaultModelSubtitle": "選択した設定プロファイルのデフォルトモデルを使用",
     "model": "モデル",
     "searchPlaceholder": "モデルを検索",
     "buttonText": "プロバイダーを選択…",

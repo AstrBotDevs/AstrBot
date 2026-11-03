@@ -542,6 +542,7 @@ paths:
           required: true
           schema:
             type: string
+        - $ref: "#/components/parameters/BotCleanup"
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -624,6 +625,7 @@ paths:
       x-astrbot-scope: bot
       parameters:
         - $ref: "#/components/parameters/BotId"
+        - $ref: "#/components/parameters/BotCleanup"
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -1587,6 +1589,12 @@ paths:
           schema:
             type: string
             default: ""
+        - name: session_id
+          in: query
+          required: false
+          description: Optional for per-session workspaces; must belong to this project and user when provided. Omitted or empty values use the legacy default workspace.
+          schema:
+            type: string
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -1608,6 +1616,12 @@ paths:
           required: true
           schema:
             type: string
+        - name: session_id
+          in: query
+          required: false
+          description: Optional for per-session workspaces; must belong to this project and user when provided. Omitted or empty values use the legacy default workspace.
+          schema:
+            type: string
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -1627,6 +1641,12 @@ paths:
         - name: path
           in: query
           required: true
+          schema:
+            type: string
+        - name: session_id
+          in: query
+          required: false
+          description: Optional for per-session workspaces; must belong to this project and user when provided. Omitted or empty values use the legacy default workspace.
           schema:
             type: string
       responses:
@@ -4184,6 +4204,48 @@ paths:
       summary: List active and known UMOs
       operationId: listActiveUmos
       x-astrbot-scope: data
+      parameters:
+        - name: platform_id
+          in: query
+          description: Exact platform instance ID; omit to list all instances.
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/sessions/senders:
+    get:
+      tags: [Sessions]
+      summary: Search known senders with source session names
+      description: >-
+        Search recorded senders, deduplicate by platform instance and sender ID,
+        then paginate in descending update order. Returns senders, page and
+        has_more in the data object. Historical messages are not backfilled.
+      operationId: listSessionSenders
+      x-astrbot-scope: data
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - name: sender_ids
+          in: query
+          description: Resolve the latest record per exact sender ID instead of returning all source sessions.
+          schema:
+            type: array
+            maxItems: 100
+            items:
+              type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+            maxLength: 512
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 100
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -4602,6 +4664,54 @@ paths:
       tags: [Stats]
       summary: Test a GitHub proxy endpoint
       operationId: testGhproxyConnection
+      x-astrbot-scope: system
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GhproxyTestRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/stats/pypi-index/test:
+    post:
+      tags: [Stats]
+      summary: Test a PyPI index (mirror) endpoint
+      operationId: testPypiIndexConnection
+      x-astrbot-scope: system
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PypiIndexTestRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/stats/pypi-index/speed:
+    post:
+      tags: [Stats]
+      summary: Download a wheel from a PyPI index and measure the throughput
+      operationId: measurePypiIndexSpeed
+      x-astrbot-scope: system
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PypiIndexTestRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/stats/ghproxy/speed:
+    post:
+      tags: [Stats]
+      summary: Download a repository file through a GitHub proxy and measure the throughput
+      operationId: measureGhproxySpeed
       x-astrbot-scope: system
       requestBody:
         required: true
@@ -5087,6 +5197,37 @@ paths:
         "200":
           $ref: "#/components/responses/Text"
 
+  /api/v1/logs/export:
+    get:
+      tags: [Logs]
+      summary: Export a diagnostic bundle
+      description: Requires a dashboard administrator session. Developer API keys are not accepted. Includes available disk and memory logs, trace history, configuration, plugin status and environment details. Credentials are masked by default; setting redact=false exports original sensitive values.
+      operationId: exportLogs
+      security:
+        - BearerAuth: []
+      x-astrbot-scope: system
+      parameters:
+        - name: redact
+          in: query
+          description: Mask recognized credentials. Disable only for private diagnosis.
+          schema: {type: boolean, default: true}
+        - name: start_time
+          in: query
+          description: Inclusive minimum log timestamp or trace start time, in Unix seconds. Omit for no lower bound. Undated standalone log content is excluded when a time bound is set.
+          schema: {type: integer, minimum: 0}
+        - name: end_time
+          in: query
+          description: Inclusive maximum log timestamp or trace start time, in Unix seconds. Omit for no upper bound. Must not be before start_time. Matching traces retain their complete details.
+          schema: {type: integer, minimum: 0}
+      responses:
+        "200":
+          description: Diagnostic ZIP. With redact=false it contains original sensitive values; personal data may remain in either mode.
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+
   /api/v1/trace/history:
     get:
       tags: [Logs]
@@ -5364,6 +5505,17 @@ components:
             type: string
 
   parameters:
+    BotCleanup:
+      name: cleanup
+      in: query
+      description: Data categories to permanently remove for this adapter. Omit to retain all associated data. Shared resources and cross-platform routing rules are preserved.
+      required: false
+      style: form
+      explode: true
+      schema:
+        type: array
+        items:
+          $ref: "#/components/schemas/BotCleanupTarget"
     AttachmentId:
       name: attachment_id
       in: path
@@ -5540,6 +5692,9 @@ components:
         type: string
 
   schemas:
+    BotCleanupTarget:
+      type: string
+      enum: [custom_rules, preferences, routing, cron_jobs, conversations, message_history, traces, stats]
     RuntimeInfo:
       type: object
       description: The AstrBot backend runtime, including when running inside a container. Values are captured at application startup.
@@ -5558,7 +5713,7 @@ components:
           properties:
             backend:
               type: [string, "null"]
-              enum: [bubblewrap, seatbelt, null]
+              enum: [bubblewrap, seatbelt, appcontainer, null]
             status:
               type: string
               enum: [detected, missing, unavailable, unsupported]
@@ -5616,6 +5771,7 @@ components:
         - tts
         - embedding
         - rerank
+        - decision
 
     LoginRequest:
       type: object
@@ -6700,6 +6856,14 @@ components:
       required: [proxy_url]
       properties:
         proxy_url:
+          type: string
+      additionalProperties: false
+
+    PypiIndexTestRequest:
+      type: object
+      required: [index_url]
+      properties:
+        index_url:
           type: string
       additionalProperties: false
 

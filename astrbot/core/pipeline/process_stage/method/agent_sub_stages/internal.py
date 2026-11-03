@@ -15,16 +15,14 @@ from astrbot.core.agent.message import (
     dump_messages_with_checkpoints,
 )
 from astrbot.core.agent.response import AgentStats
+from astrbot.core.agent.runners.base import AgentState
 from astrbot.core.astr_main_agent import (
-    LLM_ERROR_MESSAGE_EXTRA_KEY,
     MainAgentBuildConfig,
     MainAgentBuildResult,
-    _matches_provider_wake_prefix,
-    _provider_supports_modality,
-    _set_llm_error_message,
     build_main_agent,
 )
-from astrbot.core.config.agent_runner import resolve_context_compression_config
+from astrbot.core.astr_main_agent.request import matches_provider_wake_prefix
+from astrbot.core.astr_main_agent_resources import LLM_ERROR_MESSAGE_EXTRA_KEY
 from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -35,6 +33,7 @@ from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_event,
 )
 from astrbot.core.pipeline.stage import Stage
+from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider.entities import (
@@ -43,8 +42,7 @@ from astrbot.core.provider.entities import (
 )
 from astrbot.core.star.session_llm_manager import SessionServiceManager
 from astrbot.core.star.star_handler import EventType
-from astrbot.core.utils.image_input import prepare_request_images
-from astrbot.core.utils.media_utils import normalize_model_image_max_size
+from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.session_lock import session_lock_manager
 
@@ -58,6 +56,7 @@ from ...follow_up import (
     try_capture_follow_up,
     unregister_active_runner,
 )
+from .webchat import generate_conversation_title
 
 _INBOUND_MERGE_MIN_INTERVAL_SECONDS = 15.0
 _INBOUND_MERGE_MAX_AGE_SECONDS = 180.0
@@ -262,23 +261,12 @@ class InternalAgentSubStage(Stage):
         conf = ctx.astrbot_config
         settings = conf["provider_settings"]
         runner_config = conf["agent_runner"]["config"]
-        model_config = runner_config["model"]
-        persona_config = runner_config["persona"]
-        compression_config = runner_config["compression"]
         misc_config = runner_config["misc"]
         self.streaming_response: bool = settings["streaming_response"]
         self.unsupported_streaming_strategy: str = settings[
             "unsupported_streaming_strategy"
         ]
         self.max_step: int = misc_config.get("max_steps", 128)
-        self.tool_call_timeout: int = misc_config.get("tool_call_timeout", 120)
-        self.tool_schema_mode: str = misc_config.get("tool_schema_mode", "full")
-        if self.tool_schema_mode not in ("skills_like", "full"):
-            logger.warning(
-                "Unsupported tool_schema_mode: %s, fallback to skills_like",
-                self.tool_schema_mode,
-            )
-            self.tool_schema_mode = "full"
         if isinstance(self.max_step, bool):  # workaround: #2622
             self.max_step = 128
         self.show_tool_use: bool = settings.get("show_tool_use_status", True)
@@ -288,57 +276,8 @@ class InternalAgentSubStage(Stage):
             False,
         )
         self.show_reasoning = settings.get("display_reasoning_text", False)
-        self.sanitize_context_by_modalities: bool = misc_config.get(
-            "sanitize_context_by_modalities",
-            False,
-        )
-        self.kb_agentic_mode: bool = conf.get("kb_agentic_mode", False)
-
-        file_extract_conf: dict = settings.get("file_extract", {})
-        self.file_extract_enabled: bool = file_extract_conf.get("enable", False)
-        self.file_extract_prov: str = file_extract_conf.get("provider", "moonshotai")
-        self.file_extract_msh_api_key: str = file_extract_conf.get(
-            "moonshotai_api_key", ""
-        )
-
-        self.llm_safety_mode = persona_config.get("safety_mode", True)
-        self.safety_mode_strategy = persona_config.get(
-            "safety_mode_strategy", "system_prompt"
-        )
-
-        self.computer_use_runtime = settings.get("computer_use_runtime", "none")
-        self.sandbox_cfg = settings.get("sandbox", {})
-
-        # Proactive capability configuration
-        proactive_cfg = settings.get("proactive_capability", {})
-        self.add_cron_tools = proactive_cfg.get("add_cron_tools", True)
-
+        self.main_agent_cfg = MainAgentBuildConfig.from_config(conf)
         self.conv_manager = ctx.plugin_manager.context.conversation_manager
-
-        self.main_agent_cfg = MainAgentBuildConfig(
-            tool_call_timeout=self.tool_call_timeout,
-            tool_schema_mode=self.tool_schema_mode,
-            sanitize_context_by_modalities=self.sanitize_context_by_modalities,
-            kb_agentic_mode=self.kb_agentic_mode,
-            file_extract_enabled=self.file_extract_enabled,
-            file_extract_prov=self.file_extract_prov,
-            file_extract_msh_api_key=self.file_extract_msh_api_key,
-            **resolve_context_compression_config(compression_config),
-            llm_safety_mode=self.llm_safety_mode,
-            safety_mode_strategy=self.safety_mode_strategy,
-            computer_use_runtime=self.computer_use_runtime,
-            sandbox_cfg=self.sandbox_cfg,
-            add_cron_tools=self.add_cron_tools,
-            provider_settings={
-                **settings,
-                "default_personality": persona_config.get("persona_id", "default"),
-            },
-            fallback_provider_ids=model_config.get("fallback_provider_ids", []),
-            request_max_retries=model_config.get("request_max_retries", 5),
-            subagent_orchestrator=conf.get("subagent_orchestrator", {}),
-            timezone=self.ctx.plugin_manager.context.get_config().get("timezone"),
-            max_quoted_fallback_images=settings.get("max_quoted_fallback_images", 20),
-        )
 
     async def _send_llm_error_message(
         self, event: AstrMessageEvent, message: object
@@ -354,7 +293,13 @@ class InternalAgentSubStage(Stage):
         typing_requested = False
         inbound_merge_registered = False
         inbound_merge_superseded = False
+        is_wakeup = isinstance(event, AgentWakeupEvent)
         try:
+            if (
+                is_wakeup
+                and active_event_registry.get_background_stop_signal(event).is_set()
+            ):
+                raise asyncio.CancelledError()
             streaming_response = self.streaming_response
             if (enable_streaming := event.get_extra("enable_streaming")) is not None:
                 streaming_response = bool(enable_streaming)
@@ -409,7 +354,7 @@ class InternalAgentSubStage(Stage):
                 return
 
             inbound_merge_candidate = _inbound_reply_merger._eligible(event)
-            if not inbound_merge_candidate:
+            if not inbound_merge_candidate and not is_wakeup:
                 try:
                     typing_requested = True
                     await event.send_typing()
@@ -419,7 +364,7 @@ class InternalAgentSubStage(Stage):
                 return
             if event.get_extra(
                 "provider_request"
-            ) is None and not _matches_provider_wake_prefix(
+            ) is None and not matches_provider_wake_prefix(
                 event,
                 provider_wake_prefix,
             ):
@@ -497,6 +442,11 @@ class InternalAgentSubStage(Stage):
                             logger.warning("send_typing failed", exc_info=True)
                         break
                 logger.debug("acquired session lock for llm request")
+                if (
+                    is_wakeup
+                    and active_event_registry.get_background_stop_signal(event).is_set()
+                ):
+                    raise asyncio.CancelledError()
                 current_config = self.ctx.plugin_manager.context.get_config(
                     umo=event.unified_msg_origin
                 )
@@ -511,25 +461,31 @@ class InternalAgentSubStage(Stage):
                     return
                 agent_runner: AgentRunner | None = None
                 runner_registered = False
-                reset_coro = None
                 try:
                     build_cfg = replace(
                         self.main_agent_cfg,
                         provider_wake_prefix=provider_wake_prefix,
                         streaming_response=streaming_response,
+                        call_request_hook=True,
+                        validate_provider_endpoint=True,
                     )
-
                     plugin_context = self.ctx.plugin_manager.context
-                    prepared: dict[str, dict] = {}
                     build_result: MainAgentBuildResult | None = await build_main_agent(
                         event=event,
                         plugin_context=plugin_context,
                         config=build_cfg,
-                        apply_reset=False,
-                        prepared_images=prepared,
                     )
 
+                    if is_wakeup and (
+                        event.is_stopped()
+                        or active_event_registry.get_background_stop_signal(
+                            event
+                        ).is_set()
+                    ):
+                        raise asyncio.CancelledError()
                     if build_result is None:
+                        if is_wakeup:
+                            raise RuntimeError("Failed to build main agent for wakeup.")
                         if llm_error_message := event.get_extra(
                             LLM_ERROR_MESSAGE_EXTRA_KEY
                         ):
@@ -542,48 +498,15 @@ class InternalAgentSubStage(Stage):
                     agent_runner = build_result.agent_runner
                     req = build_result.provider_request
                     provider = build_result.provider
-                    reset_coro = build_result.reset_coro
-
-                    api_base = provider.provider_config.get("api_base", "")
-                    for host in decoded_blocked:
-                        if host in api_base:
-                            _set_llm_error_message(
-                                event, "blockedProvider", api_base=api_base
-                            )
-                            error_message = event.get_extra(LLM_ERROR_MESSAGE_EXTRA_KEY)
-                            logger.error(
-                                "Provider API base %s was blocked for security reasons",
-                                api_base,
-                            )
-                            await self._send_llm_error_message(event, error_message)
-                            return
+                    if not is_wakeup and event.get_platform_name() == "webchat":
+                        asyncio.create_task(
+                            generate_conversation_title(event, req, provider)
+                        )
 
                     stream_to_general = (
                         self.unsupported_streaming_strategy == "turn_off"
                         and not event.platform_meta.support_streaming_message
                     )
-
-                    if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
-                        return
-
-                    options = build_cfg.provider_settings.get(
-                        "image_compress_options", {}
-                    )
-                    await prepare_request_images(
-                        req,
-                        event,
-                        max_size=normalize_model_image_max_size(
-                            options.get("max_size")
-                            if isinstance(options, dict)
-                            else None
-                        ),
-                        prepared=prepared,
-                        supports_image=_provider_supports_modality(provider, "image"),
-                    )
-                    # apply reset
-                    if reset_coro:
-                        await reset_coro
-                        reset_coro = None
 
                     register_active_runner(event.unified_msg_origin, agent_runner)
                     runner_registered = True
@@ -642,11 +565,11 @@ class InternalAgentSubStage(Stage):
                             not event.is_stopped() or agent_runner.was_aborted()
                         ):
                             await self._save_to_history(
-                                event,
-                                req,
-                                agent_runner.get_final_llm_resp(),
-                                agent_runner.run_context.messages,
-                                agent_runner.stats,
+                                event=event,
+                                req=req,
+                                llm_response=agent_runner.get_final_llm_resp(),
+                                all_messages=agent_runner.run_context.messages,
+                                runner_stats=agent_runner.stats,
                                 user_aborted=agent_runner.was_aborted(),
                             )
 
@@ -698,6 +621,23 @@ class InternalAgentSubStage(Stage):
                             yield
 
                     final_resp = agent_runner.get_final_llm_resp()
+                    if is_wakeup:
+                        if (
+                            event.is_stopped()
+                            or active_event_registry.get_background_stop_signal(
+                                event
+                            ).is_set()
+                        ):
+                            raise asyncio.CancelledError()
+                        if agent_runner.state == AgentState.ERROR or (
+                            final_resp is not None and final_resp.role == "err"
+                        ):
+                            detail = (
+                                f": {final_resp.completion_text}" if final_resp else ""
+                            )
+                            raise RuntimeError(
+                                f"Wakeup agent run ended in ERROR state{detail}"
+                            )
 
                     event.trace.record(
                         "astr_agent_complete",
@@ -717,11 +657,11 @@ class InternalAgentSubStage(Stage):
                     # 检查事件是否被停止，如果被停止则不保存历史记录
                     if not event.is_stopped() or agent_runner.was_aborted():
                         await self._save_to_history(
-                            event,
-                            req,
-                            final_resp,
-                            agent_runner.run_context.messages,
-                            agent_runner.stats,
+                            event=event,
+                            req=req,
+                            llm_response=final_resp,
+                            all_messages=agent_runner.run_context.messages,
+                            runner_stats=agent_runner.stats,
                             user_aborted=agent_runner.was_aborted(),
                         )
 
@@ -733,12 +673,13 @@ class InternalAgentSubStage(Stage):
                         ),
                     )
                 finally:
-                    if reset_coro:
-                        reset_coro.close()
                     if runner_registered and agent_runner is not None:
+                        agent_runner._resolve_unconsumed_follow_ups()
                         unregister_active_runner(event.unified_msg_origin, agent_runner)
 
         except Exception as e:
+            if is_wakeup:
+                raise
             logger.error(f"Error occurred while processing agent: {e}")
             custom_error_message = extract_persona_custom_error_message_from_event(
                 event
@@ -868,12 +809,6 @@ class InternalAgentSubStage(Stage):
             history=message_to_save,
             token_usage=token_usage,
         )
-
-
-# we prevent astrbot from connecting to known malicious hosts
-# these hosts are base64 encoded
-BLOCKED = {"dGZid2h2d3IuY2xvdWQuc2VhbG9zLmlv", "a291cmljaGF0"}
-decoded_blocked = [base64.b64decode(b).decode("utf-8") for b in BLOCKED]
 
 
 async def _record_internal_agent_stats(

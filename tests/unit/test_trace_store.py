@@ -349,6 +349,30 @@ def persisted(tmp_path, capture):
     store.close()
 
 
+def test_trace_cleanup_matches_exact_adapter(persisted, capture):
+    """Remove a complete trace and its children without SQL wildcard matching."""
+    ids = ["bot_%", "BOT_%", "bot_ab", "bot_%-other"]
+    traces = []
+    for platform_id in ids:
+        trace = TraceSpan("message", f"{platform_id}:GroupMessage:room:1")
+        trace.record("event_received")
+        trace.record("response_sent", message="Reply")
+        trace.record("pipeline_end", status="success")
+        traces.append(trace)
+    for frame in capture:
+        assert persisted.append(frame)
+    assert persisted.flush()
+
+    assert persisted.clear_history(platform_id="bot_%") == {"removed_traces": 1}
+    assert persisted.get_trace(traces[0].trace_id) is None
+    assert all(persisted.get_trace(trace.trace_id) for trace in traces[1:])
+    with sqlite3.connect(persisted.path) as connection:
+        for table in ("spans", "events"):
+            assert connection.execute(
+                f"SELECT COUNT(*) FROM {table} WHERE trace_id = ?", (traces[0].trace_id,)
+            ).fetchone()[0] == 0
+
+
 def test_database_pages_filters_details_and_restart(persisted, capture):
     traces = []
     for index in range(4):
@@ -416,7 +440,12 @@ def test_database_pages_filters_details_and_restart(persisted, capture):
         restarted.close()
 
 
-@pytest.mark.parametrize("prompt", ["x" * 8192, "字" * 20000, "x" * 131072])
+# Keep node IDs below Windows' PYTEST_CURRENT_TEST environment variable limit.
+@pytest.mark.parametrize(
+    "prompt",
+    ["x" * 8192, "字" * 20000, "x" * 131072],
+    ids=["ascii-8k", "unicode-20k", "ascii-128k"],
+)
 def test_long_prompt_is_preserved_in_spans_events_and_database(
     persisted, capture, prompt
 ):
@@ -530,11 +559,18 @@ def test_orphan_cleanup_preserves_live_and_pending_traces(persisted, capture, mo
     assert persisted._pending_bytes == 0
 
 
-def test_stale_updates_do_not_reopen_completed_trace(persisted, capture):
+@pytest.mark.parametrize("same_timestamp", [False, True])
+def test_stale_updates_do_not_reopen_completed_trace(
+    persisted, capture, same_timestamp
+):
     trace = TraceSpan("message", message_outline="Literal % _")
     trace.record("event_received")
     trace.record("pipeline_end", status="success")
     for frame in reversed(capture):
+        # Wall-clock timestamps can collide on Windows even for distinct updates.
+        if same_timestamp:
+            frame["time_unix_nano"] = capture[-1]["time_unix_nano"]
+            frame["trace"]["updated_time_unix_nano"] = frame["time_unix_nano"]
         assert persisted.append(frame)
     assert persisted.flush()
     detail = persisted.get_trace(trace.trace_id)

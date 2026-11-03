@@ -77,6 +77,7 @@ def test_anthropic_provider_passes_custom_headers_via_default_headers(monkeypatc
     assert provider.client.kwargs["default_headers"] == {
         "User-Agent": "custom-agent/1.0",
         "X-Test-Header": "123",
+        "X-Api-Key": "test-key",
     }
     assert provider.client.kwargs["http_client"] is None
 
@@ -103,6 +104,7 @@ def test_kimi_code_provider_sets_defaults_and_preserves_custom_headers(monkeypat
     assert provider.client.kwargs["default_headers"] == {
         "User-Agent": kimi_code_source.KIMI_CODE_USER_AGENT,
         "X-Trace-Id": "trace-1",
+        "X-Api-Key": "test-key",
     }
 
 

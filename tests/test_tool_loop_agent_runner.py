@@ -2398,3 +2398,28 @@ async def test_small_step_budgets_and_reset(
     )
     assert runner._step_budget_used == 0
     assert runner._step_budget_notified == set()
+
+
+@pytest.mark.asyncio
+async def test_context_token_limit_is_isolated_per_run(
+    mock_provider, mock_tool_executor, mock_hooks
+):
+    """A session override must not leak through a shared provider to another run."""
+    mock_provider.provider_config["max_context_tokens"] = 32000
+    limited, default = ToolLoopAgentRunner(), ToolLoopAgentRunner()
+    common = {
+        "provider": mock_provider,
+        "tool_executor": mock_tool_executor,
+        "agent_hooks": mock_hooks,
+    }
+    await limited.reset(
+        **common, request=ProviderRequest(prompt="limited"),
+        run_context=ContextWrapper(context=None), max_context_tokens=4096,
+    )
+    await default.reset(
+        **common, request=ProviderRequest(prompt="default"),
+        run_context=ContextWrapper(context=None),
+    )
+    assert limited.request_context_manager_config.max_context_tokens == 4096
+    assert default.request_context_manager_config.max_context_tokens == 32000
+    assert mock_provider.provider_config["max_context_tokens"] == 32000

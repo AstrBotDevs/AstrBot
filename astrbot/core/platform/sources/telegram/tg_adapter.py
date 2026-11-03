@@ -11,7 +11,13 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram import BotCommand, Update
 from telegram.constants import ChatType
 from telegram.error import Forbidden, InvalidToken, NetworkError
-from telegram.ext import ApplicationBuilder, ContextTypes, ExtBot, filters
+from telegram.ext import (
+    ApplicationBuilder,
+    CallbackQueryHandler,
+    ContextTypes,
+    ExtBot,
+    filters,
+)
 from telegram.ext import MessageHandler as TelegramMessageHandler
 
 import astrbot.api.message_components as Comp
@@ -27,6 +33,11 @@ from astrbot.api.platform import (
     register_platform_adapter,
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.button_interaction import (
+    BUTTON_ACTION_EXPIRED_MESSAGE,
+    ButtonActionExpiredError,
+    decode_button_callback,
+)
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.star import star_map
@@ -145,6 +156,7 @@ class TelegramPlatformAdapter(Platform):
             filters=filters.ALL,
             callback=self.message_handler,
         )
+        self.application.add_handler(CallbackQueryHandler(self.callback_query_handler))
         self.application.add_handler(message_handler)
         self.client = self.application.bot
         logger.debug(f"Telegram base url: {self.client.base_url}")
@@ -446,6 +458,87 @@ class TelegramPlatformAdapter(Platform):
         abm = await self.convert_message(update, context)
         if abm:
             await self.handle_msg(abm)
+
+    async def callback_query_handler(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+    ) -> None:
+        """Convert a Telegram callback query into a button interaction event.
+
+        Args:
+            update: Telegram update containing the callback query.
+            context: Telegram callback context.
+        """
+        query = update.callback_query
+        if query is None:
+            return
+
+        action_id = None
+        data = None
+        try:
+            if isinstance(query.data, str):
+                action_id, data = decode_button_callback(query.data)
+        except ButtonActionExpiredError:
+            try:
+                await query.answer(text=BUTTON_ACTION_EXPIRED_MESSAGE, show_alert=True)
+            except Exception as exc:
+                logger.warning("Failed to send Telegram button expiry notice: %s", exc)
+            return
+        except (TypeError, ValueError):
+            pass
+
+        try:
+            await query.answer()
+        except Exception as exc:
+            logger.warning("Failed to answer Telegram callback query: %s", exc)
+
+        if action_id is None:
+            logger.debug("Ignoring a Telegram callback query not created by AstrBot.")
+            return
+
+        source_message = query.message
+        chat = source_message.chat if source_message else update.effective_chat
+        if chat is None:
+            logger.warning("Received a Telegram callback query without a chat.")
+            return
+
+        message = AstrBotMessage()
+        message.session_id = str(chat.id)
+        if chat.type == ChatType.PRIVATE:
+            message.type = MessageType.FRIEND_MESSAGE
+        else:
+            message.type = MessageType.GROUP_MESSAGE
+            message.group_id = str(chat.id)
+            if (
+                source_message is not None
+                and getattr(source_message, "is_topic_message", False)
+                and getattr(source_message, "message_thread_id", None)
+            ):
+                message.group_id += f"#{source_message.message_thread_id}"
+                message.session_id = message.group_id
+
+        source_message_id = (
+            str(source_message.message_id) if source_message is not None else None
+        )
+        message.message_id = str(query.id)
+        message.sender = MessageMember(
+            str(query.from_user.id),
+            query.from_user.username or "Unknown",
+        )
+        message.self_id = str(context.bot.username)
+        message.raw_message = update
+        message.message_str = action_id
+        message.message = [
+            Comp.ButtonInteraction(
+                action_id=action_id,
+                data=data,
+                interaction_id=str(query.id),
+                source_message_id=source_message_id,
+                callback_data=query.data,
+            )
+        ]
+        await self.handle_msg(message)
 
     async def convert_message(
         self,

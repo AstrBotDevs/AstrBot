@@ -135,6 +135,19 @@ class ActiveEventRegistry:
                 event.stop_event()
         return self.request_agent_stop_all(umo, exclude)
 
+    async def stop_platform(self, platform_id: str) -> None:
+        """Stop and drain background executions owned by an adapter.
+
+        Args:
+            platform_id: Exact adapter instance whose data is being removed.
+        """
+        tasks = []
+        for umo in set(self._events) | set(self._background_tasks):
+            if umo.partition(":")[0] == platform_id:
+                tasks.extend(self._background_tasks.get(umo, {}))
+                self.stop_all(umo)
+        await asyncio.gather(*tasks, return_exceptions=True)
+
     def request_agent_stop_all(
         self,
         umo: str,

@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import asyncio
+import time
+
 from fastapi import APIRouter, Depends, Header, Path, Query, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
+from starlette.background import BackgroundTask
 
 from astrbot.dashboard.responses import ApiError, ok
 from astrbot.dashboard.schemas import TraceSettingsRequest
@@ -78,6 +82,32 @@ async def live_logs(
     service: LogService = Depends(get_service),
 ):
     return _log_stream_response(last_event_id, service)
+
+
+@router.get("/logs/export")
+async def export_logs(
+    redact: bool = Query(default=True),
+    start_time: int | None = Query(default=None, ge=0),
+    end_time: int | None = Query(default=None, ge=0),
+    _username: str = Depends(require_dashboard_user),
+    service: LogService = Depends(get_service),
+):
+    try:
+        archive_path = await asyncio.to_thread(
+            service.export_logs,
+            redact=redact,
+            start_time=start_time,
+            end_time=end_time,
+        )
+    except LogServiceError as exc:
+        _raise_log_error(exc)
+    return FileResponse(
+        archive_path,
+        media_type="application/zip",
+        filename=f"astrbot-diagnostics-{'raw-' if not redact else ''}{time.strftime('%Y%m%d-%H%M%S')}.zip",
+        headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+        background=BackgroundTask(archive_path.unlink, missing_ok=True),
+    )
 
 
 @router.get("/trace/settings")

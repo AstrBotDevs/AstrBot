@@ -4,6 +4,17 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+BotCleanupTarget = Literal[
+    "custom_rules",
+    "preferences",
+    "routing",
+    "cron_jobs",
+    "conversations",
+    "message_history",
+    "traces",
+    "stats",
+]
+
 
 class OpenModel(BaseModel):
     model_config = ConfigDict(extra="allow")
@@ -209,6 +220,10 @@ class StorageCleanupRequest(BaseModel):
 
 class GhProxyTestRequest(BaseModel):
     proxy_url: str | None = None
+
+
+class PypiIndexTestRequest(BaseModel):
+    index_url: str | None = None
 
 
 class OpenApiChatRequest(OpenModel):
@@ -545,6 +560,7 @@ class ProviderConfigRequest(OpenModel):
                 "tts": "text_to_speech",
                 "embedding": "embedding",
                 "rerank": "rerank",
+                "decision": "decision",
             }
             config["provider_type"] = capability_map.get(
                 self.capability, self.capability
