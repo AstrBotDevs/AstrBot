@@ -1,8 +1,12 @@
 import asyncio
+import errno
+import os
+import tempfile
 from unittest.mock import AsyncMock
 
 import pytest
 
+from astrbot.core.db.vec_db.faiss_impl import embedding_storage
 from astrbot.core.db.vec_db.faiss_impl.embedding_storage import EmbeddingStorage
 from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
 from astrbot.core.exceptions import KnowledgeBaseUploadError
@@ -152,6 +156,81 @@ def test_embedding_storage_accepts_a_valid_dimension_for_a_fresh_index() -> None
     storage = EmbeddingStorage(4)
 
     assert storage.index.d == 4
+
+
+def test_safe_temp_dir_raises_when_every_candidate_rejects_creation(
+    tmp_path, monkeypatch
+) -> None:
+    system_root = str(tmp_path / "Windows")
+    system_temp = os.path.join(system_root, "Temp")
+    fallback_dir = str(tmp_path / "fallback")
+    os.makedirs(fallback_dir)
+
+    monkeypatch.setattr(embedding_storage.os, "name", "nt")
+    monkeypatch.setenv("SystemRoot", system_root)
+    monkeypatch.setattr(embedding_storage.os.path, "isdir", lambda _path: True)
+    monkeypatch.setattr(embedding_storage.os, "access", lambda *_args: True)
+    monkeypatch.setattr(embedding_storage.tempfile, "gettempdir", lambda: fallback_dir)
+
+    def deny_creation(*_args, **_kwargs):
+        raise PermissionError(errno.EACCES, "Permission denied")
+
+    monkeypatch.setattr(embedding_storage.tempfile, "mkstemp", deny_creation)
+
+    with pytest.raises(OSError) as exc_info:
+        embedding_storage._safe_temp_dir()
+
+    message = str(exc_info.value)
+    assert system_temp in message
+    assert fallback_dir in message
+    assert "Permission denied" in message
+
+
+def test_safe_temp_dir_falls_back_to_a_writable_candidate(
+    tmp_path, monkeypatch
+) -> None:
+    system_root = str(tmp_path / "Windows")
+    system_temp = os.path.join(system_root, "Temp")
+    fallback_dir = str(tmp_path / "fallback")
+    os.makedirs(fallback_dir)
+
+    monkeypatch.setattr(embedding_storage.os, "name", "nt")
+    monkeypatch.setenv("SystemRoot", system_root)
+    monkeypatch.setattr(embedding_storage.tempfile, "gettempdir", lambda: fallback_dir)
+
+    real_mkstemp = tempfile.mkstemp
+
+    def reject_system_temp(*args, **kwargs):
+        if kwargs.get("dir") == system_temp:
+            raise PermissionError(errno.EACCES, "Permission denied")
+        return real_mkstemp(*args, **kwargs)
+
+    monkeypatch.setattr(embedding_storage.tempfile, "mkstemp", reject_system_temp)
+
+    assert embedding_storage._safe_temp_dir() == fallback_dir
+
+
+def test_make_temp_file_returns_a_writable_file() -> None:
+    path = embedding_storage._make_temp_file("_test")
+    try:
+        assert os.path.isfile(path)
+        with open(path, "w", encoding="utf-8") as file:
+            file.write("ok")
+    finally:
+        os.remove(path)
+
+
+def test_write_index_bridges_through_a_temp_file(tmp_path, monkeypatch) -> None:
+    faiss = pytest.importorskip("faiss")
+    monkeypatch.setattr(embedding_storage, "_needs_bridge", lambda _path: True)
+
+    index = faiss.IndexFlatL2(2)
+    path = str(tmp_path / "中文索引.faiss")
+
+    EmbeddingStorage._write_index(index, path)
+
+    assert os.path.isfile(path)
+    assert EmbeddingStorage._read_index(path).d == 2
 
 
 @pytest.mark.asyncio
