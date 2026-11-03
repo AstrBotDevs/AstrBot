@@ -178,6 +178,7 @@ class ChatUIProjectService:
         username: str,
         project_id: str,
         relative_path: str = "",
+        session_id: str | None = None,
     ) -> dict:
         """List one directory inside an owned project's workspace.
 
@@ -185,6 +186,8 @@ class ChatUIProjectService:
             username: Dashboard username.
             project_id: ChatUI project ID.
             relative_path: Directory path relative to the workspace root.
+            session_id: Optional owned project session for per-session workspaces.
+                Omitted or empty values retain the legacy default workspace.
 
         Returns:
             Directory metadata and its direct child entries.
@@ -193,7 +196,22 @@ class ChatUIProjectService:
             ChatUIProjectServiceError: If the path is invalid or unreadable.
         """
         project = await self._get_owned_project(username, project_id)
-        fallback_umo = f"webchat:FriendMessage:webchat!{project.creator}!default"
+        workspace_session_id = "default"
+        if (
+            session_id
+            and normalize_project_workspace_type(project.workspace_type)
+            == WORKSPACE_TYPE_SESSION
+        ):
+            session = await self._get_owned_session(username, session_id)
+            session_project = await self.db.get_project_by_session(session_id, username)
+            if not session_project or session_project.project_id != project_id:
+                raise ChatUIProjectServiceError(
+                    "Session does not belong to this project"
+                )
+            workspace_session_id = session.session_id
+        fallback_umo = (
+            f"webchat:FriendMessage:webchat!{project.creator}!{workspace_session_id}"
+        )
         try:
             resolved_workspace_root = resolve_project_workspace_root(
                 project,
@@ -269,6 +287,7 @@ class ChatUIProjectService:
         username: str,
         project_id: str,
         relative_path: str,
+        session_id: str | None = None,
     ) -> dict:
         """Read a UTF-8 text file inside an owned project's workspace.
 
@@ -276,6 +295,8 @@ class ChatUIProjectService:
             username: Dashboard username.
             project_id: ChatUI project ID.
             relative_path: File path relative to the workspace root.
+            session_id: Optional owned project session for per-session workspaces.
+                Omitted or empty values retain the legacy default workspace.
 
         Returns:
             Relative path, UTF-8 content, and byte size.
@@ -287,6 +308,7 @@ class ChatUIProjectService:
             username,
             project_id,
             relative_path,
+            session_id,
         )
 
         try:
@@ -314,6 +336,7 @@ class ChatUIProjectService:
         username: str,
         project_id: str,
         relative_path: str,
+        session_id: str | None = None,
     ) -> tuple[Path, Path]:
         """Resolve a file inside an owned project's workspace.
 
@@ -321,6 +344,8 @@ class ChatUIProjectService:
             username: Dashboard username.
             project_id: ChatUI project ID.
             relative_path: File path relative to the workspace root.
+            session_id: Optional owned project session for per-session workspaces.
+                Omitted or empty values retain the legacy default workspace.
 
         Returns:
             Validated workspace root and absolute path to the workspace file.
@@ -329,7 +354,22 @@ class ChatUIProjectService:
             ChatUIProjectServiceError: If the file path is invalid or missing.
         """
         project = await self._get_owned_project(username, project_id)
-        fallback_umo = f"webchat:FriendMessage:webchat!{project.creator}!default"
+        workspace_session_id = "default"
+        if (
+            session_id
+            and normalize_project_workspace_type(project.workspace_type)
+            == WORKSPACE_TYPE_SESSION
+        ):
+            session = await self._get_owned_session(username, session_id)
+            session_project = await self.db.get_project_by_session(session_id, username)
+            if not session_project or session_project.project_id != project_id:
+                raise ChatUIProjectServiceError(
+                    "Session does not belong to this project"
+                )
+            workspace_session_id = session.session_id
+        fallback_umo = (
+            f"webchat:FriendMessage:webchat!{project.creator}!{workspace_session_id}"
+        )
         try:
             resolved_workspace_root = resolve_project_workspace_root(
                 project,

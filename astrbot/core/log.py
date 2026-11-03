@@ -25,6 +25,7 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_config_path,
     get_astrbot_data_path,
 )
+from astrbot.core.utils.console_sink import BoundedConsoleSink
 from astrbot.core.utils.telemetry import (
     bounded_attributes,
     bounded_text,
@@ -101,10 +102,20 @@ class _RecordEnricherFilter(logging.Filter):
             record.source = "plugin"
             record.plugin_name = plugin_name
         else:
+            # Framework code sometimes reports on behalf of a plugin: for
+            # example, the plugin loader logs why a plugin failed to load.
+            # Such call sites pass ``extra={"plugin_name": ...}`` so the WebUI
+            # can list the plugin in the log filter and tag the line with it.
+            explicit_plugin_name = getattr(record, "plugin_name", None)
             is_plugin = _is_plugin_path(record.pathname)
-            record.plugin_tag = "[Plug]" if is_plugin else "[Core]"
-            record.source = "plugin" if is_plugin else "core"
-            record.plugin_name = None
+            if explicit_plugin_name:
+                record.plugin_tag = f"[{explicit_plugin_name}]"
+                record.source = "plugin"
+                record.plugin_name = explicit_plugin_name
+            else:
+                record.plugin_tag = "[Plug]" if is_plugin else "[Core]"
+                record.source = "plugin" if is_plugin else "core"
+                record.plugin_name = None
         record.short_levelname = _get_short_level_name(record.levelname)
         record.astrbot_version_tag = (
             f" [v{VERSION}]" if record.levelno >= logging.WARNING else ""
@@ -374,6 +385,7 @@ class LogManager:
 
     _configured = False
     _console_sink_id: int | None = None
+    _console_output: BoundedConsoleSink | None = None
     _file_sink_id: int | None = None
     _plugin_logger_names: set[str] = set()
     _plugin_level_overrides: dict[str, str] | None = None
@@ -406,18 +418,31 @@ class LogManager:
             return
 
         _loguru.remove()
+        if cls._console_output is None:
+            cls._console_output = BoundedConsoleSink(sys.stdout)
         cls._console_sink_id = _loguru.add(
-            sys.stdout,
+            cls._console_output,
             level="DEBUG",
-            colorize=True,
+            colorize=cls._console_output.isatty(),
             filter=lambda record: not record["extra"].get("is_trace", False),
             format=(
-                "<green>[{time:HH:mm:ss.SSS}]</green> {extra[plugin_tag]} "
+                "<green>[{time:YYYY-MM-DD HH:mm:ss.SSS}]</green> {extra[plugin_tag]} "
                 "<level>[{extra[short_levelname]}]</level>{extra[astrbot_version_tag]} "
                 "[{extra[source_file]}:{extra[source_line]}]: <level>{message}</level>"
             ),
         )
         cls._configured = True
+
+    @classmethod
+    def get_console_status(cls) -> dict | None:
+        """Read console counters for diagnostics without logging to the console.
+
+        Returns:
+            Current console status, or None before console setup.
+        """
+        if cls._console_output is None:
+            return None
+        return cls._console_output.get_status()
 
     @classmethod
     def _setup_root_bridge(cls) -> None:
@@ -673,10 +698,12 @@ class LogManager:
             try:
                 configured_level = logging.getLevelName(logger.level)
                 if isinstance(configured_level, str):
+                    if cls._console_output is None:
+                        cls._console_output = BoundedConsoleSink(sys.stdout)
                     new_sink_id = _loguru.add(
-                        sys.stdout,
+                        cls._console_output,
                         level=configured_level,
-                        colorize=True,
+                        colorize=cls._console_output.isatty(),
                         filter=lambda record: (
                             not record["extra"].get("is_trace", False)
                         ),

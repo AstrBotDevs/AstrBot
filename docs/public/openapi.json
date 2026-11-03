@@ -2529,6 +2529,15 @@
               "type": "string",
               "default": ""
             }
+          },
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "description": "Optional for per-session workspaces; must belong to this project and user when provided. Omitted or empty values use the legacy default workspace.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -2563,6 +2572,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "description": "Optional for per-session workspaces; must belong to this project and user when provided. Omitted or empty values use the legacy default workspace.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -2594,6 +2612,15 @@
             "name": "path",
             "in": "query",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "description": "Optional for per-session workspaces; must belong to this project and user when provided. Omitted or empty values use the legacy default workspace.",
             "schema": {
               "type": "string"
             }
@@ -7350,7 +7377,8 @@
           "stt",
           "tts",
           "embedding",
-          "rerank"
+          "rerank",
+          "decision"
         ]
       },
       "CreateConfigProfileRequest": {

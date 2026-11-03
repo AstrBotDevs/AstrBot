@@ -604,7 +604,7 @@ export type PluginVersionSupportRequest = {
     astrbot_version?: string;
 };
 
-export type ProviderCapability = 'chat' | 'agent' | 'stt' | 'tts' | 'embedding' | 'rerank';
+export type ProviderCapability = 'chat' | 'agent' | 'stt' | 'tts' | 'embedding' | 'rerank' | 'decision';
 
 export type ProviderConfigRequest = {
     id?: string;
@@ -617,6 +617,10 @@ export type ProviderConfigRequest = {
 export type ProviderSourceConfigRequest = {
     id?: string;
     config: DynamicConfig;
+};
+
+export type PypiIndexTestRequest = {
+    index_url: string;
 };
 
 export type RenameRequest = {
@@ -647,7 +651,7 @@ export type RuntimeInfo = {
      * Local process sandbox startup check, captured when AstrBot starts. It does not verify DNS resolution or every permitted operation.
      */
     sandbox: {
-        backend: ('bubblewrap' | 'seatbelt') | null;
+        backend: ('bubblewrap' | 'seatbelt' | 'appcontainer') | null;
         /**
          * detected means the executable was found and a minimal workspace sandbox launched successfully; missing means the corresponding executable was not found; unavailable means it was found but sandbox startup failed; unsupported means this platform has no Local process sandbox backend. These identifiers are independent of the UI language.
          */
@@ -659,7 +663,7 @@ export type RuntimeInfo = {
     };
 };
 
-export type backend = 'bubblewrap' | 'seatbelt';
+export type backend = 'bubblewrap' | 'seatbelt' | 'appcontainer';
 
 /**
  * detected means the executable was found and a minimal workspace sandbox launched successfully; missing means the corresponding executable was not found; unavailable means it was found but sandbox startup failed; unsupported means this platform has no Local process sandbox backend. These identifiers are independent of the UI language.
@@ -1685,6 +1689,10 @@ export type ListChatProjectWorkspaceFilesData = {
     };
     query?: {
         path?: string;
+        /**
+         * Optional for per-session workspaces; must belong to this project and user when provided. Omitted or empty values use the legacy default workspace.
+         */
+        session_id?: string;
     };
 };
 
@@ -1698,6 +1706,10 @@ export type GetChatProjectWorkspaceFileData = {
     };
     query: {
         path: string;
+        /**
+         * Optional for per-session workspaces; must belong to this project and user when provided. Omitted or empty values use the legacy default workspace.
+         */
+        session_id?: string;
     };
 };
 
@@ -1711,6 +1723,10 @@ export type DownloadChatProjectWorkspaceFileData = {
     };
     query: {
         path: string;
+        /**
+         * Optional for per-session workspaces; must belong to this project and user when provided. Omitted or empty values use the legacy default workspace.
+         */
+        session_id?: string;
     };
 };
 
@@ -3546,6 +3562,30 @@ export type TestGhproxyConnectionData = {
 export type TestGhproxyConnectionResponse = (SuccessEnvelope);
 
 export type TestGhproxyConnectionError = unknown;
+
+export type TestPypiIndexConnectionData = {
+    body: PypiIndexTestRequest;
+};
+
+export type TestPypiIndexConnectionResponse = (SuccessEnvelope);
+
+export type TestPypiIndexConnectionError = unknown;
+
+export type MeasurePypiIndexSpeedData = {
+    body: PypiIndexTestRequest;
+};
+
+export type MeasurePypiIndexSpeedResponse = (SuccessEnvelope);
+
+export type MeasurePypiIndexSpeedError = unknown;
+
+export type MeasureGhproxySpeedData = {
+    body: GhproxyTestRequest;
+};
+
+export type MeasureGhproxySpeedResponse = (SuccessEnvelope);
+
+export type MeasureGhproxySpeedError = unknown;
 
 export type ListChangelogVersionsResponse = (SuccessEnvelope);
 

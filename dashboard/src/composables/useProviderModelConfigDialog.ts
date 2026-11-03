@@ -11,6 +11,35 @@ interface UseProviderModelConfigDialogOptions {
   showMessage: (message: string, color?: string) => void
 }
 
+// Quick-add templates for `custom_extra_body` on Gemini providers. They use the
+// Gemini SDK parameter names (max_output_tokens instead of OpenAI's max_tokens).
+// Other parameters can still be added by key; the Gemini SDK validates them.
+const GEMINI_EXTRA_BODY_TEMPLATE = {
+  temperature: {
+    name: 'Temperature',
+    description: '温度参数',
+    hint: '控制输出的随机性，范围通常为 0-2。值越高越随机。',
+    type: 'float',
+    default: 1.0,
+    slider: { min: 0, max: 2, step: 0.1 }
+  },
+  top_p: {
+    name: 'Top-p',
+    description: 'Top-p 采样',
+    hint: '核采样参数，范围通常为 0-1。控制模型考虑的概率质量。',
+    type: 'float',
+    default: 1.0,
+    slider: { min: 0, max: 1, step: 0.01 }
+  },
+  max_output_tokens: {
+    name: 'Max Output Tokens',
+    description: '最大输出词元（Tokens）数',
+    hint: '生成的最大词元（Tokens）数。',
+    type: 'int',
+    default: 8192
+  }
+}
+
 export function useProviderModelConfigDialog(options: UseProviderModelConfigDialogOptions) {
   const {
     selectedProviderSource,
@@ -35,6 +64,10 @@ export function useProviderModelConfigDialog(options: UseProviderModelConfigDial
 
     const schema = JSON.parse(JSON.stringify(configSchema.value))
     const hiddenKeys = ['id', 'model']
+
+    if (selectedProviderSource.value?.type === 'googlegenai_chat_completion') {
+      schema.provider.items.custom_extra_body.template_schema = GEMINI_EXTRA_BODY_TEMPLATE
+    }
 
     for (const key of hiddenKeys) {
       if (schema.provider.items[key]) {
