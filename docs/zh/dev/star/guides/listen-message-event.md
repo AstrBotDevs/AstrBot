@@ -312,7 +312,7 @@ async def my_custom_hook_1(
 > 对于每轮都会变化、内容量中小的提示词，优先通过 `req.extra_user_content_parts` 追加。它会作为额外的用户消息内容块放在本轮用户输入之后，更适合承载"当前时间""角色好感度""本轮相关记忆片段"等动态上下文：
 >
 > ```python
-> # 4.30.0 之前：
+> # AstrBot v4.30.0 之前的导入方式：
 > # from astrbot.core.agent.message import TextPart
 > from astrbot.api.agents import TextPart
 >
@@ -369,7 +369,7 @@ async def on_llm_resp(
 
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
-# 4.30.0 之前：
+# AstrBot v4.30.0 之前的导入方式：
 # from astrbot.core.agent.run_context import ContextWrapper
 # from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.api.agents import AstrAgentContext, ContextWrapper
@@ -394,7 +394,7 @@ async def on_agent_begin(
 
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
-# 4.30.0 之前：
+# AstrBot v4.30.0 之前的导入方式：
 # from astrbot.core.agent.tool import FunctionTool
 from astrbot.api import FunctionTool
 
@@ -423,7 +423,7 @@ async def on_using_llm_tool(
 from mcp.types import CallToolResult
 
 from astrbot.api.event import filter, AstrMessageEvent
-# 4.30.0 之前：
+# AstrBot v4.30.0 之前的导入方式：
 # from astrbot.core.agent.tool import FunctionTool
 from astrbot.api import FunctionTool
 
@@ -450,7 +450,7 @@ async def on_llm_tool_respond(
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.provider import LLMResponse
-# 4.30.0 之前：
+# AstrBot v4.30.0 之前的导入方式：
 # from astrbot.core.agent.run_context import ContextWrapper
 # from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.api.agents import AstrAgentContext, ContextWrapper

@@ -22,7 +22,7 @@ AstrBot 提供了开箱即用的会话控制功能：
 
 ```py
 import astrbot.api.message_components as Comp
-# 4.30.0 之前：
+# AstrBot v4.30.0 之前的导入方式：
 # from astrbot.core.utils.session_waiter import session_waiter, SessionController
 from astrbot.api.util import (
     session_waiter,
@@ -107,7 +107,7 @@ async def handle_empty_mention(self, event: AstrMessageEvent):
 
 ```py
 import astrbot.api.message_components as Comp
-# 4.30.0 之前：
+# AstrBot v4.30.0 之前的导入方式：
 # from astrbot.core.utils.session_waiter import session_waiter, SessionFilter, SessionController
 from astrbot.api.util import (
     session_waiter,

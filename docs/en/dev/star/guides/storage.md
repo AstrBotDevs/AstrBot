@@ -26,7 +26,7 @@ You can fetch the plugin data directory with:
 
 ```py
 from pathlib import Path
-# Before 4.30.0:
+# Before AstrBot v4.30.0:
 # from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.api.util import get_astrbot_data_path
 

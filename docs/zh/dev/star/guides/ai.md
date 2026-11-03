@@ -115,7 +115,7 @@ Tool 是大语言模型调用外部工具的能力。
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
-# 4.30.0 之前：
+# AstrBot v4.30.0 之前的导入方式：
 # from astrbot.core.agent.run_context import ContextWrapper
 # from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 # from astrbot.core.astr_agent_context import AstrAgentContext
@@ -240,7 +240,7 @@ Multi-Agent（多智能体）系统将复杂应用分解为多个专业化智能
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
-# 4.30.0 之前：
+# AstrBot v4.30.0 之前的导入方式：
 # from astrbot.core.agent.run_context import ContextWrapper
 # from astrbot.core.agent.tool import FunctionTool, ToolExecResult, ToolSet
 # from astrbot.core.astr_agent_context import AstrAgentContext
@@ -425,7 +425,7 @@ async def test(self, event: AstrMessageEvent):
 ### 获取会话当前的 LLM 对话历史 `get_conversation`
 
 ```py
-# 4.30.0 之前：
+# AstrBot v4.30.0 之前的导入方式：
 # from astrbot.core.conversation_mgr import Conversation
 from astrbot.api.provider import Conversation
 
@@ -465,7 +465,7 @@ class Conversation:
 ### 快速添加 LLM 记录到对话 `add_message_pair`
 
 ```py
-# 4.30.0 之前：
+# AstrBot v4.30.0 之前的导入方式：
 # from astrbot.core.agent.message import AssistantMessageSegment, UserMessageSegment, TextPart
 from astrbot.api.agents import (
     AssistantMessageSegment,

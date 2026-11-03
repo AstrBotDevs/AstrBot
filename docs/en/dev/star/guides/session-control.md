@@ -22,7 +22,7 @@ Import:
 
 ```py
 import astrbot.api.message_components as Comp
-# Before 4.30.0:
+# Before AstrBot v4.30.0:
 # from astrbot.core.utils.session_waiter import session_waiter, SessionController
 from astrbot.api.util import (
     session_waiter,
@@ -115,7 +115,7 @@ By default, the AstrBot session controller uses `sender_id` (the sender's ID) as
 
 ```py
 import astrbot.api.message_components as Comp
-# Before 4.30.0:
+# Before AstrBot v4.30.0:
 # from astrbot.core.utils.session_waiter import session_waiter, SessionFilter, SessionController
 from astrbot.api.util import (
     session_waiter,

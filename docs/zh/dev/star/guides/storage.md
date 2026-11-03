@@ -26,7 +26,7 @@ class Main(star.Star):
 
 ```py
 from pathlib import Path
-# 4.30.0 之前：
+# AstrBot v4.30.0 之前的导入方式：
 # from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.api.util import get_astrbot_data_path
 
