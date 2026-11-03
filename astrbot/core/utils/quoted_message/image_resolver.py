@@ -72,8 +72,9 @@ class ImageResolver:
 
     async def resolve_for_llm(self, image_refs: list[str]) -> list[str]:
         resolved: list[str] = []
-        unresolved: list[str] = []
 
+        # Resolve in source order so mixed platform IDs and direct URLs retain
+        # their positions when supplied to the vision model.
         for image_ref in normalize_and_dedupe_strings(image_refs):
             normalized = normalize_image_ref(image_ref)
             if normalized:
@@ -85,12 +86,9 @@ class ImageResolver:
                     image_ref[:128],
                 )
             else:
-                unresolved.append(image_ref)
-
-        for image_ref in unresolved:
-            resolved_ref = await self._resolve_one(image_ref)
-            if resolved_ref:
-                resolved.append(resolved_ref)
+                resolved_ref = await self._resolve_one(image_ref)
+                if resolved_ref:
+                    resolved.append(resolved_ref)
 
         return normalize_and_dedupe_strings(resolved)
 
