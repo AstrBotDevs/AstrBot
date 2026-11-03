@@ -388,6 +388,9 @@ class AstrBotCoreLifecycle:
         if self.cron_manager:
             await self.cron_manager.shutdown()
 
+        context = getattr(self, "star_context", None)
+        if isinstance(context, Context):
+            await context.agent.close()
         if self.subagents is not None:
             await self.subagents.close()
 
@@ -427,6 +430,9 @@ class AstrBotCoreLifecycle:
 
     async def restart(self) -> None:
         """重启 AstrBot 核心生命周期管理类, 终止各个管理器并重新加载平台实例"""
+        context = getattr(self, "star_context", None)
+        if isinstance(context, Context):
+            await context.agent.close()
         if self.subagents is not None:
             await self.subagents.close()
         await self.provider_manager.terminate()

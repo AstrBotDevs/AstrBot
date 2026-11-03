@@ -20,3 +20,5 @@
 - Consolidate native construction, tools, computer environments, hooks, and tool execution under `core/astr_agent_runtime`. Move runtime-independent subagent management to `core/subagents` and queue-based wakeups to `core/agent_wakeup.py`. Keep documented `core.astr_agent_context` imports as re-exports of the same classes.
 
 - Expose plugin-facing agent contexts and message types through `astrbot.api.agents`; add public tool-result, conversation, session-filter, data-path, and message-session exports. Update plugin development examples to use the API facade while retaining existing Core imports and the `astrbot.api.agent` decorator.
+
+- Add `Context.agent.run_turn()` for programmatic native inputs with shared Core admission, runtime-owned history, queued follow-ups, safe-boundary steering, session status, and optional automatic response presentation. Explicit tool and plugin sends remain unchanged.

@@ -69,12 +69,6 @@ class MainAgentSession(AgentSession):
         input = turn.input
         event = input.event
         context = self.runtime.context
-        config = context.get_config(umo=self.umo)
-        build_config = (
-            input.build_config
-            if isinstance(input, MainAgentInput) and input.build_config is not None
-            else MainAgentBuildConfig.from_config(config)
-        )
         async with session_lock_manager.acquire_lock(self.umo):
             if (
                 event.is_stopped()
@@ -87,6 +81,12 @@ class MainAgentSession(AgentSession):
                 and not await input.admit()
             ):
                 return TurnResult(reason="skipped")
+            config = context.get_config(umo=self.umo)
+            build_config = (
+                input.build_config
+                if isinstance(input, MainAgentInput) and input.build_config is not None
+                else MainAgentBuildConfig.from_config(config)
+            )
             result = await self._prepare_turn(turn, build_config)
             if result is None:
                 return TurnResult(reason="skipped")

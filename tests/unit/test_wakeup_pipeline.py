@@ -24,7 +24,6 @@ from astrbot.core.event_bus import EventBus
 from astrbot.core.log import _log_context
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.pipeline.context import PipelineContext
-from astrbot.core.pipeline.process_stage.method.agent_sub_stages import internal
 from astrbot.core.pipeline.scheduler import PipelineScheduler
 from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
 from astrbot.core.platform.astr_message_event import (
@@ -36,6 +35,7 @@ from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
+from astrbot.core.star.session_llm_manager import SessionServiceManager
 from astrbot.core.utils import trace as trace_module
 
 
@@ -148,12 +148,12 @@ async def runtime(monkeypatch):
     monkeypatch.setattr(native_session, "record_main_stats", AsyncMock())
     monkeypatch.setattr(native_session.Metric, "upload", AsyncMock())
     monkeypatch.setattr(
-        internal.SessionServiceManager,
+        SessionServiceManager,
         "should_process_llm_request",
         AsyncMock(return_value=True),
     )
     monkeypatch.setattr(
-        internal.SessionServiceManager,
+        SessionServiceManager,
         "is_session_enabled",
         AsyncMock(return_value=True),
     )
@@ -403,3 +403,40 @@ async def test_targeted_wakeup_queues_on_its_parent_after_conversation_switch(ru
         runtime.context.conversation_manager.get_curr_conversation_id.return_value
         == "other"
     )
+
+
+@pytest.mark.asyncio
+async def test_waiting_hook_streaming_override_is_resolved_after_admission(
+    runtime, monkeypatch
+):
+    """Preserve waiting hooks that change this input's output preferences.
+
+    Args:
+        runtime: Real pipeline and offline model host.
+        monkeypatch: Core hook and native builder patch manager.
+    """
+    from astrbot.core.pipeline import context_utils
+    from astrbot.core.star.star_handler import EventType
+
+    original = native_builder.build_main_agent
+    streaming = []
+
+    async def hook(event, kind, *args):
+        if kind == EventType.OnWaitingLLMRequestEvent:
+            event.set_extra("enable_streaming", True)
+        return False
+
+    async def build(**kwargs):
+        streaming.append(kwargs["config"].streaming_response)
+        return await original(**kwargs)
+
+    monkeypatch.setattr(context_utils, "call_event_hook", hook)
+    monkeypatch.setattr(native_builder, "build_main_agent", build)
+    await wake_main_agent(
+        runtime.context,
+        umo="target:FriendMessage:alice",
+        user_prompt="Continue",
+        source="plugin",
+    )
+    await asyncio.wait_for(runtime.drain(), 1)
+    assert streaming == [True]

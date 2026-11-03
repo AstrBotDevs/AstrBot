@@ -12,6 +12,7 @@ from astrbot.core.agent.message import ContentPart, Message
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import ToolSet
+from astrbot.core.agent_service import AgentService
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.conversation_mgr import ConversationManager
@@ -58,6 +59,7 @@ logger = logging.getLogger("astrbot")
 if TYPE_CHECKING:
     from astrbot.core.astr_agent_runtime import AstrAgentRuntime
     from astrbot.core.cron.manager import CronJobManager
+    from astrbot.core.star.star_manager import PluginManager
     from astrbot.core.subagents.service import SubAgentService
     from astrbot.core.utils.t2i.renderer import HtmlRenderer
 
@@ -140,7 +142,7 @@ class Context:
 
     # 向后兼容的变量
     _register_tasks: list[Awaitable] = []
-    _star_manager = None
+    _star_manager: PluginManager | None = None
 
     def __init__(
         self,
@@ -184,6 +186,8 @@ class Context:
         """Built-in runtime initialized before plugins; owns native agent sessions."""
         self.decision = DecisionService(provider_manager)
         """Decision service backed by the configured decision provider."""
+        self.agent = AgentService(self)
+        """Programmatic agent integration; closed by the core lifecycle."""
 
     async def llm_generate(
         self,

@@ -33,6 +33,7 @@ from astrbot.core.astr_agent_runtime.main_agent.subagent import initialize_subag
 from astrbot.core.astr_agent_runtime.tools.subagent import SUBAGENT_TOOL_NAMES
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.message.components import Image, Plain, Reply
+from astrbot.core.pipeline import context_utils
 from astrbot.core.pipeline.preprocess_stage import stage as preprocess
 from astrbot.core.pipeline.process_stage.method.agent_sub_stages import (
     internal,
@@ -164,7 +165,7 @@ def harness(tmp_path, monkeypatch):
         hooks.append(kind)
         return False
 
-    monkeypatch.setattr(internal, "call_event_hook", hook)
+    monkeypatch.setattr(context_utils, "call_event_hook", hook)
     monkeypatch.setattr(builder_build, "call_event_hook", hook)
     monkeypatch.setattr(
         internal, "try_capture_follow_up", lambda event, runtime=None: None
@@ -590,7 +591,7 @@ async def test_plugin_request_extra_metadata_hook_and_history(
             )
         return False
 
-    monkeypatch.setattr(internal, "call_event_hook", hook)
+    monkeypatch.setattr(context_utils, "call_event_hook", hook)
     monkeypatch.setattr(builder_build, "call_event_hook", hook)
     await process_event(harness, event)
     assert seen == [EventType.OnWaitingLLMRequestEvent, EventType.OnLLMRequestEvent]
@@ -684,7 +685,7 @@ async def test_provider_and_history_keep_bounded_previews_and_original_paths(
                     )
                 return False
 
-            monkeypatch.setattr(internal, "call_event_hook", hook)
+            monkeypatch.setattr(context_utils, "call_event_hook", hook)
             monkeypatch.setattr(builder_build, "call_event_hook", hook)
     await process_event(harness, event, preprocess_first=True)
     req = harness.captured[0].req
@@ -892,7 +893,7 @@ async def test_oversized_images_explain_omission_and_keep_original_path(
                 args[0].image_urls.extend(refs)
             return False
 
-        monkeypatch.setattr(internal, "call_event_hook", hook)
+        monkeypatch.setattr(context_utils, "call_event_hook", hook)
         monkeypatch.setattr(builder_build, "call_event_hook", hook)
     await process_event(harness, event, preprocess_first=True)
     req = harness.captured[0].req
@@ -1199,7 +1200,7 @@ async def test_plugin_and_hook_image_list_normalization(harness, tmp_path, monke
             args[0].image_urls.extend([None, "  ", "  " + str(source) + "  "])
         return False
 
-    monkeypatch.setattr(internal, "call_event_hook", hook)
+    monkeypatch.setattr(context_utils, "call_event_hook", hook)
     monkeypatch.setattr(builder_build, "call_event_hook", hook)
     await process_event(harness, event)
     assert len(harness.captured[0].req.image_urls) == 1
@@ -1250,7 +1251,7 @@ async def test_attachment_sources_survive_event_cleanup(
 
     monkeypatch.setattr(media, "download_file", download)
     if late:
-        monkeypatch.setattr(internal, "call_event_hook", hook)
+        monkeypatch.setattr(context_utils, "call_event_hook", hook)
         monkeypatch.setattr(builder_build, "call_event_hook", hook)
     await process_event(harness, event, preprocess_first=True)
     req = harness.captured[0].req
@@ -1301,7 +1302,7 @@ async def test_stage_failure_preserves_sources_and_cleans_working_files(
             raise failure("request interrupted")
         return False
 
-    monkeypatch.setattr(internal, "call_event_hook", hook)
+    monkeypatch.setattr(context_utils, "call_event_hook", hook)
     monkeypatch.setattr(builder_build, "call_event_hook", hook)
     stage = ProcessStage()
     await stage.initialize(harness.ctx)
@@ -1453,7 +1454,7 @@ async def test_final_image_labels_follow_mixed_visuals_after_hook(
             ]
         return False
 
-    monkeypatch.setattr(internal, "call_event_hook", hook)
+    monkeypatch.setattr(context_utils, "call_event_hook", hook)
     monkeypatch.setattr(builder_build, "call_event_hook", hook)
     await process_event(harness, event, preprocess_first=True)
     assert convert.await_count == 4
@@ -1533,7 +1534,7 @@ async def test_captioned_quote_has_status_without_visual_index(
             args[0].image_urls.append(str(inserted))
         return False
 
-    monkeypatch.setattr(internal, "call_event_hook", hook)
+    monkeypatch.setattr(context_utils, "call_event_hook", hook)
     monkeypatch.setattr(builder_build, "call_event_hook", hook)
     await process_event(harness, event, preprocess_first=True)
     assert caption.text_chat.await_count == 1
@@ -1651,7 +1652,7 @@ async def test_hook_only_new_refs_receive_full_image_policy(
                 )
         return False
 
-    monkeypatch.setattr(internal, "call_event_hook", hook)
+    monkeypatch.setattr(context_utils, "call_event_hook", hook)
     monkeypatch.setattr(builder_build, "call_event_hook", hook)
     event = make_event([Image(file=str(initial))])
     await process_event(harness, event, preprocess_first=True)
@@ -1778,7 +1779,7 @@ async def test_only_actually_captioned_images_receive_caption_status(
             ]
         return False
 
-    monkeypatch.setattr(internal, "call_event_hook", hook)
+    monkeypatch.setattr(context_utils, "call_event_hook", hook)
     monkeypatch.setattr(builder_build, "call_event_hook", hook)
     await process_event(harness, event)
     assert caption.text_chat.await_count == 1

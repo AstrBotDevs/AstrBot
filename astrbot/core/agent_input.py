@@ -18,7 +18,6 @@ from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import ProviderRequest
-from astrbot.core.star.context import Context
 from astrbot.core.utils.file_extract import extract_file_moonshotai
 from astrbot.core.utils.image_input import prepare_request_images
 from astrbot.core.utils.media_utils import (
@@ -34,8 +33,12 @@ from astrbot.core.utils.quoted_message_parser import (
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 if TYPE_CHECKING:
+    from astrbot.core.agent.input import InputComponent
     from astrbot.core.agent.tool import ToolSet
+    from astrbot.core.astr_agent_runtime.main_agent.config import MainAgentBuildConfig
+    from astrbot.core.astr_agent_runtime.main_session import MainAgentInput
     from astrbot.core.skills.skill_manager import SkillInfo
+    from astrbot.core.star.context import Context
 
 
 class InputProcessingSettings(Protocol):
@@ -648,3 +651,63 @@ def collect_plugin_capabilities(
         skills = []
     assert request.func_tool is not None
     return request.func_tool, skills
+
+
+async def prepare_agent_input(
+    context: Context,
+    event: AstrMessageEvent,
+    config: MainAgentBuildConfig,
+    *,
+    content: list[InputComponent] | None = None,
+) -> MainAgentInput | None:
+    """Admit platform and programmatic inputs through the same Core policy.
+
+    Args:
+        context: Host configuration and plugin services.
+        event: Existing message or Core-created programmatic event.
+        config: Native settings resolved for this input.
+        content: Optional portable content for explicitly addressed agents.
+
+    Returns:
+        An authorized native input, or None when admission rejects this request.
+    """
+    from astrbot.core.agent.runtime import AgentPermissions
+    from astrbot.core.astr_agent_runtime.main_session import MainAgentInput
+    from astrbot.core.pipeline.context_utils import call_event_hook
+    from astrbot.core.star.session_llm_manager import SessionServiceManager
+    from astrbot.core.star.star_handler import EventType
+
+    if await call_event_hook(event, EventType.OnWaitingLLMRequestEvent):
+        return None
+    if event.get_extra("provider_request") is None and not matches_provider_wake_prefix(
+        event, config.provider_wake_prefix
+    ):
+        return None
+    for component in event.message_obj.message:
+        if isinstance(component, File):
+            await component.get_file()
+        elif isinstance(component, Reply) and component.chain:
+            for quoted in component.chain:
+                if isinstance(quoted, File):
+                    await quoted.get_file()
+
+    async def admit() -> bool:
+        current_config = context.get_config(umo=event.unified_msg_origin)
+        return (
+            not event.is_stopped()
+            and current_config.get("provider_settings", {}).get("enable", True)
+            and await SessionServiceManager.should_process_llm_request(event)
+        )
+
+    if not await admit():
+        return None
+    tools, skills = collect_plugin_capabilities(context, event)
+    return MainAgentInput(
+        event=event,
+        permissions=AgentPermissions.from_event(event),
+        content=content,
+        plugin_tools=tools,
+        plugin_skills=skills,
+        admit=admit,
+        build_config=config,
+    )

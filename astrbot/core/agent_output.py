@@ -208,3 +208,56 @@ async def present_turn(
                     buffered.chain.extend(chain.chain)
                 else:
                     yield chain
+
+
+async def deliver_agent_turn(context: Context, turn: AgentTurn) -> None:
+    """Present SDK output through the existing decoration and response stages.
+
+    Args:
+        context: Host configuration and plugin services.
+        turn: Independently executing turn whose output should be presented.
+    """
+    from astrbot.core.message.message_event_result import (
+        MessageEventResult,
+        ResultContentType,
+    )
+    from astrbot.core.pipeline.context import PipelineContext
+    from astrbot.core.pipeline.respond.stage import RespondStage
+    from astrbot.core.pipeline.result_decorate.stage import ResultDecorateStage
+    from astrbot.core.pipeline.scheduler import PipelineScheduler
+
+    event = turn.input.event
+    config = context.get_config(umo=turn.session.umo)
+    manager = context._star_manager
+    if manager is None:
+        raise RuntimeError("Plugin manager is unavailable for agent output")
+    pipeline = PipelineScheduler(
+        PipelineContext(config, manager, event.get_platform_id())
+    )
+    # Input admission and execution are already owned by the service and runtime.
+    pipeline.stages = [ResultDecorateStage(), RespondStage()]
+    for stage in pipeline.stages:
+        await stage.initialize(pipeline.ctx)
+    settings = config.get("provider_settings", {})
+    async for chain in present_turn(
+        turn,
+        streaming=False,
+        show_tool_use=settings.get("show_tool_use_status", True),
+        show_tool_call_result=settings.get("show_tool_call_result", False),
+        show_reasoning=settings.get("display_reasoning_text", False),
+        buffer_intermediate_messages=settings.get(
+            "buffer_intermediate_messages", False
+        ),
+        context=context,
+    ):
+        if not chain.chain or event.is_stopped():
+            continue
+        event.set_result(
+            MessageEventResult(
+                chain=chain.chain, result_content_type=ResultContentType.LLM_RESULT
+            )
+        )
+        try:
+            await pipeline.execute(event)
+        finally:
+            event.clear_result()

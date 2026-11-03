@@ -8,13 +8,11 @@ from astrbot import logger
 from astrbot.core.agent.input import PlainInput
 from astrbot.core.agent.runtime import AgentInput, AgentPermissions, TurnStatus
 from astrbot.core.agent_input import (
-    collect_plugin_capabilities,
-    matches_provider_wake_prefix,
+    prepare_agent_input,
 )
 from astrbot.core.agent_output import present_turn
 from astrbot.core.astr_agent_runtime import AstrAgentRuntime
 from astrbot.core.astr_agent_runtime.main_agent import MainAgentBuildConfig
-from astrbot.core.astr_agent_runtime.main_session import MainAgentInput
 from astrbot.core.llm_error_messages import LLM_ERROR_MESSAGE_EXTRA_KEY
 from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.message.message_event_result import (
@@ -29,34 +27,14 @@ from astrbot.core.pipeline.stage import Stage
 from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.speech_output import stream_speech
-from astrbot.core.star.session_llm_manager import SessionServiceManager
-from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.active_event_registry import active_event_registry
 
-from ....context import PipelineContext, call_event_hook
+from ....context import PipelineContext
 from ...follow_up import (
     finalize_follow_up_capture,
     prepare_follow_up_capture,
     try_capture_follow_up,
 )
-
-
-async def _prepare_file_attachments(event: AstrMessageEvent) -> None:
-    """Download file attachments before acquiring the session lock.
-
-    Args:
-        event: Incoming event whose direct and quoted files should be prepared.
-
-    Returns:
-        None.
-    """
-    for component in event.message_obj.message:
-        if isinstance(component, File):
-            await component.get_file()
-        elif isinstance(component, Reply) and component.chain:
-            for reply_component in component.chain:
-                if isinstance(reply_component, File):
-                    await reply_component.get_file()
 
 
 class InternalAgentSubStage(Stage):
@@ -147,23 +125,20 @@ class InternalAgentSubStage(Stage):
                     await event.send_typing()
                 except Exception:
                     logger.warning("send_typing failed", exc_info=True)
-            if await call_event_hook(event, EventType.OnWaitingLLMRequestEvent):
-                return
-            if event.get_extra(
-                "provider_request"
-            ) is None and not matches_provider_wake_prefix(event, provider_wake_prefix):
-                return
-            await _prepare_file_attachments(event)
-
-            async def admit() -> bool:
-                current_config = self.ctx.plugin_manager.context.get_config(
-                    umo=event.unified_msg_origin
-                )
-                return current_config.get("provider_settings", {}).get(
-                    "enable", True
-                ) and await SessionServiceManager.should_process_llm_request(event)
-
-            if not await admit():
+            input = await prepare_agent_input(
+                self.ctx.plugin_manager.context,
+                event,
+                replace(
+                    self.main_agent_cfg,
+                    provider_wake_prefix=provider_wake_prefix,
+                    call_request_hook=True,
+                    validate_provider_endpoint=True,
+                ),
+                content=[PlainInput(text=event.message_str)]
+                if target is not None
+                else None,
+            )
+            if input is None:
                 return
             streaming = self.streaming_response
             if event.get_extra("enable_streaming") is not None:
@@ -171,26 +146,8 @@ class InternalAgentSubStage(Stage):
             show_reasoning = self.show_reasoning
             if event.get_extra("enable_reasoning") is not None:
                 show_reasoning = bool(event.get_extra("enable_reasoning"))
-            plugin_tools, plugin_skills = collect_plugin_capabilities(
-                self.ctx.plugin_manager.context, event
-            )
-            input = MainAgentInput(
-                event=event,
-                content=[PlainInput(text=event.message_str)]
-                if target is not None
-                else None,
-                permissions=AgentPermissions.from_event(event),
-                plugin_tools=plugin_tools,
-                plugin_skills=plugin_skills,
-                admit=admit,
-                build_config=replace(
-                    self.main_agent_cfg,
-                    provider_wake_prefix=provider_wake_prefix,
-                    streaming_response=streaming,
-                    call_request_hook=True,
-                    validate_provider_endpoint=True,
-                ),
-            )
+            assert input.build_config is not None
+            input.build_config.streaming_response = streaming
             session = await runtime.open_session(
                 event.unified_msg_origin,
                 input=input,

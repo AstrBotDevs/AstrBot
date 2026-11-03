@@ -396,6 +396,68 @@ async def test(self, event: AstrMessageEvent):
 
 `FunctionTool.execution_timeout` 可为等待类工具指定独立超时（秒），不填写时使用 runner 默认值；权限包装仍保留该设置。
 
+## 在现有会话中运行 Agent
+
+通过 `self.context.agent.run_turn()` 提交程序触发的输入，可以沿用目标会话的人格、历史、工具、skills 和 Agent hooks，无需自行构造消息事件或 runner。目前支持内置 Agent runtime。
+
+```py
+from astrbot.api.agents import PlainInput
+
+run = await self.context.agent.run_turn(
+    umo=event.unified_msg_origin,
+    input_message=[PlainInput(text="视频分析已完成，请向用户简要说明结果。")],
+)
+result = await run.result()
+```
+
+`run_turn()` 在输入绑定到 runtime turn 后返回，不等待模型执行。同一 session 的输入串行排队，真正执行时读取最新历史。默认由 AstrBot 通过正常输出处理发送回复，插件无需再发送 `result.text`。`result()` 等待执行、历史保存和 Core 输出处理；取消一个等待者不会取消运行，停止运行请使用 `await run.cancel()`。
+
+`run` 是 Core 的 `AgentRun` 适配器；`run.runtime_turn` 是原始 `AgentTurn`，`run.session` 是同一个 runtime session。适配器负责后续输入准备和输出完成，执行及历史仍由 runtime 管理。
+
+如需自行处理模型回复，设置 `send_to_user=False`：
+
+```py
+from astrbot.api.event import MessageChain
+
+run = await self.context.agent.run_turn(
+    umo=event.unified_msg_origin,
+    input_message=[PlainInput(text="请生成视频分析摘要。")],
+    send_to_user=False,
+)
+result = await run.result()
+if result.text:
+    await self.context.send_message(
+        event.unified_msg_origin,
+        MessageChain().message(f"视频分析结果：\n{result.text}"),
+    )
+```
+
+`send_to_user=False` 只跳过 Core 的自动输出呈现及平台回复装饰、自动 TTS，执行历史照常保存。工具或插件显式调用 `event.send()`、`Context.send_message()`、`send_message_to_user` 时仍然正常发送；框架不会拦截这些调用。
+
+`events()` 支持多个独立观察者和事后重放，提供 `llm_result`、工具调用等 runtime 事件；监听不会截走平台输出或重复发送。SDK 的最终 `turn_finished` 事件在自动输出处理结束后发布。
+
+```py
+# Queue another turn in this exact conversation, inheriting the output policy.
+next_run = await run.follow_up(
+    input_message=[PlainInput(text="再给出三条改进建议。")],
+)
+
+# Add input to an active turn at the native runner's safe boundary.
+receipt = await run.steer(
+    input_message=[PlainInput(text="补充：请重点说明安全隐患。")],
+)
+if receipt is not None:
+    consumed = await receipt
+```
+
+`follow_up()` 固定提交给原 conversation，UMO 切换当前对话不会改变目标。`steer()` 无法接收时返回 `None`，已接收时返回 `InputReceipt`；等待回执得到的布尔值表示输入是否实际消费并保存，不会自动转成下一轮。目前 steer 中的图片、文件以文本引用传递。
+
+`run.session.state` 为 `idle`、`queued`、`running` 或 `closed`；`pending_turn_count` 不包含当前 turn，`active_turn` 返回当前 runtime turn。状态用于观察，直接提交输入即可由 runtime 保证排队。
+
+调用身份默认继承当前活跃的同 UMO 事件；后台程序调用默认 member。可通过 `source_event` 显式提供来源事件，或通过 `permissions=AgentPermissions(...)` 提供授权；API key 的管理员权限上限仍然有效。来源事件与目标 UMO 不一致会报错。
+
+不要在当前 turn 的工具中等待同 session 的排队 turn 完成，这会形成互相等待。可以提交后返回，或按目的使用 steer。
+
 ## Agent 模块路径与导入兼容
 
 内置 Agent 的实现集中在 `astrbot.core.astr_agent_runtime`。插件从 `astrbot.api.agents` 导入 `AstrAgentContext`、`AgentContextWrapper`、`ContextWrapper` 和 LLM 消息类型，从 `astrbot.api` 导入 `FunctionTool`、`ToolExecResult`、`ToolSet`。这些公共入口重导出原有类型；已有的 `astrbot.core.astr_agent_context` 和 `astrbot.core.agent.*` 导入保持兼容。`Context.tool_loop_agent()` 的调用方式不变。

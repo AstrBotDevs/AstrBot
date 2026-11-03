@@ -86,6 +86,15 @@ class TurnStatus(str, Enum):
     FAILED = "failed"
 
 
+class SessionState(str, Enum):
+    """Observable execution state of a runtime-owned session."""
+
+    IDLE = "idle"
+    QUEUED = "queued"
+    RUNNING = "running"
+    CLOSED = "closed"
+
+
 @dataclass(frozen=True)
 class RuntimeEvent:
     """One output or lifecycle change, associated with exactly one turn."""
@@ -282,6 +291,24 @@ class AgentSession(ABC):
     def closed(self) -> bool:
         """Whether new input requires opening a fresh live session handle."""
         return self._closed
+
+    @property
+    def pending_turn_count(self) -> int:
+        """Count accepted turns waiting to become active, excluding settled turns."""
+        return sum(
+            turn is not self.active_turn and not turn.done for turn in self._turns
+        )
+
+    @property
+    def state(self) -> SessionState:
+        """Describe execution without requiring callers to inspect private tasks."""
+        if self.closed:
+            return SessionState.CLOSED
+        if self.active_turn is not None:
+            return SessionState.RUNNING
+        if self.pending_turn_count:
+            return SessionState.QUEUED
+        return SessionState.IDLE
 
     async def run_turn(self, input: AgentInput) -> AgentTurn:
         """Accept an independent turn, queuing behind earlier accepted turns.

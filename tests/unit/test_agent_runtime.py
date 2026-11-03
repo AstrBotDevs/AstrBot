@@ -12,6 +12,7 @@ from astrbot.core.agent.runtime import (
     AgentRole,
     AgentSession,
     InputReceipt,
+    SessionState,
     TurnResult,
     TurnStatus,
     get_agent_permissions,
@@ -70,10 +71,15 @@ async def test_result_and_multiple_event_readers_observe_one_execution():
 @pytest.mark.asyncio
 async def test_queued_cancellation_does_not_release_an_earlier_turn():
     session = RecordingSession()
+    assert session.state == SessionState.IDLE
     first = await session.run_turn(make_input("first"))
+    assert session.state == SessionState.QUEUED
+    assert session.pending_turn_count == 1
     await session.entered.get()
+    assert session.state == SessionState.RUNNING
     second = await first.follow_up(make_input("second"))
     third = await first.follow_up(make_input("third"))
+    assert session.pending_turn_count == 2
     await second.cancel()
     await asyncio.sleep(0)
     assert session.entered.empty()
@@ -82,7 +88,9 @@ async def test_queued_cancellation_does_not_release_an_earlier_turn():
     assert (await third.result()).text == "third"
     assert (await second.result()).status == TurnStatus.CANCELLED
     assert session.saved == [first.id, third.id]
+    assert session.state == SessionState.IDLE
     await session.close()
+    assert session.state == SessionState.CLOSED
 
 
 @pytest.mark.asyncio
