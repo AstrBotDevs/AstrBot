@@ -1,4 +1,5 @@
 import asyncio
+import importlib
 import json
 import sys
 from types import SimpleNamespace
@@ -14,11 +15,18 @@ from astrbot.core.subagents.store import AgentState
 
 
 @pytest.mark.asyncio
-async def test_documented_context_imports_work_with_native_sdk(environment):
-    from astrbot.core.astr_agent_context import AgentContextWrapper, AstrAgentContext
+@pytest.mark.parametrize(
+    "module_name", ["astrbot.api.agents", "astrbot.core.astr_agent_context"]
+)
+async def test_documented_context_imports_work_with_native_sdk(
+    environment, module_name
+):
     from astrbot.core.astr_agent_runtime import context as native_context
 
     env = environment
+    public = importlib.import_module(module_name)
+    AstrAgentContext = public.AstrAgentContext
+    AgentContextWrapper = public.AgentContextWrapper
     assert AstrAgentContext is native_context.AstrAgentContext
     assert AgentContextWrapper is native_context.AgentContextWrapper
     context = AstrAgentContext(context=env.context, event=env.event)

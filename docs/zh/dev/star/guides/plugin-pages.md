@@ -207,7 +207,9 @@ enabled = bool(payload.get("enabled"))
 ```python
 from pathlib import Path
 
-from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
+# 4.30.0 之前：
+# from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
+from astrbot.api.util import get_astrbot_plugin_data_path
 from astrbot.api.web import PluginUploadFile, error_response, json_response, request
 
 

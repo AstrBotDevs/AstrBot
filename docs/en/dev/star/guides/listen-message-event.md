@@ -309,7 +309,9 @@ async def my_custom_hook_1(
 > For small or medium-sized dynamic prompts that change every round, prefer appending them through `req.extra_user_content_parts`. These parts are added after the current user input as extra user-message content, which is more suitable for dynamic context such as "current time", "character affinity", or "relevant memory snippets":
 >
 > ```python
-> from astrbot.core.agent.message import TextPart
+> # Before AstrBot v4.30.0:
+> # from astrbot.core.agent.message import TextPart
+> from astrbot.api.agents import TextPart
 >
 > @filter.on_llm_request()
 > async def add_dynamic_prompt(self, event: AstrMessageEvent, req: ProviderRequest):
@@ -366,8 +368,10 @@ When the Agent starts running, the `on_agent_begin` hook is triggered.
 
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
-from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.astr_agent_context import AstrAgentContext
+# Before AstrBot v4.30.0:
+# from astrbot.core.agent.run_context import ContextWrapper
+# from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.api.agents import AstrAgentContext, ContextWrapper
 
 
 @filter.on_agent_begin()
@@ -389,7 +393,9 @@ You can obtain the `FunctionTool` object and tool call arguments.
 
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
-from astrbot.core.agent.tool import FunctionTool
+# Before AstrBot v4.30.0:
+# from astrbot.core.agent.tool import FunctionTool
+from astrbot.api import FunctionTool
 
 
 @filter.on_using_llm_tool()
@@ -416,7 +422,9 @@ You can obtain the `FunctionTool` object, tool call arguments, and tool call res
 from mcp.types import CallToolResult
 
 from astrbot.api.event import filter, AstrMessageEvent
-from astrbot.core.agent.tool import FunctionTool
+# Before AstrBot v4.30.0:
+# from astrbot.core.agent.tool import FunctionTool
+from astrbot.api import FunctionTool
 
 
 @filter.on_llm_tool_respond()
@@ -441,8 +449,10 @@ The built-in tool-loop runner triggers `on_agent_done` once when a run exits, in
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.provider import LLMResponse
-from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.astr_agent_context import AstrAgentContext
+# Before AstrBot v4.30.0:
+# from astrbot.core.agent.run_context import ContextWrapper
+# from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.api.agents import AstrAgentContext, ContextWrapper
 
 
 @filter.on_agent_done()

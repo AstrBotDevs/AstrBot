@@ -115,9 +115,12 @@ Tool 是大语言模型调用外部工具的能力。
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
-from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.agent.tool import FunctionTool, ToolExecResult
-from astrbot.core.astr_agent_context import AstrAgentContext
+# 4.30.0 之前：
+# from astrbot.core.agent.run_context import ContextWrapper
+# from astrbot.core.agent.tool import FunctionTool, ToolExecResult
+# from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.api import FunctionTool, ToolExecResult
+from astrbot.api.agents import AstrAgentContext, ContextWrapper
 
 
 @dataclass
@@ -237,10 +240,12 @@ Multi-Agent（多智能体）系统将复杂应用分解为多个专业化智能
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
-from astrbot.api import logger
-from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.agent.tool import FunctionTool, ToolExecResult, ToolSet
-from astrbot.core.astr_agent_context import AstrAgentContext
+# 4.30.0 之前：
+# from astrbot.core.agent.run_context import ContextWrapper
+# from astrbot.core.agent.tool import FunctionTool, ToolExecResult, ToolSet
+# from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.api import FunctionTool, ToolExecResult, ToolSet, logger
+from astrbot.api.agents import AstrAgentContext, ContextWrapper
 
 
 @dataclass
@@ -393,7 +398,11 @@ async def test(self, event: AstrMessageEvent):
 
 ## Agent 模块路径与导入兼容
 
-内置 Agent 的实现集中在 `astrbot.core.astr_agent_runtime`。插件继续使用文档中的 `astrbot.core.astr_agent_context.AstrAgentContext`、`AgentContextWrapper` 和公共 `astrbot.core.agent.*` 类型；旧 context 路径重导出同一个类，继承、类型检查及 `Context.tool_loop_agent()` 的调用方式保持兼容。
+内置 Agent 的实现集中在 `astrbot.core.astr_agent_runtime`。插件从 `astrbot.api.agents` 导入 `AstrAgentContext`、`AgentContextWrapper`、`ContextWrapper` 和 LLM 消息类型，从 `astrbot.api` 导入 `FunctionTool`、`ToolExecResult`、`ToolSet`。这些公共入口重导出原有类型；已有的 `astrbot.core.astr_agent_context` 和 `astrbot.core.agent.*` 导入保持兼容。`Context.tool_loop_agent()` 的调用方式不变。
+
+`astrbot.api.agent` 是已有的 Agent 注册装饰器，类型入口使用复数 `astrbot.api.agents`。
+
+`astrbot.api.agents` 也集中导出 `FunctionTool`、`ToolSet`、`ToolExecResult`、`BaseFunctionToolExecutor` 和 `Conversation`；原有 `astrbot.api`、`astrbot.api.provider` 入口继续保留，导出的是同一对象。
 
 内部实现路径调整如下：
 
@@ -416,7 +425,9 @@ async def test(self, event: AstrMessageEvent):
 ### 获取会话当前的 LLM 对话历史 `get_conversation`
 
 ```py
-from astrbot.core.conversation_mgr import Conversation
+# 4.30.0 之前：
+# from astrbot.core.conversation_mgr import Conversation
+from astrbot.api.provider import Conversation
 
 uid = event.unified_msg_origin
 conv_mgr = self.context.conversation_manager
@@ -454,7 +465,9 @@ class Conversation:
 ### 快速添加 LLM 记录到对话 `add_message_pair`
 
 ```py
-from astrbot.core.agent.message import (
+# 4.30.0 之前：
+# from astrbot.core.agent.message import AssistantMessageSegment, UserMessageSegment, TextPart
+from astrbot.api.agents import (
     AssistantMessageSegment,
     UserMessageSegment,
     TextPart,

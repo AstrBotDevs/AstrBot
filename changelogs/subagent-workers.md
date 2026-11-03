@@ -18,3 +18,5 @@
 - Share subagents within the owning UMO/conversation instead of isolating them by sender. Preserve each accepted input's caller and permissions, and retain sender metadata for result wakeups.
 
 - Consolidate native construction, tools, computer environments, hooks, and tool execution under `core/astr_agent_runtime`. Move runtime-independent subagent management to `core/subagents` and queue-based wakeups to `core/agent_wakeup.py`. Keep documented `core.astr_agent_context` imports as re-exports of the same classes.
+
+- Expose plugin-facing agent contexts and message types through `astrbot.api.agents`; add public tool-result, conversation, session-filter, data-path, and message-session exports. Update plugin development examples to use the API facade while retaining existing Core imports and the `astrbot.api.agent` decorator.

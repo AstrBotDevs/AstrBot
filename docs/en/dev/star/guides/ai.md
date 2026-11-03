@@ -116,9 +116,12 @@ Tools enable large language models to invoke external capabilities.
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
-from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.agent.tool import FunctionTool, ToolExecResult
-from astrbot.core.astr_agent_context import AstrAgentContext
+# Before AstrBot v4.30.0:
+# from astrbot.core.agent.run_context import ContextWrapper
+# from astrbot.core.agent.tool import FunctionTool, ToolExecResult
+# from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.api import FunctionTool, ToolExecResult
+from astrbot.api.agents import AstrAgentContext, ContextWrapper
 
 
 @dataclass
@@ -237,10 +240,12 @@ In the example below, we define a Main Agent responsible for delegating tasks to
 Define Tools:
 
 ```py
-from astrbot.api import logger
-from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.agent.tool import FunctionTool, ToolExecResult, ToolSet
-from astrbot.core.astr_agent_context import AstrAgentContext
+# Before AstrBot v4.30.0:
+# from astrbot.core.agent.run_context import ContextWrapper
+# from astrbot.core.agent.tool import FunctionTool, ToolExecResult, ToolSet
+# from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.api import FunctionTool, ToolExecResult, ToolSet, logger
+from astrbot.api.agents import AstrAgentContext, ContextWrapper
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
@@ -395,7 +400,11 @@ Plugins can retain an already scheduled asyncio Task with `context.register_back
 
 ## Agent module paths and import compatibility
 
-The built-in Agent implementation lives under `astrbot.core.astr_agent_runtime`. Plugins continue to use the documented `astrbot.core.astr_agent_context.AstrAgentContext`, `AgentContextWrapper`, and public `astrbot.core.agent.*` types. The old context module re-exports the same classes, preserving inheritance, type checks, and `Context.tool_loop_agent()` calls.
+The built-in Agent implementation lives under `astrbot.core.astr_agent_runtime`. Plugins import `AstrAgentContext`, `AgentContextWrapper`, `ContextWrapper`, and LLM message types from `astrbot.api.agents`, and `FunctionTool`, `ToolExecResult`, and `ToolSet` from `astrbot.api`. These public entry points re-export the original types; existing `astrbot.core.astr_agent_context` and `astrbot.core.agent.*` imports remain compatible. `Context.tool_loop_agent()` calls are unchanged.
+
+`astrbot.api.agent` remains the existing Agent registration decorator; the type module uses the plural name `astrbot.api.agents`.
+
+`astrbot.api.agents` also exports `FunctionTool`, `ToolSet`, `ToolExecResult`, `BaseFunctionToolExecutor`, and `Conversation`. Existing `astrbot.api` and `astrbot.api.provider` entry points continue to export the same objects.
 
 Internal implementation paths have changed as follows:
 
@@ -418,7 +427,9 @@ Core still owns media input preprocessing and plugin tool/skill filtering. Cron,
 ### Getting the Current LLM Conversation History for a Session
 
 ```py
-from astrbot.core.conversation_mgr import Conversation
+# Before AstrBot v4.30.0:
+# from astrbot.core.conversation_mgr import Conversation
+from astrbot.api.provider import Conversation
 
 uid = event.unified_msg_origin
 conv_mgr = self.context.conversation_manager
@@ -456,7 +467,9 @@ class Conversation:
 ### Quickly Adding LLM Records to a Conversation `add_message_pair`
 
 ```py
-from astrbot.core.agent.message import (
+# Before AstrBot v4.30.0:
+# from astrbot.core.agent.message import AssistantMessageSegment, UserMessageSegment, TextPart
+from astrbot.api.agents import (
     AssistantMessageSegment,
     UserMessageSegment,
     TextPart,
