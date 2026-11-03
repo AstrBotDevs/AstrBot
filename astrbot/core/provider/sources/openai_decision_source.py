@@ -9,7 +9,6 @@ from typing import Any, TypeGuard
 import httpx
 
 from astrbot import logger
-from astrbot.core.utils.network_utils import log_connection_failure
 
 from ..entities import (
     DecisionAnswer,
@@ -32,17 +31,9 @@ _DEFAULT_API_BASE = "https://api.openai.com/v1"
 _DEFAULT_TIMEOUT = 5.0
 _DEFAULT_TOTAL_TIMEOUT = 10.0
 _DEFAULT_MAX_CONCURRENCY = 4
-_RESPONSE_SUMMARY_CHARS = 500
 # Probabilities arrive as JSON floats; allow rounding drift when checking that
 # a distribution sums to one.
 _PROBABILITY_SUM_TOLERANCE = 1e-3
-
-
-def _summarize_response(value: Any) -> str:
-    summary = json.dumps(value, ensure_ascii=False, default=str)
-    if len(summary) <= _RESPONSE_SUMMARY_CHARS:
-        return summary
-    return f"{summary[: _RESPONSE_SUMMARY_CHARS - 3]}..."
 
 
 def _is_finite_number(value: Any) -> TypeGuard[float]:
@@ -76,11 +67,15 @@ class OpenAIDecisionProvider(DecisionProvider):
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         super().__init__(provider_config, provider_settings)
-        base_url = (
+        base_url = httpx.URL(
             str(provider_config.get("api_base") or "").strip() or _DEFAULT_API_BASE
-        ).rstrip("/")
-        self.endpoint = (
-            base_url if base_url.endswith("/decisions") else f"{base_url}/decisions"
+        )
+        endpoint_path, separator, query = base_url.raw_path.partition(b"?")
+        endpoint_path = endpoint_path.rstrip(b"/")
+        if not endpoint_path.endswith(b"/decisions"):
+            endpoint_path += b"/decisions"
+        self.endpoint = str(
+            base_url.copy_with(raw_path=endpoint_path + separator + query)
         )
         self.model = str(provider_config.get("model") or "").strip()
         if not self.model:
@@ -88,16 +83,18 @@ class OpenAIDecisionProvider(DecisionProvider):
         self.api_key = provider_config.get("key", "")
         if not isinstance(self.api_key, str):
             raise ValueError("OpenAI decision API key must be a string")
-        headers = dict(self.request_headers)
+        headers = httpx.Headers(self.request_headers)
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
         self.proxy = str(provider_config.get("proxy") or "").strip() or None
         self.timeout = float(provider_config.get("timeout", _DEFAULT_TIMEOUT))
+        if not math.isfinite(self.timeout) or self.timeout <= 0:
+            raise ValueError("timeout must be finite and greater than 0")
         self.total_timeout = float(
             provider_config.get("total_timeout", _DEFAULT_TOTAL_TIMEOUT)
         )
-        if self.total_timeout <= 0:
-            raise ValueError("total_timeout must be greater than 0")
+        if not math.isfinite(self.total_timeout) or self.total_timeout <= 0:
+            raise ValueError("total_timeout must be finite and greater than 0")
         self.max_concurrency = int(
             provider_config.get("max_concurrency", _DEFAULT_MAX_CONCURRENCY)
         )
@@ -253,64 +250,45 @@ class OpenAIDecisionProvider(DecisionProvider):
                     "OpenAI Decision",
                     _post,
                     max_attempts=request_max_retries + 1,
+                    log_error_details=False,
                 )
 
         try:
             body = await asyncio.wait_for(_request(), timeout=self.total_timeout)
-        except TimeoutError as exc:
+        except TimeoutError:
             logger.warning(
                 f"[OpenAI Decision] Total request timed out after "
                 f"{self.total_timeout:g}s"
             )
             raise DecisionError(
                 f"OpenAI decision total request timed out after {self.total_timeout:g}s"
-            ) from exc
+            ) from None
         except httpx.TimeoutException as exc:
-            log_connection_failure("OpenAI Decision", exc, self.proxy)
+            logger.warning(f"[OpenAI Decision] Request failed ({type(exc).__name__})")
             raise DecisionError(
                 f"OpenAI decision attempt timed out after {self.timeout:g}s"
-            ) from exc
+            ) from None
         except httpx.HTTPStatusError as exc:
-            # Only the status and the machine-readable error code are logged;
-            # error bodies may echo request content.
-            error_code = None
-            try:
-                error = exc.response.json().get("error")
-                if isinstance(error, Mapping):
-                    error_code = error.get("code") or error.get("type")
-            except (ValueError, AttributeError):
-                pass
-            detail = f" ({error_code})" if isinstance(error_code, str) else ""
-            logger.error(
-                f"[OpenAI Decision] HTTP {exc.response.status_code}{detail} from "
-                f"{self.endpoint}"
-            )
+            logger.error(f"[OpenAI Decision] HTTP {exc.response.status_code}")
             raise DecisionError(
-                f"OpenAI decision endpoint returned HTTP "
-                f"{exc.response.status_code}{detail}"
-            ) from exc
+                f"OpenAI decision endpoint returned HTTP {exc.response.status_code}"
+            ) from None
         except httpx.RequestError as exc:
-            log_connection_failure("OpenAI Decision", exc, self.proxy)
+            logger.warning(f"[OpenAI Decision] Request failed ({type(exc).__name__})")
             raise DecisionError(
                 "OpenAI decision request failed: unable to connect "
                 "(check network or proxy)"
-            ) from exc
-        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-            logger.error(
-                f"[OpenAI Decision] Invalid JSON or text encoding from "
-                f"{self.endpoint}: {exc}"
-            )
+            ) from None
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            logger.error("[OpenAI Decision] Invalid JSON or text encoding")
             raise DecisionError(
                 "OpenAI decision endpoint returned invalid JSON or text encoding"
-            ) from exc
+            ) from None
 
         raw_answers = body.get("answers") if isinstance(body, Mapping) else None
         if not isinstance(raw_answers, list):
-            summary = _summarize_response(body)
-            logger.warning(f"[OpenAI Decision] Invalid response: {summary}")
-            raise DecisionError(
-                f"OpenAI decision endpoint returned an invalid response: {summary}"
-            )
+            logger.warning("[OpenAI Decision] Invalid response")
+            raise DecisionError("OpenAI decision endpoint returned an invalid response")
 
         # Answers are matched by name, never by position.
         answers_by_name: dict[str, Mapping[str, Any]] = {}
@@ -321,24 +299,17 @@ class OpenAIDecisionProvider(DecisionProvider):
                 or name not in heads_by_name
                 or name in answers_by_name
             ):
-                summary = _summarize_response(raw_answers)
-                logger.warning(
-                    f"[OpenAI Decision] Unknown or duplicate answer name: {summary}"
-                )
+                logger.warning("[OpenAI Decision] Unknown or duplicate answer name")
                 raise DecisionError(
-                    f"OpenAI decision endpoint returned an unknown or duplicate "
-                    f"answer name: {summary}"
+                    "OpenAI decision endpoint returned an unknown or duplicate "
+                    "answer name"
                 )
             answers_by_name[name] = raw_answer
 
-        def invalid_answer(kind: str, head: str, raw_answer: Any) -> DecisionError:
-            summary = _summarize_response(raw_answer)
-            logger.warning(
-                f"[OpenAI Decision] Invalid {kind} answer for {head}: {summary}"
-            )
+        def invalid_answer(kind: str, head: str) -> DecisionError:
+            logger.warning(f"[OpenAI Decision] Invalid {kind} answer for {head}")
             return DecisionError(
-                f"OpenAI decision endpoint returned an invalid {kind} answer "
-                f"for {head}: {summary}"
+                f"OpenAI decision endpoint returned an invalid {kind} answer for {head}"
             )
 
         answers: dict[str, DecisionAnswer] = {}
@@ -346,12 +317,9 @@ class OpenAIDecisionProvider(DecisionProvider):
             question = questions[head]
             raw_answer = answers_by_name.get(name)
             if raw_answer is None:
-                summary = _summarize_response(raw_answers)
-                logger.warning(
-                    f"[OpenAI Decision] Missing answer for {head}: {summary}"
-                )
+                logger.warning(f"[OpenAI Decision] Missing answer for {head}")
                 raise DecisionError(
-                    f"OpenAI decision endpoint returned no answer for {head}: {summary}"
+                    f"OpenAI decision endpoint returned no answer for {head}"
                 )
             answer_type = raw_answer.get("type")
             if answer_type == "refusal":
@@ -369,7 +337,7 @@ class OpenAIDecisionProvider(DecisionProvider):
                     and _is_unit_number(confidence)
                     and isinstance(raw_probabilities, list)
                 ):
-                    raise invalid_answer("score", head, raw_answer)
+                    raise invalid_answer("score", head)
                 legend = {
                     str(level_index): level
                     for level_index, level in enumerate(question.criteria)
@@ -377,7 +345,7 @@ class OpenAIDecisionProvider(DecisionProvider):
                 probabilities: dict[str, float] = {}
                 for entry in raw_probabilities:
                     if not isinstance(entry, Mapping):
-                        raise invalid_answer("score", head, raw_answer)
+                        raise invalid_answer("score", head)
                     value = entry.get("value")
                     probability = entry.get("probability")
                     level_key = str(value)
@@ -389,14 +357,14 @@ class OpenAIDecisionProvider(DecisionProvider):
                         and entry.get("label") == level_key
                         and _is_unit_number(probability)
                     ):
-                        raise invalid_answer("score", head, raw_answer)
+                        raise invalid_answer("score", head)
                     probabilities[level_key] = float(probability)
                 if set(probabilities) != set(legend) or not math.isclose(
                     sum(probabilities.values()),
                     1.0,
                     abs_tol=_PROBABILITY_SUM_TOLERANCE,
                 ):
-                    raise invalid_answer("score", head, raw_answer)
+                    raise invalid_answer("score", head)
                 answers[head] = DecisionScoreAnswer(
                     score=float(score),
                     legend=legend,
@@ -417,11 +385,11 @@ class OpenAIDecisionProvider(DecisionProvider):
                     and _is_unit_number(confidence)
                     and isinstance(raw_probabilities, list)
                 ):
-                    raise invalid_answer("choice", head, raw_answer)
+                    raise invalid_answer("choice", head)
                 probabilities = {}
                 for entry in raw_probabilities:
                     if not isinstance(entry, Mapping):
-                        raise invalid_answer("choice", head, raw_answer)
+                        raise invalid_answer("choice", head)
                     value = entry.get("value")
                     probability = entry.get("probability")
                     if not (
@@ -430,14 +398,14 @@ class OpenAIDecisionProvider(DecisionProvider):
                         and value not in probabilities
                         and _is_unit_number(probability)
                     ):
-                        raise invalid_answer("choice", head, raw_answer)
+                        raise invalid_answer("choice", head)
                     probabilities[value] = float(probability)
                 if set(probabilities) != option_ids or not math.isclose(
                     sum(probabilities.values()),
                     1.0,
                     abs_tol=_PROBABILITY_SUM_TOLERANCE,
                 ):
-                    raise invalid_answer("choice", head, raw_answer)
+                    raise invalid_answer("choice", head)
                 answers[head] = DecisionChoiceAnswer(
                     choice=choice,
                     probability=probabilities[choice],
@@ -448,7 +416,7 @@ class OpenAIDecisionProvider(DecisionProvider):
 
             probability = raw_answer.get("probability")
             if not (answer_type == "predicate" and _is_unit_number(probability)):
-                raise invalid_answer("boolean", head, raw_answer)
+                raise invalid_answer("boolean", head)
             answers[head] = DecisionBooleanAnswer(probability=float(probability))
 
         return answers

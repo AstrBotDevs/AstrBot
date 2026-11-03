@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import traceback
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
@@ -183,6 +184,19 @@ async def test_mixed_questions_share_one_request_and_match_answers_by_name():
         ("https://api.openai.test/v1", ENDPOINT),
         ("https://api.openai.test/v1/", ENDPOINT),
         (ENDPOINT, ENDPOINT),
+        (
+            "https://api.openai.test/v1?api-key=token",
+            ENDPOINT + "?api-key=token",
+        ),
+        (ENDPOINT + "?api-key=token", ENDPOINT + "?api-key=token"),
+        (
+            "https://api.openai.test/tenant%2Fname/v1?api-key=token",
+            "https://api.openai.test/tenant%2Fname/v1/decisions?api-key=token",
+        ),
+        (
+            "https://api.openai.test/tenant%3Fname/v1",
+            "https://api.openai.test/tenant%3Fname/v1/decisions",
+        ),
         ("", "https://api.openai.com/v1/decisions"),
     ],
 )
@@ -530,7 +544,7 @@ async def test_rejects_malformed_response_body(body):
 
 
 @pytest.mark.asyncio
-async def test_http_error_reports_code_without_body_and_closes_client(caplog):
+async def test_http_error_reports_status_without_body_and_closes_client(caplog):
     caplog.set_level(logging.INFO, logger="astrbot")
     provider = _provider(
         lambda request: httpx.Response(
@@ -544,7 +558,7 @@ async def test_http_error_reports_code_without_body_and_closes_client(caplog):
         )
     )
     try:
-        with pytest.raises(DecisionError, match=r"HTTP 400 \(invalid_value\)"):
+        with pytest.raises(DecisionError, match="HTTP 400"):
             await provider.ask(
                 {"a": DecisionBooleanQuestion("Ok?")}, "private-conversation"
             )
@@ -553,6 +567,7 @@ async def test_http_error_reports_code_without_body_and_closes_client(caplog):
 
     assert provider.client.is_closed
     assert "HTTP 400" in caplog.text
+    assert "invalid_value" not in caplog.text
     assert "private-conversation" not in caplog.text
     assert "sk-test" not in caplog.text
 
@@ -951,3 +966,84 @@ async def test_rejects_question_sets_the_api_cannot_express(questions):
         await provider.terminate()
 
     handler.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("header", ["authorization", "Authorization", "AUTHORIZATION"])
+async def test_api_key_replaces_custom_authorization(header):
+    captured = []
+
+    def handler(request):
+        captured.extend(request.headers.get_list("authorization"))
+        return httpx.Response(200, json=_decision(_predicate("q0", 0.5)))
+
+    provider = _provider(handler, custom_headers={header: "Bearer old"})
+    try:
+        await provider.ask({"a": DecisionBooleanQuestion("Ok?")})
+    finally:
+        await provider.terminate()
+    assert captured == ["Bearer sk-test"]
+
+
+@pytest.mark.parametrize("field", ["timeout", "total_timeout"])
+@pytest.mark.parametrize("value", [0, -1, float("nan"), float("inf"), -float("inf")])
+def test_rejects_invalid_timeout_settings(field, value):
+    with pytest.raises(ValueError, match=field):
+        _provider(None, **{field: value})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"private": "sensitive-state"},
+        _decision({"name": "sensitive-state"}),
+        _decision({"name": "q0", "probability": "sensitive-state"}),
+        _decision(),
+    ],
+)
+async def test_invalid_response_does_not_expose_content(body, caplog):
+    caplog.set_level(logging.WARNING, logger="astrbot")
+    provider = _provider(lambda request: httpx.Response(200, json=body))
+    try:
+        with pytest.raises(DecisionError) as error:
+            await provider.ask({"a": DecisionBooleanQuestion("Ok?")})
+        assert "sensitive-state" not in str(error.value)
+        assert "sensitive-state" not in caplog.text
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["status", "network", "timeout", "json"])
+async def test_failure_logs_omit_urls_and_exception_content(failure, caplog):
+    caplog.set_level(logging.WARNING, logger="astrbot")
+    secret = "sensitive-credential"
+
+    def handler(request):
+        if failure == "network":
+            raise httpx.ConnectError(secret)
+        if failure == "timeout":
+            raise httpx.ReadTimeout(secret)
+        if failure == "json":
+            return httpx.Response(200, content=secret.encode())
+        return httpx.Response(503, json={"error": {"message": secret, "code": secret, "type": secret}})
+
+    provider = _provider(
+        handler,
+        api_base=f"https://user:{secret}@api.openai.test/v1/decisions?token={secret}",
+    )
+    # Keep MockTransport active while exercising proxy diagnostics.
+    provider.proxy = f"http://user:{secret}@proxy.test"
+    try:
+        with pytest.raises(DecisionError) as error:
+            await provider.ask(
+                {"a": DecisionBooleanQuestion("Ok?")}, request_max_retries=1
+            )
+        assert secret not in str(error.value)
+        assert secret not in "".join(traceback.format_exception(error.value))
+        assert secret not in caplog.text
+        if failure != "json":
+            assert "retrying" in caplog.text
+    finally:
+        await provider.terminate()
