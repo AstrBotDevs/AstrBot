@@ -10,7 +10,14 @@ from discord.channel import DMChannel
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import File, Image, Plain, Record, Reply
+from astrbot.api.message_components import (
+    ButtonInteraction,
+    File,
+    Image,
+    Plain,
+    Record,
+    Reply,
+)
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
@@ -20,6 +27,11 @@ from astrbot.api.platform import (
     register_platform_adapter,
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.button_interaction import (
+    BUTTON_ACTION_EXPIRED_MESSAGE,
+    ButtonActionExpiredError,
+    decode_button_callback,
+)
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.star import star_map
@@ -130,7 +142,11 @@ class DiscordPlatformAdapter(Platform):
             if self.bot_self_id is None:
                 self.bot_self_id = message_data.get("bot_id")
             abm = await self.convert_message(data=message_data)
-            await self.handle_msg(abm)
+            if abm is None:
+                return
+            interaction = message_data.get("interaction")
+            followup_webhook = interaction.followup if interaction is not None else None
+            await self.handle_msg(abm, followup_webhook)
 
         # 初始化 Discord 客户端
         token = str(self.config.get("discord_token"))
@@ -289,9 +305,67 @@ class DiscordPlatformAdapter(Platform):
         abm.message_id = str(message.id)
         return abm
 
-    async def convert_message(self, data: dict) -> AstrBotMessage:
+    async def convert_message(self, data: dict) -> AstrBotMessage | None:
         """将平台消息转换成 AstrBotMessage"""
-        # 由于 on_interaction 已被禁用，我们只处理普通消息
+        if data.get("type") == "interaction":
+            interaction = cast(discord.Interaction, data["interaction"])
+            interaction_data = cast(dict, interaction.data or {})
+            callback_payload = str(interaction_data.get("custom_id", ""))
+            try:
+                action_id, callback_data = decode_button_callback(callback_payload)
+            except ButtonActionExpiredError:
+                try:
+                    await interaction.followup.send(
+                        BUTTON_ACTION_EXPIRED_MESSAGE, ephemeral=True
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "Failed to send Discord button expiry notice: %s", exc
+                    )
+                return None
+            except (TypeError, ValueError):
+                if callback_payload.startswith("astrbot:"):
+                    logger.debug("Ignored an expired or invalid AstrBot button action.")
+                    return None
+                # Legacy DiscordButton custom IDs were sent without an AstrBot envelope.
+                action_id, callback_data = callback_payload, None
+
+            abm = AstrBotMessage()
+            abm.type = (
+                MessageType.GROUP_MESSAGE
+                if interaction.guild_id is not None
+                else MessageType.FRIEND_MESSAGE
+            )
+            abm.group_id = (
+                str(interaction.channel_id)
+                if interaction.channel_id is not None
+                else None
+            )
+            abm.message_str = action_id
+            abm.sender = MessageMember(
+                user_id=str(interaction.user.id),
+                nickname=interaction.user.display_name,
+            )
+            source_message = getattr(interaction, "message", None)
+            abm.message = [
+                ButtonInteraction(
+                    action_id=action_id,
+                    data=callback_data,
+                    interaction_id=str(interaction.id),
+                    source_message_id=(
+                        str(source_message.id) if source_message is not None else None
+                    ),
+                    callback_data=callback_payload
+                    if callback_payload.startswith("astrbot:")
+                    else None,
+                )
+            ]
+            abm.raw_message = interaction
+            abm.self_id = cast(str, self.bot_self_id)
+            abm.session_id = str(interaction.channel_id or interaction.user.id)
+            abm.message_id = str(interaction.id)
+            return abm
+
         abm = self._convert_message_to_abm(data)
         message = data["message"]
         reference = getattr(message, "reference", None)
@@ -370,11 +444,14 @@ class DiscordPlatformAdapter(Platform):
             )
             return
 
-        # 检查是否为斜杠指令
-        is_slash_command = message_event.interaction_followup_webhook is not None
+        if message_event.is_button_interaction():
+            message_event.is_wake = True
+            message_event.is_at_or_wake_command = True
+            self.commit_event(message_event)
+            return
 
-        # 1. 优先处理斜杠指令
-        if is_slash_command:
+        # Slash commands carry a follow-up webhook after their initial defer.
+        if message_event.is_slash_command():
             message_event.is_wake = True
             message_event.is_at_or_wake_command = True
             self.commit_event(message_event)

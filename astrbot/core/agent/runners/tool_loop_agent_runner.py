@@ -232,6 +232,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         request_max_retries: int | None = None,
         tool_result_overflow_dir: str | None = None,
         read_tool: FunctionTool | None = None,
+        max_context_tokens: int | None = None,
         **kwargs: T.Any,
     ) -> None:
         self.req = request
@@ -249,7 +250,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._tool_result_token_counter = EstimateTokenCounter()
         self.request_context_manager_config = ContextConfig(
             # <=0 disables token-based guarding.
-            max_context_tokens=provider.provider_config.get("max_context_tokens", 0),
+            max_context_tokens=(
+                max_context_tokens
+                if max_context_tokens is not None
+                else provider.provider_config.get("max_context_tokens", 0)
+            ),
             # Enforce max turns before token-based guarding.
             enforce_max_turns=self.enforce_max_turns,
             truncate_turns=self.truncate_turns,

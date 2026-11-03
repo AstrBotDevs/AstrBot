@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query, Request
 
 from astrbot.dashboard.responses import error, ok
-from astrbot.dashboard.schemas import BotConfigRequest, EnabledPatch
+from astrbot.dashboard.schemas import BotCleanupTarget, BotConfigRequest, EnabledPatch
 from astrbot.dashboard.services.config_service import BotConfigService
 
 from .auth import AuthContext, ScopeDependency
@@ -115,10 +115,11 @@ async def update_bot_by_id(
 @router.delete("/bots/by-id")
 async def delete_bot_by_id(
     bot_id: str = Query(...),
+    cleanup: list[BotCleanupTarget] | None = Query(default=None),
     _auth: AuthContext = Depends(require_bot_scope),
     service: BotConfigService = Depends(get_service),
 ):
-    await service.delete_bot(bot_id)
+    await service.delete_bot(bot_id, cleanup=cleanup)
     return ok(message="删除平台配置成功~")
 
 
@@ -184,10 +185,11 @@ async def update_bot(
 @router.delete("/bots/{bot_id:path}")
 async def delete_bot(
     bot_id: str,
+    cleanup: list[BotCleanupTarget] | None = Query(default=None),
     _auth: AuthContext = Depends(require_bot_scope),
     service: BotConfigService = Depends(get_service),
 ):
-    await service.delete_bot(bot_id)
+    await service.delete_bot(bot_id, cleanup=cleanup)
     return ok(message="删除平台配置成功~")
 
 

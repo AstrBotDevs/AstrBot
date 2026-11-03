@@ -492,7 +492,7 @@ async def export_file(self):
 
 ### `subscribeSSE(endpoint, handlers, params)`
 
-订阅插件后端 SSE，返回 `Promise<subscriptionId>`。`handlers` 可以包含 `onOpen`、`onMessage`、`onError`。
+订阅插件后端 SSE，返回 `Promise<subscriptionId>`。`handlers` 可以包含 `onOpen`、`onMessage`、`onClose`、`onError`。
 
 ```js
 const subscriptionId = await bridge.subscribeSSE(
@@ -504,6 +504,9 @@ const subscriptionId = await bridge.subscribeSSE(
     onMessage(event) {
       console.log(event.raw, event.parsed, event.lastEventId);
     },
+    onClose() {
+      console.log("SSE stream ended");
+    },
     onError() {
       console.warn("SSE error");
     },
@@ -513,6 +516,8 @@ const subscriptionId = await bridge.subscribeSSE(
 ```
 
 `event.raw` 是原始字符串；如果内容是 JSON 字符串，`event.parsed` 会自动解析，否则等于原始字符串。`event.eventType` 对应 SSE 的 `event:` 字段，未设置时为 `message`。
+
+流结束时调用 `onClose`，读取流失败时调用 `onError`。主动调用 `unsubscribeSSE` 不会触发这两个回调。桥接层不会自动重连；需要时请自行重新订阅。初始订阅失败时，返回的 Promise 会被拒绝。
 
 后端必须返回 `text/event-stream`：
 
