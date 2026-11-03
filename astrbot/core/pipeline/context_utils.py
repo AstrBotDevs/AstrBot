@@ -1,3 +1,4 @@
+import asyncio
 import inspect
 import traceback
 import typing as T
@@ -117,6 +118,8 @@ async def call_event_hook(
                 f"hook({hook_type.name}) -> {plugin_name} - {handler.handler_name}",
             )
             await handler.handler(event, *args, **kwargs)
+        except asyncio.CancelledError:
+            raise
         except BaseException:
             logger.error(traceback.format_exc())
             event.trace.record(

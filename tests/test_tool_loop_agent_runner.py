@@ -1123,18 +1123,51 @@ def test_main_agent_buffers_only_for_external_response_handlers(
     monkeypatch, reserved, expected
 ):
     from astrbot.core.star.star import star_map
+    from astrbot.core.star.star_handler import EventType
 
     module_path = "tests.response_handler"
     handler = SimpleNamespace(handler_module_path=module_path)
-    event = SimpleNamespace(plugins_name=None)
+    event = SimpleNamespace(plugins_name="test_plugin")
     run_context = ContextWrapper(context=SimpleNamespace(event=event))
+    mock_get_handlers = MagicMock(return_value=[handler])
     monkeypatch.setattr(
         "astrbot.core.astr_agent_hooks.star_handlers_registry.get_handlers_by_event_type",
-        lambda *args, **kwargs: [handler],
+        mock_get_handlers,
     )
     monkeypatch.setitem(star_map, module_path, SimpleNamespace(reserved=reserved))
 
     assert MainAgentHooks().should_buffer_streaming_response(run_context) is expected
+    mock_get_handlers.assert_called_once_with(
+        EventType.OnLLMResponseEvent,
+        plugins_name="test_plugin",
+    )
+
+
+@pytest.mark.asyncio
+async def test_call_event_hook_reraises_cancelled_error(monkeypatch):
+    from astrbot.core.pipeline.context_utils import call_event_hook
+    from astrbot.core.star.star_handler import EventType
+
+    async def cancelling_handler(*args, **kwargs):
+        raise asyncio.CancelledError("task cancelled")
+
+    handler = SimpleNamespace(
+        handler=cancelling_handler,
+        handler_name="cancelling_handler",
+        handler_full_name="tests.cancelling_handler",
+        handler_module_path="tests.cancelling",
+        event_type=EventType.OnLLMResponseEvent,
+    )
+
+    event = MagicMock()
+    event.plugins_name = None
+    monkeypatch.setattr(
+        "astrbot.core.pipeline.context_utils.star_handlers_registry.get_handlers_by_event_type",
+        lambda *args, **kwargs: [handler],
+    )
+
+    with pytest.raises(asyncio.CancelledError):
+        await call_event_hook(event, EventType.OnLLMResponseEvent)
 
 
 @pytest.mark.asyncio

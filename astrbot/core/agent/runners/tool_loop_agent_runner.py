@@ -841,45 +841,75 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         buffer_streaming_response = self.streaming and bool(
             self.agent_hooks.should_buffer_streaming_response(self.run_context)
         )
-        buffered_streaming_responses: list[AgentResponse] = []
+        buffered_reasoning_pieces: list[str] = []
+        buffered_completion_pieces: list[str] = []
+        buffered_result_chains: list[MessageChain] = []
+
+        def _get_flushed_buffered_responses() -> list[AgentResponse]:
+            flushed: list[AgentResponse] = []
+            if buffered_reasoning_pieces:
+                flushed.append(
+                    AgentResponse(
+                        type="streaming_delta",
+                        data=AgentResponseData(
+                            chain=MessageChain(type="reasoning").message(
+                                "".join(buffered_reasoning_pieces)
+                            ),
+                        ),
+                    )
+                )
+            for chain in buffered_result_chains:
+                flushed.append(
+                    AgentResponse(
+                        type="streaming_delta",
+                        data=AgentResponseData(chain=chain),
+                    )
+                )
+            if buffered_completion_pieces:
+                flushed.append(
+                    AgentResponse(
+                        type="streaming_delta",
+                        data=AgentResponseData(
+                            chain=MessageChain().message("".join(buffered_completion_pieces)),
+                        ),
+                    )
+                )
+            return flushed
 
         async for llm_response in self._iter_llm_responses_with_fallback():
             if llm_response.is_chunk:
                 if self.stats.time_to_first_token == 0:
                     self.stats.time_to_first_token = time.time() - self.stats.start_time
                 if llm_response.reasoning_content:
-                    response = AgentResponse(
-                        type="streaming_delta",
-                        data=AgentResponseData(
-                            chain=MessageChain(type="reasoning").message(
-                                llm_response.reasoning_content,
+                    if buffer_streaming_response:
+                        buffered_reasoning_pieces.append(llm_response.reasoning_content)
+                    else:
+                        yield AgentResponse(
+                            type="streaming_delta",
+                            data=AgentResponseData(
+                                chain=MessageChain(type="reasoning").message(
+                                    llm_response.reasoning_content,
+                                ),
                             ),
-                        ),
-                    )
-                    if buffer_streaming_response:
-                        buffered_streaming_responses.append(response)
-                    else:
-                        yield response
+                        )
                 if llm_response.result_chain:
-                    response = AgentResponse(
-                        type="streaming_delta",
-                        data=AgentResponseData(chain=llm_response.result_chain),
-                    )
                     if buffer_streaming_response:
-                        buffered_streaming_responses.append(response)
+                        buffered_result_chains.append(llm_response.result_chain)
                     else:
-                        yield response
+                        yield AgentResponse(
+                            type="streaming_delta",
+                            data=AgentResponseData(chain=llm_response.result_chain),
+                        )
                 elif llm_response.completion_text:
-                    response = AgentResponse(
-                        type="streaming_delta",
-                        data=AgentResponseData(
-                            chain=MessageChain().message(llm_response.completion_text),
-                        ),
-                    )
                     if buffer_streaming_response:
-                        buffered_streaming_responses.append(response)
+                        buffered_completion_pieces.append(llm_response.completion_text)
                     else:
-                        yield response
+                        yield AgentResponse(
+                            type="streaming_delta",
+                            data=AgentResponseData(
+                                chain=MessageChain().message(llm_response.completion_text),
+                            ),
+                        )
                 if self._is_stop_requested():
                     break
                 continue
@@ -909,13 +939,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             break  # got final response
 
         if self._is_stop_requested():
-            for response in buffered_streaming_responses:
+            for response in _get_flushed_buffered_responses():
                 yield response
             yield await self._finalize_aborted_step()
             return
 
         if not llm_resp_result:
-            for response in buffered_streaming_responses:
+            for response in _get_flushed_buffered_responses():
                 yield response
             return
 
@@ -923,7 +953,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         llm_resp = llm_resp_result
 
         if llm_resp.role == "err":
-            for response in buffered_streaming_responses:
+            for response in _get_flushed_buffered_responses():
                 yield response
             # 如果 LLM 响应错误，转换到错误状态
             self.final_llm_resp = llm_resp
