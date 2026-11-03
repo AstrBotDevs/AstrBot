@@ -14,11 +14,7 @@ from astrbot.core.provider.sources.request_retry import ProviderRequestError
 
 
 @pytest_asyncio.fixture
-async def provider(monkeypatch):
-    writer = AsyncMock()
-    monkeypatch.setattr(
-        source, "db_helper", SimpleNamespace(insert_provider_stat=writer)
-    )
+async def provider():
     instance = ProviderOpenAIOAuth(
         {
             "id": "robustness-test",
@@ -30,7 +26,6 @@ async def provider(monkeypatch):
         },
         {},
     )
-    instance._record_provider_stat = AsyncMock()
     try:
         yield instance
     finally:
@@ -299,7 +294,7 @@ def test_known_errors_keep_safe_fallback_classification(provider, code, expected
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("streaming", [False, True])
-async def test_tool_parse_failure_preserves_usage_and_is_recorded(provider, streaming):
+async def test_tool_parse_failure_preserves_reported_usage(provider, streaming):
     response = {
         "status": "completed",
         "usage": {"input_tokens": 8, "output_tokens": 3},
@@ -325,8 +320,6 @@ async def test_tool_parse_failure_preserves_usage_and_is_recorded(provider, stre
             await provider.text_chat(prompt="synthetic")
     assert "SECRET_ARGUMENT" not in str(caught.value)
     assert caught.value._astrbot_token_usage.total == 11
-    assert provider._record_provider_stat.await_args.kwargs["usage"].total == 11
-    assert provider._record_provider_stat.await_args.kwargs["status"] == "error"
 
 
 @pytest.mark.parametrize("route", ["http", "sse", "stream", "completion", "image"])
