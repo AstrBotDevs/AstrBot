@@ -272,7 +272,7 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
             *args,
             **kwargs,
         )
-        for key in ("reasoning_effort", "reasoning"):
+        for key in ("reasoning_effort", "reasoning", "response_format"):
             if kwargs.get(key) is not None:
                 payloads[key] = kwargs[key]
         if kwargs.get("oauth_web_search") is not None:
@@ -539,16 +539,26 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
                             status_code=response.status_code,
                         )
                     else:
-                        async for event in iter_json_sse_events(response.aiter_lines()):
-                            yield event
-                            if event.get("type") in {
-                                "response.completed",
-                                "response.error",
-                                "response.failed",
-                                "response.incomplete",
-                                "error",
-                            }:
-                                return
+                        try:
+                            async for event in iter_json_sse_events(
+                                response.aiter_lines()
+                            ):
+                                yield event
+                                if event.get("type") in {
+                                    "response.completed",
+                                    "response.error",
+                                    "response.failed",
+                                    "response.incomplete",
+                                    "error",
+                                }:
+                                    return
+                        except ValueError:
+                            logger.warning(
+                                "Codex backend SSE rejected 1 invalid event."
+                            )
+                            raise ValueError(
+                                "Codex backend SSE event is invalid."
+                            ) from None
             if retry_after_auth:
                 continue
             return
@@ -790,17 +800,131 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
             ) from None
         raise OpenAIOAuthImageStreamError("request_rejected")
 
-    def _format_backend_error(self, status_code: int, text: str) -> str:
-        stripped = text.strip()
-        if not stripped:
-            return f"Codex backend request failed: status={status_code}"
-        try:
-            data = json.loads(stripped)
-            return f"Codex backend request failed: status={status_code}, body={data}"
-        except Exception:
-            return (
-                f"Codex backend request failed: status={status_code}, body={stripped}"
+    def _backend_error_summary(self, data: Any) -> str:
+        """Classify backend failures without echoing backend-controlled values."""
+        if not isinstance(data, dict):
+            return "backend error"
+        payload = data.get("response")
+        payload = payload if isinstance(payload, dict) else data
+        error = payload.get("error")
+        error = error if isinstance(error, dict) else {}
+        codes = {
+            str(value).strip().lower()
+            for value in (
+                error.get("code"),
+                error.get("type"),
+                payload.get("code"),
+                payload.get("type"),
             )
+            if isinstance(value, (str, int))
+        }
+        messages = [
+            value.lower()
+            for value in (error.get("message"), payload.get("message"))
+            if isinstance(value, str)
+        ]
+        if any(
+            pattern.lower() in value
+            for pattern in self._get_image_moderation_error_patterns()
+            for value in messages + list(codes)
+        ):
+            return "configured image moderation rejected"
+        if any("the model is not a vlm" in value for value in messages):
+            return "The model is not a VLM"
+        if codes & {
+            "context_length_exceeded",
+            "context_window_exceeded",
+            "token_limit_exceeded",
+        } or any("context length" in value for value in messages):
+            return "maximum context length exceeded"
+        if codes & {
+            "rate_limit_exceeded",
+            "rate_limit_error",
+            "insufficient_quota",
+            "credit_balance_exhausted",
+            "429",
+        }:
+            return "rate limit exceeded"
+        if "invalid_attachment" in codes or any(
+            "invalid_attachment" in value
+            or ("download attachment" in value and "404" in value)
+            for value in messages
+        ):
+            return "invalid_attachment"
+        if codes & {
+            "tool_not_supported",
+            "tools_not_supported",
+            "function_calling_not_supported",
+        } or any(
+            "function calling is not enabled" in value
+            or ("tool" in value and "support" in value)
+            or ("function" in value and "support" in value)
+            for value in messages
+        ):
+            return "tools not supported"
+        if codes & {"invalid_api_key", "authentication_error", "unauthorized"}:
+            return "authentication failed"
+        if codes & {"content_policy_violation", "content_filter", "moderation_blocked"}:
+            return "content policy rejected"
+        return "backend error"
+
+    def _is_content_moderated_upload_error(self, error: Exception) -> bool:
+        if self._get_image_moderation_error_patterns() and (
+            "configured image moderation rejected" in str(error)
+        ):
+            return True
+        return super()._is_content_moderated_upload_error(error)
+
+    def _backend_response_error(self, data: Any, prefix: str) -> Exception:
+        if not isinstance(data, dict):
+            error = getattr(data, "error", None)
+            data = {
+                "status": getattr(data, "status", None),
+                "usage": getattr(data, "usage", None),
+                "error": {
+                    key: getattr(error, key, None)
+                    for key in ("code", "type", "message")
+                },
+            }
+        status_code = self._extract_stream_error_status_code(data)
+        message = f"{prefix}: {self._backend_error_summary(data)}"
+        error = (
+            ProviderRequestError(message, status_code=status_code)
+            if status_code is not None
+            else RuntimeError(message)
+        )
+        payload = data.get("response")
+        payload = payload if isinstance(payload, dict) else data
+        usage = self._extract_response_usage(payload.get("usage"))
+        if usage is not None:
+            setattr(error, "_astrbot_token_usage", usage)
+        return error
+
+    def _format_backend_error(self, status_code: int, text: str) -> str:
+        try:
+            data = json.loads(text)
+        except (ValueError, TypeError):
+            data = {"message": text}
+        return (
+            f"Codex backend request failed: status={status_code}, "
+            f"{self._backend_error_summary(data)}"
+        )
+
+    def _validate_backend_response_status(self, response: Any) -> None:
+        status = (
+            response.get("status")
+            if isinstance(response, dict)
+            else getattr(response, "status", None)
+        )
+        error = (
+            response.get("error")
+            if isinstance(response, dict)
+            else getattr(response, "error", None)
+        )
+        if error is not None or status not in {None, "completed"}:
+            raise self._backend_response_error(
+                response, "Codex backend response was not completed"
+            ) from None
 
     def _parse_backend_response(self, text: str) -> dict[str, Any]:
         completed_response: dict[str, Any] | None = None
@@ -809,6 +933,7 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
         output_text_done: str | None = None
         output_items: list[dict[str, Any]] = []
         output_item_ids: set[str] = set()
+        malformed_data_lines = 0
         for line in text.splitlines():
             line = line.strip()
             if not line or not line.startswith("data:"):
@@ -818,9 +943,11 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
                 continue
             try:
                 event = json.loads(raw)
-            except Exception:
+            except (ValueError, TypeError):
+                malformed_data_lines += 1
                 continue
             if not isinstance(event, dict):
+                malformed_data_lines += 1
                 continue
             event_type = event.get("type")
             if event_type in {
@@ -852,26 +979,35 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
                     completed_response = response
                 else:
                     completed_response = event
+        if malformed_data_lines:
+            logger.warning(
+                "Codex backend SSE skipped %d malformed data lines.",
+                malformed_data_lines,
+            )
+        if error_payload:
+            raise self._backend_response_error(
+                error_payload, "Codex backend returned error event"
+            ) from None
         merged_output_text = (
             output_text_done
             if output_text_done is not None
             else "".join(output_text_parts)
         )
         if completed_response:
+            self._validate_backend_response_status(completed_response)
             if not completed_response.get("output") and output_items:
                 completed_response["output"] = output_items
             if merged_output_text and not completed_response.get("output_text"):
                 completed_response["output_text"] = merged_output_text
             return completed_response
-        if error_payload:
-            status_code = self._extract_stream_error_status_code(error_payload)
-            message = f"Codex backend returned error event: {error_payload}"
-            if status_code is not None:
-                raise ProviderRequestError(message, status_code=status_code)
-            raise RuntimeError(message)
         stripped = text.strip()
         if stripped.startswith("{"):
-            data = json.loads(stripped)
+            try:
+                data = json.loads(stripped)
+            except (ValueError, TypeError):
+                raise ValueError(
+                    "Codex backend response contains invalid JSON."
+                ) from None
             if isinstance(data, dict):
                 if data.get("type") in {
                     "error",
@@ -879,23 +1015,20 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
                     "response.failed",
                     "response.incomplete",
                 }:
-                    status_code = self._extract_stream_error_status_code(data)
-                    message = f"Codex backend returned error event: {data}"
-                    if status_code is not None:
-                        raise ProviderRequestError(
-                            message,
-                            status_code=status_code,
-                        )
-                    raise RuntimeError(message)
+                    raise self._backend_response_error(
+                        data, "Codex backend returned error event"
+                    ) from None
                 if data.get("type") == "response.completed" and isinstance(
                     data.get("response"), dict
                 ):
                     response = data["response"]
+                    self._validate_backend_response_status(response)
                     if not response.get("output") and output_items:
                         response["output"] = output_items
                     if merged_output_text and not response.get("output_text"):
                         response["output_text"] = merged_output_text
                     return response
+                self._validate_backend_response_status(data)
                 return data
         raise Exception(
             "Codex backend response did not contain response.completed event"
@@ -1034,16 +1167,19 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
     def _extract_response_usage(self, usage: Any) -> TokenUsage | None:
         if usage is None:
             return None
-        if isinstance(usage, dict):
-            input_tokens = int(usage.get("input_tokens", 0) or 0)
-            output_tokens = int(usage.get("output_tokens", 0) or 0)
-            details = usage.get("input_tokens_details") or {}
-            cached_tokens = int(details.get("cached_tokens", 0) or 0)
-        else:
-            input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
-            output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
-            details = getattr(usage, "input_tokens_details", None)
-            cached_tokens = int(getattr(details, "cached_tokens", 0) or 0)
+        try:
+            if isinstance(usage, dict):
+                input_tokens = int(usage.get("input_tokens", 0) or 0)
+                output_tokens = int(usage.get("output_tokens", 0) or 0)
+                details = usage.get("input_tokens_details") or {}
+                cached_tokens = int(details.get("cached_tokens", 0) or 0)
+            else:
+                input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
+                output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
+                details = getattr(usage, "input_tokens_details", None)
+                cached_tokens = int(getattr(details, "cached_tokens", 0) or 0)
+        except (ValueError, TypeError, AttributeError, OverflowError):
+            return None
         return TokenUsage(
             input_other=max(0, input_tokens - cached_tokens),
             input_cached=cached_tokens,
@@ -1202,6 +1338,26 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
                     continue
                 params[key] = value
 
+        response_format = payloads.get("response_format")
+        if response_format is not None:
+            if not isinstance(response_format, dict):
+                raise ValueError("response_format must be an object.")
+            format_type = response_format.get("type")
+            if format_type in {"text", "json_object"}:
+                text_format = {"type": format_type}
+            elif format_type == "json_schema":
+                schema = response_format.get("json_schema")
+                if not isinstance(schema, dict):
+                    raise ValueError("response_format.json_schema must be an object.")
+                text_format = {**schema, "type": "json_schema"}
+            else:
+                raise ValueError("Unsupported response_format type.")
+            text_options = params.get("text")
+            if text_options is not None and not isinstance(text_options, dict):
+                raise ValueError("custom_extra_body.text must be an object.")
+            # Explicit request formatting overrides the source default only.
+            params["text"] = {**(text_options or {}), "format": text_format}
+
         request_search_mode = str(oauth_web_search or "inherit").strip().lower()
         if request_search_mode not in {"inherit", "disabled", "cached", "live"}:
             raise ValueError(
@@ -1345,17 +1501,27 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
         return citations
 
     async def _parse_responses_completion(self, response: Any, tools) -> LLMResponse:
+        status = (
+            response.get("status")
+            if isinstance(response, dict)
+            else getattr(response, "status", None)
+        )
+        self._validate_backend_response_status(response)
         llm_response = LLMResponse("assistant")
         output_text = ""
         if isinstance(response, dict):
             output_text = str(response.get("output_text") or "").strip()
         else:
             output_text = (getattr(response, "output_text", None) or "").strip()
-        output_items = list(
-            response.get("output", [])
+        output_items = (
+            response.get("output")
             if isinstance(response, dict)
-            else getattr(response, "output", []) or []
+            else getattr(response, "output", None)
         )
+        if output_items is None:
+            output_items = []
+        if not isinstance(output_items, list):
+            raise ValueError("Codex backend response output must be a list.")
         reasoning_parts: list[str] = []
         tool_args: list[dict[str, Any]] = []
         tool_names: list[str] = []
@@ -1363,6 +1529,10 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
         message_text_parts: list[str] = []
 
         for item in output_items:
+            if not isinstance(item, dict) and not hasattr(item, "type"):
+                raise ValueError(
+                    "Codex backend response contains an invalid output item."
+                )
             item_type = (
                 item.get("type")
                 if isinstance(item, dict)
@@ -1370,7 +1540,7 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
             )
             if item_type == "reasoning":
                 summaries = (
-                    item.get("summary", [])
+                    item.get("summary", []) or []
                     if isinstance(item, dict)
                     else getattr(item, "summary", []) or []
                 )
@@ -1394,9 +1564,13 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
                         if isinstance(arguments, str)
                         else arguments
                     )
-                except Exception:
-                    parsed_args = {}
-                tool_args.append(parsed_args if isinstance(parsed_args, dict) else {})
+                except (ValueError, TypeError):
+                    raise ValueError(
+                        "Codex tool arguments must contain a JSON object."
+                    ) from None
+                if not isinstance(parsed_args, dict):
+                    raise ValueError("Codex tool arguments must contain a JSON object.")
+                tool_args.append(parsed_args)
                 tool_names.append(
                     str(
                         item.get("name", "")
@@ -1413,7 +1587,7 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
                 )
             elif item_type == "message" and not output_text:
                 content_items = (
-                    item.get("content", [])
+                    item.get("content", []) or []
                     if isinstance(item, dict)
                     else getattr(item, "content", []) or []
                 )
@@ -1424,11 +1598,12 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
                         if isinstance(content, dict)
                         else getattr(content, "type", None)
                     )
-                    if ctype in {"output_text", "text"}:
+                    if ctype in {"output_text", "text", "refusal"}:
+                        field = "refusal" if ctype == "refusal" else "text"
                         text = (
-                            content.get("text")
+                            content.get(field)
                             if isinstance(content, dict)
-                            else getattr(content, "text", None)
+                            else getattr(content, field, None)
                         )
                         if text:
                             item_text_parts.append(str(text))
@@ -1457,7 +1632,12 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
             llm_response.tools_call_ids = tool_ids
 
         if llm_response.completion_text is None and not llm_response.tools_call_args:
-            raise Exception(f"账号态 responses 响应无法解析：{response}。")
+            if status == "completed":
+                llm_response.completion_text = ""
+            else:
+                raise self._backend_response_error(
+                    response, "Codex backend response has no usable output"
+                ) from None
 
         llm_response.raw_completion = response
         response_id = (
@@ -1543,6 +1723,7 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
         payloads: dict,
         tools,
         *,
+        conversation_id: str | None = None,
         request_max_retries: int | None = None,
         retry_rate_limits: bool | None = None,
         oauth_web_search: str | None = None,
@@ -1577,6 +1758,7 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
         payloads: dict,
         tools,
         *,
+        conversation_id: str | None = None,
         request_max_retries: int | None = None,
         retry_rate_limits: bool | None = None,
         oauth_web_search: str | None = None,
@@ -1628,9 +1810,15 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
                     }
                 )
                 completed_response["output"] = existing_output
-        final_response = await self._parse_responses_completion(
-            completed_response, tools
-        )
+        try:
+            final_response = await self._parse_responses_completion(
+                completed_response, tools
+            )
+        except Exception as exc:
+            usage = self._extract_response_usage(completed_response.get("usage"))
+            if usage is not None:
+                setattr(exc, "_astrbot_token_usage", usage)
+            raise
         if not output_text_parts and final_response.completion_text:
             yield LLMResponse(
                 role="assistant",
@@ -1664,20 +1852,9 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
             "response.failed",
             "response.incomplete",
         }:
-            status_code = self._extract_stream_error_status_code(event)
-            if status_code is None:
-                error = RuntimeError(f"Codex backend stream ended with {event_type}")
-            else:
-                error = ProviderRequestError(
-                    f"Codex backend stream ended with {event_type}",
-                    status_code=status_code,
-                )
-            response = event.get("response")
-            if isinstance(response, dict):
-                usage = self._extract_response_usage(response.get("usage"))
-                if usage is not None:
-                    setattr(error, "_astrbot_token_usage", usage)
-            raise error
+            raise self._backend_response_error(
+                event, "Codex backend stream ended with an error"
+            ) from None
         if event_type == "response.output_text.delta":
             delta = str(event.get("delta") or "")
             if delta:
@@ -1958,7 +2135,9 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
             )
 
         if not results:
-            raise Exception(f"Codex 图像生成响应未包含可提取图片：{response}")
+            raise self._backend_response_error(
+                response, "Codex image response contained no extractable image"
+            ) from None
         return results
 
     def _extract_image_base64_from_output_item(self, item: dict[str, Any]) -> str:
@@ -2003,6 +2182,7 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         extra_user_content_parts = kwargs.pop("extra_user_content_parts", None)
+        conversation_id = kwargs.pop("conversation_id", None)
         payloads, _context_query = await self._prepare_chat_payload(
             prompt,
             image_urls,
@@ -2018,10 +2198,14 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
             payloads["tool_choice"] = tool_choice
 
         final_response: LLMResponse | None = None
+        query_kwargs = {}
+        if conversation_id:
+            query_kwargs["conversation_id"] = conversation_id
         async with aclosing(
             self._query_stream(
                 payloads,
                 func_tool,
+                **query_kwargs,
                 request_max_retries=request_max_retries,
                 retry_rate_limits=retry_rate_limits,
                 oauth_web_search=oauth_web_search,
