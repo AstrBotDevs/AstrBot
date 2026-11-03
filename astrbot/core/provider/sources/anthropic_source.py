@@ -421,7 +421,7 @@ class ProviderAnthropic(Provider):
                     for block in content:
                         if isinstance(block, dict) and block.get("type") == "tool_use":
                             tool_use_id = block.get("id")
-                            if tool_use_id:
+                            if isinstance(tool_use_id, str) and tool_use_id:
                                 pending_tool_use_ids.add(tool_use_id)
                 sanitized.append(msg)
                 continue
