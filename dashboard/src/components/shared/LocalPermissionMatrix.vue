@@ -42,39 +42,62 @@
                   </span>
                 </template>
               </v-tooltip>
-              <span
+              <v-tooltip
                 v-if="executionBlockedRoles.includes(role)"
-                :id="`local-execution-${role}-inactive`"
-                class="execution-status text-warning text-caption"
+                location="top"
+                open-on-click
+                :max-width="480"
+                :text="tm('executionBlocked', {
+                  role: tm(`roles.${role}`),
+                  reason: isolationFailureReason
+                })"
               >
-                {{ tm('executionInactive') }}
-                <v-tooltip
-                  location="top"
-                  open-on-click
-                  :max-width="480"
-                  :text="tm('executionBlocked', {
-                    role: tm(`roles.${role}`),
-                    reason: isolationFailureReason
-                  })"
-                >
-                  <template #activator="{ props: helpProps }">
-                    <button v-bind="helpProps" type="button" class="scope-help" :aria-label="`${tm(`roles.${role}`)} · ${tm('executionInactiveHelp')}`">
-                      <CircleHelp :size="14" aria-hidden="true" />
-                    </button>
-                  </template>
-                </v-tooltip>
-              </span>
+                <template #activator="{ props: helpProps }">
+                  <button
+                    v-bind="helpProps"
+                    :id="`local-execution-${role}-inactive`"
+                    type="button"
+                    class="permission-note permission-note--warning"
+                    :aria-label="`${tm(`roles.${role}`)} · ${tm('executionInactive')} · ${tm('executionInactiveHelp')}`"
+                  >
+                    <Info :size="14" aria-hidden="true" />
+                    <span>{{ tm('executionInactive') }}</span>
+                  </button>
+                </template>
+              </v-tooltip>
             </div>
           </td>
           <td v-if="!isolationUnavailable">
-            <v-checkbox-btn
-              :model-value="policy(role, false).allow_network"
-              :disabled="permissionLocks[role].network"
-              :aria-label="`${tm(`roles.${role}`)} · ${tm('network')}`"
-              color="primary"
-              density="compact"
-              @update:model-value="updatePermission(role, { allow_network: Boolean($event) })"
-            />
+            <div class="execution-cell">
+              <v-tooltip
+                v-if="runtime?.os === 'windows' && policy(role, false).filesystem_scope === 'host' && policy(role, false).allow_network"
+                location="top"
+                open-on-click
+                :max-width="320"
+                :text="tm('windowsHostNetworkHint')"
+              >
+                <template #activator="{ props: helpProps }">
+                  <button
+                    v-bind="helpProps"
+                    type="button"
+                    class="permission-note"
+                    :aria-label="`${tm(`roles.${role}`)} · ${tm('network')} · ${tm('networkAlwaysOn')}`"
+                  >
+                    <LockKeyhole :size="14" aria-hidden="true" />
+                    <span>{{ tm('networkAlwaysOn') }}</span>
+                  </button>
+                </template>
+              </v-tooltip>
+              <v-checkbox-btn
+                v-else
+                :model-value="policy(role, false).allow_network"
+                :disabled="permissionLocks[role].network"
+                :aria-label="`${tm(`roles.${role}`)} · ${tm('network')}`"
+                color="primary"
+                density="compact"
+                @update:model-value="updatePermission(role, { allow_network: Boolean($event) })"
+              />
+            </div>
           </td>
           <td>
             <v-select
@@ -108,7 +131,7 @@
                       >
                         <template #activator="{ props: helpProps }">
                           <button v-bind="helpProps" type="button" class="scope-help" :aria-label="tm('filesystem')" @click.stop>
-                            <CircleHelp :size="14" aria-hidden="true" />
+                            <Info :size="14" aria-hidden="true" />
                           </button>
                         </template>
                         <v-card class="pa-3 text-body-2">
@@ -126,6 +149,14 @@
       </tbody>
     </v-table>
 
+    <v-alert v-if="windowsSandbox && sandboxUnavailable" type="warning" variant="tonal" density="compact">
+      <div>{{ tm('runtime.windowsSetupHint') }}</div>
+      <details v-if="runtime.sandbox.error" class="sandbox-diagnostics mt-2">
+        <summary>{{ tm('runtime.errorDetails') }}</summary>
+        <pre class="mt-2">{{ runtime.sandbox.error }}</pre>
+      </details>
+    </v-alert>
+
     <v-alert v-if="memberHasElevatedAccess" type="warning" variant="tonal" density="compact">
       {{ tm('memberWarning') }}
     </v-alert>
@@ -141,7 +172,7 @@ export const localPermissionDefaults = {
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { CircleHelp } from '@lucide/vue'
+import { Info, LockKeyhole } from '@lucide/vue'
 import { useModuleI18n } from '@/i18n/composables'
 import { statsApi } from '@/api/v1'
 
@@ -159,18 +190,30 @@ const runtimeLoading = ref(true)
 const unsupported = computed(() => runtime.value?.sandbox?.status === 'unsupported')
 const sandboxUnavailable = computed(() => ['missing', 'unavailable'].includes(runtime.value?.sandbox?.status))
 const isolationUnavailable = computed(() => unsupported.value || sandboxUnavailable.value)
-const executionUnavailableHint = computed(() => isolationUnavailable.value ? tm(
-  `runtime.executionUnavailable.${runtime.value.sandbox.status}`,
-  {
-    backend: runtime.value.sandbox.backend === 'seatbelt' ? 'Seatbelt' : 'bubblewrap',
-    dependency: runtime.value.sandbox.backend === 'seatbelt' ? 'sandbox-exec' : 'bwrap'
-  }
-) : '')
+const windowsSandbox = computed(() => runtime.value?.sandbox?.backend === 'appcontainer')
+const sandboxBackendLabel = computed(() => ({
+  seatbelt: 'Seatbelt',
+  bubblewrap: 'bubblewrap',
+  appcontainer: 'AppContainer'
+}[runtime.value?.sandbox?.backend] ?? runtime.value?.sandbox?.backend ?? ''))
+const sandboxDependencyLabel = computed(() => ({
+  seatbelt: 'sandbox-exec',
+  bubblewrap: 'bwrap',
+  appcontainer: 'AppContainer'
+}[runtime.value?.sandbox?.backend] ?? runtime.value?.sandbox?.backend ?? ''))
+const executionUnavailableHint = computed(() => {
+  if (!isolationUnavailable.value) return ''
+  if (windowsSandbox.value && sandboxUnavailable.value) return tm('runtime.windowsSetupHint')
+  return tm(`runtime.executionUnavailable.${runtime.value.sandbox.status}`, {
+    backend: sandboxBackendLabel.value,
+    dependency: sandboxDependencyLabel.value
+  })
+})
 const isolationFailureReason = computed(() => {
   if (!isolationUnavailable.value) return ''
   const reason = tm(`runtime.isolationFailure.${runtime.value.sandbox.status}`, {
-    backend: runtime.value.sandbox.backend === 'seatbelt' ? 'Seatbelt' : 'bubblewrap',
-    dependency: runtime.value.sandbox.backend === 'seatbelt' ? 'sandbox-exec' : 'bwrap'
+    backend: sandboxBackendLabel.value,
+    dependency: sandboxDependencyLabel.value
   })
   return runtime.value.sandbox.error ? `${reason} ${runtime.value.sandbox.error}` : reason
 })
@@ -221,6 +264,9 @@ function updatePermission(role, changes) {
     updatedRole.allow_execution = updatedRole.filesystem_scope === 'host'
     updatedRole.allow_network = updatedRole.allow_execution
   }
+  if (runtime.value?.os === 'windows' && updatedRole.filesystem_scope === 'host' && updatedRole.allow_execution) {
+    updatedRole.allow_network = true
+  }
   if (!updatedRole.allow_execution) {
     updatedRole.allow_network = false
   }
@@ -235,7 +281,8 @@ const permissionLocks = computed(() => Object.fromEntries(roles.map(role => {
   return [role, {
     execution: !runtime.value || current.filesystem_scope === 'none' ||
       (isolationUnavailable.value && current.filesystem_scope === 'workspace' && !current.allow_execution),
-    network: !runtime.value || !current.allow_execution
+    network: !runtime.value || !current.allow_execution ||
+      (runtime.value.os === 'windows' && current.filesystem_scope === 'host')
   }]
 })))
 const memberHasElevatedAccess = computed(() => {
@@ -259,9 +306,54 @@ const memberHasElevatedAccess = computed(() => {
   justify-content: center;
   width: 28px;
   height: 28px;
-  color: inherit;
+  border-radius: 50%;
+  color: rgba(var(--v-theme-on-surface), 0.65);
+  background: rgba(var(--v-theme-on-surface), 0.04);
   vertical-align: middle;
-  cursor: help;
+}
+
+.scope-help,
+.permission-note {
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.scope-help:hover,
+.permission-note:hover {
+  color: rgb(var(--v-theme-primary));
+  background: rgba(var(--v-theme-primary), 0.1);
+}
+
+.scope-help:focus-visible,
+.permission-note:focus-visible {
+  outline: 2px solid rgb(var(--v-theme-primary));
+  outline-offset: 3px;
+}
+
+.permission-note {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 4px 10px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+  border-radius: 8px;
+  color: rgba(var(--v-theme-on-surface), 0.7);
+  background: rgba(var(--v-theme-on-surface), 0.035);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.permission-note svg {
+  flex-shrink: 0;
+}
+
+.permission-note--warning {
+  color: rgb(var(--v-theme-warning));
+  border-color: rgba(var(--v-theme-warning), 0.2);
+  background: rgba(var(--v-theme-warning), 0.08);
 }
 
 .local-permission-matrix {
@@ -270,6 +362,15 @@ const memberHasElevatedAccess = computed(() => {
   width: 100%;
   min-width: 0;
   padding-top: 12px;
+}
+
+.sandbox-diagnostics summary {
+  cursor: pointer;
+}
+
+.sandbox-diagnostics pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .permission-table {
@@ -311,13 +412,6 @@ const memberHasElevatedAccess = computed(() => {
   justify-content: center;
   flex-wrap: wrap;
   gap: 4px;
-}
-
-.execution-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  white-space: nowrap;
 }
 
 @media (max-width: 600px) {

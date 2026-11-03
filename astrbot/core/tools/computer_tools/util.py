@@ -1,3 +1,4 @@
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -14,7 +15,7 @@ from astrbot.core.workspace import (
 )
 
 LOCAL_NETWORK_POLICY_NOTICE = (
-    "Sandbox policy: Network access is disabled for local Shell/Python execution. "
+    "Local execution policy: Network access is disabled for local Shell/Python execution. "
     "Do not retry the same network operation with another command, Python, "
     "HTTP/HTTPS, or disabled certificate verification; these do not change the policy. "
     "Local offline operations are still allowed."
@@ -295,5 +296,14 @@ def check_local_execution_permission(
         return policy, (
             f"error: Permission denied. {operation_name} is disabled by the "
             f"Local permission policy for this user role ({role}). {instructions}"
+        )
+    if (
+        policy.requires_sandbox
+        and sys.platform == "win32"
+        and policy.filesystem_scope == "host"
+    ):
+        return policy, (
+            "error: Windows Local isolation supports workspace scope only. "
+            "Host access with networking disabled is unavailable."
         )
     return policy, None

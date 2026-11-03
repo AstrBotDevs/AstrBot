@@ -18,19 +18,16 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
 from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.core.astr_agent_wakeup import wake_main_agent
 from astrbot.core.astr_main_agent_resources import (
-    BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT,
+    BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT,
 )
-from astrbot.core.config.agent_runner import resolve_context_compression_config
-from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import (
     CommandResult,
     MessageChain,
     MessageEventResult,
 )
-from astrbot.core.platform.message_session import MessageSession
-from astrbot.core.provider.entites import ProviderRequest
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.tools.computer_tools import (
     CuaKeyboardTypeTool,
@@ -48,12 +45,9 @@ from astrbot.core.tools.computer_tools import (
     PythonTool,
     ShellSessionTool,
 )
-from astrbot.core.tools.message_tools import SendMessageToUserTool
 from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.async_generator import iterate_in_task
-from astrbot.core.utils.config_number import coerce_int_config
-from astrbot.core.utils.history_saver import persist_agent_history
 from astrbot.core.utils.image_ref_utils import is_supported_image_ref
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
@@ -412,7 +406,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         Immediately yields a success response with a task_id, then runs
         the subagent asynchronously.  When the subagent finishes, a
-        ``CronMessageEvent`` is created so the main LLM can inform the
+        ``AgentWakeupEvent`` is created so the main LLM can inform the
         user of the result – the same pattern used by
         ``_execute_background`` for regular background tasks.
         """
@@ -481,18 +475,26 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         event = run_context.context.event
 
-        await cls._wake_main_agent_for_background_result(
-            run_context=run_context,
-            task_id=task_id,
-            tool_name=tool.name,
-            result_text=result_text,
-            tool_args=tool_args,
-            note=(
-                event.get_extra("background_note")
-                or f"Background task for subagent '{tool.agent.name}' finished."
+        await wake_main_agent(
+            ctx=run_context.context.context,
+            umo=event.unified_msg_origin,
+            source="background_task",
+            source_id=task_id,
+            user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
+                background_task_result=json.dumps(
+                    {
+                        "task_id": task_id,
+                        "tool_name": tool.name,
+                        "result": result_text,
+                        "tool_args": tool_args,
+                        "subagent_name": tool.agent.name,
+                        "note": event.get_extra("background_note"),
+                    },
+                    ensure_ascii=False,
+                )
             ),
-            summary_name=f"Dedicated to subagent `{tool.agent.name}`",
-            extra_result_fields={"subagent_name": tool.agent.name},
+            role=event.role,
+            stop_signal=active_event_registry.get_background_stop_signal(event),
         )
 
     @classmethod
@@ -522,164 +524,26 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         event = run_context.context.event
 
-        await cls._wake_main_agent_for_background_result(
-            run_context=run_context,
-            task_id=task_id,
-            tool_name=tool.name,
-            result_text=result_text,
-            tool_args=tool_args,
-            note=(
-                event.get_extra("background_note")
-                or f"Background task {tool.name} finished."
+        await wake_main_agent(
+            ctx=run_context.context.context,
+            umo=event.unified_msg_origin,
+            source="background_task",
+            source_id=task_id,
+            user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
+                background_task_result=json.dumps(
+                    {
+                        "task_id": task_id,
+                        "tool_name": tool.name,
+                        "result": result_text,
+                        "tool_args": tool_args,
+                        "note": event.get_extra("background_note"),
+                    },
+                    ensure_ascii=False,
+                )
             ),
-            summary_name=tool.name,
+            role=event.role,
+            stop_signal=active_event_registry.get_background_stop_signal(event),
         )
-
-    @classmethod
-    async def _wake_main_agent_for_background_result(
-        cls,
-        run_context: ContextWrapper[AstrAgentContext],
-        *,
-        task_id: str,
-        tool_name: str,
-        result_text: str,
-        tool_args: dict[str, T.Any],
-        note: str,
-        summary_name: str,
-        extra_result_fields: dict[str, T.Any] | None = None,
-    ) -> None:
-        from astrbot.core.astr_main_agent import (
-            MainAgentBuildConfig,
-            _get_session_conv,
-            build_main_agent,
-        )
-
-        event = run_context.context.event
-        stop_signal = active_event_registry.get_background_stop_signal(event)
-        if stop_signal.is_set():
-            return
-        ctx = run_context.context.context
-
-        task_result = {
-            "task_id": task_id,
-            "tool_name": tool_name,
-            "result": result_text or "",
-            "tool_args": tool_args,
-        }
-        if extra_result_fields:
-            task_result.update(extra_result_fields)
-        extras = {
-            "background_task_result": task_result,
-            "_background_stop_signal": stop_signal,
-        }
-
-        session = MessageSession.from_str(event.unified_msg_origin)
-        cron_event = CronMessageEvent(
-            context=ctx,
-            session=session,
-            message=note,
-            extras=extras,
-            message_type=session.message_type,
-        )
-        cron_event.role = event.role
-        cfg = ctx.get_config(umo=event.unified_msg_origin) or {}
-        provider_settings = cfg.get("provider_settings") or {}
-        persona_config = (
-            cfg.get("agent_runner", {}).get("config", {}).get("persona", {})
-        )
-        agent_max_step = coerce_int_config(
-            cfg.get("agent_runner", {})
-            .get("config", {})
-            .get("misc", {})
-            .get("max_steps", 128),
-            default=128,
-            min_value=1,
-            field_name="agent_runner.config.misc.max_steps",
-        )
-        config = MainAgentBuildConfig(
-            tool_call_timeout=run_context.tool_call_timeout,
-            fallback_provider_ids=cfg.get("agent_runner", {})
-            .get("config", {})
-            .get("model", {})
-            .get("fallback_provider_ids", []),
-            **resolve_context_compression_config(
-                cfg.get("agent_runner", {}).get("config", {}).get("compression", {})
-            ),
-            streaming_response=provider_settings.get("stream", False),
-            llm_safety_mode=persona_config.get("safety_mode", True),
-            safety_mode_strategy=persona_config.get(
-                "safety_mode_strategy", "system_prompt"
-            ),
-            computer_use_runtime=provider_settings.get("computer_use_runtime", "none"),
-            sandbox_cfg=provider_settings.get("sandbox", {}),
-            provider_settings=provider_settings,
-        )
-
-        req = ProviderRequest()
-        conv = await _get_session_conv(event=cron_event, plugin_context=ctx)
-        if stop_signal.is_set():
-            return
-        req.conversation = conv
-        req.contexts = json.loads(conv.history)
-
-        bg = json.dumps(extras["background_task_result"], ensure_ascii=False)
-        req.system_prompt += BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT.format(
-            background_task_result=bg
-        )
-        req.prompt = (
-            "Proceed according to your system instructions. "
-            "Output using same language as previous conversation. "
-            "If you need to deliver the result to the user immediately, "
-            "you MUST use `send_message_to_user` tool to send the message directly to the user, "
-            "otherwise the user will not see the result. "
-            "After completing your task, summarize and output your actions and results. "
-        )
-        if not req.func_tool:
-            req.func_tool = ToolSet()
-        req.func_tool.add_tool(
-            ctx.get_llm_tool_manager().get_builtin_tool(SendMessageToUserTool)
-        )
-
-        result = await build_main_agent(
-            event=cron_event, plugin_context=ctx, config=config, req=req
-        )
-        if stop_signal.is_set():
-            return
-        if not result:
-            logger.error(f"Failed to build main agent for background task {tool_name}.")
-            return
-
-        runner = result.agent_runner
-        async for _ in runner.step_until_done(agent_max_step):
-            # agent will send message to user via using tools
-            pass
-        llm_resp = runner.get_final_llm_resp()
-        task_meta = extras.get("background_task_result", {})
-        summary_note = (
-            f"[BackgroundTask] {summary_name} "
-            f"(task_id={task_meta.get('task_id', task_id)}) finished. "
-            f"Result: {task_meta.get('result') or result_text or 'no content'}"
-        )
-        if llm_resp and llm_resp.completion_text:
-            summary_note += (
-                f"I finished the task, here is the result: {llm_resp.completion_text}"
-            )
-        await persist_agent_history(
-            ctx.conversation_manager,
-            event=cron_event,
-            req=req,
-            summary_note=summary_note,
-        )
-        if not llm_resp:
-            logger.warning("background task agent got no response")
-            return
-        # Set once anything reaches this session, e.g. via send_message_to_user.
-        if not cron_event._has_send_oper:
-            logger.warning(
-                f"Background task {tool_name} (task_id={task_id}) finished, but "
-                "nothing was sent to the user. The result was only saved to the "
-                "conversation history."
-            )
 
     @classmethod
     async def _execute_local(
