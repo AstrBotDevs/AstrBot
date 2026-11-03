@@ -153,20 +153,16 @@ class GroupChatContext:
             logger.warning(f"图片转述预处理失败，回退原图: {e}")
             prepared = None
         if prepared:
-            image_ref, is_montage, temporary, original_path = prepared
+            image_ref, is_montage, temporary, original_path, original_temporary = (
+                prepared
+            )
             if temporary:
                 cleanup_paths.append(Path(image_ref))
-            # `prepare_model_image` detaches its downloaded source file, so the
-            # caption path owns it. Only remove copies that live in our temp dir
-            # to avoid deleting user files.
-            try:
-                original = Path(original_path).resolve()
-                if original.is_relative_to(
-                    Path(get_astrbot_temp_path()).resolve(),
-                ):
-                    cleanup_paths.append(original)
-            except OSError as e:
-                logger.warning(f"检查临时图片路径失败: {e}")
+            # `prepare_model_image` detaches the file it downloaded or decoded for
+            # this call, so the caption path owns it. A reused source belongs to
+            # the caller or event and must survive captioning.
+            if original_temporary:
+                cleanup_paths.append(Path(original_path))
             if is_montage:
                 caption_prompt = (
                     f"{image_caption_prompt}{ANIMATION_MONTAGE_CAPTION_NOTICE}"

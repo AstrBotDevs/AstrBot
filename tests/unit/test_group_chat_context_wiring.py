@@ -1,4 +1,6 @@
+import base64
 import json
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -348,7 +350,7 @@ async def test_image_caption_uses_normalized_image(monkeypatch, tmp_path):
 
     async def fake_prepare_model_image(image_ref, *, max_size, output_dir):
         seen.update(ref=image_ref, max_size=max_size)
-        return str(prepared), True, True, "/tmp/original.gif"
+        return str(prepared), True, True, "/tmp/original.gif", True
 
     monkeypatch.setattr(gcc_module, "prepare_model_image", fake_prepare_model_image)
 
@@ -403,8 +405,8 @@ async def test_image_caption_skips_oversized_and_bomb_images(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_image_caption_removes_downloaded_source(monkeypatch, tmp_path):
-    """A detached download under the temp dir is removed after captioning."""
+async def test_image_caption_removes_owned_download(monkeypatch, tmp_path):
+    """A source this call materialized is removed after captioning."""
     from astrbot.api.message_components import Image
     from astrbot.builtin_stars.astrbot import group_chat_context as gcc_module
 
@@ -413,7 +415,7 @@ async def test_image_caption_removes_downloaded_source(monkeypatch, tmp_path):
     downloaded.write_bytes(b"png")
 
     async def fake_prepare_model_image(image_ref, *, max_size, output_dir):
-        return str(downloaded), False, False, str(downloaded)
+        return str(downloaded), False, False, str(downloaded), True
 
     monkeypatch.setattr(gcc_module, "prepare_model_image", fake_prepare_model_image)
 
@@ -426,7 +428,78 @@ async def test_image_caption_removes_downloaded_source(monkeypatch, tmp_path):
     formatted = await gcc._format_message(event, gcc.cfg(event))
 
     assert "[Image: a download]" in formatted
-    assert not downloaded.exists(), "detached download must be cleaned up"
+    assert not downloaded.exists(), "caption-owned download must be cleaned up"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fmt", ["PNG", "GIF"])
+async def test_image_caption_preserves_event_owned_source(monkeypatch, tmp_path, fmt):
+    """A preexisting event file survives captioning with the real preparer."""
+    from PIL import Image as PILImage
+
+    from astrbot.api.message_components import Image
+    from astrbot.builtin_stars.astrbot import group_chat_context as gcc_module
+    from astrbot.core.utils import media_utils
+
+    monkeypatch.setattr(gcc_module, "get_astrbot_temp_path", lambda: str(tmp_path))
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    source = tmp_path / f"adapter_owned.{fmt.lower()}"
+    frames = [PILImage.new("RGB", (96, 96), color) for color in ["red", "blue"]]
+    if fmt == "GIF":
+        frames[0].save(source, save_all=True, append_images=frames[1:], duration=100)
+    else:
+        frames[0].save(source)
+    before = source.read_bytes()
+
+    provider = _caption_provider("caption")
+    gcc = gcc_module.GroupChatContext(
+        MagicMock(), _caption_context(provider, max_size=64)
+    )
+    event = make_event()
+    event.message_obj = SimpleNamespace(sender=SimpleNamespace(nickname="Alice"))
+    component = Image(file=str(source))
+    event.get_messages.return_value = [component]
+
+    formatted = await gcc._format_message(event, gcc.cfg(event))
+
+    assert "[Image: caption]" in formatted
+    assert source.exists(), "captioning deleted a file owned by the event"
+    assert source.read_bytes() == before
+    # The preview generated for the caption request is still cleaned up.
+    assert list(tmp_path.glob("model_image_*")) == []
+
+
+@pytest.mark.asyncio
+async def test_image_caption_removes_materialized_inline_source(monkeypatch, tmp_path):
+    """An inline payload copied to the temp dir is removed after captioning."""
+    import io
+
+    from PIL import Image as PILImage
+
+    from astrbot.api.message_components import Image
+    from astrbot.builtin_stars.astrbot import group_chat_context as gcc_module
+    from astrbot.core.utils import media_utils
+
+    monkeypatch.setattr(gcc_module, "get_astrbot_temp_path", lambda: str(tmp_path))
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    with io.BytesIO() as buffer:
+        PILImage.new("RGB", (200, 100), "red").save(buffer, "PNG")
+        payload = "base64://" + base64.b64encode(buffer.getvalue()).decode()
+
+    provider = _caption_provider("caption")
+    gcc = gcc_module.GroupChatContext(
+        MagicMock(), _caption_context(provider, max_size=64)
+    )
+    event = make_event()
+    event.message_obj = SimpleNamespace(sender=SimpleNamespace(nickname="Alice"))
+    event.get_messages.return_value = [Image(file=payload)]
+
+    formatted = await gcc._format_message(event, gcc.cfg(event))
+
+    assert "[Image: caption]" in formatted
+    forwarded = provider.text_chat.await_args.kwargs["image_urls"][0]
+    assert Path(forwarded).name.startswith("model_image_")
+    assert list(tmp_path.iterdir()) == [], "caption-owned files must be removed"
 
 
 @pytest.mark.asyncio
