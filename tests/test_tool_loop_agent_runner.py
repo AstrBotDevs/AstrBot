@@ -194,6 +194,17 @@ class MockErrProvider(MockProvider):
         )
 
 
+class CapturingFailingProvider(MockFailingProvider):
+    def __init__(self):
+        super().__init__()
+        self.received_contexts = []
+
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        self.received_contexts.append(list(kwargs.get("contexts") or []))
+        raise RuntimeError("primary provider failed")
+
+
 class CapturingProvider(MockProvider):
     def __init__(self, modalities: list[str]):
         super().__init__()
@@ -1279,6 +1290,64 @@ async def test_fallback_provider_used_when_primary_raises(
     assert final_resp.completion_text == "这是我的最终回答"
     assert primary_provider.call_count == 1
     assert fallback_provider.call_count == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_fallback_reprocesses_context_with_its_token_limit(
+    runner,
+    mock_tool_executor,
+    mock_hooks,
+    tool_set,
+    streaming,
+):
+    primary_provider = CapturingFailingProvider()
+    primary_provider.provider_config.update(
+        {"id": "primary", "max_context_tokens": 100000}
+    )
+    fallback_provider = CapturingProvider(modalities=[])
+    fallback_provider.provider_config.update(
+        {"id": "fallback", "max_context_tokens": 5000}
+    )
+    fallback_provider.should_call_tools = False
+    contexts = []
+    for index in range(6):
+        contexts.extend(
+            [
+                {
+                    "role": "user",
+                    "content": f"round-{index}-marker " + "u" * 4000,
+                },
+                {"role": "assistant", "content": "a" * 4000},
+            ]
+        )
+    request = ProviderRequest(
+        prompt="current request",
+        func_tool=tool_set,
+        contexts=contexts,
+    )
+
+    await runner.reset(
+        provider=primary_provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=streaming,
+        fallback_providers=[fallback_provider],
+        max_context_tokens=100000,
+    )
+
+    async for _ in runner.step_until_done(5):
+        pass
+
+    fallback_contexts = fallback_provider.received_contexts[0]
+    fallback_context_text = str(fallback_contexts)
+    assert "round-0-marker" not in fallback_context_text
+    assert "round-5-marker" in fallback_context_text
+    assert "current request" in fallback_context_text
+    assert len(fallback_contexts) < len(primary_provider.received_contexts[0])
+    assert runner.request_context_manager_config.max_context_tokens == 5000
 
 
 @pytest.mark.asyncio
@@ -2413,11 +2482,14 @@ async def test_context_token_limit_is_isolated_per_run(
         "agent_hooks": mock_hooks,
     }
     await limited.reset(
-        **common, request=ProviderRequest(prompt="limited"),
-        run_context=ContextWrapper(context=None), max_context_tokens=4096,
+        **common,
+        request=ProviderRequest(prompt="limited"),
+        run_context=ContextWrapper(context=None),
+        max_context_tokens=4096,
     )
     await default.reset(
-        **common, request=ProviderRequest(prompt="default"),
+        **common,
+        request=ProviderRequest(prompt="default"),
         run_context=ContextWrapper(context=None),
     )
     assert limited.request_context_manager_config.max_context_tokens == 4096
