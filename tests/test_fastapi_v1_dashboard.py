@@ -1018,6 +1018,7 @@ def fake_core_lifecycle():
             ]
         ),
         kb_manager=None,
+        subagents=None,
     )
 
 
@@ -1066,7 +1067,7 @@ async def test_version_routes_return_startup_runtime_snapshot(
     platform = SimpleNamespace(
         system=Mock(return_value="Linux"), machine=Mock(return_value="aarch64")
     )
-    from astrbot.core.computer import process_sandbox
+    from astrbot.core.astr_agent_runtime.computer import process_sandbox
 
     process_sandbox.get_process_sandbox_status.cache_clear()
     monkeypatch.setattr(process_sandbox, "platform", platform)
@@ -1903,9 +1904,11 @@ async def test_v1_system_config_update_preserves_independent_bot_provider_sectio
 async def test_config_update_revokes_only_affected_shell_sessions(
     asgi_app, fake_core_lifecycle, monkeypatch, tmp_path, change
 ):
-    from astrbot.core.computer import computer_client
-    from astrbot.core.computer.booters.local import LocalBooter
-    from astrbot.core.tools.computer_tools import shell as shell_tools
+    from astrbot.core.astr_agent_runtime.computer import computer_client
+    from astrbot.core.astr_agent_runtime.computer.booters.local import LocalBooter
+    from astrbot.core.astr_agent_runtime.tools.computer_tools import (
+        shell as shell_tools,
+    )
 
     config = fake_core_lifecycle.astrbot_config
     config["admins_id"] = ["creator", "other-admin"]
@@ -3444,26 +3447,23 @@ async def test_v1_plugin_extension_supports_astrbot_web_api(
 
 
 @pytest.mark.asyncio
-async def test_plugin_extension_accepts_plugin_scoped_api_key(
+async def test_native_subagent_runtime_requires_config_scope(
     asgi_client,
     fake_core_lifecycle,
     fake_db,
 ):
-    from astrbot.api.web import json_response, request
-
-    async def inspect_request():
-        return json_response({"plugin_name": request.plugin_name})
-
-    fake_core_lifecycle.star_context.registered_web_apis = [
-        ("/extension-check", inspect_request, ["GET"], "Inspect plugin request")
-    ]
+    fake_core_lifecycle.subagents = None
     fake_db.add_api_key("plugin-test", ["plugin"])
     response = await asgi_client.get(
-        "/api/v1/plugins/extensions/extension-check",
+        "/api/v1/subagents/runtime",
         headers={"Authorization": "ApiKey plugin-test"},
     )
+    assert response.status_code == 403
+    response = await asgi_client.get(
+        "/api/v1/subagents/runtime", headers=_jwt_headers()
+    )
     assert response.status_code == 200
-    assert response.json() == {"plugin_name": "extension-check"}
+    assert response.json()["data"] == {"agents": []}
 
 
 @pytest.mark.asyncio

@@ -203,6 +203,15 @@ class CommandPermissionRequest(BaseModel):
     permission: str
 
 
+class SubAgentConfigRequest(OpenModel):
+    main_enable: bool | None = None
+    enable: bool | None = None
+    max_concurrent_agents: int | None = Field(default=None, ge=1)
+    task_timeout: int | None = Field(default=None, ge=1)
+    max_steps: int | None = Field(default=None, ge=1)
+    agents: list[dict[str, Any]] | None = None
+
+
 class TraceSettingsRequest(BaseModel):
     trace_enable: bool | None = None
 

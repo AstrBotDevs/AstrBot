@@ -1,0 +1,114 @@
+{
+  "header": {
+    "eyebrow": "Subagent Orchestration"
+  },
+  "page": {
+    "title": "子代理编排",
+    "beta": "实验性",
+    "subtitle": "内置 AI 按需委派任务，保留子代理上下文并接收执行结果。"
+  },
+  "actions": {
+    "refresh": "刷新",
+    "save": "保存",
+    "add": "新增子代理",
+    "expand": "展开设置",
+    "collapse": "收起设置",
+    "delete": "删除",
+    "close": "关闭"
+  },
+  "overview": {
+    "totalAgents": "子代理总数",
+    "totalAgentsNote": "当前已配置的子代理数量",
+    "enabledAgents": "启用中的 Agent",
+    "enabledAgentsNote": "会参与 handoff 编排的子代理",
+    "mainOrchestration": "主编排状态",
+    "boundPersonas": "已绑定 Persona",
+    "boundPersonasNote": "完成角色绑定的子代理数量"
+  },
+  "switches": {
+    "enable": "启用子代理编排",
+    "enableHint": "启用子代理功能"
+  },
+  "description": {
+    "disabled": "未启用。主 Agent 使用自己的工具完成任务。",
+    "enabled": "已启用。主 Agent 保留自己的工具，通过 spawn_agent 创建后台子代理。"
+  },
+  "section": {
+    "title": "子代理配置",
+    "subtitle": "为主代理配置可委派的子代理、人格与描述信息",
+    "globalSettings": "全局设置",
+    "agentSetup": "Agent 设置"
+  },
+  "cards": {
+    "statusEnabled": "启用",
+    "statusDisabled": "停用",
+    "unnamed": "未命名子代理",
+    "transferPrefix": "transfer_to_{name}",
+    "switchLabel": "启用",
+    "previewTitle": "预览：主 LLM 将看到的 handoff 工具",
+    "personaChip": "Persona: {id}",
+    "noDescription": "暂无描述",
+    "personaPreview": "人格预览",
+    "previewHint": "这里展示当前所选 Persona 的预览，便于确认 handoff 目标。"
+  },
+  "form": {
+    "nameLabel": "专家名称",
+    "nameHint": "建议使用英文小写+下划线，且全局唯一",
+    "providerLabel": "Chat Provider（可选）",
+    "providerHint": "留空表示跟随全局默认 provider。",
+    "personaLabel": "选择人格设定",
+    "personaHint": "选择人格，或使用自定义提示词和工具。",
+    "personaPreview": "人格预览",
+    "descriptionLabel": "对主 LLM 的描述（用于决定是否 handoff）",
+    "descriptionHint": "供主 Agent 选择专家模板时参考。",
+    "customPersona": "使用自定义提示词与工具",
+    "systemPrompt": "系统提示词",
+    "allTools": "全部可用工具",
+    "tools": "工具",
+    "toolsHint": "不选择工具表示不使用工具；始终应用插件和执行权限限制。"
+  },
+  "messages": {
+    "loadConfigFailed": "获取配置失败",
+    "loadPersonaFailed": "获取 Persona 列表失败",
+    "unsavedChangesNotice": "当前页面有未保存修改，请在离开前保存。",
+    "unsavedChangesLeaveConfirm": "当前页面有未保存修改，离开后将丢失这些更改。是否继续离开？",
+    "unsavedChangesReloadConfirm": "当前页面有未保存修改，刷新配置会丢失这些更改。是否继续刷新？",
+    "nameMissing": "存在未填写名称的子代理",
+    "nameInvalid": "子代理名称不合法：仅允许英文小写字母/数字/下划线，且需以字母开头",
+    "nameDuplicate": "子代理名称重复：{name}",
+    "personaMissing": "子代理 {name} 未选择 Persona",
+    "saveSuccess": "保存成功",
+    "saveFailed": "保存失败",
+    "nameRequired": "名称必填",
+    "namePattern": "仅支持小写字母、数字和下划线"
+  },
+  "empty": {
+    "title": "未配置子代理",
+    "subtitle": "添加一个新的子代理以开始",
+    "action": "创建第一个 Agent"
+  },
+  "limits": {
+    "concurrency": "每会话并发数",
+    "timeout": "任务超时（秒，包含排队）",
+    "steps": "每轮最大步数"
+  },
+  "progress": {
+    "title": "执行进度",
+    "hint": "点击查看执行记录。追加指令或取消任务，请通过主 Agent 操作。",
+    "worker": "子代理",
+    "state": "状态",
+    "task": "任务",
+    "steps": "完成步数",
+    "empty": "尚无委派任务。",
+    "loadFailed": "无法加载执行记录，请刷新重试。",
+    "states": {
+      "pending": "排队中",
+      "running": "运行中",
+      "completed": "已完成",
+      "failed": "失败",
+      "cancelled": "已取消",
+      "timed_out": "超时",
+      "interrupted": "已中断"
+    }
+  }
+}

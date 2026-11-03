@@ -135,6 +135,9 @@
     },
     {
       "name": "T2I"
+    },
+    {
+      "name": "Subagents"
     }
   ],
   "paths": {
@@ -6893,6 +6896,88 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/Name"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `config`"
+      }
+    },
+    "/api/v1/subagents/config": {
+      "get": {
+        "tags": [
+          "Subagents"
+        ],
+        "summary": "Get subagent orchestrator configuration",
+        "operationId": "getSubagentConfig",
+        "x-astrbot-scope": "config",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `config`"
+      },
+      "put": {
+        "tags": [
+          "Subagents"
+        ],
+        "summary": "Update subagent orchestrator configuration",
+        "operationId": "updateSubagentConfig",
+        "x-astrbot-scope": "config",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DynamicConfig"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `config`"
+      }
+    },
+    "/api/v1/subagents/available-tools": {
+      "get": {
+        "tags": [
+          "Subagents"
+        ],
+        "summary": "List tools available to subagents",
+        "operationId": "listSubagentAvailableTools",
+        "x-astrbot-scope": "config",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `config`"
+      }
+    },
+    "/api/v1/subagents/runtime": {
+      "get": {
+        "tags": [
+          "Subagents"
+        ],
+        "summary": "List agent sessions and their current executions",
+        "operationId": "listSubagentRuntime",
+        "x-astrbot-scope": "config",
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Include history supplied by the matching agent's selected runtime."
           }
         ],
         "responses": {

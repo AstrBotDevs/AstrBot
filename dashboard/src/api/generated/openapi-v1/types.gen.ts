@@ -3934,6 +3934,35 @@ export type DeleteT2iTemplateResponse = (SuccessEnvelope);
 
 export type DeleteT2iTemplateError = unknown;
 
+export type GetSubagentConfigResponse = (SuccessEnvelope);
+
+export type GetSubagentConfigError = unknown;
+
+export type UpdateSubagentConfigData = {
+    body: DynamicConfig;
+};
+
+export type UpdateSubagentConfigResponse = (SuccessEnvelope);
+
+export type UpdateSubagentConfigError = unknown;
+
+export type ListSubagentAvailableToolsResponse = (SuccessEnvelope);
+
+export type ListSubagentAvailableToolsError = unknown;
+
+export type ListSubagentRuntimeData = {
+    query?: {
+        /**
+         * Include history supplied by the matching agent's selected runtime.
+         */
+        agent_id?: string;
+    };
+};
+
+export type ListSubagentRuntimeResponse = (SuccessEnvelope);
+
+export type ListSubagentRuntimeError = unknown;
+
 export type VerifyPlatformWebhookData = {
     path: {
         webhook_uuid: string;

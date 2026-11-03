@@ -31,6 +31,7 @@ import ruRUKnowledgeBaseDetail from './features/knowledge-base/detail.json';
 import ruRUKnowledgeBaseDocument from './features/knowledge-base/document.json';
 import ruRUPersona from './features/persona.json';
 import ruRUCommand from './features/command.json';
+import ruRUSubagent from './features/subagent.json';
 import ruRUWelcome from './features/welcome.json';
 import ruRUErrors from './messages/errors.json';
 import ruRUSuccess from './messages/success.json';
@@ -76,6 +77,7 @@ export default {
       },
       persona: ruRUPersona,
       command: ruRUCommand,
+      subagent: ruRUSubagent,
       welcome: ruRUWelcome
     },
     messages: {

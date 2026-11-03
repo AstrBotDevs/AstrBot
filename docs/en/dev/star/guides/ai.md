@@ -393,6 +393,26 @@ Plugins can retain an already scheduled asyncio Task with `context.register_back
 
 `FunctionTool.execution_timeout` optionally gives waiting tools an independent timeout in seconds. Otherwise the runner default applies. Permission wrappers preserve this setting.
 
+## Agent module paths and import compatibility
+
+The built-in Agent implementation lives under `astrbot.core.astr_agent_runtime`. Plugins continue to use the documented `astrbot.core.astr_agent_context.AstrAgentContext`, `AgentContextWrapper`, and public `astrbot.core.agent.*` types. The old context module re-exports the same classes, preserving inheritance, type checks, and `Context.tool_loop_agent()` calls.
+
+Internal implementation paths have changed as follows:
+
+| Previous path | Current path |
+| --- | --- |
+| `core/astr_agent_context.py` | `core/astr_agent_runtime/context.py`; the old path retains re-exports |
+| `core/astr_agent_hooks.py` | `core/astr_agent_runtime/hooks.py` |
+| `core/astr_agent_tool_exec.py` | `core/astr_agent_runtime/tool_executor.py`; plugin invocation lives in `core/star/tool_execution.py` |
+| `core/astr_agent_run_util.py` | `core/astr_agent_runtime/runner.py` |
+| `core/astr_main_agent/` | Native construction lives in `core/astr_agent_runtime/main_agent/`; public subagent management lives in `core/subagents/` |
+| `core/computer/`, `core/tools/` | `core/astr_agent_runtime/computer/`, `core/astr_agent_runtime/tools/` |
+| `core/skills/neo_skill_sync.py` | `core/astr_agent_runtime/computer/neo_skill_sync.py` |
+| `core/astr_agent_wakeup.py` | `core/agent_wakeup.py` |
+| `core/astr_main_agent_resources.py` | Prompts live with their owning features; shared error conventions live in `core/llm_error_messages.py` |
+
+Core still owns media input preprocessing and plugin tool/skill filtering. Cron, plugins, and background tasks continue to submit input through the event queue.
+
 ## Conversation Manager
 
 ### Getting the Current LLM Conversation History for a Session

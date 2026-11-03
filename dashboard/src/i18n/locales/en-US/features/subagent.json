@@ -1,0 +1,114 @@
+{
+  "header": {
+    "eyebrow": "Orchestration"
+  },
+  "page": {
+    "title": "SubAgent Orchestration",
+    "beta": "Experimental",
+    "subtitle": "Delegate tasks from Built-in AI, retain worker context, and review results."
+  },
+  "actions": {
+    "refresh": "Refresh",
+    "save": "Save",
+    "add": "Add SubAgent",
+    "expand": "Expand",
+    "collapse": "Collapse",
+    "delete": "Delete",
+    "close": "Close"
+  },
+  "overview": {
+    "totalAgents": "Total SubAgents",
+    "totalAgentsNote": "Configured delegate agents",
+    "enabledAgents": "Enabled Agents",
+    "enabledAgentsNote": "Agents available for handoff",
+    "mainOrchestration": "Main Orchestration",
+    "boundPersonas": "Bound Personas",
+    "boundPersonasNote": "Agents with an attached persona"
+  },
+  "switches": {
+    "enable": "Enable SubAgent orchestration",
+    "enableHint": "Enable sub-agent functionality"
+  },
+  "description": {
+    "disabled": "Disabled. Main completes tasks with its own tools.",
+    "enabled": "Enabled. Main retains its tools and starts background workers through spawn_agent."
+  },
+  "section": {
+    "title": "SubAgents",
+    "subtitle": "Configure delegate agents, personas, and descriptions for the main LLM",
+    "globalSettings": "Global Settings",
+    "agentSetup": "Agent Setup"
+  },
+  "cards": {
+    "statusEnabled": "Enabled",
+    "statusDisabled": "Disabled",
+    "unnamed": "Untitled SubAgent",
+    "transferPrefix": "transfer_to_{name}",
+    "switchLabel": "Enable",
+    "previewTitle": "Preview: handoff tool shown to the main LLM",
+    "personaChip": "Persona: {id}",
+    "personaPreview": "Persona Preview",
+    "noDescription": "No description yet",
+    "previewHint": "Review the currently selected persona to verify the handoff target."
+  },
+  "form": {
+    "nameLabel": "Expert name",
+    "nameHint": "Use lowercase letters + underscores; must be globally unique.",
+    "providerLabel": "Chat Provider (optional)",
+    "providerHint": "Leave empty to follow the global default provider.",
+    "personaLabel": "Choose Persona",
+    "personaHint": "Select a persona or configure a custom prompt and tools.",
+    "personaPreview": "Persona Preview",
+    "descriptionLabel": "Description for the main LLM (used to decide handoff)",
+    "descriptionHint": "Help main choose this expert template.",
+    "customPersona": "Use custom prompt and tools",
+    "systemPrompt": "System prompt",
+    "allTools": "All available tools",
+    "tools": "Tools",
+    "toolsHint": "An empty selection disables tools. Plugin and execution permissions still apply."
+  },
+  "messages": {
+    "loadConfigFailed": "Failed to load config",
+    "loadPersonaFailed": "Failed to load persona list",
+    "unsavedChangesNotice": "You have unsaved changes on this page. Save before leaving.",
+    "unsavedChangesLeaveConfirm": "You have unsaved changes. Leaving will discard them. Continue?",
+    "unsavedChangesReloadConfirm": "You have unsaved changes. Reloading will discard them. Continue?",
+    "nameMissing": "A SubAgent is missing a name",
+    "nameInvalid": "Invalid SubAgent name: only lowercase letters/numbers/underscores, starting with a letter",
+    "nameDuplicate": "Duplicate SubAgent name: {name}",
+    "personaMissing": "SubAgent {name} has no persona selected",
+    "saveSuccess": "Saved successfully",
+    "saveFailed": "Failed to save",
+    "nameRequired": "Name is required",
+    "namePattern": "Lowercase letters, numbers, underscore only"
+  },
+  "empty": {
+    "title": "No Agents Configured",
+    "subtitle": "Add a new sub-agent to get started",
+    "action": "Create First Agent"
+  },
+  "limits": {
+    "concurrency": "Concurrent workers per session",
+    "timeout": "Task timeout (seconds, including queue time)",
+    "steps": "Maximum steps per turn"
+  },
+  "progress": {
+    "title": "Worker progress",
+    "hint": "Select a worker to inspect its history. Ask main to send instructions or cancel work.",
+    "worker": "Worker",
+    "state": "State",
+    "task": "Task",
+    "steps": "Completed steps",
+    "empty": "No delegated tasks yet.",
+    "loadFailed": "Could not load worker records. Refresh to retry.",
+    "states": {
+      "pending": "Queued",
+      "running": "Running",
+      "completed": "Completed",
+      "failed": "Failed",
+      "cancelled": "Cancelled",
+      "timed_out": "Timed out",
+      "interrupted": "Interrupted"
+    }
+  }
+}

@@ -1111,6 +1111,37 @@ export const cronApi = {
   },
 };
 
+export type SubAgentWorker = {
+  agent_id: string;
+  runtime: string;
+  conversation_id: string;
+  owner_conversation_id: string;
+  name: string;
+  state: string;
+  task?: string;
+  completed_steps: number;
+  result?: string;
+  error?: string;
+  messages?: { role: string; content: unknown }[];
+};
+
+export const subagentApi = {
+  runtime(agentId?: string) {
+    return typed<{ agents: SubAgentWorker[] }>(openApiV1.listSubagentRuntime({ query: { agent_id: agentId } }));
+  },
+  getConfig() {
+    return typed<OpenConfig>(openApiV1.getSubagentConfig());
+  },
+  updateConfig(config: OpenConfig) {
+    return typed<OpenConfig>(
+      openApiV1.updateSubagentConfig({ body: config }),
+    );
+  },
+  availableTools() {
+    return typed<any>(openApiV1.listSubagentAvailableTools());
+  },
+};
+
 export const commandApi = {
   list(configId?: string) {
     return typed<CommandListData>(

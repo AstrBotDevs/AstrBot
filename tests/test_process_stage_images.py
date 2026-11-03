@@ -14,17 +14,23 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from PIL import Image as PILImage
 
-from astrbot.core import astr_main_agent as main
+from astrbot.core import agent_input as core_input
 from astrbot.core.agent.message import (
     ImageURLPart,
     TextPart,
     dump_messages_with_checkpoints,
 )
 from astrbot.core.agent.tool import FunctionTool, ToolSet
-from astrbot.core.astr_main_agent import builder as builder_build
-from astrbot.core.astr_main_agent import knowledge_base as knowledge_base_build
-from astrbot.core.astr_main_agent import providers as providers_build
-from astrbot.core.astr_main_agent import request as request_build
+from astrbot.core.astr_agent_runtime import main_agent as main
+from astrbot.core.astr_agent_runtime import main_session as native_session
+from astrbot.core.astr_agent_runtime.main_agent import builder as builder_build
+from astrbot.core.astr_agent_runtime.main_agent import (
+    knowledge_base as knowledge_base_build,
+)
+from astrbot.core.astr_agent_runtime.main_agent import providers as providers_build
+from astrbot.core.astr_agent_runtime.main_agent import request as request_build
+from astrbot.core.astr_agent_runtime.main_agent.subagent import initialize_subagents
+from astrbot.core.astr_agent_runtime.tools.subagent import SUBAGENT_TOOL_NAMES
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.message.components import Image, Plain, Reply
 from astrbot.core.pipeline.preprocess_stage import stage as preprocess
@@ -39,7 +45,6 @@ from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest
 from astrbot.core.provider.provider import Provider
 from astrbot.core.star.star_handler import EventType
-from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
 from astrbot.core.utils import image_input
 from astrbot.core.utils import media_utils as media
 
@@ -109,17 +114,27 @@ def harness(tmp_path, monkeypatch):
         return_value=(None, None, None, False)
     )
     context.persona_manager.personas_v3 = []
-    context.subagent_orchestrator = None
+    context.subagents = None
     context.get_llm_tool_manager.return_value.get_builtin_tool.side_effect = (
         lambda cls, **kwargs: cls(**kwargs)
     )
     conversation = SimpleNamespace(
-        cid="conv", persona_id=None, history="[]", token_usage=None
+        cid="conv",
+        user_id="test:FriendMessage:images",
+        persona_id=None,
+        history="[]",
+        token_usage=None,
     )
     context.conversation_manager.get_curr_conversation_id = AsyncMock(
-        return_value="conv"
+        side_effect=lambda umo: "conv" if umo.endswith(":images") else "conv:" + umo
     )
-    context.conversation_manager.get_conversation = AsyncMock(return_value=conversation)
+
+    async def get_conversation(umo, cid):
+        return SimpleNamespace(**{**vars(conversation), "user_id": umo, "cid": cid})
+
+    context.conversation_manager.get_conversation = AsyncMock(
+        side_effect=get_conversation, return_value=conversation
+    )
     context.conversation_manager.update_conversation = AsyncMock()
     provider = MagicMock(spec=Provider)
     provider.provider_config = {
@@ -151,9 +166,11 @@ def harness(tmp_path, monkeypatch):
 
     monkeypatch.setattr(internal, "call_event_hook", hook)
     monkeypatch.setattr(builder_build, "call_event_hook", hook)
-    monkeypatch.setattr(internal, "try_capture_follow_up", lambda event: None)
-    monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
-    monkeypatch.setattr(internal.Metric, "upload", AsyncMock())
+    monkeypatch.setattr(
+        internal, "try_capture_follow_up", lambda event, runtime=None: None
+    )
+    monkeypatch.setattr(native_session, "record_main_stats", AsyncMock())
+    monkeypatch.setattr(native_session.Metric, "upload", AsyncMock())
     monkeypatch.setattr(
         knowledge_base_build, "retrieve_knowledge_base", AsyncMock(return_value=None)
     )
@@ -167,13 +184,15 @@ def harness(tmp_path, monkeypatch):
         AsyncMock(return_value=True),
     )
 
-    async def run(runner, *args, **kwargs):
+    from astrbot.core.agent.runtime import TurnResult
+
+    async def run(runner, turn, max_steps):
         captured.append(runner)
         async for response in runner._iter_llm_responses_with_fallback():
             runner.final_llm_resp = response
-            yield None
+        return TurnResult(text=runner.final_llm_resp.completion_text)
 
-    monkeypatch.setattr(internal, "run_agent", run)
+    monkeypatch.setattr(native_session, "execute_native_loop", run)
     return SimpleNamespace(
         config=config,
         context=context,
@@ -399,8 +418,8 @@ async def test_profile_reload_and_concurrent_requests(harness, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_legacy_subagent_reload_does_not_mount_tools(harness):
-    """Keep legacy expert reloads independent of main-agent tool composition.
+async def test_subagent_config_does_not_remove_main_tools(harness):
+    """Keep expert tool selection independent of main-agent tool composition.
 
     Args:
         harness: Pipeline services and captured main-agent runs.
@@ -413,8 +432,7 @@ async def test_legacy_subagent_reload_does_not_mount_tools(harness):
     tool_mgr.func_list = tools
     tool_mgr.get_full_tool_set.side_effect = lambda: ToolSet(tools.copy())
     harness.context.persona_manager.get_persona_v3_by_id.return_value = None
-    orchestrator = SubAgentOrchestrator(tool_mgr, harness.context.persona_manager)
-    harness.context.subagent_orchestrator = orchestrator
+    await initialize_subagents(harness.context)
     harness.config["provider_settings"]["proactive_capability"]["add_cron_tools"] = (
         False
     )
@@ -434,14 +452,15 @@ async def test_legacy_subagent_reload_does_not_mount_tools(harness):
             "router_system_prompt": router,
             "agents": [{"name": "worker", "tools": [assigned]}],
         }
-        # Legacy SDK callers can reload experts without changing main's tools.
         harness.config["subagent_orchestrator"] = config
-        await orchestrator.reload_from_config(config)
         event = make_event()
         event.platform_meta.support_proactive_message = False
         stage = await process_event(harness, event, stage=stage)
         req = harness.captured[-1].req
-        assert req.func_tool.names() == ["tool_a", "tool_b"]
+        assert set(req.func_tool.names()) == {"tool_a", "tool_b"} | (
+            SUBAGENT_TOOL_NAMES if enabled else set()
+        )
+        assert ("<subagent_experts>" in req.system_prompt) == enabled
         assert router not in req.system_prompt
         if previous_router:
             assert previous_router not in req.system_prompt
@@ -451,10 +470,10 @@ async def test_legacy_subagent_reload_does_not_mount_tools(harness):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("global_enabled", [False, True])
 @pytest.mark.parametrize("session_enabled", [False, True])
-async def test_legacy_subagent_policy_does_not_override_session_profile(
+async def test_subagents_use_global_config_without_overriding_session_profile(
     harness, global_enabled, session_enabled
 ):
-    """Keep legacy routing configuration out of native main-agent composition.
+    """Use global delegation settings alongside the session provider profile.
 
     Args:
         harness: Pipeline services and captured main-agent runs.
@@ -469,8 +488,7 @@ async def test_legacy_subagent_policy_does_not_override_session_profile(
     tool_mgr.func_list = tools
     tool_mgr.get_full_tool_set.side_effect = lambda: ToolSet(tools.copy())
     harness.context.persona_manager.get_persona_v3_by_id.return_value = None
-    orchestrator = SubAgentOrchestrator(tool_mgr, harness.context.persona_manager)
-    harness.context.subagent_orchestrator = orchestrator
+    await initialize_subagents(harness.context)
     harness.config["provider_settings"]["proactive_capability"]["add_cron_tools"] = (
         False
     )
@@ -480,7 +498,6 @@ async def test_legacy_subagent_policy_does_not_override_session_profile(
         "router_system_prompt": "Global router",
         "agents": [{"name": "global_worker", "tools": ["global_tool"]}],
     }
-    await orchestrator.reload_from_config(harness.config["subagent_orchestrator"])
     session_config = copy.deepcopy(harness.config)
     session_config["provider_settings"]["prompt_prefix"] = "Session: "
     session_config["subagent_orchestrator"] = {
@@ -504,7 +521,11 @@ async def test_legacy_subagent_policy_does_not_override_session_profile(
     await process_event(harness, event, stage=stage)
 
     req = harness.captured[-1].req
-    assert req.func_tool.names() == ["global_tool", "session_tool"]
+    assert set(req.func_tool.names()) == {"global_tool", "session_tool"} | (
+        SUBAGENT_TOOL_NAMES if global_enabled else set()
+    )
+    assert ("global_worker" in req.system_prompt) == global_enabled
+    assert "session_worker" not in req.system_prompt
     assert "Global router" not in req.system_prompt
     assert "Session router" not in req.system_prompt
     assert req.prompt == "Session: hello"
@@ -781,7 +802,7 @@ async def test_reply_fallback_limit_and_deduplication(harness, tmp_path, monkeyp
         PILImage.new("RGB", (12, 12), "red").save(path)
         paths.append(str(path))
     extract = AsyncMock(return_value=[paths[0], paths[0], paths[1], paths[2]])
-    monkeypatch.setattr(request_build, "extract_quoted_message_images", extract)
+    monkeypatch.setattr(core_input, "extract_quoted_message_images", extract)
     harness.config["provider_settings"]["max_quoted_fallback_images"] = 2
     event = make_event([Reply(id="one"), Reply(id="two")])
     await process_event(harness, event)
@@ -999,8 +1020,8 @@ async def test_non_image_and_disabled_ai_do_not_prepare(harness, tmp_path, monke
 
 def test_image_preparation_stays_outside_agent_runner_and_providers():
     root = Path(__file__).parents[1] / "astrbot" / "core"
-    paths = list((root / "astr_main_agent").glob("*.py")) + [
-        root / "astr_agent_tool_exec.py"
+    paths = list((root / "astr_agent_runtime" / "main_agent").glob("*.py")) + [
+        root / "astr_agent_runtime" / "tool_executor.py"
     ]
     paths += list((root / "agent").rglob("*.py")) + list(
         (root / "provider").rglob("*.py")
@@ -1012,7 +1033,9 @@ def test_image_preparation_stays_outside_agent_runner_and_providers():
             and "resolve_image_ref_to_images" not in source
         )
         assert "image_settings" not in source
-    from astrbot.core.tools.computer_tools.cua import CuaMouseClickTool
+    from astrbot.core.astr_agent_runtime.tools.computer_tools.cua import (
+        CuaMouseClickTool,
+    )
 
     assert (
         "coordinate_space" not in inspect.signature(CuaMouseClickTool.call).parameters
@@ -1374,8 +1397,12 @@ async def test_materialized_sources_remain_owned_when_collection_fails(
             AsyncMock(side_effect=failure("unavailable")),
         )
     with pytest.raises(failure, match="unavailable"):
-        await request_build.collect_initial_request(
-            event, harness.context, main.MainAgentBuildConfig(tool_call_timeout=60)
+        await request_build.prepare_request(
+            event,
+            harness.context,
+            main.MainAgentBuildConfig(tool_call_timeout=60),
+            harness.provider,
+            None,
         )
     assert len(event._temporary_local_files) == 1
     owned = Path(event._temporary_local_files[0])

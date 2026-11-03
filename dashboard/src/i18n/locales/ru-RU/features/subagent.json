@@ -1,0 +1,114 @@
+{
+  "header": {
+    "eyebrow": "Orchestration"
+  },
+  "page": {
+    "title": "Оркестрация SubAgent",
+    "beta": "Экспериментально",
+    "subtitle": "Delegate tasks from Built-in AI, retain worker context, and review results."
+  },
+  "actions": {
+    "refresh": "Обновить",
+    "save": "Сохранить",
+    "add": "Добавить SubAgent",
+    "expand": "Развернуть",
+    "collapse": "Свернуть",
+    "delete": "Удалить",
+    "close": "Закрыть"
+  },
+  "overview": {
+    "totalAgents": "Всего SubAgent",
+    "totalAgentsNote": "Количество настроенных под-агентов",
+    "enabledAgents": "Активные агенты",
+    "enabledAgentsNote": "Под-агенты, доступные для handoff",
+    "mainOrchestration": "Основная оркестрация",
+    "boundPersonas": "Привязанные персонажи",
+    "boundPersonasNote": "Под-агенты с выбранной персоной"
+  },
+  "switches": {
+    "enable": "Включить оркестрацию SubAgent",
+    "enableHint": "Включить функциональность под-агентов"
+  },
+  "description": {
+    "disabled": "Disabled. Main completes tasks with its own tools.",
+    "enabled": "Enabled. Main retains its tools and starts background workers through spawn_agent."
+  },
+  "section": {
+    "title": "Субагенты",
+    "subtitle": "Настройте делегируемых агентов, персонажей и описания для основного LLM",
+    "globalSettings": "Глобальные настройки",
+    "agentSetup": "Настройка агента"
+  },
+  "cards": {
+    "statusEnabled": "Включено",
+    "statusDisabled": "Отключено",
+    "unnamed": "Безымянный SubAgent",
+    "transferPrefix": "передать_{name}",
+    "switchLabel": "Включить",
+    "previewTitle": "Предпросмотр: инструмент handoff, видимый основному LLM",
+    "personaChip": "Персонаж: {id}",
+    "personaPreview": "Предпросмотр персонажа",
+    "noDescription": "Описание пока не задано",
+    "previewHint": "Просмотрите выбранную персону, чтобы проверить цель handoff."
+  },
+  "form": {
+    "nameLabel": "Expert name",
+    "nameHint": "Используйте строчные латинские буквы и подчеркивания; имя должно быть глобально уникальным.",
+    "providerLabel": "Chat Provider (опционально)",
+    "providerHint": "Оставьте пустым, чтобы использовать глобальный провайдер по умолчанию.",
+    "personaLabel": "Выберите персонажа",
+    "personaHint": "Select a persona or configure a custom prompt and tools.",
+    "personaPreview": "Предпросмотр персонажа",
+    "descriptionLabel": "Описание для основного LLM (используется для принятия решения о handoff)",
+    "descriptionHint": "Help main choose this expert template.",
+    "customPersona": "Use custom prompt and tools",
+    "systemPrompt": "System prompt",
+    "allTools": "All available tools",
+    "tools": "Tools",
+    "toolsHint": "An empty selection disables tools. Plugin and execution permissions still apply."
+  },
+  "messages": {
+    "loadConfigFailed": "Не удалось загрузить конфигурацию",
+    "loadPersonaFailed": "Не удалось загрузить список персонажей",
+    "unsavedChangesNotice": "На странице есть несохраненные изменения. Сохраните их перед уходом.",
+    "unsavedChangesLeaveConfirm": "Есть несохраненные изменения. При уходе со страницы они будут потеряны. Продолжить?",
+    "unsavedChangesReloadConfirm": "Есть несохраненные изменения. Обновление конфигурации их сбросит. Продолжить?",
+    "nameMissing": "У SubAgent отсутствует имя",
+    "nameInvalid": "Недопустимое имя SubAgent: только строчные латинские буквы/цифры/подчеркивания, должно начинаться с буквы",
+    "nameDuplicate": "Дублирующееся имя SubAgent: {name}",
+    "personaMissing": "У SubAgent {name} не выбран персонаж",
+    "saveSuccess": "Успешно сохранено",
+    "saveFailed": "Ошибка сохранения",
+    "nameRequired": "Имя обязательно",
+    "namePattern": "Только строчные буквы, цифры и подчеркивание"
+  },
+  "empty": {
+    "title": "Агенты не настроены",
+    "subtitle": "Добавьте первого под-агента, чтобы начать",
+    "action": "Создать первого агента"
+  },
+  "limits": {
+    "concurrency": "Concurrent workers per session",
+    "timeout": "Task timeout (seconds, including queue time)",
+    "steps": "Maximum steps per turn"
+  },
+  "progress": {
+    "title": "Worker progress",
+    "hint": "Select a worker to inspect its history. Ask main to send instructions or cancel work.",
+    "worker": "Worker",
+    "state": "State",
+    "task": "Task",
+    "steps": "Completed steps",
+    "empty": "No delegated tasks yet.",
+    "loadFailed": "Could not load worker records. Refresh to retry.",
+    "states": {
+      "pending": "Queued",
+      "running": "Running",
+      "completed": "Completed",
+      "failed": "Failed",
+      "cancelled": "Cancelled",
+      "timed_out": "Timed out",
+      "interrupted": "Interrupted"
+    }
+  }
+}

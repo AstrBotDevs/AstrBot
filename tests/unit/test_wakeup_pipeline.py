@@ -12,10 +12,13 @@ from opentelemetry.trace import format_trace_id, get_current_span
 
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.astr_agent_run_util import AgentRunner
-from astrbot.core.astr_agent_wakeup import wake_main_agent
-from astrbot.core.astr_main_agent import MainAgentBuildResult
-from astrbot.core.astr_main_agent.request import prepare_request
+from astrbot.core.agent.runtime import AgentSessionRef
+from astrbot.core.agent_wakeup import wake_main_agent
+from astrbot.core.astr_agent_runtime import main_session as native_session
+from astrbot.core.astr_agent_runtime.main_agent import MainAgentBuildResult
+from astrbot.core.astr_agent_runtime.main_agent import builder as native_builder
+from astrbot.core.astr_agent_runtime.main_agent.request import prepare_request
+from astrbot.core.astr_agent_runtime.runner import AgentRunner
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.event_bus import EventBus
 from astrbot.core.log import _log_context
@@ -23,6 +26,7 @@ from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.pipeline.context import PipelineContext
 from astrbot.core.pipeline.process_stage.method.agent_sub_stages import internal
 from astrbot.core.pipeline.scheduler import PipelineScheduler
+from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
 from astrbot.core.platform.astr_message_event import (
     AstrMessageEvent,
     current_message_event,
@@ -31,6 +35,7 @@ from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider.entities import LLMResponse
+from astrbot.core.provider.func_tool_manager import FunctionToolManager
 from astrbot.core.utils import trace as trace_module
 
 
@@ -47,6 +52,7 @@ async def runtime(monkeypatch):
     config = copy.deepcopy(DEFAULT_CONFIG)
     config["provider_settings"]["streaming_response"] = False
     config["provider_settings"]["wake_prefix"] = "/llm "
+    config["provider_settings"]["datetime_system_prompt"] = False
     config["platform_settings"]["unique_session"] = True
     config["admins_id"] = ["astrbot"]
     conversation = SimpleNamespace(cid="conversation", history="[]", token_usage=0)
@@ -66,16 +72,21 @@ async def runtime(monkeypatch):
     async def save(*args, **kwargs):
         conversation.history = json.dumps(kwargs["history"])
 
+    async def get_conversation(umo, cid):
+        conversation.user_id = umo
+        return conversation
+
     context = SimpleNamespace(
         get_event_queue=lambda: queue,
         get_platform_inst=lambda _: SimpleNamespace(meta=lambda: metadata),
         get_config=lambda **_: config,
         conversation_manager=SimpleNamespace(
             get_curr_conversation_id=AsyncMock(return_value=conversation.cid),
-            get_conversation=AsyncMock(return_value=conversation),
+            get_conversation=AsyncMock(side_effect=get_conversation),
             update_conversation=AsyncMock(side_effect=save),
         ),
         get_using_tts_provider_async=AsyncMock(return_value=None),
+        get_llm_tool_manager=lambda: FunctionToolManager(),
         send_message=AsyncMock(return_value=True),
     )
 
@@ -114,8 +125,12 @@ async def runtime(monkeypatch):
         text_chat_stream=respond_stream,
     )
 
-    async def build(*, event, plugin_context, config):
-        prepared = await prepare_request(event, plugin_context, config, provider, None)
+    async def build(
+        *, event, plugin_context, config, req=None, collected_input=None, **kwargs
+    ):
+        prepared = await prepare_request(
+            event, plugin_context, config, provider, req, collected_input
+        )
         assert prepared is not None
         control.events.append(event)
         runner = AgentRunner()
@@ -129,9 +144,9 @@ async def runtime(monkeypatch):
         )
         return MainAgentBuildResult(runner, prepared.request, provider)
 
-    monkeypatch.setattr(internal, "build_main_agent", build)
-    monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
-    monkeypatch.setattr(internal.Metric, "upload", AsyncMock())
+    monkeypatch.setattr(native_builder, "build_main_agent", build)
+    monkeypatch.setattr(native_session, "record_main_stats", AsyncMock())
+    monkeypatch.setattr(native_session.Metric, "upload", AsyncMock())
     monkeypatch.setattr(
         internal.SessionServiceManager,
         "should_process_llm_request",
@@ -176,6 +191,7 @@ async def runtime(monkeypatch):
     for task in pending:
         task.cancel()
     await asyncio.gather(*pending, return_exceptions=True)
+    await context.agent_runtime.close()
 
 
 @pytest.mark.asyncio
@@ -197,6 +213,8 @@ async def test_wakeup_uses_current_context_and_sends_final_reply(
     event = runtime.events[0]
     assert event.unified_msg_origin == umo
     assert event.role == "member"
+    assert event.get_extra("provider_request").conversation.cid == "conversation"
+    assert event.get_extra("provider_request").prompt == "Continue"
     assert runtime.requests[0][0] == history[0]
     assert json.loads(runtime.conversation.history) == history + [
         {"role": "user", "content": [{"type": "text", "text": "Continue"}]},
@@ -290,6 +308,38 @@ async def test_platform_stop_cancels_the_wakeup_provider_and_preserves_history(r
 
 
 @pytest.mark.asyncio
+async def test_switching_conversations_does_not_steer_the_previous_active_turn(runtime):
+    umo = "target:FriendMessage:user"
+    runtime.gate.clear()
+    await wake_main_agent(runtime.context, umo=umo, user_prompt="First", source="cron")
+    await asyncio.wait_for(runtime.started.wait(), 1)
+    active = runtime.context.agent_runtime.active_turn(umo)
+    active.steer = MagicMock(side_effect=AssertionError("Wrong conversation"))
+    second = SimpleNamespace(
+        cid="second",
+        user_id=umo,
+        token_usage=0,
+        history=json.dumps([{"role": "user", "content": "Second history"}]),
+    )
+    conversations = {"conversation": runtime.conversation, "second": second}
+    manager = runtime.context.conversation_manager
+    manager.get_curr_conversation_id.return_value = "second"
+    manager.get_conversation.side_effect = lambda source, cid: conversations[cid]
+
+    async def save(source, cid, **kwargs):
+        conversations[cid].history = json.dumps(kwargs["history"])
+
+    manager.update_conversation.side_effect = save
+    await wake_main_agent(runtime.context, umo=umo, user_prompt="Next", source="cron")
+    runtime.gate.set()
+    await asyncio.wait_for(runtime.drain(), 1)
+    active.steer.assert_not_called()
+    assert runtime.requests[1][0] == {"role": "user", "content": "Second history"}
+    assert "Second history" not in runtime.conversation.history
+    assert "First" not in second.history
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("streaming", [False, True])
 async def test_wakeup_failure_is_traced_and_delivered(runtime, streaming):
     """Deliver the provider error while retaining the failed trace and history."""
@@ -309,3 +359,47 @@ async def test_wakeup_failure_is_traced_and_delivered(runtime, streaming):
         == "LLM 响应错误: Reply 1"
     )
     runtime.context.conversation_manager.update_conversation.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_targeted_wakeup_queues_on_its_parent_after_conversation_switch(runtime):
+    umo = "target:FriendMessage:user"
+    runtime.context.subagents = SimpleNamespace(
+        runtimes={"astrbot": runtime.context.agent_runtime}
+    )
+    runtime.gate.clear()
+    await wake_main_agent(runtime.context, umo=umo, user_prompt="First", source="cron")
+    await asyncio.wait_for(runtime.started.wait(), 1)
+    parent = runtime.context.agent_runtime.active_turn(umo)
+    parent.steer = MagicMock(
+        side_effect=AssertionError("Fallback must queue a new turn")
+    )
+    other = SimpleNamespace(cid="other", user_id=umo, history="[]", token_usage=0)
+    conversations = {"conversation": runtime.conversation, "other": other}
+    runtime.context.conversation_manager.get_curr_conversation_id.return_value = "other"
+    runtime.context.conversation_manager.get_conversation.side_effect = (
+        lambda source, cid: conversations.get(cid)
+    )
+    event = AgentWakeupEvent(
+        context=runtime.context,
+        session=runtime.events[0].session,
+        platform_meta=runtime.events[0].platform_meta,
+        prompt="Child result",
+        source="plugin",
+        agent_session=AgentSessionRef("astrbot", "conversation"),
+    )
+    await runtime.context.get_event_queue().put(event)
+    runtime.gate.set()
+    await asyncio.wait_for(runtime.drain(), 1)
+    parent.steer.assert_not_called()
+    assert len(runtime.requests) == 2
+    assert {
+        "role": "assistant",
+        "content": [{"type": "text", "text": "Reply 1"}],
+    } in runtime.requests[1]
+    assert "Child result" in runtime.conversation.history
+    assert other.history == "[]"
+    assert (
+        runtime.context.conversation_manager.get_curr_conversation_id.return_value
+        == "other"
+    )

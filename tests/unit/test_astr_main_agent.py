@@ -10,22 +10,26 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from astrbot.core import astr_main_agent as ama
-from astrbot.core import astr_main_agent_resources as agent_resources
+from astrbot.core import agent_input as core_input
+from astrbot.core import llm_error_messages as agent_errors
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import Message, dump_messages_with_checkpoints
 from astrbot.core.agent.runners.base import AgentState
 from astrbot.core.agent.tool import FunctionTool, ToolSet
-from astrbot.core.astr_agent_wakeup import wake_main_agent
-from astrbot.core.astr_main_agent import builder as builder_build
-from astrbot.core.astr_main_agent import computer_use as computer_use_build
-from astrbot.core.astr_main_agent import knowledge_base as knowledge_base_build
-from astrbot.core.astr_main_agent import persona as persona_build
-from astrbot.core.astr_main_agent import plugins as plugins_build
-from astrbot.core.astr_main_agent import providers as providers_build
-from astrbot.core.astr_main_agent import request as request_build
-from astrbot.core.astr_main_agent import web_search as web_search_build
-from astrbot.core.astr_main_agent import workspace as workspace_build
+from astrbot.core.agent_wakeup import wake_main_agent
+from astrbot.core.astr_agent_runtime import main_agent as ama
+from astrbot.core.astr_agent_runtime.main_agent import builder as builder_build
+from astrbot.core.astr_agent_runtime.main_agent import (
+    computer_use as computer_use_build,
+)
+from astrbot.core.astr_agent_runtime.main_agent import (
+    knowledge_base as knowledge_base_build,
+)
+from astrbot.core.astr_agent_runtime.main_agent import persona as persona_build
+from astrbot.core.astr_agent_runtime.main_agent import providers as providers_build
+from astrbot.core.astr_agent_runtime.main_agent import request as request_build
+from astrbot.core.astr_agent_runtime.main_agent import web_search as web_search_build
+from astrbot.core.astr_agent_runtime.main_agent import workspace as workspace_build
 from astrbot.core.config.agent_runner import resolve_context_compression_config
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.message.components import File, Image, Plain, Record, Reply, Video
@@ -39,6 +43,7 @@ from astrbot.core.provider import manager as provider_manager_module
 from astrbot.core.provider.entities import ProviderRequest, ProviderType
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.skills.skill_manager import SkillInfo
+from astrbot.core.star import agent_capabilities as plugins_build
 from astrbot.core.star.context import Context
 from astrbot.core.star.star import StarMetadata
 from astrbot.core.utils.active_event_registry import active_event_registry
@@ -94,7 +99,7 @@ def mock_context():
     tool_mgr = MagicMock()
     tool_mgr.get_builtin_tool.side_effect = lambda cls, **kwargs: cls(**kwargs)
     ctx.get_llm_tool_manager.return_value = tool_mgr
-    ctx.subagent_orchestrator = None
+    ctx.subagents = None
     return ctx
 
 
@@ -201,7 +206,7 @@ def test_append_system_reminders_includes_weekday(mock_event):
                 return fixed_now.astimezone(tz)
             return fixed_now
 
-    with patch("astrbot.core.astr_main_agent.request.datetime.datetime", FixedDateTime):
+    with patch("astrbot.core.agent_input.datetime.datetime", FixedDateTime):
         request_build.append_system_reminders(
             mock_event,
             req,
@@ -218,7 +223,7 @@ def test_append_system_reminders_includes_weekday(mock_event):
 def test_local_mode_prompt_uses_windows_powershell_51():
     with (
         patch(
-            "astrbot.core.astr_main_agent.computer_use.platform.system",
+            "astrbot.core.astr_agent_runtime.main_agent.computer_use.platform.system",
             return_value="Windows",
         ),
         patch.object(
@@ -239,7 +244,7 @@ def test_local_mode_prompt_uses_windows_powershell_51():
 def test_local_mode_prompt_hints_pwsh_when_resolved():
     with (
         patch(
-            "astrbot.core.astr_main_agent.computer_use.platform.system",
+            "astrbot.core.astr_agent_runtime.main_agent.computer_use.platform.system",
             return_value="Windows",
         ),
         patch.object(
@@ -259,7 +264,7 @@ def test_local_mode_prompt_hints_pwsh_when_resolved():
 def test_local_mode_prompt_ignores_pwsh_on_non_windows():
     with (
         patch(
-            "astrbot.core.astr_main_agent.computer_use.platform.system",
+            "astrbot.core.astr_agent_runtime.main_agent.computer_use.platform.system",
             return_value="Linux",
         ),
         patch.object(
@@ -278,7 +283,7 @@ def test_local_mode_prompt_ignores_pwsh_on_non_windows():
 
 def test_local_mode_prompt_keeps_posix_shell_guidance():
     with patch(
-        "astrbot.core.astr_main_agent.computer_use.platform.system",
+        "astrbot.core.astr_agent_runtime.main_agent.computer_use.platform.system",
         return_value="Linux",
     ):
         prompt = computer_use_build._build_local_mode_prompt()
@@ -375,7 +380,7 @@ class TestSelectProvider:
 
         assert result is None
         mock_event.set_extra.assert_called_with(
-            agent_resources.LLM_ERROR_MESSAGE_EXTRA_KEY,
+            agent_errors.LLM_ERROR_MESSAGE_EXTRA_KEY,
             "LLM 请求失败：未找到指定的提供商 `non-existent`。请检查提供商配置或重新选择可用模型。",
         )
 
@@ -391,7 +396,7 @@ class TestSelectProvider:
 
         assert result is None
         mock_event.set_extra.assert_called_with(
-            agent_resources.LLM_ERROR_MESSAGE_EXTRA_KEY,
+            agent_errors.LLM_ERROR_MESSAGE_EXTRA_KEY,
             "LLM 请求失败：选择的提供商类型无效（str），已跳过本次请求。",
         )
 
@@ -423,7 +428,7 @@ class TestSelectProvider:
 
         assert result is None
         mock_event.set_extra.assert_called_with(
-            agent_resources.LLM_ERROR_MESSAGE_EXTRA_KEY,
+            agent_errors.LLM_ERROR_MESSAGE_EXTRA_KEY,
             "LLM 请求失败：Test error",
         )
 
@@ -866,10 +871,10 @@ class TestApplyFileExtract:
 
         req = ProviderRequest(prompt="Summarize")
 
-        with patch.object(request_build, "extract_file_moonshotai") as mock_extract:
+        with patch.object(core_input, "extract_file_moonshotai") as mock_extract:
             mock_extract.return_value = "File content"
 
-            await request_build._apply_file_extract(mock_event, req, sample_config)
+            await core_input._apply_file_extract(mock_event, req, sample_config)
 
         assert len(req.contexts) == 1
         assert "File Extract Results" in req.contexts[0]["content"]
@@ -880,7 +885,7 @@ class TestApplyFileExtract:
         mock_event.message_obj.message = [Plain(text="Hello")]
         req = ProviderRequest(prompt="Hello")
 
-        await request_build._apply_file_extract(mock_event, req, sample_config)
+        await core_input._apply_file_extract(mock_event, req, sample_config)
 
         assert len(req.contexts) == 0
 
@@ -896,10 +901,10 @@ class TestApplyFileExtract:
 
         req = ProviderRequest(prompt="Summarize")
 
-        with patch.object(request_build, "extract_file_moonshotai") as mock_extract:
+        with patch.object(core_input, "extract_file_moonshotai") as mock_extract:
             mock_extract.return_value = "Reply content"
 
-            await request_build._apply_file_extract(mock_event, req, sample_config)
+            await core_input._apply_file_extract(mock_event, req, sample_config)
 
         assert len(req.contexts) == 1
 
@@ -913,10 +918,10 @@ class TestApplyFileExtract:
 
         req = ProviderRequest(prompt=None)
 
-        with patch.object(request_build, "extract_file_moonshotai") as mock_extract:
+        with patch.object(core_input, "extract_file_moonshotai") as mock_extract:
             mock_extract.return_value = "Content"
 
-            await request_build._apply_file_extract(mock_event, req, sample_config)
+            await core_input._apply_file_extract(mock_event, req, sample_config)
 
         assert req.prompt == "总结一下文件里面讲了什么？"
 
@@ -935,7 +940,7 @@ class TestApplyFileExtract:
 
         req = ProviderRequest(prompt="Summarize")
 
-        await request_build._apply_file_extract(mock_event, req, config)
+        await core_input._apply_file_extract(mock_event, req, config)
 
         assert len(req.contexts) == 0
 
@@ -1598,7 +1603,7 @@ class TestEnsurePersonaAndSkills:
         isolation_status,
     ):
         monkeypatch.setattr(
-            "astrbot.core.tools.computer_tools.util.get_process_sandbox_status",
+            "astrbot.core.astr_agent_runtime.tools.computer_tools.util.get_process_sandbox_status",
             lambda: {"status": isolation_status},
         )
         persona = {"name": "locked", "prompt": "No tools.", "tools": []}
@@ -1702,7 +1707,6 @@ class TestEnsurePersonaAndSkills:
 
         handoff = MagicMock()
         handoff.name = "transfer_to_planner"
-        mock_context.subagent_orchestrator = MagicMock(handoffs=[handoff])
         mock_context.get_config.return_value = {
             "subagent_orchestrator": {
                 "main_enable": True,
@@ -1725,7 +1729,6 @@ class TestEnsurePersonaAndSkills:
 
         assert req.func_tool is not None
         assert "transfer_to_planner" not in req.func_tool.names()
-        assert mock_context.subagent_orchestrator.handoffs == [handoff]
         assert "tool_a" in req.func_tool.names()
         assert "tool_b" in req.func_tool.names()
         assert "Legacy expert routing." not in req.system_prompt
@@ -2591,7 +2594,7 @@ class TestBuildMainAgent:
                 "AstrAgentContext",
                 side_effect=lambda **kwargs: SimpleNamespace(**kwargs),
             ),
-            patch("astrbot.core.astr_main_agent.media.logger") as mock_logger,
+            patch("astrbot.core.agent_media.logger") as mock_logger,
             patch.object(
                 Video,
                 "convert_to_file_path",
@@ -2937,7 +2940,9 @@ class TestHandleWebchat:
             mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
             mock_db.update_platform_session = AsyncMock()
 
-            await webchat_build.generate_conversation_title(mock_event, req, prov)
+            await webchat_build.generate_conversation_title(
+                mock_event, req.prompt, prov
+            )
 
         mock_db.get_platform_session_by_id.assert_called_once_with(
             "webchat-session-123"
@@ -2960,7 +2965,9 @@ class TestHandleWebchat:
 
         with patch("astrbot.core.db_helper") as mock_db:
             mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
-            await webchat_build.generate_conversation_title(mock_event, req, prov)
+            await webchat_build.generate_conversation_title(
+                mock_event, req.prompt, prov
+            )
 
         prov.text_chat.assert_not_called()
 
@@ -2977,7 +2984,9 @@ class TestHandleWebchat:
 
         with patch("astrbot.core.db_helper") as mock_db:
             mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
-            await webchat_build.generate_conversation_title(mock_event, req, prov)
+            await webchat_build.generate_conversation_title(
+                mock_event, req.prompt, prov
+            )
 
         prov.text_chat.assert_not_called()
 
@@ -2995,7 +3004,9 @@ class TestHandleWebchat:
         with patch("astrbot.core.db_helper") as mock_db:
             mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
 
-            await webchat_build.generate_conversation_title(mock_event, req, prov)
+            await webchat_build.generate_conversation_title(
+                mock_event, req.prompt, prov
+            )
 
         prov.text_chat.assert_not_called()
 
@@ -3010,7 +3021,9 @@ class TestHandleWebchat:
         with patch("astrbot.core.db_helper") as mock_db:
             mock_db.get_platform_session_by_id = AsyncMock(return_value=None)
 
-            await webchat_build.generate_conversation_title(mock_event, req, prov)
+            await webchat_build.generate_conversation_title(
+                mock_event, req.prompt, prov
+            )
 
         prov.text_chat.assert_not_called()
 
@@ -3032,7 +3045,9 @@ class TestHandleWebchat:
             mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
             mock_db.update_platform_session = AsyncMock()
 
-            await webchat_build.generate_conversation_title(mock_event, req, prov)
+            await webchat_build.generate_conversation_title(
+                mock_event, req.prompt, prov
+            )
 
         mock_db.update_platform_session.assert_not_called()
 
@@ -3054,7 +3069,9 @@ class TestHandleWebchat:
             mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
             mock_db.update_platform_session = AsyncMock()
 
-            await webchat_build.generate_conversation_title(mock_event, req, prov)
+            await webchat_build.generate_conversation_title(
+                mock_event, req.prompt, prov
+            )
 
         mock_db.update_platform_session.assert_not_called()
 
@@ -3074,7 +3091,9 @@ class TestHandleWebchat:
             mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
             mock_db.update_platform_session = AsyncMock()
 
-            await webchat_build.generate_conversation_title(mock_event, req, prov)
+            await webchat_build.generate_conversation_title(
+                mock_event, req.prompt, prov
+            )
 
         mock_db.update_platform_session.assert_not_called()
 
@@ -3096,7 +3115,9 @@ class TestHandleWebchat:
             mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
             mock_db.update_platform_session = AsyncMock()
 
-            await webchat_build.generate_conversation_title(mock_event, req, prov)
+            await webchat_build.generate_conversation_title(
+                mock_event, req.prompt, prov
+            )
 
         mock_db.update_platform_session.assert_not_called()
 
@@ -3118,7 +3139,9 @@ class TestHandleWebchat:
             mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
             mock_db.update_platform_session = AsyncMock()
 
-            await webchat_build.generate_conversation_title(mock_event, req, prov)
+            await webchat_build.generate_conversation_title(
+                mock_event, req.prompt, prov
+            )
 
         mock_db.update_platform_session.assert_called_once_with(
             session_id="webchat-session-123",
@@ -3146,7 +3169,9 @@ class TestHandleWebchat:
             mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
             mock_db.update_platform_session = AsyncMock()
 
-            await webchat_build.generate_conversation_title(mock_event, req, prov)
+            await webchat_build.generate_conversation_title(
+                mock_event, req.prompt, prov
+            )
 
         mock_logger.exception.assert_called_once()
         mock_db.update_platform_session.assert_not_called()
@@ -3516,8 +3541,6 @@ async def test_feature_composition_preserves_tool_scope_and_instruction_order(
     tool_schema_mode,
 ):
     """Compose real features to protect their filtering scopes and prompt order."""
-    from astrbot.core.agent.agent import Agent
-    from astrbot.core.agent.handoff import HandoffTool
 
     registered = [
         FunctionTool(name=name, description=name, parameters={"type": "object"})
@@ -3539,9 +3562,6 @@ async def test_feature_composition_preserves_tool_scope_and_instruction_order(
         selected,
         None,
         False,
-    )
-    mock_context.subagent_orchestrator = SimpleNamespace(
-        handoffs=[HandoffTool(Agent(name="worker"))]
     )
     mock_event.plugins_name = []
     mock_event.platform_meta.support_proactive_message = False
@@ -3658,7 +3678,7 @@ async def test_feature_composition_preserves_tool_scope_and_instruction_order(
         assert "Knowledge marker" in req.extra_user_content_parts[1].text
     assert req.contexts[0] == {"role": "assistant", "content": "Opening"}
     markers = [
-        agent_resources.LLM_SAFETY_MODE_SYSTEM_PROMPT,
+        persona_build.LLM_SAFETY_MODE_SYSTEM_PROMPT,
         "Caller marker",
         "<genui_instructions>",
         "</genui_instructions>",
@@ -3681,9 +3701,9 @@ async def test_feature_composition_preserves_tool_scope_and_instruction_order(
             req.system_prompt.count(computer_use_build.LOCAL_NETWORK_POLICY_NOTICE) == 1
         )
     tool_prompt = (
-        agent_resources.TOOL_CALL_PROMPT
+        builder_build.TOOL_CALL_PROMPT
         if tool_schema_mode == "full"
-        else agent_resources.TOOL_CALL_PROMPT_SKILLS_LIKE_MODE
+        else builder_build.TOOL_CALL_PROMPT_SKILLS_LIKE_MODE
     )
     markers.append(tool_prompt)
     markers.append(web_search_build.WEB_SEARCH_CITATION_PROMPT)

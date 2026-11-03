@@ -391,6 +391,26 @@ async def test(self, event: AstrMessageEvent):
 
 `FunctionTool.execution_timeout` 可为等待类工具指定独立超时（秒），不填写时使用 runner 默认值；权限包装仍保留该设置。
 
+## Agent 模块路径与导入兼容
+
+内置 Agent 的实现集中在 `astrbot.core.astr_agent_runtime`。插件继续使用文档中的 `astrbot.core.astr_agent_context.AstrAgentContext`、`AgentContextWrapper` 和公共 `astrbot.core.agent.*` 类型；旧 context 路径重导出同一个类，继承、类型检查及 `Context.tool_loop_agent()` 的调用方式保持兼容。
+
+内部实现路径调整如下：
+
+| 原路径 | 新路径 |
+| --- | --- |
+| `core/astr_agent_context.py` | `core/astr_agent_runtime/context.py`，原路径保留重导出 |
+| `core/astr_agent_hooks.py` | `core/astr_agent_runtime/hooks.py` |
+| `core/astr_agent_tool_exec.py` | `core/astr_agent_runtime/tool_executor.py`；插件调用适配位于 `core/star/tool_execution.py` |
+| `core/astr_agent_run_util.py` | `core/astr_agent_runtime/runner.py` |
+| `core/astr_main_agent/` | 内置构建位于 `core/astr_agent_runtime/main_agent/`；公共子代理管理位于 `core/subagents/` |
+| `core/computer/`、`core/tools/` | `core/astr_agent_runtime/computer/`、`core/astr_agent_runtime/tools/` |
+| `core/skills/neo_skill_sync.py` | `core/astr_agent_runtime/computer/neo_skill_sync.py` |
+| `core/astr_agent_wakeup.py` | `core/agent_wakeup.py` |
+| `core/astr_main_agent_resources.py` | 提示词按功能放回所属模块；共享错误约定位于 `core/llm_error_messages.py` |
+
+媒体输入前处理和插件工具、技能筛选继续由 Core 负责；cron、插件和后台任务仍通过事件队列触发输入。
+
 ## 对话管理器
 
 ### 获取会话当前的 LLM 对话历史 `get_conversation`

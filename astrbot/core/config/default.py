@@ -3,7 +3,9 @@
 import os
 
 from astrbot import __version__
-from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
+from astrbot.core.astr_agent_runtime.computer.booters.cua_defaults import (
+    CUA_DEFAULT_CONFIG,
+)
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from .agent_runner import get_agent_runner_config_default
@@ -207,8 +209,12 @@ DEFAULT_CONFIG = {
         "runner_type": "local",
         "config": get_agent_runner_config_default("local"),
     },
-    # Preserve legacy expert definitions for plugins using the compatibility SDK.
+    # Native subagent delegation and expert templates.
     "subagent_orchestrator": {
+        "main_enable": False,
+        "max_concurrent_agents": 3,
+        "task_timeout": 600,
+        "max_steps": 30,
         "agents": [],
     },
     "provider_stt_settings": {
