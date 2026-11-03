@@ -126,6 +126,9 @@
                 <div class="d-flex flex-column">
                   <span class="text-caption font-weight-medium">{{ getTemplateTitle(template, templateKey) }}</span>
                   <span v-if="template.hint" class="text-caption text-grey" style="font-size: 0.7rem;">{{ resolveTemplateText(templateKey, 'hint', template.hint) }}</span>
+                  <span class="text-caption" :class="isTemplateKeyAdded(templateKey) ? 'text-primary' : 'text-grey'">
+                    {{ t(isTemplateKeyAdded(templateKey) ? 'core.common.enabled' : 'core.common.disabled') }}
+                  </span>
                 </div>
               </v-col>
               <v-col cols="7" class="pl-2 d-flex align-center justify-end">
@@ -133,6 +136,7 @@
                   v-if="template.type === 'string'"
                   :model-value="getTemplateValue(templateKey)"
                   @update:model-value="updateTemplateValue(templateKey, $event)"
+                  :disabled="!isTemplateKeyAdded(templateKey)"
                   density="compact"
                   variant="outlined"
                   hide-details
@@ -147,6 +151,7 @@
                     <v-slider
                       :model-value="Number(getTemplateValue(templateKey)) || 0"
                       @update:model-value="updateTemplateValue(templateKey, $event)"
+                      :disabled="!isTemplateKeyAdded(templateKey)"
                       :min="template.slider.min"
                       :max="template.slider.max"
                       :step="template.slider.step"
@@ -165,6 +170,7 @@
                   <v-text-field
                     :model-value="getTemplateValue(templateKey)"
                     @update:model-value="updateTemplateValue(templateKey, $event)"
+                    :disabled="!isTemplateKeyAdded(templateKey)"
                     type="number"
                     density="compact"
                     variant="outlined"
@@ -177,22 +183,21 @@
                   v-else-if="template.type === 'boolean' || template.type === 'bool'"
                   :model-value="getTemplateValue(templateKey)"
                   @update:model-value="updateTemplateValue(templateKey, $event)"
+                  :disabled="!isTemplateKeyAdded(templateKey)"
                   density="compact"
                   hide-details
                   color="primary"
                 ></v-switch>
               </v-col>
               <v-col cols="1" class="pl-2">
-                <v-btn
-                  v-if="isTemplateKeyAdded(templateKey)"
-                  icon
-                  variant="text"
-                  size="small"
-                  color="error"
-                  @click="removeTemplateKey(templateKey)"
-                >
-                  <v-icon>mdi-close</v-icon>
-                </v-btn>
+                <v-checkbox-btn
+                  :model-value="isTemplateKeyAdded(templateKey)"
+                  :aria-label="`${t('core.common.enable')} ${getTemplateTitle(template, templateKey)}`"
+                  :title="t(isTemplateKeyAdded(templateKey) ? 'core.common.disable' : 'core.common.enable')"
+                  color="primary"
+                  density="compact"
+                  @update:model-value="$event ? updateTemplateValue(templateKey, getTemplateValue(templateKey)) : removeTemplateKey(templateKey)"
+                ></v-checkbox-btn>
               </v-col>
             </v-row>
           </div>
