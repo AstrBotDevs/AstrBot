@@ -346,9 +346,18 @@ function confirmSelection() {
     case 'none':
       newValue = []
       break
-    case 'custom':
-      newValue = [...selectedPlugins.value]
+    case 'custom': {
+      // Selecting every listed plugin means "no restriction", so emit the
+      // wildcard instead of freezing the current plugin names into a snapshot
+      // that plugins installed later would never join.
+      const selected = new Set(selectedPlugins.value)
+      newValue =
+        pluginList.value.length > 0 &&
+        pluginList.value.every((plugin) => selected.has(plugin.name))
+          ? ['*']
+          : [...selectedPlugins.value]
       break
+    }
   }
   
   emit('update:modelValue', newValue)
