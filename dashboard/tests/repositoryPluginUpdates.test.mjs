@@ -107,7 +107,7 @@ test("market plugins continue to use market versions rather than repository obse
   assert.equal(extension.has_update, false);
 });
 
-test("source confirmation sends the validated metadata version and refreshes update state", async () => {
+test("source confirmation leaves version selection to the server and refreshes update state", async () => {
   const calls = [];
   const context = vm.createContext({
     sourceBindingDialog: {
@@ -147,7 +147,7 @@ test("source confirmation sends the validated metadata version and refreshes upd
   );
   await vm.runInContext("confirmPluginSourceBinding()", context);
   assert.deepEqual(JSON.parse(JSON.stringify(calls)), [
-    ["demo", { install_method: "repository", repository_version: "v2.1.0" }],
+    ["demo", { install_method: "repository" }],
     "list",
     "updates",
   ]);

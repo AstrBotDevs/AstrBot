@@ -1676,10 +1676,7 @@ export const useExtensionPage = (initialTab = "installed") => {
       const pendingUpdate = sourceBindingDialog.pendingUpdate;
       const payload =
         candidate.install_method === "repository"
-          ? {
-              install_method: "repository",
-              repository_version: candidate.metadata?.version || "",
-            }
+          ? { install_method: "repository" }
           : {
               install_method: "market",
               registry_url: candidate.registry_url,

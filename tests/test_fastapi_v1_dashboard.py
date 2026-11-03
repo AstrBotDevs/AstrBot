@@ -3037,9 +3037,15 @@ async def test_plugin_service_bind_market_source_validates_and_persists(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("repository_version", [" v2.0.0 ", None, "", {"version": "2.0"}])
+@pytest.mark.parametrize(
+    "repository_version", [" v2.0.0 ", None, "", {"version": "2.0"}]
+)
+@pytest.mark.parametrize(
+    "observation_state", ["fresh", "expired", "different_repo", "failed", "missing"]
+)
 async def test_plugin_service_bind_repo_source_persists_github_method(
     repository_version,
+    observation_state,
     asgi_app: FastAPI,
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -3069,11 +3075,34 @@ async def test_plugin_service_bind_repo_source_persists_github_method(
         fake_save_plugin_install_sources,
     )
 
+    monkeypatch.setattr(
+        plugin_service.plugin_manager,
+        "inspect_plugin_repository",
+        AsyncMock(return_value={"version": repository_version}),
+        raising=False,
+    )
+    await plugin_service.validate_plugin_repo({"url": plugin.repo})
+
+    observations = plugin_service._repository_observations
+    if observation_state == "expired" and plugin.repo in observations:
+        version, recorded_at, _ = observations[plugin.repo]
+        observations[plugin.repo] = (version, recorded_at, time.monotonic() - 901)
+    elif observation_state == "different_repo":
+        plugin.repo = "https://github.com/AstrBotDevs/other-plugin"
+    elif observation_state == "missing":
+        observations.clear()
+    elif observation_state == "failed":
+        plugin_service.plugin_manager.inspect_plugin_repository.side_effect = (
+            ValueError("invalid metadata")
+        )
+        with pytest.raises(PluginServiceError):
+            await plugin_service.validate_plugin_repo({"url": plugin.repo})
+
     record, message = await plugin_service.bind_plugin_market_source(
         {
             "name": "astrbot_plugin_demo",
             "install_method": "repository",
-            "repository_version": repository_version,
+            "repository_version": "v999.0.0",
         }
     )
 
@@ -3081,13 +3110,17 @@ async def test_plugin_service_bind_repo_source_persists_github_method(
     assert record["install_method"] == "repository"
     assert record["registry_url"] is None
     assert record["registry_name"] == "Repository"
-    assert record["repo"] == "https://github.com/AstrBotDevs/astrbot-plugin-demo"
+    assert record["repo"] == plugin.repo
     assert record["installed_at"] == "2026-06-26T00:00:00+00:00"
     assert captured["records"]["astrbot_plugin_demo"] == record
 
-    if isinstance(repository_version, str) and repository_version.strip():
+    if (
+        observation_state == "fresh"
+        and isinstance(repository_version, str)
+        and repository_version.strip()
+    ):
         assert record["repository_version"] == "v2.0.0"
-        assert record["repository_version_recorded_at"] == record["updated_at"]
+        assert record["repository_version_recorded_at"] <= record["updated_at"]
         assert datetime.fromisoformat(record["repository_version_recorded_at"]).tzinfo
     else:
         assert "repository_version" not in record

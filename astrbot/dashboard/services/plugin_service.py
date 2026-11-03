@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import ssl
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -108,6 +109,7 @@ class PluginService:
             EventType.OnPluginErrorEvent: "插件报错时",
         }
         self._logo_cache: dict[str, str] = {}
+        self._repository_observations: dict[str, tuple[str, str, float]] = {}
 
     @staticmethod
     def _payload(data: object) -> dict[str, Any]:
@@ -1443,12 +1445,12 @@ class PluginService:
                 "installed_at": installed_at,
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }
-            # Advisory metadata from the repository validation already performed
-            # by the source picker; binding must not fetch the repository again.
-            repository_version = payload.get("repository_version")
-            if isinstance(repository_version, str) and repository_version.strip():
-                record["repository_version"] = repository_version.strip()
-                record["repository_version_recorded_at"] = record["updated_at"]
+            observation = self._repository_observations.get(
+                normalize_repository_url(plugin_repo).removesuffix(".git")
+            )
+            if observation and time.monotonic() - observation[2] < 900:
+                record["repository_version"] = observation[0]
+                record["repository_version_recorded_at"] = observation[1]
             plugin_name_value = str(plugin.name or "").strip()
             if plugin_name_value:
                 record["name"] = plugin_name_value
@@ -1687,11 +1689,25 @@ class PluginService:
             ) from exc
 
         proxy = str(payload.get("proxy") or "").strip()
+        # Invalidate the previous observation even if this validation fails.
+        self._repository_observations.pop(repo_url.removesuffix(".git"), None)
         try:
             metadata = await self.plugin_manager.inspect_plugin_repository(
                 repo_url,
                 proxy,
             )
+            version = metadata.get("version")
+            if isinstance(version, str) and version.strip():
+                # Bound memory use; source binding reuses this server-side result.
+                if len(self._repository_observations) >= 128:
+                    self._repository_observations.pop(
+                        next(iter(self._repository_observations))
+                    )
+                self._repository_observations[repo_url.removesuffix(".git")] = (
+                    version.strip(),
+                    datetime.now(timezone.utc).isoformat(),
+                    time.monotonic(),
+                )
             return metadata, "插件校验通过。"
         except ValueError as exc:
             raise PluginServiceError(
