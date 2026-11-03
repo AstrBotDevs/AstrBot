@@ -34,7 +34,7 @@
     },
     "openaiDecisionHints": {
       "apiBase": "OpenAI API 基础地址，默认 https://api.openai.com/v1；自动补全 /decisions，已以 /decisions 结尾则按原样请求。",
-      "model": "OpenAI Decisions 模型 ID，如 gpt-6-luna。"
+      "model": "OpenAI Decisions 当前支持 gpt-6-luna。"
     }
   },
   "availability": {

@@ -34,7 +34,7 @@
     },
     "openaiDecisionHints": {
       "apiBase": "OpenAI API base URL, https://api.openai.com/v1 by default. /decisions is appended unless the URL already ends with it.",
-      "model": "OpenAI Decisions model ID, such as gpt-6-luna."
+      "model": "OpenAI Decisions currently supports gpt-6-luna."
     }
   },
   "availability": {
