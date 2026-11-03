@@ -365,6 +365,18 @@ class OpenAIDecisionProvider(DecisionProvider):
                     abs_tol=_PROBABILITY_SUM_TOLERANCE,
                 ):
                     raise invalid_answer("score", head)
+                weighted_score = sum(
+                    int(level) * probability
+                    for level, probability in probabilities.items()
+                )
+                # Scale the probability rounding tolerance to the score range.
+                if not math.isclose(
+                    score,
+                    weighted_score,
+                    rel_tol=0.0,
+                    abs_tol=_PROBABILITY_SUM_TOLERANCE * (len(question.criteria) - 1),
+                ):
+                    raise invalid_answer("score", head)
                 answers[head] = DecisionScoreAnswer(
                     score=float(score),
                     legend=legend,

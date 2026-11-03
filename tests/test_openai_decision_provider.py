@@ -1047,3 +1047,48 @@ async def test_failure_logs_omit_urls_and_exception_content(failure, caplog):
             assert "retrying" in caplog.text
     finally:
         await provider.terminate()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("distribution", "score", "accepted"),
+    [
+        ([0.0, 0.0, 1.0], 0.0, False),
+        ([1.0, 0.0, 0.0], 2.0, False),
+        ([0.2, 0.3, 0.5], 1.3, True),
+        ([0.3333, 0.3333, 0.3333], 1.0, True),
+        ([0.0, 0.0, 0.9999], 2.0, True),
+        ([0.2, 0.3, 0.5], 1.3019, True),
+        ([0.2, 0.3, 0.5], 1.3021, False),
+        ([0.5, 0.5], 0.5009, True),
+        ([0.5, 0.5], 0.5011, False),
+        ([0.1] * 10, 4.5089, True),
+        ([0.1] * 10, 4.5091, False),
+    ],
+)
+async def test_score_matches_probability_weighted_levels(distribution, score, accepted):
+    question = DecisionScoreQuestion(
+        "Rate the impact", [f"Level {i}" for i in range(len(distribution))]
+    )
+    probabilities = [
+        {"value": i, "label": str(i), "probability": probability}
+        for i, probability in enumerate(distribution)
+    ]
+    provider = _provider(
+        lambda request: httpx.Response(
+            200,
+            json=_decision(_score(score=score, probabilities=list(reversed(probabilities)))),
+        )
+    )
+    try:
+        if accepted:
+            answer = (await provider.ask({"a": question}))["a"]
+            assert answer.score == score
+            assert answer.probabilities == {
+                str(i): probability for i, probability in enumerate(distribution)
+            }
+        else:
+            with pytest.raises(DecisionError, match="invalid score"):
+                await provider.ask({"a": question})
+    finally:
+        await provider.terminate()
