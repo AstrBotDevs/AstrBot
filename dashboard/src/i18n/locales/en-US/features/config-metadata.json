@@ -100,10 +100,11 @@
       "provider_settings": {
         "default_image_caption_provider_id": {
           "description": "Image Caption Model",
-          "hint": "Leave empty to disable; useful for non-multimodal models"
+          "hint": "When the chat model does not support image input, use the image captioning model to describe images. Leave blank to disable."
         },
         "image_caption_prompt": {
-          "description": "Image Caption Prompt"
+          "description": "Image Caption Prompt",
+          "hint": "The prompt used by the image captioning model."
         }
       },
       "provider_stt_settings": {
@@ -113,7 +114,7 @@
         },
         "provider_id": {
           "description": "Default Speech-to-Text Model",
-          "hint": "Users can also select session-specific STT models using the /provider command."
+          "hint": "You can also use /provider to select a model for an individual conversation."
         }
       },
       "provider_tts_settings": {
@@ -122,10 +123,12 @@
           "hint": "Use a text-to-speech model to turn text into voice replies."
         },
         "provider_id": {
-          "description": "Default Text-to-Speech Model"
+          "description": "Default Text-to-Speech Model",
+          "hint": "You can also use /provider to select a model for an individual conversation."
         },
         "trigger_probability": {
-          "description": "TTS Trigger Probability"
+          "description": "TTS Trigger Probability",
+          "hint": "Trigger voice replies based on a random probability."
         }
       }
     },
@@ -186,7 +189,7 @@
             "Keenable"
           ],
           "subtitles": [
-            "Google web, image, scholar, and finance search",
+            "Google web, news, image, scholar, and finance search",
             "Official DeepSeek search API",
             "",
             "",
@@ -231,7 +234,7 @@
         },
         "websearch_serpapi_key": {
           "description": "SerpApi API Key",
-          "hint": "Supports Google web, image, scholar, and finance search. Multiple keys can be added for rotation. Get a key: [https://serpapi.com/manage-api-key](https://serpapi.com/manage-api-key)"
+          "hint": "Supports Google web, news, image, scholar, and finance search. Multiple keys can be added for rotation. Get a key: [https://serpapi.com/manage-api-key](https://serpapi.com/manage-api-key)"
         },
         "websearch_deepseek_key": {
           "description": "DeepSeek API Key",
@@ -363,6 +366,8 @@
         "modes": {
           "none": "Disabled"
         },
+        "networkAlwaysOn": "Always on",
+        "windowsHostNetworkHint": "Windows cannot disable networking while executing code with entire-environment access. Switch to workspace access to disable networking.",
         "runtimeUnknown": "Runtime information is unavailable.",
         "memberWarning": "Members have network access or file access across the entire environment.",
         "executionInactive": "Inactive",
@@ -372,6 +377,9 @@
           "os": "OS",
           "arch": "Architecture",
           "sandbox": "Local isolation",
+          "windowsUnavailable": "{backend} · Not ready",
+          "windowsSetupHint": "Save the configuration and restart AstrBot. If prompted for administrator approval, allow it to initialize the sandbox.",
+          "errorDetails": "View diagnostic details",
           "unavailableHint": "Sandbox startup failed, affecting restricted Shell/Python execution and workspace file search. Use the error below to check system security policies (such as Linux AppArmor and user namespace restrictions) or container restrictions, then restart AstrBot to check again.",
           "dialog": {
             "intro": "Using Seatbelt on macOS or bubblewrap (bwrap) on Linux, AstrBot provides security isolation for Agent execution, restricting file access scope and network permissions for different users of AstrBot Agent to improve security.",
@@ -428,12 +436,12 @@
           "hint": "When history exceeds 'Max Turns Before Compression' and LLM compression is unavailable, discard this many oldest turns at once. Request-time truncation also reuses this value."
         },
         "overflow_strategy": {
-          "description": "Handling for History Limits or Context Window Pressure",
+          "description": "Compression Strategy",
           "labels": [
             "Truncate by Turns",
             "Compress by LLM"
           ],
-          "hint": "Persistent conversation history uses this strategy only after exceeding 'Max Turns Before Compression'. Before each request, the same strategy may also protect the in-flight context when tokens approach the model window."
+          "hint": "Strategy for handling model context limits."
         },
         "instruction": {
           "description": "Context Compression Instruction",
@@ -444,8 +452,8 @@
           "hint": "Keep recent exact context by current context token ratio, from 0-0.3. 0.15 means keeping 15%; values above 0 keep at least the latest round."
         },
         "provider_id": {
-          "description": "Model Provider ID for Context Compression",
-          "hint": "When left empty, the current chat model will be used for compression. If the model is unavailable or compression fails, AstrBot falls back to the 'Truncate by Turns' strategy."
+          "description": "Compression Model",
+          "hint": "The model used for context compression. Defaults to the current chat model."
         },
         "fallback_max_tokens": {
           "description": "Fallback context window size",
@@ -472,22 +480,24 @@
       } } },
       "provider_settings": {
         "display_reasoning_text": {
-          "description": "Display Reasoning Content"
+          "description": "Display Reasoning Content",
+          "hint": "Include the model's chain-of-thought information in the final reply."
         },
         "identifier": {
           "description": "User Identification",
-          "hint": "When enabled, user ID information will be included in the prompt."
+          "hint": "Prepend the user ID to the user prompt."
         },
         "group_name_display": {
           "description": "Display Group Name",
-          "hint": "When enabled, group name information will be included in the prompt on supported platforms (OneBot v11)."
+          "hint": "Prepend the group name to user prompts in group chats on supported messaging platforms."
         },
         "datetime_system_prompt": {
           "description": "Real-world Time Awareness",
-          "hint": "When enabled, current time information will be appended to the system prompt."
+          "hint": "Include the current time in the user prompt."
         },
         "show_tool_use_status": {
-          "description": "Show Tool Call Information"
+          "description": "Show Tool Call Information",
+          "hint": "When a tool is called, also send a message containing the tool name."
         },
         "show_tool_call_result": {
           "description": "Output Tool Call Results",
@@ -520,7 +530,8 @@
           }
         },
         "streaming_response": {
-          "description": "Streaming Output"
+          "description": "Streaming Output",
+          "hint": "Display responses with a typewriter effect on supported chat platforms."
         },
         "unsupported_streaming_strategy": {
           "description": "Platforms Without Streaming Support",
@@ -986,26 +997,33 @@
           "hint": "On supported platforms, each group member has a separate conversation context when enabled. Manage command permissions under Handlers → Command."
         },
         "friend_message_needs_wake_prefix": {
-          "description": "Private Messages Require Wake Word"
+          "description": "Private Messages Require Wake Word",
+          "hint": "Private messages must also include a wake prefix to activate the bot."
         },
         "reply_prefix": {
-          "description": "Reply Text Prefix"
+          "description": "Reply Text Prefix",
+          "hint": "The text prefix added to replies."
         },
         "reply_with_mention": {
-          "description": "Mention Sender in Reply"
+          "description": "Mention Sender in Reply",
+          "hint": "Mention the sender when replying."
         },
         "reply_with_quote": {
-          "description": "Quote Sender's Message in Reply"
+          "description": "Quote Sender's Message in Reply",
+          "hint": "Quote the sender's corresponding message when replying."
         },
         "forward_threshold": {
-          "description": "Forward Message Word Count Threshold"
+          "description": "Forward Message Word Count Threshold",
+          "hint": "On supported platforms, send overly long replies as merged forwarded messages."
         },
         "empty_mention_waiting": {
-          "description": "Trigger Waiting on Mention-only Messages"
+          "description": "Trigger Waiting on Mention-only Messages",
+          "hint": "After a message that only mentions the bot, stay awake for one minute to wait for the user's next message."
         }
       },
       "wake_prefix": {
-        "description": "Wake Word"
+        "description": "Wake Word",
+        "hint": "A list of message prefixes that wake the bot. You can also wake it by mentioning it.\n\nBuilt-in commands such as `/help` and `/sid` also depend on the wake word: in group chats they do not trigger unless the message starts with a wake word; in private chats they trigger without a prefix unless \"Private Messages Require Wake Word\" is enabled."
       },
       "disable_builtin_commands": {
         "description": "Disable Built-in Commands",
@@ -1160,7 +1178,8 @@
       "platform_settings": {
         "segmented_reply": {
           "enable": {
-            "description": "Enable Segmented Reply"
+            "description": "Enable Segmented Reply",
+            "hint": "Send replies in multiple segments."
           },
           "only_llm_result": {
             "description": "Segment Only LLM Results"
@@ -1208,14 +1227,16 @@
       "description": "Group Chat Context Awareness",
       "provider_ltm_settings": {
         "group_icl_enable": {
-          "description": "Inject Group Chat Records into Context"
+          "description": "Inject Group Chat Records into Context",
+          "hint": "Record group messages that do not wake the bot and pass them to the model when the bot is activated."
         },
         "group_message_max_cnt": {
-          "description": "Maximum Messages Injected into Context"
+          "description": "Maximum Messages Injected into Context",
+          "hint": "The maximum number of messages passed to the model."
         },
         "image_caption": {
           "description": "Auto-understand Images",
-          "hint": "Requires setting a group chat image caption model."
+          "hint": "Convert image messages that do not wake the bot into text descriptions. Use with care in image-heavy group chats, as this can incur substantial costs."
         },
         "image_caption_provider_id": {
           "description": "Group Chat Image Caption Model",
@@ -1223,14 +1244,16 @@
         },
         "group_message_history_enable": {
           "description": "Persist Group Chat Messages",
-          "hint": "Saves group messages and provides the model with a tool for querying the current group's history. Media content is not currently persisted; media messages are stored as placeholders such as [Image]."
+          "hint": "Persist all group messages and allow the model to query them using tools."
         },
         "group_message_history_max_cnt": {
-          "description": "Maximum Persisted Messages"
+          "description": "Maximum Persisted Messages",
+          "hint": "The maximum number of persisted messages. Older messages are discarded when the limit is exceeded."
         },
         "active_reply": {
           "enable": {
-            "description": "Active Reply"
+            "description": "Active Reply",
+            "hint": "Send messages proactively at suitable times."
           },
           "method": {
             "description": "Active Reply Method"
@@ -1249,7 +1272,8 @@
     "t2i": {
       "description": "Text-to-Image",
       "t2i": {
-        "description": "Text-to-Image Output"
+        "description": "Text-to-Image Output",
+        "hint": "Convert model replies to images before sending to avoid flooding the chat."
       },
       "t2i_word_threshold": {
         "description": "Text-to-Image Word Count Threshold"
@@ -1296,21 +1320,25 @@
         "description": "Temp Directory Size Limit (MB)",
         "hint": "Limits total size of data/temp in MB. The system checks every 10 minutes, and when exceeded, deletes oldest files first to release about 30% of current size."
       },
-      "trace_log_enable": {
-        "description": "Enable Trace File Logging",
-        "hint": "Write trace events to a separate file (does not change console output)."
+      "trace_enable": {
+        "description": "Enable Trace Recording",
+        "hint": "Trace each user command and AI call."
       },
-      "trace_log_path": {
-        "description": "Trace Log File Path",
-        "hint": "Relative paths are resolved under the data directory, e.g. logs/astrbot.trace.log; absolute paths are supported."
+      "trace_db_path": {
+        "description": "Trace Database Path",
+        "hint": "Relative paths start from the data directory, for example logs/traces.db. Absolute paths are also supported."
       },
-      "trace_log_max_mb": {
-        "description": "Trace Log Max Size (MB)",
-        "hint": "Rotate when exceeding this size; default 20MB."
+      "trace_db_max_mb": {
+        "description": "Trace Database Capacity Budget (MB)",
+        "hint": "Default: 80 MB. Values below 32 MB use 32 MB. Old data is automatically cleared when this size is exceeded."
+      },
+      "trace_retention_days": {
+        "description": "Trace Retention Days",
+        "hint": "Default: 7 days. Old data is cleared when either the retention period or capacity is reached."
       },
       "pip_install_arg": {
         "description": "Additional pip Installation Arguments",
-        "hint": "When installing plugin dependencies, Python's pip tool will be used. Additional arguments can be provided here, such as `--break-system-package`."
+        "hint": "When installing plugin dependencies, Python's pip tool will be used. Additional arguments can be provided here, such as `--break-system-package`. TLS certificates of the PyPI index are verified by default; for self-signed/private-CA mirrors, pass `--cert <CA bundle path>` (recommended) or explicitly add `--trusted-host <host>`."
       },
       "pypi_index_url": {
         "description": "PyPI Repository URL",
@@ -1517,7 +1545,7 @@
 
       "custom_headers": {
         "description": "Custom request headers",
-        "hint": "Key/value pairs added here are merged into the OpenAI SDK default_headers for custom HTTP headers. Values must be strings."
+        "hint": "Key/value pairs added here are sent by AstrBot as custom HTTP headers to the provider. Values must be strings."
       },
       "ollama_disable_thinking": {
         "description": "Disable thinking mode",
@@ -1541,6 +1569,11 @@
             "description": "Max tokens",
             "hint": "Maximum number of generated tokens.",
             "name": "Max Tokens"
+          },
+          "max_output_tokens": {
+            "description": "Max output tokens",
+            "hint": "Maximum number of generated tokens.",
+            "name": "Max Output Tokens"
           },
           "reasoning_effort": {
             "description": "Reasoning effort",
@@ -1717,15 +1750,15 @@
       },
       "gm_native_search": {
         "description": "Enable native search",
-        "hint": "When enabled, all function tools are disabled. Check official docs for free quota limits."
+        "hint": "Only Gemini 3 and later models support using this together with function tools. For Gemini 3 and later, native search is only available on the paid tier; see the official docs for pricing."
       },
       "gm_native_coderunner": {
         "description": "Enable native code runner",
-        "hint": "When enabled, all function tools are disabled."
+        "hint": "Only Gemini 3 and later models support using this together with function tools."
       },
       "gm_url_context": {
         "description": "Enable URL context",
-        "hint": "When enabled, all function tools are disabled."
+        "hint": "Only Gemini 3 and later models support using this together with function tools."
       },
       "gm_safety_settings": {
         "description": "Safety filters",
@@ -1938,6 +1971,14 @@
       },
       "api_base": {
         "description": "API Base URL"
+      },
+      "total_timeout": {
+        "description": "Total timeout",
+        "hint": "Total timeout in seconds for one decision request, including concurrency-slot wait, retries, and backoff; default 5 seconds."
+      },
+      "max_concurrency": {
+        "description": "Maximum concurrency",
+        "hint": "Maximum number of simultaneous decision requests for this provider; default 4."
       },
       "proxy": {
         "description": "Proxy address",

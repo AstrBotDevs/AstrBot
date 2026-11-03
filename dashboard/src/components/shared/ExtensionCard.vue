@@ -394,7 +394,7 @@ const openView = () => {
               icon="mdi-book-open-page-variant"
               size="small"
               variant="tonal"
-              color="info"
+              color="primary"
               @click.stop="viewReadme"
             ></v-btn>
           </template>

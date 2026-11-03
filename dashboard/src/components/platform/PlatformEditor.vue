@@ -167,44 +167,16 @@
           </div>
 
           <div class="route-builder__controls">
-            <v-autocomplete
+            <UmoSelector
+              v-if="originalPlatformId"
               v-model="pendingSessionUmo"
-              :items="availableSessionUmos"
-              :loading="loadingSessions"
+              :platform-id="originalPlatformId"
+              :excluded-umos="[...boundSessionSet]"
+              :allow-manual="false"
               :label="tm('workspace.routes.sessionLabel')"
-              :no-data-text="tm('workspace.routes.noSessions')"
-              density="compact"
-              variant="outlined"
-              hide-details
-              clearable
               :disabled="!routesReady"
-            >
-              <template #item="{ props: itemProps, item }">
-                <v-list-item v-bind="itemProps">
-                  <template #title>
-                    <UmoDisplay
-                      v-bind="getSessionDisplayProps(item.raw)"
-                      compact
-                      :show-info="false"
-                      :show-platform="false"
-                      :show-meta="false"
-                      :show-raw-title="false"
-                    />
-                  </template>
-                </v-list-item>
-              </template>
-              <template #selection="{ item }">
-                <UmoDisplay
-                  v-if="item"
-                  v-bind="getSessionDisplayProps(item.raw)"
-                  compact
-                  :show-info="false"
-                  :show-platform="false"
-                  :show-meta="false"
-                  :show-raw-title="false"
-                />
-              </template>
-            </v-autocomplete>
+              @loaded="infos => knownSessionInfo = Object.fromEntries(infos.map(info => [info.umo, info]))"
+            />
 
             <v-select
               v-model="pendingConfigId"
@@ -401,10 +373,10 @@ import {
   configProfileApi,
   configRouteApi,
   fileApi,
-  sessionApi,
 } from "@/api/v1";
 import AstrBotConfig from "@/components/shared/AstrBotConfig.vue";
 import ConfigProfileDrawer from "@/components/config/ConfigProfileDrawer.vue";
+import UmoSelector from "@/components/shared/UmoSelector.vue";
 import UmoDisplay from "@/components/shared/UmoDisplay.vue";
 import { ArrowUpRight } from "@lucide/vue";
 import { useModuleI18n } from "@/i18n/composables";
@@ -460,10 +432,8 @@ const loading = ref(false);
 const saving = ref(false);
 const routesReady = ref(false);
 const routeLoadFailed = ref(false);
-const loadingSessions = ref(false);
 const fullRoutingTable = ref({});
 const configProfiles = ref([]);
-const knownSessionUmos = ref([]);
 const knownSessionInfo = ref({});
 const simpleBindings = ref([]);
 const advancedRoutes = ref([]);
@@ -498,10 +468,6 @@ const defaultConfigOptions = computed(() => [
 
 const boundSessionSet = computed(
   () => new Set(simpleBindings.value.map((binding) => binding.umo)),
-);
-
-const availableSessionUmos = computed(() =>
-  knownSessionUmos.value.filter((umo) => !boundSessionSet.value.has(umo)),
 );
 
 const currentRouteSnapshot = computed(() =>
@@ -657,30 +623,6 @@ async function initialize(platform) {
   } else {
     fullRoutingTable.value = {};
     routeLoadFailed.value = true;
-  }
-
-  loadingSessions.value = true;
-  try {
-    const sessionsResponse = await sessionApi.activeUmos();
-    if (version === loadVersion && sessionsResponse.data.status === "ok") {
-      knownSessionUmos.value = (sessionsResponse.data.data?.umos || []).filter(
-        (umo) => parseUmo(umo)?.platform === originalPlatformId.value,
-      );
-      knownSessionInfo.value = Object.fromEntries(
-        (sessionsResponse.data.data?.umo_infos || [])
-          .filter((info) => info?.umo)
-          .map((info) => [info.umo, info]),
-      );
-    }
-  } catch (error) {
-    if (version === loadVersion) {
-      knownSessionUmos.value = [];
-      knownSessionInfo.value = {};
-    }
-  } finally {
-    if (version === loadVersion) {
-      loadingSessions.value = false;
-    }
   }
 
   if (version !== loadVersion) return;

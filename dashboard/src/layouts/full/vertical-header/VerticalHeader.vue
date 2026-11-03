@@ -134,6 +134,16 @@ const desktopUpdateCurrentVersion = ref("-");
 const desktopUpdateLatestVersion = ref("-");
 const desktopUpdateStatus = ref("");
 const desktopDownloadProgress = ref<AstrBotDesktopAppUpdateProgress | null>(null);
+const appHasNewVersion = computed(() =>
+  isDesktopReleaseMode.value
+    ? desktopUpdateHasNewVersion.value
+    : hasNewVersion.value,
+);
+const hasAvailableUpdate = computed(
+  () =>
+    appHasNewVersion.value ||
+    (!isDesktopReleaseMode.value && dashboardHasNewVersion.value),
+);
 const isChatPath = computed(
   () => route.path === "/chat" || route.path.startsWith("/chat/"),
 );
@@ -297,10 +307,11 @@ function cancelDesktopUpdate() {
   desktopUpdateDialog.value = false;
 }
 
-async function openDesktopUpdateDialog() {
+async function checkDesktopUpdate(showDialog = false) {
   if (desktopUpdateInstalling.value) return;
+  if (showDialog) desktopUpdateDialog.value = true;
+  if (desktopUpdateChecking.value) return;
   desktopDownloadProgress.value = null;
-  desktopUpdateDialog.value = true;
   desktopUpdateChecking.value = true;
   desktopUpdateInstalling.value = false;
   desktopUpdateHasNewVersion.value = false;
@@ -310,6 +321,7 @@ async function openDesktopUpdateDialog() {
 
   const bridge = getAppUpdaterBridge();
   if (!bridge) {
+    console.warn("[desktop-update] App updater bridge is unavailable.");
     desktopUpdateChecking.value = false;
     desktopUpdateStatus.value = t(
       "core.header.updateDialog.desktopApp.checkFailed",
@@ -317,9 +329,21 @@ async function openDesktopUpdateDialog() {
     return;
   }
 
+  let checkTimeout: ReturnType<typeof setTimeout> | undefined;
   try {
-    const result = await bridge.checkForAppUpdate();
+    const result = await Promise.race([
+      bridge.checkForAppUpdate(),
+      new Promise<never>((_, reject) => {
+        checkTimeout = setTimeout(() => {
+          reject(new Error("Desktop app update check timed out."));
+        }, 30_000);
+      }),
+    ]);
     if (!result?.ok) {
+      console.warn(
+        "[desktop-update] Failed to check for app updates.",
+        result?.reason || "Unknown error",
+      );
       desktopUpdateCurrentVersion.value = result?.currentVersion || "-";
       desktopUpdateLatestVersion.value =
         result?.latestVersion || result?.currentVersion || "-";
@@ -336,11 +360,12 @@ async function openDesktopUpdateDialog() {
       ? t("core.header.updateDialog.desktopApp.hasNewVersion")
       : t("core.header.updateDialog.desktopApp.isLatest");
   } catch (error) {
-    console.error(error);
+    console.error("[desktop-update] Failed to check for app updates.", error);
     desktopUpdateStatus.value = t(
       "core.header.updateDialog.desktopApp.checkFailed",
     );
   } finally {
+    if (checkTimeout !== undefined) clearTimeout(checkTimeout);
     desktopUpdateChecking.value = false;
   }
 }
@@ -391,7 +416,7 @@ async function confirmDesktopUpdate() {
 
 function handleUpdateClick() {
   if (isDesktopReleaseMode.value) {
-    void openDesktopUpdateDialog();
+    void checkDesktopUpdate(true);
     return;
   }
   checkUpdate();
@@ -1043,6 +1068,7 @@ onMounted(async () => {
   isDesktopReleaseMode.value = runtimeInfo.isDesktopRuntime;
   if (isDesktopReleaseMode.value) {
     dashboardHasNewVersion.value = false;
+    void checkDesktopUpdate();
   }
 
   // The toolbar band doubles as the window drag region on desktop (no native title bar).
@@ -1089,15 +1115,20 @@ onMounted(async () => {
 
     <v-spacer />
 
-    <!-- 版本提示信息 - 在手机上隐藏 -->
-    <div v-if="!isChatPath" class="mr-4 hidden-xs">
-      <small v-if="hasNewVersion">
+    <!-- Desktop keeps the update notice visible in both Bot and Chat modes. -->
+    <button
+      v-if="hasAvailableUpdate && (!isChatPath || isDesktopReleaseMode)"
+      type="button"
+      class="update-notice mr-4 hidden-xs text-no-wrap"
+      @click="handleUpdateClick"
+    >
+      <small v-if="appHasNewVersion">
         {{ t("core.header.version.hasNewVersion") }}
       </small>
       <small v-else-if="dashboardHasNewVersion && !isDesktopReleaseMode">
         {{ t("core.header.version.dashboardHasNewVersion") }}
       </small>
-    </div>
+    </button>
 
     <div class="header-actions" :class="{ 'chat-header-actions': isChatPath }">
       <v-btn
@@ -1155,7 +1186,9 @@ onMounted(async () => {
             icon
             :ripple="false"
           >
-            <v-icon>mdi-dots-vertical</v-icon>
+            <v-badge :model-value="hasAvailableUpdate" color="primary" dot floating>
+              <v-icon>mdi-dots-vertical</v-icon>
+            </v-badge>
             <span class="header-toolbar-label">{{ t("core.navigation.options") }}</span>
           </v-btn>
         </template>
@@ -1324,9 +1357,7 @@ onMounted(async () => {
         }}</v-list-item-title>
         <template
           v-slot:append
-          v-if="
-            hasNewVersion || (dashboardHasNewVersion && !isDesktopReleaseMode)
-          "
+          v-if="hasAvailableUpdate"
         >
           <v-chip size="x-small" color="primary" variant="tonal" class="ml-2"
             >!</v-chip
@@ -2497,6 +2528,14 @@ onMounted(async () => {
    This style block is NOT scoped, so plain selectors are already global here. */
 .top-header {
   user-select: none;
+}
+
+.top-header .update-notice {
+  cursor: pointer;
+}
+
+.top-header .update-notice:hover {
+  text-decoration: underline;
 }
 
 /* Mount point for page-contextual toolbar content (see the template note). */

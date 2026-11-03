@@ -188,6 +188,7 @@
     "refresh": "Refresh file tree",
     "filter": "Filter files...",
     "clearFilter": "Clear file filter",
+    "selectSession": "Select a conversation to browse its workspace files",
     "empty": "This workspace is empty",
     "noMatches": "No matching files",
     "loadFailed": "Failed to load workspace files",

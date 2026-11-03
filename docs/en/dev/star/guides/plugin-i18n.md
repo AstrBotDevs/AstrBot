@@ -26,6 +26,8 @@ When the current locale has no translation, a field is missing, or the locale fi
 
 `metadata` overrides the plugin name, card short description, and description shown on plugin pages.
 
+Sidebar plugin group headings, hover cards, and default titles that use the plugin name also read `metadata.display_name` for the current locale and update immediately when the language changes. The sidebar accepts only nonempty strings; missing, blank, or invalid translations fall back to the original `display_name`, then `name`. The existing precedence of `views.<view>.title` over `pages.<view>.title` stays unchanged; grouped views without a valid title still show their directory name. Routes, pinned items, and expanded groups use stable plugin IDs or view paths and do not change with translated names.
+
 ```json
 {
   "metadata": {

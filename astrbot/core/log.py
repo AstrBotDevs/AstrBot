@@ -6,6 +6,7 @@ import logging
 import os
 import sys
 import tempfile
+import threading
 import time
 from asyncio import Queue
 from collections import deque
@@ -17,11 +18,17 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from loguru import logger as _raw_loguru_logger
+from opentelemetry.trace import format_span_id, format_trace_id, get_current_span
 
 from astrbot.core.config.default import VERSION
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_config_path,
     get_astrbot_data_path,
+)
+from astrbot.core.utils.console_sink import BoundedConsoleSink
+from astrbot.core.utils.telemetry import (
+    bounded_attributes,
+    bounded_text,
 )
 
 CACHED_SIZE = 500
@@ -95,10 +102,20 @@ class _RecordEnricherFilter(logging.Filter):
             record.source = "plugin"
             record.plugin_name = plugin_name
         else:
+            # Framework code sometimes reports on behalf of a plugin: for
+            # example, the plugin loader logs why a plugin failed to load.
+            # Such call sites pass ``extra={"plugin_name": ...}`` so the WebUI
+            # can list the plugin in the log filter and tag the line with it.
+            explicit_plugin_name = getattr(record, "plugin_name", None)
             is_plugin = _is_plugin_path(record.pathname)
-            record.plugin_tag = "[Plug]" if is_plugin else "[Core]"
-            record.source = "plugin" if is_plugin else "core"
-            record.plugin_name = None
+            if explicit_plugin_name:
+                record.plugin_tag = f"[{explicit_plugin_name}]"
+                record.source = "plugin"
+                record.plugin_name = explicit_plugin_name
+            else:
+                record.plugin_tag = "[Plug]" if is_plugin else "[Core]"
+                record.source = "plugin" if is_plugin else "core"
+                record.plugin_name = None
         record.short_levelname = _get_short_level_name(record.levelname)
         record.astrbot_version_tag = (
             f" [v{VERSION}]" if record.levelno >= logging.WARNING else ""
@@ -115,6 +132,12 @@ class _RecordEnricherFilter(logging.Filter):
         record.platform_type = getattr(record, "platform_type", None) or (
             context.platform_type if context_is_active else None
         )
+        span = get_current_span()
+        # Copied task contexts can still reference a span after its execution ends.
+        if span.is_recording():
+            trace_context = span.get_span_context()
+            record.trace_id = format_trace_id(trace_context.trace_id)
+            record.span_id = format_span_id(trace_context.span_id)
         return True
 
 
@@ -176,6 +199,14 @@ def _patch_record(record: "Record") -> None:
     extra.setdefault("plugin_name", None)
     extra.setdefault("platform_id", None)
     extra.setdefault("platform_type", None)
+    extra.setdefault(
+        "trace_tag",
+        (
+            f" [trace_id={extra['trace_id']} span_id={extra.get('span_id', '')}]"
+            if extra.get("trace_id")
+            else ""
+        ),
+    )
 
 
 _loguru = _raw_loguru_logger.patch(_patch_record)
@@ -208,6 +239,8 @@ class _LoguruInterceptHandler(logging.Handler):
             "plugin_name": getattr(record, "plugin_name", None),
             "platform_id": getattr(record, "platform_id", None),
             "platform_type": getattr(record, "platform_type", None),
+            "trace_id": getattr(record, "trace_id", None),
+            "span_id": getattr(record, "span_id", None),
         }
 
         _loguru.bind(**payload).opt(exception=record.exc_info).log(
@@ -222,22 +255,70 @@ class LogBroker:
     def __init__(self) -> None:
         self.log_cache = deque(maxlen=CACHED_SIZE)
         self.subscribers: list[Queue] = []
+        self._subscriber_lock = threading.Lock()
+        self._subscriber_loops: dict[Queue, asyncio.AbstractEventLoop | None] = {}
+        self._pending_callbacks: dict[Queue, int] = {}
 
     def register(self) -> Queue:
         q = Queue(maxsize=CACHED_SIZE + 10)
-        self.subscribers.append(q)
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        with self._subscriber_lock:
+            self.subscribers.append(q)
+            self._subscriber_loops[q] = loop
+            self._pending_callbacks[q] = 0
         return q
 
     def unregister(self, q: Queue) -> None:
-        self.subscribers.remove(q)
+        with self._subscriber_lock:
+            self.subscribers.remove(q)
+            self._subscriber_loops.pop(q, None)
+            self._pending_callbacks.pop(q, None)
 
     def publish(self, log_entry: dict) -> None:
-        self.log_cache.append(log_entry)
-        for q in self.subscribers:
+        if log_entry.get("type") != "trace":
+            self.log_cache.append(log_entry)
+        try:
+            current_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            current_loop = None
+        for q in tuple(self.subscribers):
+            owner = self._subscriber_loops.get(q)
+            if owner is None or owner is current_loop:
+                try:
+                    q.put_nowait(log_entry)
+                except asyncio.QueueFull:
+                    pass
+                continue
+            # Reserve space before scheduling: queued callbacks must also be
+            # bounded when a background writer reports errors to a slow loop.
+            with self._subscriber_lock:
+                if (
+                    q not in self._pending_callbacks
+                    or q.qsize() + self._pending_callbacks[q] >= q.maxsize
+                    or owner.is_closed()
+                ):
+                    continue
+                self._pending_callbacks[q] += 1
+
+            def enqueue(queue=q, entry=log_entry):
+                with self._subscriber_lock:
+                    if queue not in self._pending_callbacks:
+                        return
+                    self._pending_callbacks[queue] -= 1
+                try:
+                    queue.put_nowait(entry)
+                except asyncio.QueueFull:
+                    pass
+
             try:
-                q.put_nowait(log_entry)
-            except asyncio.QueueFull:
-                pass
+                owner.call_soon_threadsafe(enqueue)
+            except RuntimeError:
+                with self._subscriber_lock:
+                    if q in self._pending_callbacks:
+                        self._pending_callbacks[q] -= 1
 
 
 class LogQueueHandler(logging.Handler):
@@ -253,7 +334,42 @@ class LogQueueHandler(logging.Handler):
             {
                 "level": record.levelname,
                 "time": time.time(),
-                "data": log_entry,
+                "data": bounded_text(log_entry),
+                "timestamp": str(int(record.created * 10**9)),
+                "observed_timestamp": str(time.time_ns()),
+                "severity_text": record.levelname,
+                "severity_number": {10: 5, 20: 9, 30: 13, 40: 17, 50: 21}.get(
+                    record.levelno, 0
+                ),
+                "body": bounded_text(record.getMessage()),
+                **(
+                    {
+                        "trace_id": record.trace_id,
+                        "span_id": record.span_id,
+                        "trace_flags": 1,
+                    }
+                    if getattr(record, "trace_id", None)
+                    else {}
+                ),
+                "attributes": bounded_attributes(
+                    {
+                        "astrbot.category": getattr(record, "category", None)
+                        or "system",
+                        "astrbot.source": getattr(record, "source", "core"),
+                        "astrbot.plugin_name": getattr(record, "plugin_name", None),
+                        "astrbot.platform_id": getattr(record, "platform_id", None),
+                        "astrbot.platform_type": getattr(record, "platform_type", None),
+                        "code.file.path": record.pathname,
+                        "code.line.number": record.lineno,
+                    }
+                ),
+                "resource": {
+                    "attributes": {
+                        "service.name": "astrbot",
+                        "service.version": VERSION,
+                    }
+                },
+                "instrumentation_scope": {"name": record.name},
                 "category": getattr(record, "category", None) or "system",
                 "source": getattr(record, "source", "core"),
                 "plugin_name": getattr(record, "plugin_name", None),
@@ -269,8 +385,8 @@ class LogManager:
 
     _configured = False
     _console_sink_id: int | None = None
+    _console_output: BoundedConsoleSink | None = None
     _file_sink_id: int | None = None
-    _trace_sink_id: int | None = None
     _plugin_logger_names: set[str] = set()
     _plugin_level_overrides: dict[str, str] | None = None
     _log_broker: "LogBroker | None" = None
@@ -302,18 +418,31 @@ class LogManager:
             return
 
         _loguru.remove()
+        if cls._console_output is None:
+            cls._console_output = BoundedConsoleSink(sys.stdout)
         cls._console_sink_id = _loguru.add(
-            sys.stdout,
+            cls._console_output,
             level="DEBUG",
-            colorize=True,
+            colorize=cls._console_output.isatty(),
             filter=lambda record: not record["extra"].get("is_trace", False),
             format=(
-                "<green>[{time:HH:mm:ss.SSS}]</green> {extra[plugin_tag]} "
+                "<green>[{time:YYYY-MM-DD HH:mm:ss.SSS}]</green> {extra[plugin_tag]} "
                 "<level>[{extra[short_levelname]}]</level>{extra[astrbot_version_tag]} "
                 "[{extra[source_file]}:{extra[source_line]}]: <level>{message}</level>"
             ),
         )
         cls._configured = True
+
+    @classmethod
+    def get_console_status(cls) -> dict | None:
+        """Read console counters for diagnostics without logging to the console.
+
+        Returns:
+            Current console status, or None before console setup.
+        """
+        if cls._console_output is None:
+            return None
+        return cls._console_output.get_status()
 
     @classmethod
     def _setup_root_bridge(cls) -> None:
@@ -524,25 +653,12 @@ class LogManager:
         level: int,
         max_mb: int | None,
         backup_count: int,
-        trace: bool,
     ) -> int:
         os.makedirs(os.path.dirname(file_path) or ".", exist_ok=True)
         rotation = f"{max_mb} MB" if max_mb and max_mb > 0 else None
         retention = (
             backup_count if rotation and backup_count and backup_count > 0 else None
         )
-        if trace:
-            return _loguru.add(
-                file_path,
-                level="INFO",
-                format="[{time:YYYY-MM-DD HH:mm:ss.SSS}] {message}",
-                encoding="utf-8",
-                rotation=rotation,
-                retention=retention,
-                enqueue=True,
-                filter=lambda record: record["extra"].get("is_trace", False),
-            )
-
         logging_level_name = logging.getLevelName(level)
         if isinstance(logging_level_name, int):
             logging_level_name = "INFO"
@@ -552,7 +668,7 @@ class LogManager:
             format=(
                 "[{time:YYYY-MM-DD HH:mm:ss.SSS}] {extra[plugin_tag]} "
                 "[{extra[short_levelname]}]{extra[astrbot_version_tag]} "
-                "[{extra[source_file]}:{extra[source_line]}]: {message}"
+                "[{extra[source_file]}:{extra[source_line]}]{extra[trace_tag]}: {message}"
             ),
             encoding="utf-8",
             rotation=rotation,
@@ -582,10 +698,12 @@ class LogManager:
             try:
                 configured_level = logging.getLevelName(logger.level)
                 if isinstance(configured_level, str):
+                    if cls._console_output is None:
+                        cls._console_output = BoundedConsoleSink(sys.stdout)
                     new_sink_id = _loguru.add(
-                        sys.stdout,
+                        cls._console_output,
                         level=configured_level,
-                        colorize=True,
+                        colorize=cls._console_output.isatty(),
                         filter=lambda record: (
                             not record["extra"].get("is_trace", False)
                         ),
@@ -636,43 +754,6 @@ class LogManager:
                 level=logger.level,
                 max_mb=max_mb,
                 backup_count=3,
-                trace=False,
             )
         except Exception as e:
             logger.error(f"Failed to add file sink: {e}")
-
-    @classmethod
-    def configure_trace_logger(cls, config: dict | None) -> None:
-        if not config:
-            return
-
-        enable = bool(
-            config.get("trace_log_enable")
-            or (config.get("log_file", {}) or {}).get("trace_enable", False)
-        )
-        path = config.get("trace_log_path")
-        max_mb = config.get("trace_log_max_mb")
-        if "log_file" in config:
-            legacy = config.get("log_file") or {}
-            path = path or legacy.get("trace_path")
-            max_mb = max_mb or legacy.get("trace_max_mb")
-
-        trace_logger = logging.getLogger("astrbot.trace")
-        cls._ensure_logger_enricher_filter(trace_logger)
-        cls._ensure_logger_intercept_handler(trace_logger)
-        trace_logger.setLevel(logging.INFO)
-        trace_logger.propagate = False
-
-        cls._remove_sink(cls._trace_sink_id)
-        cls._trace_sink_id = None
-
-        if not enable:
-            return
-
-        cls._trace_sink_id = cls._add_file_sink(
-            file_path=cls._resolve_log_path(path or "logs/astrbot.trace.log"),
-            level=logging.INFO,
-            max_mb=max_mb,
-            backup_count=3,
-            trace=True,
-        )

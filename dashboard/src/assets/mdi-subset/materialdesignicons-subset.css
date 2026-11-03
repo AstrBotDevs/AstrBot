@@ -196,14 +196,6 @@
   content: "\F0132";
 }
 
-.mdi-chevron-double-left::before {
-  content: "\F013D";
-}
-
-.mdi-chevron-double-right::before {
-  content: "\F013E";
-}
-
 .mdi-chevron-down::before {
   content: "\F0140";
 }
@@ -326,6 +318,10 @@
 
 .mdi-database-off::before {
   content: "\F1640";
+}
+
+.mdi-database-outline::before {
+  content: "\F1632";
 }
 
 .mdi-database-refresh-outline::before {
@@ -886,6 +882,10 @@
 
 .mdi-routes::before {
   content: "\F046A";
+}
+
+.mdi-scale-balance::before {
+  content: "\F05D1";
 }
 
 .mdi-select-multiple::before {
