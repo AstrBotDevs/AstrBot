@@ -158,6 +158,24 @@ def test_embedding_storage_accepts_a_valid_dimension_for_a_fresh_index() -> None
     assert storage.index.d == 4
 
 
+def test_safe_temp_dir_uses_system_temp_when_gettempdir_raises(
+    tmp_path, monkeypatch
+) -> None:
+    system_root = str(tmp_path / "Windows")
+    system_temp = os.path.join(system_root, "Temp")
+    os.makedirs(system_temp)
+
+    monkeypatch.setattr(embedding_storage.os, "name", "nt")
+    monkeypatch.setenv("SystemRoot", system_root)
+
+    def raise_gettempdir():
+        raise FileNotFoundError("no temporary directory")
+
+    monkeypatch.setattr(embedding_storage.tempfile, "gettempdir", raise_gettempdir)
+
+    assert embedding_storage._safe_temp_dir() == system_temp
+
+
 def test_safe_temp_dir_raises_when_every_candidate_rejects_creation(
     tmp_path, monkeypatch
 ) -> None:
@@ -210,7 +228,9 @@ def test_safe_temp_dir_falls_back_to_a_writable_candidate(
     assert embedding_storage._safe_temp_dir() == fallback_dir
 
 
-def test_make_temp_file_returns_a_writable_file() -> None:
+def test_make_temp_file_returns_a_writable_file(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(embedding_storage, "_safe_temp_dir", lambda: str(tmp_path))
+
     path = embedding_storage._make_temp_file("_test")
     try:
         assert os.path.isfile(path)
@@ -226,11 +246,49 @@ def test_write_index_bridges_through_a_temp_file(tmp_path, monkeypatch) -> None:
 
     index = faiss.IndexFlatL2(2)
     path = str(tmp_path / "中文索引.faiss")
+    write_paths = []
+    real_write_index = faiss.write_index
+
+    def reject_direct_write(target_index, target_path):
+        write_paths.append(target_path)
+        if target_path == path:
+            raise AssertionError("direct write to a non-ASCII path")
+        real_write_index(target_index, target_path)
+
+    monkeypatch.setattr(faiss, "write_index", reject_direct_write)
 
     EmbeddingStorage._write_index(index, path)
 
+    assert write_paths
+    assert path not in write_paths
     assert os.path.isfile(path)
     assert EmbeddingStorage._read_index(path).d == 2
+
+
+def test_read_index_bridges_through_a_temp_file(tmp_path, monkeypatch) -> None:
+    faiss = pytest.importorskip("faiss")
+    monkeypatch.setattr(embedding_storage, "_needs_bridge", lambda _path: True)
+
+    path = str(tmp_path / "中文索引.faiss")
+    EmbeddingStorage._write_index(faiss.IndexFlatL2(2), path)
+
+    read_paths = []
+    real_read_index = faiss.read_index
+
+    def reject_direct_read(target_path):
+        read_paths.append(target_path)
+        if target_path == path:
+            raise RuntimeError("direct read from a non-ASCII path")
+        return real_read_index(target_path)
+
+    monkeypatch.setattr(faiss, "read_index", reject_direct_read)
+
+    index = EmbeddingStorage._read_index(path)
+
+    assert index.d == 2
+    assert read_paths[0] == path
+    assert len(read_paths) == 2
+    assert read_paths[1] != path
 
 
 @pytest.mark.asyncio
