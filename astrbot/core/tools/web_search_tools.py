@@ -2370,11 +2370,14 @@ async def _keenable_request(
     keys = provider_settings.get("websearch_keenable_key") or []
 
     last_error = None
-    for _ in range(len(keys) or 1):
+    tried_keys: set[str] = set()
+    for _ in range(len(set(keys)) or 1):
         headers = {"X-Keenable-Title": _KEENABLE_APP_TITLE}
         url = f"{_KEENABLE_API_BASE}{path}"
         if keys:
-            headers["X-API-Key"] = await _KEENABLE_KEY_ROTATOR.get(provider_settings)
+            headers["X-API-Key"] = await _KEENABLE_KEY_ROTATOR.get(
+                provider_settings, tried_keys
+            )
         else:
             url += "/public"
 

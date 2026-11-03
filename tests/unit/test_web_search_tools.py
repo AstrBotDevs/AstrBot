@@ -2216,6 +2216,35 @@ async def test_keenable_search_fails_when_all_keys_exhausted(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("interleaved", [False, True])
+async def test_keenable_failover_tries_each_distinct_key_once(monkeypatch, interleaved):
+    session = _install_keenable_session(
+        monkeypatch,
+        [
+            _TavilyResponse(status=401, textData="invalid key"),
+            _TavilyResponse(status=200, jsonData=_KEENABLE_SEARCH_RESPONSE),
+        ],
+    )
+    settings = {"websearch_keenable_key": ["key-1", "key-1", "key-2"]}
+    if interleaved:
+
+        async def advance_other_request():
+            # Another request advances the shared cursor before this retry.
+            await tools._KEENABLE_KEY_ROTATOR.get(settings)
+            return "invalid key"
+
+        monkeypatch.setattr(session.responses[0], "text", advance_other_request)
+
+    results = await tools._keenable_search(settings, {"query": "AstrBot"})
+
+    assert len(results) == 2
+    assert [call["headers"]["X-API-Key"] for call in session.calls] == [
+        "key-1",
+        "key-2",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_keenable_search_does_not_failover_on_server_error_500(monkeypatch):
     session = _install_keenable_session(
         monkeypatch,
