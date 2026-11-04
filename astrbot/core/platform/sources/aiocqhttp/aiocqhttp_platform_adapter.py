@@ -381,11 +381,15 @@ class AiocqhttpAdapter(Platform):
                                 ),
                             )
 
-                            if is_at_self and not first_at_self_processed:
-                                # 第一个@是机器人，不添加到message_str
+                            if (
+                                self.config.get("strip_self_mention", True)
+                                and is_at_self
+                                and not first_at_self_processed
+                            ):
+                                # Preserve the legacy wake-prefix behavior by default.
                                 first_at_self_processed = True
                             else:
-                                # 非第一个@机器人或@其他用户，添加到message_str
+                                # Keep mention targets visible in the plain text.
                                 at_parts.append(f" @{nickname}({m['data']['qq']}) ")
                         else:
                             abm.message.append(At(qq=str(m["data"]["qq"]), name=""))

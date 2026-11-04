@@ -24,6 +24,7 @@ Please refer to each implementation project's deployment documentation.
 
 Fill in the form:
 
+- Strip self-mentions from message text (`strip_self_mention`): enabled by default to preserve existing wake-prefix handling. Disable it when multiple bots are mentioned to retain this bot’s name and ID in the text sent to the model. This also affects commands matched against message text; structured mention components and mention-based wake detection remain available.
 - ID (`id`): any value, used only to distinguish instances of different platforms.
 - Enable (`enable`): check it.
 - Reverse WebSocket host: fill your machine IP, usually `0.0.0.0`.
