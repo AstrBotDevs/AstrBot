@@ -198,6 +198,29 @@ outline: deep
 | `GET` | `/api/v1/sessions/senders` | — |
 | `PATCH` | `/api/v1/sessions/service` | — |
 
+## `backup`
+
+查看、创建、下载、上传和管理数据备份。
+
+- **敏感子权限 `backup:import`:** 允许具有 `backup` 权限的 Key 导入（恢复）备份。该操作会覆盖当前数据目录，该子权限必须显式授予。
+
+| 方法 | 接口 | 条件性敏感子权限 |
+| --- | --- | --- |
+| `GET` | `/api/v1/backups` | — |
+| `POST` | `/api/v1/backups` | — |
+| `GET` | `/api/v1/backups/tasks/{task_id}` | — |
+| `POST` | `/api/v1/backups/upload` | — |
+| `POST` | `/api/v1/backups/upload/abort` | — |
+| `POST` | `/api/v1/backups/upload/chunk` | — |
+| `POST` | `/api/v1/backups/upload/complete` | — |
+| `POST` | `/api/v1/backups/upload/init` | — |
+| `POST` | `/api/v1/backups/upload/status` | — |
+| `GET` | `/api/v1/backups/{filename}` | — |
+| `PATCH` | `/api/v1/backups/{filename}` | — |
+| `DELETE` | `/api/v1/backups/{filename}` | — |
+| `POST` | `/api/v1/backups/{filename}/check` | — |
+| `POST` | `/api/v1/backups/{filename}/import` | `backup:import` |
+
 ## `file`
 
 上传和下载对话附件。
