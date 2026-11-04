@@ -1,58 +1,87 @@
-# Subagents {#agent-handoff-and-subagent}
+# Subagents {#agent-handsoff-and-subagent}
 
-Main can delegate tasks to subagents that run concurrently in the background and return their results. Each subagent has a private history and can use its own model, persona, and tools.
+Subagents are a native **Built-in AI** capability in AstrBot. Main can continue working while delegating tasks to background workers with independent contexts. No separate plugin installation or activation is required.
 
-The Subagent extension ships with AstrBot and provides this capability for its built-in Agent. Configure subagents for external Agent services in those services.
+## Configuration
 
-## Get started {#configuration}
+Open the relevant profile at **Configuration → AI → Capabilities → Subagents**. Enabling the capability allows generic subagents immediately, without creating a saved agent. Concurrency defaults to 3 and timeout defaults to 600 seconds including queue time.
 
-Enable the Subagent extension and describe the work you want main to delegate, for example:
+For a dedicated persona or chat model, click **Configure Specialized Agents**, then **Create Agent** in the dialog. Saving refreshes the original selection list. Close the dialog and select the agent under **Specialized Agent Configurations**. Management uses two-column cards with independent saves; click a card to edit or use its menu to delete it.
 
-> Have two subagents research the benefits and risks of this proposal separately. Continue drafting the evaluation criteria yourself, then combine their findings.
+The previous sidebar **SubAgent Orchestration / Subagent Management** entry moves to **Configuration → AI → Capabilities → Subagents → Configure Specialized Agents**. Management opens in a dialog without leaving the configuration page. The previous `/subagent` URL remains accessible. Global settings have moved into profiles, and the former expert list is stored as database-backed agent configurations.
 
-Main creates subagents with their initial tasks and continues independent work while they run. Ask main to send follow-up instructions or cancel a task when needed.
+![Subagent capability settings](images/subagent-settings-en.png)
 
-Configure execution limits in **Extensions → Plugins → Subagent → Settings**. Open **Subagent management** on the plugin detail page for expert templates and execution records.
+![Subagent management](images/subagent-create-en.png)
 
-## Expert templates
+## AgentConfig and storage
 
-Open **Subagent management → Expert templates** and click **Create expert**. Configure a name, description, provider, persona, system prompt, and tools.
+Each configuration profile embeds `{ runtime, config }` under `agent` as its default main agent, edited directly in that profile. Agents created in the management page are stored in the database's `agent_configs` table and referenced by stable UUID `config_id`. Renaming an agent preserves references. Both use the same configuration structure; an inline main agent does not need a database record.
 
-A selected persona supplies its prompt, preset dialogue, and tools. Alternatively, write a custom prompt and choose all, specific, or no tools. Saved templates become available immediately while tasks already started continue running. The list supports editing, enabling, disabling, and deleting experts.
+```json
+{
+  "agent": {
+    "runtime": "astrbot",
+    "config": {
+      "subagents": {
+        "enabled": true,
+        "config_ids": ["stored-agent-configuration-UUID"],
+        "max_concurrent_agents": 3,
+        "task_timeout": 600
+      }
+    }
+  }
+}
+```
 
-![Expert creation with sample settings](./images/subagent-plugin-experts-en.png)
+`subagents` belongs to the `astrbot` runtime. Referenced AgentConfigs can select another registered runtime; ACP is not bundled in this phase. Native configurations have a form; other runtimes use a JSON editor. Configurations for unavailable runtimes remain stored but cannot create new sessions. Deletion is rejected while a profile or another AgentConfig references a record, and the API returns the reference locations.
 
-Main can select an expert template or create a generic subagent with its currently available tools. Main retains its own tools.
+Choose an Agent Runtime when creating or editing a configuration. For the AstrBot runtime, the form contains name, description, persona, and chat model. The description helps the main agent decide when to delegate. Empty persona and provider selections follow the main agent. Step limits, retries, compression, tool timeouts, and other runtime settings are inherited when the session is created instead of being duplicated in AgentConfig. The selected persona supplies instructions, tools, and skills, constrained by the parent’s authorized capabilities.
 
-## Task management
+![Create Agent form](images/subagent-edit-en.png)
 
-| Tool | Purpose |
-| --- | --- |
-| `spawn_agent` | Create a subagent with its initial task and optional expert template, name, and provider; immediately return its ID, actual name, provider ID, and state |
-| `list_agents` | Read names, provider IDs, states, and completed steps within the current sender and conversation |
-| `wait_agent` | Wait for any or all subagents; a wait timeout leaves tasks running |
-| `get_agent_result` | Read results or errors repeatedly |
-| `send_message` | Steer an active turn, or automatically start another turn if input remains unconsumed or the turn has finished |
-| `cancel_agent` | Cancel one subagent independently |
+The main system prompt lists only selected and enabled configurations, exposing their IDs, names, runtimes, and descriptions. Full instructions apply to the worker. The `spawn_agent` schema stays fixed: choose an optional `config_id`, or omit it for a generic native worker.
 
-The optional `name` sets this subagent's display name, defaulting to the expert name or `worker`. The optional `provider_id` selects a configured chat provider ID. Selection uses the call override, then the expert configuration, then the current conversation provider. Main can see available provider IDs and model names in the tool parameters. Overrides affect only this subagent and remain in effect for follow-up turns.
+Legacy `agent_runner` is migrated to `agent`, mapping `local` to `astrbot`. Legacy experts are removed from configuration files only after successful database import. Migration preserves existing sessions and history; already created agents retain their configuration snapshots.
 
-Subagents do not automatically inherit main's chat history. Include the necessary context, constraints, and expected output when delegating. Follow-up instructions retain the same subagent ID and private history. Subagents cannot create further subagents.
+## Execution and continuation
 
-## Inspect progress
+`spawn_agent` returns an agent ID after opening its runtime session, without waiting for the model task to complete. Main uses `list_agents` for status, `wait_agent` to wait, `get_agent_result` to read results, `send_message` for further instructions, and `cancel_agent` to stop one task.
 
-Open **Extensions → Plugins → Subagent → Subagent management → Worker progress** to inspect names, provider IDs, states, turns, completed steps, results, and execution records. This tab is read-only; send instructions and request cancellation through main.
+Both `spawn_agent` and `send_message` accept a `messages` array using the same component format as `send_message_to_user`. These two tools currently support `plain` (`text`), `image`, and `file` (`path` or `url`). Initial images become model image input, while files are references the worker can read with its tools. Original user-message images are never inherited automatically. Native follow-ups are currently flattened to text retaining image and file references; other runtimes receive the original structured input.
 
-![Worker progress with sample records](./images/subagent-plugin-runtime-en.png)
+```json
+{
+  "config_id": "agent-configuration-UUID",
+  "messages": [
+    {"type": "plain", "text": "Analyze this chart and consult the report"},
+    {"type": "image", "path": "chart.png"},
+    {"type": "file", "path": "report.pdf"}
+  ]
+}
+```
 
-In ChatUI, expand the `spawn_agent` tool's **Result** to inspect the actual name and provider ID, including choices resolved from templates or defaults.
+Relative image paths resolve from the current session workspace. Absolute local paths within the caller's permissions and sandbox file paths are also supported. `send_message` uses the same `messages` input and additionally requires the target `agent_id`.
 
-## Execution and recovery
+Results are addressed to the direct parent runtime/session. Delivery first calls the parent's active turn's `steer()` and waits for its durable-consumption receipt in an independent notification task. Rejected or unconsumed input is queued through the normal message pipeline with the exact parent session attached; switching the UMO's selected conversation does not redirect the result. Result bodies are carried in the input itself, without a separate step-start injection or delivery checkpoint. Further instructions steer a running worker or start its next turn with the same private history. Workers cannot spawn more workers.
 
-Defaults: 3 concurrent subagents per session, a 600-second timeout including queue time, and 30 steps per turn capped by main's limit. `wait_agent` accepts 0–60000 ms, with `any` to wait for one completion or `all` to wait for every requested subagent.
 
-An active main receives completed results; an idle main resumes to process them. Results stay bound to the original session, conversation, and sender. Switching conversations prevents automatic wakeups for the original conversation and never redirects its results. Proactive delivery depends on the platform; see [Proactive Capabilities](./proactive-agent.md).
+## Persistence and recovery
 
-Subagent states, execution histories, and pending input persist in AstrBot's database. After restart or extension reload, unfinished tasks become `interrupted`. Main can inspect and resume them without automatically replaying tools that may already have run. Results may be delivered again after an abnormal exit.
+Public agent IDs, runtime names, runtime session IDs, direct parent session references, and input/result records are persisted by UMO and owning main conversation. Users sharing a conversation share its subagents; isolation follows the main UMO/conversation without an additional sender boundary. Each input retains its own caller identity and permissions. Sender information is retained only as metadata. Each runtime persists its own private history. After restart, unfinished and queued inputs are marked interrupted and are never replayed automatically. Inspect interrupted records, then use `send_message` to send new instructions to the same conversation. The built-in runtime retains complete steps without replaying in-flight tools. Switching main conversations keeps completed results bound to their original parent. Deleted or stopped parents are not woken.
 
-Stopping a session cancels its background work. Cancelling one subagent leaves main and its siblings running. Background Shell processes started by a subagent use the Shell session tools and process timeouts.
+## Agent runtimes
+
+The bundled `astrbot` runtime owns native sessions, history, hooks, model execution, and native capabilities. Main agents and workers use the same session/turn contract; the native tool loop is an implementation detail. Core prepares message inputs and presents outputs. The shared subagent service maintains public identities, accepted tasks, concurrency limits, timeouts, and result delivery without directly reading or writing runtime-owned history storage. Delivery confirmation uses the parent session’s public history view.
+
+Runtime adapters receive typed input through `AgentInput.content`: `PlainInput`, `ImageInput`, and `FileInput` retain the `plain`, `image`, and `file` semantics. These are immutable data objects without IM serialization or media download methods. Tool requests and persisted task records retain the existing `messages` JSON format; conversion happens at the runtime boundary.
+
+An `AgentRuntime` opens or restores an `AgentSession`. `session.run_turn(input)` returns an independently executing turn with replayable `events()`, `result()`, `cancel()`, queued `follow_up()`, and optional `steer()` at a safe boundary. Cancellation of an output reader or result waiter does not implicitly cancel execution. The owner explicitly cancels the turn when its pipeline stops.
+
+Extensions can register a runtime with `ctx.subagents.register_runtime(name, runtime)` and select it in an AgentConfig’s `runtime` field. `spawn_agent` uses the configuration through `config_id`; generic workers use `astrbot`. an ACP runtime and continuous voice sessions are not included in this phase. Existing third-party main-agent execution paths remain unchanged.
+
+`list_agents` returns each agent's public `agent_id`, `runtime`, and opaque runtime-owned session ID in `conversation_id`. `send_message` resolves the runtime and session by agent ID. `owner_conversation_id` identifies the separate owning main conversation.
+
+## Entry points and APIs
+
+Open management through **Configuration → AI → Capabilities → Subagents → Configure Specialized Agents**, route `/subagent`. Use `/api/v1/agent-configs` to list/create records and `/api/v1/agent-configs/{config_id}` to read/update/delete one. `/api/v1/agent-runtimes` lists callable runtimes and their defaults. Tool listing remains at `/api/v1/subagents/available-tools`. All require the `config` scope. The former whole-configuration `/subagents/config` and `/api/subagent/config` endpoints are removed.

@@ -561,42 +561,6 @@ def register_on_agent_done(**kwargs):
     return decorator
 
 
-def register_on_agent_step_start(**kwargs):
-    """Register a handler before each complete Agent step.
-
-    Args:
-        **kwargs: Handler registration options, including priority.
-
-    Returns:
-        A decorator for async handlers accepting event and run_context.
-    """
-
-    def decorator(awaitable):
-        _ = get_handler_or_create(awaitable, EventType.OnAgentStepStartEvent, **kwargs)
-        return awaitable
-
-    return decorator
-
-
-def register_on_agent_step_end(**kwargs):
-    """Register a handler after a step's tool results and images are assembled.
-
-    Interrupted steps do not trigger this event; on_agent_done handles their exit.
-
-    Args:
-        **kwargs: Handler registration options, including priority.
-
-    Returns:
-        A decorator for async handlers accepting event and run_context.
-    """
-
-    def decorator(awaitable):
-        _ = get_handler_or_create(awaitable, EventType.OnAgentStepEndEvent, **kwargs)
-        return awaitable
-
-    return decorator
-
-
 def register_on_using_llm_tool(**kwargs):
     """当调用函数工具前的事件。
     会传入 tool 和 tool_args 参数。

@@ -18,8 +18,8 @@ from astrbot.core.agent.message import ImageURLPart, Message, TextPart
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool, ToolSet
-from astrbot.core.astr_agent_run_util import run_agent
-from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+from astrbot.core.astr_agent_runtime.runner import run_agent
+from astrbot.core.astr_agent_runtime.tool_executor import FunctionToolExecutor
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
@@ -2335,7 +2335,7 @@ async def test_step_notices_reach_model_once_per_threshold(
     else:
         # Bootstrap the public API first, as the application does, to avoid import cycles.
         import astrbot.api  # noqa: F401
-        from astrbot.core.astr_agent_run_util import run_agent
+        from astrbot.core.astr_agent_runtime.runner import run_agent
 
         responses = run_agent(runner, max_step=128)
     async for _ in responses:
@@ -2679,7 +2679,7 @@ async def test_lifecycle_main_cancel_between_complete_steps(
             await asyncio.Future()
 
     monkeypatch.setattr(
-        "astrbot.core.astr_agent_run_util._watch_agent_stop_signal", watcher
+        "astrbot.core.astr_agent_runtime.runner._watch_agent_stop_signal", watcher
     )
     event = MagicMock()
     event.is_stopped.return_value = False

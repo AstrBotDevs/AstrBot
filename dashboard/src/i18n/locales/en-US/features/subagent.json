@@ -1,0 +1,117 @@
+{
+  "header": {
+    "eyebrow": "Orchestration"
+  },
+  "page": {
+    "title": "Subagent Management",
+    "beta": "Experimental",
+    "subtitle": "Create reusable agents and choose their runtimes. Select available agents in each configuration profile."
+  },
+  "actions": {
+    "refresh": "Refresh",
+    "save": "Save",
+    "add": "Add SubAgent",
+    "expand": "Expand",
+    "collapse": "Collapse",
+    "delete": "Delete",
+    "close": "Close",
+    "create": "Create Agent",
+    "cancel": "Cancel",
+    "more": "More",
+    "edit": "Edit Agent",
+    "remove": "Delete Agent"
+  },
+  "overview": {
+    "totalAgents": "Total SubAgents",
+    "totalAgentsNote": "Configured delegate agents",
+    "enabledAgents": "Enabled Agents",
+    "enabledAgentsNote": "Agents available for handoff",
+    "mainOrchestration": "Main Orchestration",
+    "boundPersonas": "Bound Personas",
+    "boundPersonasNote": "Agents with an attached persona"
+  },
+  "switches": {
+    "enable": "Enable SubAgent orchestration",
+    "enableHint": "Enable sub-agent functionality"
+  },
+  "description": {
+    "disabled": "Disabled. Main completes tasks with its own tools.",
+    "enabled": "Enabled. Main retains its tools and starts background workers through spawn_agent."
+  },
+  "section": {
+    "title": "SubAgents",
+    "subtitle": "Configure delegate agents, personas, and descriptions for the main LLM",
+    "globalSettings": "Global Settings",
+    "agentSetup": "Agent Setup",
+    "empty": "Create an agent to get started.",
+    "noDescription": "No description"
+  },
+  "cards": {
+    "statusEnabled": "Enabled",
+    "statusDisabled": "Disabled",
+    "unnamed": "Untitled SubAgent",
+    "transferPrefix": "transfer_to_{name}",
+    "switchLabel": "Enable",
+    "previewTitle": "Preview: handoff tool shown to the main LLM",
+    "personaChip": "Persona: {id}",
+    "personaPreview": "Persona Preview",
+    "noDescription": "No description yet",
+    "previewHint": "Review the currently selected persona to verify the handoff target."
+  },
+  "form": {
+    "nameLabel": "Name",
+    "nameHint": "Use lowercase letters + underscores; must be globally unique.",
+    "providerLabel": "Chat Model",
+    "providerHint": "Leave empty to follow the global default provider.",
+    "personaLabel": "Persona",
+    "personaHint": "Select a persona or configure a custom prompt and tools.",
+    "personaPreview": "Persona Preview",
+    "descriptionLabel": "Description",
+    "descriptionHint": "Describe when the main agent should delegate to this agent.",
+    "customPersona": "Use custom prompt and tools",
+    "runtime": "Agent Runtime",
+    "runtimeConfig": "Runtime Configuration (JSON)",
+    "followProvider": "Follow conversation model",
+    "externalRuntime": "External runtime configuration",
+    "inheritPersona": "Leave empty to use the main agent’s persona",
+    "inheritProvider": "Leave empty to use the main agent’s chat model",
+    "inheritSettings": "Other runtime settings follow the main agent.",
+    "followPersona": "Uses main agent persona"
+  },
+  "messages": {
+    "loadConfigFailed": "Failed to load config",
+    "loadPersonaFailed": "Failed to load persona list",
+    "unsavedChangesNotice": "You have unsaved changes on this page. Save before leaving.",
+    "unsavedChangesLeaveConfirm": "You have unsaved changes. Leaving will discard them. Continue?",
+    "unsavedChangesReloadConfirm": "You have unsaved changes. Reloading will discard them. Continue?",
+    "nameMissing": "A SubAgent is missing a name",
+    "nameInvalid": "Invalid SubAgent name: only lowercase letters/numbers/underscores, starting with a letter",
+    "nameDuplicate": "Duplicate SubAgent name: {name}",
+    "personaMissing": "SubAgent {name} has no persona selected",
+    "saveSuccess": "Saved successfully",
+    "saveFailed": "Failed to save",
+    "nameRequired": "Name is required",
+    "namePattern": "Lowercase letters, numbers, underscore only",
+    "deleteConfirm": "Delete {name}? Existing sessions retain their configuration and history.",
+    "jsonObject": "Enter a valid JSON object."
+  },
+  "empty": {
+    "title": "No Agents Configured",
+    "subtitle": "Add a new sub-agent to get started",
+    "action": "Create First Agent"
+  },
+  "limits": {
+    "concurrency": "Concurrent workers per session",
+    "timeout": "Task timeout (seconds, including queue time)",
+    "steps": "Maximum steps per turn"
+  },
+  "status": {
+    "disabled": "Disabled",
+    "unavailable": "Runtime unavailable",
+    "missing": "Missing configuration"
+  },
+  "selection": {
+    "label": "Specialized Agent Configurations",
+    "manage": "Configure Specialized Agents"
+  }
+}

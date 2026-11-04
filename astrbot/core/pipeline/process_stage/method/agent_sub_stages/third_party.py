@@ -13,8 +13,8 @@ from astrbot.core.agent.runners.deerflow.deerflow_agent_runner import (
     DeerFlowAgentRunner,
 )
 from astrbot.core.agent.runners.dify.dify_agent_runner import DifyAgentRunner
-from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
-from astrbot.core.astr_main_agent.request import matches_provider_wake_prefix
+from astrbot.core.agent_input import matches_provider_wake_prefix
+from astrbot.core.astr_agent_runtime.hooks import MAIN_AGENT_HOOKS
 from astrbot.core.message.components import Image, Record
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -158,8 +158,8 @@ class ThirdPartyAgentSubStage(Stage):
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
         self.conf = ctx.astrbot_config
-        agent_runner = self.conf["agent_runner"]
-        self.runner_type = agent_runner["runner_type"]
+        agent_runner = self.conf["agent"]
+        self.runner_type = agent_runner["runtime"]
         self.runner_config = agent_runner["config"]
         settings = ctx.astrbot_config["provider_settings"]
         self.streaming_response: bool = settings["streaming_response"]

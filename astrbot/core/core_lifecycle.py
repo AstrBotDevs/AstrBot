@@ -11,7 +11,6 @@
 
 import asyncio
 import os
-import sys
 import threading
 import time
 import traceback
@@ -20,8 +19,8 @@ from pathlib import Path
 
 from astrbot.api import logger, sp
 from astrbot.core import LogBroker, LogManager
+from astrbot.core.astr_agent_runtime import AstrAgentRuntime
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
-from astrbot.core.computer.computer_client import shutdown_local_booter
 from astrbot.core.config.default import VERSION
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.cron import CronJobManager
@@ -39,7 +38,8 @@ from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.star.context import Context
 from astrbot.core.star.star_handler import EventType, star_handlers_registry, star_map
 from astrbot.core.star.star_manager import PluginManager
-from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
+from astrbot.core.subagents.service import SubAgentService
+from astrbot.core.subagents.store import SubAgentStore
 from astrbot.core.umop_config_router import UmopConfigRouter
 from astrbot.core.updater import AstrBotUpdater
 from astrbot.core.utils.event_loop_diagnostics import (
@@ -66,7 +66,7 @@ class AstrBotCoreLifecycle:
         self.astrbot_config = astrbot_config  # 初始化配置
         self.db = db  # 初始化数据库
 
-        self.subagent_orchestrator: SubAgentOrchestrator | None = None
+        self.subagents: SubAgentService | None = None
         self.cron_manager: CronJobManager | None = None
         self.temp_dir_cleaner: TempDirCleaner | None = None
         self._default_chat_provider_warning_emitted = False
@@ -101,20 +101,6 @@ class AstrBotCoreLifecycle:
             os.environ["no_proxy"] = "localhost,127.0.0.1,::1"
             logger.debug("HTTP proxy cleared, no_proxy set to localhost")
 
-    async def _init_or_reload_subagent_orchestrator(self) -> None:
-        """Load legacy expert definitions for plugin SDK compatibility."""
-        try:
-            if self.subagent_orchestrator is None:
-                self.subagent_orchestrator = SubAgentOrchestrator(
-                    self.provider_manager.llm_tools,
-                    self.persona_mgr,
-                )
-            await self.subagent_orchestrator.reload_from_config(
-                self.astrbot_config.get("subagent_orchestrator", {}),
-            )
-        except Exception as e:
-            logger.error(f"Subagent orchestrator init failed: {e}", exc_info=True)
-
     def _warn_about_unset_default_chat_provider(self) -> None:
         if self._default_chat_provider_warning_emitted:
             return
@@ -136,7 +122,7 @@ class AstrBotCoreLifecycle:
                 return
             self._default_chat_provider_warning_emitted = True
             logger.warning(
-                "Detected %d enabled chat providers but `agent_runner.config.model.provider_id` is empty. "
+                "Detected %d enabled chat providers but `agent.config.model.provider_id` is empty. "
                 "AstrBot will use `%s` as the startup fallback chat provider. "
                 "Set a default chat model in the WebUI configuration page to avoid unexpected provider switching.",
                 len(providers),
@@ -189,18 +175,6 @@ class AstrBotCoreLifecycle:
             sp=sp,
         )
         await self.astrbot_config_mgr.initialize()
-        if sys.platform == "win32" and any(
-            config.get("provider_settings", {}).get("computer_use_runtime") == "local"
-            for config in self.astrbot_config_mgr.confs.values()
-        ):
-            try:
-                from astrbot.core.computer.process_sandbox.windows_setup import (
-                    initialize_windows_sandbox,
-                )
-
-                await asyncio.to_thread(initialize_windows_sandbox)
-            except Exception as exc:
-                logger.warning(f"Windows Local sandbox is unavailable: {exc}")
         self.temp_dir_cleaner = TempDirCleaner(
             max_size_getter=lambda: self.astrbot_config_mgr.default_conf.get(
                 TempDirCleaner.CONFIG_KEY,
@@ -249,9 +223,6 @@ class AstrBotCoreLifecycle:
         # 初始化 CronJob 管理器
         self.cron_manager = CronJobManager(self.db)
 
-        # Keep legacy expert discovery available to plugins without main routing.
-        await self._init_or_reload_subagent_orchestrator()
-
         # 初始化提供给插件的上下文
         self.star_context = Context(
             self.event_queue,
@@ -265,8 +236,14 @@ class AstrBotCoreLifecycle:
             self.astrbot_config_mgr,
             self.kb_manager,
             self.cron_manager,
-            self.subagent_orchestrator,
         )
+        self.star_context.agent_runtime = AstrAgentRuntime(self.star_context)
+        await self.star_context.agent_runtime.initialize()
+        self.subagents = SubAgentService(
+            SubAgentStore(self.db), {"astrbot": self.star_context.agent_runtime}
+        )
+        self.star_context.subagents = self.subagents
+        self.star_context.agent_runtimes = self.subagents.runtimes
         self.star_context.html_renderer = html_renderer
 
         # 初始化插件管理器
@@ -303,6 +280,12 @@ class AstrBotCoreLifecycle:
 
         # 根据配置实例化各个平台适配器
         await self.platform_manager.initialize()
+
+        from astrbot.core.astr_agent_runtime.main_agent.subagent import (
+            initialize_subagents,
+        )
+
+        await initialize_subagents(self.star_context)
 
         # 初始化关闭控制面板的事件
         self.dashboard_shutdown_event = asyncio.Event()
@@ -406,7 +389,11 @@ class AstrBotCoreLifecycle:
         if self.cron_manager:
             await self.cron_manager.shutdown()
 
-        await shutdown_local_booter()
+        context = getattr(self, "star_context", None)
+        if isinstance(context, Context):
+            await context.agent.close()
+        if self.subagents is not None:
+            await self.subagents.close()
 
         for plugin in self.plugin_manager.context.get_all_stars():
             try:
@@ -444,7 +431,11 @@ class AstrBotCoreLifecycle:
 
     async def restart(self) -> None:
         """重启 AstrBot 核心生命周期管理类, 终止各个管理器并重新加载平台实例"""
-        await shutdown_local_booter()
+        context = getattr(self, "star_context", None)
+        if isinstance(context, Context):
+            await context.agent.close()
+        if self.subagents is not None:
+            await self.subagents.close()
         await self.provider_manager.terminate()
         await self.platform_manager.terminate()
         await self.kb_manager.terminate()

@@ -31,6 +31,7 @@ import zhCNKnowledgeBaseDetail from './features/knowledge-base/detail.json';
 import zhCNKnowledgeBaseDocument from './features/knowledge-base/document.json';
 import zhCNPersona from './features/persona.json';
 import zhCNCommand from './features/command.json';
+import zhCNSubagent from './features/subagent.json';
 import zhCNWelcome from './features/welcome.json';
 import zhCNErrors from './messages/errors.json';
 import zhCNSuccess from './messages/success.json';
@@ -76,6 +77,7 @@ export default {
       },
       persona: zhCNPersona,
       command: zhCNCommand,
+      subagent: zhCNSubagent,
       welcome: zhCNWelcome
     },
     messages: {

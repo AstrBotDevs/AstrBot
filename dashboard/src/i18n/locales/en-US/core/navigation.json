@@ -12,6 +12,7 @@
     "logs": "Logs",
     "trace": "Trace"
   },
+  "subagent": "Subagent Management",
   "toolUse": "MCP Tools",
   "config": "Config",
   "chat": "Chat",

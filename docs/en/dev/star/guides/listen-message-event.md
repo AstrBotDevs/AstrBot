@@ -309,7 +309,9 @@ async def my_custom_hook_1(
 > For small or medium-sized dynamic prompts that change every round, prefer appending them through `req.extra_user_content_parts`. These parts are added after the current user input as extra user-message content, which is more suitable for dynamic context such as "current time", "character affinity", or "relevant memory snippets":
 >
 > ```python
-> from astrbot.core.agent.message import TextPart
+> # Before AstrBot v4.30.0:
+> # from astrbot.core.agent.message import TextPart
+> from astrbot.api.agents import TextPart
 >
 > @filter.on_llm_request()
 > async def add_dynamic_prompt(self, event: AstrMessageEvent, req: ProviderRequest):
@@ -366,8 +368,10 @@ When the Agent starts running, the `on_agent_begin` hook is triggered.
 
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
-from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.astr_agent_context import AstrAgentContext
+# Before AstrBot v4.30.0:
+# from astrbot.core.agent.run_context import ContextWrapper
+# from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.api.agents import AstrAgentContext, ContextWrapper
 
 
 @filter.on_agent_begin()
@@ -389,7 +393,9 @@ You can obtain the `FunctionTool` object and tool call arguments.
 
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
-from astrbot.core.agent.tool import FunctionTool
+# Before AstrBot v4.30.0:
+# from astrbot.core.agent.tool import FunctionTool
+from astrbot.api import FunctionTool
 
 
 @filter.on_using_llm_tool()
@@ -416,7 +422,9 @@ You can obtain the `FunctionTool` object, tool call arguments, and tool call res
 from mcp.types import CallToolResult
 
 from astrbot.api.event import filter, AstrMessageEvent
-from astrbot.core.agent.tool import FunctionTool
+# Before AstrBot v4.30.0:
+# from astrbot.core.agent.tool import FunctionTool
+from astrbot.api import FunctionTool
 
 
 @filter.on_llm_tool_respond()
@@ -432,36 +440,19 @@ async def on_llm_tool_respond(
 
 > You cannot use yield to send messages here. If you need to send, please use the `event.send()` method directly.
 
-#### Before and After Each Agent Step
-
-The built-in tool-loop runner supports `on_agent_step_start` and `on_agent_step_end`. A step consists of one model decision and all requested tools. The end hook runs after the whole batch of assistant/tool messages and tool images has been assembled into `run_context.messages`. The final step without tools also triggers it. An interrupted step does not trigger the end hook; use `on_agent_done` for cleanup.
-
-```python
-@filter.on_agent_step_start()
-async def before_step(self, event: AstrMessageEvent, run_context: ContextWrapper[AstrAgentContext]):
-    # Inspect or update context before the next model decision.
-    pass
-
-
-@filter.on_agent_step_end()
-async def after_step(self, event: AstrMessageEvent, run_context: ContextWrapper[AstrAgentContext]):
-    # The complete step context is now available for checkpointing.
-    print(len(run_context.messages))
-```
-
-These hooks use the same event/context imports shown below. `on_llm_request` and `on_llm_response` do not run for every model request within the built-in tool loop. `on_llm_tool_respond` runs for individual tools, before the complete batch is added to the context.
-
 #### On Agent Done
 
-The built-in tool-loop runner triggers `on_agent_done` once when a run exits, including normal completion, provider errors, unexpected exceptions, cancellation and step-budget exhaustion. It runs after the final completed step's end hook; it does not confirm that conversation history has been saved. Check `run_context.run_end_reason` (`completed`, `error`, `cancelled`, or `max_steps`) and `run_context.run_error` (an error description or `None`). Forced termination of the process cannot run cleanup hooks.
+The built-in tool-loop runner triggers `on_agent_done` once when a run exits, including normal completion, provider errors, unexpected exceptions, cancellation and step-budget exhaustion. It does not confirm that conversation history has been saved. Check `run_context.run_end_reason` (`completed`, `error`, `cancelled`, or `max_steps`) and `run_context.run_error` (an error description or `None`). Forced termination of the process cannot run cleanup hooks.
 
 `resp` can be `None` if execution exits without a final response. Guard access to it. A user stop may supply a synthetic interruption response. `on_llm_response` is not dispatched for cleanup without a model reply or for a synthetic interruption; normal response handling precedes `on_agent_done`. To modify a reply before delivery, use `on_llm_response`.
 
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.provider import LLMResponse
-from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.astr_agent_context import AstrAgentContext
+# Before AstrBot v4.30.0:
+# from astrbot.core.agent.run_context import ContextWrapper
+# from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.api.agents import AstrAgentContext, ContextWrapper
 
 
 @filter.on_agent_done()

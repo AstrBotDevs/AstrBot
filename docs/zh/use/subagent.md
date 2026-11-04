@@ -1,58 +1,88 @@
 # 子代理 {#agent-handsoff-与-subagent}
 
-子代理让主 Agent 自主委派任务，多个子代理在后台并行执行，并将结果交回主 Agent。每个子代理拥有独立历史，可以使用不同的模型、人格和工具。
+子代理是 AstrBot **内置 AI** 的委派能力。主 Agent 可以继续与用户交流，同时把任务交给具有独立上下文的后台 worker。无需安装或启用额外插件。
 
-该能力适用于 AstrBot 内置 Agent，由随 AstrBot 提供的 Subagent 内置扩展实现。外部 Agent 服务的子代理在对应服务中配置。
+## 配置入口
 
-## 开始使用 {#configuration}
+进入对应配置档的 **配置 → AI → 能力 → 子代理**，启用后即可创建通用子代理，无需预先配置 Agent。并发数默认 3，超时默认 600 秒且包含排队时间。
 
-启用 Subagent 扩展后，直接向主 Agent 描述需要委派的任务，例如：
+如果需要独立的人格或聊天模型，点击该区域的 **配置专用 Agent**，在弹窗中点击 **新建 Agent**。保存后，原配置页的选择列表会同步刷新；关闭弹窗，在 **专用 Agent 配置** 中勾选它。管理弹窗使用两列卡片，每个 Agent 独立保存；点击卡片编辑，使用菜单删除。
 
-> 派两个子代理，分别检索这个方案的优点和风险，你继续整理评估标准，最后汇总它们的结果。
+原侧边栏的“子代理编排 / 子代理管理”入口已移至 **配置 → AI → 能力 → 子代理 → 配置专用 Agent**。入口以弹窗打开，不离开当前配置页；旧地址 `/subagent` 仍可直接访问。旧全局设置已迁入配置档，旧专家列表改为数据库中的 Agent 配置。
 
-主 Agent 会创建子代理并提交任务，在它们执行期间继续处理独立工作。需要调整方向时，也通过主 Agent 追加指令或取消任务。
+![子代理能力设置](images/subagent-settings-zh.png)
 
-运行限制在 **扩展 → 插件 → Subagent → 设置** 中调整。专家模板和执行记录位于插件详情中的 **子代理管理** 页面。
+![子代理管理页面](images/subagent-create-zh.png)
 
-## 专家模板
+## AgentConfig 与存储
 
-打开 **子代理管理 → 专家模板**，点击 **创建专家**，配置名称、用途说明、模型提供商、人格、系统提示词和工具。
+每个配置档的 `agent` 内嵌 `{ runtime, config }`，代表该配置档的默认主代理，继续现场配置。管理页创建的 AgentConfig 存入数据库 `agent_configs` 表，通过稳定 UUID `config_id` 引用；重命名不会改变引用。两处使用相同的运行配置结构，配置档的主代理无需创建数据库记录。
 
-选择人格后，会继承人格的提示词、预设对话和工具；也可以使用自定义提示词，并选择全部、指定或不使用工具。保存后模板立即可用，已经启动的任务继续执行。列表中可以编辑、启用、停用或删除专家。
+```json
+{
+  "agent": {
+    "runtime": "astrbot",
+    "config": {
+      "subagents": {
+        "enabled": true,
+        "config_ids": ["数据库中的配置 UUID"],
+        "max_concurrent_agents": 3,
+        "task_timeout": 600
+      }
+    }
+  }
+}
+```
 
-![专家创建表单（示例配置）](./images/subagent-plugin-experts-zh.png)
+`subagents` 是 `astrbot` runtime 的配置。被引用的 AgentConfig 可以选择其他已注册 runtime；本次未内置 ACP。内置 runtime 提供表单，其他 runtime 使用 JSON 配置编辑。不可用 runtime 的配置仍保留，但不能新建对应会话。被配置档或其他 AgentConfig 引用的记录不能删除，删除接口会返回引用位置。
 
-主 Agent 可以按任务选择专家模板，也可以创建使用自己当前可用工具的通用子代理。主 Agent 保留自己的工具。
+创建和编辑时均可选择 Agent 运行时。选择 AstrBot 运行时后，表单配置名称、描述、人格和聊天模型。描述用于主代理判断何时委派任务；人格和模型留空时跟随主代理。步数、重试、上下文压缩、工具超时等其他运行设置在创建会话时继承主代理，不在 AgentConfig 中重复保存。所选人格决定提示词、工具和技能范围，最终权限仍受父代理本轮可委派能力限制。
 
-## 任务管理
+![新建 Agent 表单](images/subagent-edit-zh.png)
 
-| 工具 | 用途 |
-| --- | --- |
-| `spawn_agent` | 创建子代理并提交首条任务，可选择专家模板、名称和模型提供商；立即返回 ID、实际名称、provider ID 和状态 |
-| `list_agents` | 查看当前发送者、当前对话内的子代理名称、provider ID、状态和完成步数 |
-| `wait_agent` | 等待任意或全部子代理完成，等待超时不会取消任务 |
-| `get_agent_result` | 读取结果或错误，可以重复读取 |
-| `send_message` | 运行中追加指令；本轮未消费或已经结束时，自动开启下一轮 |
-| `cancel_agent` | 单独取消一个子代理 |
+主代理 system prompt 仅列出当前配置档选中且启用的 AgentConfig 名称、ID、runtime 和用途。完整 prompt 不会加入主代理；`spawn_agent` 的 schema 保持固定，通过可选 `config_id` 选择配置，不指定则创建通用内置子代理。
 
-创建时可用 `name` 设置本次子代理的显示名称，省略时使用专家模板名或 `worker`。`provider_id` 使用已配置的聊天模型提供商 ID；选择优先级为调用参数、专家模板、当前会话默认提供商。主 Agent 可以在工具参数中看到可用的 provider ID 和模型名。覆盖只影响本次子代理，追加任务继续沿用其名称和提供商。
+旧的 `agent_runner` 自动迁移为 `agent`，`local` 映射为 `astrbot`；旧全局专家在数据库导入成功后才从配置中清理。迁移不修改已有会话及历史，已经创建的 Agent 继续使用原配置快照。
 
-子代理不会自动继承主 Agent 的聊天历史，委派时需要提供必要背景、约束和预期输出。追加指令保留同一个子代理 ID 和独立历史。子代理不能继续创建子代理。
+## 执行与继续对话
 
-## 查看进度
+`spawn_agent` 建立 agent runtime 会话后返回 agent ID，不等待模型任务完成。主 Agent 可以通过 `list_agents` 查看状态、`wait_agent` 等待结果、`get_agent_result` 读取结果、`send_message` 追加指令，或通过 `cancel_agent` 取消单个任务。
 
-打开 **扩展 → 插件 → Subagent → 子代理管理 → 执行进度**，查看名称、模型提供商 ID、状态、轮次、完成步数、结果和执行记录。该页签只读，追加指令和取消任务通过主 Agent 操作。
+`spawn_agent` 和 `send_message` 都使用 `messages` 数组，组件格式与 `send_message_to_user` 一致。这两个工具目前支持 `plain`（`text`）、`image` 和 `file`（`path` 或 `url`）。首次委派的图片作为模型图片输入，文件作为可供工具读取的引用；不会自动附带原用户消息中的图片。内置 runtime 的追加指令暂时统一转成文本，保留图片和文件的引用，不作为新的多模态输入；其他 runtime 接收原始结构化内容。
 
-![子代理执行进度（示例记录）](./images/subagent-plugin-runtime-zh.png)
+```json
+{
+  "config_id": "agent-configuration-UUID",
+  "messages": [
+    {"type": "plain", "text": "分析这张图，并参考报告"},
+    {"type": "image", "path": "chart.png"},
+    {"type": "file", "path": "report.pdf"}
+  ]
+}
+```
 
-在 ChatUI 中展开 `spawn_agent` 的 **Result**，也可以确认实际名称和 provider ID，包括使用模板或默认配置时的选择。
+图片的相对路径从当前会话工作目录解析，也支持权限范围内的本地绝对路径和 sandbox 文件路径。`send_message` 使用相同的 `messages`，并额外指定目标 `agent_id`。
 
-## 运行与恢复
+完成结果绑定直接父代理的 runtime/session。通知任务先调用父代理活跃 turn 的 `steer()`，独立等待其确认消费，子代理任务本身无需等待通知完成。被拒绝或未消费的输入通过正常消息流水线排队，并明确指定原父会话；UMO 当前 conversation 的切换不会改变投递目标。结果正文直接放入本次输入，不再通过单独的 step-start 注入或投递 checkpoint 处理。追加指令会进入正在执行的 worker，或沿用其私有历史开始下一轮。worker 不能继续创建子代理。
 
-默认每个会话最多同时运行 3 个子代理，超时 600 秒（包含排队时间），每轮最多 30 步且不超过主 Agent 上限。`wait_agent` 支持 0–60000 毫秒，以及等待任意一个完成的 `any` 或等待全部完成的 `all`。
+管理页只维护 Agent 配置。运行状态、结果、追加指令和取消任务由主 Agent 的工具处理；配置修改不会改变已经启动的会话。
 
-子代理完成后，主 Agent 在运行中接收结果，空闲时会被唤醒继续处理。结果绑定原来的会话、对话和发送者；切换对话后，不再自动唤醒原对话或将结果发送到其他对话。主动消息送达取决于平台能力，参见[主动能力](./proactive-agent.md)。
+## 持久化与恢复
 
-子代理状态、执行历史和待处理消息保存在 AstrBot 数据库中。重启或扩展重载后，未完成任务标记为 `interrupted`；主 Agent 可以检查后继续，不会自动重放可能已经执行过的工具。异常退出后，完成结果可能再次交付。
+agent 的公共 ID、runtime 类型、runtime session ID、直接父会话引用和每次输入的执行结果按 UMO 和主 conversation 持久化。同一个 conversation 内的用户共享子代理；对话隔离沿用主会话的 UMO/conversation 划分，不再按发送者额外隔离。每条输入使用其调用者自己的身份和权限，发送者信息仅作为元数据保留。私有对话历史由对应 runtime 保存。重启时，未完成和排队中的输入均标记为已中断，不自动执行；检查中断记录后，可通过 `send_message` 沿用同一会话发送新的指令。内置 runtime 保留完整步骤，正在执行的工具不会重放。切换主 conversation 后，结果仍绑定原父会话；父会话已删除或停止时不会唤醒。
 
-停止会话会取消所属后台任务；单独取消子代理不影响主 Agent 或其他子代理。子代理已启动的后台 Shell 由 Shell 会话工具和进程超时机制管理。
+## Agent runtime
+
+内置 `astrbot` runtime 管理原生会话、历史、hooks、模型执行和内置能力。主代理与 worker 使用相同的 session/turn 接口；原生 tool loop 是其内部实现。Core 负责消息输入前处理和输出呈现。公共子代理服务管理公共 ID、已接受任务、并发配额、超时和结果通知，不直接读写 runtime 的私有历史存储；投递确认通过父 session 提供的公共历史视图完成。
+
+Runtime 适配器通过 `AgentInput.content` 接收有类型的输入：`PlainInput`、`ImageInput`、`FileInput` 分别保持 `plain`、`image`、`file` 的语义。这些是不可变的数据对象，不包含 IM 协议序列化或媒体下载方法。工具请求和任务存储继续使用原有的 `messages` JSON 格式，在进入 runtime 时转换为内容对象。
+
+`AgentRuntime` 创建或恢复 `AgentSession`。`session.run_turn(input)` 返回独立执行的 turn，提供可重复读取的 `events()`、`result()`、`cancel()`、排队开始新一轮的 `follow_up()`，以及可选的安全边界 `steer()`。输出消费者或结果等待者被取消不会自动取消执行；流水线停止时，由调用方明确取消该 turn。
+
+扩展实现可以通过 `ctx.subagents.register_runtime(name, runtime)` 注册，在 AgentConfig 的 `runtime` 字段选择；`spawn_agent` 通过 `config_id` 使用该配置。通用子代理使用 `astrbot`。本阶段不包含 ACP runtime 或持续实时语音会话；现有第三方主代理执行路径保持原样。
+
+`list_agents` 返回每个 agent 的 `agent_id`、`runtime`，以及通过 `conversation_id` 字段提供的 runtime 私有会话 ID。`send_message` 根据 agent ID 找回 runtime 和会话。`owner_conversation_id` 单独表示所属主会话。
+
+## 入口与接口
+
+管理页入口为 **配置 → AI → 能力 → 子代理 → 配置专用 Agent**，路由 `/subagent`。配置接口使用 `/api/v1/agent-configs`（列表、新建）和 `/api/v1/agent-configs/{config_id}`（读取、更新、删除）；`/api/v1/agent-runtimes` 返回可调用 runtime 及默认配置。工具列表使用 `/api/v1/subagents/available-tools`。这些接口需要 `config` 权限，旧的整包 `/subagents/config` 与 `/api/subagent/config` 接口已移除。

@@ -2,16 +2,18 @@ from __future__ import annotations
 
 import logging
 from asyncio import Queue, Task
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from typing import TYPE_CHECKING, Any, Protocol
 
 from deprecated import deprecated
 
+from astrbot.core.agent.config_store import AgentConfigStore
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.message import ContentPart, Message
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import ToolSet
+from astrbot.core.agent_service import AgentService
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.conversation_mgr import ConversationManager
@@ -45,7 +47,6 @@ from astrbot.core.star.filter.platform_adapter_type import (
     ADAPTER_NAME_2_TYPE,
     PlatformAdapterType,
 )
-from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
 from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
 
 from ..exceptions import ProviderNotFoundError
@@ -57,7 +58,11 @@ from .star_handler import EventType, StarHandlerMetadata, star_handlers_registry
 logger = logging.getLogger("astrbot")
 
 if TYPE_CHECKING:
+    from astrbot.core.agent.runtime import AgentRuntime
+    from astrbot.core.astr_agent_runtime import AstrAgentRuntime
     from astrbot.core.cron.manager import CronJobManager
+    from astrbot.core.star.star_manager import PluginManager
+    from astrbot.core.subagents.service import SubAgentService
     from astrbot.core.utils.t2i.renderer import HtmlRenderer
 
 WebApiHandler = Callable[..., Awaitable[Any]]
@@ -139,7 +144,7 @@ class Context:
 
     # 向后兼容的变量
     _register_tasks: list[Awaitable] = []
-    _star_manager = None
+    _star_manager: PluginManager | None = None
 
     def __init__(
         self,
@@ -154,7 +159,7 @@ class Context:
         astrbot_config_mgr: AstrBotConfigManager,
         knowledge_base_manager: KnowledgeBaseManager,
         cron_manager: CronJobManager,
-        subagent_orchestrator: SubAgentOrchestrator | None = None,
+        subagents: SubAgentService | None = None,
     ) -> None:
         self._event_queue = event_queue
         """事件队列。消息平台通过事件队列传递消息事件。"""
@@ -178,9 +183,17 @@ class Context:
         """知识库管理器"""
         self.cron_manager = cron_manager
         """Cron job manager, initialized by core lifecycle."""
-        self.subagent_orchestrator = subagent_orchestrator
+        self.subagents = subagents
+        self.agent_configs: AgentConfigStore = AgentConfigStore(db)
+        self.agent_runtimes: dict[str, AgentRuntime] = (
+            subagents.runtimes if subagents is not None else {}
+        )
+        self.agent_runtime: AstrAgentRuntime | None = None
+        """Built-in runtime initialized before plugins; owns native agent sessions."""
         self.decision = DecisionService(provider_manager)
         """Decision service backed by the configured decision provider."""
+        self.agent = AgentService(self)
+        """Programmatic agent integration; closed by the core lifecycle."""
 
     async def llm_generate(
         self,
@@ -237,7 +250,7 @@ class Context:
         extra_user_content_parts: list[ContentPart] | None = None,
         tools: ToolSet | None = None,
         system_prompt: str | None = None,
-        contexts: list[Message] | None = None,
+        contexts: Sequence[Message | dict[str, Any]] | None = None,
         max_steps: int = 128,
         tool_call_timeout: int = 120,
         **kwargs: Any,
@@ -273,12 +286,12 @@ class Context:
             Exception: For other errors during LLM generation
         """
         # Import here to avoid circular imports
-        from astrbot.core.astr_agent_context import (
+        from astrbot.core.astr_agent_runtime.context import (
             AgentContextWrapper,
             AstrAgentContext,
         )
-        from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
-        from astrbot.core.tools.computer_tools.util import (
+        from astrbot.core.astr_agent_runtime.tool_executor import FunctionToolExecutor
+        from astrbot.core.astr_agent_runtime.tools.computer_tools.util import (
             LOCAL_NETWORK_POLICY_NOTICE,
             get_local_permission_policy,
             is_local_runtime,

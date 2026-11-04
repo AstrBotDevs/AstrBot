@@ -1,0 +1,117 @@
+{
+  "header": {
+    "eyebrow": "Subagent Orchestration"
+  },
+  "page": {
+    "title": "子代理管理",
+    "beta": "实验性",
+    "subtitle": "创建可复用的 Agent 并选择运行环境，在各配置档中勾选允许使用的 Agent。"
+  },
+  "actions": {
+    "refresh": "刷新",
+    "save": "保存",
+    "add": "新增子代理",
+    "expand": "展开设置",
+    "collapse": "收起设置",
+    "delete": "删除",
+    "close": "关闭",
+    "create": "新建 Agent",
+    "cancel": "取消",
+    "more": "更多",
+    "edit": "编辑 Agent",
+    "remove": "删除 Agent"
+  },
+  "overview": {
+    "totalAgents": "子代理总数",
+    "totalAgentsNote": "当前已配置的子代理数量",
+    "enabledAgents": "启用中的 Agent",
+    "enabledAgentsNote": "会参与 handoff 编排的子代理",
+    "mainOrchestration": "主编排状态",
+    "boundPersonas": "已绑定 Persona",
+    "boundPersonasNote": "完成角色绑定的子代理数量"
+  },
+  "switches": {
+    "enable": "启用子代理编排",
+    "enableHint": "启用子代理功能"
+  },
+  "description": {
+    "disabled": "未启用。主 Agent 使用自己的工具完成任务。",
+    "enabled": "已启用。主 Agent 保留自己的工具，通过 spawn_agent 创建后台子代理。"
+  },
+  "section": {
+    "title": "子代理配置",
+    "subtitle": "为主代理配置可委派的子代理、人格与描述信息",
+    "globalSettings": "全局设置",
+    "agentSetup": "Agent 设置",
+    "empty": "新建一个 Agent 开始使用。",
+    "noDescription": "暂无用途说明"
+  },
+  "cards": {
+    "statusEnabled": "启用",
+    "statusDisabled": "停用",
+    "unnamed": "未命名子代理",
+    "transferPrefix": "transfer_to_{name}",
+    "switchLabel": "启用",
+    "previewTitle": "预览：主 LLM 将看到的 handoff 工具",
+    "personaChip": "Persona: {id}",
+    "noDescription": "暂无描述",
+    "personaPreview": "人格预览",
+    "previewHint": "这里展示当前所选 Persona 的预览，便于确认 handoff 目标。"
+  },
+  "form": {
+    "nameLabel": "名称",
+    "nameHint": "建议使用英文小写+下划线，且全局唯一",
+    "providerLabel": "聊天模型",
+    "providerHint": "留空表示跟随全局默认 provider。",
+    "personaLabel": "人格",
+    "personaHint": "选择人格，或使用自定义提示词和工具。",
+    "personaPreview": "人格预览",
+    "descriptionLabel": "描述",
+    "descriptionHint": "说明什么任务适合委派给这个 Agent。",
+    "customPersona": "使用自定义提示词与工具",
+    "runtime": "Agent 运行时",
+    "runtimeConfig": "Runtime 配置（JSON）",
+    "followProvider": "跟随主代理对话模型",
+    "externalRuntime": "外部 runtime 配置",
+    "inheritPersona": "留空则跟随主代理人格",
+    "inheritProvider": "留空则跟随主代理对话模型",
+    "inheritSettings": "其他运行设置跟随主代理。",
+    "followPersona": "跟随主代理人格"
+  },
+  "messages": {
+    "loadConfigFailed": "获取配置失败",
+    "loadPersonaFailed": "获取 Persona 列表失败",
+    "unsavedChangesNotice": "当前页面有未保存修改，请在离开前保存。",
+    "unsavedChangesLeaveConfirm": "当前页面有未保存修改，离开后将丢失这些更改。是否继续离开？",
+    "unsavedChangesReloadConfirm": "当前页面有未保存修改，刷新配置会丢失这些更改。是否继续刷新？",
+    "nameMissing": "存在未填写名称的子代理",
+    "nameInvalid": "子代理名称不合法：仅允许英文小写字母/数字/下划线，且需以字母开头",
+    "nameDuplicate": "子代理名称重复：{name}",
+    "personaMissing": "子代理 {name} 未选择 Persona",
+    "saveSuccess": "保存成功",
+    "saveFailed": "保存失败",
+    "nameRequired": "名称必填",
+    "namePattern": "仅支持小写字母、数字和下划线",
+    "deleteConfirm": "删除 {name}？已经创建的会话仍保留原配置与历史。",
+    "jsonObject": "请输入有效的 JSON 对象。"
+  },
+  "empty": {
+    "title": "未配置子代理",
+    "subtitle": "添加一个新的子代理以开始",
+    "action": "创建第一个 Agent"
+  },
+  "limits": {
+    "concurrency": "每会话并发数",
+    "timeout": "任务超时（秒，包含排队）",
+    "steps": "每轮最大步数"
+  },
+  "status": {
+    "disabled": "已停用",
+    "unavailable": "Runtime 不可用",
+    "missing": "配置不存在"
+  },
+  "selection": {
+    "label": "专用 Agent 配置",
+    "manage": "配置专用 Agent"
+  }
+}

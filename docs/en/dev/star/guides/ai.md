@@ -116,9 +116,12 @@ Tools enable large language models to invoke external capabilities.
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
-from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.agent.tool import FunctionTool, ToolExecResult
-from astrbot.core.astr_agent_context import AstrAgentContext
+# Before AstrBot v4.30.0:
+# from astrbot.core.agent.run_context import ContextWrapper
+# from astrbot.core.agent.tool import FunctionTool, ToolExecResult
+# from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.api import FunctionTool, ToolExecResult
+from astrbot.api.agents import AstrAgentContext, ContextWrapper
 
 
 @dataclass
@@ -237,10 +240,12 @@ In the example below, we define a Main Agent responsible for delegating tasks to
 Define Tools:
 
 ```py
-from astrbot.api import logger
-from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.agent.tool import FunctionTool, ToolExecResult, ToolSet
-from astrbot.core.astr_agent_context import AstrAgentContext
+# Before AstrBot v4.30.0:
+# from astrbot.core.agent.run_context import ContextWrapper
+# from astrbot.core.agent.tool import FunctionTool, ToolExecResult, ToolSet
+# from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.api import FunctionTool, ToolExecResult, ToolSet, logger
+from astrbot.api.agents import AstrAgentContext, ContextWrapper
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
@@ -393,12 +398,100 @@ Plugins can retain an already scheduled asyncio Task with `context.register_back
 
 `FunctionTool.execution_timeout` optionally gives waiting tools an independent timeout in seconds. Otherwise the runner default applies. Permission wrappers preserve this setting.
 
+## Running an Agent in an Existing Conversation
+
+Use `self.context.agent.run_turn()` for programmatic inputs that inherit the target conversation's persona, history, tools, skills and Agent hooks. Plugins do not need to construct events or runners. The built-in Agent runtime is currently supported.
+
+```py
+from astrbot.api.agents import PlainInput
+
+run = await self.context.agent.run_turn(
+    umo=event.unified_msg_origin,
+    input_message=[PlainInput(text="Video analysis is complete. Explain the result briefly.")],
+)
+result = await run.result()
+```
+
+Submission returns after binding to a runtime turn, without waiting for model execution. Inputs in the same session execute serially and read fresh history when admitted. AstrBot sends replies through its normal output handling by default; do not send `result.text` again. `result()` waits for execution, history persistence and Core output handling. Cancelling a waiter leaves execution running; use `await run.cancel()` to stop the run.
+
+The returned `AgentRun` adapts Core input and output integration. `run.runtime_turn` is the original `AgentTurn`, and `run.session` is its existing session. Execution and history remain runtime-owned.
+
+Set `send_to_user=False` to handle the model reply yourself:
+
+```py
+from astrbot.api.event import MessageChain
+
+run = await self.context.agent.run_turn(
+    umo=event.unified_msg_origin,
+    input_message=[PlainInput(text="Summarize the video analysis.")],
+    send_to_user=False,
+)
+result = await run.result()
+if result.text:
+    await self.context.send_message(
+        event.unified_msg_origin,
+        MessageChain().message(f"Video analysis: {result.text}"),
+    )
+```
+
+`send_to_user=False` skips Core's automatic output presentation, platform reply decoration and automatic TTS, while preserving execution history. Explicit tool or plugin calls to `event.send()`, `Context.send_message()` or `send_message_to_user` still send normally; the framework does not intercept them.
+
+Multiple independent `events()` observers can watch or replay runtime events such as `llm_result` and tool calls without intercepting output or duplicating delivery. The SDK's terminal `turn_finished` event follows automatic output completion.
+
+```py
+# Queue another turn in this exact conversation, inheriting the output policy.
+next_run = await run.follow_up(
+    input_message=[PlainInput(text="Now suggest three improvements.")],
+)
+
+# Submit steering while the current turn is still active.
+receipt = await run.steer(
+    input_message=[PlainInput(text="Also focus on safety concerns.")],
+)
+if receipt is not None:
+    consumed = await receipt
+```
+
+Follow-ups retain the original conversation even if the UMO's current selection changes. Steering returns `None` when rejected, or an `InputReceipt` when accepted. Awaiting it confirms whether input was actually consumed and persisted. Rejected steering never silently becomes a queued turn. Images and files in steering currently become text references.
+
+`run.session.state` is `idle`, `queued`, `running` or `closed`. `pending_turn_count` excludes the active turn; `active_turn` exposes the current runtime handle. These properties are observational: submit inputs directly and let the runtime serialize them.
+
+Authorization defaults to the current active same-UMO event, or member rights for background calls. Supply `source_event` explicitly or use `permissions=AgentPermissions(...)` for explicit authorization. API-key administrator ceilings still apply. A source event belonging to another UMO is rejected.
+
+A tool must not wait for another queued turn in its own session: that turn is waiting for the tool's current turn to finish. Submit and return, or use steering as appropriate.
+
+## Agent module paths and import compatibility
+
+The built-in Agent implementation lives under `astrbot.core.astr_agent_runtime`. Plugins import `AstrAgentContext`, `AgentContextWrapper`, `ContextWrapper`, and LLM message types from `astrbot.api.agents`, and `FunctionTool`, `ToolExecResult`, and `ToolSet` from `astrbot.api`. These public entry points re-export the original types; existing `astrbot.core.astr_agent_context` and `astrbot.core.agent.*` imports remain compatible. `Context.tool_loop_agent()` calls are unchanged.
+
+`astrbot.api.agent` remains the existing Agent registration decorator; the type module uses the plural name `astrbot.api.agents`.
+
+`astrbot.api.agents` also exports `FunctionTool`, `ToolSet`, `ToolExecResult`, `BaseFunctionToolExecutor`, and `Conversation`. Existing `astrbot.api` and `astrbot.api.provider` entry points continue to export the same objects.
+
+Internal implementation paths have changed as follows:
+
+| Previous path | Current path |
+| --- | --- |
+| `core/astr_agent_context.py` | `core/astr_agent_runtime/context.py`; the old path retains re-exports |
+| `core/astr_agent_hooks.py` | `core/astr_agent_runtime/hooks.py` |
+| `core/astr_agent_tool_exec.py` | `core/astr_agent_runtime/tool_executor.py`; plugin invocation lives in `core/star/tool_execution.py` |
+| `core/astr_agent_run_util.py` | `core/astr_agent_runtime/runner.py` |
+| `core/astr_main_agent/` | Native construction lives in `core/astr_agent_runtime/main_agent/`; public subagent management lives in `core/subagents/` |
+| `core/computer/`, `core/tools/` | `core/astr_agent_runtime/computer/`, `core/astr_agent_runtime/tools/` |
+| `core/skills/neo_skill_sync.py` | `core/astr_agent_runtime/computer/neo_skill_sync.py` |
+| `core/astr_agent_wakeup.py` | `core/agent_wakeup.py` |
+| `core/astr_main_agent_resources.py` | Prompts live with their owning features; shared error conventions live in `core/llm_error_messages.py` |
+
+Core still owns media input preprocessing and plugin tool/skill filtering. Cron, plugins, and background tasks continue to submit input through the event queue.
+
 ## Conversation Manager
 
 ### Getting the Current LLM Conversation History for a Session
 
 ```py
-from astrbot.core.conversation_mgr import Conversation
+# Before AstrBot v4.30.0:
+# from astrbot.core.conversation_mgr import Conversation
+from astrbot.api.provider import Conversation
 
 uid = event.unified_msg_origin
 conv_mgr = self.context.conversation_manager
@@ -436,7 +529,9 @@ class Conversation:
 ### Quickly Adding LLM Records to a Conversation `add_message_pair`
 
 ```py
-from astrbot.core.agent.message import (
+# Before AstrBot v4.30.0:
+# from astrbot.core.agent.message import AssistantMessageSegment, UserMessageSegment, TextPart
+from astrbot.api.agents import (
     AssistantMessageSegment,
     UserMessageSegment,
     TextPart,

@@ -203,6 +203,16 @@ class CommandPermissionRequest(BaseModel):
     permission: str
 
 
+class AgentConfigRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    name: str = Field(min_length=1, max_length=128)
+    description: str = ""
+    enabled: bool = True
+    runtime: str = Field(min_length=1)
+    config: dict[str, Any] = Field(default_factory=dict)
+
+
 class TraceSettingsRequest(BaseModel):
     trace_enable: bool | None = None
 

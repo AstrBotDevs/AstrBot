@@ -1,7 +1,32 @@
 {
   "ai_group": {
     "name": "AI",
-    "agent_runner": {
+    "subagents": {
+      "description": "Subagents",
+      "agent": {
+        "config": {
+          "subagents": {
+            "enabled": {
+              "description": "Enable Subagents",
+              "hint": "Allow AstrBot to create generic or specialized subagents when appropriate to complete tasks."
+            },
+            "config_ids": {
+              "hint": "Configure specialized subagents with their own personas, toolsets, and other settings. Even without configuring any, AstrBot dynamically creates generic subagents when needed to complete tasks.",
+              "description": "Specialized Agent Configurations"
+            },
+            "max_concurrent_agents": {
+              "description": "Concurrent Agents per Conversation",
+              "hint": "Other tasks queue. Default: 3."
+            },
+            "task_timeout": {
+              "description": "Task Timeout (seconds)",
+              "hint": "Includes queue time. Default: 600 seconds."
+            }
+          }
+        }
+      }
+    },
+    "agent": {
       "description": "エージェントの実行方式",
       "hint": "AI 会話のランナーを選択します。ランナーを切り替えると、新しい種類のデフォルト設定が適用され、以前の種類のパラメーターは引き継がれません。",
       "provider_settings": {
@@ -10,8 +35,8 @@
           "hint": "AI 会話のマスタースイッチ"
         }
       },
-      "agent_runner": {
-        "runner_type": {
+      "agent": {
+        "runtime": {
           "description": "ランナー",
           "labels": [
             "組み込みエージェント",
@@ -25,7 +50,7 @@
     },
     "dify_runner": {
       "description": "Dify 設定",
-      "agent_runner": {
+      "agent": {
         "config": {
           "dify_api_type": {
             "description": "アプリケーションの種類"
@@ -56,7 +81,7 @@
     },
     "coze_runner": {
       "description": "Coze 設定",
-      "agent_runner": {
+      "agent": {
         "config": {
           "coze_api_key": {
             "description": "API Key"
@@ -81,7 +106,7 @@
     },
     "dashscope_runner": {
       "description": "Alibaba Cloud Bailianアプリケーション設定",
-      "agent_runner": {
+      "agent": {
         "config": {
           "dashscope_app_type": {
             "description": "アプリケーションの種類"
@@ -117,7 +142,7 @@
     },
     "deerflow_runner": {
       "description": "DeerFlow 設定",
-      "agent_runner": {
+      "agent": {
         "config": {
           "deerflow_api_base": {
             "description": "API Base URL"
@@ -161,7 +186,7 @@
     "ai": {
       "description": "モデル",
       "hint": "組み込みエージェントが使用する会話モデルと、共通の画像説明モデル・音声モデルを設定します。",
-      "agent_runner": {
+      "agent": {
         "config": {
           "model": {
             "provider_id": {
@@ -217,7 +242,7 @@
     "persona": {
       "description": "ペルソナ",
       "hint": "AstrBot にペルソナを設定します。",
-      "agent_runner": {
+      "agent": {
         "config": {
           "persona": {
             "persona_id": {
@@ -351,7 +376,11 @@
         "computer_use_runtime": {
           "description": "実行環境",
           "hint": "エージェントにアクセスを許可する環境です。",
-          "labels": ["環境を使用しない", "ローカルコンピューター", "外部サンドボックス"]
+          "labels": [
+            "環境を使用しない",
+            "ローカルコンピューター",
+            "外部サンドボックス"
+          ]
         },
         "computer_use_local_permissions": {
           "description": "ローカル権限ポリシー"
@@ -508,7 +537,7 @@
     "truncate_and_compress": {
       "hint": "AstrBot が作業メモリを管理する方法を設定します。詳細：[コンテキスト管理方式](https://docs.astrbot.app/en/use/context-compress.html)。",
       "description": "コンテキスト管理方式",
-      "agent_runner": {
+      "agent": {
         "config": {
           "compression": {
             "max_turns": {
@@ -549,7 +578,7 @@
     },
     "others": {
       "description": "その他の設定",
-      "agent_runner": {
+      "agent": {
         "config": {
           "misc": {
             "max_steps": {
@@ -1637,7 +1666,6 @@
           "ツール使用"
         ]
       },
-
       "custom_headers": {
         "description": "カスタムリクエストヘッダー",
         "hint": "ここで追加したキーと値のペアは、AstrBot からプロバイダーへの HTTP リクエストにカスタムヘッダーとして付加されます。値は文字列である必要があります。"

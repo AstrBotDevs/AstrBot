@@ -312,7 +312,9 @@ async def my_custom_hook_1(
 > 对于每轮都会变化、内容量中小的提示词，优先通过 `req.extra_user_content_parts` 追加。它会作为额外的用户消息内容块放在本轮用户输入之后，更适合承载"当前时间""角色好感度""本轮相关记忆片段"等动态上下文：
 >
 > ```python
-> from astrbot.core.agent.message import TextPart
+> # AstrBot v4.30.0 之前的导入方式：
+> # from astrbot.core.agent.message import TextPart
+> from astrbot.api.agents import TextPart
 >
 > @filter.on_llm_request()
 > async def add_dynamic_prompt(self, event: AstrMessageEvent, req: ProviderRequest):
@@ -367,8 +369,10 @@ async def on_llm_resp(
 
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
-from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.astr_agent_context import AstrAgentContext
+# AstrBot v4.30.0 之前的导入方式：
+# from astrbot.core.agent.run_context import ContextWrapper
+# from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.api.agents import AstrAgentContext, ContextWrapper
 
 
 @filter.on_agent_begin()
@@ -390,7 +394,9 @@ async def on_agent_begin(
 
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
-from astrbot.core.agent.tool import FunctionTool
+# AstrBot v4.30.0 之前的导入方式：
+# from astrbot.core.agent.tool import FunctionTool
+from astrbot.api import FunctionTool
 
 
 @filter.on_using_llm_tool()
@@ -417,7 +423,9 @@ async def on_using_llm_tool(
 from mcp.types import CallToolResult
 
 from astrbot.api.event import filter, AstrMessageEvent
-from astrbot.core.agent.tool import FunctionTool
+# AstrBot v4.30.0 之前的导入方式：
+# from astrbot.core.agent.tool import FunctionTool
+from astrbot.api import FunctionTool
 
 
 @filter.on_llm_tool_respond()
@@ -433,36 +441,19 @@ async def on_llm_tool_respond(
 
 > 这里不能使用 yield 来发送消息。如需发送，请直接使用 `event.send()` 方法。
 
-#### 每个 Agent Step 开始与结束时
-
-内置工具循环提供 `on_agent_step_start` 和 `on_agent_step_end`。一个 step 包括一次模型决策及其要求执行的整批工具。结束钩子触发时，整批 assistant/tool 消息和工具图片都已组装进 `run_context.messages`；最后一次不调用工具的 step 也会触发。执行中断的 step 不触发结束钩子，请使用 `on_agent_done` 收尾。
-
-```python
-@filter.on_agent_step_start()
-async def before_step(self, event: AstrMessageEvent, run_context: ContextWrapper[AstrAgentContext]):
-    # Inspect or update context before the next model decision.
-    pass
-
-
-@filter.on_agent_step_end()
-async def after_step(self, event: AstrMessageEvent, run_context: ContextWrapper[AstrAgentContext]):
-    # The complete step context is now available for checkpointing.
-    print(len(run_context.messages))
-```
-
-上述类型的导入方式见下方示例。`on_llm_request`、`on_llm_response` 不会在内置工具循环的每次模型请求时触发；`on_llm_tool_respond` 是单个工具返回后的钩子，触发时整批结果尚未写入上下文。
-
 #### Agent 运行完成时
 
-内置工具循环在本轮执行退出时触发一次 `on_agent_done`，覆盖正常完成、模型错误、未处理异常、取消和步数耗尽。它在最后一个完整 step 的结束钩子之后触发，不代表会话历史已经保存。可以读取 `run_context.run_end_reason`（`completed`、`error`、`cancelled` 或 `max_steps`）及 `run_context.run_error`（错误说明或 `None`）。进程被强制终止时无法执行清理钩子。
+内置工具循环在本轮执行退出时触发一次 `on_agent_done`，覆盖正常完成、模型错误、未处理异常、取消和步数耗尽。它不代表会话历史已经保存。可以读取 `run_context.run_end_reason`（`completed`、`error`、`cancelled` 或 `max_steps`）及 `run_context.run_error`（错误说明或 `None`）。进程被强制终止时无法执行清理钩子。
 
 没有最终响应时，`resp` 可以是 `None`，使用前需要判断。用户停止执行时可能携带合成的中断提示响应。没有模型回复的收尾及合成的中断提示不会触发 `on_llm_response`；正常回复处理早于 `on_agent_done`。需要在发送前修改回复，请使用 `on_llm_response`。
 
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.provider import LLMResponse
-from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.astr_agent_context import AstrAgentContext
+# AstrBot v4.30.0 之前的导入方式：
+# from astrbot.core.agent.run_context import ContextWrapper
+# from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.api.agents import AstrAgentContext, ContextWrapper
 
 
 @filter.on_agent_done()

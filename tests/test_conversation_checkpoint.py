@@ -16,10 +16,8 @@ from astrbot.core.agent.message import (
     get_checkpoint_id,
     strip_checkpoint_messages,
 )
+from astrbot.core.astr_agent_runtime.history import save_main_history
 from astrbot.core.db.po import Conversation
-from astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal import (
-    InternalAgentSubStage,
-)
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, ToolCallsResult
 from astrbot.core.provider.provider import Provider
 from astrbot.dashboard.services.chat_service import find_turn_range
@@ -178,8 +176,7 @@ def test_chat_service_find_turn_range():
 @pytest.mark.asyncio
 async def test_failed_llm_response_persists_checkpoint_for_retry():
     conversation_manager = AsyncMock()
-    stage = InternalAgentSubStage()
-    stage.conv_manager = conversation_manager
+    context = SimpleNamespace(conversation_manager=conversation_manager)
     event = SimpleNamespace(
         unified_msg_origin="webchat:FriendMessage:test",
         get_extra=lambda key: {"llm_checkpoint_id": "cp-1"}.get(key),
@@ -192,7 +189,8 @@ async def test_failed_llm_response_persists_checkpoint_for_retry():
         )
     )
 
-    await stage._save_to_history(
+    await save_main_history(
+        context,
         event,
         request,
         LLMResponse(role="err", completion_text="upstream failed"),
@@ -214,8 +212,7 @@ async def test_failed_llm_response_persists_checkpoint_for_retry():
 @pytest.mark.asyncio
 async def test_aborted_response_persists_synthetic_stop_turn():
     conversation_manager = AsyncMock()
-    stage = InternalAgentSubStage()
-    stage.conv_manager = conversation_manager
+    context = SimpleNamespace(conversation_manager=conversation_manager)
     event = SimpleNamespace(
         unified_msg_origin="webchat:FriendMessage:test",
         get_extra=lambda _key: None,
@@ -228,7 +225,8 @@ async def test_aborted_response_persists_synthetic_stop_turn():
         )
     )
 
-    await stage._save_to_history(
+    await save_main_history(
+        context,
         event,
         request,
         LLMResponse(role="assistant", completion_text="Output stopped."),
@@ -262,8 +260,7 @@ async def test_aborted_response_persists_synthetic_stop_turn():
 @pytest.mark.asyncio
 async def test_terminal_tool_result_persists_history_without_checkpoint():
     conversation_manager = AsyncMock()
-    stage = InternalAgentSubStage()
-    stage.conv_manager = conversation_manager
+    context = SimpleNamespace(conversation_manager=conversation_manager)
     event = SimpleNamespace(
         unified_msg_origin="qq:GroupMessage:test",
         get_extra=lambda _key: None,
@@ -290,7 +287,8 @@ async def test_terminal_tool_result_persists_history_without_checkpoint():
         ),
     )
 
-    await stage._save_to_history(
+    await save_main_history(
+        context,
         event,
         request,
         None,
@@ -334,8 +332,7 @@ async def test_terminal_tool_result_persists_history_without_checkpoint():
 @pytest.mark.asyncio
 async def test_terminal_tool_result_with_checkpoint_uses_none_token_usage():
     conversation_manager = AsyncMock()
-    stage = InternalAgentSubStage()
-    stage.conv_manager = conversation_manager
+    context = SimpleNamespace(conversation_manager=conversation_manager)
     event = SimpleNamespace(
         unified_msg_origin="qq:GroupMessage:test",
         get_extra=lambda key: {"llm_checkpoint_id": "cp-1"}.get(key),
@@ -362,7 +359,8 @@ async def test_terminal_tool_result_with_checkpoint_uses_none_token_usage():
         ),
     )
 
-    await stage._save_to_history(
+    await save_main_history(
+        context,
         event,
         request,
         None,
@@ -407,8 +405,7 @@ async def test_terminal_tool_result_with_checkpoint_uses_none_token_usage():
 @pytest.mark.asyncio
 async def test_empty_response_without_tool_result_skips_history_save():
     conversation_manager = AsyncMock()
-    stage = InternalAgentSubStage()
-    stage.conv_manager = conversation_manager
+    context = SimpleNamespace(conversation_manager=conversation_manager)
     event = SimpleNamespace(
         unified_msg_origin="qq:GroupMessage:test",
         get_extra=lambda _key: None,
@@ -421,7 +418,8 @@ async def test_empty_response_without_tool_result_skips_history_save():
         )
     )
 
-    await stage._save_to_history(
+    await save_main_history(
+        context,
         event,
         request,
         None,

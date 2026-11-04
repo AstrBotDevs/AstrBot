@@ -8,7 +8,7 @@ import pytest
 
 from astrbot.api.event import filter
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.astr_agent_hooks import MainAgentHooks
+from astrbot.core.astr_agent_runtime.hooks import MainAgentHooks
 from astrbot.core.pipeline import context_utils
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.star.register import star_handler as registration
@@ -21,17 +21,7 @@ from astrbot.core.star.star_handler import (
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("decorator_name", "event_type"),
-    [
-        ("on_agent_step_start", EventType.OnAgentStepStartEvent),
-        ("on_agent_step_end", EventType.OnAgentStepEndEvent),
-        ("on_agent_done", EventType.OnAgentDoneEvent),
-    ],
-)
-async def test_public_lifecycle_hooks_use_existing_plugin_registry(
-    monkeypatch, decorator_name, event_type
-):
+async def test_public_done_hook_uses_existing_plugin_registry(monkeypatch):
     """Public decorators preserve priority, session policy and plugin activation."""
     registry = StarHandlerRegistry()
     monkeypatch.setattr(registration, "star_handlers_registry", registry)
@@ -54,13 +44,12 @@ async def test_public_lifecycle_hooks_use_existing_plugin_registry(
             calls.append(plugin_name)
 
         handler.__module__ = module
-        getattr(filter, decorator_name)(priority=priority)(handler)
+        filter.on_agent_done(priority=priority)(handler)
 
     event = MagicMock(plugins_name=["low", "high", "disabled"])
     event.is_stopped.return_value = False
     rc = ContextWrapper(context=SimpleNamespace(event=event))
-    args = (rc, None) if event_type == EventType.OnAgentDoneEvent else (rc,)
-    await context_utils.call_event_hook(event, event_type, *args)
+    await context_utils.call_event_hook(event, EventType.OnAgentDoneEvent, rc, None)
     assert calls == ["high", "low"]
 
 
@@ -104,15 +93,15 @@ async def test_plugin_hook_dispatch_preserves_task_cancellation(monkeypatch):
     monkeypatch.setitem(star_map, module, StarMetadata(name=module))
     started = asyncio.Event()
 
-    async def handler(event, rc):
+    async def handler(event, rc, response):
         started.set()
         await asyncio.Future()
 
     registry.append(
         StarHandlerMetadata(
-            event_type=EventType.OnAgentStepStartEvent,
+            event_type=EventType.OnAgentDoneEvent,
             handler_full_name=module,
-            handler_name="checkpoint",
+            handler_name="cleanup",
             handler_module_path=module,
             handler=handler,
             event_filters=[],
@@ -121,7 +110,7 @@ async def test_plugin_hook_dispatch_preserves_task_cancellation(monkeypatch):
     event = MagicMock(plugins_name=None)
     event.is_stopped.return_value = False
     rc = ContextWrapper(context=SimpleNamespace(event=event))
-    task = asyncio.create_task(MainAgentHooks().on_agent_step_start(rc))
+    task = asyncio.create_task(MainAgentHooks().on_agent_done(rc, None))
     await asyncio.wait_for(started.wait(), 2)
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
@@ -132,7 +121,7 @@ async def test_plugin_hook_dispatch_preserves_task_cancellation(monkeypatch):
 async def test_response_and_done_notifications_are_independent(monkeypatch):
     """Failure cleanup is not an LLM response; normal replies remain editable."""
     dispatch = AsyncMock()
-    monkeypatch.setattr("astrbot.core.astr_agent_hooks.call_event_hook", dispatch)
+    monkeypatch.setattr("astrbot.core.astr_agent_runtime.hooks.call_event_hook", dispatch)
     event = MagicMock()
     rc = ContextWrapper(context=SimpleNamespace(event=event))
     hooks = MainAgentHooks()
