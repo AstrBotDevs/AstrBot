@@ -214,7 +214,59 @@ class ToolSet:
                 if (
                     tool.parameters and tool.parameters.get("properties")
                 ) or not omit_empty_parameter_field:
-                    func_def["function"]["parameters"] = tool.parameters
+                    parameters = copy.deepcopy(tool.parameters)
+                    schemas = [parameters]
+                    while schemas:
+                        schema = schemas.pop()
+                        if not isinstance(schema, dict):
+                            continue
+                        if "const" in schema:
+                            value = schema.pop("const")
+                            # Keep any existing enum constraint, including conflicts.
+                            validator = jsonschema.Draft202012Validator(
+                                {"const": value}
+                            )
+                            schema["enum"] = [
+                                item
+                                for item in schema.get("enum", [value])
+                                if validator.is_valid(item)
+                            ]
+                        # Visit schema nodes only: defaults, examples and enum
+                        # values may contain literal objects with a "const" key.
+                        for key in (
+                            "properties",
+                            "patternProperties",
+                            "$defs",
+                            "definitions",
+                            "dependentSchemas",
+                            "dependencies",
+                        ):
+                            children = schema.get(key)
+                            if isinstance(children, dict):
+                                schemas.extend(children.values())
+                        for key in (
+                            "items",
+                            "prefixItems",
+                            "additionalItems",
+                            "additionalProperties",
+                            "unevaluatedProperties",
+                            "unevaluatedItems",
+                            "contains",
+                            "propertyNames",
+                            "allOf",
+                            "anyOf",
+                            "oneOf",
+                            "not",
+                            "if",
+                            "then",
+                            "else",
+                            "contentSchema",
+                        ):
+                            child = schema.get(key)
+                            schemas.extend(
+                                child if isinstance(child, list) else [child]
+                            )
+                    func_def["function"]["parameters"] = parameters
 
             result.append(func_def)
         return result
