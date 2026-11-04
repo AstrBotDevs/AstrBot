@@ -139,6 +139,8 @@ class KBHelper:
         self.kb_root_dir = kb_root_dir
         self.chunker = chunker
         self.init_error = None
+        self._vec_db_lock = asyncio.Lock()
+        self._vec_db_generation = 0
 
         self.kb_dir = Path(self.kb_root_dir) / self.kb.kb_id
         self.kb_medias_dir = Path(self.kb_dir) / "medias" / self.kb.kb_id
@@ -176,31 +178,51 @@ class KBHelper:
         return rp
 
     async def _ensure_vec_db(self) -> "FaissVecDB":
-        if not self.kb.embedding_provider_id:
-            raise ValueError(f"知识库 {self.kb.kb_name} 未配置 Embedding Provider")
-
-        ep = await self.get_ep()
-        rp: RerankProvider | None = None
-        try:
-            rp = await self.get_rp()
-        except Exception as e:
-            logger.warning(
-                f"知识库 {self.kb.kb_name}({self.kb.kb_id}) 初始化重排序能力失败，将跳过重排序: {e}",
-            )
-
         from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
 
-        vec_db = FaissVecDB(
-            doc_store_path=str(self.kb_dir / "doc.db"),
-            index_store_path=str(self.kb_dir / "index.faiss"),
-            embedding_provider=ep,
-            rerank_provider=rp,
-        )
-        await vec_db.initialize()
-        self.vec_db = vec_db
-        # Clear stale init_error once initialization succeeds.
-        self.init_error = None
-        return vec_db
+        generation = self._vec_db_generation
+        async with self._vec_db_lock:
+            if generation != self._vec_db_generation:
+                raise RuntimeError(
+                    "Knowledge base terminated while waiting for initialization"
+                )
+            if not self.kb.embedding_provider_id:
+                raise ValueError(f"知识库 {self.kb.kb_name} 未配置 Embedding Provider")
+
+            # Resolve and publish providers under the same lock so an older
+            # lookup cannot overwrite a newer provider on the shared database.
+            ep = await self.get_ep()
+            rp: RerankProvider | None = None
+            try:
+                rp = await self.get_rp()
+            except Exception as e:
+                logger.warning(
+                    f"知识库 {self.kb.kb_name}({self.kb.kb_id}) 初始化重排序能力失败，将跳过重排序: {e}",
+                )
+
+            # All uploads must share the live index; reloading it while another
+            # upload awaits embeddings can overwrite that upload's vectors.
+            vec_db: FaissVecDB | None = getattr(self, "vec_db", None)
+            if vec_db is None:
+                vec_db = FaissVecDB(
+                    doc_store_path=str(self.kb_dir / "doc.db"),
+                    index_store_path=str(self.kb_dir / "index.faiss"),
+                    embedding_provider=ep,
+                    rerank_provider=rp,
+                )
+                try:
+                    await vec_db.initialize()
+                except BaseException:
+                    await vec_db.close()
+                    raise
+                self.vec_db = vec_db
+            else:
+                # Providers can be replaced by configuration reloads.
+                vec_db.embedding_provider = ep
+                vec_db.rerank_provider = rp
+            # Clear stale init_error once initialization succeeds.
+            self.init_error = None
+            return vec_db
 
     async def delete_vec_db(self) -> None:
         """删除知识库的向量数据库和所有相关文件"""
@@ -211,8 +233,15 @@ class KBHelper:
             shutil.rmtree(self.kb_dir)
 
     async def terminate(self) -> None:
-        if hasattr(self, "vec_db") and self.vec_db:
-            await self.vec_db.close()
+        async with self._vec_db_lock:
+            try:
+                if hasattr(self, "vec_db") and self.vec_db:
+                    await self.vec_db.close()
+                    del self.vec_db
+            finally:
+                # Invalidate pending callers, including ones queued while close
+                # awaited. A new call after termination may initialize again.
+                self._vec_db_generation += 1
 
     async def upload_document(
         self,
