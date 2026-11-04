@@ -414,6 +414,12 @@ result = await run.result()
 
 `run` 是 Core 的 `AgentRun` 适配器；`run.runtime_turn` 是原始 `AgentTurn`，`run.session` 是同一个 runtime session。适配器负责后续输入准备和输出完成，执行及历史仍由 runtime 管理。
 
+Core 按当前配置档的 `agent.runtime` 选择已注册实现；使用 `ctx.agent.register_runtime(name, runtime)` 注册后，该实现可用于主代理，也可由内置 runtime 作为子代理调用。未注册的名称明确报错；Dify、Coze 等现有第三方路径继续沿用原执行方式。
+
+Core 传入公共 `AgentInput`：原始 `AstrMessageEvent`、权限、可选的 `plain/image/file` 内容、授权后的插件 tools/skills，以及流式输出偏好。Core 在投递前完成额外唤醒前缀的匹配和剥离，通过 `content` 传入处理后的文本，不修改原始 event。无需覆盖文本的普通平台消息可保留 `content=None`；来源附件仍保留在 event 上。SDK 调用提供显式内容。配置通过 `open_session(..., options={"config": ...})` 交给 runtime 自行解释，Core 不构造内置 `MainAgentInput`、`MainAgentBuildConfig` 或模型请求。
+
+实现 runtime 时复用 `AgentSession.run_turn()`：Core 通过调度参数 `run_turn(input, admit=...)` 传入准入检查，与 `AgentInput` 分离。它在会话串行锁及实现提供的 `_execution_scope()` 内执行，再进入 `execute_turn()`。排队后会重新检查 AI 启用状态、权限和插件能力；不要通过重写调度绕过准入。额外的锁由 runtime 提供。可选的 `active_turn(umo)` 支持普通消息的活跃 turn 发现；未实现时返回 `None`，session 仍负责排队。内置 runtime 在自己的执行阶段构造 `ProviderRequest`、解析模型配置并调用现有模型 hooks；外部实现不需要导入 `astr_agent_runtime`。
+
 如需自行处理模型回复，设置 `send_to_user=False`：
 
 ```py
@@ -434,7 +440,7 @@ if result.text:
 
 `send_to_user=False` 只跳过 Core 的自动输出呈现及平台回复装饰、自动 TTS，执行历史照常保存。工具或插件显式调用 `event.send()`、`Context.send_message()`、`send_message_to_user` 时仍然正常发送；框架不会拦截这些调用。
 
-`events()` 支持多个独立观察者和事后重放，提供 `llm_result`、工具调用等 runtime 事件；监听不会截走平台输出或重复发送。SDK 的最终 `turn_finished` 事件在自动输出处理结束后发布。
+`events()` 支持多个独立观察者和事后重放，提供 `message.completed`、工具调用等 runtime 事件；监听不会截走平台输出或重复发送。SDK 的最终 `turn.finished` 事件在自动输出处理结束后发布。
 
 ```py
 # Queue another turn in this exact conversation, inheriting the output policy.
@@ -450,7 +456,7 @@ if receipt is not None:
     consumed = await receipt
 ```
 
-`follow_up()` 固定提交给原 conversation，UMO 切换当前对话不会改变目标。`steer()` 无法接收时返回 `None`，已接收时返回 `InputReceipt`；等待回执得到的布尔值表示输入是否实际消费并保存，不会自动转成下一轮。目前 steer 中的图片、文件以文本引用传递。
+`follow_up()` 固定提交给原 runtime 和 conversation，配置档切换 runtime 或 UMO 切换当前对话不会改变目标。`steer()` 无法接收时返回 `None`，已接收时返回 `InputReceipt`；等待回执得到的布尔值表示输入是否实际消费并保存，不会自动转成下一轮。目前 steer 中的图片、文件以文本引用传递。
 
 `run.session.state` 为 `idle`、`queued`、`running` 或 `closed`；`pending_turn_count` 不包含当前 turn，`active_turn` 返回当前 runtime turn。状态用于观察，直接提交输入即可由 runtime 保证排队。
 

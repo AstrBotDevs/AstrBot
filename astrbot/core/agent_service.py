@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator, Sequence
-from dataclasses import replace
+from copy import deepcopy
 from typing import TYPE_CHECKING
 
 from astrbot import logger
@@ -16,6 +16,7 @@ from astrbot.core.agent.input import (
     format_input_content,
 )
 from astrbot.core.agent.runtime import (
+    AgentInput,
     AgentPermissions,
     AgentRuntime,
     AgentSession,
@@ -50,11 +51,30 @@ class AgentRun:
     """
 
     def __init__(
-        self, service: AgentService, event: AgentWakeupEvent, send_to_user: bool
+        self,
+        service: AgentService,
+        event: AgentWakeupEvent,
+        send_to_user: bool,
+        runtime_name: str,
+        options: dict | None,
+        content: Sequence[InputComponent],
     ) -> None:
+        """Bind a submission to its runtime and Core output policy.
+
+        Args:
+            service: Core input and output integration services.
+            event: Authorized source and target of this programmatic turn.
+            send_to_user: Whether Core presents runtime output to the platform.
+            runtime_name: Registered runtime selected for this submission.
+            options: New-session configuration, or None when restoring a session.
+            content: Explicit portable input, retained for execution-time admission.
+        """
         self._service = service
         self._event = event
         self.send_to_user = send_to_user
+        self._runtime_name = runtime_name
+        self._options = options
+        self._content = list(content)
         self._ready: asyncio.Future[AgentTurn] = (
             asyncio.get_running_loop().create_future()
         )
@@ -162,11 +182,6 @@ class AgentRun:
             self._event,
             self.runtime_turn.input.permissions,
         )
-        from astrbot.core.astr_agent_runtime.main_agent import MainAgentBuildConfig
-
-        config = MainAgentBuildConfig.from_config(
-            self._service.context.get_config(umo=self.session.umo)
-        )
         with (
             log_context(event.get_platform_id(), event.get_platform_name()),
             event_context(event),
@@ -175,7 +190,7 @@ class AgentRun:
             input = await prepare_agent_input(
                 self._service.context,
                 event,
-                config,
+                streaming=False,
                 content=list(input_message),
             )
             if input is None:
@@ -315,7 +330,7 @@ class AgentService:
         permissions: AgentPermissions | None = None,
         session_id: str | None = None,
     ) -> AgentRun:
-        """Submit a built-in agent turn without waiting for model execution.
+        """Submit a configured runtime turn without waiting for model execution.
 
         Args:
             umo: Target conversation source, including existing isolation.
@@ -331,14 +346,11 @@ class AgentService:
             An SDK view of the runtime turn with independent output observation.
 
         Raises:
-            RuntimeError: If the service or built-in runtime is unavailable.
-            ValueError: If input is invalid or the session uses a foreign runner.
+            RuntimeError: If the service or selected runtime is unavailable.
+            ValueError: If input or the explicit session target is invalid.
         """
-        if self._closed or "astrbot" not in self._runtimes:
+        if self._closed:
             raise RuntimeError("Agent service is unavailable")
-        config = self.context.get_config(umo=umo)
-        if config.get("agent", {}).get("runtime", "astrbot") != "astrbot":
-            raise ValueError("ctx.agent currently supports the built-in runtime only")
         if source_event is None:
             current = current_message_event.get()
             if (
@@ -347,9 +359,30 @@ class AgentService:
                 and current.unified_msg_origin == umo
             ):
                 source_event = current
+        config = self.context.get_config(umo=umo).get("agent", {})
+        target = (
+            source_event.agent_session
+            if isinstance(source_event, AgentWakeupEvent)
+            else None
+        )
+        if (
+            target is not None
+            and session_id is not None
+            and target.session_id == session_id
+        ):
+            runtime_name = target.runtime
+        else:
+            runtime_name = config.get("runtime", "astrbot")
+        if runtime_name not in self._runtimes:
+            raise RuntimeError(f"Agent runtime unavailable: {runtime_name}")
+        options = (
+            {"config": deepcopy(config.get("config", {}))}
+            if session_id is None
+            else None
+        )
         content = tuple(input_message)
         event = self._make_event(umo, content, source_event, permissions)
-        run = AgentRun(self, event, send_to_user)
+        run = AgentRun(self, event, send_to_user, runtime_name, options, content)
         self._runs.add(run)
         run._task = asyncio.create_task(self._execute(run, session_id))
 
@@ -385,9 +418,6 @@ class AgentService:
         Returns:
             The settled runtime result after framework presentation.
         """
-        from astrbot.core.astr_agent_runtime.main_agent import MainAgentBuildConfig
-        from astrbot.core.astr_agent_runtime.main_session import MainAgentInput
-
         event = run._event
         turn = None
 
@@ -397,8 +427,11 @@ class AgentService:
                 event_context(event),
                 trace_execution(event.trace),
             ):
-                input = MainAgentInput(
-                    event=event, permissions=AgentPermissions.from_event(event)
+                input = AgentInput(
+                    event=event,
+                    permissions=AgentPermissions.from_event(event),
+                    content=run._content,
+                    streaming=False,
                 )
 
                 async def admit() -> bool:
@@ -407,40 +440,31 @@ class AgentService:
                     Returns:
                         Whether the runtime may prepare and execute this input.
                     """
-                    enabled = self.context.get_config(umo=event.unified_msg_origin).get(
-                        "plugin_set", ["*"]
-                    )
-                    event.plugins_name = None if enabled == ["*"] else list(enabled)
-                    config = MainAgentBuildConfig.from_config(
-                        self.context.get_config(umo=event.unified_msg_origin)
-                    )
                     prepared = await prepare_agent_input(
-                        self.context,
-                        event,
-                        replace(
-                            config,
-                            streaming_response=False,
-                            call_request_hook=True,
-                            validate_provider_endpoint=True,
-                        ),
+                        self.context, event, streaming=False, content=run._content
                     )
                     if prepared is None:
                         return False
+                    input.content = prepared.content
                     input.permissions = prepared.permissions
                     input.plugin_tools = prepared.plugin_tools
                     input.plugin_skills = prepared.plugin_skills
-                    input.build_config = prepared.build_config
                     return True
 
-                input.admit = admit
-                runtime = self._runtimes.get("astrbot")
+                runtime = self._runtimes.get(run._runtime_name)
                 if runtime is None:
-                    raise RuntimeError("Built-in agent runtime is unavailable")
+                    raise RuntimeError(
+                        f"Agent runtime unavailable: {run._runtime_name}"
+                    )
                 session = await runtime.open_session(
-                    event.unified_msg_origin, session_id=session_id, input=input
+                    event.unified_msg_origin,
+                    session_id=session_id,
+                    input=input,
+                    options=run._options,
                 )
-                event.agent_session = AgentSessionRef("astrbot", session.id)
-                turn = await session.run_turn(input)
+                session.runtime_name = run._runtime_name
+                event.agent_session = AgentSessionRef(run._runtime_name, session.id)
+                turn = await session.run_turn(input, admit=admit)
                 run._ready.set_result(turn)
                 if run.send_to_user:
                     try:

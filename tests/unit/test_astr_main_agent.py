@@ -300,9 +300,7 @@ class TestMainAgentBuildConfig:
         """Keep build settings stable when the source session config changes."""
         source = {
             "provider_settings": {"sandbox": {"booter": "test"}},
-            "agent": {
-                "config": {"model": {"fallback_provider_ids": ["backup"]}}
-            },
+            "agent": {"config": {"model": {"fallback_provider_ids": ["backup"]}}},
         }
         config = ama.MainAgentBuildConfig.from_config(source)
         source["provider_settings"]["sandbox"]["booter"] = "changed"
@@ -1757,7 +1755,7 @@ class TestPluginToolFix:
         req = ProviderRequest(func_tool=ToolSet())
         mock_event.plugins_name = None
 
-        plugins_build.filter_tools(mock_event, req)
+        req.func_tool = plugins_build.filter_tools(mock_event, req.func_tool)
 
         assert req.func_tool is not None
 
@@ -1784,7 +1782,7 @@ class TestPluginToolFix:
             mock_plugin.reserved = False
             mock_star_map.get.return_value = mock_plugin
 
-            plugins_build.filter_tools(mock_event, req)
+            req.func_tool = plugins_build.filter_tools(mock_event, req.func_tool)
 
         assert "mcp_tool" in req.func_tool.names()
         assert "plugin_tool" in req.func_tool.names()
@@ -1802,7 +1800,7 @@ class TestPluginToolFix:
         mock_event.plugins_name = ["other_plugin"]
 
         with patch.object(plugins_build, "star_map"):
-            plugins_build.filter_tools(mock_event, req)
+            req.func_tool = plugins_build.filter_tools(mock_event, req.func_tool)
 
         assert "mcp_tool" in req.func_tool.names()
 
@@ -1825,7 +1823,7 @@ class TestPluginToolFix:
         mock_event.plugins_name = ["other_plugin"]
 
         with patch.object(plugins_build, "star_map"):
-            plugins_build.filter_tools(mock_event, req)
+            req.func_tool = plugins_build.filter_tools(mock_event, req.func_tool)
 
         assert "transfer_to_demo_agent" in req.func_tool.names()
 
@@ -3585,9 +3583,7 @@ async def test_feature_composition_preserves_tool_scope_and_instruction_order(
     config = ama.MainAgentBuildConfig.from_config(
         {
             "kb_agentic_mode": agentic_kb,
-            "agent": {
-                "config": {"misc": {"tool_schema_mode": tool_schema_mode}}
-            },
+            "agent": {"config": {"misc": {"tool_schema_mode": tool_schema_mode}}},
             "provider_settings": {
                 "computer_use_runtime": runtime,
                 "sandbox": {"booter": booter},

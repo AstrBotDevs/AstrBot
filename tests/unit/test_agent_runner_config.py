@@ -76,7 +76,7 @@ async def test_agent_request_normalizes_incomplete_runner_config():
     }
     stage = AgentRequestSubStage()
 
-    await stage.initialize(SimpleNamespace(astrbot_config=config))
+    await stage.initialize(SimpleNamespace(astrbot_config=config, agent_runtimes={}))
 
     assert stage.agent_sub_stage.runner_config == {
         **get_agent_runner_config_default("dify"),

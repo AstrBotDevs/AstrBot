@@ -416,6 +416,12 @@ Submission returns after binding to a runtime turn, without waiting for model ex
 
 The returned `AgentRun` adapts Core input and output integration. `run.runtime_turn` is the original `AgentTurn`, and `run.session` is its existing session. Execution and history remain runtime-owned.
 
+Core selects a registered implementation using the profile's `agent.runtime`. After `ctx.agent.register_runtime(name, runtime)`, an implementation can serve main turns or be called as a subagent by the built-in runtime. Unregistered names fail explicitly; existing Dify, Coze and other legacy paths retain their execution flow.
+
+Core supplies public `AgentInput`: the original `AstrMessageEvent`, permissions, optional plain/image/file content, authorized plugin tools/skills, and a streaming preference. Core matches and removes the AI trigger prefix before dispatch, passing the processed text in `content` without changing the original event. Platform inputs without a text override may retain `content=None`; source attachments remain available on the event. SDK inputs carry explicit content. Runtime configuration is passed through `open_session(..., options={"config": ...})` for the implementation to interpret. Core does not construct native `MainAgentInput`, `MainAgentBuildConfig`, or model requests.
+
+Reuse `AgentSession.run_turn()` when implementing a runtime. Core supplies admission through the scheduling argument `run_turn(input, admit=...)`, independently of `AgentInput`. It runs inside the session lock and the implementation's `_execution_scope()`, before `execute_turn()`. AI enablement, permissions and plugin contributions are refreshed after queued work; do not bypass admission by replacing scheduling. Additional locks belong to the runtime. Optional `active_turn(umo)` supports discovery for ordinary-message steering; its default is `None`, while the session still handles queued execution. The built-in runtime constructs `ProviderRequest`, resolves model configuration, and invokes existing model hooks in its own execution stage. External implementations need not import `astr_agent_runtime`.
+
 Set `send_to_user=False` to handle the model reply yourself:
 
 ```py
@@ -436,7 +442,7 @@ if result.text:
 
 `send_to_user=False` skips Core's automatic output presentation, platform reply decoration and automatic TTS, while preserving execution history. Explicit tool or plugin calls to `event.send()`, `Context.send_message()` or `send_message_to_user` still send normally; the framework does not intercept them.
 
-Multiple independent `events()` observers can watch or replay runtime events such as `llm_result` and tool calls without intercepting output or duplicating delivery. The SDK's terminal `turn_finished` event follows automatic output completion.
+Multiple independent `events()` observers can watch or replay runtime events such as `message.completed` and tool calls without intercepting output or duplicating delivery. The SDK's terminal `turn.finished` event follows automatic output completion.
 
 ```py
 # Queue another turn in this exact conversation, inheriting the output policy.
@@ -452,7 +458,7 @@ if receipt is not None:
     consumed = await receipt
 ```
 
-Follow-ups retain the original conversation even if the UMO's current selection changes. Steering returns `None` when rejected, or an `InputReceipt` when accepted. Awaiting it confirms whether input was actually consumed and persisted. Rejected steering never silently becomes a queued turn. Images and files in steering currently become text references.
+Follow-ups retain the original runtime and conversation even if the profile runtime or the UMO's current selection changes. Steering returns `None` when rejected, or an `InputReceipt` when accepted. Awaiting it confirms whether input was actually consumed and persisted. Rejected steering never silently becomes a queued turn. Images and files in steering currently become text references.
 
 `run.session.state` is `idle`, `queued`, `running` or `closed`. `pending_turn_count` excludes the active turn; `active_turn` exposes the current runtime handle. These properties are observational: submit inputs directly and let the runtime serialize them.
 

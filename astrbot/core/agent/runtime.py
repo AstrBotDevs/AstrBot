@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import asyncio
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Generator
+from collections.abc import AsyncIterator, Awaitable, Callable, Generator
+from contextlib import AbstractAsyncContextManager, nullcontext
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
@@ -102,13 +103,23 @@ class SessionState(str, Enum):
 
 @dataclass
 class AgentInput:
-    """An input with its own caller authorization and plugin contributions."""
+    """An input with Core authorization, independent of native model requests.
+
+    Args:
+        event: Source identity and existing plugin-hook context.
+        permissions: Caller authorization for this input.
+        content: Explicit portable content, or None to use the source event.
+        plugin_tools: Authorized plugin tool contributions before runtime filtering.
+        plugin_skills: Authorized plugin skill contributions before runtime filtering.
+        streaming: Requested output mode, or None to use the runtime default.
+    """
 
     event: AstrMessageEvent
     permissions: AgentPermissions
     content: list[InputComponent] | None = None
     plugin_tools: ToolSet | None = None
     plugin_skills: list[SkillInfo] | None = None
+    streaming: bool | None = None
 
 
 class InputReceipt:
@@ -303,11 +314,17 @@ class AgentSession(ABC):
             return SessionState.QUEUED
         return SessionState.IDLE
 
-    async def run_turn(self, input: AgentInput) -> AgentTurn:
+    async def run_turn(
+        self,
+        input: AgentInput,
+        *,
+        admit: Callable[[], Awaitable[bool]] | None = None,
+    ) -> AgentTurn:
         """Accept an independent turn, queuing behind earlier accepted turns.
 
         Args:
             input: Input and caller capabilities belonging to this turn.
+            admit: Core admission check, run after acquiring execution guards.
 
         Returns:
             A scheduled turn handle without waiting for model execution.
@@ -328,7 +345,11 @@ class AgentSession(ABC):
                 async with self._execution_lock:
                     self.active_turn = turn
                     turn.emit(TurnStarted())
-                    result = await self.execute_turn(turn)
+                    async with self._execution_scope():
+                        if admit is not None and not await admit():
+                            result = TurnResult(reason="skipped")
+                        else:
+                            result = await self.execute_turn(turn)
             except asyncio.CancelledError as exc:
                 result = TurnResult(
                     status=TurnStatus.CANCELLED,
@@ -384,6 +405,14 @@ class AgentSession(ABC):
 
         task.add_done_callback(completed)
         return turn
+
+    def _execution_scope(self) -> AbstractAsyncContextManager[object]:
+        """Acquire implementation-owned guards before Core's queued admission.
+
+        Returns:
+            Additional serialization scope, empty for independently owned sessions.
+        """
+        return nullcontext()
 
     @abstractmethod
     async def execute_turn(self, turn: AgentTurn) -> TurnResult:
@@ -465,6 +494,17 @@ class AgentRuntime(ABC):
             Referenced persistent IDs, empty for runtimes without delegation.
         """
         return []
+
+    def active_turn(self, umo: str) -> AgentTurn | None:
+        """Optionally locate the active main turn without opening a session.
+
+        Args:
+            umo: Core-selected conversation source.
+
+        Returns:
+            An active main turn, or None when discovery is unsupported or idle.
+        """
+        return None
 
     @abstractmethod
     async def open_session(

@@ -132,6 +132,21 @@ async def present_turn(
                 yield buffered
             result = payload.result
             if (
+                result.status == TurnStatus.COMPLETED
+                and result.content
+                and not completed
+                and not emitted
+            ):
+                chain = chain_from_content(
+                    tuple(
+                        part
+                        for part in result.content
+                        if not isinstance(part, ReasoningOutput)
+                    )
+                )
+                if chain.chain:
+                    yield chain
+            if (
                 result.status == TurnStatus.CANCELLED
                 and result.error is None
                 and not turn.cancellation_requested

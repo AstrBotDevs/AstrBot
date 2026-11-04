@@ -1,19 +1,19 @@
-"""Route built-in AI input to its runtime and present the resulting turn."""
+"""Route registered AI input to its runtime and present the resulting turn."""
 
 import asyncio
 from collections.abc import AsyncGenerator
-from dataclasses import replace
+from copy import deepcopy
+from functools import partial
 
 from astrbot import logger
 from astrbot.core.agent.input import PlainInput
 from astrbot.core.agent.runtime import AgentInput, AgentPermissions, TurnStatus
 from astrbot.core.agent_input import (
+    admit_agent_input,
     prepare_agent_input,
 )
 from astrbot.core.agent_output import present_turn
 from astrbot.core.agent_output_content import chain_from_content
-from astrbot.core.astr_agent_runtime import AstrAgentRuntime
-from astrbot.core.astr_agent_runtime.main_agent import MainAgentBuildConfig
 from astrbot.core.llm_error_messages import LLM_ERROR_MESSAGE_EXTRA_KEY
 from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.message.message_event_result import (
@@ -55,11 +55,6 @@ class InternalAgentSubStage(Stage):
             "buffer_intermediate_messages", False
         )
         self.show_reasoning = settings.get("display_reasoning_text", False)
-        self.main_agent_cfg = MainAgentBuildConfig.from_config(ctx.astrbot_config)
-        runtime = ctx.agent_runtimes.get("astrbot")
-        if not isinstance(runtime, AstrAgentRuntime):
-            raise RuntimeError("Built-in agent runtime is unavailable")
-        self.runtime = runtime
 
     async def process(
         self, event: AstrMessageEvent, provider_wake_prefix: str
@@ -79,13 +74,15 @@ class InternalAgentSubStage(Stage):
         is_wakeup = isinstance(event, AgentWakeupEvent)
         target = event.agent_session if isinstance(event, AgentWakeupEvent) else None
         try:
-            runtime = self.runtime
-            if target is not None:
-                if target.runtime not in self.ctx.agent_runtimes:
-                    raise ValueError(
-                        f"Target agent runtime unavailable: {target.runtime}"
-                    )
-                runtime = self.ctx.agent_runtimes[target.runtime]
+            agent_config = self.ctx.astrbot_config.get("agent", {})
+            runtime_name = (
+                target.runtime
+                if target is not None
+                else agent_config.get("runtime", "astrbot")
+            )
+            runtime = self.ctx.agent_runtimes.get(runtime_name)
+            if runtime is None:
+                raise RuntimeError(f"Agent runtime unavailable: {runtime_name}")
             if (
                 is_wakeup
                 and active_event_registry.get_background_stop_signal(event).is_set()
@@ -99,12 +96,12 @@ class InternalAgentSubStage(Stage):
                 return
             # Explicit session wakeups are queued turns; their sender already tried steering.
             active = (
-                self.runtime.active_turn(event.unified_msg_origin)
+                runtime.active_turn(event.unified_msg_origin)
                 if target is None
                 else None
             )
             if active is not None:
-                selected = await self.runtime.open_session(
+                selected = await runtime.open_session(
                     event.unified_msg_origin,
                     input=AgentInput(event, AgentPermissions.from_event(event)),
                 )
@@ -123,35 +120,42 @@ class InternalAgentSubStage(Stage):
                     await event.send_typing()
                 except Exception:
                     logger.warning("send_typing failed", exc_info=True)
+            streaming = self.streaming_response
+            if event.get_extra("enable_streaming") is not None:
+                streaming = bool(event.get_extra("enable_streaming"))
             input = await prepare_agent_input(
                 self.ctx.plugin_manager.context,
                 event,
-                replace(
-                    self.main_agent_cfg,
-                    provider_wake_prefix=provider_wake_prefix,
-                    call_request_hook=True,
-                    validate_provider_endpoint=True,
-                ),
+                provider_wake_prefix=provider_wake_prefix,
+                streaming=streaming,
                 content=[PlainInput(text=event.message_str)]
                 if target is not None
                 else None,
             )
             if input is None:
                 return
-            streaming = self.streaming_response
+            # Waiting hooks may override this event's presentation preference.
             if event.get_extra("enable_streaming") is not None:
                 streaming = bool(event.get_extra("enable_streaming"))
+            input.streaming = streaming
             show_reasoning = self.show_reasoning
             if event.get_extra("enable_reasoning") is not None:
                 show_reasoning = bool(event.get_extra("enable_reasoning"))
-            assert input.build_config is not None
-            input.build_config.streaming_response = streaming
             session = await runtime.open_session(
                 event.unified_msg_origin,
                 input=input,
                 session_id=target.session_id if target is not None else None,
+                options={"config": deepcopy(agent_config.get("config", {}))}
+                if target is None
+                else None,
             )
-            turn = await session.run_turn(input)
+            session.runtime_name = runtime_name
+            turn = await session.run_turn(
+                input,
+                admit=partial(
+                    admit_agent_input, self.ctx.plugin_manager.context, input
+                ),
+            )
             stream_to_general = (
                 self.unsupported_streaming_strategy == "turn_off"
                 and not event.platform_meta.support_streaming_message

@@ -201,10 +201,9 @@ class TestConcurrency:
             event,
             AgentPermissions(),
             build_config=MainAgentBuildConfig(tool_call_timeout=1),
-            admit=admit,
         )
         async with manager.acquire_lock(session_id):
-            turn = await session.run_turn(input)
+            turn = await session.run_turn(input, admit=admit)
             events = turn.events()
             assert (await anext(events)).type == "turn.started"
             config["provider_settings"]["enable"] = provider_enabled

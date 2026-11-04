@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from contextlib import AbstractAsyncContextManager
 from typing import TYPE_CHECKING
 
 from astrbot.core.agent.events import RuntimeExecutionError, TurnPrepared
@@ -56,16 +57,13 @@ class NativeAgentSession(AgentSession):
             self.runtime.context.get_config(umo=self.umo)
         )
 
-    async def _admit_turn(self, turn: AgentTurn) -> bool:
-        """Check host admission before resolving per-turn configuration.
-
-        Args:
-            turn: Input waiting for execution.
+    def _execution_scope(self) -> AbstractAsyncContextManager[object]:
+        """Preserve native UMO serialization while child conversations stay independent.
 
         Returns:
-            Whether execution may proceed.
+            Native execution lock held through admission, hooks and history commit.
         """
-        return True
+        return session_lock_manager.acquire_lock(self.umo if self.is_main else self.id)
 
     async def _prepare_turn(
         self, turn: AgentTurn, build_config: MainAgentBuildConfig
@@ -91,64 +89,55 @@ class NativeAgentSession(AgentSession):
             Native result after history and steering receipts have settled.
         """
         event = turn.input.event
-        # Core's ordinary-message admission still uses the UMO lock. Private
-        # conversations must run independently of the parent waiting for them.
-        async with session_lock_manager.acquire_lock(
-            self.umo if self.is_main else self.id
+        if (
+            event.is_stopped()
+            or active_event_registry.get_background_stop_signal(event).is_set()
         ):
-            if (
-                event.is_stopped()
-                or active_event_registry.get_background_stop_signal(event).is_set()
-            ):
-                raise asyncio.CancelledError()
-            if not await self._admit_turn(turn):
-                return TurnResult(reason="skipped")
-            config = self._build_config(turn)
-            result = await self._prepare_turn(turn, config)
-            if result is None:
-                return TurnResult(reason="skipped")
-            runner, req, provider = (
-                result.agent_runner,
-                result.provider_request,
-                result.provider,
+            raise asyncio.CancelledError()
+        config = self._build_config(turn)
+        result = await self._prepare_turn(turn, config)
+        if result is None:
+            return TurnResult(reason="skipped")
+        runner, req, provider = (
+            result.agent_runner,
+            result.provider_request,
+            result.provider,
+        )
+        runner.run_context.context.permissions = turn.input.permissions
+        runner.run_context.context.agent_session = AgentSessionRef("astrbot", self.id)
+        self._runner = runner
+        runner.run_context.context.runtime = self.runtime
+        if self.is_main:
+            self.runtime._active_main[self.umo] = turn
+            active_event_registry.register_agent_stop_callback(
+                event, runner.request_stop
             )
-            runner.run_context.context.permissions = turn.input.permissions
-            runner.run_context.context.agent_session = AgentSessionRef(
-                "astrbot", self.id
+        metadata = {
+            "user_prompt": req.prompt,
+            "persona_id": event.get_extra("_trace_persona_id"),
+            "system_prompt": req.system_prompt,
+            "tools": req.func_tool.names() if req.func_tool else [],
+            "stream": runner.streaming,
+            "chat_provider": {
+                "id": provider.provider_config.get("id", ""),
+                "model": provider.get_model(),
+            },
+        }
+        event.trace.record("astr_agent_prepare", **metadata)
+        turn.emit(
+            TurnPrepared(
+                user_prompt=req.prompt or "",
+                model=provider.get_model(),
+                provider_id=provider.provider_config.get("id"),
+                persona_id=event.get_extra("_trace_persona_id"),
+                tool_names=tuple(req.func_tool.names()) if req.func_tool else (),
+                streaming=runner.streaming,
             )
-            self._runner = runner
-            runner.run_context.context.runtime = self.runtime
-            if self.is_main:
-                self.runtime._active_main[self.umo] = turn
-                active_event_registry.register_agent_stop_callback(
-                    event, runner.request_stop
-                )
-            metadata = {
-                "user_prompt": req.prompt,
-                "persona_id": event.get_extra("_trace_persona_id"),
-                "system_prompt": req.system_prompt,
-                "tools": req.func_tool.names() if req.func_tool else [],
-                "stream": runner.streaming,
-                "chat_provider": {
-                    "id": provider.provider_config.get("id", ""),
-                    "model": provider.get_model(),
-                },
-            }
-            event.trace.record("astr_agent_prepare", **metadata)
-            turn.emit(
-                TurnPrepared(
-                    user_prompt=req.prompt or "",
-                    model=provider.get_model(),
-                    provider_id=provider.provider_config.get("id"),
-                    persona_id=event.get_extra("_trace_persona_id"),
-                    tool_names=tuple(req.func_tool.names()) if req.func_tool else (),
-                    streaming=runner.streaming,
-                )
-            )
-            try:
-                return await execute_native_loop(runner, turn, config.max_steps)
-            finally:
-                await self._finish_turn(turn, result)
+        )
+        try:
+            return await execute_native_loop(runner, turn, config.max_steps)
+        finally:
+            await self._finish_turn(turn, result)
 
     async def _commit_history(
         self, history: list[dict], token_usage: int | None

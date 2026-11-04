@@ -21,7 +21,7 @@
 
 - Expose plugin-facing agent contexts and message types through `astrbot.api.agents`; add public tool-result, conversation, session-filter, data-path, and message-session exports. Update plugin development examples to use the API facade while retaining existing Core imports and the `astrbot.api.agent` decorator.
 
-- Add `Context.agent.run_turn()` for programmatic native inputs with shared Core admission, runtime-owned history, queued follow-ups, safe-boundary steering, session status, and optional automatic response presentation. Explicit tool and plugin sends remain unchanged.
+- Add `Context.agent.run_turn()` for programmatic runtime inputs with shared Core admission, runtime-owned history, queued follow-ups, safe-boundary steering, session status, and optional automatic response presentation. Explicit tool and plugin sends remain unchanged.
 
 - Rename SubAgent Orchestration to Subagent Management at the existing `/subagent` route. Replace expanded rows and global settings with two-column cards and per-agent dialogs; remove search and execution progress from the management page; move selection, concurrency and timeout settings into each profile’s native runtime configuration.
 - Embed `AgentConfig` under each profile’s `agent`, replacing `agent_runner` and mapping `local` to `astrbot`. Store reusable AgentConfigs in `agent_configs`, preserving runtime-specific JSON and stable UUID references. Import legacy experts before deleting their source data.
@@ -36,3 +36,5 @@
 - Keep plugin agent access behind `ctx.agent`, including runtime registration. Inject configuration storage, the runtime registry and delegation services from the core lifecycle instead of exposing them on plugin Context.
 
 - Standardize native runtime output with typed attributed events, portable content, request and tool execution boundaries, and final usage snapshots. Replace `event.data` with `event.payload` and `result.chain` with `result.content`; retain existing plugin hooks and third-party runner execution.
+
+- Admit main-agent inputs through public `AgentInput` and dispatch registered runtimes from both normal messages and `ctx.agent`. Keep native request/configuration construction inside the AstrBot runtime, recheck queued admission after runtime locks, and preserve existing third-party runner paths.

@@ -152,7 +152,8 @@ async def build_main_agent(
     await knowledge_base.apply_knowledge_base(event, req, plugin_context, config)
 
     # Session plugin filtering precedes builtins, which have their own settings.
-    plugins.filter_tools(event, req)
+    if req.func_tool is not None:
+        req.func_tool = plugins.filter_tools(event, req.func_tool)
     search_instructions = web_search.apply_web_search(
         req, plugin_context, config.provider_settings, event
     )

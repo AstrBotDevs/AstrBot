@@ -568,3 +568,241 @@ async def test_usage_events_are_snapshots_of_the_reported_requests(sdk):
     ]
     assert snapshots[-1] == result.usage
     assert all(snapshot.tokens.total_tokens == 15 for snapshot in snapshots)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("send_to_user", [False, True])
+async def test_registered_runtime_runs_without_native_request_construction(
+    sdk, monkeypatch, send_to_user
+):
+    """The SDK admits public input and presents a foreign runtime's final output."""
+    from astrbot.core.agent.runtime import AgentInput
+    from astrbot.core.astr_agent_runtime.main_agent import builder
+
+    sdk.config["agent"] = {"runtime": "memory", "config": {"model": "external"}}
+    monkeypatch.setattr(
+        builder,
+        "build_main_agent",
+        AsyncMock(side_effect=AssertionError("Native builder must not run")),
+    )
+    opened = []
+    original = sdk.memory.open_session
+
+    async def open_session(*args, **kwargs):
+        opened.append(copy.deepcopy(kwargs.get("options")))
+        return await original(*args, **kwargs)
+
+    monkeypatch.setattr(sdk.memory, "open_session", open_session)
+    run = await sdk.context.agent.run_turn(
+        umo=sdk.event.unified_msg_origin,
+        input_message=[PlainInput(text="External reply")],
+        send_to_user=send_to_user,
+    )
+    result = await run.result()
+    assert result.text == "External reply"
+    assert type(sdk.memory.inputs[0]) is AgentInput
+    assert sdk.memory.inputs[0].plugin_tools is not None
+    assert opened == [{"config": {"model": "external"}}]
+    events = [event async for event in run.events()]
+    assert all(event.session.runtime == "memory" for event in events)
+    assert sdk.platform_send.await_count == int(send_to_user)
+    if send_to_user:
+        assert sdk.platform_send.await_args.args[1].get_plain_text() == "External reply"
+    sdk.provider.text_chat.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_foreign_follow_up_stays_bound_after_profile_runtime_changes(sdk):
+    """Existing session handles continue their own runtime after profile edits."""
+    sdk.config["agent"] = {"runtime": "memory", "config": {}}
+    first = await sdk.context.agent.run_turn(
+        umo=sdk.event.unified_msg_origin,
+        input_message=[PlainInput(text="First")],
+        send_to_user=False,
+    )
+    await first.result()
+    sdk.config["agent"]["runtime"] = "astrbot"
+    second = await first.follow_up(input_message=[PlainInput(text="Second")])
+    assert second.session is first.session
+    assert (await second.result()).text == "Second"
+    sdk.provider.text_chat.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_foreign_queued_input_rechecks_core_admission(sdk):
+    """Core admission is enforced by the common session execution boundary."""
+    sdk.config["agent"] = {"runtime": "memory", "config": {}}
+    sdk.memory.release = asyncio.Event()
+    first = await sdk.context.agent.run_turn(
+        umo=sdk.event.unified_msg_origin,
+        input_message=[PlainInput(text="First")],
+        send_to_user=False,
+    )
+    await asyncio.wait_for(sdk.memory.started.get(), 2)
+    queued = await first.follow_up(input_message=[PlainInput(text="Queued")])
+    sdk.config["provider_settings"]["enable"] = False
+    sdk.memory.release.set()
+    await first.result()
+    assert (await queued.result()).reason == "skipped"
+    assert len(sdk.memory.inputs) == 1
+
+
+@pytest.mark.asyncio
+async def test_unregistered_runtime_fails_explicitly(sdk):
+    sdk.config["agent"] = {"runtime": "missing", "config": {}}
+    with pytest.raises(RuntimeError, match="Agent runtime unavailable: missing"):
+        await sdk.context.agent.run_turn(
+            umo=sdk.event.unified_msg_origin,
+            input_message=[PlainInput(text="Input")],
+            send_to_user=False,
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("targeted_wakeup", [False, True])
+async def test_message_pipeline_accepts_a_core_only_runtime(
+    sdk, monkeypatch, targeted_wakeup
+):
+    """A runtime implementation needs only Core input, session and output contracts."""
+    from astrbot.core.agent.output import PlainOutput
+    from astrbot.core.agent.input import format_input_content
+    from astrbot.core.agent.runtime import (
+        AgentRuntime,
+        AgentSessionRef,
+        AgentSession,
+        AgentInput,
+        TurnResult,
+    )
+    from astrbot.core.pipeline.context import PipelineContext
+    from astrbot.core.pipeline.process_stage.method.agent_request import (
+        AgentRequestSubStage,
+    )
+    from astrbot.core.platform.astr_message_event import AstrMessageEvent
+    from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
+    from astrbot.core.astr_agent_runtime.main_agent import builder
+
+    inputs = []
+
+    class CoreSession(AgentSession):
+        async def execute_turn(self, turn):
+            inputs.append(turn.input)
+            text = (
+                format_input_content(turn.input.content)
+                if turn.input.content is not None
+                else turn.input.event.message_str
+            )
+            return TurnResult(content=(PlainOutput(text=text),))
+
+        async def history(self):
+            return []
+
+    class CoreRuntime(AgentRuntime):
+        async def open_session(self, umo, *, session_id=None, options=None, input=None):
+            assert options == (None if targeted_wakeup else {"config": {"model": "remote"}})
+            assert session_id == ("external-session" if targeted_wakeup else None)
+            return CoreSession("external-session", umo, runtime_name="external")
+
+        async def close(self):
+            pass
+
+    sdk.context.agent.register_runtime("external", CoreRuntime())
+    sdk.config["agent"] = {"runtime": "external", "config": {"model": "remote"}}
+    sdk.config["provider_settings"]["wake_prefix"] = "ask "
+    monkeypatch.setattr(
+        builder,
+        "build_main_agent",
+        AsyncMock(side_effect=AssertionError("Native builder must not run")),
+    )
+    if targeted_wakeup:
+        # An existing runtime session survives switching the profile to a legacy path.
+        sdk.config["agent"] = {"runtime": "dify", "config": {}}
+        event = AgentWakeupEvent(
+            context=sdk.context,
+            session=sdk.event.session,
+            platform_meta=sdk.event.platform_meta,
+            prompt="External platform input",
+            source="plugin",
+            agent_session=AgentSessionRef("external", "external-session"),
+        )
+    else:
+        event = AstrMessageEvent(
+            "ask   External platform input  \n",
+            sdk.event.message_obj,
+            sdk.event.platform_meta,
+            sdk.event.session_id,
+        )
+    event.send_typing = AsyncMock()
+    event.stop_typing = AsyncMock()
+    event.send = AsyncMock()
+    stage = AgentRequestSubStage()
+    await stage.initialize(
+        PipelineContext(
+            sdk.config,
+            sdk.context._star_manager,
+            "profile",
+            agent_runtimes=sdk.runtimes,
+        )
+    )
+    outputs = []
+    async for _ in stage.process(event):
+        if event.get_result():
+            outputs.append(event.get_result().get_plain_text())
+    assert outputs == [
+        "External platform input" if targeted_wakeup else "  External platform input  \n"
+    ]
+    assert type(inputs[0]) is AgentInput
+    assert inputs[0].plugin_tools is not None
+    assert not hasattr(inputs[0], "admit")
+    assert not hasattr(inputs[0], "provider_wake_prefix")
+    if not targeted_wakeup:
+        assert event.message_str == "ask   External platform input  \n"
+    sdk.provider.text_chat.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_queued_foreign_input_refreshes_plugin_tools_and_skills(sdk, monkeypatch):
+    """Revoking a profile plugin affects the next admitted turn's contributions."""
+    from astrbot.core.skills.skill_manager import SkillInfo, SkillManager
+    from astrbot.core.star import agent_capabilities
+
+    sdk.config["agent"] = {"runtime": "memory", "config": {}}
+    sdk.config["plugin_set"] = ["Allowed"]
+    plugin = SimpleNamespace(
+        name="Allowed", root_dir_name="allowed", activated=True, reserved=False
+    )
+    monkeypatch.setattr(agent_capabilities, "star_registry", [plugin])
+    monkeypatch.setitem(agent_capabilities.star_map, "plugin.scope", plugin)
+    tool = FunctionTool(
+        name="scoped_tool",
+        description="Scoped",
+        parameters={"type": "object", "properties": {}},
+        handler_module_path="plugin.scope",
+    )
+    sdk.context.get_llm_tool_manager().func_list.append(tool)
+    skill = SkillInfo(
+        name="scoped_skill",
+        description="Scoped",
+        path="SKILL.md",
+        active=True,
+        source_type="plugin",
+        plugin_name="allowed",
+    )
+    monkeypatch.setattr(SkillManager, "list_skills", lambda *args, **kwargs: [skill])
+    sdk.memory.release = asyncio.Event()
+    first = await sdk.context.agent.run_turn(
+        umo=sdk.event.unified_msg_origin,
+        input_message=[PlainInput(text="First")],
+        send_to_user=False,
+    )
+    await asyncio.wait_for(sdk.memory.started.get(), 2)
+    assert sdk.memory.inputs[0].plugin_tools.get_tool("scoped_tool") is not None
+    assert [entry.name for entry in sdk.memory.inputs[0].plugin_skills] == [
+        "scoped_skill"
+    ]
+    queued = await first.follow_up(input_message=[PlainInput(text="Second")])
+    sdk.config["plugin_set"] = []
+    sdk.memory.release.set()
+    await first.result()
+    assert (await queued.result()).status == TurnStatus.COMPLETED
+    assert sdk.memory.inputs[1].plugin_tools.get_tool("scoped_tool") is None
+    assert sdk.memory.inputs[1].plugin_skills == []

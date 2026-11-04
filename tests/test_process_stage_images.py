@@ -17,7 +17,6 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from PIL import Image as PILImage
 
-from astrbot.core import agent_input as core_input
 from astrbot.core.agent.message import (
     ImageURLPart,
     TextPart,
@@ -400,6 +399,9 @@ async def test_profile_reload_and_concurrent_requests(harness, tmp_path):
     )
     other_config = copy.deepcopy(harness.config)
     other_config["provider_settings"]["image_compress_options"]["max_size"] = 60
+    harness.context.get_config.side_effect = lambda umo=None: (
+        other_config if umo is not None and umo.endswith(":other") else harness.config
+    )
     other_ctx = SimpleNamespace(
         astrbot_config=other_config,
         plugin_manager=harness.ctx.plugin_manager,
@@ -546,6 +548,7 @@ async def test_subagents_use_session_profile_without_global_override(
 async def test_plugin_request_extra_metadata_hook_and_history(
     harness, tmp_path, monkeypatch
 ):
+    harness.config["provider_settings"]["wake_prefix"] = "ask "
     source = source_image(tmp_path)
     replacement = source_image(tmp_path, "BMP")
     extra = ImageURLPart(
@@ -607,6 +610,7 @@ async def test_plugin_request_extra_metadata_hook_and_history(
     assert seen == [EventType.OnWaitingLLMRequestEvent, EventType.OnLLMRequestEvent]
     assert convert.await_count == 2
     req = harness.captured[0].req
+    assert req.prompt == "plugin"
     assert req is not original and original.image_urls == [str(source)]
     assert extra.image_url.url == str(source) and extra._no_save
     assert detail["image_url"]["url"] == str(source)
@@ -813,7 +817,7 @@ async def test_reply_fallback_limit_and_deduplication(harness, tmp_path, monkeyp
         PILImage.new("RGB", (12, 12), "red").save(path)
         paths.append(str(path))
     extract = AsyncMock(return_value=[paths[0], paths[0], paths[1], paths[2]])
-    monkeypatch.setattr(core_input, "extract_quoted_message_images", extract)
+    monkeypatch.setattr(request_build, "extract_quoted_message_images", extract)
     harness.config["provider_settings"]["max_quoted_fallback_images"] = 2
     event = make_event([Reply(id="one"), Reply(id="two")])
     await process_event(harness, event)
@@ -1194,6 +1198,40 @@ async def test_wake_prefix_rejection_does_not_prepare(harness, tmp_path, monkeyp
     )
     await process_event(harness, make_event([Image(file=str(source_image(tmp_path)))]))
     assert not harness.captured
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("platform", "text", "expected"),
+    [
+        ("test", "ask   describe  \n", "  describe  \n"),
+        ("lark", "  ask   describe  \n", "  describe  \n"),
+        ("test", "ask ", ""),
+    ],
+)
+async def test_core_prefix_processing_preserves_attachments_and_source(
+    harness, tmp_path, platform, text, expected
+):
+    """Processed text reaches the model alongside source and quoted attachments."""
+    harness.config["provider_settings"]["wake_prefix"] = "ask "
+    source = source_image(tmp_path, "PNG")
+    event = make_event(
+        [
+            Image(file=str(source)),
+            Reply(id="quoted", chain=[Plain("Quoted content")]),
+        ],
+        text=text,
+    )
+    event.platform_meta.name = platform
+    await process_event(harness, event)
+    request = harness.captured[0].req
+    assert request.prompt == expected
+    assert request.image_urls
+    assert any(
+        isinstance(part, TextPart) and "Quoted content" in part.text
+        for part in request.extra_user_content_parts
+    )
+    assert event.message_str == text
 
 
 @pytest.mark.asyncio

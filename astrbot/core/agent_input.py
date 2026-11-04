@@ -3,17 +3,15 @@
 from __future__ import annotations
 
 import asyncio
-import copy
 import datetime
 import json
 import zoneinfo
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 from astrbot.core import logger
 from astrbot.core.agent.message import TextPart
-from astrbot.core.message.components import File, Image, Record, Reply, Video
+from astrbot.core.message.components import File, Reply
 from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider import Provider
@@ -22,21 +20,14 @@ from astrbot.core.utils.file_extract import extract_file_moonshotai
 from astrbot.core.utils.image_input import prepare_request_images
 from astrbot.core.utils.media_utils import (
     IMAGE_COMPRESS_DEFAULT_MAX_SIZE,
-    describe_media_ref,
-    is_file_uri,
-    is_recoverable_image_error,
     normalize_model_image_max_size,
-)
-from astrbot.core.utils.quoted_message_parser import (
-    extract_quoted_message_images,
 )
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 if TYPE_CHECKING:
     from astrbot.core.agent.input import InputComponent
+    from astrbot.core.agent.runtime import AgentInput
     from astrbot.core.agent.tool import ToolSet
-    from astrbot.core.astr_agent_runtime.main_agent.config import MainAgentBuildConfig
-    from astrbot.core.astr_agent_runtime.main_session import MainAgentInput
     from astrbot.core.skills.skill_manager import SkillInfo
     from astrbot.core.star.context import Context
 
@@ -203,260 +194,6 @@ def matches_provider_wake_prefix(
         or event.get_platform_name() == "webchat"
         or message_str.startswith(provider_wake_prefix)
     )
-
-
-async def collect_initial_request(
-    event: AstrMessageEvent,
-    plugin_context: Context,
-    config: InputProcessingSettings,
-    req: ProviderRequest | None = None,
-    *,
-    quoted_image_refs: set[str] | None = None,
-    materialized_paths: list[str] | None = None,
-) -> tuple[ProviderRequest | None, str | None]:
-    """Collect raw attachments without applying model image policy.
-
-    Args:
-        event: Incoming event, including any plugin-provided request.
-        plugin_context: Services used to resolve the conversation and attachments.
-        config: Existing request collection settings.
-        req: Explicit request for direct callers; its attachments are already
-            collected, so only its quote reference needs to be resolved.
-        quoted_image_refs: Optional output set populated from quoted image components.
-        materialized_paths: Optional output list of temporary files adopted on success.
-
-    Returns:
-        The initial request and the first embedded quote image reference used by
-        the dedicated quote caption branch. A rejected wake prefix returns None.
-    """
-    from astrbot.core import agent_media as media
-
-    if quoted_image_refs is None:
-        quoted_image_refs = set()
-    attachment_paths: list[str] = []
-    if req is None:
-        if event.get_extra("provider_request"):
-            req = event.get_extra("provider_request")
-            assert isinstance(req, ProviderRequest), (
-                "provider_request 必须是 ProviderRequest 类型。"
-            )
-            req = copy.copy(req)
-            req.image_urls = list(req.image_urls or [])
-            req.extra_user_content_parts = list(req.extra_user_content_parts)
-            req.contexts = (
-                list(req.contexts) if isinstance(req.contexts, list) else req.contexts
-            )
-        else:
-            req = ProviderRequest()
-            req.prompt = ""
-            req.image_urls = []
-            req.audio_urls = []
-            if sel_model := event.get_extra("selected_model"):
-                req.model = sel_model
-            provider_wake_prefix = config.provider_wake_prefix
-            if not matches_provider_wake_prefix(event, provider_wake_prefix):
-                return None, None
-
-            req.prompt = event.message_str
-            prefix_text = event.message_str
-            if event.get_platform_name() == "lark":
-                prefix_text = prefix_text.lstrip()
-            if (
-                provider_wake_prefix
-                and not isinstance(event, AgentWakeupEvent)
-                and prefix_text.startswith(provider_wake_prefix)
-            ):
-                req.prompt = prefix_text[len(provider_wake_prefix) :]
-
-            # media files attachments
-            for comp in event.message_obj.message:
-                if isinstance(comp, Image):
-                    try:
-                        image_path = await comp.convert_to_file_path()
-                    except Exception as exc:
-                        if not is_recoverable_image_error(exc):
-                            raise
-                        logger.warning(
-                            "Image attachment is unavailable (%s): %s",
-                            type(exc).__name__,
-                            describe_media_ref(comp.url or comp.file),
-                        )
-                        req.extra_user_content_parts.append(
-                            TextPart(text="[Image unavailable]")
-                        )
-                        continue
-                    req.image_urls.append(image_path)
-                    attachment_paths.append(image_path)
-                    # Adopt sources created after PreProcess, before another
-                    # attachment or conversation lookup can fail or be cancelled.
-                    source_ref = comp.url or comp.file or ""
-                    if not is_file_uri(source_ref):
-                        try:
-                            source_is_local = Path(source_ref).is_file()
-                        except OSError as exc:
-                            if not is_recoverable_image_error(exc):
-                                raise
-                            source_is_local = False
-                        if not source_is_local and Path(image_path).is_file():
-                            event.track_temporary_local_file(image_path)
-                elif isinstance(comp, Record):
-                    try:
-                        audio_path = await comp.convert_to_file_path()
-                    except Exception as exc:  # noqa: BLE001
-                        logger.warning(
-                            "Voice attachment is unavailable (%s).",
-                            type(exc).__name__,
-                        )
-                        req.extra_user_content_parts.append(
-                            TextPart(text="[Voice unavailable]")
-                        )
-                        continue
-                    req.audio_urls.append(audio_path)
-                    media.append_audio_attachment(req, audio_path)
-                elif isinstance(comp, File):
-                    file_path = await comp.get_file()
-                    file_name = comp.name or Path(file_path).name
-                    req.extra_user_content_parts.append(
-                        TextPart(
-                            text=f"[File Attachment: name {file_name}, path {file_path}]"
-                        )
-                    )
-                elif isinstance(comp, Video):
-                    await media.append_video_attachment(req, comp)
-            # quoted message attachments
-            reply_comps = [
-                comp for comp in event.message_obj.message if isinstance(comp, Reply)
-            ]
-            quoted_message_settings = media.get_quoted_message_settings(
-                config.provider_settings
-            )
-            fallback_quoted_image_count = 0
-            for comp in reply_comps:
-                has_embedded_image = False
-                if comp.chain:
-                    for reply_comp in comp.chain:
-                        if isinstance(reply_comp, Image):
-                            has_embedded_image = True
-                            try:
-                                image_path = await reply_comp.convert_to_file_path()
-                            except Exception as exc:
-                                if not is_recoverable_image_error(exc):
-                                    raise
-                                logger.warning(
-                                    "Quoted image is unavailable (%s): %s",
-                                    type(exc).__name__,
-                                    describe_media_ref(
-                                        reply_comp.url or reply_comp.file
-                                    ),
-                                )
-                                req.extra_user_content_parts.append(
-                                    TextPart(text="[Image unavailable]")
-                                )
-                                continue
-                            req.image_urls.append(image_path)
-                            attachment_paths.append(image_path)
-                            source_ref = reply_comp.url or reply_comp.file or ""
-                            if not is_file_uri(source_ref):
-                                try:
-                                    source_is_local = Path(source_ref).is_file()
-                                except OSError as exc:
-                                    if not is_recoverable_image_error(exc):
-                                        raise
-                                    source_is_local = False
-                                if not source_is_local and Path(image_path).is_file():
-                                    event.track_temporary_local_file(image_path)
-                            quoted_image_refs.add(image_path)
-                        elif isinstance(reply_comp, Record):
-                            try:
-                                audio_path = await reply_comp.convert_to_file_path()
-                            except Exception as exc:  # noqa: BLE001
-                                logger.warning(
-                                    "Quoted voice is unavailable (%s).",
-                                    type(exc).__name__,
-                                )
-                                req.extra_user_content_parts.append(
-                                    TextPart(text="[Voice unavailable]")
-                                )
-                                continue
-                            req.audio_urls.append(audio_path)
-                            media.append_quoted_audio_attachment(req, audio_path)
-                        elif isinstance(reply_comp, File):
-                            file_path = await reply_comp.get_file()
-                            file_name = reply_comp.name or Path(file_path).name
-                            req.extra_user_content_parts.append(
-                                TextPart(
-                                    text=(
-                                        f"[File Attachment in quoted message: "
-                                        f"name {file_name}, path {file_path}]"
-                                    )
-                                )
-                            )
-                        elif isinstance(reply_comp, Video):
-                            await media.append_video_attachment(
-                                req, reply_comp, quoted=True
-                            )
-
-                # Fallback quoted image extraction for reply-id-only payloads, or when
-                # embedded reply chain only contains placeholders (e.g. [Forward Message], [Image]).
-                if not has_embedded_image:
-                    try:
-                        fallback_images = normalize_and_dedupe_strings(
-                            await extract_quoted_message_images(
-                                event,
-                                comp,
-                                settings=quoted_message_settings,
-                            )
-                        )
-                        remaining_limit = max(
-                            config.max_quoted_fallback_images
-                            - fallback_quoted_image_count,
-                            0,
-                        )
-                        if remaining_limit <= 0 and fallback_images:
-                            logger.warning(
-                                "Skip quoted fallback images due to limit=%d for umo=%s",
-                                config.max_quoted_fallback_images,
-                                event.unified_msg_origin,
-                            )
-                            continue
-                        if len(fallback_images) > remaining_limit:
-                            logger.warning(
-                                "Truncate quoted fallback images for umo=%s, reply_id=%s from %d to %d",
-                                event.unified_msg_origin,
-                                getattr(comp, "id", None),
-                                len(fallback_images),
-                                remaining_limit,
-                            )
-                            fallback_images = fallback_images[:remaining_limit]
-                        for image_ref in fallback_images:
-                            if image_ref in req.image_urls:
-                                continue
-                            req.image_urls.append(image_ref)
-                            fallback_quoted_image_count += 1
-                            quoted_image_refs.add(image_ref)
-                    except Exception as exc:  # noqa: BLE001
-                        logger.warning(
-                            "Failed to resolve fallback quoted images for umo=%s, reply_id=%s: %s",
-                            event.unified_msg_origin,
-                            getattr(comp, "id", None),
-                            exc,
-                            exc_info=True,
-                        )
-
-    req.image_urls = normalize_and_dedupe_strings(req.image_urls)
-    quote_image_ref = None
-    quote = next(
-        (part for part in event.message_obj.message if isinstance(part, Reply)), None
-    )
-    if quote and quote.chain:
-        image = next((part for part in quote.chain if isinstance(part, Image)), None)
-        if image:
-            quote_image_ref = image.url or image.file
-    # Keep adopted source paths usable after cleanup, but retain provisional
-    # ownership until collection succeeds so errors and cancellation can clean up.
-    if materialized_paths is not None:
-        materialized_paths.extend(attachment_paths)
-    return req, quote_image_ref
 
 
 @dataclass(slots=True)
@@ -634,8 +371,7 @@ def collect_plugin_capabilities(
 
     registered = context.get_llm_tool_manager().get_full_tool_set()
     tools = ToolSet(tools=list(registered))
-    request = ProviderRequest(func_tool=tools)
-    filter_tools(event, request)
+    tools = filter_tools(event, tools)
     settings = context.get_config(umo=event.unified_msg_origin).get(
         "provider_settings", {}
     )
@@ -644,45 +380,65 @@ def collect_plugin_capabilities(
             active_only=True, runtime=settings.get("computer_use_runtime", "none")
         )
         skills = filter_skills(
-            [skill for skill in skills if skill.source_type == "plugin"], settings
+            [skill for skill in skills if skill.source_type == "plugin"],
+            {
+                **settings,
+                "plugin_set": event.plugins_name
+                if event.plugins_name is not None
+                else ["*"],
+            },
         )
     except Exception:
         logger.exception("Failed to collect plugin skills for an agent input")
         skills = []
-    assert request.func_tool is not None
-    return request.func_tool, skills
+    return tools, skills
 
 
 async def prepare_agent_input(
     context: Context,
     event: AstrMessageEvent,
-    config: MainAgentBuildConfig,
     *,
+    provider_wake_prefix: str = "",
+    streaming: bool | None = None,
     content: list[InputComponent] | None = None,
-) -> MainAgentInput | None:
-    """Admit platform and programmatic inputs through the same Core policy.
+) -> AgentInput | None:
+    """Admit an input without constructing a runtime-specific model request.
 
     Args:
-        context: Host configuration and plugin services.
-        event: Existing message or Core-created programmatic event.
-        config: Native settings resolved for this input.
-        content: Optional portable content for explicitly addressed agents.
+        context: Core configuration and plugin services.
+        event: Platform or programmatic input with trusted caller identity.
+        provider_wake_prefix: Core-resolved additional AI trigger prefix.
+        streaming: Core output preference for this input, or runtime default.
+        content: Explicit portable content; None preserves the source event.
 
     Returns:
-        An authorized native input, or None when admission rejects this request.
+        Authorized common input, or None when rejected. Queued dispatch must
+        recheck admission through admit_agent_input before execution.
     """
-    from astrbot.core.agent.runtime import AgentPermissions
-    from astrbot.core.astr_agent_runtime.main_session import MainAgentInput
+    from astrbot.core.agent.input import PlainInput
+    from astrbot.core.agent.runtime import AgentInput, AgentPermissions
     from astrbot.core.pipeline.context_utils import call_event_hook
-    from astrbot.core.star.session_llm_manager import SessionServiceManager
     from astrbot.core.star.star_handler import EventType
 
     if await call_event_hook(event, EventType.OnWaitingLLMRequestEvent):
         return None
     if event.get_extra("provider_request") is None and not matches_provider_wake_prefix(
-        event, config.provider_wake_prefix
+        event, provider_wake_prefix
     ):
         return None
+    if (
+        content is None
+        and event.get_extra("provider_request") is None
+        and provider_wake_prefix
+        and not isinstance(event, AgentWakeupEvent)
+    ):
+        text = event.message_str or ""
+        if event.get_platform_name() == "lark":
+            text = text.lstrip()
+        if text.startswith(provider_wake_prefix):
+            text = text[len(provider_wake_prefix) :]
+            # Platform text is already typed; preserve its formatting and whitespace.
+            content = [PlainInput.model_construct(text=text)] if text else []
     for component in event.message_obj.message:
         if isinstance(component, File):
             await component.get_file()
@@ -690,24 +446,42 @@ async def prepare_agent_input(
             for quoted in component.chain:
                 if isinstance(quoted, File):
                     await quoted.get_file()
-
-    async def admit() -> bool:
-        current_config = context.get_config(umo=event.unified_msg_origin)
-        return (
-            not event.is_stopped()
-            and current_config.get("provider_settings", {}).get("enable", True)
-            and await SessionServiceManager.should_process_llm_request(event)
-        )
-
-    if not await admit():
-        return None
-    tools, skills = collect_plugin_capabilities(context, event)
-    return MainAgentInput(
+    input = AgentInput(
         event=event,
         permissions=AgentPermissions.from_event(event),
         content=content,
-        plugin_tools=tools,
-        plugin_skills=skills,
-        admit=admit,
-        build_config=config,
+        streaming=streaming,
     )
+    if not await admit_agent_input(context, input):
+        return None
+    return input
+
+
+async def admit_agent_input(context: Context, input: AgentInput) -> bool:
+    """Recheck Core policy and refresh capabilities at execution admission.
+
+    Args:
+        context: Current configuration and plugin services.
+        input: Input whose caller authorization must reflect the current policy.
+
+    Returns:
+        Whether the input remains authorized to execute.
+    """
+    from astrbot.core.agent.runtime import AgentPermissions
+    from astrbot.core.star.session_llm_manager import SessionServiceManager
+
+    event = input.event
+    current_config = context.get_config(umo=event.unified_msg_origin)
+    if (
+        event.is_stopped()
+        or not current_config.get("provider_settings", {}).get("enable", True)
+        or not await SessionServiceManager.should_process_llm_request(event)
+    ):
+        return False
+    enabled = current_config.get("plugin_set", ["*"])
+    event.plugins_name = None if enabled == ["*"] else list(enabled)
+    input.permissions = AgentPermissions.from_event(event)
+    input.plugin_tools, input.plugin_skills = collect_plugin_capabilities(
+        context, event
+    )
+    return True

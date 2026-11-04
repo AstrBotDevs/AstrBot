@@ -3,7 +3,6 @@
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.skills.skill_manager import SkillInfo
 from astrbot.core.star.star import star_registry
 from astrbot.core.star.star_handler import star_map
@@ -50,17 +49,20 @@ def filter_skills(
     return filtered
 
 
-def filter_tools(event: AstrMessageEvent, req: ProviderRequest) -> None:
+def filter_tools(event: AstrMessageEvent, tools: ToolSet) -> ToolSet:
     """Filter plugin-owned tools using the session's enabled-plugin list.
 
     Args:
         event: Event carrying the session plugin selection.
-        req: Request whose tool set is filtered in place. MCP tools, handoffs,
+        tools: Available tools. MCP tools, handoffs,
             and tools with unknown ownership retain their existing availability.
+
+    Returns:
+        The tool set restricted to the caller's enabled plugins.
     """
-    if event.plugins_name is not None and req.func_tool:
+    if event.plugins_name is not None:
         new_tool_set = ToolSet()
-        for tool in req.func_tool.tools:
+        for tool in tools.tools:
             if isinstance(tool, MCPTool):
                 # MCP tools are not owned by plugins.
                 new_tool_set.add_tool(tool)
@@ -77,4 +79,5 @@ def filter_tools(event: AstrMessageEvent, req: ProviderRequest) -> None:
                 continue
             if plugin.name in event.plugins_name or plugin.reserved:
                 new_tool_set.add_tool(tool)
-        req.func_tool = new_tool_set
+        return new_tool_set
+    return tools
