@@ -4,7 +4,17 @@ from collections.abc import AsyncGenerator
 from contextlib import aclosing
 
 from astrbot.core import logger
+from astrbot.core.agent.events import (
+    MessageCompleted,
+    ReasoningDelta,
+    TextDelta,
+    ToolFinished,
+    ToolRejected,
+    ToolStarted,
+)
 from astrbot.core.agent.message import Message
+from astrbot.core.agent.output import PlainOutput, ReasoningOutput
+from astrbot.core.agent.response import AgentResponse
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent_output import (
     _build_tool_call_status_message,
@@ -12,7 +22,9 @@ from astrbot.core.agent_output import (
     _extract_chain_json_data,
     _record_tool_call_name,
 )
+from astrbot.core.agent_output_content import chain_from_content
 from astrbot.core.astr_agent_runtime.context import AstrAgentContext
+from astrbot.core.message.components import Json
 from astrbot.core.message.message_event_result import (
     MessageChain,
     MessageEventResult,
@@ -84,6 +96,8 @@ async def run_agent(
     Yields:
         Output chains for delivery by the message pipeline.
     """
+    emitted_messages: set[str] = set()
+    emitted_reasoning: set[str] = set()
     step_idx = 0
     agent_runner._step_budget_max = max_step
     agent_runner._step_budget_used = 0
@@ -122,6 +136,104 @@ async def run_agent(
         try:
             async with aclosing(agent_runner.step()) as responses:
                 async for resp in responses:
+                    if not isinstance(resp, AgentResponse):
+                        payload = resp
+                        if isinstance(payload, (TextDelta, ReasoningDelta)):
+                            (
+                                emitted_reasoning
+                                if isinstance(payload, ReasoningDelta)
+                                else emitted_messages
+                            ).add(payload.message_id)
+                            resp = AgentResponse(
+                                type="streaming_delta",
+                                data={
+                                    "chain": MessageChain(
+                                        type="reasoning"
+                                        if isinstance(payload, ReasoningDelta)
+                                        else None
+                                    ).message(payload.text)
+                                },
+                            )
+                        elif isinstance(payload, MessageCompleted):
+                            if (
+                                agent_runner.streaming
+                                and not stream_to_general
+                                and show_reasoning
+                                and payload.message_id not in emitted_reasoning
+                            ):
+                                reasoning = "".join(
+                                    part.text or ""
+                                    for part in payload.content
+                                    if isinstance(part, ReasoningOutput)
+                                )
+                                if reasoning:
+                                    yield MessageChain(type="reasoning").message(
+                                        reasoning
+                                    )
+                            content = tuple(
+                                part
+                                for part in payload.content
+                                if not isinstance(part, ReasoningOutput)
+                            )
+                            if (
+                                agent_runner.streaming
+                                and not stream_to_general
+                                and payload.message_id in emitted_messages
+                            ):
+                                content = tuple(
+                                    part
+                                    for part in content
+                                    if not isinstance(part, PlainOutput)
+                                )
+                            if not content:
+                                continue
+                            resp = AgentResponse(
+                                type="streaming_delta"
+                                if agent_runner.streaming and not stream_to_general
+                                else "llm_result",
+                                data={"chain": chain_from_content(content)},
+                            )
+                        elif isinstance(payload, ToolStarted):
+                            resp = AgentResponse(
+                                type="tool_call",
+                                data={
+                                    "chain": MessageChain(
+                                        type="tool_call",
+                                        chain=[
+                                            Json(
+                                                data={
+                                                    "id": payload.call_id,
+                                                    "name": payload.name,
+                                                    "args": payload.arguments,
+                                                }
+                                            )
+                                        ],
+                                    )
+                                },
+                            )
+                        elif isinstance(payload, (ToolFinished, ToolRejected)):
+                            resp = AgentResponse(
+                                type="tool_call_result",
+                                data={
+                                    "chain": MessageChain(
+                                        type="tool_call_result",
+                                        chain=[
+                                            Json(
+                                                data={
+                                                    "id": payload.call_id,
+                                                    "result": "".join(
+                                                        part.text
+                                                        for part in payload.content
+                                                        if isinstance(part, PlainOutput)
+                                                    ),
+                                                }
+                                            )
+                                        ],
+                                    )
+                                },
+                            )
+                        else:
+                            continue
                     if _should_stop_agent(astr_event):
                         agent_runner.request_stop()
 
@@ -259,6 +371,21 @@ async def run_agent(
                             continue
                         yield resp.data["chain"]  # MessageChain
 
+            if (
+                isinstance(agent_runner, ToolLoopAgentRunner)
+                and agent_runner.was_aborted()
+            ):
+                astr_event.set_extra("agent_user_aborted", True)
+                astr_event.set_extra("agent_stop_requested", False)
+            final = (
+                agent_runner.get_final_llm_resp()
+                if isinstance(agent_runner, ToolLoopAgentRunner)
+                else None
+            )
+            if agent_runner.done() and final is not None and final.role == "err":
+                yield MessageChain().message(
+                    final.completion_text or "Error occurred during AI execution."
+                )
             if can_buffer_llm_result and agent_runner.done():
                 merged_chain = _merge_buffered_llm_chains(buffered_llm_chains)
                 if merged_chain:

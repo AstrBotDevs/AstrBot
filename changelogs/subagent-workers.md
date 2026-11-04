@@ -34,3 +34,5 @@
 - Share native runner initialization, turn execution, steering settlement and history commits between main agents and subagents. Remove the step-start/step-end hooks and per-step child history writes.
 
 - Keep plugin agent access behind `ctx.agent`, including runtime registration. Inject configuration storage, the runtime registry and delegation services from the core lifecycle instead of exposing them on plugin Context.
+
+- Standardize native runtime output with typed attributed events, portable content, request and tool execution boundaries, and final usage snapshots. Replace `event.data` with `event.payload` and `result.chain` with `result.content`; retain existing plugin hooks and third-party runner execution.

@@ -1,5 +1,8 @@
 """Exercise the real preprocess/process/build/reset sequence with generated images."""
 
+from astrbot.core.agent.events import TextDelta, ExecutionMetrics
+from astrbot.core.agent.output import PlainOutput
+
 import asyncio
 import base64
 import copy
@@ -154,9 +157,13 @@ def harness(tmp_path, monkeypatch):
     provider.text_chat_stream = stream
     context.get_using_provider_async = AsyncMock(return_value=provider)
     context.get_provider_by_id.return_value = provider
-    runtime = AstrAgentRuntime(context, agent_configs=MagicMock(), subagents=MagicMock())
+    runtime = AstrAgentRuntime(
+        context, agent_configs=MagicMock(), subagents=MagicMock()
+    )
     ctx = SimpleNamespace(
-        astrbot_config=config, plugin_manager=SimpleNamespace(context=context), agent_runtimes={"astrbot": runtime}
+        astrbot_config=config,
+        plugin_manager=SimpleNamespace(context=context),
+        agent_runtimes={"astrbot": runtime},
     )
     captured = []
     hooks = []
@@ -191,7 +198,9 @@ def harness(tmp_path, monkeypatch):
         captured.append(runner)
         async for response in runner._iter_llm_responses_with_fallback():
             runner.final_llm_resp = response
-        return TurnResult(text=runner.final_llm_resp.completion_text)
+        return TurnResult(
+            content=(PlainOutput(text=runner.final_llm_resp.completion_text),)
+        )
 
     monkeypatch.setattr(native_session, "execute_native_loop", run)
     return SimpleNamespace(
@@ -392,7 +401,9 @@ async def test_profile_reload_and_concurrent_requests(harness, tmp_path):
     other_config = copy.deepcopy(harness.config)
     other_config["provider_settings"]["image_compress_options"]["max_size"] = 60
     other_ctx = SimpleNamespace(
-        astrbot_config=other_config, plugin_manager=harness.ctx.plugin_manager, agent_runtimes=harness.ctx.agent_runtimes
+        astrbot_config=other_config,
+        plugin_manager=harness.ctx.plugin_manager,
+        agent_runtimes=harness.ctx.agent_runtimes,
     )
     other_stage = ProcessStage()
     await other_stage.initialize(other_ctx)
@@ -452,7 +463,10 @@ async def test_subagent_config_does_not_remove_main_tools(harness):
             "router_system_prompt": router,
             "agents": [{"name": "worker", "tools": [assigned]}],
         }
-        harness.config["agent"]["config"]["subagents"] = {"enabled": enabled, "config_ids": []}
+        harness.config["agent"]["config"]["subagents"] = {
+            "enabled": enabled,
+            "config_ids": [],
+        }
         event = make_event()
         event.platform_meta.support_proactive_message = False
         stage = await process_event(harness, event, stage=stage)
@@ -491,17 +505,25 @@ async def test_subagents_use_session_profile_without_global_override(
     harness.config["provider_settings"]["proactive_capability"]["add_cron_tools"] = (
         False
     )
-    harness.config["agent"]["config"]["subagents"] = {"enabled": global_enabled, "config_ids": []}
+    harness.config["agent"]["config"]["subagents"] = {
+        "enabled": global_enabled,
+        "config_ids": [],
+    }
     session_config = copy.deepcopy(harness.config)
     session_config["provider_settings"]["prompt_prefix"] = "Session: "
-    session_config["agent"]["config"]["subagents"] = {"enabled": session_enabled, "config_ids": []}
+    session_config["agent"]["config"]["subagents"] = {
+        "enabled": session_enabled,
+        "config_ids": [],
+    }
     harness.context.get_config.side_effect = lambda umo=None: (
         harness.config if umo is None else session_config
     )
     stage = ProcessStage()
     await stage.initialize(
         SimpleNamespace(
-            astrbot_config=session_config, plugin_manager=harness.ctx.plugin_manager, agent_runtimes=harness.ctx.agent_runtimes
+            astrbot_config=session_config,
+            plugin_manager=harness.ctx.plugin_manager,
+            agent_runtimes=harness.ctx.agent_runtimes,
         )
     )
 

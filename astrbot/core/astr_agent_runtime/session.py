@@ -6,6 +6,7 @@ import asyncio
 import json
 from typing import TYPE_CHECKING
 
+from astrbot.core.agent.events import RuntimeExecutionError, TurnPrepared
 from astrbot.core.agent.input import format_input_content
 from astrbot.core.agent.runtime import (
     AgentInput,
@@ -134,7 +135,16 @@ class NativeAgentSession(AgentSession):
                 },
             }
             event.trace.record("astr_agent_prepare", **metadata)
-            turn.emit("prepared", metadata)
+            turn.emit(
+                TurnPrepared(
+                    user_prompt=req.prompt or "",
+                    model=provider.get_model(),
+                    provider_id=provider.provider_config.get("id"),
+                    persona_id=event.get_extra("_trace_persona_id"),
+                    tool_names=tuple(req.func_tool.names()) if req.func_tool else (),
+                    streaming=runner.streaming,
+                )
+            )
             try:
                 return await execute_native_loop(runner, turn, config.max_steps)
             finally:
@@ -170,17 +180,22 @@ class NativeAgentSession(AgentSession):
         try:
             response = runner.get_final_llm_resp()
             if not event.is_stopped() and not turn.cancellation_requested:
-                saved = await save_agent_history(
-                    req=req,
-                    llm_response=response,
-                    all_messages=runner.run_context.messages,
-                    runner_stats=runner.stats,
-                    user_aborted=runner.was_aborted(),
-                    commit=self._commit_history,
-                    checkpoint_id=event.get_extra("llm_checkpoint_id")
-                    if self.is_main
-                    else None,
-                )
+                try:
+                    saved = await save_agent_history(
+                        req=req,
+                        llm_response=response,
+                        all_messages=runner.run_context.messages,
+                        runner_stats=runner.stats,
+                        user_aborted=runner.was_aborted(),
+                        commit=self._commit_history,
+                        checkpoint_id=event.get_extra("llm_checkpoint_id")
+                        if self.is_main
+                        else None,
+                    )
+                except Exception as exc:
+                    raise RuntimeExecutionError(
+                        "history_save_failed", str(exc)
+                    ) from exc
             await record_agent_stats(event, req, runner, response)
             event.trace.record(
                 "astr_agent_complete",

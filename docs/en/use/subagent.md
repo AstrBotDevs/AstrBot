@@ -85,3 +85,31 @@ Extensions can register a runtime with `ctx.agent.register_runtime(name, runtime
 ## Entry points and APIs
 
 Open management through **Configuration → AI → Capabilities → Subagents → Configure Specialized Agents**, route `/subagent`. Use `/api/v1/agent-configs` to list/create records and `/api/v1/agent-configs/{config_id}` to read/update/delete one. `/api/v1/agent-runtimes` lists callable runtimes and their defaults. Tool listing remains at `/api/v1/subagents/available-tools`. All require the `config` scope. The former whole-configuration `/subagents/config` and `/api/subagent/config` endpoints are removed.
+
+
+## Runtime output protocol
+
+Both `turn.events()` and the handle returned by `ctx.agent.run_turn()` expose typed `RuntimeEvent` values: `event_id`, `session`, `turn_id`, UTC `created_at`, and `payload`. `event.type` delegates to `payload.type`. Replay retains event IDs and readers receive independent snapshots. Execution and history persistence do not require a subscriber.
+
+```python
+from astrbot.api.agents import TextDelta, MessageCompleted
+
+async for event in run.events():
+    payload = event.payload
+    if isinstance(payload, TextDelta):
+        print(payload.text, end="")
+    elif isinstance(payload, MessageCompleted):
+        # Replace earlier deltas for this message_id with its complete content.
+        print(payload.message_id, payload.content)
+
+result = await run.result()
+print(result.status, result.text, result.usage.tokens.total_tokens)
+```
+
+Events cover `turn.started`, `turn.prepared`, `text.delta`, `reasoning.delta`, `message.completed`, `request.started/finished`, `tool.started/progress/finished/rejected`, `usage.updated`, and `turn.finished`. A request is one provider method invocation, including fallback and skills-like re-queries, without claiming visibility into hidden HTTP retries. Rejected tool calls never claim execution.
+
+`message_id` associates deltas with the authoritative completed snapshot; do not append that snapshot again. `part_index` identifies a content position. `result.content` contains the final reply only, and `result.text` extracts its plain text without reasoning, tool results or intermediate narration. Content types are `plain`, `reasoning`, `image`, `file`, `audio`, `video`, and namespaced `extension`. Media references distinguish local paths, URLs and base64 data with a MIME type. Core restores platform-specific components from `astrbot.platform` extensions.
+
+Usage events and final usage are cumulative replacement snapshots, never additive increments. Cached input is a subset of input tokens. Unknown counts remain `None`, distinct from zero; context occupancy is separate in `usage.context`. Actual step count is in `result.metrics.steps`. External runtimes declare their session ownership with `runtime_name` and publish only observed facts.
+
+Migration: replace `event.data` with `event.payload`, and `result.chain` with `result.content`. `streaming_delta` / `llm_result` become `text.delta`, `reasoning.delta` / `message.completed`; `agent_stats` becomes `usage.updated`. Final status, errors and metrics replace `err`, `aborted`, and `step_completed`. Existing message sends, `ProviderRequest`, `LLMResponse`, and plugin hook signatures remain unchanged. Explicit tool sends are not intercepted or automatically recorded as runtime output.

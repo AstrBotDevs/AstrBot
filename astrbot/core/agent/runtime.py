@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Generator
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
@@ -13,11 +14,23 @@ from uuid import uuid4
 from astrbot import logger
 from astrbot.core.agent.input import InputComponent
 
+from .events import (
+    AgentSessionRef,
+    RuntimeErrorInfo,
+    RuntimeEvent,
+    RuntimeEventPayload,
+    RuntimeExecutionError,
+    TurnFinished,
+    TurnResult,
+    TurnStarted,
+    TurnStatus,
+    UsageUpdated,
+)
+
 if TYPE_CHECKING:
     from astrbot.core.agent.run_context import ContextWrapper
     from astrbot.core.agent.tool import ToolSet
     from astrbot.core.astr_agent_context import AstrAgentContext
-    from astrbot.core.message.message_event_result import MessageChain
     from astrbot.core.platform.astr_message_event import AstrMessageEvent
     from astrbot.core.skills.skill_manager import SkillInfo
 
@@ -78,14 +91,6 @@ def get_agent_permissions(
     return AgentPermissions.from_event(owner.event)
 
 
-class TurnStatus(str, Enum):
-    """Terminal outcomes of a runtime turn."""
-
-    COMPLETED = "completed"
-    CANCELLED = "cancelled"
-    FAILED = "failed"
-
-
 class SessionState(str, Enum):
     """Observable execution state of a runtime-owned session."""
 
@@ -93,27 +98,6 @@ class SessionState(str, Enum):
     QUEUED = "queued"
     RUNNING = "running"
     CLOSED = "closed"
-
-
-@dataclass(frozen=True)
-class RuntimeEvent:
-    """One output or lifecycle change, associated with exactly one turn."""
-
-    turn_id: str
-    type: str
-    data: Any = None
-
-
-@dataclass(frozen=True)
-class TurnResult:
-    """Settled output after the runtime has finished its history and hooks."""
-
-    status: TurnStatus = TurnStatus.COMPLETED
-    text: str = ""
-    chain: MessageChain | None = None
-    error: str | None = None
-    reason: str = "completed"
-    usage: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -125,14 +109,6 @@ class AgentInput:
     content: list[InputComponent] | None = None
     plugin_tools: ToolSet | None = None
     plugin_skills: list[SkillInfo] | None = None
-
-
-@dataclass(frozen=True)
-class AgentSessionRef:
-    """A persistent address of one agent, independent of UMO selection."""
-
-    runtime: str
-    session_id: str
 
 
 class InputReceipt:
@@ -185,21 +161,33 @@ class AgentTurn:
         """Whether the owner cancelled this turn, distinct from an agent stop."""
         return self._cancel_requested
 
-    def emit(self, type: str, data: Any = None) -> None:
-        """Publish one runtime-owned event to all readers.
+    def emit(self, payload: RuntimeEventPayload) -> None:
+        """Publish a detached fact without giving observers execution ownership.
 
         Args:
-            type: Output or lifecycle event name.
-            data: Event-specific data; native output may contain a MessageChain.
+            payload: Standard event data; mutable JSON is copied before retention.
+
+        Raises:
+            RuntimeError: If execution has already published its terminal event.
         """
-        self._events.append(RuntimeEvent(self.id, type, data))
+        if self._events and self._events[-1].type == "turn.finished":
+            raise RuntimeError("Cannot publish after turn.finished")
+        self._events.append(
+            RuntimeEvent(
+                event_id=str(uuid4()),
+                session=AgentSessionRef(self.session.runtime_name, self.session.id),
+                turn_id=self.id,
+                created_at=datetime.now(timezone.utc),
+                payload=payload.model_copy(deep=True),
+            )
+        )
         self._changed.set()
 
     async def events(self) -> AsyncIterator[RuntimeEvent]:
         """Read this turn's ordered events, including already published events.
 
         Yields:
-            Events through the terminal turn_finished event.
+            Events through the terminal turn.finished event.
         """
         position = 0
         while True:
@@ -207,8 +195,8 @@ class AgentTurn:
             while position < len(self._events):
                 event = self._events[position]
                 position += 1
-                yield event
-                if event.type == "turn_finished":
+                yield event.model_copy(deep=True)
+                if event.type == "turn.finished":
                     return
             await self._changed.wait()
 
@@ -221,7 +209,7 @@ class AgentTurn:
         if self._task is None:
             raise RuntimeError("Turn has not been scheduled")
         try:
-            return await asyncio.shield(self._task)
+            return (await asyncio.shield(self._task)).model_copy(deep=True)
         except asyncio.CancelledError:
             if self._task.cancelled():
                 return TurnResult(status=TurnStatus.CANCELLED, reason="cancelled")
@@ -278,7 +266,12 @@ class AgentTurn:
 class AgentSession(ABC):
     """One runtime-owned conversation with a single serial execution chain."""
 
-    def __init__(self, session_id: str, umo: str) -> None:
+    runtime_name: str = "astrbot"
+
+    def __init__(
+        self, session_id: str, umo: str, *, runtime_name: str = "astrbot"
+    ) -> None:
+        self.runtime_name = runtime_name
         self.id = session_id
         self.umo = umo
         self.active_turn: AgentTurn | None = None
@@ -334,25 +327,43 @@ class AgentSession(ABC):
             try:
                 async with self._execution_lock:
                     self.active_turn = turn
-                    turn.emit("turn_started")
+                    turn.emit(TurnStarted())
                     result = await self.execute_turn(turn)
             except asyncio.CancelledError as exc:
                 result = TurnResult(
                     status=TurnStatus.CANCELLED,
                     reason="cancelled",
-                    error=str(exc) or None,
+                    error=RuntimeErrorInfo(
+                        code="cancelled", message=str(exc) or "Agent turn cancelled"
+                    ),
                 )
             except Exception as exc:
                 logger.exception("Agent turn %s failed in session %s", turn.id, self.id)
                 result = TurnResult(
                     status=TurnStatus.FAILED,
-                    error=str(exc) or type(exc).__name__,
+                    error=RuntimeErrorInfo(
+                        code=exc.code
+                        if isinstance(exc, RuntimeExecutionError)
+                        else "execution_failed",
+                        message=str(exc) or type(exc).__name__,
+                    ),
                     reason="error",
                 )
             finally:
+                if result.usage.source == "unknown":
+                    for event in reversed(turn._events):
+                        if isinstance(event.payload, UsageUpdated):
+                            result = result.model_copy(
+                                update={
+                                    "usage": event.payload.usage,
+                                    "metrics": event.payload.metrics,
+                                },
+                                deep=True,
+                            )
+                            break
                 if self.active_turn is turn:
                     self.active_turn = None
-                turn.emit("turn_finished", result)
+                turn.emit(TurnFinished(result=result))
                 self._turns.discard(turn)
             return result
 
@@ -363,8 +374,11 @@ class AgentSession(ABC):
             # A task cancelled before coroutine entry cannot run its finally.
             if done.cancelled():
                 turn.emit(
-                    "turn_finished",
-                    TurnResult(status=TurnStatus.CANCELLED, reason="cancelled"),
+                    TurnFinished(
+                        result=TurnResult(
+                            status=TurnStatus.CANCELLED, reason="cancelled"
+                        )
+                    )
                 )
                 self._turns.discard(turn)
 

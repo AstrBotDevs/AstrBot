@@ -11,6 +11,7 @@ from astrbot.core.agent_input import (
     prepare_agent_input,
 )
 from astrbot.core.agent_output import present_turn
+from astrbot.core.agent_output_content import chain_from_content
 from astrbot.core.astr_agent_runtime import AstrAgentRuntime
 from astrbot.core.astr_agent_runtime.main_agent import MainAgentBuildConfig
 from astrbot.core.llm_error_messages import LLM_ERROR_MESSAGE_EXTRA_KEY
@@ -185,7 +186,7 @@ class InternalAgentSubStage(Stage):
                     chain = (
                         MessageChain().message(result.text)
                         if result.text
-                        else result.chain or MessageChain()
+                        else chain_from_content(result.content)
                     )
                     event.set_result(
                         MessageEventResult(
@@ -209,12 +210,16 @@ class InternalAgentSubStage(Stage):
             if result.status == TurnStatus.CANCELLED and not event.get_extra(
                 "agent_user_aborted"
             ):
-                raise asyncio.CancelledError(result.error or "")
+                raise asyncio.CancelledError(
+                    result.error.message if result.error else ""
+                )
             if is_wakeup:
                 if result.status == TurnStatus.CANCELLED:
                     raise asyncio.CancelledError()
                 if result.status == TurnStatus.FAILED:
-                    raise RuntimeError(f"Wakeup agent failed: {result.error}")
+                    raise RuntimeError(
+                        f"Wakeup agent failed: {result.error.message if result.error else 'unknown error'}"
+                    )
         except asyncio.CancelledError:
             if turn is not None:
                 await turn.cancel()

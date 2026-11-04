@@ -1,5 +1,8 @@
 """Behavioral contract for runtime turns, independent of native model execution."""
 
+from astrbot.core.agent.events import TextDelta, ExecutionMetrics
+from astrbot.core.agent.output import PlainOutput
+
 import asyncio
 from types import SimpleNamespace
 
@@ -28,11 +31,11 @@ class RecordingSession(AgentSession):
 
     async def execute_turn(self, turn):
         await self.entered.put(turn)
-        turn.emit("text_delta", "working")
+        turn.emit(TextDelta(message_id="message", part_index=0, text="working"))
         await self.release.wait()
         self.saved.append(turn.id)
         assert turn.input.content is not None
-        return TurnResult(text=turn.input.content[0].text)
+        return TurnResult(content=(PlainOutput(text=turn.input.content[0].text),))
 
     async def history(self):
         return list(self.saved)
@@ -59,12 +62,12 @@ async def test_result_and_multiple_event_readers_observe_one_execution():
     first = [event async for event in turn.events()]
     second = [event async for event in turn.events()]
     assert [event.type for event in first] == [
-        "turn_started",
-        "text_delta",
-        "turn_finished",
+        "turn.started",
+        "text.delta",
+        "turn.finished",
     ]
     assert first == second
-    assert first[-1].data is result
+    assert first[-1].payload.result == result
     await session.close()
 
 
@@ -187,7 +190,11 @@ async def test_main_session_stays_bound_when_current_conversation_changes():
             )
         ),
     )
-    runtime = AstrAgentRuntime(SimpleNamespace(conversation_manager=manager), agent_configs=MagicMock(), subagents=MagicMock())
+    runtime = AstrAgentRuntime(
+        SimpleNamespace(conversation_manager=manager),
+        agent_configs=MagicMock(),
+        subagents=MagicMock(),
+    )
     first = await runtime.open_session(umo)
     manager.get_curr_conversation_id.return_value = "second"
     second = await runtime.open_session(umo)

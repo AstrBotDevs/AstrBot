@@ -4,8 +4,20 @@ import asyncio
 from contextlib import aclosing
 from typing import TYPE_CHECKING
 
+from astrbot.core.agent.events import (
+    ContextUsage,
+    ExecutionMetrics,
+    RequestFinished,
+    RequestStarted,
+    RuntimeErrorInfo,
+    RuntimeTokenUsage,
+    TurnUsage,
+    UsageUpdated,
+)
+from astrbot.core.agent.output import PlainOutput
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runtime import AgentTurn, TurnResult, TurnStatus
+from astrbot.core.agent_output_content import content_from_chain
 from astrbot.core.astr_agent_runtime.runner import AgentRunner, _watch_agent_stop_signal
 
 if TYPE_CHECKING:
@@ -107,26 +119,92 @@ async def execute_native_loop(
     """
     event = turn.input.event
     watcher = asyncio.create_task(_watch_agent_stop_signal(runner, event))
+    seen: set[str] = set()
+    active_requests: set[str] = set()
+    input_tokens = output_tokens = cached_tokens = 0
+    has_input = has_output = has_cached = False
+    complete = True
+    usage = TurnUsage()
     try:
         async with aclosing(runner.step_until_done(max_steps)) as responses:
-            async for response in responses:
-                turn.emit(response.type, response.data)
+            async for payload in responses:
+                if isinstance(payload, RequestStarted):
+                    active_requests.add(payload.request_id)
+                    if usage.source == "unknown":
+                        usage = TurnUsage(source="requests", complete=False)
+                if (
+                    isinstance(payload, RequestFinished)
+                    and payload.request_id not in seen
+                ):
+                    seen.add(payload.request_id)
+                    active_requests.discard(payload.request_id)
+                    report = payload.usage
+                    complete = (
+                        complete
+                        and report is not None
+                        and report.input_tokens is not None
+                        and report.output_tokens is not None
+                    )
+                    if report is not None:
+                        if report.input_tokens is not None:
+                            input_tokens += report.input_tokens
+                            has_input = True
+                        if report.output_tokens is not None:
+                            output_tokens += report.output_tokens
+                            has_output = True
+                        if report.cached_input_tokens is not None:
+                            cached_tokens += report.cached_input_tokens
+                            has_cached = True
+                    usage = TurnUsage(
+                        source="requests",
+                        complete=complete,
+                        tokens=RuntimeTokenUsage(
+                            input_tokens=input_tokens if has_input else None,
+                            output_tokens=output_tokens if has_output else None,
+                            cached_input_tokens=cached_tokens if has_cached else None,
+                        ),
+                        context=ContextUsage(
+                            tokens=report.input_tokens if report is not None else None,
+                            limit=runner.request_context_manager_config.max_context_tokens
+                            if runner.request_context_manager_config.max_context_tokens
+                            > 0
+                            else None,
+                        ),
+                    )
+                turn.emit(payload)
+                if isinstance(payload, RequestFinished):
+                    turn.emit(UsageUpdated(usage=usage, metrics=ExecutionMetrics()))
     finally:
         watcher.cancel()
         await asyncio.gather(watcher, return_exceptions=True)
-    turn.emit("step_completed", {"steps": runner._step_budget_used})
+        if active_requests:
+            usage = usage.model_copy(update={"complete": False})
+        metrics = ExecutionMetrics(
+            duration_ms=max(0, runner.stats.end_time - runner.stats.start_time) * 1000,
+            first_token_ms=runner.stats.time_to_first_token * 1000
+            if runner.stats.time_to_first_token
+            else None,
+            steps=runner._step_budget_used,
+        )
+        turn.emit(UsageUpdated(usage=usage, metrics=metrics))
+
     response = runner.get_final_llm_resp()
     cancelled = runner.was_aborted()
     error = response is not None and response.role == "err"
+    content = content_from_chain(response.result_chain) if response else ()
+    if not content and response is not None and response.completion_text:
+        content = (PlainOutput(text=response.completion_text),)
     return TurnResult(
         status=TurnStatus.CANCELLED
         if cancelled
         else TurnStatus.FAILED
         if error
         else TurnStatus.COMPLETED,
-        text=response.completion_text if response else "",
-        chain=response.result_chain if response else None,
-        error=response.completion_text if error and response is not None else None,
+        content=content if not error else (),
+        error=RuntimeErrorInfo(code="provider_error", message=response.completion_text)
+        if error and response is not None
+        else None,
         reason=runner.run_context.run_end_reason or "completed",
-        usage=runner.stats.to_dict(),
+        usage=usage,
+        metrics=metrics,
     )

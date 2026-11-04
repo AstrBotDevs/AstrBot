@@ -513,6 +513,7 @@ class SubAgentService:
                 session_id=agent.conversation_id,
                 options={"profile": "subagent"},
             )
+            session.runtime_name = agent.runtime
             handle = await session.run_turn(
                 DelegatedAgentInput(
                     event=caller.event,
@@ -526,15 +527,18 @@ class SubAgentService:
             )
             self._turn_handles[agent.agent_id] = handle
             try:
-                async for event in handle.events():
-                    if event.type == "step_completed":
-                        turn.completed_steps = event.data["steps"]
-                        await self.store.save(agent)
                 result = await handle.result()
+                if result.metrics.steps is not None:
+                    turn.completed_steps = result.metrics.steps
+                    await self.store.save(agent)
                 if result.status == TurnStatus.CANCELLED:
                     raise asyncio.CancelledError()
                 if result.status == TurnStatus.FAILED:
-                    raise RuntimeError(result.error)
+                    raise RuntimeError(
+                        result.error.message
+                        if result.error
+                        else "Agent execution failed"
+                    )
                 return result.text
             except BaseException:
                 await handle.cancel()

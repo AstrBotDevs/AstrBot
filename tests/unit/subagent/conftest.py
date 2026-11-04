@@ -1,4 +1,7 @@
 import asyncio
+from astrbot.core.agent.events import TextDelta, ExecutionMetrics
+from astrbot.core.agent.output import PlainOutput
+
 import copy
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -51,8 +54,11 @@ class MemorySession(AgentSession):
             await self.runtime.release.wait()
         if self.runtime.failure:
             raise self.runtime.failure
-        turn.emit("step_completed", {"steps": 1})
-        return TurnResult(text=format_input_content(content))
+
+        return TurnResult(
+            content=(PlainOutput(text=format_input_content(content)),),
+            metrics=ExecutionMetrics(steps=1),
+        )
 
     async def cancel_turn(self, turn):
         self.runtime.cancelled.append(self.id)
@@ -193,9 +199,7 @@ async def environment(tmp_path, request):
             config_id=str(uuid4()),
             name=name,
             runtime=runtime,
-            config=runtimes[runtime].normalize_config(
-                runtime_config, delegated=True
-            ),
+            config=runtimes[runtime].normalize_config(runtime_config, delegated=True),
         )
         await agent_configs.save(record)
         config_ids = context.get_config()["agent"]["config"]["subagents"]["config_ids"]

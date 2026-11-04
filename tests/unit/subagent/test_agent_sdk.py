@@ -101,9 +101,11 @@ async def test_output_observers_do_not_change_delivery_or_history(sdk, send_to_u
     first = [event async for event in run.events()]
     second = [event async for event in run.events()]
     assert first == second
-    assert first[-1].type == "turn_finished"
+    assert first[-1].type == "turn.finished"
     assert any(
-        event.type == "llm_result" and event.data["chain"].get_plain_text() == "Done"
+        event.type == "message.completed"
+        and "".join(part.text for part in event.payload.content if part.type == "plain")
+        == "Done"
         for event in first
     )
     history = json.loads(sdk.conversation.history)
@@ -432,19 +434,36 @@ async def test_native_sessions_commit_whole_turn_after_execution(sdk, delegated)
         nonlocal calls
         calls += 1
         if calls == 1:
-            return LLMResponse(role="assistant", tools_call_name=["echo"], tools_call_ids=["echo-call"], tools_call_args=[{}])
+            return LLMResponse(
+                role="assistant",
+                tools_call_name=["echo"],
+                tools_call_ids=["echo-call"],
+                tools_call_args=[{}],
+            )
         entered.set()
         await release.wait()
         return LLMResponse(role="assistant", completion_text="Done")
 
     sdk.provider.text_chat.side_effect = respond
     if delegated:
-        agent = await sdk.native.spawn_agent(sdk.root, [{"type": "plain", "text": "Initial"}])
-        session = await sdk.native.open_session(sdk.scope.umo, session_id=agent["conversation_id"])
+        agent = await sdk.native.spawn_agent(
+            sdk.root, [{"type": "plain", "text": "Initial"}]
+        )
+        session = await sdk.native.open_session(
+            sdk.scope.umo, session_id=agent["conversation_id"]
+        )
         turn = None
     else:
-        session = await sdk.native.open_session(sdk.scope.umo, session_id=sdk.conversation.cid)
-        turn = await session.run_turn(MainAgentInput(event=sdk.event, permissions=sdk.root.permissions, content=[PlainInput(text="Initial")]))
+        session = await sdk.native.open_session(
+            sdk.scope.umo, session_id=sdk.conversation.cid
+        )
+        turn = await session.run_turn(
+            MainAgentInput(
+                event=sdk.event,
+                permissions=sdk.root.permissions,
+                content=[PlainInput(text="Initial")],
+            )
+        )
     try:
         await asyncio.wait_for(entered.wait(), 3)
         assert await session.history() == []
@@ -496,3 +515,56 @@ async def test_context_exposes_agent_facade_for_runtime_registration(environment
         env.context.agent.register_runtime("closed", type(env.memory)())
     await env.service.close()
     external.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_history_save_failure_is_not_reported_as_success(sdk):
+    """Execution completion waits for history, with a stable persistence failure."""
+    sdk.context.conversation_manager.update_conversation.side_effect = RuntimeError(
+        "storage unavailable"
+    )
+    run = await sdk.context.agent.run_turn(
+        umo=sdk.event.unified_msg_origin,
+        input_message=[PlainInput(text="Persist this turn")],
+        send_to_user=False,
+    )
+    result = await run.result()
+    assert result.status == TurnStatus.FAILED
+    assert result.error.code == "history_save_failed"
+    events = [event async for event in run.events()]
+    terminal = [event for event in events if event.type == "turn.finished"]
+    assert len(terminal) == 1
+    assert terminal[0].payload.result == result
+
+
+@pytest.mark.asyncio
+async def test_usage_events_are_snapshots_of_the_reported_requests(sdk):
+    """Final usage and event snapshots must not multiply request charges."""
+    from astrbot.core.provider.entities import TokenUsage
+
+    sdk.provider.text_chat.side_effect = [
+        LLMResponse(
+            role="assistant",
+            completion_text="Done",
+            usage=TokenUsage(input_other=10, input_cached=2, output=3),
+        )
+    ]
+    run = await sdk.context.agent.run_turn(
+        umo=sdk.event.unified_msg_origin,
+        input_message=[PlainInput(text="Usage")],
+        send_to_user=False,
+    )
+    result = await run.result()
+    events = [event async for event in run.events()]
+    requests = [event.payload for event in events if event.type == "request.finished"]
+    assert len(requests) == 1
+    assert result.usage.tokens.input_tokens == 12
+    assert result.usage.tokens.cached_input_tokens == 2
+    assert result.usage.tokens.total_tokens == 15
+    assert result.usage.source == "requests"
+    assert result.usage.complete
+    snapshots = [
+        event.payload.usage for event in events if event.type == "usage.updated"
+    ]
+    assert snapshots[-1] == result.usage
+    assert all(snapshot.tokens.total_tokens == 15 for snapshot in snapshots)

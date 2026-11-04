@@ -178,7 +178,11 @@ class TestConcurrency:
             set_extra=lambda *args: None,
             is_stopped=lambda: False,
         )
-        runtime = AstrAgentRuntime(SimpleNamespace(get_config=lambda **_: config), agent_configs=MagicMock(), subagents=MagicMock())
+        runtime = AstrAgentRuntime(
+            SimpleNamespace(get_config=lambda **_: config),
+            agent_configs=MagicMock(),
+            subagents=MagicMock(),
+        )
         session = MainAgentSession(runtime, "conversation", session_id)
         monkeypatch.setattr(native_session, "session_lock_manager", manager)
         monkeypatch.setattr(builder, "build_main_agent", build_main_agent)
@@ -202,7 +206,7 @@ class TestConcurrency:
         async with manager.acquire_lock(session_id):
             turn = await session.run_turn(input)
             events = turn.events()
-            assert (await anext(events)).type == "turn_started"
+            assert (await anext(events)).type == "turn.started"
             config["provider_settings"]["enable"] = provider_enabled
         result = await turn.result()
         await events.aclose()

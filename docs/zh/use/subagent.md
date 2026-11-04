@@ -86,3 +86,31 @@ Runtime 适配器通过 `AgentInput.content` 接收有类型的输入：`PlainIn
 ## 入口与接口
 
 管理页入口为 **配置 → AI → 能力 → 子代理 → 配置专用 Agent**，路由 `/subagent`。配置接口使用 `/api/v1/agent-configs`（列表、新建）和 `/api/v1/agent-configs/{config_id}`（读取、更新、删除）；`/api/v1/agent-runtimes` 返回可调用 runtime 及默认配置。工具列表使用 `/api/v1/subagents/available-tools`。这些接口需要 `config` 权限，旧的整包 `/subagents/config` 与 `/api/subagent/config` 接口已移除。
+
+
+## Runtime 输出协议
+
+`turn.events()` 与 `ctx.agent.run_turn()` 返回句柄的 `events()` 提供同一套有类型的 `RuntimeEvent`：`event_id`、`session`、`turn_id`、UTC `created_at` 和 `payload`。`event.type` 是 `payload.type` 的便利属性。重复读取保留相同事件 ID，每个读者获得独立快照；不订阅事件也会正常执行和保存历史。
+
+```python
+from astrbot.api.agents import TextDelta, MessageCompleted
+
+async for event in run.events():
+    payload = event.payload
+    if isinstance(payload, TextDelta):
+        print(payload.text, end="")
+    elif isinstance(payload, MessageCompleted):
+        # Complete content replaces the deltas for this message_id.
+        print(payload.message_id, payload.content)
+
+result = await run.result()
+print(result.status, result.text, result.usage.tokens.total_tokens)
+```
+
+事件包括 `turn.started`、`turn.prepared`、`text.delta`、`reasoning.delta`、`message.completed`、`request.started/finished`、`tool.started/progress/finished/rejected`、`usage.updated` 和 `turn.finished`。请求事件以一次 provider 方法调用为单位，包含 fallback 和 skills-like 重查询，不声称反映 provider 内部的每次 HTTP 重试。工具校验失败使用 `tool.rejected`，实际执行后才有 `tool.started/finished`。
+
+完整消息用 `message_id` 关联增量；完整快照替换此前增量，不应再次追加。`part_index` 表示消息内内容位置。`result.content` 只包含最终答复，`result.text` 只提取其中的 `plain`，不混入推理、工具输出或中间说明。内容类型为 `plain`、`reasoning`、`image`、`file`、`audio`、`video` 和命名空间扩展 `extension`。媒体引用显式区分本地路径、URL 和带 MIME 类型的 base64 数据。平台专属组件使用 `astrbot.platform` 扩展，由 Core 呈现层还原。
+
+`usage.updated` 和最终 `result.usage` 都是累计快照，不可相加。缓存命中量包含在输入 token 中；未知值为 `None`，不等同于零。上下文占用单独位于 `usage.context`。`result.metrics.steps` 提供实际执行步数。外部 runtime 创建 session 时通过 `runtime_name` 声明归属，并仅发布自己实际观察到的事件。
+
+接口迁移：原 `event.data` 改为 `event.payload`；原 `result.chain` 改为 `result.content`。旧 `streaming_delta` / `llm_result` 对应 `text.delta`、`reasoning.delta` / `message.completed`；`agent_stats` 对应 `usage.updated`；`err`、`aborted` 和 `step_completed` 的信息归入最终状态、错误及执行指标。插件的消息发送、`ProviderRequest`、`LLMResponse` 和 hooks 参数协议保持原样。工具直接发送的消息不被拦截，也不会自动出现在 runtime 输出流中。

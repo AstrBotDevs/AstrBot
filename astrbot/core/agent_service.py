@@ -88,7 +88,7 @@ class AgentRun:
         """
         assert self._task is not None
         try:
-            return await asyncio.shield(self._task)
+            return (await asyncio.shield(self._task)).model_copy(deep=True)
         except asyncio.CancelledError:
             if self._task.cancelled():
                 return await self.runtime_turn.result()
@@ -98,15 +98,15 @@ class AgentRun:
         """Observe runtime output without changing explicit message sends.
 
         Yields:
-            Replayable runtime events, then turn_finished after any automatic
+            Replayable runtime events, then turn.finished after any automatic
             output presentation has completed.
         """
         async for event in self.runtime_turn.events():
-            if event.type == "turn_finished":
-                break
+            if event.type == "turn.finished":
+                await self.result()
+                yield event
+                return
             yield event
-        result = await self.result()
-        yield RuntimeEvent(self.id, "turn_finished", result)
 
     async def cancel(self) -> None:
         """Cancel this execution and its output handler, keeping the session open."""
@@ -443,7 +443,12 @@ class AgentService:
                 turn = await session.run_turn(input)
                 run._ready.set_result(turn)
                 if run.send_to_user:
-                    await deliver_agent_turn(self.context, turn)
+                    try:
+                        await deliver_agent_turn(self.context, turn)
+                    except Exception:
+                        # Presentation failure does not rewrite an executing runtime's outcome.
+                        await turn.result()
+                        raise
                 return await turn.result()
         except BaseException as exc:
             if not run._ready.done():
