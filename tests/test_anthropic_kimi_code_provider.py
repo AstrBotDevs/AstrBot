@@ -28,7 +28,10 @@ class _FakeAsyncAnthropic:
         ("https://api.anthropic.com/", "https://api.anthropic.com"),
         ("https://api.anthropic.com/v1", "https://api.anthropic.com"),
         ("https://api.anthropic.com/v1/", "https://api.anthropic.com"),
-        ("https://gateway.example.com/anthropic", "https://gateway.example.com/anthropic"),
+        (
+            "https://gateway.example.com/anthropic",
+            "https://gateway.example.com/anthropic",
+        ),
     ],
 )
 def test_anthropic_provider_normalizes_api_base(
@@ -1011,3 +1014,52 @@ async def test_prepare_payload_keeps_data_uri_history_images():
     images = [block for block in new_messages[0]["content"] if block["type"] == "image"]
     assert len(images) == 1
     assert images[0]["source"]["media_type"] == "image/png"
+
+
+@pytest.mark.asyncio
+async def test_prepare_payload_skips_history_image_above_anthropic_base64_limit(
+    tmp_path, caplog
+):
+    """An oversized history image must not be inlined: Anthropic rejects the turn."""
+    image_path = tmp_path / "huge_cache.png"
+    image_path.write_bytes(_png_bytes() + b"\x00" * 3_932_161)
+    provider = _make_anthropic_provider_for_payload_tests()
+    history = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "describe this screenshot"},
+                {"type": "image_url", "image_url": {"url": str(image_path)}},
+            ],
+        }
+    ]
+
+    with caplog.at_level(logging.WARNING):
+        _, new_messages = await provider._prepare_payload(history)
+
+    blocks = new_messages[0]["content"]
+    assert [block["type"] for block in blocks] == ["text"]
+    assert "Skipping oversized history image for Anthropic" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_prepare_payload_keeps_history_image_just_below_anthropic_limit(
+    tmp_path,
+):
+    """The guard must not reject images that still fit in one request."""
+    image_path = tmp_path / "large_cache.png"
+    image_path.write_bytes(_png_bytes() + b"\x00" * 3_932_000)
+    provider = _make_anthropic_provider_for_payload_tests()
+    history = [
+        {
+            "role": "user",
+            "content": [{"type": "image_url", "image_url": {"url": str(image_path)}}],
+        }
+    ]
+
+    _, new_messages = await provider._prepare_payload(history)
+
+    images = [block for block in new_messages[0]["content"] if block["type"] == "image"]
+    assert len(images) == 1
+    data = images[0]["source"]["data"]
+    assert len(data) <= anthropic_source.ANTHROPIC_IMAGE_MAX_BASE64_BYTES
