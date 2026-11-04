@@ -1,4 +1,6 @@
+import base64
 import builtins
+import logging
 from types import SimpleNamespace
 
 import httpx
@@ -324,10 +326,11 @@ def _make_anthropic_provider_for_payload_tests() -> anthropic_source.ProviderAnt
     )
 
 
-def test_prepare_payload_merges_consecutive_tool_results_into_single_user_message():
+@pytest.mark.asyncio
+async def test_prepare_payload_merges_consecutive_tool_results_into_single_user_message():
     provider = _make_anthropic_provider_for_payload_tests()
 
-    _, new_messages = provider._prepare_payload(
+    _, new_messages = await provider._prepare_payload(
         [
             {
                 "role": "assistant",
@@ -372,10 +375,11 @@ def test_prepare_payload_merges_consecutive_tool_results_into_single_user_messag
     ]
 
 
-def test_prepare_payload_keeps_single_tool_result_as_single_user_message():
+@pytest.mark.asyncio
+async def test_prepare_payload_keeps_single_tool_result_as_single_user_message():
     provider = _make_anthropic_provider_for_payload_tests()
 
-    _, new_messages = provider._prepare_payload(
+    _, new_messages = await provider._prepare_payload(
         [
             {
                 "role": "assistant",
@@ -408,10 +412,11 @@ def test_prepare_payload_keeps_single_tool_result_as_single_user_message():
     }
 
 
-def test_prepare_payload_does_not_merge_non_consecutive_tool_results():
+@pytest.mark.asyncio
+async def test_prepare_payload_does_not_merge_non_consecutive_tool_results():
     provider = _make_anthropic_provider_for_payload_tests()
 
-    _, new_messages = provider._prepare_payload(
+    _, new_messages = await provider._prepare_payload(
         [
             {
                 "role": "assistant",
@@ -907,3 +912,102 @@ async def test_tool_choice_empty_tool_list_skips_tool_choice(monkeypatch):
     kwargs = _capture_payloads_create.last_kwargs
     assert "tools" not in kwargs
     assert "tool_choice" not in kwargs
+
+
+def _png_bytes() -> bytes:
+    return base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+    )
+
+
+@pytest.mark.asyncio
+async def test_prepare_payload_inlines_local_history_image_paths(tmp_path, caplog):
+    """History images cached to disk by plugins must reach the model, not vanish."""
+    image_path = tmp_path / "media_cache.png"
+    image_path.write_bytes(_png_bytes())
+    provider = _make_anthropic_provider_for_payload_tests()
+    history = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "what is in this picture?"},
+                {"type": "image_url", "image_url": {"url": str(image_path)}},
+            ],
+        },
+        {"role": "assistant", "content": "A tiny transparent pixel."},
+    ]
+
+    with caplog.at_level(logging.WARNING):
+        _, new_messages = await provider._prepare_payload(history)
+
+    blocks = new_messages[0]["content"]
+    images = [block for block in blocks if block["type"] == "image"]
+    assert len(images) == 1
+    assert images[0]["source"]["type"] == "base64"
+    assert images[0]["source"]["media_type"] == "image/png"
+    assert base64.b64decode(images[0]["source"]["data"]) == _png_bytes()
+    assert blocks[0] == {"type": "text", "text": "what is in this picture?"}
+    assert "Unsupported image URL format" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_prepare_payload_drops_unreadable_local_history_image(tmp_path, caplog):
+    """A stale cache path must degrade to a warning, not fail the whole request."""
+    provider = _make_anthropic_provider_for_payload_tests()
+    history = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "still there?"},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": str(tmp_path / "gone.png")},
+                },
+            ],
+        }
+    ]
+
+    with caplog.at_level(logging.WARNING):
+        _, new_messages = await provider._prepare_payload(history)
+
+    blocks = new_messages[0]["content"]
+    assert [block["type"] for block in blocks] == ["text"]
+    assert "Unsupported image URL format for Anthropic" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_prepare_payload_does_not_refetch_remote_history_images(caplog):
+    """Remote history URLs stay untouched: rebuilding the payload must not hit the network."""
+    provider = _make_anthropic_provider_for_payload_tests()
+    url = "https://example.invalid/history.png"
+    history = [
+        {
+            "role": "user",
+            "content": [{"type": "image_url", "image_url": {"url": url}}],
+        }
+    ]
+
+    with caplog.at_level(logging.WARNING):
+        _, new_messages = await provider._prepare_payload(history)
+
+    assert new_messages[0]["content"] == []
+    assert f"Unsupported image URL format for Anthropic: {url[:50]}..." in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_prepare_payload_keeps_data_uri_history_images():
+    provider = _make_anthropic_provider_for_payload_tests()
+    data_uri = "data:image/png;base64," + base64.b64encode(_png_bytes()).decode()
+
+    _, new_messages = await provider._prepare_payload(
+        [
+            {
+                "role": "user",
+                "content": [{"type": "image_url", "image_url": {"url": data_uri}}],
+            }
+        ]
+    )
+
+    images = [block for block in new_messages[0]["content"] if block["type"] == "image"]
+    assert len(images) == 1
+    assert images[0]["source"]["media_type"] == "image/png"
