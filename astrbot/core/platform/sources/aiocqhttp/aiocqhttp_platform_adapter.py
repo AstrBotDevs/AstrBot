@@ -2,6 +2,8 @@ import asyncio
 import inspect
 import itertools
 import logging
+import socket
+import sys
 import time
 import uuid
 from collections.abc import Awaitable
@@ -425,6 +427,24 @@ class AiocqhttpAdapter(Platform):
         return abm
 
     def run(self) -> Awaitable[Any]:
+        """Start the reverse WebSocket server coroutine of this adapter.
+
+        The port is probed before the server starts because hypercorn enables
+        ``SO_REUSEADDR`` unconditionally, which on Windows lets a second process
+        bind a port that is already served and hides the conflict. On Windows
+        the probe therefore binds with ``SO_EXCLUSIVEADDRUSE``; on POSIX,
+        ``SO_REUSEADDR`` still rejects a live listener while tolerating
+        ``TIME_WAIT``. The probe only binds and never listens, so it leaves no
+        ``TIME_WAIT`` entry and cannot delay a quick restart. A host containing
+        a colon (``::`` or ``::1``) is probed with ``AF_INET6``, otherwise
+        ``AF_INET``.
+
+        Returns:
+            The awaitable returned by the aiocqhttp task runner.
+
+        Raises:
+            OSError: When the configured ws_reverse port is already in use.
+        """
         if not self.host or not self.port:
             logger.warning(
                 "aiocqhttp: 未配置 ws_reverse_host 或 ws_reverse_port，将使用默认值：http://0.0.0.0:6199",
@@ -432,15 +452,40 @@ class AiocqhttpAdapter(Platform):
             self.host = "0.0.0.0"
             self.port = 6199
 
+        bind_host = str(self.host)
+        bind_port = int(self.port)
+        family = socket.AF_INET6 if ":" in bind_host else socket.AF_INET
+        probe = socket.socket(family, socket.SOCK_STREAM)
+        try:
+            if sys.platform == "win32":
+                # SO_REUSEADDR on Windows silently succeeds against a live
+                # listener, so only SO_EXCLUSIVEADDRUSE can detect it.
+                probe.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+            else:
+                # On POSIX SO_REUSEADDR still rejects a live listener while
+                # tolerating TIME_WAIT, which keeps fast restarts working.
+                probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            probe.bind((bind_host, bind_port))
+        except OSError as exc:
+            logger.error(
+                f"aiocqhttp: ws_reverse port {bind_host}:{bind_port} is already in use. "
+                "Another AstrBot instance, or a stale backend process that was never "
+                f"stopped, may still be listening on it. Original error: {exc!r}"
+            )
+            raise
+        finally:
+            probe.close()
+
+        logger.info(
+            f"aiocqhttp: starting reverse WebSocket server on {bind_host}:{bind_port}",
+        )
         coro = self.bot.run_task(
-            host=self.host,
-            port=int(self.port),
+            host=bind_host,
+            port=bind_port,
             shutdown_trigger=self.shutdown_trigger_placeholder,
         )
 
-        for handler in logging.root.handlers[:]:
-            logging.root.removeHandler(handler)
-        logging.getLogger("aiocqhttp").setLevel(logging.ERROR)
+        logging.getLogger("aiocqhttp").setLevel(logging.WARNING)
         self.shutdown_event = asyncio.Event()
         return coro
 
