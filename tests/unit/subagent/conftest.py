@@ -31,10 +31,10 @@ from astrbot.core.provider.entities import LLMResponse, ProviderRequest
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
 from astrbot.core.provider.provider import Provider
 from astrbot.core.star.context import Context
-from astrbot.core.subagents.caller import DelegatedAgentInput
-from astrbot.core.subagents.messages import format_agent_messages
-from astrbot.core.subagents.service import SubAgentService
-from astrbot.core.subagents.store import SubAgentStore
+from astrbot.core.astr_agent_runtime.subagents.caller import DelegatedAgentInput
+from astrbot.core.astr_agent_runtime.subagents.messages import format_agent_messages
+from astrbot.core.astr_agent_runtime.subagents.service import SubAgentService
+from astrbot.core.astr_agent_runtime.subagents.store import SubAgentStore
 
 
 class MemorySession(AgentSession):

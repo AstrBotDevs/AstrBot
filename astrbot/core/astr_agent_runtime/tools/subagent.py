@@ -7,13 +7,13 @@ import json
 from typing import TYPE_CHECKING, Any
 
 from astrbot.core.agent.tool import FunctionTool
+from astrbot.core.astr_agent_runtime.subagents.messages import SUBAGENT_MESSAGES_SCHEMA
 from astrbot.core.astr_agent_runtime.tools.registry import builtin_tool
-from astrbot.core.subagents.messages import SUBAGENT_MESSAGES_SCHEMA
 
 if TYPE_CHECKING:
     from astrbot.core.agent.run_context import ContextWrapper
-    from astrbot.core.subagents.context import SubAgentContext
-    from astrbot.core.subagents.service import SubAgentService
+    from astrbot.core.astr_agent_runtime.subagents.context import SubAgentContext
+    from astrbot.core.astr_agent_runtime.subagents.service import SubAgentService
 
 
 SUBAGENT_TOOL_NAMES = frozenset(

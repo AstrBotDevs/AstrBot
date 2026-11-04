@@ -16,9 +16,9 @@ from .main_session import MainAgentSession
 
 if TYPE_CHECKING:
     from astrbot.core.agent.config_store import AgentConfigStore
+    from astrbot.core.astr_agent_runtime.subagents.context import SubAgentContext
+    from astrbot.core.astr_agent_runtime.subagents.service import SubAgentService
     from astrbot.core.star.context import Context
-    from astrbot.core.subagents.context import SubAgentContext
-    from astrbot.core.subagents.service import SubAgentService
 
 
 class AstrAgentRuntime(AgentRuntime):

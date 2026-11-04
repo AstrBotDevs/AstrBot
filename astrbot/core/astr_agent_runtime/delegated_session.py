@@ -27,15 +27,15 @@ from astrbot.core.astr_agent_runtime.main_agent.builder import MainAgentBuildRes
 from astrbot.core.astr_agent_runtime.main_agent.config import MainAgentBuildConfig
 from astrbot.core.astr_agent_runtime.main_agent.persona import apply_skills
 from astrbot.core.astr_agent_runtime.session import NativeAgentSession
+from astrbot.core.astr_agent_runtime.subagents.caller import (
+    AgentCaller,
+    DelegatedAgentInput,
+)
+from astrbot.core.astr_agent_runtime.subagents.context import SubAgentContext
 from astrbot.core.astr_agent_runtime.tools.message_tools import SendMessageToUserTool
 from astrbot.core.db.po import Conversation
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.star.star import star_map
-from astrbot.core.subagents.caller import (
-    AgentCaller,
-    DelegatedAgentInput,
-)
-from astrbot.core.subagents.context import SubAgentContext
 
 if TYPE_CHECKING:
     from .runtime import AstrAgentRuntime

@@ -476,7 +476,8 @@ Internal implementation paths have changed as follows:
 | `core/astr_agent_hooks.py` | `core/astr_agent_runtime/hooks.py` |
 | `core/astr_agent_tool_exec.py` | `core/astr_agent_runtime/tool_executor.py`; plugin invocation lives in `core/star/tool_execution.py` |
 | `core/astr_agent_run_util.py` | `core/astr_agent_runtime/runner.py` |
-| `core/astr_main_agent/` | Native construction lives in `core/astr_agent_runtime/main_agent/`; public subagent management lives in `core/subagents/` |
+| `core/astr_main_agent/` | Native construction lives in `core/astr_agent_runtime/main_agent/`; native subagent orchestration lives in `core/astr_agent_runtime/subagents/` |
+| `core/subagents/` | `core/astr_agent_runtime/subagents/` |
 | `core/computer/`, `core/tools/` | `core/astr_agent_runtime/computer/`, `core/astr_agent_runtime/tools/` |
 | `core/skills/neo_skill_sync.py` | `core/astr_agent_runtime/computer/neo_skill_sync.py` |
 | `core/astr_agent_wakeup.py` | `core/agent_wakeup.py` |

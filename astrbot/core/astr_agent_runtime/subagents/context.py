@@ -4,7 +4,7 @@ from pydantic import Field
 from pydantic.dataclasses import dataclass
 
 from astrbot.core.agent.tool import ToolSet
-from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.core.astr_agent_runtime.context import AstrAgentContext
 
 from .store import AgentScope
 

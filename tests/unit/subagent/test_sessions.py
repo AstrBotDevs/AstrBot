@@ -21,7 +21,7 @@ from astrbot.core.astr_agent_runtime.tools.subagent import (
     WaitAgentTool,
 )
 from astrbot.core.provider.entities import ProviderRequest
-from astrbot.core.subagents.store import AgentState
+from astrbot.core.astr_agent_runtime.subagents.store import AgentState
 
 
 @pytest.mark.asyncio

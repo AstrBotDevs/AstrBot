@@ -11,7 +11,7 @@ from PIL import Image as PILImage
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.message.components import Image
 from astrbot.core.provider.entities import LLMResponse
-from astrbot.core.subagents.store import AgentState
+from astrbot.core.astr_agent_runtime.subagents.store import AgentState
 
 
 @pytest.mark.asyncio

@@ -73,7 +73,7 @@ agent 的公共 ID、runtime 类型、runtime session ID、直接父会话引用
 
 ## Agent runtime
 
-内置 `astrbot` runtime 管理原生会话、历史、hooks、模型执行和内置能力。主代理与 worker 使用相同的 session/turn 接口；原生 tool loop 是其内部实现。Core 负责消息输入前处理和输出呈现。公共子代理服务管理公共 ID、已接受任务、并发配额、超时和结果通知，不直接读写 runtime 的私有历史存储；投递确认通过父 session 提供的公共历史视图完成。
+内置 `astrbot` runtime 管理原生会话、历史、hooks、模型执行和内置能力。主代理与 worker 使用相同的 session/turn 接口；原生 tool loop 是其内部实现。Core 负责消息输入前处理和输出呈现。AstrBot runtime 的子代理编排服务管理公共 ID、已接受任务、并发配额、超时和结果通知，不直接读写 runtime 的私有历史存储；投递确认通过父 session 提供的公共历史视图完成。
 
 Runtime 适配器通过 `AgentInput.content` 接收有类型的输入：`PlainInput`、`ImageInput`、`FileInput` 分别保持 `plain`、`image`、`file` 的语义。这些是不可变的数据对象，不包含 IM 协议序列化或媒体下载方法。工具请求和任务存储继续使用原有的 `messages` JSON 格式，在进入 runtime 时转换为内容对象。
 

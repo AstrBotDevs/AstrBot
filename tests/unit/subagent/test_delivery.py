@@ -9,8 +9,8 @@ from astrbot.core.agent.runtime import AgentSessionRef, InputReceipt, TurnResult
 from astrbot.core.astr_agent_runtime import AstrAgentRuntime
 from astrbot.core.astr_agent_runtime.main_agent import subagent
 from astrbot.core.provider.entities import ProviderRequest
-from astrbot.core.subagents.service import SubAgentService
-from astrbot.core.subagents.store import AgentState, SubAgentStore
+from astrbot.core.astr_agent_runtime.subagents.service import SubAgentService
+from astrbot.core.astr_agent_runtime.subagents.store import AgentState, SubAgentStore
 from astrbot.core.utils.active_event_registry import active_event_registry
 
 

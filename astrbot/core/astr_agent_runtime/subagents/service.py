@@ -1,4 +1,4 @@
-"""Runtime-independent interaction, scheduling, and result delivery for agent sessions."""
+"""AstrBot runtime delegation, scheduling, and result delivery across agent runtimes."""
 
 from __future__ import annotations
 

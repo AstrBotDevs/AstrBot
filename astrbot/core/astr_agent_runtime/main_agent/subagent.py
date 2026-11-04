@@ -7,6 +7,10 @@ from html import escape
 from typing import TYPE_CHECKING
 
 from astrbot.core.agent.tool import ToolSet
+from astrbot.core.astr_agent_runtime.subagents.caller import AgentCaller
+from astrbot.core.astr_agent_runtime.subagents.context import SubAgentContext
+from astrbot.core.astr_agent_runtime.subagents.service import SubAgentService
+from astrbot.core.astr_agent_runtime.subagents.store import AgentScope
 from astrbot.core.astr_agent_runtime.tools.subagent import (
     SUBAGENT_TOOL_NAMES,
     CancelAgentTool,
@@ -16,10 +20,6 @@ from astrbot.core.astr_agent_runtime.tools.subagent import (
     SpawnAgentTool,
     WaitAgentTool,
 )
-from astrbot.core.subagents.caller import AgentCaller
-from astrbot.core.subagents.context import SubAgentContext
-from astrbot.core.subagents.service import SubAgentService
-from astrbot.core.subagents.store import AgentScope
 from astrbot.core.utils.active_event_registry import active_event_registry
 
 if TYPE_CHECKING:

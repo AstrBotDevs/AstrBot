@@ -474,7 +474,8 @@ if receipt is not None:
 | `core/astr_agent_hooks.py` | `core/astr_agent_runtime/hooks.py` |
 | `core/astr_agent_tool_exec.py` | `core/astr_agent_runtime/tool_executor.py`；插件调用适配位于 `core/star/tool_execution.py` |
 | `core/astr_agent_run_util.py` | `core/astr_agent_runtime/runner.py` |
-| `core/astr_main_agent/` | 内置构建位于 `core/astr_agent_runtime/main_agent/`；公共子代理管理位于 `core/subagents/` |
+| `core/astr_main_agent/` | 内置构建位于 `core/astr_agent_runtime/main_agent/`；子代理编排位于 `core/astr_agent_runtime/subagents/` |
+| `core/subagents/` | `core/astr_agent_runtime/subagents/` |
 | `core/computer/`、`core/tools/` | `core/astr_agent_runtime/computer/`、`core/astr_agent_runtime/tools/` |
 | `core/skills/neo_skill_sync.py` | `core/astr_agent_runtime/computer/neo_skill_sync.py` |
 | `core/astr_agent_wakeup.py` | `core/agent_wakeup.py` |

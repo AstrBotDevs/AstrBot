@@ -22,6 +22,8 @@ from astrbot.core import LogBroker, LogManager
 from astrbot.core.agent.config_store import AgentConfigStore
 from astrbot.core.agent.runtime import AgentRuntime
 from astrbot.core.astr_agent_runtime import AstrAgentRuntime
+from astrbot.core.astr_agent_runtime.subagents.service import SubAgentService
+from astrbot.core.astr_agent_runtime.subagents.store import SubAgentStore
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.config.default import VERSION
 from astrbot.core.conversation_mgr import ConversationManager
@@ -40,8 +42,6 @@ from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.star.context import Context
 from astrbot.core.star.star_handler import EventType, star_handlers_registry, star_map
 from astrbot.core.star.star_manager import PluginManager
-from astrbot.core.subagents.service import SubAgentService
-from astrbot.core.subagents.store import SubAgentStore
 from astrbot.core.umop_config_router import UmopConfigRouter
 from astrbot.core.updater import AstrBotUpdater
 from astrbot.core.utils.event_loop_diagnostics import (

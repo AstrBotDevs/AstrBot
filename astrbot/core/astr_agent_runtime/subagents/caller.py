@@ -10,7 +10,7 @@ from astrbot.core.agent.runtime import AgentInput, AgentPermissions
 
 if TYPE_CHECKING:
     from astrbot.core.agent.tool import ToolSet
-    from astrbot.core.astr_agent_context import AstrAgentContext
+    from astrbot.core.astr_agent_runtime.context import AstrAgentContext
     from astrbot.core.platform.astr_message_event import AstrMessageEvent
     from astrbot.core.star.context import Context
 
