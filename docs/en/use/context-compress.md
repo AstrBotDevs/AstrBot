@@ -11,11 +11,13 @@ Context compression reduces older material so a conversation can continue. AstrB
 
 1. Open **Config** in the WebUI sidebar and select the profile your bot uses.
 2. Go to **AI → Advanced → Context Management Strategy**. If this section is missing, confirm that you are using AstrBot Built-in AI and that **Enable AI** is on. See [Agent Execution Mode](./agent-runner.md) for switching modes.
-3. Choose a strategy under **Handling for History Limits or Context Window Pressure**. New profiles default to **Compress by LLM**.
-4. To get started, keep the recent context ratio at `0.15` and leave the compression model empty to use the current chat model. Keep **Max Turns Before Compression** at `-1` to avoid an additional turn-based history limit.
+3. Choose a **Compression Strategy**. New profiles default to **Compress by LLM**.
+4. Leave **Compression Model** empty to use the current chat model. To adjust parameters, expand **More Settings**. To get started, keep the recent context ratio at `0.15` and **Max Turns Before Compression** at `-1` to avoid an additional turn-based history limit.
 5. Click **Save Configuration** at the bottom right.
 
-![Context management settings](./images/context-compress-settings-en.png)
+Label changes: **Handling for History Limits or Context Window Pressure** → **Compression Strategy**; **Model Provider ID for Context Compression** → **Compression Model**.
+
+**Max Turns Before Compression**, **Turns to Discard When Limit Exceeded**, **Context Compression Instruction**, **Recent Context Token Ratio to Keep**, and **Fallback context window size** are now under **More Settings**, collapsed by default. The instruction and recent-context ratio appear only when LLM compression is selected. Configuration keys, default values and runtime behavior are unchanged; no data migration is required.
 
 These settings belong to the selected profile. Check each profile separately if your bots use different ones.
 
@@ -32,7 +34,7 @@ LLM compression adds a model request, which takes time and may incur a charge. S
 
 | Setting | Meaning and recommendation |
 | --- | --- |
-| Model Provider ID for Context Compression | Leave empty to use the current session's chat model, or choose a configured chat model. Its context window must be large enough for the material being summarized. |
+| Compression Model | Leave empty to use the current session's chat model, or choose a configured chat model. Its context window must be large enough for the material being summarized. |
 | Recent Context Token Ratio to Keep | Defaults to `0.15`: a budget of 15% of the current context's tokens is used to retain recent content unchanged. The range is `0–0.3`. AstrBot keeps whole turns rather than cutting at an exact token boundary; a positive ratio keeps at least the latest turn. |
 | Context Compression Instruction | Leave empty for the default prompt. A custom prompt can ask the summary to preserve the task goal, completed steps, key conclusions, file paths, and next actions. |
 

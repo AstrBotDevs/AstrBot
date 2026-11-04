@@ -97,6 +97,29 @@ The **_special** field is only available after v4.0.0. Common values include `se
 
 - `select_provider`, `select_provider_tts`, `select_provider_stt`, and `select_persona` return strings.
 - `select_knowledgebase` returns a `list` and supports multiple selection, so the corresponding config item should use `type: list` with a default value of `[]`.
+- `sender_id` opens the Select users dialog with search by nickname, ID or source session, saving only user IDs. Use `type: list` with a default value of `[]`. The list shows 50 results per page, supports previous/next navigation and selections across pages, and returns to the first page when searching or refreshing. Only recorded users are searched; historical messages are not backfilled. Hidden copy icons take no layout space. Hover over an entry and use its copy icon to copy the raw user ID.
+- `umo` opens the Select session sources dialog with search by group name, nickname, alias or UMO. Use `type: string` with a default of `""` for a single UMO string, or `type: list` with a default of `[]` for multiple UMOs. Each entry shows the full UMO in gray parentheses after its name, with the bot ID below; group-chat badges are blue and private-chat badges are green. All entries use the interface font. Candidate titles stay on one line and selected titles use up to two lines, with an ellipsis when truncated; hover to view the full name and UMO. Hidden copy icons take no layout space. Hover over an entry and use its copy icon to copy the full UMO.
+
+For example, add the following to `_conf_schema.json`:
+
+```json
+{
+  "users": {
+    "description": "Selected users",
+    "type": "list",
+    "default": [],
+    "_special": "sender_id"
+  },
+  "sources": {
+    "description": "Session sources",
+    "type": "list",
+    "default": [],
+    "_special": "umo"
+  }
+}
+```
+
+User suggestions are deduplicated by platform instance and sender ID, retaining the newest matching record; identical IDs on different platforms remain separate. Session sources are sorted by the latest existing conversation, alias or sender `updated_at`, descending. User suggestions are recorded when a message wakes the bot; an unrecorded ID can be added directly when no search results match. Session sources also support entering unrecorded UMOs manually. Both selectors support `readonly`. The bot page restricts platform instances through the component's `platformId` prop; plugin configuration schemas do not currently expose this filter.
 
 > [!NOTE]
 > For reference, AstrBot Core also uses other internal `_special` values, such as `select_providers`, `provider_pool`, `persona_pool`, `select_plugin_set`, `t2i_template`, `get_embedding_dim`, and `select_agent_runner_provider:*` (where `*` is a placeholder for the runner type). These are internal implementations and may change at any time — please avoid using them in plugins.

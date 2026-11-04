@@ -349,6 +349,30 @@ def persisted(tmp_path, capture):
     store.close()
 
 
+def test_trace_cleanup_matches_exact_adapter(persisted, capture):
+    """Remove a complete trace and its children without SQL wildcard matching."""
+    ids = ["bot_%", "BOT_%", "bot_ab", "bot_%-other"]
+    traces = []
+    for platform_id in ids:
+        trace = TraceSpan("message", f"{platform_id}:GroupMessage:room:1")
+        trace.record("event_received")
+        trace.record("response_sent", message="Reply")
+        trace.record("pipeline_end", status="success")
+        traces.append(trace)
+    for frame in capture:
+        assert persisted.append(frame)
+    assert persisted.flush()
+
+    assert persisted.clear_history(platform_id="bot_%") == {"removed_traces": 1}
+    assert persisted.get_trace(traces[0].trace_id) is None
+    assert all(persisted.get_trace(trace.trace_id) for trace in traces[1:])
+    with sqlite3.connect(persisted.path) as connection:
+        for table in ("spans", "events"):
+            assert connection.execute(
+                f"SELECT COUNT(*) FROM {table} WHERE trace_id = ?", (traces[0].trace_id,)
+            ).fetchone()[0] == 0
+
+
 def test_database_pages_filters_details_and_restart(persisted, capture):
     traces = []
     for index in range(4):

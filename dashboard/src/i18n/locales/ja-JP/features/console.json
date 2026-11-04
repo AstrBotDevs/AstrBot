@@ -24,7 +24,8 @@
     "core": "Core",
     "plugins": "プラグイン",
     "plugin": "プラグイン",
-    "allPlugins": "すべてのプラグイン",
+    "pluginsInLogs": "現在のログのプラグイン",
+    "pluginsInLogsHint": "この一覧は現在のログに基づくもので、インストール済みプラグインの一覧ではありません",
     "platform": "ボットプラットフォーム",
     "allPlatforms": "すべてのプラットフォーム",
     "unscopedPlatform": "システム / 未指定"

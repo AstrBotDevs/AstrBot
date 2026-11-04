@@ -204,7 +204,7 @@
             "AnySearch"
           ],
           "subtitles": [
-            "Google 网页、图片、学术和财经搜索",
+            "Google 网页、新闻、图片、学术和财经搜索",
             "DeepSeek 官方搜索接口",
             "",
             "",
@@ -248,7 +248,7 @@
         },
         "websearch_serpapi_key": {
           "description": "SerpApi API Key",
-          "hint": "支持 Google 网页、图片、学术和财经搜索。可添加多个 Key 轮询。获取 Key：[https://serpapi.com/manage-api-key](https://serpapi.com/manage-api-key)"
+          "hint": "支持 Google 网页、新闻、图片、学术和财经搜索。可添加多个 Key 轮询。获取 Key：[https://serpapi.com/manage-api-key](https://serpapi.com/manage-api-key)"
         },
         "websearch_deepseek_key": {
           "description": "DeepSeek API Key",
@@ -376,6 +376,8 @@
         "modes": {
           "none": "关闭"
         },
+        "networkAlwaysOn": "始终开启",
+        "windowsHostNetworkHint": "Windows 暂不支持在“整个环境”执行代码时单独禁网。切换到“工作区”后可关闭联网。",
         "runtimeUnknown": "运行环境信息不可用。",
         "memberWarning": "普通成员已获得联网或整个环境访问权限。",
         "executionInactive": "未生效",
@@ -385,6 +387,9 @@
           "os": "操作系统",
           "arch": "架构",
           "sandbox": "本地隔离",
+          "windowsUnavailable": "{backend} · 尚未就绪",
+          "windowsSetupHint": "请保存配置并重启 AstrBot；如出现管理员授权提示，请允许以完成沙盒初始化。",
+          "errorDetails": "查看诊断详情",
           "unavailableHint": "沙箱启动失败，受限 Shell/Python 执行及工作区文件搜索会受到影响。请根据下方错误检查系统安全策略（如 Linux 的 AppArmor、用户命名空间限制）或容器限制，修复后重启 AstrBot 重新检测。",
           "dialog": {
             "intro": "利用 macOS 的 Seatbelt 或 Linux 的 bubblewrap（bwrap）技术，为 AstrBot Agent 的执行提供安全隔离，以限制不同用户使用 AstrBot Agent 时的文件访问范围和联网权限，获得更高的安全性。",
@@ -443,9 +448,9 @@
               "hint": "当超过\"压缩前最多保留对话轮数\"且无法使用 LLM 压缩时，一次丢弃多少轮旧对话；请求期截断也会复用该值。"
             },
             "overflow_strategy": {
-              "description": "历史超限或上下文接近上限时的处理方式",
+              "description": "压缩策略",
               "labels": ["按对话轮数截断", "由 LLM 压缩上下文"],
-              "hint": "普通会话历史仅在超过\"压缩前最多保留对话轮数\"后执行该策略；请求发送前也会在上下文 token 接近模型窗口时使用同一策略保护本次请求。"
+              "hint": "模型上下文超限时的处理策略。"
             },
             "instruction": {
               "description": "上下文压缩提示词",
@@ -456,8 +461,8 @@
               "hint": "按当前上下文 token 数保留最近内容，范围 0-0.3。0.15 表示保留 15%；比例大于 0 时至少保留最后一轮。"
             },
             "provider_id": {
-              "description": "用于上下文压缩的模型提供商 ID",
-              "hint": "留空时使用当前聊天模型进行压缩；如果模型不可用或压缩失败，将回退为\"按对话轮数截断\"的策略。"
+              "description": "压缩模型",
+              "hint": "用于上下文压缩的模型。默认选择当前的对话模型。"
             },
             "fallback_max_tokens": {
               "description": "上下文窗口兜底值",
@@ -1033,7 +1038,7 @@
       },
       "wake_prefix": {
         "description": "唤醒词",
-        "hint": "唤醒机器人的消息前缀的列表。也可以通过 @ 机器人来唤醒。"
+        "hint": "唤醒机器人的消息前缀的列表，也可以通过 @ 机器人来唤醒。\n\n内置指令（如 `/help`、`/sid`）也依赖唤醒词：群聊中不带唤醒词直接输入将无法触发；私聊在未启用「私聊消息需要唤醒词」时无需前缀，可直接输入指令触发。"
       },
       "disable_builtin_commands": {
         "description": "禁用自带指令",
@@ -1348,7 +1353,7 @@
       },
       "pip_install_arg": {
         "description": "pip 安装额外参数",
-        "hint": "安装插件依赖时,会使用 Python 的 pip 工具。这里可以填写额外的参数,如 `--break-system-package` 等。"
+        "hint": "安装插件依赖时,会使用 Python 的 pip 工具。这里可以填写额外的参数,如 `--break-system-package` 等。PyPI 镜像的 TLS 证书默认会校验;若使用自签名/私有 CA 镜像,请通过 `--cert <CA 路径>` 指定信任的证书(推荐),或显式添加 `--trusted-host <主机名>`。"
       },
       "pypi_index_url": {
         "description": "PyPI 软件仓库地址",
@@ -1555,7 +1560,7 @@
 
       "custom_headers": {
         "description": "自定义请求头",
-        "hint": "此处添加的键值对将被合并到 OpenAI SDK 的 default_headers 中，用于自定义 HTTP 请求头。值必须为字符串。"
+        "hint": "此处添加的键值对将作为自定义 HTTP 请求头，附加到 AstrBot 发往模型服务商的请求中。值必须为字符串。"
       },
       "ollama_disable_thinking": {
         "description": "关闭思考模式",
@@ -1579,6 +1584,11 @@
             "description": "最大词元（Tokens）数",
             "hint": "生成的最大词元（Tokens）数。",
             "name": "Max Tokens"
+          },
+          "max_output_tokens": {
+            "description": "最大输出词元（Tokens）数",
+            "hint": "生成的最大词元（Tokens）数。",
+            "name": "Max Output Tokens"
           },
           "reasoning_effort": {
             "description": "推理强度",
@@ -1755,15 +1765,15 @@
       },
       "gm_native_search": {
         "description": "启用原生搜索功能",
-        "hint": "启用后所有函数工具将全部失效，免费次数限制请查阅官方文档"
+        "hint": "仅 Gemini 3 及以上模型支持与函数工具同时使用；Gemini 3 及以上模型的原生搜索仅限付费层级，计费规则请查阅官方文档"
       },
       "gm_native_coderunner": {
         "description": "启用原生代码执行器",
-        "hint": "启用后所有函数工具将全部失效"
+        "hint": "仅 Gemini 3 及以上模型支持与函数工具同时使用"
       },
       "gm_url_context": {
         "description": "启用URL上下文功能",
-        "hint": "启用后所有函数工具将全部失效"
+        "hint": "仅 Gemini 3 及以上模型支持与函数工具同时使用"
       },
       "gm_safety_settings": {
         "description": "安全过滤器",
@@ -1976,6 +1986,14 @@
       },
       "api_base": {
         "description": "API Base URL"
+      },
+      "total_timeout": {
+        "description": "总超时时间",
+        "hint": "单次决策请求的总超时时间（秒），包含等待并发名额、重试与退避；默认 5 秒。"
+      },
+      "max_concurrency": {
+        "description": "最大并发数",
+        "hint": "该提供商同时进行的决策请求上限；默认 4。"
       },
       "proxy": {
         "description": "代理地址",

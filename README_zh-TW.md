@@ -151,6 +151,7 @@ uv tool upgrade astrbot --python 3.12
 | Ollama（本機部署） | 大型模型服務 |
 | LM Studio（本機部署） | 大型模型服務 |
 | [MiraRouter](https://mirarouter.com/) | 大型模型服務（API 閘道，支援所有模型） |
+| [勝算雲](https://www.shengsuanyun.com/?from=CH_T70U2X9L) | 大型模型服務 |
 | [AIHubMix](https://aihubmix.com/?aff=4bfH) | 大型模型服務（API 閘道，支援所有模型） |
 | [優雲智算](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74) | 大型模型服務 |
 | [302.AI](https://share.302.ai/rr1M3l) | 大型模型服務 |
@@ -210,7 +211,7 @@ pre-commit install
 特別感謝所有 Contributors 和外掛開發者對 AstrBot 的貢獻 ❤️
 
 <a href="https://github.com/AstrBotDevs/AstrBot/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=AstrBotDevs/AstrBot&max=300&columns=15" />
+  <img src="https://contrib.rocks/image?repo=AstrBotDevs/AstrBot&max=500&columns=17" />
 </a>
 
 開源夥伴 ❤️

@@ -19,6 +19,7 @@ from astrbot.dashboard.services.live_chat_service import LiveChatService
     [
         "web_search_deepseek",
         "web_search_serpapi",
+        "news_search_serpapi",
         "image_search_serpapi",
         "finance_search_serpapi",
         "scholar_search_serpapi",
