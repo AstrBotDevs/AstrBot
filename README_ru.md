@@ -156,6 +156,7 @@ uv tool upgrade astrbot --python 3.12
 | [CompShare](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74) | Сервисы LLM |
 | [302.AI](https://share.302.ai/rr1M3l) | Сервисы LLM |
 | [TokenPony](https://www.tokenpony.cn/3YPyf) | Сервисы LLM |
+| [IO Intelligence](https://io.net/intelligence) | Сервисы LLM |
 | [SiliconFlow](https://docs.siliconflow.cn/cn/usercases/use-siliconcloud-in-astrbot) | Сервисы LLM |
 | [PPIO Cloud](https://ppio.com/user/register?invited_by=AIOONE) | Сервисы LLM |
 | ModelScope | Сервисы LLM |

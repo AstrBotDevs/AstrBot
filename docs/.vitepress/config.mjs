@@ -138,6 +138,7 @@ export default defineConfig({
                   { text: "硅基流动", link: "/siliconflow" },
                   { text: "小马算力", link: "/tokenpony" },
                   { text: "302.AI", link: "/302ai" },
+                  { text: "IO Intelligence", link: "/ionet" },
                   { text: "Ollama", link: "/provider-ollama" },
                   { text: "LMStudio", link: "/provider-lmstudio" },
                 ]
@@ -417,6 +418,7 @@ export default defineConfig({
                   { text: "SiliconFlow", link: "/siliconflow" },
                   { text: "TokenPony", link: "/tokenpony" },
                   { text: "302.AI", link: "/302ai" },
+                  { text: "IO Intelligence", link: "/ionet" },
                   { text: "Ollama", link: "/provider-ollama" },
                   { text: "LMStudio", link: "/provider-lmstudio" },
                 ],

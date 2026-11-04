@@ -156,6 +156,7 @@ uv tool upgrade astrbot --python 3.12
 | [優雲智算](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74) | 大型模型服務 |
 | [302.AI](https://share.302.ai/rr1M3l) | 大型模型服務 |
 | [小馬算力](https://www.tokenpony.cn/3YPyf) | 大型模型服務 |
+| [IO Intelligence](https://io.net/intelligence) | 大型模型服務 |
 | [矽基流動](https://docs.siliconflow.cn/cn/usercases/use-siliconcloud-in-astrbot) | 大型模型服務 |
 | [PPIO 派歐雲](https://ppio.com/user/register?invited_by=AIOONE) | 大型模型服務 |
 | ModelScope | 大型模型服務 |
