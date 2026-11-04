@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -751,6 +752,96 @@ class TestAstrBotCoreLifecycleStart:
 
             # Verify handler was called
             mock_handler.handler.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_start_propagates_loaded_hook_cancellation(
+        self, mock_log_broker, mock_db
+    ):
+        """Cancellation of a loaded hook must stop startup immediately."""
+        lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
+        lifecycle._load = MagicMock()
+        lifecycle.curr_tasks = []
+
+        entered = asyncio.Event()
+        release = asyncio.Event()
+        next_handler = AsyncMock()
+
+        async def blocking_handler():
+            entered.set()
+            await release.wait()
+
+        first_handler = SimpleNamespace(
+            handler=blocking_handler,
+            handler_module_path="test_module",
+            handler_name="blocking_handler",
+        )
+        second_handler = SimpleNamespace(
+            handler=next_handler,
+            handler_module_path="test_module",
+            handler_name="next_handler",
+        )
+
+        with (
+            patch(
+                "astrbot.core.core_lifecycle.star_handlers_registry"
+            ) as mock_registry,
+            patch(
+                "astrbot.core.core_lifecycle.star_map",
+                {"test_module": SimpleNamespace(name="test")},
+            ),
+            patch("astrbot.core.core_lifecycle.logger"),
+        ):
+            mock_registry.get_handlers_by_event_type.return_value = [
+                first_handler,
+                second_handler,
+            ]
+            start_task = asyncio.create_task(lifecycle.start())
+            await asyncio.wait_for(entered.wait(), timeout=2)
+            start_task.cancel()
+
+            with pytest.raises(asyncio.CancelledError):
+                await start_task
+
+        next_handler.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_start_keeps_isolating_loaded_hook_errors(
+        self, mock_log_broker, mock_db
+    ):
+        """Ordinary plugin errors remain isolated from later loaded hooks."""
+        lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
+        lifecycle._load = MagicMock()
+        lifecycle.curr_tasks = []
+
+        first_handler = SimpleNamespace(
+            handler=AsyncMock(side_effect=RuntimeError("plugin failed")),
+            handler_module_path="test_module",
+            handler_name="failing_handler",
+        )
+        second_handler = SimpleNamespace(
+            handler=AsyncMock(),
+            handler_module_path="test_module",
+            handler_name="next_handler",
+        )
+
+        with (
+            patch(
+                "astrbot.core.core_lifecycle.star_handlers_registry"
+            ) as mock_registry,
+            patch(
+                "astrbot.core.core_lifecycle.star_map",
+                {"test_module": SimpleNamespace(name="test")},
+            ),
+            patch("astrbot.core.core_lifecycle.logger") as mock_logger,
+        ):
+            mock_registry.get_handlers_by_event_type.return_value = [
+                first_handler,
+                second_handler,
+            ]
+            await lifecycle.start()
+
+        second_handler.handler.assert_awaited_once()
+        mock_logger.error.assert_called_once()
 
 
 class TestAstrBotCoreLifecycleStopAdditional:
