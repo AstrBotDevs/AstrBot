@@ -6,6 +6,7 @@ The adapter now probes the port before starting the server, so a conflict fails
 at startup instead of staying silent.
 """
 
+import errno
 import logging
 import socket
 import sys
@@ -257,3 +258,27 @@ def test_root_handlers_are_preserved(monkeypatch):
         assert handler in logging.root.handlers
     finally:
         logging.root.removeHandler(handler)
+
+
+def test_unresolvable_host_is_not_reported_as_a_port_conflict(monkeypatch):
+    """A host problem must not be described as a port that is already in use."""
+    logger = _RecordingLogger()
+    monkeypatch.setattr(aiocqhttp_platform_adapter, "logger", logger)
+    _FakeSocket.instances = []
+    monkeypatch.setattr(aiocqhttp_platform_adapter, "socket", _fake_socket_module())
+
+    adapter = _make_adapter("no-such-host.invalid", 47504)
+
+    def _bind_raises(self, address):
+        self.bind_args = address
+        raise socket.gaierror(errno.ENOENT, "getaddrinfo failed")
+
+    monkeypatch.setattr(_FakeSocket, "bind", _bind_raises)
+    with pytest.raises(socket.gaierror):
+        adapter.run()
+
+    assert len(logger.errors) == 1
+    assert "is already in use" not in logger.errors[0]
+    assert "cannot bind ws_reverse address" in logger.errors[0]
+    assert "no-such-host.invalid" in logger.errors[0]
+

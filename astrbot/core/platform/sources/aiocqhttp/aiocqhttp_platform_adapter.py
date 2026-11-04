@@ -1,4 +1,5 @@
 import asyncio
+import errno
 import inspect
 import itertools
 import logging
@@ -467,11 +468,20 @@ class AiocqhttpAdapter(Platform):
                 probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             probe.bind((bind_host, bind_port))
         except OSError as exc:
-            logger.error(
-                f"aiocqhttp: ws_reverse port {bind_host}:{bind_port} is already in use. "
-                "Another AstrBot instance, or a stale backend process that was never "
-                f"stopped, may still be listening on it. Original error: {exc!r}"
-            )
+            # A bad ws_reverse_host (unresolvable name, address not assigned to this
+            # machine) fails the bind for a reason that has nothing to do with a
+            # port conflict, so only EADDRINUSE gets the "already in use" wording.
+            if exc.errno == errno.EADDRINUSE:
+                logger.error(
+                    f"aiocqhttp: ws_reverse port {bind_host}:{bind_port} is already in use. "
+                    "Another AstrBot instance, or a stale backend process that was never "
+                    f"stopped, may still be listening on it. Original error: {exc!r}"
+                )
+            else:
+                logger.error(
+                    f"aiocqhttp: cannot bind ws_reverse address {bind_host}:{bind_port}: "
+                    f"{exc!r}. Check ws_reverse_host in the platform configuration."
+                )
             raise
         finally:
             probe.close()
