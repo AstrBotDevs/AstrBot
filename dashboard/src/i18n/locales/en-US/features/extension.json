@@ -480,5 +480,33 @@
   },
   "pluginChangelog": {
     "menuTitle": "View Changelog"
+  },
+  "organizer": {
+    "title": "Folders",
+    "hint": "Drag plugin cards into a folder to organize them.",
+    "all": "All plugins",
+    "uncategorized": "Uncategorized",
+    "count": "{count} plugins",
+    "stats": {
+      "plugins": "{count} plugins",
+      "running": "{count} running",
+      "updates": "{count} updates available"
+    },
+    "newFolder": "New folder",
+    "newFolderTitle": "Create plugin folder",
+    "folderName": "Folder name",
+    "duplicateFolder": "A folder with this name already exists.",
+    "createFolder": "Create folder",
+    "deleteFolder": "Delete folder",
+    "noMatch": "No plugins match these filters. Try another folder or filter.",
+    "moveToFolder": "Move to folder",
+    "filters": {
+      "all": "All",
+      "active": "Running",
+      "stopped": "Stopped",
+      "updates": "Updates",
+      "pinned": "Pinned"
+    },
+    "filterLabel": "Quick plugin filters"
   }
 }
