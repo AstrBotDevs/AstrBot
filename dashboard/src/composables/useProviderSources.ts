@@ -400,6 +400,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       dashscope: 'chat_completion',
       openai_whisper_api: 'speech_to_text',
       mimo_stt_api: 'speech_to_text',
+      minimax_stt_api: 'speech_to_text',
       openai_whisper_selfhost: 'speech_to_text',
       sensevoice_stt_selfhost: 'speech_to_text',
       openai_tts_api: 'text_to_speech',
