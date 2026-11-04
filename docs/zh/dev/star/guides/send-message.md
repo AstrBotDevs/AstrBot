@@ -39,6 +39,10 @@ async def helloworld(self, event: AstrMessageEvent):
 > 关于 unified_msg_origin。
 > unified_msg_origin 是一个字符串，记录了一个会话的唯一 ID，AstrBot 能够据此找到属于哪个消息平台的哪个会话。这样就能够实现在 `send_message` 的时候，发送消息到正确的会话。有关 MessageChain，请参见接下来的一节。
 
+> [!WARNING]
+> unified_msg_origin 中包含了 `session_id`，而群消息的 `session_id` 会随**隔离对话**（`platform_settings.unique_session`）的开启而改变格式。长期存储 unified_msg_origin 前，请确认插件是否依赖它跨隔离对话开关保持稳定；需要以群为单位定位时，改用 `event.get_group_id()`。详细格式见[处理消息事件](./listen-message-event)。上述改写仅对支持隔离的渠道生效。
+> `event.get_group_id()` 仅用于识别群，**不能**作为 `Context.send_message` 的发送目标；该参数必须是 `unified_msg_origin` 或 `MessageSession` 对象，传入裸群号会抛出 `ValueError`。
+
 ## 富媒体消息
 
 AstrBot 支持发送富媒体消息，比如图片、语音、视频等。使用 `MessageChain` 来构建消息。

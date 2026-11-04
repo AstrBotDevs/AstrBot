@@ -28,7 +28,7 @@ class AstrBotMessage:
 
     type: MessageType  # 消息类型
     self_id: str  # 机器人的识别id
-    session_id: str  # 会话id。取决于 unique_session 的设置。
+    session_id: str  # 会话id。此处保存平台适配器给出的原始值；开启隔离对话后，事件对象的 session_id 会被改写。
     message_id: str  # 消息id
     group_id: str = ""  # 群组id，如果为私聊，则为空
     sender: MessageMember  # 发送者
@@ -41,6 +41,11 @@ class AstrBotMessage:
 ```
 
 其中，`raw_message` 是消息平台适配器的**原始消息对象**。
+
+> [!WARNING]
+> 当用户开启**隔离对话**（`platform_settings.unique_session`，即 WebUI「平台与消息」中的开关）时，群消息的 `session_id` 会被改写为平台相关的复合 ID，`unified_msg_origin` 也随之变化。以 QQ（`aiocqhttp`）为例，`default:GroupMessage:987654321` 会变成 `default:GroupMessage:123456789_987654321`（`发送者ID_群ID`）。各平台的格式并不统一，例如飞书（`lark`）使用 `发送者ID%群ID`。
+> 如果插件需要以群为单位存储或查询数据，请使用 `event.get_group_id()` 获取原始群号，而不要直接使用 `session_id` 或解析 `unified_msg_origin`，否则同一会话在隔离对话开启前后的标识会不一致，导致查询不到数据。
+> 改写只发生在已注册隔离 ID 构造器的平台上，其余平台（如 Telegram、Discord）的 `session_id` 保持不变。各平台的构造结果并不统一：QQ、Slack、Matrix 为 `发送者ID_群ID`，飞书（`lark`）为 `发送者ID%群ID`，Misskey 为 `会话ID_发送者ID`，而**钉钉（`dingtalk`）只返回 `发送者ID`、不含群号**。请不要假定所有平台的 `session_id` 都包含群号。
 
 ### 消息链
 
