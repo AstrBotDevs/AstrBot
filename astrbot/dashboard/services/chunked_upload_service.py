@@ -16,9 +16,12 @@ import os
 import shutil
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
+
+import anyio
 
 from astrbot.core import logger
 from astrbot.core.utils.upload import UploadTooLargeError
@@ -26,6 +29,7 @@ from astrbot.core.utils.upload import UploadTooLargeError
 DEFAULT_CHUNK_SIZE = 1024 * 1024
 DEFAULT_EXPIRE_SECONDS = 3600
 CLEANUP_INTERVAL_SECONDS = 300
+_ResultT = TypeVar("_ResultT")
 
 
 class ChunkedUploadError(Exception):
@@ -47,6 +51,7 @@ class UploadSession:
     received_chunks: set[int] = field(default_factory=set)
     created_at: float = 0.0
     last_activity: float = 0.0
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
 
 
 class ChunkedUploadService:
@@ -161,6 +166,24 @@ class ChunkedUploadService:
             ChunkedUploadError: Unknown session, bad index or oversized chunk.
         """
         session = self.get_session(upload_id, owner=owner)
+        async with session.lock:
+            self.get_session(upload_id, owner=owner)
+            return await self._save_chunk(session, chunk_index, file)
+
+    async def _save_chunk(
+        self, session: UploadSession, chunk_index: int, file: Any
+    ) -> dict:
+        """Persist a chunk while the caller holds the session lock.
+
+        Args:
+            session: Active upload session.
+            chunk_index: Zero-based chunk index.
+            file: Upload adapter exposing save().
+
+        Returns:
+            Upload progress after publishing the chunk.
+        """
+        upload_id = session.id
         if chunk_index < 0 or chunk_index >= session.total_chunks:
             raise ChunkedUploadError("Chunk index out of range")
 
@@ -190,7 +213,7 @@ class ChunkedUploadService:
             )
 
         try:
-            await asyncio.to_thread(os.replace, temp_path, chunk_path)
+            await self._run_file_operation(os.replace, temp_path, chunk_path)
         except BaseException:
             temp_path.unlink(missing_ok=True)
             raise
@@ -242,11 +265,68 @@ class ChunkedUploadService:
             ChunkedUploadError: Chunks missing or merged size mismatch.
         """
         session = self.get_session(upload_id, owner=owner)
+        async with session.lock:
+            self.get_session(upload_id, owner=owner)
+            # Do not abandon the worker on cancellation: it owns open files.
+            # Keep the lock until writes and partial-file cleanup have finished.
+            try:
+                size = await self._run_file_operation(
+                    self._assemble_file, session, Path(dest)
+                )
+                await self._cleanup_locked_session(session)
+            except asyncio.CancelledError:
+                Path(dest).unlink(missing_ok=True)
+                raise
+            return size
+
+    async def _run_file_operation(
+        self, operation: Callable[..., _ResultT], *args: Any
+    ) -> _ResultT:
+        """Wait for disk work to finish before propagating task cancellation.
+
+        Args:
+            operation: Synchronous disk operation to run.
+            *args: Arguments passed to the operation.
+
+        Returns:
+            The operation's result.
+
+        Raises:
+            asyncio.CancelledError: The caller was cancelled during disk work.
+        """
+        worker = asyncio.create_task(anyio.to_thread.run_sync(operation, *args))
+        try:
+            return await asyncio.shield(worker)
+        except asyncio.CancelledError:
+            # Repeated cancellation must not release the session lock early.
+            while not worker.done():
+                try:
+                    await asyncio.shield(worker)
+                except asyncio.CancelledError:
+                    continue
+                except Exception:
+                    break
+            if not worker.cancelled():
+                worker.exception()
+            raise
+
+    def _assemble_file(self, session: UploadSession, dest_path: Path) -> int:
+        """Merge and validate chunks while the caller holds the session lock.
+
+        Args:
+            session: Upload containing the ordered source chunks.
+            dest_path: Destination for the merged bytes.
+
+        Returns:
+            Validated merged file size.
+
+        Raises:
+            ChunkedUploadError: Chunks are missing or the merged size is invalid.
+        """
         if len(session.received_chunks) != session.total_chunks:
             missing = sorted(set(range(session.total_chunks)) - session.received_chunks)
             raise ChunkedUploadError(f"Chunks incomplete, missing: {missing[:10]}...")
 
-        dest_path = Path(dest)
         try:
             with dest_path.open("wb") as outfile:
                 for i in range(session.total_chunks):
@@ -262,7 +342,6 @@ class ChunkedUploadService:
             dest_path.unlink(missing_ok=True)
             raise
 
-        await self.cleanup_session(upload_id)
         return size
 
     async def abort(self, upload_id: str, *, owner: str | None = None) -> bool:
@@ -289,15 +368,41 @@ class ChunkedUploadService:
         session = self.sessions.get(upload_id)
         if session is None:
             return
-        if session.chunk_dir.exists():
+        async with session.lock:
+            await self._cleanup_locked_session(session)
+
+    async def _cleanup_locked_session(self, session: UploadSession) -> None:
+        """Delete files off-loop and update the registry on the event-loop thread.
+
+        Args:
+            session: Session whose lock is held by the caller.
+        """
+        if self.sessions.get(session.id) is not session:
+            return
+        if await self._run_file_operation(
+            self._cleanup_session_files, session.chunk_dir
+        ):
+            self.sessions.pop(session.id, None)
+
+    @staticmethod
+    def _cleanup_session_files(chunk_dir: Path) -> bool:
+        """Remove files without accessing the shared session registry.
+
+        Args:
+            chunk_dir: Directory owned by the locked session.
+
+        Returns:
+            Whether the directory is absent or was successfully removed.
+        """
+        if chunk_dir.exists():
             try:
-                shutil.rmtree(session.chunk_dir)
+                shutil.rmtree(chunk_dir)
             except Exception as exc:
-                logger.warning(f"Failed to remove chunk dir {session.chunk_dir}: {exc}")
+                logger.warning(f"Failed to remove chunk dir {chunk_dir}: {exc}")
                 # Keep the session registered so the janitor can retry the
                 # leftover directory instead of forgetting it permanently.
-                return
-        self.sessions.pop(upload_id, None)
+                return False
+        return True
 
     def ensure_cleanup_task_started(self) -> None:
         if self._cleanup_task is None or self._cleanup_task.done():
