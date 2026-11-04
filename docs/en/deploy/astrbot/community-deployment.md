@@ -50,3 +50,11 @@ __Repository Address: [railgun19457/AstrbotScript](https://github.com/railgun194
 ## AstrBot Android Deployment
 
 Refer to [zz6zz666/AstrBot-Android-App](https://github.com/zz6zz666/AstrBot-Android-App)
+
+## Pethost One-Click Template
+
+[Pethost](https://pethost.dev) has a one-click template that runs the official `soulter/astrbot` image with its data on a persistent volume, at its own address with HTTPS.
+
+1. Open the [AstrBot template](https://pethost.dev/templates/astrbot/) and click Deploy on Pethost.
+2. Enter the dashboard password: it needs an upper-case letter, a lower-case letter and a digit.
+3. Once the project is live, open its address and sign in as `astrbot` with that password. AstrBot asks for a new password at the first sign-in.
