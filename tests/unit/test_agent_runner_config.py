@@ -180,6 +180,113 @@ def test_local_legacy_fields_are_fully_migrated():
     }.intersection(config["provider_settings"])
 
 
+def test_legacy_keep_recent_count_is_migrated_to_ratio():
+    config = {
+        "config_version": 2,
+        "provider": [{"id": "chat-main", "provider_type": "chat_completion"}],
+        "provider_settings": {
+            "agent_runner_type": "local",
+            "llm_compress_keep_recent": 4,
+            "max_context_length": 20,
+        },
+    }
+
+    assert _migrate_agent_runner_config(config)
+
+    compression = config["agent_runner"]["config"]["compression"]
+    assert compression["keep_recent_ratio"] == 0.2
+    assert "llm_compress_keep_recent" not in config["provider_settings"]
+
+
+def test_existing_keep_recent_ratio_wins_over_legacy_count():
+    config = {
+        "config_version": 2,
+        "provider": [{"id": "chat-main", "provider_type": "chat_completion"}],
+        "provider_settings": {
+            "agent_runner_type": "local",
+            "llm_compress_keep_recent": 4,
+            "llm_compress_keep_recent_ratio": 0.1,
+            "max_context_length": 20,
+        },
+    }
+
+    assert _migrate_agent_runner_config(config)
+
+    compression = config["agent_runner"]["config"]["compression"]
+    assert compression["keep_recent_ratio"] == 0.1
+    assert "llm_compress_keep_recent" not in config["provider_settings"]
+
+
+def test_invalid_legacy_keep_recent_count_falls_back_to_default_ratio():
+    config = {
+        "config_version": 2,
+        "provider": [{"id": "chat-main", "provider_type": "chat_completion"}],
+        "provider_settings": {
+            "agent_runner_type": "local",
+            "llm_compress_keep_recent": "not-a-number",
+            "max_context_length": 20,
+        },
+    }
+
+    assert _migrate_agent_runner_config(config)
+
+    compression = config["agent_runner"]["config"]["compression"]
+    assert compression["keep_recent_ratio"] == 0.15
+    assert "llm_compress_keep_recent" not in config["provider_settings"]
+
+
+def test_existing_runner_receives_unmigrated_legacy_keep_recent_count():
+    config = {
+        "config_version": 4,
+        "provider": [],
+        "provider_settings": {
+            "llm_compress_keep_recent": 6,
+            "max_context_length": 20,
+        },
+        "agent_runner": {
+            "runner_type": "local",
+            "config": {
+                "model": {},
+                "persona": {},
+                "compression": {"max_turns": 20},
+                "misc": {},
+            },
+        },
+    }
+
+    assert _migrate_agent_runner_config(config)
+
+    compression = config["agent_runner"]["config"]["compression"]
+    assert compression["keep_recent_ratio"] == 0.3
+    assert "llm_compress_keep_recent" not in config["provider_settings"]
+
+
+def test_existing_runner_keep_recent_ratio_is_preserved():
+    config = {
+        "config_version": 4,
+        "provider": [],
+        "provider_settings": {
+            "llm_compress_keep_recent": 6,
+            "max_context_length": 20,
+        },
+        "agent_runner": {
+            "runner_type": "local",
+            "config": {
+                "model": {},
+                "persona": {},
+                "compression": {"max_turns": 20, "keep_recent_ratio": 0.05},
+                "misc": {},
+            },
+        },
+    }
+
+    assert _migrate_agent_runner_config(config)
+
+    compression = config["agent_runner"]["config"]["compression"]
+    assert compression["keep_recent_ratio"] == 0.05
+    assert "llm_compress_keep_recent" not in config["provider_settings"]
+
+
 def test_local_migration_replaces_default_root_inserted_before_version_bump():
     config = {
         "config_version": 2,
