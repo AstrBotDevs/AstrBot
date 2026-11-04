@@ -137,10 +137,10 @@
       "name": "T2I"
     },
     {
-      "name": "Subagents"
+      "name": "Agent Configurations"
     },
     {
-      "name": "Agent Configurations"
+      "name": "Subagents"
     }
   ],
   "paths": {
@@ -6909,22 +6909,6 @@
         "description": "**Required scope:** `config`"
       }
     },
-    "/api/v1/subagents/available-tools": {
-      "get": {
-        "tags": [
-          "Subagents"
-        ],
-        "summary": "List tools available to subagents",
-        "operationId": "listSubagentAvailableTools",
-        "x-astrbot-scope": "config",
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Ok"
-          }
-        },
-        "description": "**Required scope:** `config`"
-      }
-    },
     "/api/v1/agent-configs": {
       "get": {
         "tags": [
@@ -6937,7 +6921,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `config`"
       },
       "post": {
         "tags": [
@@ -6960,20 +6945,11 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `config`"
       }
     },
     "/api/v1/agent-configs/{config_id}": {
-      "parameters": [
-        {
-          "in": "path",
-          "name": "config_id",
-          "required": true,
-          "schema": {
-            "type": "string"
-          }
-        }
-      ],
       "get": {
         "tags": [
           "Agent Configurations"
@@ -6985,7 +6961,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `config`"
       },
       "put": {
         "tags": [
@@ -7008,7 +6985,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `config`"
       },
       "delete": {
         "tags": [
@@ -7021,7 +6999,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `config`"
       }
     },
     "/api/v1/agent-runtimes": {
@@ -7036,7 +7015,24 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `config`"
+      }
+    },
+    "/api/v1/subagents/available-tools": {
+      "get": {
+        "tags": [
+          "Subagents"
+        ],
+        "summary": "List tools available to subagents",
+        "operationId": "listSubagentAvailableTools",
+        "x-astrbot-scope": "config",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `config`"
       }
     }
   },
@@ -7294,6 +7290,37 @@
           "data": {}
         },
         "additionalProperties": false
+      },
+      "AgentConfigRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "runtime"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "description": {
+            "type": "string",
+            "default": ""
+          },
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          },
+          "runtime": {
+            "type": "string",
+            "minLength": 1
+          },
+          "config": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
       },
       "DynamicConfig": {
         "type": "object",
@@ -8516,37 +8543,6 @@
           }
         },
         "additionalProperties": true
-      },
-      "AgentConfigRequest": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "name",
-          "runtime"
-        ],
-        "properties": {
-          "name": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 128
-          },
-          "description": {
-            "type": "string",
-            "default": ""
-          },
-          "enabled": {
-            "type": "boolean",
-            "default": true
-          },
-          "runtime": {
-            "type": "string",
-            "minLength": 1
-          },
-          "config": {
-            "type": "object",
-            "additionalProperties": true
-          }
-        }
       }
     }
   }
