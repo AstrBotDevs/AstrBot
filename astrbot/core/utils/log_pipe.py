@@ -1,3 +1,4 @@
+import locale
 import os
 import threading
 from logging import Logger
@@ -6,13 +7,13 @@ from logging import Logger
 class LogPipe(threading.Thread):
     """Drain a subprocess pipe and forward every line to a Python logger.
 
-    The pipe is decoded as UTF-8 with ``errors="replace"``. MCP servers and
-    other children commonly log to stderr in UTF-8, while ``os.fdopen``
-    without an explicit encoding falls back to the platform locale (``cp936``
-    on zh-CN Windows) and raises ``UnicodeDecodeError`` on the first
-    non-ASCII line. That kills this drain thread silently, and once the OS
-    pipe buffer fills up the child blocks on writing to stderr, freezing its
-    whole event loop.
+    Lines are decoded UTF-8 first, falling back to the host locale encoding
+    with ``errors="replace"``: children do not share one stderr encoding
+    (Node.js writes UTF-8 on Windows regardless of locale, while a Python
+    child below 3.15 without ``PYTHONUTF8`` logs in the host locale, which is
+    the same machine's locale). Undecodable bytes degrade to replacement
+    characters, so a bad line can never kill the drain thread and deadlock
+    the child on a full OS pipe buffer.
     """
 
     def __init__(
@@ -38,11 +39,7 @@ class LogPipe(threading.Thread):
         self.identifier = identifier
         self.logger = logger
         self.callback = callback
-        self.reader = os.fdopen(
-            self.fd_read,
-            encoding="utf-8",
-            errors="replace",
-        )
+        self.reader = os.fdopen(self.fd_read, "rb")
         self.start()
 
     def fileno(self):
@@ -56,11 +53,16 @@ class LogPipe(threading.Thread):
     def run(self) -> None:
         """Read lines until EOF and forward them one at a time.
 
-        A single failing line (throwing callback, unserialisable payload)
-        must not kill the drain thread: a wedged child would otherwise
-        deadlock on stderr once the OS pipe buffer fills up.
+        A single failing line (undecodable bytes, throwing callback,
+        unserialisable payload) must not kill the drain thread: a wedged
+        child would otherwise deadlock on stderr once the OS pipe buffer
+        fills up.
         """
-        for line in iter(self.reader.readline, ""):
+        for raw in iter(self.reader.readline, b""):
+            try:
+                line = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                line = raw.decode(locale.getpreferredencoding(False), errors="replace")
             try:
                 if self.callback:
                     self.callback(line.strip())

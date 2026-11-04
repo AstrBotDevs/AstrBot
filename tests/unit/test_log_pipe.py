@@ -1,3 +1,4 @@
+import locale
 import logging
 import os
 
@@ -41,8 +42,23 @@ def test_forwards_non_ascii_utf8_lines():
     assert any("ready, waiting for stdin" in line for line in messages)
 
 
+def test_decodes_locale_encoded_lines(monkeypatch):
+    """A child logging in the host locale (cp936 here) stays readable."""
+    monkeypatch.setattr(
+        locale, "getpreferredencoding", lambda do_setlocale=True: "cp936"
+    )
+    pipe, messages = _make_pipe()
+    # GBK multi-byte CJK whose byte pairs are invalid UTF-8: the strict UTF-8
+    # pass must raise and hand the raw line to the locale fallback.
+    os.write(pipe.fileno(), "OCTEN_API_KEY 未设置\n".encode("gbk"))
+    pipe.close()
+    pipe.join(timeout=5)
+    assert not pipe.is_alive(), "drain thread must exit once the pipe is drained"
+    assert any("OCTEN_API_KEY 未设置" in line for line in messages)
+
+
 def test_replaces_undecodable_bytes_instead_of_dying():
-    """Bytes that are not valid UTF-8 become replacement chars, not an exception."""
+    """Bytes valid in neither UTF-8 nor the locale become replacement chars."""
     pipe, messages = _make_pipe()
     os.write(pipe.fileno(), b"bad \xff\xfe bytes\n")
     pipe.close()
