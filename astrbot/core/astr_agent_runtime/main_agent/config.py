@@ -10,6 +10,7 @@ from astrbot.core.astr_agent_runtime.tools.web_search_tools import (
     normalize_legacy_web_search_config,
 )
 from astrbot.core.config.agent_runner import resolve_context_compression_config
+from astrbot.core.utils.config_number import coerce_int_config
 
 
 @dataclass(slots=True)
@@ -23,6 +24,8 @@ class MainAgentBuildConfig:
     """
     tool_schema_mode: str = "full"
     """The tool schema mode, can be 'full' or 'skills-like'."""
+    max_steps: int = 128
+    """Maximum native model/tool steps before forcing a final response."""
     provider_wake_prefix: str = ""
     """The wake prefix for the provider. If the user message does not start with this prefix,
     the main agent will not be triggered."""
@@ -104,6 +107,12 @@ class MainAgentBuildConfig:
             tool_schema_mode = "full"
         return cls(
             tool_call_timeout=misc.get("tool_call_timeout", 120),
+            max_steps=coerce_int_config(
+                misc.get("max_steps", 128),
+                default=128,
+                min_value=1,
+                field_name="agent.config.misc.max_steps",
+            ),
             tool_schema_mode=tool_schema_mode,
             streaming_response=settings.get("streaming_response", True),
             sanitize_context_by_modalities=misc.get(

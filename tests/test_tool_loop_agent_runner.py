@@ -2405,10 +2405,10 @@ async def test_small_step_budgets_and_reset(
 
 
 @pytest.mark.asyncio
-async def test_lifecycle_step_end_sees_whole_tool_batch_and_final_context(
+async def test_lifecycle_complete_steps_preserve_tool_batch_and_final_context(
     runner, mock_provider, provider_request, mock_tool_executor
 ):
-    """Checkpoint only after every tool result has entered the context."""
+    """Completed steps retain the whole tool batch before the final response."""
     hooks = AsyncMock(spec=BaseAgentRunHooks)
     mock_provider.text_chat = AsyncMock(
         side_effect=[
@@ -2421,14 +2421,8 @@ async def test_lifecycle_step_end_sees_whole_tool_batch_and_final_context(
             LLMResponse(role="assistant", completion_text="done"),
         ]
     )
-    checkpoints = []
+    snapshots = []
 
-    async def checkpoint(context):
-        checkpoints.append(
-            [message.model_copy(deep=True) for message in context.messages]
-        )
-
-    hooks.on_agent_step_end.side_effect = checkpoint
     await runner.reset(
         provider=mock_provider,
         request=provider_request,
@@ -2436,21 +2430,22 @@ async def test_lifecycle_step_end_sees_whole_tool_batch_and_final_context(
         tool_executor=mock_tool_executor,
         agent_hooks=hooks,
     )
+    async for _ in runner.step():
+        pass
+    snapshots.append([message.model_copy(deep=True) for message in runner.run_context.messages])
     async for _ in runner.step_until_done(4):
         pass
+    snapshots.append([message.model_copy(deep=True) for message in runner.run_context.messages])
 
     assert hooks.on_agent_begin.await_count == 1
-    assert hooks.on_agent_step_start.await_count == 2
-    assert hooks.on_agent_step_end.await_count == 2
-    assert [m.tool_call_id for m in checkpoints[0] if m.role == "tool"] == [
+    assert [m.tool_call_id for m in snapshots[0] if m.role == "tool"] == [
         "call_first",
         "call_second",
     ]
-    assert checkpoints[-1][-1].role == "assistant"
-    assert checkpoints[-1][-1].content[-1].text == "done"
-    assert [call[0] for call in hooks.mock_calls][-3:] == [
+    assert snapshots[-1][-1].role == "assistant"
+    assert snapshots[-1][-1].content[-1].text == "done"
+    assert [call[0] for call in hooks.mock_calls][-2:] == [
         "on_llm_response",
-        "on_agent_step_end",
         "on_agent_done",
     ]
     hooks.on_agent_done.assert_awaited_once_with(
@@ -2495,7 +2490,6 @@ async def test_lifecycle_terminal_paths_notify_once(
                 pass
         assert runner.run_context.run_error == "RuntimeError: checkpoint failed"
         hooks.on_agent_done.assert_awaited_once_with(runner.run_context, None)
-        hooks.on_agent_step_end.assert_not_awaited()
     else:
         async for _ in runner.step_until_done(3):
             pass
@@ -2504,8 +2498,6 @@ async def test_lifecycle_terminal_paths_notify_once(
         )
         if exit_kind == "provider_error":
             assert runner.run_context.run_error == "provider unavailable"
-        else:
-            hooks.on_agent_step_end.assert_not_awaited()
     assert runner.run_context.run_end_reason == (
         "cancelled" if exit_kind == "stop" else "error"
     )
@@ -2542,14 +2534,12 @@ async def test_lifecycle_closing_response_consumer_finalizes_immediately(
     await responses.aclose()
     hooks.on_agent_done.assert_awaited_once()
     assert runner.run_context.run_end_reason == "cancelled"
-    hooks.on_agent_step_end.assert_not_awaited()
     assert runner.done()
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("blocking_hook", ["model", "step_start", "step_end"])
 async def test_lifecycle_cancellation_during_async_work(
-    runner, mock_provider, provider_request, mock_tool_executor, blocking_hook
+    runner, mock_provider, provider_request, mock_tool_executor
 ):
     """Task cancellation propagates and still runs one awaited cleanup hook."""
     hooks = AsyncMock(spec=BaseAgentRunHooks)
@@ -2565,10 +2555,7 @@ async def test_lifecycle_cancellation_during_async_work(
         cleanup.set()
 
     hooks.on_agent_done.side_effect = done
-    if blocking_hook == "model":
-        mock_provider.text_chat = block
-    else:
-        getattr(hooks, f"on_agent_{blocking_hook}").side_effect = block
+    mock_provider.text_chat = block
     await runner.reset(
         provider=mock_provider,
         request=provider_request,
@@ -2699,7 +2686,6 @@ async def test_lifecycle_main_cancel_between_complete_steps(
 
     task = asyncio.create_task(run())
     await asyncio.wait_for(cleanup_started.wait(), 2)
-    assert hooks.on_agent_step_end.await_count == 1
     assert not runner.done()
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
@@ -2709,10 +2695,10 @@ async def test_lifecycle_main_cancel_between_complete_steps(
 
 
 @pytest.mark.asyncio
-async def test_lifecycle_checkpoint_contains_tool_images(
+async def test_completed_step_contains_tool_images(
     runner, mock_provider, provider_request
 ):
-    """The step checkpoint includes image messages assembled after tool callbacks."""
+    """Completed steps retain tool-produced image messages in context."""
     hooks = AsyncMock(spec=BaseAgentRunHooks)
     await runner.reset(
         provider=mock_provider,
@@ -2723,7 +2709,6 @@ async def test_lifecycle_checkpoint_contains_tool_images(
     )
     async for _ in runner.step():
         pass
-    hooks.on_agent_step_end.assert_awaited_once()
     assert runner.run_context.messages[-1].role == "user"
     assert any(
         isinstance(part, ImageURLPart)

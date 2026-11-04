@@ -38,7 +38,7 @@ async def test_record_internal_agent_stats_persists_provider_stat(
     )
     final_resp = SimpleNamespace(role="assistant")
 
-    await native_history.record_main_stats(
+    await native_history.record_agent_stats(
         event,
         req,
         agent_runner,

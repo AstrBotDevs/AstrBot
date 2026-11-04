@@ -14,7 +14,7 @@ from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runtime import AgentSessionRef
 from astrbot.core.agent_wakeup import wake_main_agent
-from astrbot.core.astr_agent_runtime import main_session as native_session
+from astrbot.core.astr_agent_runtime import session as native_session
 from astrbot.core.astr_agent_runtime.main_agent import MainAgentBuildResult
 from astrbot.core.astr_agent_runtime.main_agent import builder as native_builder
 from astrbot.core.astr_agent_runtime.main_agent.request import prepare_request
@@ -145,7 +145,7 @@ async def runtime(monkeypatch):
         return MainAgentBuildResult(runner, prepared.request, provider)
 
     monkeypatch.setattr(native_builder, "build_main_agent", build)
-    monkeypatch.setattr(native_session, "record_main_stats", AsyncMock())
+    monkeypatch.setattr(native_session, "record_agent_stats", AsyncMock())
     monkeypatch.setattr(native_session.Metric, "upload", AsyncMock())
     monkeypatch.setattr(
         SessionServiceManager,

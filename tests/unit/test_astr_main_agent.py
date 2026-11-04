@@ -17,6 +17,7 @@ from astrbot.core.agent.message import Message, dump_messages_with_checkpoints
 from astrbot.core.agent.runners.base import AgentState
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent_wakeup import wake_main_agent
+from astrbot.core.astr_agent_runtime import execution as native_execution
 from astrbot.core.astr_agent_runtime import main_agent as ama
 from astrbot.core.astr_agent_runtime.main_agent import builder as builder_build
 from astrbot.core.astr_agent_runtime.main_agent import (
@@ -837,7 +838,7 @@ class TestBuiltinToolInjection:
 
         req.prompt = "Run task"
         with (
-            patch.object(builder_build, "AgentRunner") as runner,
+            patch.object(native_execution, "AgentRunner") as runner,
             patch.object(
                 builder_build,
                 "AstrAgentContext",
@@ -1558,7 +1559,7 @@ class TestEnsurePersonaAndSkills:
         req.conversation = MagicMock(persona_id="locked", history="[]")
 
         with (
-            patch.object(builder_build, "AgentRunner") as mock_runner_cls,
+            patch.object(native_execution, "AgentRunner") as mock_runner_cls,
             patch.object(
                 builder_build,
                 "AstrAgentContext",
@@ -1633,7 +1634,7 @@ class TestEnsurePersonaAndSkills:
         req.conversation = MagicMock(persona_id="locked", history="[]")
 
         with (
-            patch.object(builder_build, "AgentRunner") as mock_runner_cls,
+            patch.object(native_execution, "AgentRunner") as mock_runner_cls,
             patch.object(
                 builder_build,
                 "AstrAgentContext",
@@ -1893,7 +1894,7 @@ class TestBuildMainAgent:
         _setup_conversation_for_build(conv_mgr)
 
         with (
-            patch.object(builder_build, "AgentRunner") as mock_runner_cls,
+            patch.object(native_execution, "AgentRunner") as mock_runner_cls,
             patch.object(
                 builder_build,
                 "AstrAgentContext",
@@ -1925,7 +1926,7 @@ class TestBuildMainAgent:
         _setup_conversation_for_build(conv_mgr)
 
         with (
-            patch.object(builder_build, "AgentRunner") as mock_runner_cls,
+            patch.object(native_execution, "AgentRunner") as mock_runner_cls,
             patch.object(
                 builder_build,
                 "AstrAgentContext",
@@ -1963,7 +1964,7 @@ class TestBuildMainAgent:
         _setup_conversation_for_build(mock_context.conversation_manager)
 
         with (
-            patch.object(builder_build, "AgentRunner") as runner_cls,
+            patch.object(native_execution, "AgentRunner") as runner_cls,
             patch.object(
                 builder_build,
                 "AstrAgentContext",
@@ -2030,7 +2031,7 @@ class TestBuildMainAgent:
         _setup_conversation_for_build(conv_mgr)
 
         with (
-            patch.object(builder_build, "AgentRunner") as mock_runner_cls,
+            patch.object(native_execution, "AgentRunner") as mock_runner_cls,
             patch.object(
                 builder_build,
                 "AstrAgentContext",
@@ -2106,7 +2107,7 @@ class TestBuildMainAgent:
         _setup_conversation_for_build(conv_mgr)
 
         with (
-            patch.object(builder_build, "AgentRunner") as mock_runner_cls,
+            patch.object(native_execution, "AgentRunner") as mock_runner_cls,
             patch.object(
                 builder_build,
                 "AstrAgentContext",
@@ -2176,7 +2177,7 @@ class TestBuildMainAgent:
         _setup_conversation_for_build(conv_mgr)
 
         with (
-            patch.object(builder_build, "AgentRunner") as mock_runner_cls,
+            patch.object(native_execution, "AgentRunner") as mock_runner_cls,
             patch.object(
                 builder_build,
                 "AstrAgentContext",
@@ -2248,7 +2249,7 @@ class TestBuildMainAgent:
         _setup_conversation_for_build(conv_mgr)
 
         with (
-            patch.object(builder_build, "AgentRunner") as mock_runner_cls,
+            patch.object(native_execution, "AgentRunner") as mock_runner_cls,
             patch.object(
                 builder_build,
                 "AstrAgentContext",
@@ -2321,7 +2322,7 @@ class TestBuildMainAgent:
         _setup_conversation_for_build(conv_mgr)
 
         with (
-            patch.object(builder_build, "AgentRunner") as mock_runner_cls,
+            patch.object(native_execution, "AgentRunner") as mock_runner_cls,
             patch.object(
                 builder_build,
                 "AstrAgentContext",
@@ -2390,7 +2391,7 @@ class TestBuildMainAgent:
         mock_context.get_config.return_value = {}
 
         with (
-            patch.object(builder_build, "AgentRunner") as mock_runner_cls,
+            patch.object(native_execution, "AgentRunner") as mock_runner_cls,
             patch.object(
                 builder_build,
                 "AstrAgentContext",
@@ -2443,7 +2444,7 @@ class TestBuildMainAgent:
         mock_context.get_config.return_value = {}
 
         with (
-            patch.object(builder_build, "AgentRunner") as mock_runner_cls,
+            patch.object(native_execution, "AgentRunner") as mock_runner_cls,
             patch.object(
                 builder_build,
                 "AstrAgentContext",
@@ -2492,7 +2493,7 @@ class TestBuildMainAgent:
         _setup_conversation_for_build(conv_mgr)
 
         with (
-            patch.object(builder_build, "AgentRunner") as mock_runner_cls,
+            patch.object(native_execution, "AgentRunner") as mock_runner_cls,
             patch.object(
                 builder_build,
                 "AstrAgentContext",
@@ -2537,7 +2538,7 @@ class TestBuildMainAgent:
         _setup_conversation_for_build(conv_mgr)
 
         with (
-            patch.object(builder_build, "AgentRunner") as mock_runner_cls,
+            patch.object(native_execution, "AgentRunner") as mock_runner_cls,
             patch.object(
                 builder_build,
                 "AstrAgentContext",
@@ -2588,7 +2589,7 @@ class TestBuildMainAgent:
             raise RuntimeError("quoted")
 
         with (
-            patch.object(builder_build, "AgentRunner") as mock_runner_cls,
+            patch.object(native_execution, "AgentRunner") as mock_runner_cls,
             patch.object(
                 builder_build,
                 "AstrAgentContext",
@@ -2658,7 +2659,7 @@ class TestBuildMainAgent:
             return quoted_path if self.file == "quoted.amr" else direct_path
 
         with (
-            patch.object(builder_build, "AgentRunner") as mock_runner_cls,
+            patch.object(native_execution, "AgentRunner") as mock_runner_cls,
             patch.object(
                 builder_build,
                 "AstrAgentContext",
@@ -2722,7 +2723,7 @@ class TestBuildMainAgent:
             raise Exception(f"not a valid file: {self.file}")
 
         with (
-            patch.object(builder_build, "AgentRunner") as mock_runner_cls,
+            patch.object(native_execution, "AgentRunner") as mock_runner_cls,
             patch.object(
                 builder_build,
                 "AstrAgentContext",
@@ -2774,7 +2775,7 @@ class TestBuildMainAgent:
         _setup_conversation_for_build(conv_mgr)
 
         with (
-            patch.object(builder_build, "AgentRunner") as mock_runner_cls,
+            patch.object(native_execution, "AgentRunner") as mock_runner_cls,
             patch.object(
                 builder_build,
                 "AstrAgentContext",
@@ -2849,7 +2850,7 @@ class TestBuildMainAgent:
             return stop
 
         with (
-            patch.object(builder_build, "AgentRunner") as mock_runner_cls,
+            patch.object(native_execution, "AgentRunner") as mock_runner_cls,
             patch.object(
                 builder_build,
                 "AstrAgentContext",
@@ -2896,7 +2897,7 @@ class TestBuildMainAgent:
         )
 
         with (
-            patch.object(builder_build, "AgentRunner") as mock_runner_cls,
+            patch.object(native_execution, "AgentRunner") as mock_runner_cls,
             patch.object(
                 builder_build,
                 "AstrAgentContext",
@@ -3469,7 +3470,7 @@ async def test_endpoint_validation_does_not_depend_on_hook_dispatch(
         patch.object(
             builder_build, "call_event_hook", AsyncMock(return_value=False)
         ) as hook,
-        patch.object(builder_build, "AgentRunner") as runner,
+        patch.object(native_execution, "AgentRunner") as runner,
         patch.object(
             builder_build,
             "AstrAgentContext",
@@ -3506,7 +3507,7 @@ async def test_stopping_during_history_loading_does_not_initialize_an_agent(
 
     with (
         patch.object(request_build, "_get_session_conv", side_effect=load_conversation),
-        patch.object(builder_build, "AgentRunner") as runner,
+        patch.object(native_execution, "AgentRunner") as runner,
         patch.object(persona_build, "apply_persona", AsyncMock()) as persona,
     ):
         result = await ama.build_main_agent(
@@ -3616,7 +3617,7 @@ async def test_feature_composition_preserves_tool_scope_and_instruction_order(
     runner = MagicMock()
     runner.reset = AsyncMock()
     with (
-        patch.object(builder_build, "AgentRunner", return_value=runner),
+        patch.object(native_execution, "AgentRunner", return_value=runner),
         patch.object(
             builder_build,
             "AstrAgentContext",

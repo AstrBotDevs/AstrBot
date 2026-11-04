@@ -853,19 +853,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     await self.agent_hooks.on_agent_begin(self.run_context)
             except Exception as e:
                 logger.error(f"Error in on_agent_begin hook: {e}", exc_info=True)
-            try:
-                await self.agent_hooks.on_agent_step_start(self.run_context)
-            except Exception as e:
-                logger.error(f"Error in on_agent_step_start hook: {e}", exc_info=True)
             async with aclosing(self._step()) as responses:
                 async for response in responses:
                     yield response
             completed = True
-            try:
-                if not self._aborted:
-                    await self.agent_hooks.on_agent_step_end(self.run_context)
-            except Exception as e:
-                logger.error(f"Error in on_agent_step_end hook: {e}", exc_info=True)
         except (asyncio.CancelledError, GeneratorExit):
             self.run_context.run_end_reason = "cancelled"
             raise

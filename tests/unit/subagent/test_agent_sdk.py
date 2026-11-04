@@ -19,7 +19,7 @@ from astrbot.api.agents import (
 )
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool
-from astrbot.core.astr_agent_runtime import main_session
+from astrbot.core.astr_agent_runtime import session as native_session
 from astrbot.core.astr_agent_runtime.context import AstrAgentContext
 from astrbot.core.astr_agent_runtime.tools.message_tools import SendMessageToUserTool
 from astrbot.core.config.default import DEFAULT_CONFIG
@@ -72,8 +72,8 @@ async def sdk(environment, monkeypatch):
         "should_process_llm_request",
         AsyncMock(return_value=True),
     )
-    monkeypatch.setattr(main_session, "record_main_stats", AsyncMock())
-    monkeypatch.setattr(main_session.Metric, "upload", AsyncMock())
+    monkeypatch.setattr(native_session, "record_agent_stats", AsyncMock())
+    monkeypatch.setattr(native_session.Metric, "upload", AsyncMock())
     try:
         yield env
     finally:
@@ -403,3 +403,61 @@ async def test_portable_media_uses_the_normal_input_preprocessor(sdk, tmp_path):
     assert "image_url" in model_input
     assert "notes.txt" in model_input
     assert document.exists() and image.exists()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("delegated", [False, True])
+async def test_native_sessions_commit_whole_turn_after_execution(sdk, delegated):
+    """Main and child histories remain unchanged until a complete turn settles.
+
+    Args:
+        sdk: Native runtime with isolated storage and model responses.
+        delegated: Whether to execute a private child or the main conversation.
+    """
+    from astrbot.core.agent.tool import FunctionTool, ToolSet
+    from astrbot.core.astr_agent_runtime.main_session import MainAgentInput
+
+    class EchoTool(FunctionTool):
+        async def call(self, context):
+            return "tool output"
+
+    tool = EchoTool(name="echo", description="Echo", parameters={})
+    sdk.manager.func_list.append(tool)
+    sdk.root.delegable_tools = ToolSet([tool])
+    sdk.config["agent"]["config"]["subagents"]["enabled"] = True
+    entered, release = asyncio.Event(), asyncio.Event()
+    calls = 0
+
+    async def respond(**kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return LLMResponse(role="assistant", tools_call_name=["echo"], tools_call_ids=["echo-call"], tools_call_args=[{}])
+        entered.set()
+        await release.wait()
+        return LLMResponse(role="assistant", completion_text="Done")
+
+    sdk.provider.text_chat.side_effect = respond
+    if delegated:
+        agent = await sdk.native.spawn_agent(sdk.root, [{"type": "plain", "text": "Initial"}])
+        session = await sdk.native.open_session(sdk.scope.umo, session_id=agent["conversation_id"])
+        turn = None
+    else:
+        session = await sdk.native.open_session(sdk.scope.umo, session_id=sdk.conversation.cid)
+        turn = await session.run_turn(MainAgentInput(event=sdk.event, permissions=sdk.root.permissions, content=[PlainInput(text="Initial")]))
+    try:
+        await asyncio.wait_for(entered.wait(), 3)
+        assert await session.history() == []
+        release.set()
+        if turn is not None:
+            assert (await turn.result()).text == "Done"
+        else:
+            result = await sdk.service.wait(sdk.root, [agent["agent_id"]], 2000, "all")
+            assert result["agents"][0]["result"] == "Done"
+        history = await session.history()
+        assert "Initial" in str(history)
+        assert "tool output" in str(history)
+        assert any(message.get("tool_call_id") == "echo-call" for message in history)
+        assert history[-1]["role"] == "assistant"
+    finally:
+        release.set()

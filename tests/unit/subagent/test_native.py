@@ -288,25 +288,22 @@ async def test_native_tool_selection_preserves_guards_and_scope_restrictions(
     )
     selected = await env.save_agent("expert", tools=None)
     env.root.delegable_tools = ToolSet(tools)
-    calls = []
-
-    async def execute(**kwargs):
-        calls.append(kwargs)
-        return LLMResponse(role="assistant", completion_text="Done")
-
-    env.context.tool_loop_agent = execute
+    from astrbot.core.astr_agent_runtime import delegated_session
+    create_runner = AsyncMock(wraps=delegated_session.create_native_runner)
+    monkeypatch.setattr(delegated_session, "create_native_runner", create_runner)
     agent = await env.native.spawn_agent(
         env.root, [{"type": "plain", "text": "Task"}], config_id=selected.config_id
     )
     await env.service.wait(env.root, [agent["agent_id"]], 2000, "all")
-    assert calls[0]["tools"].names() == ["allowed"]
-    assert isinstance(calls[0]["tools"].get_tool("allowed"), _PermissionGuardedTool)
+    tools = create_runner.call_args.args[2].func_tool
+    assert tools.names() == ["allowed"]
+    assert isinstance(tools.get_tool("allowed"), _PermissionGuardedTool)
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("selection", [None, ["hidden"]])
 async def test_expert_and_parent_tools_cannot_expand_core_plugin_contributions(
-    environment, selection
+    environment, selection, monkeypatch
 ):
     env = environment
     hidden = FunctionTool(name="hidden", description="Hidden", parameters={})
@@ -314,11 +311,11 @@ async def test_expert_and_parent_tools_cannot_expand_core_plugin_contributions(
     env.root.delegable_tools = ToolSet([hidden])
     env.root.plugin_tools = ToolSet()
     selected = await env.save_agent("expert", tools=selection)
-    env.context.tool_loop_agent = AsyncMock(
-        return_value=LLMResponse(role="assistant", completion_text="Done")
-    )
+    from astrbot.core.astr_agent_runtime import delegated_session
+    create_runner = AsyncMock(wraps=delegated_session.create_native_runner)
+    monkeypatch.setattr(delegated_session, "create_native_runner", create_runner)
     agent = await env.native.spawn_agent(
         env.root, [{"type": "plain", "text": "Task"}], config_id=selected.config_id
     )
     await env.service.wait(env.root, [agent["agent_id"]], 2000, "all")
-    assert env.context.tool_loop_agent.call_args.kwargs["tools"] is None
+    assert create_runner.call_args.args[2].func_tool is None

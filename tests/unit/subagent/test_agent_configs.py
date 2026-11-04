@@ -287,7 +287,7 @@ def test_reusable_native_config_only_stores_persona_and_provider_overrides():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("specialized", [False, True])
-async def test_native_workers_inherit_main_execution_settings(environment, specialized):
+async def test_native_workers_inherit_main_execution_settings(environment, specialized, monkeypatch):
     env = environment
     from astrbot.core.provider.entities import LLMResponse
 
@@ -312,22 +312,20 @@ async def test_native_workers_inherit_main_execution_settings(environment, speci
     selected = await env.save_agent(
         "Specialist", persona_id="specialist", provider_id="alternate"
     )
-    env.context.tool_loop_agent = AsyncMock(
-        return_value=LLMResponse(role="assistant", completion_text="Done")
-    )
+    from astrbot.core.astr_agent_runtime import delegated_session
+    create_runner = AsyncMock(wraps=delegated_session.create_native_runner)
+    monkeypatch.setattr(delegated_session, "create_native_runner", create_runner)
     agent = await env.native.spawn_agent(
         env.root,
         [{"type": "plain", "text": "Task"}],
         config_id=selected.config_id if specialized else None,
     )
     await env.service.wait(env.root, [agent["agent_id"]], 2000, "all")
-    invocation = env.context.tool_loop_agent.call_args.kwargs
-    assert invocation["max_steps"] == 17
-    assert invocation["request_max_retries"] == 2
-    assert invocation["run_context"].tool_call_timeout == 7
-    assert invocation["enforce_max_turns"] == 11
-    assert invocation["truncate_turns"] == 3
-    assert invocation["chat_provider_id"] == ("alternate" if specialized else "model")
-    assert (
-        "Specialist instructions" if specialized else "Parent instructions"
-    ) in invocation["system_prompt"]
+    _, _, request, config, _ = create_runner.call_args.args
+    assert config.max_steps == 17
+    assert config.request_max_retries == 2
+    assert config.tool_call_timeout == 7
+    assert config.max_context_length == 11
+    assert config.dequeue_context_length == 3
+    assert env.context.provider_manager.get_provider_by_id.call_args.args == (("alternate" if specialized else "model"),)
+    assert ("Specialist instructions" if specialized else "Parent instructions") in request.system_prompt

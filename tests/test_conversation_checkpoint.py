@@ -16,7 +16,7 @@ from astrbot.core.agent.message import (
     get_checkpoint_id,
     strip_checkpoint_messages,
 )
-from astrbot.core.astr_agent_runtime.history import save_main_history
+from astrbot.core.astr_agent_runtime.history import save_agent_history
 from astrbot.core.db.po import Conversation
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, ToolCallsResult
 from astrbot.core.provider.provider import Provider
@@ -189,14 +189,9 @@ async def test_failed_llm_response_persists_checkpoint_for_retry():
         )
     )
 
-    await save_main_history(
-        context,
-        event,
-        request,
-        LLMResponse(role="err", completion_text="upstream failed"),
-        [Message(role="user", content="hello")],
-        runner_stats=None,
-    )
+    await save_agent_history(req=request, llm_response=LLMResponse(role="err", completion_text="upstream failed"), all_messages=[Message(role="user", content="hello")],
+        commit=lambda history, token_usage: context.conversation_manager.update_conversation(event.unified_msg_origin, request.conversation.cid, history=history, token_usage=token_usage),
+        checkpoint_id=event.get_extra("llm_checkpoint_id"), runner_stats=None)
 
     conversation_manager.update_conversation.assert_awaited_once_with(
         "webchat:FriendMessage:test",
@@ -225,19 +220,13 @@ async def test_aborted_response_persists_synthetic_stop_turn():
         )
     )
 
-    await save_main_history(
-        context,
-        event,
-        request,
-        LLMResponse(role="assistant", completion_text="Output stopped."),
-        [
+    await save_agent_history(req=request, llm_response=LLMResponse(role="assistant", completion_text="Output stopped."), all_messages=[
             Message(role="user", content="Explain the result."),
             Message(role="user", content=[TextPart(text="Stop output.")]),
             Message(role="assistant", content=[TextPart(text="Output stopped.")]),
         ],
-        runner_stats=None,
-        user_aborted=True,
-    )
+        commit=lambda history, token_usage: context.conversation_manager.update_conversation(event.unified_msg_origin, request.conversation.cid, history=history, token_usage=token_usage),
+        checkpoint_id=event.get_extra("llm_checkpoint_id"), runner_stats=None, user_aborted=True)
 
     conversation_manager.update_conversation.assert_awaited_once_with(
         "webchat:FriendMessage:test",
@@ -287,18 +276,13 @@ async def test_terminal_tool_result_persists_history_without_checkpoint():
         ),
     )
 
-    await save_main_history(
-        context,
-        event,
-        request,
-        None,
-        [
+    await save_agent_history(req=request, llm_response=None, all_messages=[
             Message(role="user", content="latest group observation"),
             assistant_message,
             tool_message,
         ],
-        runner_stats=None,
-    )
+        commit=lambda history, token_usage: context.conversation_manager.update_conversation(event.unified_msg_origin, request.conversation.cid, history=history, token_usage=token_usage),
+        checkpoint_id=event.get_extra("llm_checkpoint_id"), runner_stats=None)
 
     conversation_manager.update_conversation.assert_awaited_once_with(
         "qq:GroupMessage:test",
@@ -359,18 +343,13 @@ async def test_terminal_tool_result_with_checkpoint_uses_none_token_usage():
         ),
     )
 
-    await save_main_history(
-        context,
-        event,
-        request,
-        None,
-        [
+    await save_agent_history(req=request, llm_response=None, all_messages=[
             Message(role="user", content="latest group observation"),
             assistant_message,
             tool_message,
         ],
-        runner_stats=None,
-    )
+        commit=lambda history, token_usage: context.conversation_manager.update_conversation(event.unified_msg_origin, request.conversation.cid, history=history, token_usage=token_usage),
+        checkpoint_id=event.get_extra("llm_checkpoint_id"), runner_stats=None)
 
     conversation_manager.update_conversation.assert_awaited_once_with(
         "qq:GroupMessage:test",
@@ -418,13 +397,8 @@ async def test_empty_response_without_tool_result_skips_history_save():
         )
     )
 
-    await save_main_history(
-        context,
-        event,
-        request,
-        None,
-        [Message(role="user", content="latest group observation")],
-        runner_stats=None,
-    )
+    await save_agent_history(req=request, llm_response=None, all_messages=[Message(role="user", content="latest group observation")],
+        commit=lambda history, token_usage: context.conversation_manager.update_conversation(event.unified_msg_origin, request.conversation.cid, history=history, token_usage=token_usage),
+        checkpoint_id=event.get_extra("llm_checkpoint_id"), runner_stats=None)
 
     conversation_manager.update_conversation.assert_not_awaited()

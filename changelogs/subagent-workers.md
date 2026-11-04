@@ -30,3 +30,5 @@
 - Simplify the AstrBot agent editor to name, description, persona, and chat model. Inherit other execution settings from the parent when creating a native worker; persist only optional persona/provider overrides in reusable native configurations.
 
 - Move the sidebar Subagent Management entry into the profile’s subagent capability settings. Explain generic workers first, make specialized configurations optional, and open management in a dialog, preserving the current profile edits and refreshing available configurations after changes.
+
+- Share native runner initialization, turn execution, steering settlement and history commits between main agents and subagents. Remove the step-start/step-end hooks and per-step child history writes.

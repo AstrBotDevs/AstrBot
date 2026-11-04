@@ -12,7 +12,7 @@ import pytest
 
 from astrbot.core.agent.runtime import AgentPermissions
 from astrbot.core.astr_agent_runtime import AstrAgentRuntime
-from astrbot.core.astr_agent_runtime import main_session as native_session
+from astrbot.core.astr_agent_runtime import session as native_session
 from astrbot.core.astr_agent_runtime.main_agent import MainAgentBuildConfig, builder
 from astrbot.core.astr_agent_runtime.main_session import (
     MainAgentInput,

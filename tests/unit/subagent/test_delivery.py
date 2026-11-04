@@ -255,7 +255,7 @@ async def test_native_parent_waits_for_child_without_blocking_delivery(
     from astrbot.core.agent.run_context import ContextWrapper
     from astrbot.core.agent.runtime import AgentPermissions
     from astrbot.core.agent.tool import FunctionTool, ToolSet
-    from astrbot.core.astr_agent_runtime import main_session
+    from astrbot.core.astr_agent_runtime import session as native_session
     from astrbot.core.astr_agent_runtime.context import AstrAgentContext
     from astrbot.core.astr_agent_runtime.hooks import MainAgentHooks
     from astrbot.core.astr_agent_runtime.main_agent import (
@@ -331,8 +331,8 @@ async def test_native_parent_waits_for_child_without_blocking_delivery(
         LLMResponse(role="assistant", completion_text="Finished parent"),
     ]
     monkeypatch.setattr(builder, "build_main_agent", build)
-    monkeypatch.setattr(main_session, "record_main_stats", AsyncMock())
-    monkeypatch.setattr(main_session.Metric, "upload", AsyncMock())
+    monkeypatch.setattr(native_session, "record_agent_stats", AsyncMock())
+    monkeypatch.setattr(native_session.Metric, "upload", AsyncMock())
     turn = await parent.run_turn(
         MainAgentInput(
             event=env.event,
@@ -367,7 +367,7 @@ async def test_idle_result_runs_through_pipeline_once_and_commits_to_parent(
     import copy
 
     from astrbot.core.agent.run_context import ContextWrapper
-    from astrbot.core.astr_agent_runtime import main_session
+    from astrbot.core.astr_agent_runtime import session as native_session
     from astrbot.core.astr_agent_runtime.context import AstrAgentContext
     from astrbot.core.astr_agent_runtime.hooks import MainAgentHooks
     from astrbot.core.astr_agent_runtime.main_agent import MainAgentBuildResult, builder
@@ -423,8 +423,8 @@ async def test_idle_result_runs_through_pipeline_once_and_commits_to_parent(
 
     env.context.conversation_manager.update_conversation.side_effect = save
     monkeypatch.setattr(builder, "build_main_agent", build)
-    monkeypatch.setattr(main_session, "record_main_stats", AsyncMock())
-    monkeypatch.setattr(main_session.Metric, "upload", AsyncMock())
+    monkeypatch.setattr(native_session, "record_agent_stats", AsyncMock())
+    monkeypatch.setattr(native_session.Metric, "upload", AsyncMock())
     monkeypatch.setattr(
         SessionServiceManager,
         "should_process_llm_request",

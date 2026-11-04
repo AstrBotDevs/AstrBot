@@ -69,7 +69,7 @@
 
 ## 持久化与恢复
 
-agent 的公共 ID、runtime 类型、runtime session ID、直接父会话引用和每次输入的执行结果按 UMO 和主 conversation 持久化。同一个 conversation 内的用户共享子代理；对话隔离沿用主会话的 UMO/conversation 划分，不再按发送者额外隔离。每条输入使用其调用者自己的身份和权限，发送者信息仅作为元数据保留。私有对话历史由对应 runtime 保存。重启时，未完成和排队中的输入均标记为已中断，不自动执行；检查中断记录后，可通过 `send_message` 沿用同一会话发送新的指令。内置 runtime 保留完整步骤，正在执行的工具不会重放。切换主 conversation 后，结果仍绑定原父会话；父会话已删除或停止时不会唤醒。
+agent 的公共 ID、runtime 类型、runtime session ID、直接父会话引用和每次输入的执行结果按 UMO 和主 conversation 持久化。同一个 conversation 内的用户共享子代理；对话隔离沿用主会话的 UMO/conversation 划分，不再按发送者额外隔离。每条输入使用其调用者自己的身份和权限，发送者信息仅作为元数据保留。私有对话历史由对应 runtime 保存。重启时，未完成和排队中的输入均标记为已中断，不自动执行；检查中断记录后，可通过 `send_message` 沿用同一会话发送新的指令。内置主代理和子代理共用执行及历史保存策略，以 turn 收尾时提交的历史为准，不自动重放中断中的工具。切换主 conversation 后，结果仍绑定原父会话；父会话已删除或停止时不会唤醒。
 
 ## Agent runtime
 

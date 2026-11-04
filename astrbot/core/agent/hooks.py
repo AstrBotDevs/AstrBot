@@ -10,20 +10,6 @@ from .run_context import ContextWrapper, TContext
 
 class BaseAgentRunHooks(Generic[TContext]):
     async def on_agent_begin(self, run_context: ContextWrapper[TContext]) -> None: ...
-    async def on_agent_step_start(self, run_context: ContextWrapper[TContext]) -> None:
-        """Run before each model decision and its tools.
-
-        Args:
-            run_context: Mutable execution context for the upcoming step.
-        """
-
-    async def on_agent_step_end(self, run_context: ContextWrapper[TContext]) -> None:
-        """Run after a complete step's tool results and images are assembled.
-
-        Args:
-            run_context: Execution context containing the whole completed step.
-        """
-
     async def on_llm_response(
         self,
         run_context: ContextWrapper[TContext],

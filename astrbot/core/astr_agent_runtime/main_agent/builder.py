@@ -6,13 +6,10 @@ from astrbot.core import logger
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.agent_input import CollectedInput
 from astrbot.core.astr_agent_runtime.context import (
-    AgentContextWrapper,
     AstrAgentContext,
 )
-from astrbot.core.astr_agent_runtime.hooks import MAIN_AGENT_HOOKS
 from astrbot.core.astr_agent_runtime.main_agent.providers import decoded_blocked
 from astrbot.core.astr_agent_runtime.runner import AgentRunner
-from astrbot.core.astr_agent_runtime.tool_executor import FunctionToolExecutor
 from astrbot.core.astr_agent_runtime.tools.cron_tools import FutureTaskTool
 from astrbot.core.astr_agent_runtime.tools.message_tools import (
     GetGroupMessageHistoryTool,
@@ -28,9 +25,7 @@ from astrbot.core.skills.skill_manager import SkillInfo
 from astrbot.core.star import agent_capabilities as plugins
 from astrbot.core.star.context import Context
 from astrbot.core.star.star_handler import EventType
-from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
 from astrbot.core.utils.image_input import prepare_request_images
-from astrbot.core.utils.llm_metadata import LLM_METADATAS
 
 from . import (
     computer_use,
@@ -235,41 +230,15 @@ async def build_main_agent(
             supports_image=providers.supports_modality(provider, "image"),
         )
 
-    # Apply limits per run without mutating the shared provider configuration.
-    max_context_tokens = provider.provider_config.get("max_context_tokens", 0)
-    if max_context_tokens <= 0:
-        model_info = LLM_METADATAS.get(provider.get_model())
-        max_context_tokens = (
-            model_info["limit"]["context"]
-            if model_info
-            else config.fallback_max_context_tokens
-        )
-    agent_runner = AgentRunner()
-    read_tool = (
-        req.func_tool.get_tool("astrbot_file_read_tool") if req.func_tool else None
-    )
-    await agent_runner.reset(
-        provider=provider,
-        request=req,
-        run_context=AgentContextWrapper(
-            context=agent_context, tool_call_timeout=config.tool_call_timeout
-        ),
-        tool_executor=FunctionToolExecutor(),
-        agent_hooks=MAIN_AGENT_HOOKS,
-        streaming=config.streaming_response,
-        max_context_tokens=max_context_tokens,
-        llm_compress_instruction=config.llm_compress_instruction,
-        llm_compress_keep_recent_ratio=config.llm_compress_keep_recent_ratio,
-        llm_compress_provider=await providers.resolve_compression_provider(
-            config, plugin_context, event
-        ),
-        truncate_turns=config.dequeue_context_length,
-        enforce_max_turns=config.max_context_length,
-        tool_schema_mode=config.tool_schema_mode,
+    from astrbot.core.astr_agent_runtime.execution import create_native_runner
+
+    agent_runner = await create_native_runner(
+        plugin_context,
+        provider,
+        req,
+        config,
+        agent_context,
         fallback_providers=fallbacks,
-        request_max_retries=config.request_max_retries,
-        tool_result_overflow_dir=get_astrbot_system_tmp_path() if read_tool else None,
-        read_tool=read_tool,
     )
     return MainAgentBuildResult(
         agent_runner=agent_runner, provider_request=req, provider=provider

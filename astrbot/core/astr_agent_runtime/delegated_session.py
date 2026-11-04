@@ -18,19 +18,17 @@ from astrbot.core.agent.message import (
 )
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runtime import (
-    AgentInput,
-    AgentSession,
     AgentSessionRef,
     AgentTurn,
-    InputReceipt,
-    TurnResult,
 )
 from astrbot.core.agent.tool import ToolSet
-from astrbot.core.astr_agent_runtime.context import AstrAgentContext
-from astrbot.core.astr_agent_runtime.hooks import MainAgentHooks
+from astrbot.core.astr_agent_runtime.execution import create_native_runner
+from astrbot.core.astr_agent_runtime.main_agent.builder import MainAgentBuildResult
+from astrbot.core.astr_agent_runtime.main_agent.config import MainAgentBuildConfig
 from astrbot.core.astr_agent_runtime.main_agent.persona import apply_skills
+from astrbot.core.astr_agent_runtime.session import NativeAgentSession
 from astrbot.core.astr_agent_runtime.tools.message_tools import SendMessageToUserTool
-from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.db.po import Conversation
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.star.star import star_map
 from astrbot.core.subagents.caller import (
@@ -38,14 +36,8 @@ from astrbot.core.subagents.caller import (
     DelegatedAgentInput,
 )
 from astrbot.core.subagents.context import SubAgentContext
-from astrbot.core.utils.config_number import coerce_int_config
 
 if TYPE_CHECKING:
-    from astrbot.core.agent.runners.tool_loop_agent_runner import (
-        FollowUpTicket,
-    )
-    from astrbot.core.astr_agent_runtime.runner import AgentRunner
-
     from .runtime import AstrAgentRuntime
 
 
@@ -61,7 +53,6 @@ async def native_user_message(
     Returns:
         One user message, preserving component order and capturing image bytes.
     """
-    from astrbot.core.agent.run_context import ContextWrapper
 
     parts: list[ContentPart] = []
     for item in content:
@@ -95,70 +86,21 @@ class NativeConversation:
     initial_dialogs: list[Message] = field(default_factory=list)
     messages: list[Message] = field(default_factory=list)
     runtime_config: dict = field(default_factory=dict)
+    token_usage: int = 0
 
 
-@dataclass
-class _ActivePrompt:
-    """Transient steering handles, never serialized into an agent session."""
-
-    runner: AgentRunner | None = None
-    receipts: list[tuple[FollowUpTicket, InputReceipt]] = field(default_factory=list)
-
-
-class _NativeHooks(MainAgentHooks):
-    def __init__(
-        self,
-        owner: DelegatedAgentSession,
-        conversation: NativeConversation,
-        active: _ActivePrompt,
-        turn: AgentTurn,
-    ) -> None:
-        self.owner = owner
-        self.conversation = conversation
-        self.active = active
-        self.turn = turn
-        self.steps = 0
-        self.failure: Exception | None = None
-
-    async def on_agent_begin(
-        self, run_context: ContextWrapper[AstrAgentContext]
-    ) -> None:
-        self.active.runner = run_context.runner
-        await super().on_agent_begin(run_context)
-
-    async def on_agent_step_end(
-        self, run_context: ContextWrapper[AstrAgentContext]
-    ) -> None:
-        # Commit only complete tool-call/result pairs. Cancellation can leave the
-        # caller-owned runner context incomplete; that context is never reused.
-        messages = copy.deepcopy(run_context.messages)
-        if messages and messages[0].role == "system":
-            messages.pop(0)
-        try:
-            self.conversation.messages = await self.owner._save(
-                self.conversation, messages
-            )
-            self.steps += 1
-            for ticket, receipt in self.active.receipts:
-                if ticket.consumed and not receipt.done():
-                    receipt.resolve(True)
-            self.turn.emit("step_completed", {"steps": self.steps})
-        except Exception as exc:
-            self.failure = exc
-            raise
-
-
-class DelegatedAgentSession(AgentSession):
+class DelegatedAgentSession(NativeAgentSession):
     """A private native conversation; scheduling is inherited from AgentSession."""
+
+    is_main = False
 
     def __init__(
         self, runtime: AstrAgentRuntime, conversation: NativeConversation, umo: str
     ) -> None:
-        super().__init__(conversation.conversation_id, umo)
+        super().__init__(runtime, conversation.conversation_id, umo)
         self.runtime = runtime
         self.db = runtime.context._db
         self.conversation = conversation
-        self._active_prompt: _ActivePrompt | None = None
 
     @classmethod
     async def create(
@@ -252,7 +194,7 @@ class DelegatedAgentSession(AgentSession):
             ),
         )
         session = cls(runtime, conversation, umo)
-        await session._save(conversation, conversation.messages)
+        await session._commit_history([], None)
         return session
 
     @classmethod
@@ -293,29 +235,25 @@ class DelegatedAgentSession(AgentSession):
                     data.get("initial_dialogs", [])
                 ),
                 messages=bind_checkpoint_messages(data["messages"]),
+                token_usage=data.get("token_usage", 0),
             ),
             umo,
         )
 
-    async def _save(
-        self, conversation: NativeConversation, messages: list[Message]
-    ) -> list[Message]:
-        """Write canonical history independently of the public session store.
+    async def _commit_history(
+        self, history: list[dict], token_usage: int | None
+    ) -> None:
+        """Write the shared history policy's output with private session metadata.
 
         Args:
-            conversation: Native configuration owning this history.
-            messages: Complete messages to commit.
-
-        Returns:
-            The committed history with temporary messages and content removed.
+            history: Canonical messages already filtered by native history handling.
+            token_usage: Latest context usage, if available.
         """
-        persisted = dump_messages_with_checkpoints(
-            [message for message in messages if not message._no_save]
-        )
+        conversation = self.conversation
         await self.db.insert_preference_or_update(
             "subagent_native",
             "conversation",
-            conversation.conversation_id,
+            self.id,
             {
                 "umo": self.umo,
                 "provider_id": conversation.provider_id,
@@ -330,23 +268,44 @@ class DelegatedAgentSession(AgentSession):
                     }
                     for message in conversation.initial_dialogs
                 ],
-                "messages": persisted,
+                "messages": history,
+                "token_usage": token_usage or 0,
             },
         )
-        return bind_checkpoint_messages(persisted)
+        conversation.messages = bind_checkpoint_messages(history)
+        conversation.token_usage = token_usage or 0
 
-    async def execute_turn(self, turn: AgentTurn) -> TurnResult:
-        """Run explicit child input against this session's committed history.
+    def _build_config(self, turn: AgentTurn) -> MainAgentBuildConfig:
+        """Apply the immutable native configuration snapshot to this turn.
+
+        Args:
+            turn: Accepted delegated input.
+
+        Returns:
+            Native execution settings shared with ordinary conversations.
+        """
+        effective = {
+            **self.runtime.context.get_config(umo=self.umo),
+            "agent": {"runtime": "astrbot", "config": self.conversation.runtime_config},
+        }
+        config = MainAgentBuildConfig.from_config(effective)
+        config.streaming_response = False
+        return config
+
+    async def _prepare_turn(
+        self, turn: AgentTurn, build_config: MainAgentBuildConfig
+    ) -> MainAgentBuildResult:
+        """Prepare delegated input and bound capabilities for the native executor.
 
         Args:
             turn: One delegated input and its output sink.
+            build_config: Effective native execution settings.
 
         Returns:
-            Final output after complete-step persistence.
+            Prepared runner and request for the shared execution lifecycle.
 
         Raises:
             ValueError: If delegated caller metadata is missing.
-            RuntimeError: If the native model returns an error.
         """
         from astrbot.core.astr_agent_runtime.tools.subagent import SUBAGENT_TOOL_NAMES
 
@@ -369,7 +328,6 @@ class DelegatedAgentSession(AgentSession):
             *(conversation.messages or conversation.initial_dialogs),
             user_message,
         ]
-        conversation.messages = await self._save(conversation, history)
 
         # Resolve tool implementations against fresh permissions each turn; the
         # saved native configuration stores names, never executable objects.
@@ -417,17 +375,9 @@ class DelegatedAgentSession(AgentSession):
                 continue
             tools.add_tool(tool)
         config = caller.context.get_config(umo=caller.scope.umo)
-        from .main_agent import providers
-        from .main_agent.config import MainAgentBuildConfig
-        from .main_agent.persona import apply_safety_instructions
-
-        effective = {
-            **config,
-            "agent": {"runtime": "astrbot", "config": conversation.runtime_config},
-        }
-        build_config = MainAgentBuildConfig.from_config(effective)
         from astrbot.core.provider import Provider
-        from astrbot.core.utils.llm_metadata import LLM_METADATAS
+
+        from .main_agent.persona import apply_safety_instructions
 
         provider = await caller.context.provider_manager.get_provider_by_id(
             conversation.provider_id
@@ -435,14 +385,6 @@ class DelegatedAgentSession(AgentSession):
         if not isinstance(provider, Provider):
             raise ValueError(
                 f"Agent provider is unavailable: {conversation.provider_id}"
-            )
-        max_context_tokens = provider.provider_config.get("max_context_tokens", 0)
-        if max_context_tokens <= 0:
-            model = LLM_METADATAS.get(provider.get_model())
-            max_context_tokens = (
-                model["limit"]["context"]
-                if model
-                else build_config.fallback_max_context_tokens
             )
         instructions = ProviderRequest(
             system_prompt=f"<persona_instructions>\n{conversation.instructions}\n</persona_instructions>\n"
@@ -457,15 +399,6 @@ class DelegatedAgentSession(AgentSession):
         )
         if build_config.llm_safety_mode:
             apply_safety_instructions(build_config, instructions)
-        max_steps = coerce_int_config(
-            conversation.runtime_config.get("misc", {}).get("max_steps", 30),
-            default=30,
-            min_value=1,
-            field_name="agent.config.misc.max_steps",
-        )
-        active = _ActivePrompt()
-        self._active_prompt = active
-        hooks = _NativeHooks(self, conversation, active, turn)
         context = SubAgentContext(
             context=caller.context,
             event=caller.event,
@@ -476,95 +409,30 @@ class DelegatedAgentSession(AgentSession):
             plugin_skills=request.plugin_skills,
             agent_session=AgentSessionRef("astrbot", self.id),
         )
-        try:
-            response = await caller.context.tool_loop_agent(
-                event=caller.event,
-                chat_provider_id=conversation.provider_id,
-                system_prompt=instructions.system_prompt,
-                contexts=[
-                    {
-                        **message.model_dump(),
-                        **({"_no_save": True} if message._no_save else {}),
-                    }
-                    for message in history
-                ],
-                tools=tools if tools.tools else None,
-                max_steps=max_steps,
-                run_context=ContextWrapper(
-                    context=context, tool_call_timeout=build_config.tool_call_timeout
-                ),
-                agent_hooks=hooks,
-                tool_schema_mode=build_config.tool_schema_mode,
-                request_max_retries=build_config.request_max_retries,
-                max_context_tokens=max_context_tokens,
-                enforce_max_turns=build_config.max_context_length,
-                truncate_turns=build_config.dequeue_context_length,
-                llm_compress_instruction=build_config.llm_compress_instruction,
-                llm_compress_keep_recent_ratio=build_config.llm_compress_keep_recent_ratio,
-                llm_compress_provider=(
-                    await providers.resolve_compression_provider(
-                        build_config, caller.context
-                    )
-                )
-                if build_config.llm_compress_provider_id
-                else provider,
-                fallback_providers=providers.resolve_fallback_providers(
-                    provider,
-                    caller.context,
-                    build_config.fallback_provider_ids,
-                ),
-            )
-            if hooks.failure is not None:
-                raise hooks.failure
-            if response.role == "err":
-                raise RuntimeError(
-                    response.completion_text or "Native agent returned an error"
-                )
-            text = response.completion_text or ""
-            chain = response.result_chain or MessageChain().message(text)
-            turn.emit("llm_result", {"chain": chain})
-            return TurnResult(text=text, chain=chain)
-        finally:
-            self._active_prompt = None
-            for _, receipt in active.receipts:
-                if not receipt.done():
-                    receipt.resolve(False)
-
-    def steer_turn(self, turn: AgentTurn, input: AgentInput) -> InputReceipt | None:
-        """Flatten child steering to text and confirm its persisted consumption.
-
-        Args:
-            turn: Exact active execution, checked by the public turn handle.
-            input: Explicit follow-up components.
-
-        Returns:
-            A consumption receipt, or None when no safe boundary remains.
-        """
-        active = self._active_prompt
-        if active is None or active.runner is None:
-            return None
-        ticket = active.runner.follow_up(
-            message_text=format_input_content(input.content or [])
+        req = ProviderRequest(
+            system_prompt=instructions.system_prompt,
+            contexts=[
+                {
+                    **message.model_dump(),
+                    **({"_no_save": True} if message._no_save else {}),
+                }
+                for message in history
+            ],
+            func_tool=tools if tools.tools else None,
+            conversation=Conversation(
+                platform_id=caller.event.get_platform_id(),
+                user_id=self.umo,
+                cid=self.id,
+                history="[]",
+                token_usage=conversation.token_usage,
+            ),
         )
-        if ticket is None:
-            return None
-        receipt = InputReceipt()
-        active.receipts.append((ticket, receipt))
-        return receipt
-
-    async def cancel_turn(self, turn: AgentTurn) -> None:
-        """Request a native stop for this exact active child execution.
-
-        Args:
-            turn: Execution being cancelled.
-        """
-        active = self._active_prompt
-        if (
-            self.active_turn is turn
-            and active is not None
-            and active.runner is not None
-        ):
-            active.runner.request_stop()
+        runner = await create_native_runner(
+            caller.context, provider, req, build_config, context
+        )
+        return MainAgentBuildResult(
+            agent_runner=runner, provider_request=req, provider=provider
+        )
 
     async def history(self) -> list[dict]:
         """Read the last complete persisted conversation state.
