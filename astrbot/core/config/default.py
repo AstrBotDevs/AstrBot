@@ -1611,6 +1611,18 @@ CONFIG_METADATA_2 = {
                         "proxy": "",
                         "custom_headers": {},
                     },
+                    "Magpie": {
+                        "id": "magpie",
+                        "provider": "openai",
+                        "type": "openai_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": ["magpie"],
+                        "api_base": "http://127.0.0.1:3425/v1",
+                        "timeout": 120,
+                        "proxy": "",
+                        "custom_headers": {},
+                    },
                     "Gemini_OpenAI_API": {
                         "id": "google_gemini_openai",
                         "provider": "google",
