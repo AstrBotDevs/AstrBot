@@ -1,5 +1,6 @@
 import json
 import os
+import struct
 from collections.abc import AsyncIterator
 
 import aiohttp
@@ -11,6 +12,54 @@ from astrbot.core.utils.datetime_utils import generate_timestamp_id
 from ..entities import ProviderType
 from ..provider import TTSProvider
 from ..register import register_provider_adapter
+
+
+def _repair_wav_header(audio: bytes) -> bytes:
+    """按实际数据长度重建流式 WAV 的 RIFF/data 头部。
+
+    MiniMax 以 stream=True 返回经服务端 ffmpeg 转出的流式 WAV，总长度
+    未知，RIFF 总长度与 data 块长度只能写 0xFFFFFFFF 占位。浏览器解码
+    器可以容忍这种头部，但 Android WebView、系统播放器等严格解码器会
+    直接判定文件非法。合成结束后按真实长度回填，若头部已一致则原样
+    返回。
+    """
+    if len(audio) < 12 or audio[:4] != b"RIFF" or audio[8:12] != b"WAVE":
+        return audio
+    pos, fmt, data_start, data_size = 12, b"", 0, 0
+    while pos + 8 <= len(audio):
+        cid = audio[pos : pos + 4]
+        csize = struct.unpack_from("<I", audio, pos + 4)[0]
+        chunk_start, remaining = pos + 8, max(0, len(audio) - (pos + 8))
+        actual = min(csize, remaining)
+        if cid == b"fmt ":
+            fmt = audio[chunk_start : chunk_start + actual]
+        elif cid == b"data":
+            data_start, data_size = chunk_start, actual
+            break
+        if csize > remaining:
+            break
+        pos = chunk_start + csize + (csize % 2)
+    if not fmt or not data_start or not data_size:
+        return audio
+    if (
+        struct.unpack_from("<I", audio, 4)[0] == len(audio) - 8
+        and struct.unpack_from("<I", audio, data_start - 4)[0] == data_size
+    ):
+        return audio
+    payload = audio[data_start : data_start + data_size]
+    return b"".join(
+        (
+            b"RIFF",
+            struct.pack("<I", 4 + (8 + len(fmt)) + (8 + len(payload))),
+            b"WAVE",
+            b"fmt ",
+            struct.pack("<I", len(fmt)),
+            fmt,
+            b"data",
+            struct.pack("<I", len(payload)),
+            payload,
+        )
+    )
 
 
 @register_provider_adapter(
@@ -151,7 +200,7 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
         async for chunk in audio_stream:
             if chunk.strip():
                 chunks.append(bytes.fromhex(chunk.strip()))
-        return b"".join(chunks)
+        return _repair_wav_header(b"".join(chunks))
 
     async def get_audio(self, text: str) -> str:
         temp_dir = get_astrbot_temp_path()
