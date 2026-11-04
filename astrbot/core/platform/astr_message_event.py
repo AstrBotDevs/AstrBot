@@ -159,6 +159,8 @@ class AstrMessageEvent(abc.ABC):
 
         self._has_send_oper = False
         """在此次事件中是否有过至少一次发送消息的操作"""
+        self._llm_session_lock_key: str | None = None
+        """Optional key used to serialize LLM requests for this event."""
         self.call_llm = False
         """是否在此消息事件中禁止默认的 LLM 请求"""
         self._temporary_local_files: list[str] = []
@@ -431,6 +433,19 @@ class AstrMessageEvent(abc.ABC):
         if isinstance(result, MessageEventResult) and result.chain is None:
             result.chain = []
         self._result = result
+
+    def set_llm_session_lock_key(self, key: str | None) -> None:
+        """Set an optional LLM request lock key for this event.
+
+        Args:
+            key: Lock key to use. Empty values restore the unified message
+                origin default.
+        """
+        self._llm_session_lock_key = key
+
+    def get_llm_session_lock_key(self) -> str:
+        """Return the key used to serialize LLM requests for this event."""
+        return self._llm_session_lock_key or self.unified_msg_origin
 
     def stop_event(self) -> None:
         """终止事件传播。"""
