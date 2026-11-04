@@ -232,10 +232,14 @@ class GroupChatContext:
                         pass
 
                 detail = {}
+                is_music_card = False
                 if isinstance(card_data, dict):
                     meta = card_data.get("meta")
                     if isinstance(meta, dict):
                         candidate = meta.get("detail_1") or meta.get("news")
+                        if not candidate:
+                            candidate = meta.get("music")
+                            is_music_card = True
                         if isinstance(candidate, dict):
                             detail = candidate
 
@@ -243,7 +247,14 @@ class GroupChatContext:
                 for label, value in (
                     ("Title", detail.get("title")),
                     ("Description", detail.get("desc")),
-                    ("URL", detail.get("qqdocurl") or detail.get("jumpUrl")),
+                    ("Source", detail.get("tag") if is_music_card else None),
+                    # Music links can contain signatures; retain descriptive metadata only.
+                    (
+                        "URL",
+                        None
+                        if is_music_card
+                        else detail.get("qqdocurl") or detail.get("jumpUrl"),
+                    ),
                 ):
                     if isinstance(value, str) and value.strip():
                         normalized = " ".join(value.split())
