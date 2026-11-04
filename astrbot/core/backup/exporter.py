@@ -330,6 +330,10 @@ class AstrBotExporter:
             total_size = 0
 
             try:
+                # Mark confirmed empty roots, not directories whose file exports failed.
+                if not any(full_path.iterdir()):
+                    zf.write(full_path, f"directories/{dir_name}/")
+
                 for root, dirs, files in os.walk(full_path):
                     # 跳过 __pycache__ 目录
                     dirs[:] = [d for d in dirs if d != "__pycache__"]
