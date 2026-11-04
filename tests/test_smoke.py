@@ -40,7 +40,11 @@ def test_smoke_critical_imports_in_fresh_interpreter() -> None:
         "'astrbot.core.astr_main_agent',"
         "'astrbot.core.pipeline.scheduler',"
         "'astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal',"
-        "'astrbot.core.pipeline.process_stage.method.agent_sub_stages.third_party'"
+        "'astrbot.core.pipeline.process_stage.method.agent_sub_stages.third_party',"
+        "'astrbot.core.persona_mgr',"
+        "'astrbot.core.pipeline.process_stage.stage',"
+        "'astrbot.core.pipeline.process_stage.method.agent_request',"
+        "'astrbot.core.pipeline.process_stage.method.star_request'"
         "];"
         "[importlib.import_module(m) for m in mods]"
     )
