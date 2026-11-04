@@ -322,6 +322,12 @@ class Main(star.Star):
         self, event: AstrMessageEvent, req: ProviderRequest
     ) -> None:
         """在请求 LLM 前注入人格信息、Identifier、时间、回复内容等 System Prompt"""
+        if event.get_message_type() == MessageType.GROUP_MESSAGE and any(
+            isinstance(comp, Comp.At) and str(comp.qq) == str(event.get_self_id())
+            for comp in event.get_messages()
+        ):
+            req.prompt = "⚠️[DIRECTED AT YOU]\n" + (req.prompt or "")
+
         if self.group_chat_context and self.group_context_enabled(event):
             try:
                 await self.group_chat_context.on_req_llm(event, req)

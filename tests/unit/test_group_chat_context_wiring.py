@@ -1,13 +1,19 @@
+import copy
 import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from astrbot.api.message_components import Json, Plain
-from astrbot.api.provider import LLMResponse
-from astrbot.builtin_stars.astrbot.group_chat_context import GroupChatContext
+from astrbot.api.message_components import At, AtAll, Image, Json, Plain, Reply
+from astrbot.api.provider import LLMResponse, ProviderRequest
+from astrbot.builtin_stars.astrbot.group_chat_context import (
+    GROUP_HISTORY_FOOTER,
+    GROUP_HISTORY_HEADER,
+    GroupChatContext,
+)
 from astrbot.builtin_stars.astrbot.main import Main
+from astrbot.core.agent.message import TextPart
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.message_type import MessageType
 
@@ -44,6 +50,9 @@ def make_event(
     event.message_obj = SimpleNamespace(message=[Plain("hello")])
     event.message_str = "hello"
     event.session_id = "session-1"
+    event.get_message_type.return_value = MessageType.GROUP_MESSAGE
+    event.get_self_id.return_value = "bot-1"
+    event.get_messages.side_effect = lambda: event.message_obj.message
 
     store, get_extra, set_extra = _make_extras_store()
     # Simulate WakingCheckStage output: an empty dict means no command matched.
@@ -53,6 +62,151 @@ def make_event(
     event.get_extra.side_effect = get_extra
     event.set_extra.side_effect = set_extra
     return event
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("history_state", ["missing", "disabled", "enabled"])
+@pytest.mark.parametrize(
+    ("self_id", "mentioned_id", "mention_count", "prompt"),
+    [
+        ("bot-1", "bot-1", 1, "hello"),
+        ("12345", 12345, 2, "hello"),
+        (12345, "12345", 1, "hello"),
+        (12345, 12345, 1, None),
+    ],
+)
+async def test_current_group_mention_marks_prompt_without_changing_source(
+    history_state, self_id, mentioned_id, mention_count, prompt
+):
+    main = make_main_with_conversation_manager(MagicMock())
+    main.context.get_config.return_value = {
+        "provider_ltm_settings": {
+            "group_icl_enable": history_state == "enabled",
+            "active_reply": {"enable": False},
+        },
+    }
+    main.group_chat_context = (
+        None if history_state == "missing" else SimpleNamespace(on_req_llm=AsyncMock())
+    )
+    event = make_event()
+    event.get_self_id.return_value = self_id
+    source_chain = [
+        *[At(qq=mentioned_id) for _ in range(mention_count)],
+        Plain("hello"),
+        Image(file="original-image"),
+    ]
+    event.message_obj.message = source_chain
+    original_chain = copy.deepcopy(source_chain)
+    req = ProviderRequest(
+        prompt=prompt,
+        session_id="request-session",
+        image_urls=["request-image"],
+        audio_urls=["request-audio"],
+        extra_user_content_parts=[TextPart(text="existing note")],
+        contexts=[{"role": "user", "content": "⚠️[DIRECTED AT YOU]\nprevious message"}],
+        system_prompt="existing system prompt",
+        model="existing model",
+    )
+    original_request = copy.deepcopy(vars(req))
+
+    await main.decorate_llm_req(event, req)
+
+    assert vars(req) == {
+        **original_request,
+        "prompt": "⚠️[DIRECTED AT YOU]\n" + (prompt or ""),
+    }
+    assert event.message_str == "hello"
+    assert event.message_obj.message is source_chain
+    assert source_chain == original_chain
+    if history_state == "enabled":
+        main.group_chat_context.on_req_llm.assert_awaited_once_with(event, req)
+    elif history_state == "disabled":
+        main.group_chat_context.on_req_llm.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("message_type", "messages"),
+    [
+        (MessageType.GROUP_MESSAGE, [At(qq="other-user"), Plain("hello")]),
+        (MessageType.GROUP_MESSAGE, [Plain("hello")]),
+        (MessageType.FRIEND_MESSAGE, [At(qq="bot-1"), Plain("hello")]),
+        (MessageType.GROUP_MESSAGE, [At(qq="all"), Plain("hello")]),
+        (MessageType.GROUP_MESSAGE, [AtAll(), Plain("hello")]),
+        (
+            MessageType.GROUP_MESSAGE,
+            [Reply(id="quoted", chain=[At(qq="bot-1")]), Plain("hello")],
+        ),
+    ],
+)
+async def test_unrelated_or_quoted_mentions_do_not_mark_prompt(message_type, messages):
+    main = make_main_with_conversation_manager(MagicMock())
+    main.group_chat_context = None
+    event = make_event()
+    event.get_message_type.return_value = message_type
+    event.message_obj.message = messages
+    original_chain = copy.deepcopy(messages)
+    req = ProviderRequest(prompt="hello")
+
+    await main.decorate_llm_req(event, req)
+
+    assert req.prompt == "hello"
+    assert event.message_str == "hello"
+    assert event.message_obj.message is messages
+    assert messages == original_chain
+
+
+@pytest.mark.asyncio
+async def test_current_group_mention_reaches_assembled_user_message_with_history():
+    main = make_main_with_conversation_manager(MagicMock())
+    main.context.get_config.return_value = {
+        "provider_ltm_settings": {
+            "group_icl_enable": True,
+            "image_caption": False,
+            "active_reply": {
+                "enable": False,
+                "method": "possibility_reply",
+                "possibility_reply": 0.0,
+            },
+        },
+        "provider_settings": {"image_caption_prompt": ""},
+    }
+    main.group_chat_context = GroupChatContext(MagicMock(), main.context)
+    previous_event = make_event()
+    previous_event.message_obj.sender = SimpleNamespace(nickname="Alice")
+    previous_event.message_obj.message = [
+        At(qq="bot-1", name="bot"),
+        Plain("previous message"),
+    ]
+    await main.group_chat_context.handle_message(previous_event)
+    previous_record = main.group_chat_context.raw_records[
+        previous_event.unified_msg_origin
+    ][0]
+    event = make_event()
+    event.message_obj.sender = SimpleNamespace(nickname="Bob")
+    event.message_obj.message = [At(qq="bot-1", name="bot"), Plain("hello")]
+    await main.group_chat_context.handle_message(event)
+    req = ProviderRequest(
+        prompt="hello",
+        extra_user_content_parts=[TextPart(text="existing note")],
+    )
+
+    await main.decorate_llm_req(event, req)
+    user_message = await req.assemble_context()
+
+    assert user_message == {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "⚠️[DIRECTED AT YOU]\nhello"},
+            {"type": "text", "text": "existing note"},
+            {
+                "type": "text",
+                "text": GROUP_HISTORY_HEADER + previous_record + GROUP_HISTORY_FOOTER,
+            },
+        ],
+    }
+    assert "⚠️[DIRECTED AT YOU]" in previous_record
+    assert list(main.group_chat_context.raw_records[event.unified_msg_origin]) == []
 
 
 @pytest.mark.asyncio
