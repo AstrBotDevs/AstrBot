@@ -105,9 +105,31 @@ class CommandGroupFilter(HandlerFilter):
         return "".join(parts)
 
     def custom_filter_ok(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
+        # The same group filter may be evaluated several times for one message
+        # (by the group handler and by each matching sub-command), so cache the
+        # result on the event to keep side effects to a single call.
+        cache_key = f"custom_filter_ok:{id(self)}"
+        cached = event.get_extra(cache_key)
+        if cached is not None:
+            return cached
+
+        result = True
         for custom_filter in self.custom_filter_list:
             if not custom_filter.filter(event, cfg):
+                result = False
+                break
+        event.set_extra(cache_key, result)
+        return result
+
+    def ancestor_custom_filter_ok(
+        self, event: AstrMessageEvent, cfg: AstrBotConfig
+    ) -> bool:
+        """Check the custom filters of every ancestor command group."""
+        parent_group = self.parent_group
+        while parent_group is not None:
+            if not parent_group.custom_filter_ok(event, cfg):
                 return False
+            parent_group = parent_group.parent_group
         return True
 
     def startswith(self, message_str: str) -> bool:
@@ -127,8 +149,17 @@ class CommandGroupFilter(HandlerFilter):
         if not event.is_at_or_wake_command:
             return False
 
-        # 判断当前指令组的自定义过滤器
+        # Only evaluate the custom filters for messages that target this group,
+        # so a filter with side effects (for example sending a hint) is not
+        # triggered by unrelated messages.
+        if not self.startswith(event.message_str):
+            return False
+
+        # 判断当前指令组以及上层指令组的自定义过滤器
         if not self.custom_filter_ok(event, cfg):
+            return False
+
+        if not self.ancestor_custom_filter_ok(event, cfg):
             return False
 
         if self.equals(event.message_str.strip()):
@@ -141,4 +172,4 @@ class CommandGroupFilter(HandlerFilter):
                 f"参数不足。{self.group_name} 指令组下有如下指令，请参考：\n" + tree,
             )
 
-        return self.startswith(event.message_str)
+        return True

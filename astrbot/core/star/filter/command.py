@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import inspect
 import re
 import types
 import typing
-from typing import Any
+from typing import Any, Protocol
 
 from astrbot.core.config import AstrBotConfig
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -10,6 +12,23 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from ..star_handler import StarHandlerMetadata
 from . import HandlerFilter
 from .custom_filter import CustomFilter
+
+
+class CommandGroupLike(Protocol):
+    """Structural type of ``CommandGroupFilter``.
+
+    ``command_group`` imports ``CommandFilter`` at runtime, so it cannot be
+    imported back here directly. A protocol keeps the constructor annotations
+    resolvable for ``typing.get_type_hints`` without a circular import.
+    """
+
+    parent_group: CommandGroupLike | None
+
+    def custom_filter_ok(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool: ...
+
+    def ancestor_custom_filter_ok(
+        self, event: AstrMessageEvent, cfg: AstrBotConfig
+    ) -> bool: ...
 
 
 class GreedyStr(str):
@@ -37,6 +56,7 @@ class CommandFilter(HandlerFilter):
         alias: set | None = None,
         handler_md: StarHandlerMetadata | None = None,
         parent_command_names: list[str] | None = None,
+        parent_group: CommandGroupLike | None = None,
     ) -> None:
         self.command_name = command_name
         self.alias = alias if alias else set()
@@ -44,6 +64,7 @@ class CommandFilter(HandlerFilter):
         self.parent_command_names = (
             parent_command_names if parent_command_names is not None else [""]
         )
+        self.parent_group = parent_group
         if handler_md:
             self.init_handler_md(handler_md)
         self.custom_filter_list: list[CustomFilter] = []
@@ -89,6 +110,23 @@ class CommandFilter(HandlerFilter):
             if not custom_filter.filter(event, cfg):
                 return False
         return True
+
+    def parent_custom_filter_ok(
+        self, event: AstrMessageEvent, cfg: AstrBotConfig
+    ) -> bool:
+        """Check the custom filters of every ancestor command group.
+
+        A filter registered on a command group is meant to constrain the whole
+        group, including its sub-commands. Sub-command handlers are evaluated
+        independently from the group handler, so the ancestor filters have to
+        be checked here as well.
+        """
+        parent_group = self.parent_group
+        if parent_group is None:
+            return True
+        return parent_group.custom_filter_ok(
+            event, cfg
+        ) and parent_group.ancestor_custom_filter_ok(event, cfg)
 
     def validate_and_convert_params(
         self,
@@ -203,6 +241,9 @@ class CommandFilter(HandlerFilter):
                 ok = True
                 message_str = message_str[len(full_cmd) :].strip()
         if not ok:
+            return False
+
+        if not self.parent_custom_filter_ok(event, cfg):
             return False
 
         # 分割为列表
