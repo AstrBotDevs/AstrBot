@@ -2,7 +2,7 @@
 
 ## Supported Basic Message Types
 
-> Version v4.19.6.
+> Version v4.20.0.
 
 | Message Type | Receive | Send | Notes |
 | --- | --- | --- | --- |
@@ -11,6 +11,8 @@
 | Voice | Yes | Yes | |
 | Video | Yes | Yes | |
 | File | Yes | Yes | |
+
+Sending voice, video, and files is only available in group chats and message-list private chats; channel chats and channel direct messages only support images.
 
 Proactive message push: Supported.
 
@@ -43,8 +45,8 @@ With this configuration, the bot can receive full group messages and proactively
 ### Apply for a Bot
 
 > [!WARNING]
-> 1. QQ Official Bot currently requires an IP whitelist.
-> 2. It supports group chat, private chat, channel chat, and channel private chat.
+> 1. It supports group chat, private chat, channel chat, and channel private chat.
+> 2. The IP whitelist is optional: when it is not configured, requests from any source IP can call the OpenAPI; once configured, only whitelisted IPs can call it. Only single IPv4 addresses are supported, up to 50 entries.
 
 Open [QQ Official Bot](https://q.qq.com) and sign in.
 
@@ -68,9 +70,9 @@ After adding the bot where you need it, open `Development -> Development Setting
 
 If you use AstrBot WebUI's `One-click QR setup`, you can skip this step. AstrBot fills in `appid` and `secret` automatically after QR binding succeeds.
 
-### Add IP Whitelist
+### Add IP Whitelist (Optional)
 
-Open `Development -> Development Settings`, find IP whitelist, and add your server IP.
+Open `Development -> Development Settings`, find IP whitelist, and add your server IP. This configuration is optional: when it is not set, requests from any source IP can call the OpenAPI; once set, only whitelisted IPs can call it. We recommend adding at least one entry for security (single IPv4 addresses only, up to 50 entries).
 
 ![image](https://files.astrbot.app/docs/source/images/qqofficial/image-3.png)
 
