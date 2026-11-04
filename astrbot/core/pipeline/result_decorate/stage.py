@@ -387,7 +387,7 @@ class ResultDecorateStage(Stage):
                             endpoint=self.ctx.astrbot_config.get("t2i_endpoint")
                             or None,
                         )
-                    except BaseException:
+                    except Exception:
                         logger.error(
                             "Text-to-image rendering failed; sending text instead."
                         )
