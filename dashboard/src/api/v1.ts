@@ -1111,32 +1111,30 @@ export const cronApi = {
   },
 };
 
-export type SubAgentWorker = {
-  agent_id: string;
-  runtime: string;
-  conversation_id: string;
-  owner_conversation_id: string;
+export type AgentConfig = {
+  config_id: string;
   name: string;
-  state: string;
-  task?: string;
-  completed_steps: number;
-  result?: string;
-  error?: string;
-  messages?: { role: string; content: unknown }[];
+  description: string;
+  enabled: boolean;
+  runtime: string;
+  config: Record<string, any>;
+};
+export type AgentConfigInput = Omit<AgentConfig, 'config_id'>;
+export type AgentRuntimeInfo = { runtime: string; config: Record<string, any> };
+
+export const agentConfigApi = {
+  list() { return typed<AgentConfig[]>(openApiV1.listAgentConfigs()); },
+  runtimes() { return typed<AgentRuntimeInfo[]>(openApiV1.listAgentRuntimes()); },
+  create(body: AgentConfigInput) { return typed<AgentConfig>(openApiV1.createAgentConfig({ body })); },
+  update(configId: string, body: AgentConfigInput) {
+    return typed<AgentConfig>(openApiV1.updateAgentConfig({ path: { config_id: configId }, body }));
+  },
+  delete(configId: string) {
+    return typed<unknown>(openApiV1.deleteAgentConfig({ path: { config_id: configId } }));
+  },
 };
 
 export const subagentApi = {
-  runtime(agentId?: string) {
-    return typed<{ agents: SubAgentWorker[] }>(openApiV1.listSubagentRuntime({ query: { agent_id: agentId } }));
-  },
-  getConfig() {
-    return typed<OpenConfig>(openApiV1.getSubagentConfig());
-  },
-  updateConfig(config: OpenConfig) {
-    return typed<OpenConfig>(
-      openApiV1.updateSubagentConfig({ body: config }),
-    );
-  },
   availableTools() {
     return typed<any>(openApiV1.listSubagentAvailableTools());
   },

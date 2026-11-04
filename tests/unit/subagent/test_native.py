@@ -80,7 +80,8 @@ async def test_native_explicit_images_and_files_are_ordered_and_private(
     env.event.message_obj.message.append(Image(file="file:///parent-only.png"))
     env.wrapper.messages.append({"role": "user", "content": "Main secret"})
     monkeypatch.setattr(
-        "astrbot.core.astr_agent_runtime.tools.message_tools.is_local_runtime", lambda _: True
+        "astrbot.core.astr_agent_runtime.tools.message_tools.is_local_runtime",
+        lambda _: True,
     )
     monkeypatch.setattr(
         "astrbot.core.astr_agent_runtime.tools.message_tools.workspace_root_for_context",
@@ -285,7 +286,8 @@ async def test_native_tool_selection_preserves_guards_and_scope_restrictions(
         "astrbot.core.astr_agent_runtime.delegated_session.star_map",
         {"plugins.blocked": SimpleNamespace(name="blocked", reserved=False)},
     )
-    env.config["agents"] = [{"name": "expert", "tools": None}]
+    selected = await env.save_agent("expert", tools=None)
+    env.root.delegable_tools = ToolSet(tools)
     calls = []
 
     async def execute(**kwargs):
@@ -293,8 +295,8 @@ async def test_native_tool_selection_preserves_guards_and_scope_restrictions(
         return LLMResponse(role="assistant", completion_text="Done")
 
     env.context.tool_loop_agent = execute
-    agent = await env.service.spawn(
-        env.root, [{"type": "plain", "text": "Task"}], template="expert"
+    agent = await env.native.spawn_agent(
+        env.root, [{"type": "plain", "text": "Task"}], config_id=selected.config_id
     )
     await env.service.wait(env.root, [agent["agent_id"]], 2000, "all")
     assert calls[0]["tools"].names() == ["allowed"]
@@ -311,12 +313,12 @@ async def test_expert_and_parent_tools_cannot_expand_core_plugin_contributions(
     env.manager.func_list.append(hidden)
     env.root.delegable_tools = ToolSet([hidden])
     env.root.plugin_tools = ToolSet()
-    env.config["agents"] = [{"name": "expert", "tools": selection}]
+    selected = await env.save_agent("expert", tools=selection)
     env.context.tool_loop_agent = AsyncMock(
         return_value=LLMResponse(role="assistant", completion_text="Done")
     )
-    agent = await env.service.spawn(
-        env.root, [{"type": "plain", "text": "Task"}], template="expert"
+    agent = await env.native.spawn_agent(
+        env.root, [{"type": "plain", "text": "Task"}], config_id=selected.config_id
     )
     await env.service.wait(env.root, [agent["agent_id"]], 2000, "all")
     assert env.context.tool_loop_agent.call_args.kwargs["tools"] is None

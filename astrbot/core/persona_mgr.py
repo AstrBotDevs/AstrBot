@@ -34,13 +34,13 @@ class PersonaManager:
     def __init__(self, db_helper: BaseDatabase, acm: AstrBotConfigManager) -> None:
         self.db = db_helper
         self.acm = acm
-        default_runner = acm.default_conf.get("agent_runner", {})
+        default_runner = acm.default_conf.get("agent", {})
         default_runner_config = default_runner.get("config", {})
         self.default_persona: str = (
             default_runner_config.get("persona", {}).get(
                 "persona_id", SYSTEM_DEFAULT_PERSONA_ID
             )
-            if default_runner.get("runner_type") == "local"
+            if default_runner.get("runtime") == "astrbot"
             else default_runner_config.get("persona_id", SYSTEM_DEFAULT_PERSONA_ID)
         )
         self.personas: list[Persona] = []
@@ -109,13 +109,13 @@ class PersonaManager:
     ) -> Personality:
         """获取默认 persona"""
         cfg = self.acm.get_conf(umo)
-        agent_runner = cfg.get("agent_runner", {})
+        agent_runner = cfg.get("agent", {})
         runner_config = agent_runner.get("config", {})
         default_persona_id = (
             runner_config.get("persona", {}).get(
                 "persona_id", SYSTEM_DEFAULT_PERSONA_ID
             )
-            if agent_runner.get("runner_type") == "local"
+            if agent_runner.get("runtime") == "astrbot"
             else runner_config.get("persona_id", SYSTEM_DEFAULT_PERSONA_ID)
         )
         return self.get_persona_v3_by_id(default_persona_id) or DEFAULT_PERSONALITY
@@ -156,13 +156,13 @@ class PersonaManager:
                 pass
             elif persona_id is None:
                 cfg = self.acm.get_conf(umo)
-                agent_runner = cfg.get("agent_runner", {})
+                agent_runner = cfg.get("agent", {})
                 runner_config = agent_runner.get("config", {})
                 persona_id = (
                     runner_config.get("persona", {}).get(
                         "persona_id", SYSTEM_DEFAULT_PERSONA_ID
                     )
-                    if agent_runner.get("runner_type") == "local"
+                    if agent_runner.get("runtime") == "astrbot"
                     else runner_config.get("persona_id", SYSTEM_DEFAULT_PERSONA_ID)
                 )
 

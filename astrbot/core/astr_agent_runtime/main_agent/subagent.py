@@ -6,8 +6,6 @@ import json
 from html import escape
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
-
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.astr_agent_runtime.tools.subagent import (
     SUBAGENT_TOOL_NAMES,
@@ -32,33 +30,6 @@ if TYPE_CHECKING:
     from astrbot.core.star.context import Context
 
 
-class ExpertDefinition(BaseModel):
-    """Expert configuration shared by the native API and template loader."""
-
-    model_config = ConfigDict(str_strip_whitespace=True)
-
-    name: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
-    enabled: StrictBool = True
-    public_description: str = ""
-    persona_id: str | None = None
-    provider_id: str | None = None
-    system_prompt: str = ""
-    tools: list[str] | None = Field(default_factory=list)
-
-    @field_validator("persona_id", "provider_id")
-    @classmethod
-    def normalize_optional_id(cls, value: str | None) -> str | None:
-        """Return the selected ID, treating an empty selector as unset.
-
-        Args:
-            value: Configured persona or provider ID.
-
-        Returns:
-            The nonempty ID, or None.
-        """
-        return value or None
-
-
 async def initialize_subagents(context: Context) -> None:
     """Register fixed controls and recover persisted workers after startup.
 
@@ -76,15 +47,20 @@ async def apply_subagents(
 
     Args:
         req: Main request after persona and capability selection.
-        context: Application services holding the global subagent configuration.
+        context: Application services holding profile configuration and reusable agent configurations.
         event: Incoming message or programmatic wakeup.
 
     Returns:
         Whether main-agent construction may continue.
     """
     service = context.subagents
-    config = context.get_config().get("subagent_orchestrator", {})
-    enabled = config.get("main_enable", False)
+    config = (
+        context.get_config(umo=event.unified_msg_origin)
+        .get("agent", {})
+        .get("config", {})
+        .get("subagents", {})
+    )
+    enabled = config.get("enabled", False)
     wakeup = event.get_extra("_subagent_wakeup")
     if wakeup is not None:
         if req.conversation is None:
@@ -134,44 +110,28 @@ async def apply_subagents(
             req.func_tool.add_tool(tool)
 
     if req.func_tool.get_tool("spawn_agent") is not None:
-        experts = []
-        for item in config.get("agents", []):
-            if not isinstance(item, dict) or not item.get("enabled", True):
+        configurations = []
+        for config_id in config.get("config_ids", []):
+            agent_config = await context.agent_configs.get(config_id)
+            if not agent_config.enabled:
                 continue
-            name = str(item.get("name", "")).strip()
-            if not name:
-                continue
-            description = str(item.get("public_description", "")).strip()
-            if not description and item.get("persona_id"):
-                persona = context.persona_manager.get_persona_v3_by_id(
-                    item["persona_id"]
-                )
-                if persona:
-                    description = str(persona.get("prompt", "")).strip()[:120]
-            experts.append({"name": name, "description": description})
-        providers = [
-            {"id": provider.provider_config["id"], "model": provider.get_model()}
-            for provider in context.get_all_providers()
-        ]
+            if agent_config.runtime not in context.agent_runtimes:
+                raise ValueError(f"Agent runtime unavailable: {agent_config.runtime}")
+            configurations.append(
+                {
+                    "config_id": agent_config.config_id,
+                    "name": agent_config.name,
+                    "description": agent_config.description,
+                    "runtime": agent_config.runtime,
+                }
+            )
         req.system_prompt += (
             "\n<subagent_instructions>\n"
             "Delegate self-contained tasks with spawn_agent. Workers do not inherit "
-            "your chat history. Select an expert by its template name below, or omit "
-            "template for a generic worker. Expert instructions apply only to that worker.\n"
-            f"<subagent_experts>\n{escape(json.dumps(experts, ensure_ascii=False), quote=False)}\n"
-            "</subagent_experts>\n"
-            "Optional provider_id overrides must use a configured ID from this catalog; "
-            "omit it to use the expert's provider or the current conversation provider.\n"
-            f"<subagent_providers>\n{escape(json.dumps(providers, ensure_ascii=False), quote=False)}\n"
-            "</subagent_providers>\n"
-            "Available agent runtimes: "
-            + ", ".join(
-                service.runtimes
-                if isinstance(service, SubAgentService)
-                else ["astrbot"]
-            )
-            + ". Omit runtime to use astrbot.\n"
-            "</subagent_instructions>\n"
+            "your chat history. Choose a config_id from the catalog, or omit config_id "
+            "for a generic native worker. Each agent configuration selects its own runtime and configuration.\n"
+            f"<agent_configs>\n{escape(json.dumps(configurations, ensure_ascii=False), quote=False)}\n"
+            "</agent_configs>\n</subagent_instructions>\n"
         )
 
     return True
@@ -190,9 +150,11 @@ async def begin_main_agent(run_context: ContextWrapper[AstrAgentContext]) -> Non
     if not isinstance(service, SubAgentService) or run_context.runner is None:
         return
     if (
-        not original.context.get_config()
-        .get("subagent_orchestrator", {})
-        .get("main_enable", False)
+        not original.context.get_config(umo=original.event.unified_msg_origin)
+        .get("agent", {})
+        .get("config", {})
+        .get("subagents", {})
+        .get("enabled", False)
     ):
         return
     conversation = run_context.runner.req.conversation
@@ -217,6 +179,14 @@ async def begin_main_agent(run_context: ContextWrapper[AstrAgentContext]) -> Non
     )
     run_context.context = parent
     caller = AgentCaller(
-        parent.context, parent.event, scope, parent.delegable_tools, parent
+        parent.context,
+        parent.event,
+        scope,
+        parent.delegable_tools,
+        parent,
+        limits=original.context.get_config(umo=scope.umo)
+        .get("agent", {})
+        .get("config", {})
+        .get("subagents", {}),
     )
     service.delivery.callers[scope] = caller

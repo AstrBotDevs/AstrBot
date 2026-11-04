@@ -5,8 +5,9 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
+from copy import deepcopy
 from time import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from astrbot import logger
@@ -127,18 +128,14 @@ class SubAgentService:
             raise ValueError("Subagent tools require an explicit parent agent session")
         if active_event_registry.get_background_stop_signal(context.event).is_set():
             raise ValueError("Cannot use subagents after the session was stopped")
-        if (
-            not context.context.get_config()
-            .get("subagent_orchestrator", {})
-            .get("main_enable", False)
-        ):
-            raise ValueError("Subagents are disabled")
+        previous = self._callers.get(context.subagent_scope)
         caller = AgentCaller(
             context.context,
             context.event,
             context.subagent_scope,
             context.delegable_tools,
             context,
+            limits=previous.limits if previous is not None else {},
         )
         self._callers[caller.scope] = caller
         return caller
@@ -149,9 +146,9 @@ class SubAgentService:
         messages: list[dict],
         *,
         runtime: str = "astrbot",
-        template: str | None = None,
+        config: dict | None = None,
+        config_id: str | None = None,
         name: str | None = None,
-        provider_id: str | None = None,
     ) -> dict:
         """Accept a new agent session without waiting for its first model response.
 
@@ -159,9 +156,9 @@ class SubAgentService:
             context: Main execution owning the new session.
             messages: Explicit initial input components.
             runtime: Registered agent runtime name.
-            template: Optional expert name interpreted by the selected runtime.
+            config: Validated runtime configuration captured for this session.
+            config_id: Optional source spec identity, retained as metadata.
             name: Optional display name.
-            provider_id: Optional native model-provider override.
 
         Returns:
             Public agent identity and initial execution metadata.
@@ -176,16 +173,13 @@ class SubAgentService:
         messages = [item.model_dump(exclude_none=True) for item in content]
         if not isinstance(runtime, str) or runtime not in self.runtimes:
             raise ValueError(f"Unknown agent runtime: {runtime}")
-        options = {}
-        for key, value in (
-            ("template", template),
-            ("name", name),
-            ("provider_id", provider_id),
-        ):
-            if value is not None:
-                if not isinstance(value, str) or not value.strip():
-                    raise ValueError(f"{key} must be a nonempty string")
-                options[key] = value.strip()
+        options: dict[str, Any] = {"config": deepcopy(config or {})}
+        if config_id is not None:
+            options["config_id"] = config_id
+        if name is not None:
+            if not isinstance(name, str) or not name.strip():
+                raise ValueError("name must be a nonempty string")
+            options["name"] = name.strip()
         input = DelegatedAgentInput(
             event=caller.event,
             permissions=caller.agent_context.permissions
@@ -218,7 +212,7 @@ class SubAgentService:
                 agent_id=uuid4().hex,
                 scope=caller.scope,
                 runtime=runtime,
-                name=options.get("name") or options.get("template") or "worker",
+                name=options.get("name") or "worker",
                 options=options,
                 conversation_id=conversation_id,
                 owner=caller.owner_metadata(),
@@ -586,7 +580,7 @@ class SubAgentService:
                 )
             ) is not None:
                 caller = self._task_callers[(agent.agent_id, turn.turn_id)]
-                config = caller.context.get_config().get("subagent_orchestrator", {})
+                config = caller.limits
                 limit = coerce_int_config(
                     config.get("max_concurrent_agents", 3),
                     default=3,
@@ -668,37 +662,6 @@ class SubAgentService:
                 await self.store.save(agent)
             elif any(item.state == AgentState.PENDING for item in agent.turns):
                 self._schedule(agent, self._callers.get(agent.scope, caller))
-
-    async def inspect(self, agent_id: str | None = None) -> list[dict]:
-        """Provide authenticated dashboard inspection without exposing runtime objects.
-
-        Args:
-            agent_id: Optional agent whose runtime history should be requested.
-
-        Returns:
-            Session metadata and optional displayable history.
-        """
-        records = []
-        for agent in list(self.store.agents.values()):
-            if agent_id is not None and agent.agent_id != agent_id:
-                continue
-            data = agent.describe(result=True)
-            if agent_id is not None:
-                runtime = self.runtimes.get(agent.runtime)
-                session = (
-                    await runtime.open_session(
-                        agent.scope.umo,
-                        session_id=agent.conversation_id,
-                        options={"profile": "subagent"},
-                    )
-                    if runtime is not None
-                    else None
-                )
-                data["messages"] = (
-                    await session.history() if session is not None else []
-                )
-            records.append(data)
-        return records
 
     async def close(self) -> None:
         """Stop active executions, flush records, then close agent runtime resources."""

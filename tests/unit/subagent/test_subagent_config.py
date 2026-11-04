@@ -1,11 +1,10 @@
 import json
 
 from astrbot.core.config.astrbot_config import AstrBotConfig
-from astrbot.core.config.default import DEFAULT_CONFIG
 
 
 def test_config_load_preserves_native_subagent_settings(tmp_path):
-    """Configuration cleanup retains experts and native delegation limits."""
+    """Configuration cleanup stages legacy agents and retains delegation limits."""
     agents = [{"name": "planner", "system_prompt": "Plan the task", "tools": []}]
     config_path = tmp_path / "legacy.json"
     config_path.write_text(
@@ -21,15 +20,12 @@ def test_config_load_preserves_native_subagent_settings(tmp_path):
         ),
         encoding="utf-8",
     )
-    config = AstrBotConfig(
-        str(config_path),
-        default_config={
-            "subagent_orchestrator": DEFAULT_CONFIG["subagent_orchestrator"]
-        },
-    )
-    assert config["subagent_orchestrator"]["agents"] == agents
-    assert config["subagent_orchestrator"]["main_enable"] is True
-    assert config["subagent_orchestrator"]["max_concurrent_agents"] == 3
-    assert "router_system_prompt" not in config["subagent_orchestrator"]
-    assert "remove_main_duplicate_tools" not in config["subagent_orchestrator"]
+    config = AstrBotConfig(str(config_path))
+    assert "subagent_orchestrator" not in config
+    pending = config_path.with_suffix(".subagents-migration.json")
+    assert json.loads(pending.read_text(encoding="utf-8"))["agents"] == agents
+    policy = config["agent"]["config"]["subagents"]
+    assert policy["enabled"] is True
+    assert policy["max_concurrent_agents"] == 3
+    assert len(policy["config_ids"]) == 1
     assert json.loads(config_path.read_text(encoding="utf-8-sig")) == dict(config)

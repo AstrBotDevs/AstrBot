@@ -453,7 +453,7 @@ async def test_subagent_config_does_not_remove_main_tools(harness):
             "router_system_prompt": router,
             "agents": [{"name": "worker", "tools": [assigned]}],
         }
-        harness.config["subagent_orchestrator"] = config
+        harness.config["agent"]["config"]["subagents"] = {"enabled": enabled, "config_ids": []}
         event = make_event()
         event.platform_meta.support_proactive_message = False
         stage = await process_event(harness, event, stage=stage)
@@ -461,7 +461,7 @@ async def test_subagent_config_does_not_remove_main_tools(harness):
         assert set(req.func_tool.names()) == {"tool_a", "tool_b"} | (
             SUBAGENT_TOOL_NAMES if enabled else set()
         )
-        assert ("<subagent_experts>" in req.system_prompt) == enabled
+        assert ("<agent_configs>" in req.system_prompt) == enabled
         assert router not in req.system_prompt
         if previous_router:
             assert previous_router not in req.system_prompt
@@ -471,10 +471,10 @@ async def test_subagent_config_does_not_remove_main_tools(harness):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("global_enabled", [False, True])
 @pytest.mark.parametrize("session_enabled", [False, True])
-async def test_subagents_use_global_config_without_overriding_session_profile(
+async def test_subagents_use_session_profile_without_global_override(
     harness, global_enabled, session_enabled
 ):
-    """Use global delegation settings alongside the session provider profile.
+    """Use the session delegation settings alongside its provider profile.
 
     Args:
         harness: Pipeline services and captured main-agent runs.
@@ -493,20 +493,10 @@ async def test_subagents_use_global_config_without_overriding_session_profile(
     harness.config["provider_settings"]["proactive_capability"]["add_cron_tools"] = (
         False
     )
-    harness.config["subagent_orchestrator"] = {
-        "main_enable": global_enabled,
-        "remove_main_duplicate_tools": True,
-        "router_system_prompt": "Global router",
-        "agents": [{"name": "global_worker", "tools": ["global_tool"]}],
-    }
+    harness.config["agent"]["config"]["subagents"] = {"enabled": global_enabled, "config_ids": []}
     session_config = copy.deepcopy(harness.config)
     session_config["provider_settings"]["prompt_prefix"] = "Session: "
-    session_config["subagent_orchestrator"] = {
-        "main_enable": session_enabled,
-        "remove_main_duplicate_tools": True,
-        "router_system_prompt": "Session router",
-        "agents": [{"name": "session_worker", "tools": ["session_tool"]}],
-    }
+    session_config["agent"]["config"]["subagents"] = {"enabled": session_enabled, "config_ids": []}
     harness.context.get_config.side_effect = lambda umo=None: (
         harness.config if umo is None else session_config
     )
@@ -523,9 +513,9 @@ async def test_subagents_use_global_config_without_overriding_session_profile(
 
     req = harness.captured[-1].req
     assert set(req.func_tool.names()) == {"global_tool", "session_tool"} | (
-        SUBAGENT_TOOL_NAMES if global_enabled else set()
+        SUBAGENT_TOOL_NAMES if session_enabled else set()
     )
-    assert ("global_worker" in req.system_prompt) == global_enabled
+    assert ("<agent_configs>" in req.system_prompt) == session_enabled
     assert "session_worker" not in req.system_prompt
     assert "Global router" not in req.system_prompt
     assert "Session router" not in req.system_prompt
@@ -1154,7 +1144,7 @@ async def test_third_party_route_retains_original_images(
         ThirdPartyAgentSubStage,
     )
 
-    harness.config["agent_runner"] = {"runner_type": "dify", "config": {}}
+    harness.config["agent"] = {"runtime": "dify", "config": {}}
     source = source_image(tmp_path)
     seen = []
 

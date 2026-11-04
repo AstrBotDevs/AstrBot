@@ -90,7 +90,7 @@ class MainAgentBuildConfig:
         """
         normalize_legacy_web_search_config(config)
         settings = copy.deepcopy(config.get("provider_settings") or {})
-        runner_config = config.get("agent_runner", {}).get("config", {})
+        runner_config = config.get("agent", {}).get("config", {})
         model = runner_config.get("model", {})
         persona = runner_config.get("persona", {})
         misc = runner_config.get("misc", {})

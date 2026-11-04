@@ -46,7 +46,7 @@ async def sdk(environment, monkeypatch):
     config = copy.deepcopy(DEFAULT_CONFIG)
     config["provider_settings"]["streaming_response"] = False
     config["provider_settings"]["datetime_system_prompt"] = False
-    config["subagent_orchestrator"]["main_enable"] = False
+    config["agent"]["config"]["subagents"]["enabled"] = False
     env.config = config
     env.context.get_config = lambda **kwargs: config
     env.context.get_using_provider_async = AsyncMock(return_value=env.provider)

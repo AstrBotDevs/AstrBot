@@ -3,7 +3,7 @@
     "eyebrow": "Orchestration"
   },
   "page": {
-    "title": "Оркестрация SubAgent",
+    "title": "Управление субагентами",
     "beta": "Экспериментально",
     "subtitle": "Delegate tasks from Built-in AI, retain worker context, and review results."
   },
@@ -14,7 +14,12 @@
     "expand": "Развернуть",
     "collapse": "Свернуть",
     "delete": "Удалить",
-    "close": "Закрыть"
+    "close": "Закрыть",
+    "create": "Create Agent",
+    "cancel": "Cancel",
+    "more": "More",
+    "edit": "Edit Agent",
+    "remove": "Delete Agent"
   },
   "overview": {
     "totalAgents": "Всего SubAgent",
@@ -37,7 +42,9 @@
     "title": "Субагенты",
     "subtitle": "Настройте делегируемых агентов, персонажей и описания для основного LLM",
     "globalSettings": "Глобальные настройки",
-    "agentSetup": "Настройка агента"
+    "agentSetup": "Настройка агента",
+    "empty": "Create an agent to get started.",
+    "noDescription": "No description"
   },
   "cards": {
     "statusEnabled": "Включено",
@@ -54,18 +61,22 @@
   "form": {
     "nameLabel": "Expert name",
     "nameHint": "Используйте строчные латинские буквы и подчеркивания; имя должно быть глобально уникальным.",
-    "providerLabel": "Chat Provider (опционально)",
+    "providerLabel": "Модель чата",
     "providerHint": "Оставьте пустым, чтобы использовать глобальный провайдер по умолчанию.",
-    "personaLabel": "Выберите персонажа",
+    "personaLabel": "Persona",
     "personaHint": "Select a persona or configure a custom prompt and tools.",
     "personaPreview": "Предпросмотр персонажа",
-    "descriptionLabel": "Описание для основного LLM (используется для принятия решения о handoff)",
-    "descriptionHint": "Help main choose this expert template.",
+    "descriptionLabel": "Описание",
+    "descriptionHint": "Describe when the main agent should delegate to this agent.",
     "customPersona": "Use custom prompt and tools",
-    "systemPrompt": "System prompt",
-    "allTools": "All available tools",
-    "tools": "Tools",
-    "toolsHint": "An empty selection disables tools. Plugin and execution permissions still apply."
+    "runtime": "Agent Runtime",
+    "runtimeConfig": "Runtime Configuration (JSON)",
+    "followProvider": "Follow conversation model",
+    "externalRuntime": "External runtime configuration",
+    "inheritPersona": "Leave empty to use the main agent’s persona",
+    "inheritProvider": "Leave empty to use the main agent’s chat model",
+    "inheritSettings": "Other runtime settings follow the main agent.",
+    "followPersona": "Uses main agent persona"
   },
   "messages": {
     "loadConfigFailed": "Не удалось загрузить конфигурацию",
@@ -80,7 +91,9 @@
     "saveSuccess": "Успешно сохранено",
     "saveFailed": "Ошибка сохранения",
     "nameRequired": "Имя обязательно",
-    "namePattern": "Только строчные буквы, цифры и подчеркивание"
+    "namePattern": "Только строчные буквы, цифры и подчеркивание",
+    "deleteConfirm": "Delete {name}? Existing sessions retain their configuration and history.",
+    "jsonObject": "Enter a valid JSON object."
   },
   "empty": {
     "title": "Агенты не настроены",
@@ -92,23 +105,13 @@
     "timeout": "Task timeout (seconds, including queue time)",
     "steps": "Maximum steps per turn"
   },
-  "progress": {
-    "title": "Worker progress",
-    "hint": "Select a worker to inspect its history. Ask main to send instructions or cancel work.",
-    "worker": "Worker",
-    "state": "State",
-    "task": "Task",
-    "steps": "Completed steps",
-    "empty": "No delegated tasks yet.",
-    "loadFailed": "Could not load worker records. Refresh to retry.",
-    "states": {
-      "pending": "Queued",
-      "running": "Running",
-      "completed": "Completed",
-      "failed": "Failed",
-      "cancelled": "Cancelled",
-      "timed_out": "Timed out",
-      "interrupted": "Interrupted"
-    }
+  "status": {
+    "disabled": "Disabled",
+    "unavailable": "Runtime unavailable",
+    "missing": "Missing configuration"
+  },
+  "selection": {
+    "label": "Specialized Agent Configurations",
+    "manage": "Configure Specialized Agents"
   }
 }

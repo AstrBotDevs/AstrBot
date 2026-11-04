@@ -1,12 +1,12 @@
 # Native asynchronous subagents
 
-- Keep subagents in Built-in AI at `/subagent`, with global expert configuration and worker progress on one native page. The former plugin-extension entry is replaced by Built-in AI → Subagents.
+- Open reusable agent management from Configuration → AI → Capabilities → Subagents → Configure Specialized Agents. Remove its standalone sidebar entry while retaining `/subagent`; generic subagents work without creating saved agent configurations.
 - Main delegates through `spawn_agent` and manages workers with list, wait, result, message, and cancellation tools. Workers have private histories and configurable personas, models, tools, concurrency, timeouts, and step budgets.
 - Continue workers with the same identity and conversation context. Persist worker state and result receipts; recover unfinished work as interrupted without replaying in-flight tools.
 - Integrate main-agent construction and lifecycle through `astrbot/core/astr_agent_runtime/main_agent/subagent.py`. Register, recover, and close worker state through core lifecycle rather than plugin loading.
-- Remove eager expert orchestration. Keep expert and provider catalogs in system instructions, use fixed control-tool schemas, and resolve expert configurations only when spawning a worker.
+- Remove eager expert orchestration. Keep selected agent configuration catalogs in system instructions, use fixed control-tool schemas, and resolve agent configurations only when spawning a worker.
 - Use explicit `messages` components for spawning and messaging workers. Initial inputs support text, images, and file references; follow-ups currently become text with attachment references. Remove automatic inheritance of parent-event images.
-- Retain native `/api/v1/subagents/*` APIs, the Dashboard configuration routes, and legacy Agent handoff SDK compatibility.
+- Use `/api/v1/agent-configs` for reusable agent configuration CRUD and `/api/v1/agent-runtimes` for runtime discovery. Retain subagent tools and legacy Agent handoff SDK compatibility.
 - Separate public agent sessions from their runtime-owned conversations. Add an `AgentRuntime` session/turn contract with `AstrAgentRuntime` as the bundled implementation; extensions can register other runtimes without changing the tools or session store.
 - Remove synthetic parent-agent IDs and redundant worker/runtime state. Persist input executions and result delivery stages directly, and keep native history preparation and steering inside the built-in runtime.
 - Open runtime sessions before returning from `spawn_agent`, then execute model tasks asynchronously. Restore interrupted records without replaying queued inputs; continue existing runtime sessions by agent ID.
@@ -22,3 +22,11 @@
 - Expose plugin-facing agent contexts and message types through `astrbot.api.agents`; add public tool-result, conversation, session-filter, data-path, and message-session exports. Update plugin development examples to use the API facade while retaining existing Core imports and the `astrbot.api.agent` decorator.
 
 - Add `Context.agent.run_turn()` for programmatic native inputs with shared Core admission, runtime-owned history, queued follow-ups, safe-boundary steering, session status, and optional automatic response presentation. Explicit tool and plugin sends remain unchanged.
+
+- Rename SubAgent Orchestration to Subagent Management at the existing `/subagent` route. Replace expanded rows and global settings with two-column cards and per-agent dialogs; remove search and execution progress from the management page; move selection, concurrency and timeout settings into each profile’s native runtime configuration.
+- Embed `AgentConfig` under each profile’s `agent`, replacing `agent_runner` and mapping `local` to `astrbot`. Store reusable AgentConfigs in `agent_configs`, preserving runtime-specific JSON and stable UUID references. Import legacy experts before deleting their source data.
+- Replace the spawn tool’s template/runtime pair with `config_id`. Enforce selected configurations and parent capabilities at invocation, snapshot native configuration per session, and keep existing session histories intact.
+
+- Simplify the AstrBot agent editor to name, description, persona, and chat model. Inherit other execution settings from the parent when creating a native worker; persist only optional persona/provider overrides in reusable native configurations.
+
+- Move the sidebar Subagent Management entry into the profile’s subagent capability settings. Explain generic workers first, make specialized configurations optional, and open management in a dialog, preserving the current profile edits and refreshing available configurations after changes.

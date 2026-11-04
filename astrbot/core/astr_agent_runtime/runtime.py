@@ -16,6 +16,7 @@ from .main_session import MainAgentSession
 
 if TYPE_CHECKING:
     from astrbot.core.star.context import Context
+    from astrbot.core.subagents.context import SubAgentContext
 
 
 class AstrAgentRuntime(AgentRuntime):
@@ -27,6 +28,94 @@ class AstrAgentRuntime(AgentRuntime):
         self._opening = asyncio.Lock()
         self._active_main: dict[str, AgentTurn] = {}
         self._closed = False
+
+    def normalize_config(self, config: dict, *, delegated: bool = False) -> dict:
+        """Validate native options and apply role-appropriate defaults.
+
+        Args:
+            config: Native model, persona, execution and delegation options.
+            delegated: Whether to retain only reusable persona/model overrides.
+
+        Returns:
+            Validated native configuration.
+        """
+        from astrbot.core.config.agent import normalize_agent
+
+        return normalize_agent(
+            {"runtime": "astrbot", "config": config}, delegated=delegated
+        )["config"]
+
+    def referenced_config_ids(self, config: dict) -> list[str]:
+        """Return configured delegation targets, including disabled selections.
+
+        Args:
+            config: Native runtime configuration.
+
+        Returns:
+            Stable agent_config IDs referenced by this configuration.
+        """
+        return list(config.get("subagents", {}).get("config_ids", []))
+
+    async def spawn_agent(
+        self,
+        context: SubAgentContext,
+        messages: list[dict],
+        *,
+        config_id: str | None = None,
+        name: str | None = None,
+    ) -> dict:
+        """Resolve this runtime's delegation policy before opening another agent.
+
+        Args:
+            context: Bound native parent execution and authorized capabilities.
+            messages: Explicit structured task input.
+            config_id: Optional reusable agent selected by the parent.
+            name: Optional session display name.
+
+        Returns:
+            Public session identity and initial execution state.
+
+        Raises:
+            ValueError: If delegation, the agent_config, or its runtime is unavailable.
+        """
+        config = (
+            self.context.get_config(umo=context.event.unified_msg_origin)
+            .get("agent", {})
+            .get("config", {})
+        )
+        policy = config.get("subagents", {})
+        if not policy.get("enabled", False):
+            raise ValueError("Subagents are disabled for this configuration profile")
+        selected_runtime = "astrbot"
+        selected_config = self.normalize_config({}, delegated=True)
+        if config_id is not None:
+            if config_id not in policy.get("config_ids", []):
+                raise ValueError(
+                    f"Agent configuration is not selected by this profile: {config_id}"
+                )
+            agent_config = await self.context.agent_configs.get(config_id)
+            if not agent_config.enabled:
+                raise ValueError(f"Agent configuration is disabled: {config_id}")
+            selected_runtime, selected_config = (
+                agent_config.runtime,
+                agent_config.config,
+            )
+            name = name or agent_config.name
+        runtime = self.context.agent_runtimes.get(selected_runtime)
+        if runtime is None:
+            raise ValueError(f"Agent runtime unavailable: {selected_runtime}")
+        selected_config = runtime.normalize_config(selected_config, delegated=True)
+        service = self.context.subagents
+        if service is None:
+            raise ValueError("Agent session service is unavailable")
+        return await service.spawn(
+            context,
+            messages,
+            runtime=selected_runtime,
+            config=selected_config,
+            config_id=config_id,
+            name=name,
+        )
 
     async def initialize(self) -> None:
         """Initialize native execution environments before plugins can use them."""

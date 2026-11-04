@@ -427,6 +427,31 @@ class AgentSession(ABC):
 class AgentRuntime(ABC):
     """Host integration boundary; implementations own sessions and history."""
 
+    def normalize_config(self, config: dict, *, delegated: bool = False) -> dict:
+        """Validate runtime-owned configuration without interpreting its fields.
+
+        Args:
+            config: JSON configuration supplied by a profile or stored agent_config.
+            delegated: Whether defaults should suit a reusable worker.
+
+        Returns:
+            A detached validated configuration.
+        """
+        from copy import deepcopy
+
+        return deepcopy(config)
+
+    def referenced_config_ids(self, config: dict) -> list[str]:
+        """Report reusable configurations referenced by runtime-owned configuration.
+
+        Args:
+            config: This runtime's configuration.
+
+        Returns:
+            Referenced persistent IDs, empty for runtimes without delegation.
+        """
+        return []
+
     @abstractmethod
     async def open_session(
         self,

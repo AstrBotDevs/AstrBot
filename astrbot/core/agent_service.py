@@ -304,7 +304,7 @@ class AgentService:
         if self._closed or self.context.agent_runtime is None:
             raise RuntimeError("Agent service is unavailable")
         config = self.context.get_config(umo=umo)
-        if config.get("agent_runner", {}).get("runner_type", "local") != "local":
+        if config.get("agent", {}).get("runtime", "astrbot") != "astrbot":
             raise ValueError("ctx.agent currently supports the built-in runtime only")
         if source_event is None:
             current = current_message_event.get()

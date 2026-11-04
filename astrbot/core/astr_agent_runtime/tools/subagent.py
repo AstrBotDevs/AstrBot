@@ -47,7 +47,7 @@ def get_subagent_service(context: ContextWrapper[SubAgentContext]) -> SubAgentSe
     return service
 
 
-@builtin_tool(config={"subagent_orchestrator.main_enable": True})
+@builtin_tool(config={"agent.config.subagents.enabled": True})
 class SpawnAgentTool(FunctionTool):
     name = "spawn_agent"
 
@@ -55,33 +55,24 @@ class SpawnAgentTool(FunctionTool):
         super().__init__(
             name="spawn_agent",
             description=(
-                "Open an agent session and return its agent_id while the task runs asynchronously. "
-                "Provide a self-contained task and explicit attachments in messages; main history and original attachments are not inherited. "
-                "Omit template for a generic worker or choose an expert from the system instructions. "
-                "Omit runtime for the built-in AstrBot agent runtime. Optionally override name or native provider_id. "
-                "Continue independent work; use wait_agent for results, send_message for follow-ups, and cancel_agent to stop work."
+                "Open an agent session and return agent_id while the task runs asynchronously. "
+                "Provide a self-contained task and explicit attachments in messages. "
+                "Choose config_id from the system catalog or omit it for a generic native worker. "
+                "Use wait_agent for results, send_message for follow-ups, and cancel_agent to stop work."
             ),
             parameters={
                 "type": "object",
                 "properties": {
                     "messages": copy.deepcopy(SUBAGENT_MESSAGES_SCHEMA),
-                    "template": {
+                    "config_id": {
                         "type": "string",
-                        "description": "Optional configured expert name; omit for a generic agent.",
-                    },
-                    "runtime": {
-                        "type": "string",
-                        "description": "Agent runtime name from the system instructions. Defaults to astrbot.",
+                        "minLength": 1,
+                        "description": "Optional reusable agent spec ID from the system catalog.",
                     },
                     "name": {
                         "type": "string",
                         "minLength": 1,
-                        "description": "Optional agent display name.",
-                    },
-                    "provider_id": {
-                        "type": "string",
-                        "minLength": 1,
-                        "description": "Optional native configured chat provider ID; otherwise uses the expert or current conversation provider.",
+                        "description": "Optional session display name.",
                     },
                 },
                 "required": ["messages"],
@@ -94,44 +85,43 @@ class SpawnAgentTool(FunctionTool):
         self,
         context: ContextWrapper[SubAgentContext],
         messages: list[dict] | None = None,
-        template: str | None = None,
-        runtime: str = "astrbot",
+        config_id: str | None = None,
         name: str | None = None,
-        provider_id: str | None = None,
         **kwargs: Any,
     ) -> str:
-        """Create an agent session through its selected agent runtime.
+        """Resolve a native delegation choice and open its configured runtime.
 
         Args:
-            context: Main execution owning the session.
-            messages: Explicit structured task input.
-            template: Optional expert name.
-            runtime: Registered agent runtime name.
-            name: Optional instance display name.
-            provider_id: Optional native provider override.
-            **kwargs: Unsupported arguments, rejected to match the tool schema.
+            context: Bound parent execution and permissions.
+            messages: Self-contained structured input.
+            config_id: Optional configured reusable agent.
+            name: Optional session display name.
+            **kwargs: Unsupported arguments, rejected to match the schema.
 
         Returns:
-            JSON public agent identity and initial state.
+            JSON agent identity and initial state.
+
+        Raises:
+            ValueError: If delegation or the selected spec is unavailable.
+            TypeError: If the tool input does not match its schema.
         """
         if messages is None or kwargs:
             raise TypeError(
                 "spawn_agent requires messages and accepts only schema arguments"
             )
+        host = context.context.context
+        native = host.agent_runtime
+        if native is None:
+            raise ValueError("AstrBot agent runtime is unavailable")
         return json.dumps(
-            await get_subagent_service(context).spawn(
-                context.context,
-                messages,
-                runtime=runtime,
-                template=template,
-                name=name,
-                provider_id=provider_id,
+            await native.spawn_agent(
+                context.context, messages, config_id=config_id, name=name
             ),
             ensure_ascii=False,
         )
 
 
-@builtin_tool(config={"subagent_orchestrator.main_enable": True})
+@builtin_tool(config={"agent.config.subagents.enabled": True})
 class ListAgentsTool(FunctionTool):
     name = "list_agents"
 
@@ -158,7 +148,7 @@ class ListAgentsTool(FunctionTool):
         )
 
 
-@builtin_tool(config={"subagent_orchestrator.main_enable": True})
+@builtin_tool(config={"agent.config.subagents.enabled": True})
 class GetAgentResultTool(FunctionTool):
     name = "get_agent_result"
 
@@ -189,7 +179,7 @@ class GetAgentResultTool(FunctionTool):
         )
 
 
-@builtin_tool(config={"subagent_orchestrator.main_enable": True})
+@builtin_tool(config={"agent.config.subagents.enabled": True})
 class WaitAgentTool(FunctionTool):
     name = "wait_agent"
 
@@ -244,7 +234,7 @@ class WaitAgentTool(FunctionTool):
         )
 
 
-@builtin_tool(config={"subagent_orchestrator.main_enable": True})
+@builtin_tool(config={"agent.config.subagents.enabled": True})
 class SendAgentMessageTool(FunctionTool):
     name = "send_message"
 
@@ -285,7 +275,7 @@ class SendAgentMessageTool(FunctionTool):
         )
 
 
-@builtin_tool(config={"subagent_orchestrator.main_enable": True})
+@builtin_tool(config={"agent.config.subagents.enabled": True})
 class CancelAgentTool(FunctionTool):
     name = "cancel_agent"
 

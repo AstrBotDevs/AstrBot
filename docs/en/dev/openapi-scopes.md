@@ -119,9 +119,12 @@ Manage configuration profiles, system configuration, and shared configuration, e
 | `PUT` | `/api/v1/config-routes/{umo}` | — |
 | `DELETE` | `/api/v1/config-routes/{umo}` | — |
 | `GET` | `/api/v1/subagents/available-tools` | — |
-| `GET` | `/api/v1/subagents/config` | — |
-| `PUT` | `/api/v1/subagents/config` | — |
-| `GET` | `/api/v1/subagents/runtime` | — |
+| `GET` | `/api/v1/agent-configs` | — |
+| `POST` | `/api/v1/agent-configs` | — |
+| `GET` | `/api/v1/agent-configs/{config_id}` | — |
+| `PUT` | `/api/v1/agent-configs/{config_id}` | — |
+| `DELETE` | `/api/v1/agent-configs/{config_id}` | — |
+| `GET` | `/api/v1/agent-runtimes` | — |
 | `GET` | `/api/v1/system-config` | — |
 | `PUT` | `/api/v1/system-config` | `config:edit_admin` |
 | `GET` | `/api/v1/system-config/runtime` | — |

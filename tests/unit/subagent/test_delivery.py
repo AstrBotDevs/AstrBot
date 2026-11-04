@@ -382,7 +382,7 @@ async def test_idle_result_runs_through_pipeline_once_and_commits_to_parent(
 
     env = environment
     config = copy.deepcopy(DEFAULT_CONFIG)
-    config["subagent_orchestrator"] = env.config
+    config["agent"]["config"]["subagents"] = env.config
     config["provider_settings"]["streaming_response"] = False
     env.context.get_config = lambda **_: config
     env.context.send_message = AsyncMock(return_value=True)

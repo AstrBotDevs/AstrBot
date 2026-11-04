@@ -4,25 +4,45 @@ Subagents are a native **Built-in AI** capability in AstrBot. Main can continue 
 
 ## Configuration
 
-Open **Built-in AI → Subagents**, enable orchestration, and click **Save**. Settings are global and apply after saving.
+Open the relevant profile at **Configuration → AI → Capabilities → Subagents**. Enabling the capability allows generic subagents immediately, without creating a saved agent. Concurrency defaults to 3 and timeout defaults to 600 seconds including queue time.
 
-| Setting | Meaning |
-| --- | --- |
-| Concurrent workers per session | Defaults to 3. Additional tasks wait for an execution slot. |
-| Task timeout | Includes time waiting for a slot; defaults to 600 seconds. |
-| Maximum steps per turn | Defaults to 30 and never exceeds main's step budget. |
+For a dedicated persona or chat model, click **Configure Specialized Agents**, then **Create Agent** in the dialog. Saving refreshes the original selection list. Close the dialog and select the agent under **Specialized Agent Configurations**. Management uses two-column cards with independent saves; click a card to edit or use its menu to delete it.
 
-![Native subagent configuration](images/subagent-create-en.png)
+The previous sidebar **SubAgent Orchestration / Subagent Management** entry moves to **Configuration → AI → Capabilities → Subagents → Configure Specialized Agents**. Management opens in a dialog without leaving the configuration page. The previous `/subagent` URL remains accessible. Global settings have moved into profiles, and the former expert list is stored as database-backed agent configurations.
 
-## Expert templates
+![Subagent capability settings](images/subagent-settings-en.png)
 
-An expert defines a name, task description, optional model provider, and persona. Names start with a lowercase letter and contain up to 64 lowercase letters, digits, or underscores.
+![Subagent management](images/subagent-create-en.png)
 
-Selecting a persona inherits its system prompt, tools, and initial dialogue. Alternatively, configure a custom prompt and tools. An empty tool list disables tools. All-available selection still applies tool activation, plugin scope, and execution permissions.
+## AgentConfig and storage
 
-An unset provider follows the current conversation. Without an expert template, main can create a generic worker using its available delegable tools. Workers do not inherit main's entire chat history: include relevant context and constraints in each task.
+Each configuration profile embeds `{ runtime, config }` under `agent` as its default main agent, edited directly in that profile. Agents created in the management page are stored in the database's `agent_configs` table and referenced by stable UUID `config_id`. Renaming an agent preserves references. Both use the same configuration structure; an inline main agent does not need a database record.
 
-The main agent's system prompt lists available expert names and purposes, along with optional model providers. The `spawn_agent` tool definition stays fixed, without an expert catalog or dynamic enums. The selected expert is resolved from current configuration when called; its full persona instructions and preset dialogue apply to the worker.
+```json
+{
+  "agent": {
+    "runtime": "astrbot",
+    "config": {
+      "subagents": {
+        "enabled": true,
+        "config_ids": ["stored-agent-configuration-UUID"],
+        "max_concurrent_agents": 3,
+        "task_timeout": 600
+      }
+    }
+  }
+}
+```
+
+`subagents` belongs to the `astrbot` runtime. Referenced AgentConfigs can select another registered runtime; ACP is not bundled in this phase. Native configurations have a form; other runtimes use a JSON editor. Configurations for unavailable runtimes remain stored but cannot create new sessions. Deletion is rejected while a profile or another AgentConfig references a record, and the API returns the reference locations.
+
+Choose an Agent Runtime when creating or editing a configuration. For the AstrBot runtime, the form contains name, description, persona, and chat model. The description helps the main agent decide when to delegate. Empty persona and provider selections follow the main agent. Step limits, retries, compression, tool timeouts, and other runtime settings are inherited when the session is created instead of being duplicated in AgentConfig. The selected persona supplies instructions, tools, and skills, constrained by the parent’s authorized capabilities.
+
+![Create Agent form](images/subagent-edit-en.png)
+
+The main system prompt lists only selected and enabled configurations, exposing their IDs, names, runtimes, and descriptions. Full instructions apply to the worker. The `spawn_agent` schema stays fixed: choose an optional `config_id`, or omit it for a generic native worker.
+
+Legacy `agent_runner` is migrated to `agent`, mapping `local` to `astrbot`. Legacy experts are removed from configuration files only after successful database import. Migration preserves existing sessions and history; already created agents retain their configuration snapshots.
 
 ## Execution and continuation
 
@@ -32,7 +52,7 @@ Both `spawn_agent` and `send_message` accept a `messages` array using the same c
 
 ```json
 {
-  "template": "researcher",
+  "config_id": "agent-configuration-UUID",
   "messages": [
     {"type": "plain", "text": "Analyze this chart and consult the report"},
     {"type": "image", "path": "chart.png"},
@@ -45,7 +65,6 @@ Relative image paths resolve from the current session workspace. Absolute local 
 
 Results are addressed to the direct parent runtime/session. Delivery first calls the parent's active turn's `steer()` and waits for its durable-consumption receipt in an independent notification task. Rejected or unconsumed input is queued through the normal message pipeline with the exact parent session attached; switching the UMO's selected conversation does not redirect the result. Result bodies are carried in the input itself, without a separate step-start injection or delivery checkpoint. Further instructions steer a running worker or start its next turn with the same private history. Workers cannot spawn more workers.
 
-The **Worker progress** section shows states, completed steps, results, and errors. Select a worker to inspect its execution record. Editing an expert does not change already-started workers.
 
 ## Persistence and recovery
 
@@ -59,12 +78,10 @@ Runtime adapters receive typed input through `AgentInput.content`: `PlainInput`,
 
 An `AgentRuntime` opens or restores an `AgentSession`. `session.run_turn(input)` returns an independently executing turn with replayable `events()`, `result()`, `cancel()`, queued `follow_up()`, and optional `steer()` at a safe boundary. Cancellation of an output reader or result waiter does not implicitly cancel execution. The owner explicitly cancels the turn when its pipeline stops.
 
-Extensions can register a runtime with `ctx.subagents.register_runtime(name, runtime)` and select it using `spawn_agent`'s `runtime` parameter. The default is `astrbot`; an ACP runtime and continuous voice sessions are not included in this phase. Existing third-party main-agent execution paths remain unchanged.
+Extensions can register a runtime with `ctx.subagents.register_runtime(name, runtime)` and select it in an AgentConfig’s `runtime` field. `spawn_agent` uses the configuration through `config_id`; generic workers use `astrbot`. an ACP runtime and continuous voice sessions are not included in this phase. Existing third-party main-agent execution paths remain unchanged.
 
 `list_agents` returns each agent's public `agent_id`, `runtime`, and opaque runtime-owned session ID in `conversation_id`. `send_message` resolves the runtime and session by agent ID. `owner_conversation_id` identifies the separate owning main conversation.
 
 ## Entry points and APIs
 
-Expert management and worker progress share **Built-in AI → Subagents** at `/subagent`. The former plugin-extension entry is replaced by this native page.
-
-Native APIs are `/api/v1/subagents/config`, `/api/v1/subagents/available-tools`, and `/api/v1/subagents/runtime`; they require the `config` scope. The Dashboard configuration routes under `/api/subagent/*` remain compatible.
+Open management through **Configuration → AI → Capabilities → Subagents → Configure Specialized Agents**, route `/subagent`. Use `/api/v1/agent-configs` to list/create records and `/api/v1/agent-configs/{config_id}` to read/update/delete one. `/api/v1/agent-runtimes` lists callable runtimes and their defaults. Tool listing remains at `/api/v1/subagents/available-tools`. All require the `config` scope. The former whole-configuration `/subagents/config` and `/api/subagent/config` endpoints are removed.

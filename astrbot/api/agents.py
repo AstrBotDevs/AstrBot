@@ -1,5 +1,6 @@
 """Public agent contexts, messages, tools, and conversation types for plugins."""
 
+from astrbot.core.agent.config import AgentConfig, StoredAgentConfig
 from astrbot.core.agent.input import FileInput, ImageInput, InputComponent, PlainInput
 from astrbot.core.agent.message import (
     AssistantMessageSegment,
@@ -35,6 +36,8 @@ from astrbot.core.astr_agent_context import AgentContextWrapper, AstrAgentContex
 from astrbot.core.db.po import Conversation
 
 __all__ = [
+    "AgentConfig",
+    "StoredAgentConfig",
     "AgentContextWrapper",
     "AgentPermissions",
     "AgentRole",

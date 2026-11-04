@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 from deprecated import deprecated
 
+from astrbot.core.agent.config_store import AgentConfigStore
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.message import ContentPart, Message
 from astrbot.core.agent.run_context import ContextWrapper
@@ -57,6 +58,7 @@ from .star_handler import EventType, StarHandlerMetadata, star_handlers_registry
 logger = logging.getLogger("astrbot")
 
 if TYPE_CHECKING:
+    from astrbot.core.agent.runtime import AgentRuntime
     from astrbot.core.astr_agent_runtime import AstrAgentRuntime
     from astrbot.core.cron.manager import CronJobManager
     from astrbot.core.star.star_manager import PluginManager
@@ -182,6 +184,10 @@ class Context:
         self.cron_manager = cron_manager
         """Cron job manager, initialized by core lifecycle."""
         self.subagents = subagents
+        self.agent_configs: AgentConfigStore = AgentConfigStore(db)
+        self.agent_runtimes: dict[str, AgentRuntime] = (
+            subagents.runtimes if subagents is not None else {}
+        )
         self.agent_runtime: AstrAgentRuntime | None = None
         """Built-in runtime initialized before plugins; owns native agent sessions."""
         self.decision = DecisionService(provider_manager)

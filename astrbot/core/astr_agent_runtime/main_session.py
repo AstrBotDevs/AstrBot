@@ -119,13 +119,13 @@ class MainAgentSession(AgentSession):
             turn.emit("prepared", metadata)
             try:
                 max_steps = coerce_int_config(
-                    config.get("agent_runner", {})
+                    config.get("agent", {})
                     .get("config", {})
                     .get("misc", {})
                     .get("max_steps", 128),
                     default=128,
                     min_value=1,
-                    field_name="agent_runner.config.misc.max_steps",
+                    field_name="agent.config.misc.max_steps",
                 )
                 outcome = await execute_native_loop(runner, turn, max_steps)
                 return outcome

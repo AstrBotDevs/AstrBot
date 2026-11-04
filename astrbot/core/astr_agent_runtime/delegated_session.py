@@ -7,7 +7,6 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from astrbot import logger
 from astrbot.core.agent.input import ImageInput, InputComponent, format_input_content
 from astrbot.core.agent.message import (
     ContentPart,
@@ -95,6 +94,7 @@ class NativeConversation:
     skills: list[str] | None = None
     initial_dialogs: list[Message] = field(default_factory=list)
     messages: list[Message] = field(default_factory=list)
+    runtime_config: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -168,64 +168,55 @@ class DelegatedAgentSession(AgentSession):
         input: DelegatedAgentInput,
         options: dict,
     ) -> DelegatedAgentSession:
-        """Snapshot one expert and its capabilities when a child session opens.
+        """Snapshot native configuration and its capabilities when a child session opens.
 
         Args:
             runtime: Owner supplying storage and application services.
             umo: Owner message source.
             input: Initial caller and its currently delegable capabilities.
-            options: Optional expert, provider and display name.
+            options: Validated runtime configuration and display metadata.
 
         Returns:
             A new persisted private session with no model work started.
 
         Raises:
-            ValueError: If the caller, expert or configured provider is unavailable.
+            ValueError: If the caller, persona or configured provider is unavailable.
         """
         caller = input.caller
         if caller is None:
             raise ValueError("A delegated session requires an owning caller")
-        template = options.get("template")
-        instructions = "Complete the delegated task. Follow its constraints and return a concise result with evidence and unresolved limitations."
-        tools = list(caller.tools.names())
+        overrides = runtime.normalize_config(options.get("config", {}), delegated=True)
+        config = runtime.normalize_config(
+            caller.context.get_config(umo=umo).get("agent", {}).get("config", {})
+        )
+        explicit_persona_id = overrides["persona"]["persona_id"]
+        if explicit_persona_id:
+            config["persona"]["persona_id"] = explicit_persona_id
+        elif isinstance(
+            resolved_persona_id := caller.event.get_extra("_trace_persona_id"), str
+        ):
+            config["persona"]["persona_id"] = resolved_persona_id
+        if overrides["model"]["provider_id"]:
+            config["model"]["provider_id"] = overrides["model"]["provider_id"]
+        persona_config = config["persona"]
+        instructions = (
+            persona_config.get("system_prompt")
+            or "Complete the delegated task. Follow its constraints and return a concise result with evidence and unresolved limitations."
+        )
+        tools = persona_config.get("tools")
         dialogs = []
-        skills = None
-        provider_id = options.get("provider_id")
-        if template:
-            config = caller.context.get_config().get("subagent_orchestrator", {})
-            expert = next(
-                (
-                    item
-                    for item in config.get("agents", [])
-                    if isinstance(item, dict)
-                    and item.get("enabled", True)
-                    and str(item.get("name", "")).strip() == template
-                ),
-                None,
-            )
-            if expert is None:
-                raise ValueError(f"Unknown subagent template: {template}")
-            instructions = str(expert.get("system_prompt", "")).strip()
-            tools = expert.get("tools", [])
-            persona_id = str(expert.get("persona_id") or "").strip()
-            persona = (
-                caller.context.persona_manager.get_persona_v3_by_id(persona_id)
-                if persona_id
-                else None
-            )
-            if persona:
+        skills = persona_config.get("skills")
+        persona_id = persona_config.get("persona_id")
+        if persona_id:
+            persona = caller.context.persona_manager.get_persona_v3_by_id(persona_id)
+            if persona is None and explicit_persona_id:
+                raise ValueError(f"Agent persona is unavailable: {persona_id}")
+            if persona is not None:
                 instructions = str(persona.get("prompt", "")).strip() or instructions
                 tools = persona.get("tools")
                 dialogs = persona.get("_begin_dialogs_processed") or []
                 skills = persona.get("skills")
-            elif persona_id:
-                logger.warning(
-                    "SubAgent persona %s not found, fallback to inline prompt.",
-                    persona_id,
-                )
-            provider_id = (
-                provider_id or str(expert.get("provider_id") or "").strip() or None
-            )
+        provider_id = overrides["model"]["provider_id"]
         if tools is not None:
             tools = (
                 [str(name).strip() for name in tools if str(name).strip()]
@@ -235,6 +226,7 @@ class DelegatedAgentSession(AgentSession):
         provider_id = provider_id or await caller.context.get_current_chat_provider_id(
             caller.scope.umo
         )
+        config["model"]["provider_id"] = provider_id
         available = [
             provider.provider_config["id"]
             for provider in caller.context.get_all_providers()
@@ -249,6 +241,7 @@ class DelegatedAgentSession(AgentSession):
             instructions=instructions,
             tools=tools,
             skills=skills,
+            runtime_config=config,
             initial_dialogs=bind_checkpoint_messages(
                 [
                     {**item.model_dump(), "_no_save": item._no_save}
@@ -295,6 +288,7 @@ class DelegatedAgentSession(AgentSession):
                 instructions=data["instructions"],
                 tools=data["tools"],
                 skills=data.get("skills"),
+                runtime_config=data.get("runtime_config", {"misc": {"max_steps": 30}}),
                 initial_dialogs=bind_checkpoint_messages(
                     data.get("initial_dialogs", [])
                 ),
@@ -328,6 +322,7 @@ class DelegatedAgentSession(AgentSession):
                 "instructions": conversation.instructions,
                 "tools": conversation.tools,
                 "skills": conversation.skills,
+                "runtime_config": conversation.runtime_config,
                 "initial_dialogs": [
                     {
                         **message.model_dump(),
@@ -386,7 +381,7 @@ class DelegatedAgentSession(AgentSession):
         )
         for tool in caller.tools:
             if request.plugin_tools is None or manager.is_builtin_tool(tool.name):
-                available.add_tool(tool)
+                available.add_tool(available.get_tool(tool.name) or tool)
         selected = (
             available.tools
             if conversation.tools is None
@@ -401,6 +396,7 @@ class DelegatedAgentSession(AgentSession):
             if (
                 tool is None
                 or not tool.active
+                or tool.name not in caller.tools.names()
                 or tool.name in SUBAGENT_TOOL_NAMES
                 or tool.name.startswith("transfer_to_")
             ):
@@ -421,7 +417,36 @@ class DelegatedAgentSession(AgentSession):
                 continue
             tools.add_tool(tool)
         config = caller.context.get_config(umo=caller.scope.umo)
-        instructions = ProviderRequest(system_prompt=conversation.instructions)
+        from .main_agent import providers
+        from .main_agent.config import MainAgentBuildConfig
+        from .main_agent.persona import apply_safety_instructions
+
+        effective = {
+            **config,
+            "agent": {"runtime": "astrbot", "config": conversation.runtime_config},
+        }
+        build_config = MainAgentBuildConfig.from_config(effective)
+        from astrbot.core.provider import Provider
+        from astrbot.core.utils.llm_metadata import LLM_METADATAS
+
+        provider = await caller.context.provider_manager.get_provider_by_id(
+            conversation.provider_id
+        )
+        if not isinstance(provider, Provider):
+            raise ValueError(
+                f"Agent provider is unavailable: {conversation.provider_id}"
+            )
+        max_context_tokens = provider.provider_config.get("max_context_tokens", 0)
+        if max_context_tokens <= 0:
+            model = LLM_METADATAS.get(provider.get_model())
+            max_context_tokens = (
+                model["limit"]["context"]
+                if model
+                else build_config.fallback_max_context_tokens
+            )
+        instructions = ProviderRequest(
+            system_prompt=f"<persona_instructions>\n{conversation.instructions}\n</persona_instructions>\n"
+        )
         await apply_skills(
             instructions,
             config.get("provider_settings", {}),
@@ -430,23 +455,13 @@ class DelegatedAgentSession(AgentSession):
             allowed_skills=conversation.skills,
             plugin_skills=request.plugin_skills,
         )
-        limits = caller.context.get_config().get("subagent_orchestrator", {})
-        max_steps = min(
-            coerce_int_config(
-                limits.get("max_steps", 30),
-                default=30,
-                min_value=1,
-                field_name="subagent.max_steps",
-            ),
-            coerce_int_config(
-                config.get("agent_runner", {})
-                .get("config", {})
-                .get("misc", {})
-                .get("max_steps", 128),
-                default=128,
-                min_value=1,
-                field_name="agent_runner.config.misc.max_steps",
-            ),
+        if build_config.llm_safety_mode:
+            apply_safety_instructions(build_config, instructions)
+        max_steps = coerce_int_config(
+            conversation.runtime_config.get("misc", {}).get("max_steps", 30),
+            default=30,
+            min_value=1,
+            field_name="agent.config.misc.max_steps",
         )
         active = _ActivePrompt()
         self._active_prompt = active
@@ -475,8 +490,29 @@ class DelegatedAgentSession(AgentSession):
                 ],
                 tools=tools if tools.tools else None,
                 max_steps=max_steps,
-                run_context=ContextWrapper(context=context),
+                run_context=ContextWrapper(
+                    context=context, tool_call_timeout=build_config.tool_call_timeout
+                ),
                 agent_hooks=hooks,
+                tool_schema_mode=build_config.tool_schema_mode,
+                request_max_retries=build_config.request_max_retries,
+                max_context_tokens=max_context_tokens,
+                enforce_max_turns=build_config.max_context_length,
+                truncate_turns=build_config.dequeue_context_length,
+                llm_compress_instruction=build_config.llm_compress_instruction,
+                llm_compress_keep_recent_ratio=build_config.llm_compress_keep_recent_ratio,
+                llm_compress_provider=(
+                    await providers.resolve_compression_provider(
+                        build_config, caller.context
+                    )
+                )
+                if build_config.llm_compress_provider_id
+                else provider,
+                fallback_providers=providers.resolve_fallback_providers(
+                    provider,
+                    caller.context,
+                    build_config.fallback_provider_ids,
+                ),
             )
             if hooks.failure is not None:
                 raise hooks.failure

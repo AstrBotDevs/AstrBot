@@ -36,11 +36,14 @@ async def test_foreign_runner_exchanges_structured_input_without_native_loop(
         {"type": "plain", "text": "Research"},
         {"type": "image", "url": "https://example.com/a.png"},
     ]
+    selected = await env.save_agent("researcher", runtime="memory", config={"model": "external"})
+    env.memory.open_session = AsyncMock(wraps=env.memory.open_session)
     reply = json.loads(
         await SpawnAgentTool().call(
-            env.wrapper, messages, runtime="memory", name="researcher"
+            env.wrapper, messages, config_id=selected.config_id, name="researcher"
         )
     )
+    assert env.memory.open_session.call_args_list[0].kwargs["options"]["config"] == {"model": "external"}
     agent_id = reply["agent_id"]
     messages[0]["text"] = "Changed"
     result = await env.service.wait(env.root, [agent_id], 2000, "all")
@@ -201,9 +204,9 @@ async def test_group_members_share_agents_but_keep_each_inputs_caller(environmen
         ("bob", AgentRole.MEMBER),
         ("carol", AgentRole.ADMIN),
     ]
-    assert (
-        await env.service.result(wrappers[0].context, agent["agent_id"])
-    )["result"] == "carol"
+    assert (await env.service.result(wrappers[0].context, agent["agent_id"]))[
+        "result"
+    ] == "carol"
     await CancelAgentTool().call(wrappers[0], agent["agent_id"])
     assert not env.service._task_callers
 
@@ -277,13 +280,11 @@ async def test_config_catalog_only_changes_prompt_not_tool_schema(environment):
     env = environment
     spawn = env.manager.get_func("spawn_agent")
     before = (spawn.description, json.dumps(spawn.parameters))
-    env.config["agents"] = [
-        {
-            "name": "researcher",
-            "public_description": "Find evidence",
-            "system_prompt": "Private instructions",
-        }
-    ]
+    selected = await env.save_agent(
+        "researcher", runtime="memory", config={"instructions": "Private instructions"}
+    )
+    selected.description = "Find evidence"
+    await env.context.agent_configs.save(selected)
     req = ProviderRequest(conversation=env.conversation)
     await subagent.apply_subagents(req, env.context, env.event)
     assert "researcher" in req.system_prompt
@@ -291,26 +292,11 @@ async def test_config_catalog_only_changes_prompt_not_tool_schema(environment):
     assert "memory" in req.system_prompt
     assert "researcher" not in json.dumps(req.func_tool.openai_schema())
     assert (spawn.description, json.dumps(spawn.parameters)) == before
-    env.config["agents"] = []
+    env.config["config_ids"] = []
     updated = ProviderRequest(conversation=env.conversation)
     await subagent.apply_subagents(updated, env.context, env.event)
     assert "researcher" not in updated.system_prompt
     assert updated.func_tool.openai_schema() == req.func_tool.openai_schema()
-
-
-@pytest.mark.asyncio
-async def test_dashboard_history_is_delegated_to_the_selected_runner(environment):
-    from astrbot.dashboard.services.subagent_service import SubAgentService
-
-    env = environment
-    agent = await env.service.spawn(
-        env.root, [{"type": "plain", "text": "Inspect"}], runtime="memory"
-    )
-    await env.service.wait(env.root, [agent["agent_id"]], 2000, "all")
-    dashboard = SubAgentService(SimpleNamespace(subagents=env.service))
-    row = (await dashboard.get_runtime(agent["agent_id"]))[0]
-    assert row["messages"] == [{"role": "user", "content": "Inspect"}]
-    assert row["runtime"] == "memory"
 
 
 @pytest.mark.asyncio

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import copy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from astrbot.core.agent.runtime import AgentInput, AgentPermissions
@@ -26,6 +26,7 @@ class AgentCaller:
     scope: AgentScope
     tools: ToolSet
     agent_context: AstrAgentContext
+    limits: dict = field(default_factory=dict)
 
     def owner_metadata(self) -> dict:
         """Snapshot only the information required for safe result wakeups.

@@ -135,13 +135,16 @@ async def environment(tmp_path, request):
     ]
     context.get_current_chat_provider_id = AsyncMock(return_value="model")
     config = {
-        "main_enable": True,
+        "enabled": True,
+        "config_ids": [],
         "agents": [],
         "max_concurrent_agents": 3,
         "task_timeout": 600,
         "max_steps": 30,
     }
-    context.get_config = lambda **kwargs: {"subagent_orchestrator": config}
+    context.get_config = lambda **kwargs: {
+        "agent": {"runtime": "astrbot", "config": {"subagents": config}}
+    }
     event = AgentWakeupEvent(
         context=context,
         session=MessageSession.from_str(conversation.user_id),
@@ -155,6 +158,7 @@ async def environment(tmp_path, request):
     service = SubAgentService(SubAgentStore(db), {"astrbot": native})
     service.register_runtime("memory", memory)
     context.subagents = service
+    context.agent_runtimes = service.runtimes
     await subagent.initialize_subagents(context)
     wrapper = ContextWrapper(
         context=AstrAgentContext(
@@ -167,7 +171,35 @@ async def environment(tmp_path, request):
         req=ProviderRequest(conversation=conversation, func_tool=ToolSet())
     )
     await subagent.begin_main_agent(wrapper)
+
+    async def save_agent(name="worker", *, runtime="astrbot", config=None, **legacy):
+        from astrbot.core.agent.config import StoredAgentConfig
+
+        runtime_config = config or {}
+        if legacy:
+            runtime_config = {
+                "model": {"provider_id": legacy.get("provider_id") or ""},
+                "persona": {
+                    "persona_id": legacy.get("persona_id") or "",
+                    "system_prompt": legacy.get("system_prompt", ""),
+                    "tools": legacy.get("tools"),
+                },
+            }
+        record = StoredAgentConfig(
+            config_id=str(uuid4()),
+            name=name,
+            runtime=runtime,
+            config=context.agent_runtimes[runtime].normalize_config(
+                runtime_config, delegated=True
+            ),
+        )
+        await context.agent_configs.save(record)
+        config_ids = context.get_config()["agent"]["config"]["subagents"]["config_ids"]
+        config_ids.append(record.config_id)
+        return record
+
     env = SimpleNamespace(
+        save_agent=save_agent,
         db=db,
         manager=manager,
         conversation=conversation,

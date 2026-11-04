@@ -158,8 +158,8 @@ class ThirdPartyAgentSubStage(Stage):
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
         self.conf = ctx.astrbot_config
-        agent_runner = self.conf["agent_runner"]
-        self.runner_type = agent_runner["runner_type"]
+        agent_runner = self.conf["agent"]
+        self.runner_type = agent_runner["runtime"]
         self.runner_config = agent_runner["config"]
         settings = ctx.astrbot_config["provider_settings"]
         self.streaming_response: bool = settings["streaming_response"]

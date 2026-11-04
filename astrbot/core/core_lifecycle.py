@@ -122,7 +122,7 @@ class AstrBotCoreLifecycle:
                 return
             self._default_chat_provider_warning_emitted = True
             logger.warning(
-                "Detected %d enabled chat providers but `agent_runner.config.model.provider_id` is empty. "
+                "Detected %d enabled chat providers but `agent.config.model.provider_id` is empty. "
                 "AstrBot will use `%s` as the startup fallback chat provider. "
                 "Set a default chat model in the WebUI configuration page to avoid unexpected provider switching.",
                 len(providers),
@@ -243,6 +243,7 @@ class AstrBotCoreLifecycle:
             SubAgentStore(self.db), {"astrbot": self.star_context.agent_runtime}
         )
         self.star_context.subagents = self.subagents
+        self.star_context.agent_runtimes = self.subagents.runtimes
         self.star_context.html_renderer = html_renderer
 
         # 初始化插件管理器

@@ -63,7 +63,7 @@ async def test_third_party_runner_receives_inline_profile_config(
     monkeypatch.setattr(third_party.Metric, "upload", AsyncMock(return_value=None))
 
     config = {
-        "agent_runner": {"runner_type": runner_type, "config": inline_config},
+        "agent": {"runtime": runner_type, "config": inline_config},
         "provider_settings": {
             "streaming_response": False,
             "unsupported_streaming_strategy": "turn_off",
@@ -141,7 +141,7 @@ async def test_third_party_skips_unavailable_voice_attachment(
     monkeypatch.setattr(Record, "convert_to_file_path", unavailable)
 
     config = {
-        "agent_runner": {"runner_type": "dify", "config": {"dify_api_key": "k"}},
+        "agent": {"runtime": "dify", "config": {"dify_api_key": "k"}},
         "provider_settings": {
             "streaming_response": False,
             "unsupported_streaming_strategy": "turn_off",
@@ -221,7 +221,7 @@ async def test_third_party_skips_unavailable_image_attachment(
     monkeypatch.setattr(Image, "convert_to_base64", unavailable)
 
     config = {
-        "agent_runner": {"runner_type": "dify", "config": {"dify_api_key": "k"}},
+        "agent": {"runtime": "dify", "config": {"dify_api_key": "k"}},
         "provider_settings": {
             "streaming_response": False,
             "unsupported_streaming_strategy": "turn_off",

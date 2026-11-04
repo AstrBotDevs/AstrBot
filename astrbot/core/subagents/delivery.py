@@ -143,12 +143,6 @@ class AgentResultDelivery:
                 scope.umo, session_id=parent.session_id
             )
             while not self._closing:
-                if (
-                    not context.get_config()
-                    .get("subagent_orchestrator", {})
-                    .get("main_enable", False)
-                ):
-                    return
                 caller = self.callers.get(scope)
                 if (
                     caller

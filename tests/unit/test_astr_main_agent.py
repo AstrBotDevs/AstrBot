@@ -300,13 +300,13 @@ class TestMainAgentBuildConfig:
         """Keep build settings stable when the source session config changes."""
         source = {
             "provider_settings": {"sandbox": {"booter": "test"}},
-            "agent_runner": {
+            "agent": {
                 "config": {"model": {"fallback_provider_ids": ["backup"]}}
             },
         }
         config = ama.MainAgentBuildConfig.from_config(source)
         source["provider_settings"]["sandbox"]["booter"] = "changed"
-        source["agent_runner"]["config"]["model"]["fallback_provider_ids"].clear()
+        source["agent"]["config"]["model"]["fallback_provider_ids"].clear()
 
         assert config.sandbox_cfg == {"booter": "test"}
         assert config.provider_settings["sandbox"] == {"booter": "test"}
@@ -1197,8 +1197,8 @@ class TestEnsurePersonaAndSkills:
         from astrbot.core.db.po import Persona
 
         conf = {
-            "agent_runner": {
-                "runner_type": "local",
+            "agent": {
+                "runtime": "astrbot",
                 "config": {"persona": {"persona_id": "default"}},
             },
             "provider_settings": {},
@@ -3585,7 +3585,7 @@ async def test_feature_composition_preserves_tool_scope_and_instruction_order(
     config = ama.MainAgentBuildConfig.from_config(
         {
             "kb_agentic_mode": agentic_kb,
-            "agent_runner": {
+            "agent": {
                 "config": {"misc": {"tool_schema_mode": tool_schema_mode}}
             },
             "provider_settings": {

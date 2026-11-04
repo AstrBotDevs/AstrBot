@@ -1,7 +1,7 @@
 from collections.abc import AsyncGenerator
 
 from astrbot.core import logger
-from astrbot.core.config.agent_runner import normalize_agent_runner
+from astrbot.core.config.agent import normalize_agent
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.session_llm_manager import SessionServiceManager
 
@@ -27,10 +27,10 @@ class AgentRequestSubStage(Stage):
                 )
                 self.prov_wake_prefix = self.prov_wake_prefix[len(bwp) :]
 
-        agent_runner = normalize_agent_runner(self.config.get("agent_runner"))
-        self.config["agent_runner"] = agent_runner
-        agent_runner_type = agent_runner["runner_type"]
-        if agent_runner_type == "local":
+        agent_runner = normalize_agent(self.config.get("agent"))
+        self.config["agent"] = agent_runner
+        agent_runner_type = agent_runner["runtime"]
+        if agent_runner_type == "astrbot":
             self.agent_sub_stage = InternalAgentSubStage()
         else:
             self.agent_sub_stage = ThirdPartyAgentSubStage()
@@ -49,12 +49,12 @@ class AgentRequestSubStage(Stage):
             )
             return
 
-        agent_config = self.config.get("agent_runner", {})
+        agent_config = self.config.get("agent", {})
         event.trace.record(
             "agent_start",
             kind="agent",
             status="running",
-            runner_type=agent_config.get("runner_type", "local"),
+            runner_type=agent_config.get("runtime", "astrbot"),
             provider_wake_prefix=self.prov_wake_prefix,
         )
         try:
@@ -68,7 +68,7 @@ class AgentRequestSubStage(Stage):
                 kind="agent",
                 status="error",
                 error=str(exc),
-                runner_type=agent_config.get("runner_type", "local"),
+                runner_type=agent_config.get("runtime", "astrbot"),
             )
             raise
         else:
@@ -76,5 +76,5 @@ class AgentRequestSubStage(Stage):
                 "agent_end",
                 kind="agent",
                 status="success",
-                runner_type=agent_config.get("runner_type", "local"),
+                runner_type=agent_config.get("runtime", "astrbot"),
             )
