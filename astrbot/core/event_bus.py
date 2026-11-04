@@ -112,6 +112,8 @@ class EventBus:
             event: Incoming event whose original UMO was used to select a profile.
             config: Selected profile's configuration controlling session isolation.
         """
+        if event.get_extra("_session_resolved") is True:
+            return
         event.set_extra("_session_isolated", False)
         platform_settings = config.get("platform_settings", {})
         if platform_settings.get("unique_session", False) and (
@@ -140,7 +142,9 @@ class EventBus:
 
         """
         log_extra = {
-            "category": "user_chat",
+            "category": "user_chat"
+            if event.event_kind == "message"
+            else event.event_kind,
             "platform_id": event.get_platform_id(),
             "platform_type": event.get_platform_name(),
         }
