@@ -425,23 +425,24 @@ class ResultDecorateStage(Stage):
                     )
                     result.chain = [node]
 
-            # at 回复 / 引用回复仅适用于纯文本或图文消息
-            can_decorate = all(
-                isinstance(item, (Plain, Image)) for item in result.chain
-            )
-            if can_decorate:
-                # at 回复
-                if (
-                    self.reply_with_mention
-                    and event.get_message_type() != MessageType.FRIEND_MESSAGE
-                ):
-                    result.chain.insert(
-                        0,
-                        At(qq=event.get_sender_id(), name=event.get_sender_name()),
-                    )
-                    if len(result.chain) > 1 and isinstance(result.chain[1], Plain):
-                        result.chain[1].text = "\n" + result.chain[1].text
+            # @ mentions are limited to plain text and image results.
+            can_mention = all(isinstance(item, (Plain, Image)) for item in result.chain)
+            if can_mention and (
+                self.reply_with_mention
+                and event.get_message_type() != MessageType.FRIEND_MESSAGE
+            ):
+                result.chain.insert(
+                    0,
+                    At(qq=event.get_sender_id(), name=event.get_sender_name()),
+                )
+                if len(result.chain) > 1 and isinstance(result.chain[1], Plain):
+                    result.chain[1].text = "\n" + result.chain[1].text
 
-                # 引用回复
-                if self.reply_with_quote:
-                    result.chain.insert(0, Reply(id=event.message_obj.message_id))
+            can_quote = can_mention or (
+                event.get_platform_name() == "aiocqhttp"
+                and all(
+                    isinstance(item, (Plain, Image, Record)) for item in result.chain
+                )
+            )
+            if can_quote and self.reply_with_quote:
+                result.chain.insert(0, Reply(id=event.message_obj.message_id))
