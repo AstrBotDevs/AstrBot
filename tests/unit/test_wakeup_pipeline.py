@@ -10,6 +10,7 @@ import pytest
 import pytest_asyncio
 from opentelemetry.trace import format_trace_id, get_current_span
 
+from astrbot.core.astr_agent_runtime import AstrAgentRuntime
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runtime import AgentSessionRef
@@ -164,8 +165,10 @@ async def runtime(monkeypatch):
         lambda *_: SimpleNamespace(append=lambda *args, **kwargs: True),
     )
     monkeypatch.setattr(trace_module, "_get_log_broker", lambda: None)
+    native = AstrAgentRuntime(context, agent_configs=MagicMock(), subagents=MagicMock())
+    runtimes = {"astrbot": native}
     scheduler = PipelineScheduler(
-        PipelineContext(config, SimpleNamespace(context=context), "profile")
+        PipelineContext(config, SimpleNamespace(context=context), "profile", agent_runtimes=runtimes)
     )
     await scheduler.initialize()
     bus = EventBus(
@@ -180,6 +183,7 @@ async def runtime(monkeypatch):
             await asyncio.sleep(0)
             await asyncio.gather(*list(bus._pending_tasks), return_exceptions=True)
 
+    control.native = native
     control.context, control.conversation = context, conversation
     control.bus, control.scheduler, control.drain = bus, scheduler, drain
     control.agent_stage = next(
@@ -191,7 +195,7 @@ async def runtime(monkeypatch):
     for task in pending:
         task.cancel()
     await asyncio.gather(*pending, return_exceptions=True)
-    await context.agent_runtime.close()
+    await native.close()
 
 
 @pytest.mark.asyncio
@@ -313,7 +317,7 @@ async def test_switching_conversations_does_not_steer_the_previous_active_turn(r
     runtime.gate.clear()
     await wake_main_agent(runtime.context, umo=umo, user_prompt="First", source="cron")
     await asyncio.wait_for(runtime.started.wait(), 1)
-    active = runtime.context.agent_runtime.active_turn(umo)
+    active = runtime.native.active_turn(umo)
     active.steer = MagicMock(side_effect=AssertionError("Wrong conversation"))
     second = SimpleNamespace(
         cid="second",
@@ -364,13 +368,10 @@ async def test_wakeup_failure_is_traced_and_delivered(runtime, streaming):
 @pytest.mark.asyncio
 async def test_targeted_wakeup_queues_on_its_parent_after_conversation_switch(runtime):
     umo = "target:FriendMessage:user"
-    runtime.context.subagents = SimpleNamespace(
-        runtimes={"astrbot": runtime.context.agent_runtime}
-    )
     runtime.gate.clear()
     await wake_main_agent(runtime.context, umo=umo, user_prompt="First", source="cron")
     await asyncio.wait_for(runtime.started.wait(), 1)
-    parent = runtime.context.agent_runtime.active_turn(umo)
+    parent = runtime.native.active_turn(umo)
     parent.steer = MagicMock(
         side_effect=AssertionError("Fallback must queue a new turn")
     )

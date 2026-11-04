@@ -174,7 +174,7 @@ def test_explicit_permissions_override_mutable_event_role():
 
 @pytest.mark.asyncio
 async def test_main_session_stays_bound_when_current_conversation_changes():
-    from unittest.mock import AsyncMock
+    from unittest.mock import AsyncMock, MagicMock
 
     from astrbot.core.astr_agent_runtime import AstrAgentRuntime
 
@@ -187,7 +187,7 @@ async def test_main_session_stays_bound_when_current_conversation_changes():
             )
         ),
     )
-    runtime = AstrAgentRuntime(SimpleNamespace(conversation_manager=manager))
+    runtime = AstrAgentRuntime(SimpleNamespace(conversation_manager=manager), agent_configs=MagicMock(), subagents=MagicMock())
     first = await runtime.open_session(umo)
     manager.get_curr_conversation_id.return_value = "second"
     second = await runtime.open_session(umo)

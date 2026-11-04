@@ -1012,9 +1012,9 @@ def fake_core_lifecycle():
             reload=reload_plugin,
             _validate_astrbot_version_specifier=validate_astrbot_version_specifier,
         ),
+        agent_configs=SimpleNamespace(lock=asyncio.Lock()),
+        agent_runtimes={},
         star_context=SimpleNamespace(
-            agent_configs=SimpleNamespace(lock=asyncio.Lock()),
-            agent_runtimes={},
             registered_web_apis=[
                 ("/<path:plugin_path>", plugin_extension, ["GET", "POST"], "demo")
             ]

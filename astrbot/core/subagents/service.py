@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from copy import deepcopy
 from time import time
@@ -41,11 +41,9 @@ if TYPE_CHECKING:
 class SubAgentService:
     """Expose one session API while agent runtimes own their execution details."""
 
-    def __init__(
-        self, store: SubAgentStore, runtimes: Mapping[str, AgentRuntime]
-    ) -> None:
+    def __init__(self, store: SubAgentStore, runtimes: dict[str, AgentRuntime]) -> None:
         self.store = store
-        self.runtimes = dict(runtimes)
+        self.runtimes = runtimes
         self._turn_handles: dict[str, AgentTurn] = {}
         self._workers: dict[str, asyncio.Task[None]] = {}
         self._deliveries: dict[str, set[asyncio.Task[None]]] = {}
@@ -58,25 +56,6 @@ class SubAgentService:
         self._closing = False
         self._lifecycle_lock = asyncio.Lock()
         self._cleanup_tasks: set[asyncio.Task[None]] = set()
-
-    def register_runtime(self, name: str, runtime: AgentRuntime) -> None:
-        """Register another agent runtime without changing the tools or session store.
-
-        Args:
-            name: Stable persisted runtime name, for example astrbot or acp.
-            runtime: Implementation of session creation and execution.
-
-        Raises:
-            ValueError: If the name is empty or already registered.
-        """
-        if (
-            not isinstance(name, str)
-            or not name.strip()
-            or name != name.strip()
-            or name in self.runtimes
-        ):
-            raise ValueError(f"Agent runtime already registered or invalid: {name!r}")
-        self.runtimes[name] = runtime
 
     async def start(self, context: Context) -> None:
         """Restore sessions and pending results without replaying interrupted inputs.

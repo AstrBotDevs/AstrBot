@@ -136,6 +136,7 @@ class MainAgentSession(NativeAgentSession):
             collected_input=collected,
             plugin_tools=input.plugin_tools,
             plugin_skills=input.plugin_skills,
+            runtime=self.runtime,
         )
         if result is None:
             error = event.get_extra(LLM_ERROR_MESSAGE_EXTRA_KEY)

@@ -15,15 +15,32 @@ from .delegated_session import DelegatedAgentInput, DelegatedAgentSession
 from .main_session import MainAgentSession
 
 if TYPE_CHECKING:
+    from astrbot.core.agent.config_store import AgentConfigStore
     from astrbot.core.star.context import Context
     from astrbot.core.subagents.context import SubAgentContext
+    from astrbot.core.subagents.service import SubAgentService
 
 
 class AstrAgentRuntime(AgentRuntime):
     """AstrBot host services around native main and delegated execution."""
 
-    def __init__(self, context: Context) -> None:
+    def __init__(
+        self,
+        context: Context,
+        *,
+        agent_configs: AgentConfigStore,
+        subagents: SubAgentService,
+    ) -> None:
+        """Bind native execution to explicit configuration and delegation services.
+
+        Args:
+            context: Host provider, plugin, platform and conversation services.
+            agent_configs: Shared storage for reusable agent configurations.
+            subagents: Delegation scheduler sharing the application's runtime registry.
+        """
         self.context = context
+        self.agent_configs = agent_configs
+        self.subagents = subagents
         self._sessions: dict[tuple[str, str], AgentSession] = {}
         self._opening = asyncio.Lock()
         self._active_main: dict[str, AgentTurn] = {}
@@ -93,7 +110,7 @@ class AstrAgentRuntime(AgentRuntime):
                 raise ValueError(
                     f"Agent configuration is not selected by this profile: {config_id}"
                 )
-            agent_config = await self.context.agent_configs.get(config_id)
+            agent_config = await self.agent_configs.get(config_id)
             if not agent_config.enabled:
                 raise ValueError(f"Agent configuration is disabled: {config_id}")
             selected_runtime, selected_config = (
@@ -101,14 +118,11 @@ class AstrAgentRuntime(AgentRuntime):
                 agent_config.config,
             )
             name = name or agent_config.name
-        runtime = self.context.agent_runtimes.get(selected_runtime)
+        runtime = self.subagents.runtimes.get(selected_runtime)
         if runtime is None:
             raise ValueError(f"Agent runtime unavailable: {selected_runtime}")
         selected_config = runtime.normalize_config(selected_config, delegated=True)
-        service = self.context.subagents
-        if service is None:
-            raise ValueError("Agent session service is unavailable")
-        return await service.spawn(
+        return await self.subagents.spawn(
             context,
             messages,
             runtime=selected_runtime,

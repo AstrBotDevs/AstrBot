@@ -24,9 +24,11 @@ async def test_config_crud_uses_stable_ids_and_blocks_persisted_references(envir
     profile = env.context.get_config()
     core = SimpleNamespace(
         star_context=env.context,
+        agent_configs=env.agent_configs,
+        agent_runtimes=env.runtimes,
         astrbot_config_mgr=SimpleNamespace(confs={"default": profile}),
     )
-    service = AgentConfigService(core)
+    service = AgentConfigService(env.agent_configs, env.runtimes, core.astrbot_config_mgr)
     created = await service.save(
         {"name": "Researcher", "runtime": "memory", "config": {"model": "external"}}
     )
@@ -69,7 +71,7 @@ async def test_profile_selection_is_enforced_in_prompt_and_spawn(environment):
     other = await env.save_agent("Unselected", runtime="memory")
     env.config["config_ids"] = [chosen.config_id]
     request = ProviderRequest(conversation=env.conversation)
-    await apply_subagents(request, env.context, env.event)
+    await apply_subagents(request, env.context, env.event, runtime=env.native)
     assert chosen.config_id in request.system_prompt
     assert other.config_id not in request.system_prompt
     with pytest.raises(ValueError, match="not selected"):
@@ -77,7 +79,7 @@ async def test_profile_selection_is_enforced_in_prompt_and_spawn(environment):
             env.root, [{"type": "plain", "text": "Task"}], config_id=other.config_id
         )
     chosen.enabled = False
-    await env.context.agent_configs.save(chosen)
+    await env.agent_configs.save(chosen)
     with pytest.raises(ValueError, match="disabled"):
         await env.native.spawn_agent(
             env.root, [{"type": "plain", "text": "Task"}], config_id=chosen.config_id
@@ -180,7 +182,7 @@ async def test_config_migration_keeps_source_on_failure_and_is_idempotent(
         with pytest.raises(RuntimeError, match="disk failure"):
             await migrate_agent_configs(env.db, profiles)
     assert pending.exists()
-    records = await env.context.agent_configs.list()
+    records = await env.agent_configs.list()
     assert len(records) == 1
     record = records[0]
     assert record.config == {
@@ -188,7 +190,7 @@ async def test_config_migration_keeps_source_on_failure_and_is_idempotent(
         "persona": {"persona_id": ""},
     }
     record.name = "User edit"
-    await env.context.agent_configs.save(record)
+    await env.agent_configs.save(record)
 
     # A profile first loaded after a failed import still sees the shared source.
     late = profile_path / "abconf_b.json"
@@ -200,12 +202,12 @@ async def test_config_migration_keeps_source_on_failure_and_is_idempotent(
     assert all(
         not path.with_suffix(".subagents-migration.json").exists() for path in paths
     )
-    assert (await env.context.agent_configs.get(record.config_id)).name == "User edit"
-    assert {item.config_id for item in await env.context.agent_configs.list()} == set(
+    assert (await env.agent_configs.get(record.config_id)).name == "User edit"
+    assert {item.config_id for item in await env.agent_configs.list()} == set(
         selection["config_ids"]
     )
     await migrate_agent_configs(env.db, [AstrBotConfig(str(path)) for path in paths])
-    assert len(await env.context.agent_configs.list()) == 2
+    assert len(await env.agent_configs.list()) == 2
 
 
 @pytest.mark.asyncio
@@ -233,7 +235,7 @@ async def test_config_migration_retries_failed_source_cleanup(
     assert pending.exists()
     await migrate_agent_configs(environment.db, [AstrBotConfig(str(path))])
     assert not pending.exists()
-    assert len(await environment.context.agent_configs.list()) == 1
+    assert len(await environment.agent_configs.list()) == 1
 
 
 def test_failed_migration_staging_does_not_rewrite_original_config(

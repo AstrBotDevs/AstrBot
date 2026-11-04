@@ -383,7 +383,6 @@ class TestAstrBotCoreLifecycleInitialize:
 
         mock_star_context = MagicMock()
         mock_star_context._register_tasks = []
-        mock_star_context.subagents = None
 
         mock_plugin_manager = MagicMock()
         mock_plugin_manager.reload = AsyncMock()
@@ -551,7 +550,7 @@ class TestAstrBotCoreLifecycleInitialize:
             ),
             patch(
                 "astrbot.core.core_lifecycle.Context",
-                return_value=MagicMock(_register_tasks=[], subagents=None),
+                return_value=MagicMock(_register_tasks=[]),
             ),
             patch(
                 "astrbot.core.core_lifecycle.PluginManager",

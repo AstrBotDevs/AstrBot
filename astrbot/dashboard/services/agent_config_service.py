@@ -2,16 +2,36 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from astrbot.core.agent.config import StoredAgentConfig
-from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.agent.config_store import AgentConfigStore
+from astrbot.core.agent.runtime import AgentRuntime
 from astrbot.dashboard.responses import ApiError
+
+if TYPE_CHECKING:
+    from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 
 
 class AgentConfigService:
-    def __init__(self, core: AstrBotCoreLifecycle) -> None:
-        self.core = core
+    def __init__(
+        self,
+        store: AgentConfigStore,
+        runtimes: Mapping[str, AgentRuntime],
+        config_manager: AstrBotConfigManager,
+    ) -> None:
+        """Bind configuration resources without depending on plugin Context.
+
+        Args:
+            store: Shared persistent AgentConfig storage and resource lock.
+            runtimes: Registered runtimes used for validation and discovery.
+            config_manager: Configuration profiles referencing stored AgentConfigs.
+        """
+        self.store = store
+        self._runtimes = runtimes
+        self._config_manager = config_manager
 
     async def validate(self, agent: dict, *, delegated: bool = False) -> dict:
         """Normalize runtime configuration and check its persistent references.
@@ -26,14 +46,13 @@ class AgentConfigService:
         Raises:
             ValueError: If the runtime or a referenced configuration is missing.
         """
-        host = self.core.star_context
         runtime_name = agent["runtime"]
-        runtime = host.agent_runtimes.get(runtime_name)
+        runtime = self._runtimes.get(runtime_name)
         if runtime is None:
             raise ValueError(f"Agent runtime unavailable: {runtime_name}")
         config = runtime.normalize_config(agent.get("config", {}), delegated=delegated)
         for config_id in runtime.referenced_config_ids(config):
-            await host.agent_configs.get(config_id)
+            await self.store.get(config_id)
         return {"runtime": runtime_name, "config": config}
 
     async def list(self) -> list[dict]:
@@ -42,10 +61,7 @@ class AgentConfigService:
         Returns:
             Persisted configuration resources.
         """
-        return [
-            item.model_dump()
-            for item in await self.core.star_context.agent_configs.list()
-        ]
+        return [item.model_dump() for item in await self.store.list()]
 
     async def save(self, data: dict, config_id: str | None = None) -> dict:
         """Create or update one configuration under the shared resource lock.
@@ -57,7 +73,7 @@ class AgentConfigService:
         Returns:
             The persisted configuration resource.
         """
-        store = self.core.star_context.agent_configs
+        store = self.store
         async with store.lock:
             if config_id is not None:
                 await store.get(config_id)
@@ -84,19 +100,18 @@ class AgentConfigService:
             ApiError: If any profile or stored configuration references it.
             ValueError: If the resource is missing.
         """
-        host = self.core.star_context
-        async with host.agent_configs.lock:
-            await host.agent_configs.get(config_id)
+        async with self.store.lock:
+            await self.store.get(config_id)
             references = []
-            for profile_id, profile in self.core.astrbot_config_mgr.confs.items():
+            for profile_id, profile in self._config_manager.confs.items():
                 agent = profile.get("agent", {})
-                runtime = host.agent_runtimes.get(agent.get("runtime"))
+                runtime = self._runtimes.get(agent.get("runtime"))
                 if runtime is not None and config_id in runtime.referenced_config_ids(
                     agent.get("config", {})
                 ):
                     references.append({"type": "profile", "id": profile_id})
-            for agent in await host.agent_configs.list():
-                runtime = host.agent_runtimes.get(agent.runtime)
+            for agent in await self.store.list():
+                runtime = self._runtimes.get(agent.runtime)
                 if (
                     agent.config_id != config_id
                     and runtime is not None
@@ -115,7 +130,7 @@ class AgentConfigService:
                     status_code=409,
                     data={"references": references},
                 )
-            await host.agent_configs.delete(config_id)
+            await self.store.delete(config_id)
 
     def runtimes(self) -> list[dict]:
         """Describe callable runtimes and their reusable-agent defaults.
@@ -125,5 +140,5 @@ class AgentConfigService:
         """
         return [
             {"runtime": name, "config": runtime.normalize_config({}, delegated=True)}
-            for name, runtime in self.core.star_context.agent_runtimes.items()
+            for name, runtime in self._runtimes.items()
         ]

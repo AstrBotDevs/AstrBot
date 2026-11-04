@@ -100,7 +100,6 @@ def mock_context():
     tool_mgr = MagicMock()
     tool_mgr.get_builtin_tool.side_effect = lambda cls, **kwargs: cls(**kwargs)
     ctx.get_llm_tool_manager.return_value = tool_mgr
-    ctx.subagents = None
     return ctx
 
 

@@ -78,7 +78,7 @@ Runtime adapters receive typed input through `AgentInput.content`: `PlainInput`,
 
 An `AgentRuntime` opens or restores an `AgentSession`. `session.run_turn(input)` returns an independently executing turn with replayable `events()`, `result()`, `cancel()`, queued `follow_up()`, and optional `steer()` at a safe boundary. Cancellation of an output reader or result waiter does not implicitly cancel execution. The owner explicitly cancels the turn when its pipeline stops.
 
-Extensions can register a runtime with `ctx.subagents.register_runtime(name, runtime)` and select it in an AgentConfig’s `runtime` field. `spawn_agent` uses the configuration through `config_id`; generic workers use `astrbot`. an ACP runtime and continuous voice sessions are not included in this phase. Existing third-party main-agent execution paths remain unchanged.
+Extensions can register a runtime with `ctx.agent.register_runtime(name, runtime)` and select it in an AgentConfig’s `runtime` field. `spawn_agent` uses the configuration through `config_id`; generic workers use `astrbot`. An ACP runtime and continuous voice sessions are not included in this phase. Existing third-party main-agent execution paths remain unchanged.
 
 `list_agents` returns each agent's public `agent_id`, `runtime`, and opaque runtime-owned session ID in `conversation_id`. `send_message` resolves the runtime and session by agent ID. `owner_conversation_id` identifies the separate owning main conversation.
 

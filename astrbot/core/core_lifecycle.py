@@ -19,6 +19,8 @@ from pathlib import Path
 
 from astrbot.api import logger, sp
 from astrbot.core import LogBroker, LogManager
+from astrbot.core.agent.config_store import AgentConfigStore
+from astrbot.core.agent.runtime import AgentRuntime
 from astrbot.core.astr_agent_runtime import AstrAgentRuntime
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.config.default import VERSION
@@ -67,6 +69,8 @@ class AstrBotCoreLifecycle:
         self.db = db  # 初始化数据库
 
         self.subagents: SubAgentService | None = None
+        self.agent_configs = AgentConfigStore(db)
+        self.agent_runtimes: dict[str, AgentRuntime] = {}
         self.cron_manager: CronJobManager | None = None
         self.temp_dir_cleaner: TempDirCleaner | None = None
         self._default_chat_provider_warning_emitted = False
@@ -224,6 +228,7 @@ class AstrBotCoreLifecycle:
         self.cron_manager = CronJobManager(self.db)
 
         # 初始化提供给插件的上下文
+        self.subagents = SubAgentService(SubAgentStore(self.db), self.agent_runtimes)
         self.star_context = Context(
             self.event_queue,
             self.astrbot_config,
@@ -236,14 +241,15 @@ class AstrBotCoreLifecycle:
             self.astrbot_config_mgr,
             self.kb_manager,
             self.cron_manager,
+            agent_runtimes=self.agent_runtimes,
         )
-        self.star_context.agent_runtime = AstrAgentRuntime(self.star_context)
-        await self.star_context.agent_runtime.initialize()
-        self.subagents = SubAgentService(
-            SubAgentStore(self.db), {"astrbot": self.star_context.agent_runtime}
+        runtime = AstrAgentRuntime(
+            self.star_context,
+            agent_configs=self.agent_configs,
+            subagents=self.subagents,
         )
-        self.star_context.subagents = self.subagents
-        self.star_context.agent_runtimes = self.subagents.runtimes
+        self.star_context.agent.register_runtime("astrbot", runtime)
+        await runtime.initialize()
         self.star_context.html_renderer = html_renderer
 
         # 初始化插件管理器
@@ -281,11 +287,7 @@ class AstrBotCoreLifecycle:
         # 根据配置实例化各个平台适配器
         await self.platform_manager.initialize()
 
-        from astrbot.core.astr_agent_runtime.main_agent.subagent import (
-            initialize_subagents,
-        )
-
-        await initialize_subagents(self.star_context)
+        await self.subagents.start(self.star_context)
 
         # 初始化关闭控制面板的事件
         self.dashboard_shutdown_event = asyncio.Event()
@@ -474,7 +476,13 @@ class AstrBotCoreLifecycle:
         mapping = {}
         for conf_id, ab_config in self.astrbot_config_mgr.confs.items():
             scheduler = PipelineScheduler(
-                PipelineContext(ab_config, self.plugin_manager, conf_id, self.db),
+                PipelineContext(
+                    ab_config,
+                    self.plugin_manager,
+                    conf_id,
+                    self.db,
+                    agent_runtimes=self.agent_runtimes,
+                ),
             )
             await scheduler.initialize()
             mapping[conf_id] = scheduler
@@ -491,7 +499,13 @@ class AstrBotCoreLifecycle:
         if not ab_config:
             raise ValueError(f"配置文件 {conf_id} 不存在")
         scheduler = PipelineScheduler(
-            PipelineContext(ab_config, self.plugin_manager, conf_id, self.db),
+            PipelineContext(
+                ab_config,
+                self.plugin_manager,
+                conf_id,
+                self.db,
+                agent_runtimes=self.agent_runtimes,
+            ),
         )
         await scheduler.initialize()
         self.pipeline_scheduler_mapping[conf_id] = scheduler

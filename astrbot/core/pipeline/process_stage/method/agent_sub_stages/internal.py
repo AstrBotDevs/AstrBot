@@ -55,11 +55,9 @@ class InternalAgentSubStage(Stage):
         )
         self.show_reasoning = settings.get("display_reasoning_text", False)
         self.main_agent_cfg = MainAgentBuildConfig.from_config(ctx.astrbot_config)
-        context = ctx.plugin_manager.context
-        runtime = getattr(context, "agent_runtime", None)
+        runtime = ctx.agent_runtimes.get("astrbot")
         if not isinstance(runtime, AstrAgentRuntime):
-            runtime = AstrAgentRuntime(context)
-            context.agent_runtime = runtime
+            raise RuntimeError("Built-in agent runtime is unavailable")
         self.runtime = runtime
 
     async def process(
@@ -82,12 +80,11 @@ class InternalAgentSubStage(Stage):
         try:
             runtime = self.runtime
             if target is not None:
-                service = self.ctx.plugin_manager.context.subagents
-                if service is None or target.runtime not in service.runtimes:
+                if target.runtime not in self.ctx.agent_runtimes:
                     raise ValueError(
                         f"Target agent runtime unavailable: {target.runtime}"
                     )
-                runtime = service.runtimes[target.runtime]
+                runtime = self.ctx.agent_runtimes[target.runtime]
             if (
                 is_wakeup
                 and active_event_registry.get_background_stop_signal(event).is_set()

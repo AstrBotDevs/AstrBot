@@ -25,35 +25,31 @@ from astrbot.core.utils.active_event_registry import active_event_registry
 if TYPE_CHECKING:
     from astrbot.core.agent.run_context import ContextWrapper
     from astrbot.core.astr_agent_runtime.context import AstrAgentContext
+    from astrbot.core.astr_agent_runtime.runtime import AstrAgentRuntime
     from astrbot.core.platform.astr_message_event import AstrMessageEvent
     from astrbot.core.provider.entities import ProviderRequest
     from astrbot.core.star.context import Context
 
 
-async def initialize_subagents(context: Context) -> None:
-    """Register fixed controls and recover persisted workers after startup.
-
-    Args:
-        context: Initialized application services and target platform adapters.
-    """
-    if context.subagents is not None:
-        await context.subagents.start(context)
-
-
 async def apply_subagents(
-    req: ProviderRequest, context: Context, event: AstrMessageEvent
+    req: ProviderRequest,
+    context: Context,
+    event: AstrMessageEvent,
+    *,
+    runtime: AstrAgentRuntime | None = None,
 ) -> bool:
     """Validate worker wakeups and add native delegation tools to main.
 
     Args:
         req: Main request after persona and capability selection.
-        context: Application services holding profile configuration and reusable agent configurations.
+        context: Application services supplying profile configuration and plugin tools.
         event: Incoming message or programmatic wakeup.
+        runtime: Native owner supplying configuration storage and delegation services.
 
     Returns:
         Whether main-agent construction may continue.
     """
-    service = context.subagents
+    service = runtime.subagents if runtime is not None else None
     config = (
         context.get_config(umo=event.unified_msg_origin)
         .get("agent", {})
@@ -94,7 +90,7 @@ async def apply_subagents(
         req.func_tool = ToolSet()
     for name in SUBAGENT_TOOL_NAMES:
         req.func_tool.remove_tool(name)
-    if not enabled or req.conversation is None:
+    if not enabled or req.conversation is None or runtime is None:
         return True
     manager = context.get_llm_tool_manager()
     for tool_type in (
@@ -112,10 +108,10 @@ async def apply_subagents(
     if req.func_tool.get_tool("spawn_agent") is not None:
         configurations = []
         for config_id in config.get("config_ids", []):
-            agent_config = await context.agent_configs.get(config_id)
+            agent_config = await runtime.agent_configs.get(config_id)
             if not agent_config.enabled:
                 continue
-            if agent_config.runtime not in context.agent_runtimes:
+            if agent_config.runtime not in runtime.subagents.runtimes:
                 raise ValueError(f"Agent runtime unavailable: {agent_config.runtime}")
             configurations.append(
                 {
@@ -146,7 +142,12 @@ async def begin_main_agent(run_context: ContextWrapper[AstrAgentContext]) -> Non
     original = run_context.context
     if isinstance(original, SubAgentContext) and original.is_subagent:
         return
-    service = original.context.subagents
+    from astrbot.core.astr_agent_runtime.runtime import AstrAgentRuntime
+
+    runtime = original.runtime
+    if not isinstance(runtime, AstrAgentRuntime):
+        return
+    service = runtime.subagents
     if not isinstance(service, SubAgentService) or run_context.runner is None:
         return
     if (
@@ -170,6 +171,7 @@ async def begin_main_agent(run_context: ContextWrapper[AstrAgentContext]) -> Non
         plugin_tools=original.plugin_tools,
         plugin_skills=original.plugin_skills,
         agent_session=original.agent_session,
+        runtime=runtime,
         subagent_scope=scope,
         delegable_tools=ToolSet(
             tools=[tool for tool in tools.tools if tool.name not in SUBAGENT_TOOL_NAMES]

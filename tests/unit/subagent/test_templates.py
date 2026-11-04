@@ -60,7 +60,7 @@ async def test_expert_changes_do_not_reconfigure_open_conversations(environment)
     await env.service.wait(env.root, [agent["agent_id"]], 2000, "all")
     persona["prompt"] = "Updated instructions"
     selected.config["model"]["provider_id"] = "model"
-    await env.context.agent_configs.save(selected)
+    await env.agent_configs.save(selected)
     await env.service.send(
         env.root, agent["agent_id"], [{"type": "plain", "text": "Continue"}]
     )

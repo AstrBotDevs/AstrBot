@@ -17,6 +17,7 @@ from astrbot.core.agent.input import (
 )
 from astrbot.core.agent.runtime import (
     AgentPermissions,
+    AgentRuntime,
     AgentSession,
     AgentSessionRef,
     AgentTurn,
@@ -185,10 +186,42 @@ class AgentRun:
 class AgentService:
     """Core integration shared by programmatic agent callers."""
 
-    def __init__(self, context: Context) -> None:
+    def __init__(self, context: Context, runtimes: dict[str, AgentRuntime]) -> None:
+        """Bind plugin-facing agent operations to lifecycle-owned runtime instances.
+
+        Args:
+            context: Core input preparation and platform delivery services.
+            runtimes: Registry shared with execution and configuration management.
+        """
         self.context = context
+        self._runtimes = runtimes
         self._runs: set[AgentRun] = set()
         self._closed = False
+
+    def register_runtime(self, name: str, runtime: AgentRuntime) -> None:
+        """Register a runtime without exposing the mutable application registry.
+
+        Args:
+            name: Stable runtime name used by persisted AgentConfigs.
+            runtime: Implementation responsible for its own sessions and history.
+
+        Raises:
+            RuntimeError: If the agent service is closed.
+            ValueError: If the name is invalid or already registered.
+            TypeError: If the implementation is not an AgentRuntime.
+        """
+        if self._closed:
+            raise RuntimeError("Agent service is unavailable")
+        if (
+            not isinstance(name, str)
+            or not name.strip()
+            or name != name.strip()
+            or name in self._runtimes
+        ):
+            raise ValueError(f"Agent runtime already registered or invalid: {name!r}")
+        if not isinstance(runtime, AgentRuntime):
+            raise TypeError("runtime must implement AgentRuntime")
+        self._runtimes[name] = runtime
 
     def _make_event(
         self,
@@ -301,7 +334,7 @@ class AgentService:
             RuntimeError: If the service or built-in runtime is unavailable.
             ValueError: If input is invalid or the session uses a foreign runner.
         """
-        if self._closed or self.context.agent_runtime is None:
+        if self._closed or "astrbot" not in self._runtimes:
             raise RuntimeError("Agent service is unavailable")
         config = self.context.get_config(umo=umo)
         if config.get("agent", {}).get("runtime", "astrbot") != "astrbot":
@@ -400,7 +433,7 @@ class AgentService:
                     return True
 
                 input.admit = admit
-                runtime = self.context.agent_runtime
+                runtime = self._runtimes.get("astrbot")
                 if runtime is None:
                     raise RuntimeError("Built-in agent runtime is unavailable")
                 session = await runtime.open_session(

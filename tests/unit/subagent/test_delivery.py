@@ -123,7 +123,7 @@ async def test_idle_wakeup_contains_results_and_uses_explicit_parent(environment
     assert f"[subagent-result:{agent['agent_id']}:1]" in event.message_str
     assert event.agent_session == env.store.get(agent["agent_id"], env.scope).parent
     req = ProviderRequest(conversation=env.conversation, prompt=event.message_str)
-    assert await subagent.apply_subagents(req, env.context, event)
+    assert await subagent.apply_subagents(req, env.context, event, runtime=env.native)
     await asyncio.gather(*list(env.service.delivery._notifications.values()))
 
 
@@ -153,11 +153,10 @@ async def test_restart_reconciles_result_receipts_from_parent_history(
         )
     while not env.context.get_event_queue().empty():
         env.context.get_event_queue().get_nowait()
-    restarted = SubAgentService(
-        SubAgentStore(env.db),
-        {"memory": env.memory, "astrbot": AstrAgentRuntime(env.context)},
-    )
-    env.context.subagents = restarted
+    restarted = SubAgentService(SubAgentStore(env.db), {"memory": env.memory})
+    native = AstrAgentRuntime(env.context, agent_configs=env.agent_configs, subagents=restarted)
+    restarted.runtimes["astrbot"] = native
+    env.root.runtime = native
     await restarted.start(env.context)
     await asyncio.gather(*list(restarted.delivery._notifications.values()))
     assert env.context.get_event_queue().empty() == saved
@@ -184,7 +183,7 @@ async def test_shutdown_and_restart_do_not_replay_unfinished_prompts(environment
     )
     await env.service.close()
     restarted = SubAgentService(SubAgentStore(env.db), {"memory": env.memory})
-    env.context.subagents = restarted
+    env.native.subagents = restarted
     await restarted.start(env.context)
     record = restarted.store.get(agent["agent_id"], env.scope)
     assert all(turn.state == AgentState.INTERRUPTED for turn in record.turns)
@@ -211,10 +210,10 @@ async def test_native_history_survives_service_and_runner_restart(environment):
     )
     await env.service.wait(env.root, [agent["agent_id"]], 2000, "all")
     await env.service.close()
-    restarted = SubAgentService(
-        SubAgentStore(env.db), {"astrbot": AstrAgentRuntime(env.context)}
-    )
-    env.context.subagents = restarted
+    restarted = SubAgentService(SubAgentStore(env.db), {})
+    native = AstrAgentRuntime(env.context, agent_configs=env.agent_configs, subagents=restarted)
+    restarted.runtimes["astrbot"] = native
+    env.root.runtime = native
     await restarted.start(env.context)
     await restarted.send(
         env.root, agent["agent_id"], [{"type": "plain", "text": "Continue"}]
@@ -406,7 +405,7 @@ async def test_idle_result_runs_through_pipeline_once_and_commits_to_parent(
         prepared = await prepare_request(
             event, env.context, config, env.provider, req, collected_input
         )
-        if not await subagent.apply_subagents(prepared.request, env.context, event):
+        if not await subagent.apply_subagents(prepared.request, env.context, event, runtime=env.native):
             return None
         runner = AgentRunner()
         await runner.reset(
@@ -434,7 +433,7 @@ async def test_idle_result_runs_through_pipeline_once_and_commits_to_parent(
         SessionServiceManager, "is_session_enabled", AsyncMock(return_value=True)
     )
     scheduler = PipelineScheduler(
-        PipelineContext(config, SimpleNamespace(context=env.context), "test")
+        PipelineContext(config, SimpleNamespace(context=env.context), "test", agent_runtimes=env.runtimes)
     )
     await scheduler.initialize()
     bus = EventBus(

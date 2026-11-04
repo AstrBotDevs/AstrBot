@@ -461,3 +461,38 @@ async def test_native_sessions_commit_whole_turn_after_execution(sdk, delegated)
         assert history[-1]["role"] == "assistant"
     finally:
         release.set()
+
+
+@pytest.mark.asyncio
+async def test_context_exposes_agent_facade_for_runtime_registration(environment):
+    """Plugin registration reaches delegation without exposing internal services.
+
+    Args:
+        environment: Runtime services with an isolated plugin Context and store.
+    """
+    env = environment
+    for name in ("subagents", "agent_configs", "agent_runtimes", "agent_runtime"):
+        assert not hasattr(env.context, name)
+    external = type(env.memory)()
+    external.close = AsyncMock(wraps=external.close)
+    env.context.agent.register_runtime("external", external)
+    assert env.runtimes["external"] is external
+    with pytest.raises(ValueError, match="already registered"):
+        env.context.agent.register_runtime("external", external)
+    with pytest.raises(TypeError, match="AgentRuntime"):
+        env.context.agent.register_runtime("invalid", object())
+    assert "invalid" not in env.runtimes
+    selected = await env.save_agent("External", runtime="external")
+    agent = await env.native.spawn_agent(
+        env.root,
+        [{"type": "plain", "text": "Task"}],
+        config_id=selected.config_id,
+    )
+    result = await env.service.wait(env.root, [agent["agent_id"]], 2000, "all")
+    assert result["agents"][0]["state"] == "completed"
+    assert env.store.get(agent["agent_id"], env.scope).runtime == "external"
+    await env.context.agent.close()
+    with pytest.raises(RuntimeError, match="unavailable"):
+        env.context.agent.register_runtime("closed", type(env.memory)())
+    await env.service.close()
+    external.close.assert_awaited_once()

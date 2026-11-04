@@ -29,9 +29,7 @@ async def get_agent_config(
     config_id: str, service: AgentConfigService = Depends(get_service)
 ) -> dict:
     try:
-        return ok(
-            (await service.core.star_context.agent_configs.get(config_id)).model_dump()
-        )
+        return ok((await service.store.get(config_id)).model_dump())
     except ValueError as exc:
         raise ApiError(str(exc), status_code=404) from exc
 

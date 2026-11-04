@@ -79,7 +79,7 @@ Runtime 适配器通过 `AgentInput.content` 接收有类型的输入：`PlainIn
 
 `AgentRuntime` 创建或恢复 `AgentSession`。`session.run_turn(input)` 返回独立执行的 turn，提供可重复读取的 `events()`、`result()`、`cancel()`、排队开始新一轮的 `follow_up()`，以及可选的安全边界 `steer()`。输出消费者或结果等待者被取消不会自动取消执行；流水线停止时，由调用方明确取消该 turn。
 
-扩展实现可以通过 `ctx.subagents.register_runtime(name, runtime)` 注册，在 AgentConfig 的 `runtime` 字段选择；`spawn_agent` 通过 `config_id` 使用该配置。通用子代理使用 `astrbot`。本阶段不包含 ACP runtime 或持续实时语音会话；现有第三方主代理执行路径保持原样。
+扩展实现可以通过 `ctx.agent.register_runtime(name, runtime)` 注册，在 AgentConfig 的 `runtime` 字段选择；`spawn_agent` 通过 `config_id` 使用该配置。通用子代理使用 `astrbot`。本阶段不包含 ACP runtime 或持续实时语音会话；现有第三方主代理执行路径保持原样。
 
 `list_agents` 返回每个 agent 的 `agent_id`、`runtime`，以及通过 `conversation_id` 字段提供的 runtime 私有会话 ID。`send_message` 根据 agent ID 找回 runtime 和会话。`owner_conversation_id` 单独表示所属主会话。
 

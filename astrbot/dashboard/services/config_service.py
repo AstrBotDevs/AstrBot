@@ -664,11 +664,11 @@ class ConfigProfileService:
             raise ValueError(f"Configuration validation failed: {errors}")
         from astrbot.dashboard.services.agent_config_service import AgentConfigService
 
-        host = self.core_lifecycle.star_context
+        host = self.core_lifecycle
         async with host.agent_configs.lock:
             if profile_config.get("agent", {}).get("runtime") in host.agent_runtimes:
                 profile_config["agent"] = await AgentConfigService(
-                    self.core_lifecycle
+                    host.agent_configs, host.agent_runtimes, self.acm
                 ).validate(profile_config["agent"])
             conf_id = await self.acm.create_conf(name=name, config=profile_config)
         await self.core_lifecycle.reload_pipeline_scheduler(conf_id)
@@ -772,11 +772,11 @@ class ConfigProfileService:
         set_pending_totp_secret(None)
         from astrbot.dashboard.services.agent_config_service import AgentConfigService
 
-        host = self.core_lifecycle.star_context
+        host = self.core_lifecycle
         async with host.agent_configs.lock:
             if config.get("agent", {}).get("runtime") in host.agent_runtimes:
                 config["agent"] = await AgentConfigService(
-                    self.core_lifecycle
+                    host.agent_configs, host.agent_runtimes, self.acm
                 ).validate(config["agent"])
             save_config(
                 config, self.acm.confs[config_id], is_core=True, runtime=self.runtime

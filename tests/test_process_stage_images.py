@@ -22,6 +22,7 @@ from astrbot.core.agent.message import (
 )
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.astr_agent_runtime import main_agent as main
+from astrbot.core.astr_agent_runtime import AstrAgentRuntime
 from astrbot.core.astr_agent_runtime import session as native_session
 from astrbot.core.astr_agent_runtime.main_agent import builder as builder_build
 from astrbot.core.astr_agent_runtime.main_agent import (
@@ -29,7 +30,6 @@ from astrbot.core.astr_agent_runtime.main_agent import (
 )
 from astrbot.core.astr_agent_runtime.main_agent import providers as providers_build
 from astrbot.core.astr_agent_runtime.main_agent import request as request_build
-from astrbot.core.astr_agent_runtime.main_agent.subagent import initialize_subagents
 from astrbot.core.astr_agent_runtime.tools.subagent import SUBAGENT_TOOL_NAMES
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.message.components import Image, Plain, Reply
@@ -115,7 +115,6 @@ def harness(tmp_path, monkeypatch):
         return_value=(None, None, None, False)
     )
     context.persona_manager.personas_v3 = []
-    context.subagents = None
     context.get_llm_tool_manager.return_value.get_builtin_tool.side_effect = (
         lambda cls, **kwargs: cls(**kwargs)
     )
@@ -155,8 +154,9 @@ def harness(tmp_path, monkeypatch):
     provider.text_chat_stream = stream
     context.get_using_provider_async = AsyncMock(return_value=provider)
     context.get_provider_by_id.return_value = provider
+    runtime = AstrAgentRuntime(context, agent_configs=MagicMock(), subagents=MagicMock())
     ctx = SimpleNamespace(
-        astrbot_config=config, plugin_manager=SimpleNamespace(context=context)
+        astrbot_config=config, plugin_manager=SimpleNamespace(context=context), agent_runtimes={"astrbot": runtime}
     )
     captured = []
     hooks = []
@@ -392,7 +392,7 @@ async def test_profile_reload_and_concurrent_requests(harness, tmp_path):
     other_config = copy.deepcopy(harness.config)
     other_config["provider_settings"]["image_compress_options"]["max_size"] = 60
     other_ctx = SimpleNamespace(
-        astrbot_config=other_config, plugin_manager=harness.ctx.plugin_manager
+        astrbot_config=other_config, plugin_manager=harness.ctx.plugin_manager, agent_runtimes=harness.ctx.agent_runtimes
     )
     other_stage = ProcessStage()
     await other_stage.initialize(other_ctx)
@@ -433,7 +433,6 @@ async def test_subagent_config_does_not_remove_main_tools(harness):
     tool_mgr.func_list = tools
     tool_mgr.get_full_tool_set.side_effect = lambda: ToolSet(tools.copy())
     harness.context.persona_manager.get_persona_v3_by_id.return_value = None
-    await initialize_subagents(harness.context)
     harness.config["provider_settings"]["proactive_capability"]["add_cron_tools"] = (
         False
     )
@@ -489,7 +488,6 @@ async def test_subagents_use_session_profile_without_global_override(
     tool_mgr.func_list = tools
     tool_mgr.get_full_tool_set.side_effect = lambda: ToolSet(tools.copy())
     harness.context.persona_manager.get_persona_v3_by_id.return_value = None
-    await initialize_subagents(harness.context)
     harness.config["provider_settings"]["proactive_capability"]["add_cron_tools"] = (
         False
     )
@@ -503,7 +501,7 @@ async def test_subagents_use_session_profile_without_global_override(
     stage = ProcessStage()
     await stage.initialize(
         SimpleNamespace(
-            astrbot_config=session_config, plugin_manager=harness.ctx.plugin_manager
+            astrbot_config=session_config, plugin_manager=harness.ctx.plugin_manager, agent_runtimes=harness.ctx.agent_runtimes
         )
     )
 

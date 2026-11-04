@@ -147,7 +147,11 @@ def create_dashboard_asgi_app(
         skills=SkillsService(core_lifecycle),
         stats=stats,
         subagents=SubAgentService(core_lifecycle),
-        agent_configs=AgentConfigService(core_lifecycle),
+        agent_configs=AgentConfigService(
+            core_lifecycle.agent_configs,
+            core_lifecycle.agent_runtimes,
+            core_lifecycle.astrbot_config_mgr,
+        ),
         t2i=T2iService(core_lifecycle),
         tools=ToolsService(core_lifecycle),
         updates=UpdateService(

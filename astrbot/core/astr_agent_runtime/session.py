@@ -116,6 +116,7 @@ class NativeAgentSession(AgentSession):
                 "astrbot", self.id
             )
             self._runner = runner
+            runner.run_context.context.runtime = self.runtime
             if self.is_main:
                 self.runtime._active_main[self.umo] = turn
                 active_event_registry.register_agent_stop_callback(

@@ -2,7 +2,7 @@ from pydantic import Field
 from pydantic.dataclasses import dataclass
 
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.agent.runtime import AgentPermissions, AgentSessionRef
+from astrbot.core.agent.runtime import AgentPermissions, AgentRuntime, AgentSessionRef
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.skills.skill_manager import SkillInfo
@@ -27,6 +27,8 @@ class AstrAgentContext:
     """Core-authorized plugin skills available for delegation."""
     agent_session: AgentSessionRef | None = None
     """The current agent's runtime address, retained when it delegates work."""
+    runtime: AgentRuntime | None = None
+    """Native execution owner, injected by the runtime rather than plugin Context."""
 
     def __post_init__(self) -> None:
         """Resolve legacy SDK callers through the same authorization boundary."""

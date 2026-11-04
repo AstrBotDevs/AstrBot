@@ -400,6 +400,7 @@ class DelegatedAgentSession(NativeAgentSession):
         if build_config.llm_safety_mode:
             apply_safety_instructions(build_config, instructions)
         context = SubAgentContext(
+            runtime=self.runtime,
             context=caller.context,
             event=caller.event,
             subagent_scope=caller.scope,

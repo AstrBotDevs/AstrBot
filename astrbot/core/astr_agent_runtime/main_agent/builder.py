@@ -1,6 +1,7 @@
 """The single entry point for building a ready-to-run main agent."""
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from astrbot.core import logger
 from astrbot.core.agent.tool import ToolSet
@@ -38,6 +39,9 @@ from . import (
     workspace,
 )
 from .config import MainAgentBuildConfig
+
+if TYPE_CHECKING:
+    from astrbot.core.astr_agent_runtime.runtime import AstrAgentRuntime
 
 TOOL_CALL_PROMPT = (
     "<tool_use_instructions>\n"
@@ -95,6 +99,7 @@ async def build_main_agent(
     collected_input: CollectedInput | None = None,
     plugin_tools: ToolSet | None = None,
     plugin_skills: list[SkillInfo] | None = None,
+    runtime: "AstrAgentRuntime | None" = None,
 ) -> MainAgentBuildResult | None:
     """Build a main agent through the same ordered stages for every trigger.
 
@@ -107,6 +112,7 @@ async def build_main_agent(
         collected_input: Core-collected input and temporary media ownership.
         plugin_tools: Core-authorized plugin tools, or None for legacy lookup.
         plugin_skills: Core-authorized plugin skills, or None for legacy lookup.
+        runtime: Native session owner supplying internal agent services.
 
     Returns:
         An initialized runner with its request and provider, or None when the
@@ -157,6 +163,7 @@ async def build_main_agent(
         event=event,
         plugin_tools=plugin_tools,
         plugin_skills=plugin_skills,
+        runtime=runtime,
     )
     await computer_use.apply_computer_use(req, plugin_context, config, agent_context)
 
@@ -176,7 +183,7 @@ async def build_main_agent(
         for tool_type in builtin_types:
             req.func_tool.add_tool(tool_mgr.get_builtin_tool(tool_type))
 
-    if not await subagent.apply_subagents(req, plugin_context, event):
+    if not await subagent.apply_subagents(req, plugin_context, event, runtime=runtime):
         return None
 
     # Final instructions describe the assembled capabilities and output mode.

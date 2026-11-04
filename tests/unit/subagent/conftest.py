@@ -6,6 +6,7 @@ from uuid import uuid4
 
 import pytest_asyncio
 
+from astrbot.core.agent.config_store import AgentConfigStore
 from astrbot.core.agent.input import PlainInput, format_input_content
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runtime import (
@@ -99,6 +100,9 @@ async def environment(tmp_path, request):
         history="[]",
         token_usage=0,
     )
+    runtimes = {}
+    agent_configs = AgentConfigStore(db)
+    service = SubAgentService(SubAgentStore(db), runtimes)
     context = Context(
         asyncio.Queue(),
         {},
@@ -115,6 +119,7 @@ async def environment(tmp_path, request):
         MagicMock(),
         MagicMock(),
         MagicMock(),
+        agent_runtimes=runtimes,
     )
     context.platform_manager.platform_insts = [
         SimpleNamespace(
@@ -153,18 +158,17 @@ async def environment(tmp_path, request):
         prompt="Main task",
     )
     event.message_obj.sender.user_id = "alice"
-    native, memory = AstrAgentRuntime(context), MemoryAgentRuntime()
-    context.agent_runtime = native
-    service = SubAgentService(SubAgentStore(db), {"astrbot": native})
-    service.register_runtime("memory", memory)
-    context.subagents = service
-    context.agent_runtimes = service.runtimes
-    await subagent.initialize_subagents(context)
+    native = AstrAgentRuntime(context, agent_configs=agent_configs, subagents=service)
+    memory = MemoryAgentRuntime()
+    context.agent.register_runtime("astrbot", native)
+    context.agent.register_runtime("memory", memory)
+    await service.start(context)
     wrapper = ContextWrapper(
         context=AstrAgentContext(
             context=context,
             event=event,
             agent_session=AgentSessionRef("astrbot", conversation.cid),
+            runtime=native,
         )
     )
     wrapper.runner = SimpleNamespace(
@@ -189,17 +193,19 @@ async def environment(tmp_path, request):
             config_id=str(uuid4()),
             name=name,
             runtime=runtime,
-            config=context.agent_runtimes[runtime].normalize_config(
+            config=runtimes[runtime].normalize_config(
                 runtime_config, delegated=True
             ),
         )
-        await context.agent_configs.save(record)
+        await agent_configs.save(record)
         config_ids = context.get_config()["agent"]["config"]["subagents"]["config_ids"]
         config_ids.append(record.config_id)
         return record
 
     env = SimpleNamespace(
         save_agent=save_agent,
+        agent_configs=agent_configs,
+        runtimes=runtimes,
         db=db,
         manager=manager,
         conversation=conversation,
@@ -225,5 +231,5 @@ async def environment(tmp_path, request):
     try:
         yield env
     finally:
-        await context.subagents.close()
+        await service.close()
         await db.engine.dispose()

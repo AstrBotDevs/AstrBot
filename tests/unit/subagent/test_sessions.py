@@ -180,6 +180,7 @@ async def test_group_members_share_agents_but_keep_each_inputs_caller(environmen
                 event=event,
                 permissions=AgentPermissions(role),
                 agent_session=env.root.agent_session,
+                runtime=env.native,
             )
         )
         wrapper.runner = env.wrapper.runner
@@ -284,9 +285,9 @@ async def test_config_catalog_only_changes_prompt_not_tool_schema(environment):
         "researcher", runtime="memory", config={"instructions": "Private instructions"}
     )
     selected.description = "Find evidence"
-    await env.context.agent_configs.save(selected)
+    await env.agent_configs.save(selected)
     req = ProviderRequest(conversation=env.conversation)
-    await subagent.apply_subagents(req, env.context, env.event)
+    await subagent.apply_subagents(req, env.context, env.event, runtime=env.native)
     assert "researcher" in req.system_prompt
     assert "Private instructions" not in req.system_prompt
     assert "memory" in req.system_prompt
@@ -294,7 +295,7 @@ async def test_config_catalog_only_changes_prompt_not_tool_schema(environment):
     assert (spawn.description, json.dumps(spawn.parameters)) == before
     env.config["config_ids"] = []
     updated = ProviderRequest(conversation=env.conversation)
-    await subagent.apply_subagents(updated, env.context, env.event)
+    await subagent.apply_subagents(updated, env.context, env.event, runtime=env.native)
     assert "researcher" not in updated.system_prompt
     assert updated.func_tool.openai_schema() == req.func_tool.openai_schema()
 

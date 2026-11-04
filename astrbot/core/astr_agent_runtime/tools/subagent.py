@@ -41,10 +41,12 @@ def get_subagent_service(context: ContextWrapper[SubAgentContext]) -> SubAgentSe
     Raises:
         ValueError: If application subagents have not been initialized.
     """
-    service = context.context.context.subagents
-    if service is None:
+    from astrbot.core.astr_agent_runtime.runtime import AstrAgentRuntime
+
+    runtime = context.context.runtime
+    if not isinstance(runtime, AstrAgentRuntime):
         raise ValueError("Subagent service is not initialized")
-    return service
+    return runtime.subagents
 
 
 @builtin_tool(config={"agent.config.subagents.enabled": True})
@@ -109,9 +111,10 @@ class SpawnAgentTool(FunctionTool):
             raise TypeError(
                 "spawn_agent requires messages and accepts only schema arguments"
             )
-        host = context.context.context
-        native = host.agent_runtime
-        if native is None:
+        from astrbot.core.astr_agent_runtime.runtime import AstrAgentRuntime
+
+        native = context.context.runtime
+        if not isinstance(native, AstrAgentRuntime):
             raise ValueError("AstrBot agent runtime is unavailable")
         return json.dumps(
             await native.spawn_agent(
