@@ -432,6 +432,14 @@ class AstrMessageEvent(abc.ABC):
             result.chain = []
         self._result = result
 
+    def mark_sent_to_user(self) -> None:
+        """Mark that this event has delivered content to its user."""
+        self._has_send_oper = True
+
+    def has_sent_to_user(self) -> bool:
+        """Return whether this event has delivered content to its user."""
+        return self._has_send_oper
+
     def stop_event(self) -> None:
         """终止事件传播。"""
         self._force_stopped = True

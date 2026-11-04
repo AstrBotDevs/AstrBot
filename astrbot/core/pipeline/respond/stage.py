@@ -208,7 +208,12 @@ class RespondStage(Stage):
             not result.chain
             and result.result_content_type != ResultContentType.STREAMING_RESULT
         ):
-            # 空消息链没有任何可发内容，直接返回，不打日志、也不触发 after_message_sent
+            # A direct delivery can clear the result chain after content has
+            # already reached the user. Preserve the post-send lifecycle.
+            if event.has_sent_to_user():
+                if await call_event_hook(event, EventType.OnAfterMessageSentEvent):
+                    return
+                event.clear_result()
             return
         sent_plain_texts = event.get_extra(
             "_send_message_to_user_current_session_plain_texts",
