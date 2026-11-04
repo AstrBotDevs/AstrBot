@@ -107,7 +107,7 @@
           ref="sidebarProjects"
           :projects="projects"
           :project-sessions="projectSessionsById"
-          :loading-project-ids="loadingProjectSessionIds"
+          :pagination="projectSessionsPagination"
           :selected-project-id="selectedProjectId"
           :active-session-id="currSessionId"
           :is-session-running="isSessionRunning"
@@ -115,6 +115,7 @@
           @edit-project="openEditProjectDialog"
           @delete-project="handleDeleteProject"
           @toggle-project="handleProjectToggle"
+          @load-sessions="getProjectSessions"
           @select-project="selectProject"
           @select-session="selectProjectSession"
           @edit-session-title="editProjectSessionTitle"
@@ -249,6 +250,8 @@
         v-else-if="selectedProject"
         :project="selectedProject"
         :sessions="projectSessions"
+        :pagination="projectSessionsPagination[selectedProjectId!]"
+        @load-sessions="getProjectSessions(selectedProjectId!, $event)"
         @select-session="selectProjectSession"
         @edit-session-title="editProjectSessionTitle"
         @delete-session="deleteProjectSession"
@@ -638,6 +641,8 @@ const {
 const {
   projects,
   selectedProjectId,
+  projectSessionsById,
+  projectSessionsPagination,
   getProjects,
   createProject,
   updateProject,
@@ -691,9 +696,9 @@ const savingSessionTitle = ref(false);
 const messageEditDraft = ref("");
 const editingMessage = ref<ChatRecord | null>(null);
 const savingMessageEdit = ref(false);
-const projectSessions = ref<Session[]>([]);
-const projectSessionsById = ref<Record<string, Session[]>>({});
-const loadingProjectSessionIds = ref<string[]>([]);
+const projectSessions = computed(
+  () => projectSessionsById.value[selectedProjectId.value || ""] || [],
+);
 const loadingSessions = ref(false);
 const draft = ref(readChatDraft(currSessionId.value));
 const tokenProviderConfigs = ref<TokenProviderConfig[]>([]);
@@ -1191,7 +1196,13 @@ watch(
 );
 
 watch(
-  [() => sessionsPagination.loading, () => mobileDrawer.open],
+  [
+    () => sessionsPagination.loading,
+    () => Object.values(projectSessionsPagination).map(
+      (pagination) => pagination.loading,
+    ),
+    () => mobileDrawer.open,
+  ],
   () => loadMoreSessions(),
   { flush: "post" },
 );
@@ -1339,49 +1350,17 @@ async function selectProject(projectId: string) {
 }
 
 async function loadProjectSessions(projectId = selectedProjectId.value) {
-  if (!projectId) {
-    projectSessions.value = [];
-    return [];
-  }
-  const sessions = await getProjectSessions(projectId);
-  projectSessionsById.value = {
-    ...projectSessionsById.value,
-    [projectId]: sessions,
-  };
-  if (projectId === selectedProjectId.value) {
-    projectSessions.value = sessions;
-  }
-  return sessions;
+  if (projectId) await getProjectSessions(projectId);
 }
 
 async function handleProjectToggle(projectId: string, expanded: boolean) {
   if (!expanded || projectSessionsById.value[projectId]) return;
-  if (loadingProjectSessionIds.value.includes(projectId)) return;
-  loadingProjectSessionIds.value = [
-    ...loadingProjectSessionIds.value,
-    projectId,
-  ];
-  try {
-    await loadProjectSessions(projectId);
-  } finally {
-    loadingProjectSessionIds.value = loadingProjectSessionIds.value.filter(
-      (item) => item !== projectId,
-    );
-  }
+  if (projectSessionsPagination[projectId]?.loading) return;
+  await loadProjectSessions(projectId);
 }
 
 async function handleDeleteProject(projectId: string) {
   await deleteProjectById(projectId);
-  const nextSessionsById = { ...projectSessionsById.value };
-  delete nextSessionsById[projectId];
-  projectSessionsById.value = nextSessionsById;
-  loadingProjectSessionIds.value = loadingProjectSessionIds.value.filter(
-    (item) => item !== projectId,
-  );
-  if (selectedProjectId.value === projectId) {
-    selectedProjectId.value = null;
-    projectSessions.value = [];
-  }
 }
 
 function openSessionTitleDialog(
@@ -1424,7 +1403,10 @@ async function saveSessionTitleDialog() {
       }
     });
     if (refreshProjectSessionsAfterTitleSave.value) {
-      await loadProjectSessions();
+      const projectId = Object.entries(projectSessionsById.value).find(
+        ([, sessions]) => sessions.some((session) => session.session_id === sessionId),
+      )?.[0];
+      await loadProjectSessions(projectId);
     } else {
       await getSessions();
     }
@@ -2075,7 +2057,11 @@ function loadMoreSessions() {
   if (
     !container ||
     container.clientHeight === 0 ||
-    (isMobile.value && !mobileDrawer.open) ||
+    (isMobile.value && !mobileDrawer.open)
+  )
+    return;
+  sidebarProjects.value?.loadMoreSessions(container);
+  if (
     !sessionsPagination.hasMore ||
     sessionsPagination.loading ||
     sessionsPagination.error
