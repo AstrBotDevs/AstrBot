@@ -38,6 +38,9 @@ class ServeTTSRequest(BaseModel):
     latency: Literal["normal", "balanced"] = "normal"
 
 
+DEFAULT_TIMEOUT_SECONDS = 20
+
+
 @register_provider_adapter(
     "fishaudio_tts_api",
     "FishAudio TTS API",
@@ -57,10 +60,22 @@ class ProviderFishAudioTTSAPI(TTSProvider):
             "api_base",
             "https://api.fish-audio.cn/v1",
         )
+        raw_timeout = provider_config.get("timeout", DEFAULT_TIMEOUT_SECONDS)
         try:
-            self.timeout: int = int(provider_config.get("timeout", 20))
-        except ValueError:
-            self.timeout = 20
+            timeout = int(raw_timeout)
+        except (TypeError, ValueError, OverflowError):
+            timeout = -1
+        if timeout <= 0:
+            # httpx reads a zero or negative timeout as "expire immediately", so
+            # every request fails with an empty ConnectTimeout. The dashboard
+            # writes 0 when this numeric field is cleared, and an empty value in
+            # a hand-edited config file is None.
+            logger.warning(
+                f"[FishAudio TTS] 无效的 timeout 配置 {raw_timeout!r}，"
+                f"使用默认值 {DEFAULT_TIMEOUT_SECONDS}s。",
+            )
+            timeout = DEFAULT_TIMEOUT_SECONDS
+        self.timeout: int = timeout
         self.proxy: str = provider_config.get("proxy", "")
         if self.proxy:
             logger.info(f"[FishAudio TTS] 使用代理: {self.proxy}")
