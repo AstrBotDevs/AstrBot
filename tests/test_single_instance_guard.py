@@ -177,3 +177,27 @@ def test_help_is_not_blocked_by_the_guard(tmp_path, help_flag):
     assert "--reset-password" in output
     assert "Another AstrBot instance is already running" not in output
     assert not (tmp_path / "astrbot.pid").exists()
+
+
+def test_guard_starts_when_the_pid_file_cannot_be_written(tmp_path):
+    """An unwritable pid file must not stop the single instance from starting."""
+    (tmp_path / "astrbot.pid").mkdir()
+
+    exit_code, output, guard_state = _run_main(tmp_path, stop_at_startup=True)
+
+    assert exit_code == STARTUP_REACHED_CODE, output
+    assert "Could not record the owner pid" in output
+    assert guard_state is not None
+
+
+def test_guard_explains_an_unwritable_lock_path(tmp_path):
+    """A lock path that cannot be created fails with a message, not a traceback."""
+    (tmp_path / "astrbot.lock").mkdir()
+
+    exit_code, output, _ = _run_main(tmp_path, stop_at_startup=True)
+
+    assert exit_code == 1, output
+    assert "lock file cannot be created" in output
+    assert str(tmp_path) in output
+    assert "ASTRBOT_ROOT" in output
+    assert "Traceback" not in output

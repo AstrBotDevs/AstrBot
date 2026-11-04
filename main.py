@@ -201,7 +201,31 @@ if __name__ == "__main__":
             holder_pid,
         )
         sys.exit(1)
-    pid_file.write_text(str(os.getpid()), encoding="utf-8")
+    except OSError as exc:
+        # A read-only root (for example a container started with --read-only) or a
+        # lock path owned by another user must fail with a message that names the
+        # path, not with an unhandled traceback. Timeout is an OSError subclass, so
+        # this branch must stay after the Timeout one.
+        logger.error(
+            "The AstrBot lock file cannot be created, so startup is aborted.\n"
+            "  root: %s\n  lock file: %s\n  error: %r\n"
+            "Make the root directory writable, or start AstrBot with a different "
+            "ASTRBOT_ROOT.",
+            astrbot_root,
+            lock_file,
+            exc,
+        )
+        sys.exit(1)
+    try:
+        # The pid file only feeds the diagnostic message above, so a failure to write
+        # it must not keep a single instance from starting.
+        pid_file.write_text(str(os.getpid()), encoding="utf-8")
+    except OSError as exc:
+        logger.warning(
+            "Could not record the owner pid in %s: %r. Startup continues.",
+            pid_file,
+            exc,
+        )
 
     check_env()
 
