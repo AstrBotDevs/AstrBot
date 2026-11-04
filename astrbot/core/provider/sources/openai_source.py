@@ -29,6 +29,7 @@ from astrbot.core.agent.tool import ToolSet
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
+from astrbot.core.utils.config_number import coerce_int_config
 from astrbot.core.utils.media_utils import (
     describe_media_ref,
     resolve_media_ref_to_base64_data,
@@ -359,10 +360,16 @@ class ProviderOpenAIOfficial(Provider):
         self.chosen_api_key = None
         self.api_keys: list = super().get_keys()
         self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else None
-        self.timeout = provider_config.get("timeout", 120)
+        # The dashboard writes 0 when this numeric field is cleared and httpx
+        # reads 0 as "expire immediately", so both mean "keep the default".
+        self.timeout = coerce_int_config(
+            provider_config.get("timeout") or 120,
+            default=120,
+            min_value=1,
+            field_name="timeout",
+            source="OpenAI provider config",
+        )
         self.custom_headers = self.request_headers
-        if isinstance(self.timeout, str):
-            self.timeout = int(self.timeout)
 
         if "api_version" in provider_config:
             # Using Azure OpenAI API
