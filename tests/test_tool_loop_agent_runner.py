@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import os
 import sys
 from pathlib import Path
@@ -21,7 +22,13 @@ from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.astr_agent_run_util import run_agent
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.exceptions import EmptyModelOutputError
+from astrbot.core.message.components import At, AtAll, Plain, Reply
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.pipeline.process_stage import follow_up
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
+from astrbot.core.platform.message_type import MessageType
+from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
 from astrbot.core.provider.provider import Provider
 
@@ -506,6 +513,22 @@ def provider_request(tool_set):
 def runner():
     """创建ToolLoopAgentRunner实例"""
     return ToolLoopAgentRunner()
+
+
+@pytest.fixture
+def follow_up_event():
+    message = AstrBotMessage()
+    message.type = MessageType.GROUP_MESSAGE
+    message.self_id = "100"
+    message.message_id = "follow-up"
+    message.sender = MessageMember(user_id="u1")
+    message.message = [At(qq=100), Plain(text="continue")]
+    return AstrMessageEvent(
+        message_str="  continue  ",
+        message_obj=message,
+        platform_meta=PlatformMetadata(name="test", description="", id="test"),
+        session_id="mention_follow_up",
+    )
 
 
 def _make_large_tool_result_text() -> str:
@@ -1582,6 +1605,152 @@ async def test_stop_interrupts_pending_regular_tool(mock_hooks):
 
     with pytest.raises(StopAsyncIteration):
         await step_iter.__anext__()
+
+
+@pytest.mark.parametrize(
+    ("message_type", "components", "directed"),
+    [
+        pytest.param(MessageType.GROUP_MESSAGE, [At(qq=100)], True, id="self-integer"),
+        pytest.param(
+            MessageType.GROUP_MESSAGE,
+            [At(qq="100"), At(qq=100)],
+            True,
+            id="multiple-self",
+        ),
+        pytest.param(
+            MessageType.GROUP_MESSAGE, [At(qq="200")], False, id="other-member"
+        ),
+        pytest.param(MessageType.GROUP_MESSAGE, [At(qq="all")], False, id="all"),
+        pytest.param(
+            MessageType.GROUP_MESSAGE, [AtAll()], False, id="at-all-component"
+        ),
+        pytest.param(MessageType.GROUP_MESSAGE, [], False, id="no-mention"),
+        pytest.param(
+            MessageType.GROUP_MESSAGE,
+            [Reply(id="quoted", chain=[At(qq="100")])],
+            False,
+            id="quoted-self",
+        ),
+        pytest.param(MessageType.FRIEND_MESSAGE, [At(qq="100")], False, id="private"),
+    ],
+)
+def test_event_follow_up_text_marks_only_current_group_mentions(
+    follow_up_event, message_type, components, directed
+):
+    follow_up_event.message_obj.type = message_type
+    follow_up_event.message_obj.message = components
+    original_components = copy.deepcopy(components)
+
+    text = follow_up._event_follow_up_text(follow_up_event)
+
+    expected = "⚠️[DIRECTED AT YOU]\ncontinue" if directed else "continue"
+    assert text == expected
+    assert follow_up_event.message_str == "  continue  "
+    assert follow_up_event.message_obj.message is components
+    assert components == original_components
+
+
+@pytest.mark.parametrize("message_str", [" \n ", None])
+def test_event_follow_up_text_preserves_outline_fallback(follow_up_event, message_str):
+    follow_up_event.message_str = message_str
+    outline = follow_up_event.get_message_outline().strip()
+    components = follow_up_event.get_messages()
+    original_components = copy.deepcopy(components)
+
+    text = follow_up._event_follow_up_text(follow_up_event)
+
+    assert text == "⚠️[DIRECTED AT YOU]\n" + outline
+    assert follow_up_event.message_str is message_str
+    assert follow_up_event.get_messages() is components
+    assert components == original_components
+
+
+@pytest.mark.asyncio
+async def test_empty_follow_up_does_not_become_valid_from_mention(
+    runner,
+    mock_provider,
+    provider_request,
+    mock_tool_executor,
+    mock_hooks,
+    follow_up_event,
+    monkeypatch,
+):
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=MockAgentContext(follow_up_event)),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+    follow_up_event.message_str = " \n "
+    monkeypatch.setattr(
+        follow_up_event, "get_message_outline", MagicMock(return_value=" \n ")
+    )
+
+    text = follow_up._event_follow_up_text(follow_up_event)
+
+    assert text == ""
+    assert runner.follow_up(message_text=text) is None
+    assert runner._pending_follow_ups == []
+    assert follow_up_event.message_str == " \n "
+
+
+@pytest.mark.asyncio
+async def test_captured_group_mention_survives_follow_up_consumption(
+    runner,
+    mock_provider,
+    provider_request,
+    mock_tool_executor,
+    mock_hooks,
+    mock_event,
+    follow_up_event,
+    monkeypatch,
+):
+    monkeypatch.setattr(follow_up, "_ACTIVE_AGENT_RUNNERS", {})
+    monkeypatch.setattr(follow_up, "_FOLLOW_UP_ORDER_STATE", {})
+    mock_event.unified_msg_origin = follow_up_event.unified_msg_origin
+    mock_event.get_sender_id.return_value = follow_up_event.get_sender_id()
+    mock_event.message_obj.message_id = "active-run"
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=MockAgentContext(mock_event)),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+    components = follow_up_event.get_messages()
+    original_components = copy.deepcopy(components)
+    capture = None
+    follow_up.register_active_runner(follow_up_event.unified_msg_origin, runner)
+    try:
+        capture = follow_up.try_capture_follow_up(follow_up_event)
+        assert capture is not None
+        assert capture.ticket.text == "⚠️[DIRECTED AT YOU]\ncontinue"
+
+        async for _ in runner.step():
+            pass
+
+        assert await follow_up.prepare_follow_up_capture(capture) == (True, False)
+        assert capture.ticket.consumed is True
+        assert capture.ticket.resolved.is_set()
+        assert capture.target_run_id == "active-run"
+        assert provider_request.tool_calls_result
+        tool_result = str(
+            provider_request.tool_calls_result[0].tool_calls_result[0].content
+        )
+        assert "SYSTEM NOTICE" in tool_result
+        assert "1. ⚠️[DIRECTED AT YOU]\ncontinue" in tool_result
+        assert follow_up_event.message_str == "  continue  "
+        assert follow_up_event.get_messages() is components
+        assert components == original_components
+    finally:
+        follow_up.unregister_active_runner(follow_up_event.unified_msg_origin, runner)
+        if capture is not None:
+            await follow_up.finalize_follow_up_capture(
+                capture, activated=False, consumed_marked=capture.ticket.consumed
+            )
 
 
 @pytest.mark.asyncio
