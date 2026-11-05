@@ -541,7 +541,7 @@ const updateDialogPluginLogo = computed(() => {
     @confirm="handleUninstallConfirm"
   />
 
-  <!-- 更新全部插件确认对话框 -->
+  <!-- Batch plugin update confirmation -->
   <v-dialog v-model="updateAllConfirmDialog.show" max-width="420">
     <v-card class="rounded-lg">
       <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
@@ -552,19 +552,36 @@ const updateDialogPluginLogo = computed(() => {
         <p class="text-body-1">
           {{
             tm("dialogs.updateAllConfirm.message", {
-              count: updatableExtensions.length,
+              count: updateAllConfirmDialog.selectedNames.length,
             })
           }}
         </p>
+        <div class="mt-4" style="max-height: 320px; overflow-y: auto">
+          <v-checkbox
+            v-for="extension in updatableExtensions"
+            :key="extension.name"
+            v-model="updateAllConfirmDialog.selectedNames"
+            :value="extension.name"
+            :label="pluginName(extension)"
+            density="compact"
+            hide-details
+          />
+        </div>
       </v-card-text>
       <v-card-actions class="pa-4">
         <v-spacer></v-spacer>
         <v-btn variant="text" @click="cancelUpdateAll">{{
           tm("buttons.cancel")
         }}</v-btn>
-        <v-btn color="warning" variant="tonal" @click="confirmUpdateAll">{{
-          tm("dialogs.updateAllConfirm.confirm")
-        }}</v-btn>
+        <v-btn
+          color="warning"
+          variant="tonal"
+          :disabled="
+            updateAllConfirmDialog.selectedNames.length === 0 || updatingAll
+          "
+          @click="confirmUpdateAll"
+          >{{ tm("dialogs.updateAllConfirm.confirm") }}</v-btn
+        >
       </v-card-actions>
     </v-card>
   </v-dialog>
