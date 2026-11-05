@@ -16,11 +16,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import delete
+from sqlalchemy import delete, update
 
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
 from astrbot.core.db import BaseDatabase
+from astrbot.core.db.po import Attachment
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_data_path,
     get_astrbot_knowledge_base_path,
@@ -496,7 +497,7 @@ class AstrBotImporter:
                     await progress_callback("attachments", 0, 100, "正在导入附件...")
 
                 attachment_count = await self._import_attachments(
-                    zf, main_data.get("attachments", [])
+                    zf, main_data.get("attachments", []), result
                 )
                 result.imported_files["attachments"] = attachment_count
 
@@ -842,18 +843,28 @@ class AstrBotImporter:
         self,
         zf: zipfile.ZipFile,
         attachments: list[dict],
+        result: ImportResult,
     ) -> int:
-        """导入附件文件"""
+        """Restore attachments and rebase paths when the data directory changes.
+
+        Args:
+            zf: Open backup archive.
+            attachments: Attachment records containing their original paths.
+            result: Import result used to report attachment failures.
+
+        Returns:
+            Number of files restored with their database paths updated.
+        """
         count = 0
 
-        attachments_dir = Path(self.config_path).parent / "attachments"
+        attachments_dir = (Path(self.config_path).parent / "attachments").resolve()
         attachments_dir.mkdir(parents=True, exist_ok=True)
 
         attachment_prefix = "files/attachments/"
         for name in zf.namelist():
             if name.startswith(attachment_prefix) and name != attachment_prefix:
                 try:
-                    # 从附件记录中找到原始路径
+                    # Preserve paths within this instance; rebase migrated files.
                     attachment_id = os.path.splitext(os.path.basename(name))[0]
                     original_path = None
                     for att in attachments:
@@ -861,22 +872,34 @@ class AstrBotImporter:
                             original_path = att.get("path")
                             break
 
-                    if original_path:
+                    if original_path and _validate_path_within(
+                        Path(original_path), attachments_dir
+                    ):
                         target_path = Path(original_path)
                     else:
                         target_path = attachments_dir / os.path.basename(name)
 
                     # Validate path is within attachments directory (CWE-22)
                     if not _validate_path_within(target_path, attachments_dir):
-                        logger.warning(f"附件路径越界，已跳过: {target_path}")
+                        result.add_error(
+                            f"Attachment path is outside the attachments directory: {target_path}"
+                        )
                         continue
 
                     target_path.parent.mkdir(parents=True, exist_ok=True)
                     with zf.open(name) as src, open(target_path, "wb") as dst:
                         dst.write(src.read())
+                    if original_path != str(target_path):
+                        async with self.main_db.get_db() as session:
+                            async with session.begin():
+                                await session.execute(
+                                    update(Attachment)
+                                    .where(Attachment.attachment_id == attachment_id)
+                                    .values(path=str(target_path))
+                                )
                     count += 1
                 except Exception as e:
-                    logger.warning(f"导入附件 {name} 失败: {e}")
+                    result.add_error(f"Failed to restore attachment {name}: {e}")
 
         return count
 
