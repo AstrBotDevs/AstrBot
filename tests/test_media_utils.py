@@ -1185,11 +1185,36 @@ async def test_prepare_model_image_accepts_inputs_up_to_64_mib(tmp_path, input_s
     )
 
     assert result is not None
-    output_path, is_montage, needs_cleanup, original_path = result
+    output_path, is_montage, needs_cleanup, original_path, original_temporary = result
     assert original_path == str(image_path)
     assert not is_montage and needs_cleanup
+    assert not original_temporary, "a reused caller-owned source is not ours"
     assert Path(output_path).stat().st_size < 512 * 1024
     assert image_path.stat().st_size == input_size
+
+
+@pytest.mark.asyncio
+async def test_prepare_model_image_skips_oversized_decoded_pixels(
+    tmp_path, monkeypatch
+):
+    """A compressed source declaring a huge frame must be rejected undecoded."""
+    from PIL import Image as PILImage
+
+    image_path = tmp_path / "bomb.png"
+    # 48 megapixels: above our decode cap, below Pillow's own bomb threshold.
+    PILImage.new("1", (8000, 6000)).save(image_path, format="PNG")
+
+    def fail_encode(*args, **kwargs):
+        pytest.fail("Oversized frames must be rejected before decoding")
+
+    monkeypatch.setattr(media_utils, "_encode_image_frame_bytes", fail_encode)
+    with pytest.raises(media_utils.ImageInputTooLargeError) as error:
+        await media_utils.prepare_model_image(
+            str(image_path), max_size=1280, output_dir=tmp_path / "previews"
+        )
+
+    assert str(error.value) == str(image_path)
+    assert image_path.is_file()
 
 
 def test_convert_image_bytes_reuses_small_in_range_input():
