@@ -4,7 +4,9 @@ from types import SimpleNamespace
 import pytest
 from openai.types.responses import Response
 
+import astrbot.core.message.components as Comp
 from astrbot.core.config.default import CONFIG_METADATA_2
+from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.sources.openai_responses_source import (
     ProviderOpenAIResponses,
 )
@@ -396,4 +398,81 @@ async def test_parse_failed_response_raises_provider_error():
     )
 
     with pytest.raises(RuntimeError, match="server_error: failed"):
+        await provider._parse_response(response, tools=None)
+
+
+@pytest.mark.asyncio
+async def test_parse_response_converts_image_generation_call_to_image_component():
+    provider = _make_provider()
+    image_b64 = (
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/"
+        "q842iQAAAABJRU5ErkJggg=="
+    )
+    response = _make_response(
+        [
+            {
+                "type": "image_generation_call",
+                "id": "img_1",
+                "status": "completed",
+                "result": image_b64,
+            },
+        ]
+    )
+
+    result = await provider._parse_response(response, tools=None)
+
+    images = [
+        comp for comp in result.result_chain.chain if isinstance(comp, Comp.Image)
+    ]
+    assert [image.file for image in images] == [f"base64://{image_b64}"]
+
+
+@pytest.mark.asyncio
+async def test_parse_response_keeps_text_and_generated_image_together():
+    provider = _make_provider()
+    image_b64 = "iVBORw0KGgo="
+    response = _make_response(
+        [
+            {
+                "type": "message",
+                "id": "msg_1",
+                "status": "completed",
+                "role": "assistant",
+                "content": [
+                    {"type": "output_text", "text": "here you go", "annotations": []},
+                ],
+            },
+            {
+                "type": "image_generation_call",
+                "id": "img_1",
+                "status": "completed",
+                "result": image_b64,
+            },
+        ]
+    )
+
+    result = await provider._parse_response(response, tools=None)
+
+    assert result.completion_text == "here you go"
+    images = [
+        comp for comp in result.result_chain.chain if isinstance(comp, Comp.Image)
+    ]
+    assert [image.file for image in images] == [f"base64://{image_b64}"]
+
+
+@pytest.mark.asyncio
+async def test_parse_response_rejects_image_call_without_result():
+    provider = _make_provider()
+    response = _make_response(
+        [
+            {
+                "type": "image_generation_call",
+                "id": "img_1",
+                "status": "completed",
+                "result": "",
+            },
+        ]
+    )
+
+    with pytest.raises(EmptyModelOutputError):
         await provider._parse_response(response, tools=None)
