@@ -2,27 +2,27 @@ import os
 import tempfile
 from pathlib import Path
 
+import pytest
+
 from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
 
 
-def test_system_tmp_path_lives_in_the_system_temp_dir(monkeypatch, tmp_path):
+@pytest.mark.parametrize("existing_dir", [False, True])
+def test_system_tmp_path_lives_in_the_system_temp_dir(
+    monkeypatch, tmp_path, existing_dir
+):
     system_temp = tmp_path / "system_temp"
-    system_temp.mkdir()
+    target = system_temp / ".astrbot"
+    if existing_dir:
+        target.mkdir(parents=True)
+    else:
+        system_temp.mkdir()
     monkeypatch.setattr(tempfile, "tempdir", str(system_temp))
 
-    assert get_astrbot_system_tmp_path() == os.path.realpath(
-        str(system_temp / ".astrbot")
-    )
+    resolved = get_astrbot_system_tmp_path()
 
-
-def test_system_tmp_path_keeps_an_existing_directory(monkeypatch, tmp_path):
-    system_temp = tmp_path / "system_temp"
-    (system_temp / ".astrbot").mkdir(parents=True)
-    monkeypatch.setattr(tempfile, "tempdir", str(system_temp))
-
-    assert get_astrbot_system_tmp_path() == os.path.realpath(
-        str(system_temp / ".astrbot")
-    )
+    assert resolved == os.path.realpath(str(target))
+    assert Path(resolved).is_dir() is existing_dir
 
 
 def test_system_tmp_path_never_shadows_the_init_marker_file(monkeypatch, tmp_path):
