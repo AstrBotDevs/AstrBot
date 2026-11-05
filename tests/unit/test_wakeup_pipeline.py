@@ -311,8 +311,10 @@ async def test_cron_wakeup_persists_usage_once(
 ):
     """Record the new cron pipeline once for managed and aggregate providers."""
     persisted = asyncio.Event()
+    writers = set()
 
     async def write_usage(event, request, runner, final_response, *, aborted=False):
+        writers.add(asyncio.current_task())
         try:
             await record_agent_runner_stats(
                 temp_db,
@@ -337,12 +339,19 @@ async def test_cron_wakeup_persists_usage_once(
         user_prompt="Run a scheduled task",
         source="cron",
     )
-    if outcome == "aborted":
-        await asyncio.wait_for(runtime.started.wait(), 1)
-        await runtime.bus.stop_platform("target")
-    else:
-        await asyncio.wait_for(runtime.drain(), 1)
-    await asyncio.wait_for(persisted.wait(), 1)
+    try:
+        if outcome == "aborted":
+            await asyncio.wait_for(runtime.started.wait(), 1)
+            await runtime.bus.stop_platform("target")
+        else:
+            await asyncio.wait_for(runtime.drain(), 1)
+        # The first SQLite write can take longer on a loaded Windows runner.
+        await asyncio.wait_for(persisted.wait(), 10)
+    finally:
+        for task in writers:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*writers, return_exceptions=True)
     async with temp_db.get_db() as session:
         result = await session.execute(select(ProviderStat))
         records = result.scalars().all()
