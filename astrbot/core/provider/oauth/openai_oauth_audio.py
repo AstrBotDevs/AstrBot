@@ -15,17 +15,17 @@ class OpenAIOAuthAudioMixin:
         if contexts is None and len(args) > 2:
             contexts = args[2]
         extra_parts = kwargs.get("extra_user_content_parts")
-        has_audio_parts = any(
+        has_media_parts = any(
             (
                 part.get("type")
                 if isinstance(part, dict)
                 else getattr(part, "type", None)
             )
-            == "audio_url"
+            in {"audio_url", "image_url"}
             for part in extra_parts or []
         )
         if prompt is None and (
-            audio_urls or has_audio_parts or (extra_parts and not contexts)
+            audio_urls or has_media_parts or (extra_parts and not contexts)
         ):
             prompt = ""
         prepared = await super()._prepare_chat_payload(prompt, *args, **kwargs)

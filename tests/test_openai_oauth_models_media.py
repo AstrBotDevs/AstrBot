@@ -67,6 +67,45 @@ async def test_extra_only_turn_and_audio_with_context_remain_present():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("positional_context", [False, True])
+@pytest.mark.parametrize("with_metadata", [False, True])
+async def test_extra_image_with_history_reaches_real_responses_payload(
+    positional_context, with_metadata
+):
+    from astrbot.core.agent.message import ImageURLPart, TextPart
+
+    image = io.BytesIO()
+    with Image.new("RGB", (2, 2), "red") as reference:
+        reference.save(image, format="PNG")
+    data_url = "data:image/png;base64," + base64.b64encode(image.getvalue()).decode()
+    provider = _make_provider()
+    history = [{"role": "user", "content": "earlier conversation"}]
+    parts = [ImageURLPart(image_url={"url": data_url})]
+    if with_metadata:
+        parts.insert(0, TextPart(text="sender metadata"))
+    try:
+        if positional_context:
+            payload, _ = await provider._prepare_chat_payload(
+                None, None, None, history, extra_user_content_parts=parts
+            )
+        else:
+            payload, _ = await provider._prepare_chat_payload(
+                None, contexts=history, extra_user_content_parts=parts
+            )
+        assert len(payload["messages"]) == 2
+        assert history == [{"role": "user", "content": "earlier conversation"}]
+        params = provider._build_responses_params(payload, None)
+        assert any(
+            part.get("type") == "input_image" and part.get("image_url") == data_url
+            for message in params["input"]
+            for part in message.get("content", [])
+            if isinstance(part, dict)
+        )
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("effort", ["none", "low", "medium", "high", "xhigh", "max"])
 async def test_terra_reasoning_and_sampling_parameters(effort):
     provider = _make_provider(
