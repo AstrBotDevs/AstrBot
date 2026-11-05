@@ -295,24 +295,10 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
                         self._build_backend_headers_with_version()
                     )
                     headers["Accept"] = "application/json"
-                    async with (
-                        asyncio.timeout(MODEL_CATALOG_TIMEOUT_SECONDS),
-                        self._open_oauth_http_client(follow_redirects=False) as client,
-                        client.stream(
-                            "GET",
-                            f"{self.base_url}/models",
-                            params={"client_version": CODEX_CLIENT_VERSION},
-                            headers=headers,
-                            timeout=MODEL_CATALOG_TIMEOUT_SECONDS,
-                        ) as response,
-                    ):
-                        body = bytearray()
-                        async for chunk in response.aiter_bytes():
-                            if len(body) + len(chunk) > MODEL_CATALOG_MAX_BYTES:
-                                raise ValueError(
-                                    "Codex model catalog exceeds size limit"
-                                )
-                            body.extend(chunk)
+                    response, body = await asyncio.wait_for(
+                        self._read_model_catalog(headers),
+                        timeout=MODEL_CATALOG_TIMEOUT_SECONDS,
+                    )
                     if response.status_code in {401, 403} and attempt == 0:
                         if await self._refresh_after_auth_failure(attempted_version):
                             continue
@@ -355,6 +341,37 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
                 state.models_expires_at = time.monotonic() + 30
                 return list(state.models_cache)
         return list(self.model_capabilities)
+
+    async def _read_model_catalog(
+        self, headers: dict[str, str]
+    ) -> tuple[httpx.Response, bytes]:
+        """Read one bounded catalog under the caller's overall deadline.
+
+        Args:
+            headers: Source-level authenticated request headers.
+
+        Returns:
+            The closed HTTP response and its bounded body.
+
+        Raises:
+            ValueError: If the catalog body exceeds the size limit.
+        """
+        async with (
+            self._open_oauth_http_client(follow_redirects=False) as client,
+            client.stream(
+                "GET",
+                f"{self.base_url}/models",
+                params={"client_version": CODEX_CLIENT_VERSION},
+                headers=headers,
+                timeout=MODEL_CATALOG_TIMEOUT_SECONDS,
+            ) as response,
+        ):
+            body = bytearray()
+            async for chunk in response.aiter_bytes():
+                if len(body) + len(chunk) > MODEL_CATALOG_MAX_BYTES:
+                    raise ValueError("Codex model catalog exceeds size limit")
+                body.extend(chunk)
+        return response, bytes(body)
 
     async def _prepare_chat_payload(
         self,

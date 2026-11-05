@@ -151,6 +151,59 @@ async def test_models_discovery_filters_catalog_and_caches_requests(monkeypatch)
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("outcome", ["normal", "timeout", "cancel"])
+async def test_python310_catalog_without_asyncio_timeout(monkeypatch, outcome):
+    provider = _make_provider()
+    requests = []
+    closed = []
+    started = asyncio.Event()
+    task = None
+
+    @asynccontextmanager
+    async def open_client(**kwargs):
+        async def handle(request):
+            requests.append(request)
+            started.set()
+            if outcome != "normal":
+                await asyncio.Event().wait()
+            return httpx.Response(
+                200, json={"models": [{"slug": "dynamic-python310-model"}]}
+            )
+
+        try:
+            async with httpx.AsyncClient(
+                transport=httpx.MockTransport(handle)
+            ) as client:
+                yield client
+        finally:
+            closed.append(True)
+
+    monkeypatch.delattr(asyncio, "timeout", raising=False)
+    monkeypatch.setattr(provider, "_open_oauth_http_client", open_client)
+    try:
+        if outcome == "normal":
+            assert await provider.get_models() == ["dynamic-python310-model"]
+        elif outcome == "timeout":
+            monkeypatch.setattr(oauth_source, "MODEL_CATALOG_TIMEOUT_SECONDS", 0.01)
+            assert await provider.get_models() == list(provider.model_capabilities)
+        else:
+            task = asyncio.create_task(provider.get_models())
+            await asyncio.wait_for(started.wait(), timeout=1)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+            assert not provider._oauth_shared_state.models_cache
+        assert len(requests) == 1
+        assert closed == [True]
+        assert not provider._oauth_shared_state.models_lock.locked()
+    finally:
+        if task is not None and not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "mode", ["invalid_json", "invalid_shape", "empty", "http_failure", "network"]
 )
