@@ -5,6 +5,10 @@
 expose, so a video can arrive there as a ``data:video/mp4`` payload or as a saved
 ``.mp4`` path. Resolving such a reference as audio re-encodes it to WAV, which
 keeps the soundtrack and silently drops the picture.
+
+Delivering that video is conditional on the provider declaring the ``video``
+modality: this path bypasses the runner's modality gate, so it applies the same
+opt-in rule itself and degrades to ``[Video]`` text otherwise.
 """
 
 import base64
@@ -26,12 +30,25 @@ AUDIO_DATA_URL = f"data:audio/wav;base64,{base64.b64encode(AUDIO_BYTES).decode()
 RESOLVER = (
     "astrbot.core.provider.sources.gemini_source.resolve_media_ref_to_base64_data"
 )
+# The capability list of a provider that opted into video input.
+VIDEO_MODALITIES = ["text", "image", "audio", "video", "tool_use"]
 
 
-def _provider() -> ProviderGoogleGenAI:
-    """Build the provider without running its network setup."""
+def _provider(modalities: list[str] | None = None) -> ProviderGoogleGenAI:
+    """Build the provider without running its network setup.
+
+    Args:
+        modalities: Declared model capabilities. Defaults to every modality, so
+            the media-family tests below run against a provider that opted into
+            video input.
+
+    Returns:
+        A provider whose `provider_config` carries `modalities`.
+    """
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
-    provider.provider_config = {}
+    provider.provider_config = {
+        "modalities": VIDEO_MODALITIES if modalities is None else modalities,
+    }
     provider.provider_settings = {}
     return provider
 
@@ -113,6 +130,42 @@ async def test_unresolvable_video_degrades_to_a_placeholder(tmp_path):
         context = await provider.assemble_context("look", audio_urls=[str(video_path)])
 
     assert {"type": "text", "text": "[Video]"} in _content_blocks(context)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("modalities", [[], ["text", "image", "audio", "tool_use"]])
+async def test_video_in_the_audio_slot_degrades_without_the_video_modality(modalities):
+    """A provider that did not opt into video must not receive one.
+
+    `text_chat(prompt=...)` assembles its message here instead of through the
+    agent runner, so it applies the opt-in rule itself: the attachment becomes
+    `[Video]` text and the request is not failed at the API. The media reference
+    is not resolved either, so no WAV conversion and no wasted encode happen.
+    """
+    provider = _provider(modalities)
+    resolve = AsyncMock()
+
+    with patch(RESOLVER, resolve):
+        context = await provider.assemble_context("look", audio_urls=[VIDEO_DATA_URL])
+
+    assert _content_blocks(context) == [
+        {"type": "text", "text": "look"},
+        {"type": "text", "text": "[Video]"},
+    ]
+    resolve.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_video_url_argument_degrades_without_the_video_modality():
+    """The separate video channel follows the same opt-in rule."""
+    provider = _provider(["text", "image", "audio", "tool_use"])
+
+    context = await provider.assemble_context("look", video_urls=[VIDEO_DATA_URL])
+
+    assert _content_blocks(context) == [
+        {"type": "text", "text": "look"},
+        {"type": "text", "text": "[Video]"},
+    ]
 
 
 @pytest.mark.asyncio
