@@ -22,6 +22,8 @@ _IMAGE_MODEL_ALIASES = (
     "gpt-image-2",
     "gpt-image-2.5-flare",
     "gpt-image-2.5-sunburst",
+    "gpt-image-2.6-flare",
+    "gpt-image-2.6-sunburst",
 )
 
 
@@ -766,8 +768,9 @@ async def test_oauth_provider_exposes_codex_model_catalog_and_defaults():
     try:
         models = await provider.get_models()
 
-        assert models[:7] == [
+        assert models[:8] == [
             "gpt-6.1-sol",
+            "gpt-6.1-terra",
             "gpt-6-astra",
             "gpt-6-sol",
             "gpt-6-luna",
@@ -786,7 +789,7 @@ async def test_oauth_provider_exposes_codex_model_catalog_and_defaults():
             ),
         }
         expected_efforts = ("none", "low", "medium", "high", "xhigh", "max")
-        for model in models[2:7]:
+        for model in ["gpt-6.1-terra", *models[3:8]]:
             assert (
                 provider.model_capabilities[model]["supported_reasoning_efforts"]
                 == expected_efforts
@@ -1279,6 +1282,7 @@ async def test_generate_image_with_reference_file_builds_image_edit_payload(tmp_
                 "type": "image_generation",
                 "action": "edit",
                 "size": "1024x1024",
+                "model": "gpt-image-2.6-sunburst",
             }
         ]
         assert payload["input"] == [
@@ -1339,6 +1343,7 @@ async def test_generate_image_with_data_url_reference_keeps_data_url(tmp_path):
             {
                 "type": "image_generation",
                 "action": "auto",
+                "model": "gpt-image-2.6-sunburst",
             }
         ]
         assert payload["input"][0]["content"][0] == {
@@ -1442,6 +1447,7 @@ async def test_generate_image_reads_sse_incrementally(monkeypatch, tmp_path):
             {
                 "type": "image_generation",
                 "action": "generate",
+                "model": "gpt-image-2.6-sunburst",
             }
         ]
         assert len(results) == 1
@@ -1688,12 +1694,12 @@ def test_gpt6_sol_luna_reject_invalid_reasoning(model, effort):
         )
 
 
-def test_oauth_source_image_model_metadata_defaults_to_backend_selection():
+def test_oauth_source_image_model_metadata_defaults_to_images_26():
     provider_metadata = CONFIG_METADATA_2["provider_group"]["metadata"]["provider"]
     source = provider_metadata["config_template"]["ChatGPT/Codex OAuth"]
     field = provider_metadata["items"]["oauth_image_model"]
 
-    assert source["oauth_image_model"] == ""
+    assert source["oauth_image_model"] == "gpt-image-2.6-sunburst"
     assert field["options"] == ["", *_IMAGE_MODEL_ALIASES]
     assert "主调用模型" in field["hint"]
     assert "图像" in field["description"]
@@ -1715,7 +1721,7 @@ async def test_generate_image_model_alias_only_changes_image_tool(
             "output": [
                 {
                     "type": "image_generation_call",
-                    "result": base64.b64encode(b"image").decode(),
+                    "result": base64.b64encode(b"\x89PNG\r\n\x1a\nimage").decode(),
                 }
             ]
         }
@@ -1726,7 +1732,7 @@ async def test_generate_image_model_alias_only_changes_image_tool(
             "output": [
                 {
                     "type": "image_generation_call",
-                    "result": base64.b64encode(b"image").decode(),
+                    "result": base64.b64encode(b"\x89PNG\r\n\x1a\nimage").decode(),
                 }
             ]
         }
@@ -1788,7 +1794,7 @@ async def test_generate_image_model_config_and_override(
             "output": [
                 {
                     "type": "image_generation_call",
-                    "result": base64.b64encode(b"image").decode(),
+                    "result": base64.b64encode(b"\x89PNG\r\n\x1a\nimage").decode(),
                 }
             ]
         }
@@ -1819,7 +1825,7 @@ async def test_generate_image_model_edit_with_local_reference_and_old_positional
             "output": [
                 {
                     "type": "image_generation_call",
-                    "result": base64.b64encode(b"image").decode(),
+                    "result": base64.b64encode(b"\x89PNG\r\n\x1a\nimage").decode(),
                 }
             ]
         }

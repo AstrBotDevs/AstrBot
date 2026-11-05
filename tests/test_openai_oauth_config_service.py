@@ -24,7 +24,7 @@ def test_legacy_oauth_source_reads_include_image_model_without_persisting(read_s
 
     returned = read_source(service)
 
-    assert returned["oauth_image_model"] == ""
+    assert returned["oauth_image_model"] == "gpt-image-2.6-sunburst"
     assert returned["oauth_access_token"] == "access-0"
     assert service.config == original
     returned["oauth_access_token"] = "modified-copy"

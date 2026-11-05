@@ -13,6 +13,16 @@ the backend can expose this model. GPT-6 Sol and Luna retain their existing
 reasoning levels, including `none`. Unsupported GPT-6.1 sampling and output
 log-probability options are removed without changing function tools or search.
 
+The model selector discovers visible, API-enabled models from the authenticated
+Codex model catalog, including `gpt-6.1-terra`. Catalog reads share the source's
+credentials, refresh lock, and persistence callback with its chat providers.
+Successful catalogs are cached for five minutes. Discovery failures retain the
+last successful catalog, or use the built-in model list when none exists, and
+retry after 30 seconds. Each catalog read is limited to ten seconds and 4 MiB;
+an account or endpoint change discards an in-flight result. Existing configured models are not removed when the
+discovered list changes. The Terra adapter accepts the documented reasoning
+efforts `none`, `low`, `medium`, `high`, `xhigh`, and `max`.
+
 The provider implements incremental text, reasoning and function-call streams.
 Chunks have `is_chunk=True`; the final response contains complete text, tools,
 raw response and usage. Consumers must not append the final full text to chunks.
@@ -132,9 +142,17 @@ or editing permissions.
 
 The ChatGPT/Codex OAuth source has an optional, experimental `oauth_image_model` setting.
 It sends a model request in the `image_generation` tool and does not change the
-main `model` used for the Responses request. An empty setting leaves the tool
-model unset, preserving the previous request. Accepted request values are
-`gpt-image-2`, `gpt-image-2.5-flare`, and `gpt-image-2.5-sunburst`.
+main `model` used for the Responses request. New sources and sources without an
+`oauth_image_model` setting default to `gpt-image-2.6-sunburst`. An explicitly empty
+setting leaves the tool model unset. Accepted request values are:
+
+| Image model | Request value |
+| --- | --- |
+| Images 2.6 Sunburst, default | `gpt-image-2.6-sunburst` |
+| Images 2.6 Flare | `gpt-image-2.6-flare` |
+| Images 2.5 Sunburst | `gpt-image-2.5-sunburst` |
+| Images 2.5 Flare | `gpt-image-2.5-flare` |
+| Images 2.0 | `gpt-image-2` |
 
 Plugins calling the provider can override the source setting for one image
 request. Passing an empty string explicitly restores backend selection for
@@ -144,8 +162,8 @@ to both generation and reference-image editing.
 ```python
 images = await provider.generate_image(
     "Illustrate a mountain at sunrise",
-    model="gpt-6-sol",
-    image_model="gpt-image-2.5-flare",
+    model="gpt-6.1-sol",
+    image_model="gpt-image-2.6-sunburst",
 )
 ```
 
@@ -153,7 +171,48 @@ An unsupported nonempty image model fails before sending the request. Existing
 calls without the new argument keep the previous payload when the source
 setting is empty. The backend may ignore the requested image model or fall
 back, and a successful image response does not confirm which model was used.
-Availability depends on the account's backend permissions.
+Availability depends on the account's backend permissions. HTTP generation
+requests for 2.6 Sunburst, 2.5 Sunburst, and 2.0 succeeded in a November 6, 2026
+account probe, but the returned image tool items did not identify the actual
+image model. Those results verify accepted requests rather than model routing.
+
+### GIF references and output
+
+Local GIF references retain their original bytes and animation frames. GIF
+content is recognized by its signature even when the local file has an incorrect
+suffix. Returned GIF, JPEG, and WebP bytes are saved with their detected MIME type
+and extension instead of always being labeled PNG. The existing result contract
+remains a list of objects containing `path`, `mime_type`, `revised_prompt`, and
+`raw`; plugins should forward the file without converting it to a still image.
+
+Plugins may request `output_format="gif"`, with optional `frame_count` from 2 to
+16 and `frame_duration_ms` from 20 to 2000. These are optional keyword arguments
+and do not alter existing positional arguments:
+
+```python
+images = await provider.generate_image(
+    "Animate a bouncing dot",
+    image_model="gpt-image-2.6-sunburst",
+    output_format="gif",
+    frame_count=9,
+    frame_duration_ms=200,
+)
+```
+
+The Responses API schema advertises these controls, but the tested Codex OAuth
+backend rejected GIF output with HTTP 400 `invalid_value`, both with and without
+the frame controls. GIF generation and GIF editing are therefore not verified
+OAuth capabilities. Backend rejection is propagated; a PNG response to an
+explicit GIF request raises an error before writing output files. No silent
+conversion, API-key fallback, or claim of successful animation is made.
+Ordinary chat's existing animation previews are unchanged; image-edit plugins
+should pass original files through `reference_images`.
+
+References:
+
+- [OpenAI image generation guide](https://developers.openai.com/api/docs/guides/image-generation)
+- [Responses tool schema](https://developers.openai.com/api/reference/resources/responses/methods/retrieve)
+- [GPT-6.1 Terra](https://developers.openai.com/api/docs/models/gpt-6.1-terra)
 
 ## Ordinary voice messages
 

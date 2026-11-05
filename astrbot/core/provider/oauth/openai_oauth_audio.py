@@ -8,8 +8,25 @@ class OpenAIOAuthAudioMixin:
 
     async def _prepare_chat_payload(self, prompt, *args, **kwargs):
         tool_choice = kwargs.pop("_oauth_tool_choice", None)
-        audio_urls = kwargs.get("audio_urls") or (args[1] if len(args) > 1 else None)
-        if prompt is None and (audio_urls or kwargs.get("extra_user_content_parts")):
+        audio_urls = kwargs.get("audio_urls")
+        if audio_urls is None and len(args) > 1:
+            audio_urls = args[1]
+        contexts = kwargs.get("contexts")
+        if contexts is None and len(args) > 2:
+            contexts = args[2]
+        extra_parts = kwargs.get("extra_user_content_parts")
+        has_audio_parts = any(
+            (
+                part.get("type")
+                if isinstance(part, dict)
+                else getattr(part, "type", None)
+            )
+            == "audio_url"
+            for part in extra_parts or []
+        )
+        if prompt is None and (
+            audio_urls or has_audio_parts or (extra_parts and not contexts)
+        ):
             prompt = ""
         prepared = await super()._prepare_chat_payload(prompt, *args, **kwargs)
         if tool_choice is not None and tool_choice != "auto":

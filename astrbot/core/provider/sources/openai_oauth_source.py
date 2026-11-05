@@ -4,6 +4,7 @@ import inspect
 import json
 import math
 import mimetypes
+import time
 import uuid
 from collections.abc import AsyncGenerator
 from contextlib import AsyncExitStack, aclosing, asynccontextmanager
@@ -41,9 +42,18 @@ from .request_retry import (
 IMAGE_WEBSOCKET_MAX_MESSAGE_BYTES = 64 * 1024 * 1024
 IMAGE_WEBSOCKET_MAX_TRANSCRIPT_BYTES = 128 * 1024 * 1024
 IMAGE_WEBSOCKET_MAX_EVENTS = 16384
+MODEL_CATALOG_MAX_BYTES = 4 * 1024 * 1024
+MODEL_CATALOG_TIMEOUT_SECONDS = 10.0
 OAUTH_IMAGE_MODEL_ALIASES = frozenset(
-    {"gpt-image-2", "gpt-image-2.5-flare", "gpt-image-2.5-sunburst"}
+    {
+        "gpt-image-2",
+        "gpt-image-2.5-flare",
+        "gpt-image-2.5-sunburst",
+        "gpt-image-2.6-flare",
+        "gpt-image-2.6-sunburst",
+    }
 )
+OAUTH_DEFAULT_IMAGE_MODEL = "gpt-image-2.6-sunburst"
 OAUTH_PLACEHOLDER_KEY = "__openai_oauth__"
 CODEX_CLIENT_VERSION = "0.159.2"
 
@@ -97,6 +107,17 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
         "gpt-6.1-sol": {
             "default_reasoning_effort": "medium",
             "supported_reasoning_efforts": (
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max",
+            ),
+        },
+        "gpt-6.1-terra": {
+            "default_reasoning_effort": "medium",
+            "supported_reasoning_efforts": (
+                "none",
                 "low",
                 "medium",
                 "high",
@@ -251,7 +272,88 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
         )
         self._sync_oauth_credentials_from_shared()
 
-    async def get_models(self):
+    async def get_models(self) -> list[str]:
+        """Discover visible Codex models, retaining a safe catalog on failure.
+
+        Returns:
+            Models advertised by the account, or cached and built-in fallback models.
+        """
+        state = self._oauth_shared_state
+        async with state.models_lock:
+            self._sync_oauth_credentials_from_shared()
+            cache_key = (self.base_url, self.account_id)
+            if state.models_cache_key != cache_key:
+                state.models_cache = []
+                state.models_expires_at = 0.0
+                state.models_cache_key = cache_key
+            if state.models_cache and time.monotonic() < state.models_expires_at:
+                return list(state.models_cache)
+            try:
+                await self._ensure_fresh_oauth_token()
+                for attempt in range(2):
+                    headers, attempted_version = (
+                        self._build_backend_headers_with_version()
+                    )
+                    headers["Accept"] = "application/json"
+                    async with (
+                        asyncio.timeout(MODEL_CATALOG_TIMEOUT_SECONDS),
+                        self._open_oauth_http_client(follow_redirects=False) as client,
+                        client.stream(
+                            "GET",
+                            f"{self.base_url}/models",
+                            params={"client_version": CODEX_CLIENT_VERSION},
+                            headers=headers,
+                            timeout=MODEL_CATALOG_TIMEOUT_SECONDS,
+                        ) as response,
+                    ):
+                        body = bytearray()
+                        async for chunk in response.aiter_bytes():
+                            if len(body) + len(chunk) > MODEL_CATALOG_MAX_BYTES:
+                                raise ValueError(
+                                    "Codex model catalog exceeds size limit"
+                                )
+                            body.extend(chunk)
+                    if response.status_code in {401, 403} and attempt == 0:
+                        if await self._refresh_after_auth_failure(attempted_version):
+                            continue
+                    response.raise_for_status()
+                    data = json.loads(body)
+                    entries = data.get("models") if isinstance(data, dict) else None
+                    if not isinstance(entries, list):
+                        raise ValueError("Invalid Codex model catalog")
+                    models = list(
+                        dict.fromkeys(
+                            entry["slug"].strip()
+                            for entry in entries
+                            if isinstance(entry, dict)
+                            and isinstance(entry.get("slug"), str)
+                            and entry["slug"].strip()
+                            and entry.get("visibility", "list") == "list"
+                            and entry.get("supported_in_api") is not False
+                        )
+                    )
+                    if not models:
+                        raise ValueError("Empty Codex model catalog")
+                    self._sync_oauth_credentials_from_shared()
+                    if cache_key != (self.base_url, self.account_id):
+                        raise ValueError("Codex model catalog account changed")
+                    state.models_cache = models
+                    state.models_expires_at = time.monotonic() + 300
+                    return list(models)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.warning(
+                    "Codex model discovery failed; using cached or built-in models."
+                )
+                self._sync_oauth_credentials_from_shared()
+                if state.models_cache_key != (self.base_url, self.account_id):
+                    state.models_cache = []
+                    state.models_cache_key = (self.base_url, self.account_id)
+                if not state.models_cache:
+                    state.models_cache = list(self.model_capabilities)
+                state.models_expires_at = time.monotonic() + 30
+                return list(state.models_cache)
         return list(self.model_capabilities)
 
     async def _prepare_chat_payload(
@@ -866,6 +968,12 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
             return "authentication failed"
         if codes & {"content_policy_violation", "content_filter", "moderation_blocked"}:
             return "content policy rejected"
+        if codes & {
+            "invalid_value",
+            "invalid_request_error",
+            "image_generation_user_error",
+        }:
+            return "request parameters rejected"
         return "backend error"
 
     def _is_content_moderated_upload_error(self, error: Exception) -> bool:
@@ -888,6 +996,7 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
             }
         status_code = self._extract_stream_error_status_code(data)
         message = f"{prefix}: {self._backend_error_summary(data)}"
+        logger.warning("%s (status=%s)", message, status_code)
         error = (
             ProviderRequestError(message, status_code=status_code)
             if status_code is not None
@@ -905,10 +1014,12 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
             data = json.loads(text)
         except (ValueError, TypeError):
             data = {"message": text}
-        return (
+        message = (
             f"Codex backend request failed: status={status_code}, "
             f"{self._backend_error_summary(data)}"
         )
+        logger.warning("%s", message)
+        return message
 
     def _validate_backend_response_status(self, response: Any) -> None:
         status = (
@@ -1439,13 +1550,13 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
         params.pop("temperature", None)
         model_name = str(params.get("model") or "").strip().lower()
         if model_name.startswith(
-            ("gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna")
+            ("gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna")
         ):
             # The Codex backend rejects sampling parameters even without reasoning.
             params.pop("top_p", None)
             params.pop("top_logprobs", None)
         if model_name.startswith(("gpt-6.1-sol", "gpt-6-astra")) or (
-            model_name.startswith(("gpt-6-sol", "gpt-6-luna"))
+            model_name.startswith(("gpt-6.1-terra", "gpt-6-sol", "gpt-6-luna"))
             and reasoning.get("effort") != "none"
         ):
             include = params.get("include")
@@ -1960,6 +2071,9 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
         timeout: float | None = None,
         *,
         image_model: str | None = None,
+        output_format: str | None = None,
+        frame_count: int | None = None,
+        frame_duration_ms: int | None = None,
     ) -> list[OpenAIOAuthImageResult]:
         """Generate images through HTTP or a bounded WebSocket session.
 
@@ -1974,6 +2088,10 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
             timeout: Optional per-image deadline; WebSocket defaults to provider timeout.
             image_model: Experimental image-generation model request; the backend
                 may ignore it. An empty string omits it, overriding the source setting.
+            output_format: Optional png, jpeg, webp, or gif request. OAuth backends
+                may reject GIF requests; unsupported formats are never converted silently.
+            frame_count: Optional GIF frame count, from 2 to 16.
+            frame_duration_ms: Optional GIF frame duration, from 20 to 2000 milliseconds.
 
         Returns:
             Extracted image results from all backend generations.
@@ -1990,7 +2108,7 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
             if not math.isfinite(timeout) or timeout <= 0:
                 raise ValueError("Image timeout must be a finite positive number")
         selected_image_model = (
-            self.provider_config.get("oauth_image_model", "")
+            self.provider_config.get("oauth_image_model", OAUTH_DEFAULT_IMAGE_MODEL)
             if image_model is None
             else image_model
         )
@@ -2003,6 +2121,21 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
                 raise ValueError("Invalid image model selection")
         else:
             selected_image_model = ""
+        if output_format not in {None, "png", "jpeg", "webp", "gif"}:
+            raise ValueError("Image output format must be png, jpeg, webp, or gif")
+        for name, value, minimum, maximum in (
+            ("frame_count", frame_count, 2, 16),
+            ("frame_duration_ms", frame_duration_ms, 20, 2000),
+        ):
+            if value is not None and (
+                output_format != "gif"
+                or isinstance(value, bool)
+                or not isinstance(value, int)
+                or not minimum <= value <= maximum
+            ):
+                raise ValueError(
+                    f"{name} requires gif output and an integer in {minimum}..{maximum}"
+                )
         references = [
             str(image).strip() for image in reference_images or [] if str(image).strip()
         ]
@@ -2024,6 +2157,12 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
                 tool["size"] = size
             if selected_image_model:
                 tool["model"] = selected_image_model
+            if output_format is not None:
+                tool["output_format"] = output_format
+            if frame_count is not None:
+                tool["frame_count"] = frame_count
+            if frame_duration_ms is not None:
+                tool["frame_duration_ms"] = frame_duration_ms
             payload = {
                 "model": model or self.get_model(),
                 "input": image_input,
@@ -2043,7 +2182,11 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
                 )
             else:
                 response = await self._request_image_backend(payload)
-            results.extend(await self._extract_generated_images(response))
+            results.extend(
+                await self._extract_generated_images(
+                    response, expected_output_format=output_format
+                )
+            )
         return results
 
     def _build_image_generation_input(
@@ -2092,15 +2235,22 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
         if not path.is_file():
             raise ValueError(f"参考图文件不存在: {value}")
 
-        mime_type = mimetypes.guess_type(path.name)[0] or "image/png"
+        image_data = path.read_bytes()
+        mime_type = (
+            "image/gif"
+            if image_data.startswith((b"GIF87a", b"GIF89a"))
+            else mimetypes.guess_type(path.name)[0] or "image/png"
+        )
         if not mime_type.startswith("image/"):
             mime_type = "image/png"
-        encoded = base64.b64encode(path.read_bytes()).decode()
+        encoded = base64.b64encode(image_data).decode()
         return f"data:{mime_type};base64,{encoded}"
 
     async def _extract_generated_images(
         self,
         response: dict[str, Any],
+        *,
+        expected_output_format: str | None = None,
     ) -> list[OpenAIOAuthImageResult]:
         output = response.get("output") or []
         if not isinstance(output, list):
@@ -2112,9 +2262,7 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
             if image_dir_value
             else Path(get_astrbot_data_path()) / "generated" / "openai_oauth_images"
         )
-        image_dir.mkdir(parents=True, exist_ok=True)
-
-        results: list[OpenAIOAuthImageResult] = []
+        decoded_images: list[tuple[bytes, str, str, dict[str, Any]]] = []
         for item in output:
             if not isinstance(item, dict):
                 continue
@@ -2123,21 +2271,47 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
                 continue
             if "," in image_base64 and image_base64.startswith("data:"):
                 image_base64 = image_base64.split(",", 1)[1]
-            file_path = image_dir / f"{uuid.uuid4().hex}.png"
-            file_path.write_bytes(base64.b64decode(image_base64))
+            try:
+                image_data = base64.b64decode(image_base64, validate=True)
+            except (ValueError, TypeError):
+                raise ValueError(
+                    "Codex image response contains invalid base64"
+                ) from None
+            if image_data.startswith(b"\x89PNG\r\n\x1a\n"):
+                mime_type, suffix = "image/png", ".png"
+            elif image_data.startswith((b"GIF87a", b"GIF89a")):
+                mime_type, suffix = "image/gif", ".gif"
+            elif image_data.startswith(b"\xff\xd8\xff"):
+                mime_type, suffix = "image/jpeg", ".jpg"
+            elif image_data.startswith(b"RIFF") and image_data[8:12] == b"WEBP":
+                mime_type, suffix = "image/webp", ".webp"
+            else:
+                raise ValueError(
+                    "Codex image response contains an unsupported image format"
+                )
+            if expected_output_format == "gif" and mime_type != "image/gif":
+                raise RuntimeError(
+                    "Codex backend did not return the requested GIF format"
+                )
+            decoded_images.append((image_data, mime_type, suffix, item))
+
+        if not decoded_images:
+            raise self._backend_response_error(
+                response, "Codex image response contained no extractable image"
+            ) from None
+        image_dir.mkdir(parents=True, exist_ok=True)
+        results: list[OpenAIOAuthImageResult] = []
+        for image_data, mime_type, suffix, item in decoded_images:
+            file_path = image_dir / f"{uuid.uuid4().hex}{suffix}"
+            file_path.write_bytes(image_data)
             results.append(
                 OpenAIOAuthImageResult(
                     path=str(file_path),
-                    mime_type="image/png",
+                    mime_type=mime_type,
                     revised_prompt=str(item.get("revised_prompt") or ""),
                     raw=item,
                 )
             )
-
-        if not results:
-            raise self._backend_response_error(
-                response, "Codex image response contained no extractable image"
-            ) from None
         return results
 
     def _extract_image_base64_from_output_item(self, item: dict[str, Any]) -> str:

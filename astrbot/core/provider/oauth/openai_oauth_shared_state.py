@@ -25,6 +25,10 @@ class OpenAIOAuthSharedState:
     def __init__(self, source_id: str, source_config: dict[str, Any]) -> None:
         self.source_id = source_id
         self.refresh_lock = asyncio.Lock()
+        self.models_lock = asyncio.Lock()
+        self.models_cache: list[str] = []
+        self.models_expires_at = 0.0
+        self.models_cache_key: tuple[str, str] | None = None
         self.version = 0
         self._credentials: dict[str, Any] = dict.fromkeys(
             OPENAI_OAUTH_CREDENTIAL_FIELDS,
