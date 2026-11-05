@@ -45,6 +45,15 @@ IMAGE_COMPRESS_DEFAULT_MIN_FILE_SIZE_MB = 1.0
 # Model image inputs larger than this are skipped before decoding.
 MODEL_IMAGE_MAX_INPUT_BYTES = 64 * 1024 * 1024
 
+# Wall-clock limit for ffmpeg/ffprobe helper processes. It must stay below the
+# platform API timeout (OneBot HTTP/WS calls are typically bounded at 180s or
+# more) so a hung conversion fails here with a clear error instead of silently
+# consuming the caller's budget and dropping the request.
+FFMPEG_TIMEOUT_SECONDS = 120.0
+
+# Number of trailing ffmpeg stderr lines kept in raised conversion errors.
+FFMPEG_ERROR_TAIL_LINES = 5
+
 MEDIA_MIME_EXTENSIONS = {
     "audio/wav": ".wav",
     "audio/wave": ".wav",
@@ -1382,6 +1391,116 @@ async def resolve_media_ref_to_base64_data(
     )
 
 
+async def _terminate_media_process(process: asyncio.subprocess.Process) -> None:
+    """Kill and reap a media helper process after a timeout or cancellation.
+
+    Args:
+        process: Process created by ``asyncio.create_subprocess_exec``.
+    """
+    try:
+        process.kill()
+    except ProcessLookupError:
+        pass
+    try:
+        await asyncio.wait_for(process.wait(), timeout=5)
+    except asyncio.TimeoutError:
+        logger.warning("Media process did not exit after being killed")
+    except Exception as e:  # pragma: no cover - best effort reaping
+        logger.warning("Failed to reap media process: %s", e)
+
+
+def _remove_partial_output(output_path: str | None) -> None:
+    """Remove an output file left behind by a killed media process.
+
+    Args:
+        output_path: Output file written by the process, if any.
+    """
+    if not output_path or not os.path.exists(output_path):
+        return
+    try:
+        os.remove(output_path)
+        logger.debug("Removed incomplete output file: %s", output_path)
+    except OSError as e:
+        logger.warning(
+            "Failed to remove incomplete output file %s: %s",
+            output_path,
+            e,
+        )
+
+
+async def _communicate_with_timeout(
+    process: asyncio.subprocess.Process,
+    *,
+    timeout: float,
+    output_path: str | None = None,
+    output_existed: bool = False,
+) -> tuple[bytes, bytes]:
+    """Collect subprocess output with a hard wall-clock limit.
+
+    A stuck ffmpeg/ffprobe process would otherwise block the caller forever and
+    keep its temporary file around, so it is killed, reaped and its partial
+    output removed. The same cleanup runs when the caller is cancelled, so a
+    plugin timeout or a shutdown does not leak the child process.
+
+    Args:
+        process: Process created by ``asyncio.create_subprocess_exec``.
+        timeout: Seconds to wait before killing the process.
+        output_path: Output file written by the process, if any.
+        output_existed: Whether ``output_path`` existed before the process was
+            started; pre-existing files are never deleted.
+
+    Returns:
+        The captured stdout and stderr bytes.
+
+    Raises:
+        asyncio.TimeoutError: When the process does not exit within ``timeout``.
+        asyncio.CancelledError: When the calling task is cancelled.
+    """
+    try:
+        return await asyncio.wait_for(process.communicate(), timeout=timeout)
+    except asyncio.CancelledError:
+        await _terminate_media_process(process)
+        if not output_existed:
+            _remove_partial_output(output_path)
+        raise
+    except asyncio.TimeoutError:
+        if process.returncode is not None:
+            # The process exited while the deadline expired; keep its real result
+            # so the caller reports the true outcome instead of a bogus timeout.
+            try:
+                return await process.communicate()
+            except Exception:
+                return b"", b""
+        await _terminate_media_process(process)
+        if not output_existed:
+            _remove_partial_output(output_path)
+        raise
+
+
+def _format_ffmpeg_error(
+    stderr: bytes | None,
+    *,
+    max_lines: int = FFMPEG_ERROR_TAIL_LINES,
+) -> str:
+    """Format the tail of ffmpeg stderr for logs and raised errors.
+
+    ffmpeg is verbose on failure, and embedding the whole decoder log hides the
+    actual reason and bloats error messages, so only the last lines are kept.
+
+    Args:
+        stderr: Captured stderr bytes, or ``None``.
+        max_lines: Number of trailing non-empty lines to keep.
+
+    Returns:
+        The trimmed stderr text, or ``"unknown error"`` when it is empty.
+    """
+    text = (stderr or b"").decode(errors="replace").strip()
+    if not text:
+        return "unknown error"
+    lines = [line for line in text.splitlines() if line.strip()]
+    return "\n".join(lines[-max_lines:])
+
+
 async def get_media_duration(file_path: str) -> int | None:
     """Probe media duration with ffprobe.
 
@@ -1406,7 +1525,9 @@ async def get_media_duration(file_path: str) -> int | None:
             stderr=subprocess.PIPE,
         )
 
-        stdout, stderr = await process.communicate()
+        stdout, stderr = await _communicate_with_timeout(
+            process, timeout=FFMPEG_TIMEOUT_SECONDS
+        )
 
         if process.returncode == 0 and stdout:
             duration_seconds = float(stdout.decode().strip())
@@ -1417,6 +1538,11 @@ async def get_media_duration(file_path: str) -> int | None:
             logger.warning("Failed to get media duration: %s", file_path)
             return None
 
+    except asyncio.TimeoutError:
+        logger.warning(
+            "ffprobe timed out after %ss: %s", FFMPEG_TIMEOUT_SECONDS, file_path
+        )
+        return None
     except FileNotFoundError:
         logger.warning(
             "ffprobe is not installed or not in PATH. "
@@ -1476,6 +1602,8 @@ async def convert_video_format(
             f"media_video_{generate_timestamp_id()}.{output_format}",
         )
 
+    output_existed = os.path.exists(output_path)
+
     try:
         # Convert the video with ffmpeg.
         process = await asyncio.create_subprocess_exec(
@@ -1492,11 +1620,21 @@ async def convert_video_format(
             stderr=subprocess.PIPE,
         )
 
-        stdout, stderr = await process.communicate()
+        try:
+            stdout, stderr = await _communicate_with_timeout(
+                process,
+                timeout=FFMPEG_TIMEOUT_SECONDS,
+                output_path=output_path,
+                output_existed=output_existed,
+            )
+        except asyncio.TimeoutError:
+            raise Exception(
+                f"ffmpeg timed out after {FFMPEG_TIMEOUT_SECONDS}s: {video_path}"
+            ) from None
 
         if process.returncode != 0:
             # Remove a partial output file created by a failed ffmpeg run.
-            if output_path and os.path.exists(output_path):
+            if output_path and not output_existed and os.path.exists(output_path):
                 try:
                     os.remove(output_path)
                     logger.debug(
@@ -1511,7 +1649,7 @@ async def convert_video_format(
                         e,
                     )
 
-            error_msg = stderr.decode() if stderr else "unknown error"
+            error_msg = _format_ffmpeg_error(stderr)
             logger.error("ffmpeg video conversion failed: %s", error_msg)
             raise Exception(f"ffmpeg conversion failed: {error_msg}")
 
@@ -1599,15 +1737,27 @@ async def convert_audio_format(
         args.extend(["-acodec", "libopus", "-ac", "1", "-ar", "16000"])
     args.append(output_path)
 
+    output_existed = os.path.exists(output_path)
+
     try:
         process = await asyncio.create_subprocess_exec(
             *args,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
-        _, stderr = await process.communicate()
+        try:
+            _, stderr = await _communicate_with_timeout(
+                process,
+                timeout=FFMPEG_TIMEOUT_SECONDS,
+                output_path=output_path,
+                output_existed=output_existed,
+            )
+        except asyncio.TimeoutError:
+            raise Exception(
+                f"ffmpeg timed out after {FFMPEG_TIMEOUT_SECONDS}s: {audio_path}"
+            ) from None
         if process.returncode != 0:
-            if output_path and os.path.exists(output_path):
+            if output_path and not output_existed and os.path.exists(output_path):
                 try:
                     os.remove(output_path)
                 except OSError as e:
@@ -1615,7 +1765,7 @@ async def convert_audio_format(
                         "Failed to remove failed audio output file: %s",
                         e,
                     )
-            error_msg = stderr.decode() if stderr else "unknown error"
+            error_msg = _format_ffmpeg_error(stderr)
             raise Exception(f"ffmpeg conversion failed: {error_msg}")
         logger.debug(
             "Audio converted successfully: %s -> %s",
@@ -1890,6 +2040,8 @@ async def extract_video_cover(
         temp_dir.mkdir(parents=True, exist_ok=True)
         output_path = str(temp_dir / f"media_cover_{generate_timestamp_id()}.jpg")
 
+    output_existed = os.path.exists(output_path)
+
     try:
         process = await asyncio.create_subprocess_exec(
             "ffmpeg",
@@ -1904,9 +2056,19 @@ async def extract_video_cover(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
-        _, stderr = await process.communicate()
+        try:
+            _, stderr = await _communicate_with_timeout(
+                process,
+                timeout=FFMPEG_TIMEOUT_SECONDS,
+                output_path=output_path,
+                output_existed=output_existed,
+            )
+        except asyncio.TimeoutError:
+            raise Exception(
+                f"ffmpeg timed out after {FFMPEG_TIMEOUT_SECONDS}s: {video_path}"
+            ) from None
         if process.returncode != 0:
-            if output_path and os.path.exists(output_path):
+            if output_path and not output_existed and os.path.exists(output_path):
                 try:
                     os.remove(output_path)
                 except OSError as e:
@@ -1914,7 +2076,7 @@ async def extract_video_cover(
                         "Failed to remove failed video cover file: %s",
                         e,
                     )
-            error_msg = stderr.decode() if stderr else "unknown error"
+            error_msg = _format_ffmpeg_error(stderr)
             raise Exception(f"ffmpeg extract cover failed: {error_msg}")
         return output_path
     except FileNotFoundError:
