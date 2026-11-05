@@ -348,6 +348,12 @@ class EmbeddingProvider(AbstractProvider):
         默认回退到 :meth:`get_embedding`。对支持非对称检索条件化的提供
         商（如 Gemini Embedding），应覆盖此方法让查询与文档使用不同的任务
         类型或文本前缀，否则编码空间对不上，相似度区分度会明显下降。
+
+        Args:
+            text: 待嵌入的查询文本。
+
+        Returns:
+            查询对应的向量。
         """
         return await self.get_embedding(text)
 

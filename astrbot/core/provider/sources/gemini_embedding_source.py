@@ -179,15 +179,31 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
             return True
         return uses_task_prefix(self.model)
 
+    def _supports_task_type(self) -> bool:
+        """该模型是否接受 ``task_type`` 参数。
+
+        ``gemini-embedding-2`` 起不再支持该参数，传了会被 API 拒绝，因此即使
+        配置成 ``never``（不启用任何任务条件化）也不能退回 ``task_type``。
+        """
+        if self.task_config_mode == "always":
+            return False  # 强制前缀模式，本来就不发 task_type
+        return not uses_task_prefix(self.model)
+
     def _build_config(
         self,
         *,
         task_type: str | None,
         title: str | None = None,
     ) -> types.EmbedContentConfig:
-        """构造 ``EmbedContentConfig``；前缀模式不设置 ``task_type``。"""
+        """构造 ``EmbedContentConfig``；前缀模式或模型不支持时不设置 ``task_type``。"""
         kwargs: dict = {"output_dimensionality": self.get_dim()}
-        if task_type and not self._uses_task_prefix():
+        # ``never`` 表示不启用任务条件化，此时既不写前缀也不发 task_type。
+        if (
+            task_type
+            and self.task_config_mode != "never"
+            and not self._uses_task_prefix()
+            and self._supports_task_type()
+        ):
             kwargs["task_type"] = task_type
             # ``title`` 只在 RETRIEVAL_DOCUMENT 下有意义。
             if title and task_type == _DEFAULT_DOCUMENT_TASK:
@@ -231,14 +247,39 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         """批量获取**文档**侧文本的嵌入。
 
         批量入库不需要查询侧语义，因此统一走文档路径。
+
+        Args:
+            text: 待嵌入的文本列表。
+
+        Returns:
+            与输入顺序一致的向量列表。
         """
-        return await self._embed_many(
-            [self._prepare_document(s) for s in text],
-            config=self._build_config(
-                task_type=self.document_task,
-                title=self.document_title or None,
-            ),
-        )
+        try:
+            contents = [
+                types.Content(
+                    parts=[types.Part.from_text(text=self._prepare_document(s))]
+                )
+                for s in text
+            ]
+            result = await self.client.models.embed_content(
+                model=self.model,
+                contents=contents,
+                config=self._build_config(
+                    task_type=self.document_task,
+                    title=self.document_title or None,
+                ),
+            )
+            if result.embeddings is None:
+                raise Exception("Gemini Embedding API 返回了空结果")
+
+            embeddings: list[list[float]] = []
+            for embedding in result.embeddings:
+                if embedding.values is None:
+                    raise Exception("Gemini Embedding API 返回的向量为空")
+                embeddings.append(embedding.values)
+            return embeddings
+        except APIError as e:
+            raise Exception(f"Gemini Embedding API批量请求失败: {e.message}")
 
     async def _embed_single(
         self,
@@ -257,33 +298,6 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
             return result.embeddings[0].values
         except APIError as e:
             raise Exception(f"Gemini Embedding API请求失败: {e.message}")
-
-    async def _embed_many(
-        self,
-        text: list[str],
-        *,
-        config: types.EmbedContentConfig,
-    ) -> list[list[float]]:
-        try:
-            contents = [
-                types.Content(parts=[types.Part.from_text(text=s)]) for s in text
-            ]
-            result = await self.client.models.embed_content(
-                model=self.model,
-                contents=contents,
-                config=config,
-            )
-            if result.embeddings is None:
-                raise Exception("Gemini Embedding API 返回了空结果")
-
-            embeddings: list[list[float]] = []
-            for embedding in result.embeddings:
-                if embedding.values is None:
-                    raise Exception("Gemini Embedding API 返回的向量为空")
-                embeddings.append(embedding.values)
-            return embeddings
-        except APIError as e:
-            raise Exception(f"Gemini Embedding API批量请求失败: {e.message}")
 
     def get_dim(self) -> int:
         """获取向量的维度"""

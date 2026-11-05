@@ -183,8 +183,9 @@ async def test_task_prefix_mode_never_disables_prefix_for_embedding_2():
 
     call = provider.client.calls[0]
     assert call["contents"] == "查询词"
-    # never 模式回退到 task_type 路径
-    assert call["config"].task_type == "RETRIEVAL_QUERY"
+
+    # never = 不启用任务条件化；且 embedding-2 不支持 task_type，两者都不能发
+    assert call["config"].task_type is None
 
 
 @pytest.mark.asyncio
@@ -245,3 +246,45 @@ async def test_misspelled_task_name_produces_valid_prefix_end_to_end():
     await provider.get_query_embedding("查询词")
 
     assert provider.client.calls[0]["contents"] == "task: search result | query: 查询词"
+
+
+@pytest.mark.parametrize(
+    ("model", "mode", "expect_prefix", "expect_task_type"),
+    [
+        # 001 走 task_type
+        ("gemini-embedding-001", "auto", False, "RETRIEVAL_DOCUMENT"),
+        # never = 完全不启用任务条件化，既不写前缀也不发 task_type
+        ("gemini-embedding-001", "never", False, None),
+        # always 强制前缀
+        ("gemini-embedding-001", "always", True, None),
+        # 2 走文本前缀
+        ("gemini-embedding-2", "auto", True, None),
+        # 关键：2 不支持 task_type，never 也不能退回它，否则 API 会拒绝
+        ("gemini-embedding-2", "never", False, None),
+        ("gemini-embedding-2", "always", True, None),
+    ],
+)
+def test_task_conditioning_matrix(model, mode, expect_prefix, expect_task_type):
+    """gemini-embedding-2 在任何模式下都不能收到 task_type。"""
+    provider = _make_provider(model, embedding_task_type_mode=mode)
+
+    assert provider._uses_task_prefix() is expect_prefix
+
+    config = provider._build_config(
+        task_type=provider.document_task,
+        title="示例标题",
+    )
+    assert config.task_type == expect_task_type
+
+
+@pytest.mark.asyncio
+async def test_embedding_2_never_mode_omits_task_type_in_request():
+    """回归：mode=never + gemini-embedding-2 曾把 task_type 发给不支持的模型。"""
+    provider = _make_provider("gemini-embedding-2", embedding_task_type_mode="never")
+
+    await provider.get_query_embedding("查询词")
+
+    call = provider.client.calls[0]
+    assert call["config"].task_type is None
+    # 也不加前缀
+    assert call["contents"] == "查询词"
