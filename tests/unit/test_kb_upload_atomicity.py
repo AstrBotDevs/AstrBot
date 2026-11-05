@@ -476,6 +476,67 @@ async def test_upload_document_logs_chained_cause_for_non_storage_stage(
 
 
 @pytest.mark.asyncio
+async def test_upload_document_redacts_api_key_from_logged_cause(
+    tmp_path: Path,
+    stub_provider_manager_module,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A provider error quoting an API key must not reach the log verbatim.
+
+    ``details["cause"]`` is stored as ``str(exc)`` and ``__cause__`` is a raw
+    exception, so both branches can carry a provider response containing the
+    live key. Now that the cause is appended to the log message, the value has
+    to be redacted first or the fix trades a diagnosis gap for a credential
+    leak.
+
+    Args:
+        tmp_path: Temporary directory for the helper's media folder.
+        stub_provider_manager_module: Stub avoiding circular core imports.
+        caplog: Pytest log capture fixture.
+
+    Raises:
+        KnowledgeBaseUploadError: Expected; raised by the failing upload.
+    """
+    KBHelper = _import_kb_helper()
+
+    helper = KBHelper.__new__(KBHelper)
+    helper.kb = KnowledgeBase(
+        kb_name="Test KB",
+        description="",
+        embedding_provider_id="emb",
+    )
+    helper.kb_db = MagicMock()
+    helper.vec_db = AsyncMock()
+    helper.kb_medias_dir = tmp_path / "medias"
+    helper.kb_medias_dir.mkdir()
+    helper.chunker = AsyncMock()
+
+    secret = "sk-proj-AbCd1234EfGh5678IjKl9012"
+    boom = UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
+    # Simulate a provider error that echoes the request credentials.
+    boom.args = (*boom.args, f"Incorrect API key provided: {secret}")
+
+    with (
+        patch(
+            "astrbot.core.knowledge_base.kb_helper.select_parser",
+            new=AsyncMock(side_effect=boom),
+        ),
+        patch.object(helper, "_ensure_vec_db", new=AsyncMock()),
+        caplog.at_level("WARNING", logger="astrbot"),
+        pytest.raises(KnowledgeBaseUploadError),
+    ):
+        await helper.upload_document(
+            file_name="demo.txt",
+            file_content=b"hello world",
+            file_type="txt",
+        )
+
+    combined = "\n".join(r.getMessage() for r in caplog.records)
+    assert secret not in combined, f"API key leaked into log: {combined}"
+    assert "[REDACTED]" in combined, combined
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("file_name", "file_type"),
     [
