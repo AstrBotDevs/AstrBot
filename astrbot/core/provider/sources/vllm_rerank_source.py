@@ -50,7 +50,11 @@ class VLLMRerankProvider(RerankProvider):
         }
         if top_n is not None:
             payload["top_n"] = top_n
-        assert self.client is not None
+
+        # Do not resurrect a terminated session: that would silently reuse the
+        # endpoint, key and model from before the reload.
+        if self.client is None:
+            raise RuntimeError("Rerank provider session is terminated")
         rerank_url = f"{self.base_url}{self.api_suffix}"
         async with self.client.post(
             rerank_url,
