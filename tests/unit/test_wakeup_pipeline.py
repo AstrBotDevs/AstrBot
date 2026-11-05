@@ -273,6 +273,81 @@ async def test_wakeup_queues_after_an_active_message_and_reads_its_saved_reply(r
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("stop_at", ["queued", "session_check"])
+@pytest.mark.parametrize("stop_kind", ["request", "signal"])
+async def test_stopped_wakeup_skips_build_and_remains_cancelled(
+    runtime, monkeypatch, stop_at, stop_kind
+):
+    """Preserve wakeup cancellation while skipping all request construction.
+
+    Args:
+        runtime: Real event bus and pipeline with offline dependencies.
+        monkeypatch: Fixture for controlling the stop timing.
+        stop_at: Whether cancellation arrives at the lock or session check.
+        stop_kind: Registry stop request or a shared background stop signal.
+    """
+    umo = "target:FriendMessage:stopped-wakeup"
+    ready = asyncio.Event()
+    stop_signal = asyncio.Event()
+    tasks = []
+
+    async def prepare_attachments(event):
+        """Capture the pipeline task immediately before its lock wait.
+
+        Args:
+            event: Wakeup event entering request preparation.
+        """
+        assert event.unified_msg_origin == umo
+        tasks.append(asyncio.current_task())
+        ready.set()
+
+    async def check_session(event):
+        """Request cancellation during the awaited session admission check.
+
+        Args:
+            event: Wakeup event being checked.
+
+        Returns:
+            True to allow admission unless the caller rechecks cancellation.
+        """
+        if stop_at == "session_check" and ready.is_set():
+            if stop_kind == "request":
+                assert internal.active_event_registry.request_agent_stop_all(umo) == 1
+            else:
+                stop_signal.set()
+        return True
+
+    monkeypatch.setattr(internal, "_prepare_file_attachments", prepare_attachments)
+    monkeypatch.setattr(
+        internal.SessionServiceManager, "should_process_llm_request", check_session
+    )
+    async with internal.session_lock_manager.acquire_lock(umo):
+        await wake_main_agent(
+            runtime.context,
+            umo=umo,
+            user_prompt="Run",
+            source="background_task",
+            stop_signal=stop_signal,
+        )
+        await asyncio.wait_for(ready.wait(), 1)
+        if stop_at == "queued":
+            if stop_kind == "request":
+                assert internal.active_event_registry.request_agent_stop_all(umo) == 1
+            else:
+                stop_signal.set()
+    await asyncio.wait_for(runtime.drain(), 1)
+
+    assert len(tasks) == 1 and tasks[0].cancelled()
+    assert not runtime.events
+    assert not runtime.requests
+    runtime.context.send_message.assert_not_awaited()
+    runtime.context.conversation_manager.get_conversation.assert_not_awaited()
+    runtime.context.conversation_manager.update_conversation.assert_not_awaited()
+    assert umo not in internal.active_event_registry._events
+    assert umo not in internal.session_lock_manager._get_loop_manager()._locks
+
+
+@pytest.mark.asyncio
 async def test_platform_stop_cancels_the_wakeup_provider_and_preserves_history(runtime):
     """Finish provider cleanup through the ordinary event-bus cancellation path."""
     runtime.gate.clear()

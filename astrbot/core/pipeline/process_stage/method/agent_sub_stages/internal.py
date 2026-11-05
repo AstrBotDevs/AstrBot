@@ -188,6 +188,8 @@ class InternalAgentSubStage(Stage):
                     and active_event_registry.get_background_stop_signal(event).is_set()
                 ):
                     raise asyncio.CancelledError()
+                if event.get_extra("agent_stop_requested"):
+                    return
                 current_config = self.ctx.plugin_manager.context.get_config(
                     umo=event.unified_msg_origin
                 )
@@ -199,6 +201,14 @@ class InternalAgentSubStage(Stage):
                         "skipping request for %s.",
                         event.unified_msg_origin,
                     )
+                    return
+                # A stop request can also arrive during the async session check.
+                if (
+                    is_wakeup
+                    and active_event_registry.get_background_stop_signal(event).is_set()
+                ):
+                    raise asyncio.CancelledError()
+                if event.get_extra("agent_stop_requested"):
                     return
                 agent_runner: AgentRunner | None = None
                 runner_registered = False

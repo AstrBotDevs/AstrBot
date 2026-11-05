@@ -68,6 +68,58 @@ def test_unregister_removes_agent_stop_callback() -> None:
     callback.assert_not_called()
 
 
+@pytest.mark.parametrize("stop_method", ["stop_all", "request_agent_stop_all"])
+def test_repeated_stop_counts_only_new_requests(stop_method) -> None:
+    registry = ActiveEventRegistry()
+    events = [StubEvent("session") for _ in range(12)]
+    excluded, other = StubEvent("session"), StubEvent("other")
+    for event in [*events, excluded, other]:
+        registry.register(event)
+    stop = getattr(registry, stop_method)
+
+    assert stop("session", exclude=excluded) == 12
+    assert stop("session", exclude=excluded) == 0
+    registry.unregister(events.pop())
+    assert stop("session", exclude=excluded) == 0
+    # run_agent clears the request flag after acknowledging an interruption.
+    events[0].set_extra("agent_user_aborted", True)
+    events[0].set_extra("agent_stop_requested", False)
+    assert stop("session", exclude=excluded) == 0
+    fresh = StubEvent("session")
+    registry.register(fresh)
+    assert stop("session", exclude=excluded) == 1
+    assert not excluded.get_extra("agent_stop_requested")
+    assert not other.get_extra("agent_stop_requested")
+    assert set(registry._events["session"]) == {*events, excluded, fresh}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("runner_type", ["local", "dify"])
+async def test_stop_command_reports_new_requests_without_claiming_completion(
+    monkeypatch, runner_type
+) -> None:
+    from astrbot.builtin_stars.builtin_commands.commands import conversation
+
+    registry = ActiveEventRegistry()
+    monkeypatch.setattr(conversation, "active_event_registry", registry)
+    context = Mock()
+    context.get_config.return_value = {"agent_runner": {"runner_type": runner_type}}
+    command = conversation.ConversationCommands(context)
+    event, message = StubEvent("session"), StubEvent("session")
+    message.set_result = Mock()
+    registry.register(event)
+    registry.register(message)
+
+    await command.stop(message)
+    assert "1 additional tasks" in message.set_result.call_args.args[0].get_plain_text()
+    await command.stop(message)
+    text = message.set_result.call_args.args[0].get_plain_text()
+    assert "No new tasks" in text
+    assert "may still be stopping" in text
+    assert event in registry._events["session"]
+    assert not message.get_extra("agent_stop_requested")
+
+
 def test_active_runner_wires_immediate_stop_callback() -> None:
     """Active Runner registration connects registry stop to Runner cancellation."""
     event = StubEvent("webchat:FriendMessage:webchat!alice!runner-session")
@@ -175,7 +227,7 @@ async def test_repeated_stop_preserves_background_cleanup() -> None:
         await asyncio.wait_for(started.wait(), timeout=1)
         assert registry.request_agent_stop_all("session") == 1
         await asyncio.wait_for(cleaning.wait(), timeout=1)
-        assert registry.request_agent_stop_all("session") == 1
+        assert registry.request_agent_stop_all("session") == 0
     finally:
         release.set()
         await asyncio.wait_for(asyncio.gather(task, return_exceptions=True), timeout=1)
