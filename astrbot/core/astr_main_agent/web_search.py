@@ -22,6 +22,7 @@ from astrbot.core.tools.web_search_tools import (
     SerpApiWebSearchTool,
     TavilyExtractWebPageTool,
     TavilyWebSearchTool,
+    YuanbaoWebSearchTool,
 )
 
 WEB_SEARCH_CITATION_TOOL_NAMES = frozenset(
@@ -33,6 +34,7 @@ WEB_SEARCH_CITATION_TOOL_NAMES = frozenset(
         "web_search_exa",
         "web_search_anysearch",
         "web_search_deepseek",
+        "web_search_yuanbao",
         "web_search_serpapi",
         "news_search_serpapi",
         "image_search_serpapi",
@@ -96,6 +98,8 @@ def apply_web_search(
         elif provider == "deepseek":
             req.func_tool.add_tool(tool_mgr.get_builtin_tool(DeepSeekWebSearchTool))
             req.func_tool.add_tool(tool_mgr.get_builtin_tool(DeepSeekFetchWebPageTool))
+        elif provider == "yuanbao":
+            req.func_tool.add_tool(tool_mgr.get_builtin_tool(YuanbaoWebSearchTool))
         elif provider == "serpapi":
             req.func_tool.add_tool(tool_mgr.get_builtin_tool(SerpApiWebSearchTool))
             req.func_tool.add_tool(tool_mgr.get_builtin_tool(SerpApiNewsSearchTool))
