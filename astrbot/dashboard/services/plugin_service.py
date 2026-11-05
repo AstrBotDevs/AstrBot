@@ -18,6 +18,7 @@ from astrbot.api import sp
 from astrbot.core import DEMO_MODE, file_token_service, logger
 from astrbot.core.computer.computer_client import sync_skills_to_active_sandboxes
 from astrbot.core.repository import (
+    GitCloneTimeoutError,
     GitUnavailableError,
     normalize_repository_url,
     parse_repository_url,
@@ -38,6 +39,9 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_t
 PLUGIN_UPDATE_CONCURRENCY = 3
 PLUGIN_OPERATION_FAILED_MESSAGE = "插件操作失败，请查看服务端日志。"
 PLUGIN_UPDATE_FAILED_MESSAGE = "更新失败，请查看服务端日志。"
+PLUGIN_CLONE_TIMEOUT_MESSAGE = (
+    "克隆仓库超时，请检查网络连接，并确认该仓库无需登录凭据即可访问。"
+)
 PLUGIN_INSTALL_SOURCES_KEY = "plugin_install_sources"
 PLUGIN_DEFAULT_REGISTRY_NAME = "Default"
 PLUGIN_UPDATE_DISABLED_MESSAGE = "该插件不是通过插件市场安装，无法检测或执行更新。"
@@ -1655,6 +1659,11 @@ class PluginService:
             ) from exc
         except GitUnavailableError as exc:
             raise PluginServiceError(str(exc), public_message=str(exc)) from exc
+        except GitCloneTimeoutError as exc:
+            raise PluginServiceError(
+                str(exc),
+                public_message=PLUGIN_CLONE_TIMEOUT_MESSAGE,
+            ) from exc
 
     async def validate_plugin_repo(self, data: object) -> tuple[dict[str, Any], str]:
         """Validate whether a repository contains AstrBot plugin metadata.
@@ -1694,6 +1703,11 @@ class PluginService:
             ) from exc
         except GitUnavailableError as exc:
             raise PluginServiceError(str(exc), public_message=str(exc)) from exc
+        except GitCloneTimeoutError as exc:
+            raise PluginServiceError(
+                str(exc),
+                public_message=PLUGIN_CLONE_TIMEOUT_MESSAGE,
+            ) from exc
         except Exception as exc:
             logger.warning(
                 "Plugin repository validation failed for %s: %s", repo_url, exc

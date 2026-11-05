@@ -4,6 +4,7 @@ from typing import Literal
 from urllib.parse import quote, unquote, urlparse
 
 __all__ = [
+    "GitCloneTimeoutError",
     "GitUnavailableError",
     "GitHubRepository",
     "RepositoryReference",
@@ -19,6 +20,14 @@ _SCP_GIT_URL_PATTERN = re.compile(
 
 class GitUnavailableError(RuntimeError):
     """Raised when a Git transport is requested but Git is unavailable."""
+
+
+class GitCloneTimeoutError(RuntimeError):
+    """Raised when a Git clone overruns its deadline.
+
+    Callers that answer a user request can translate this into a message about
+    reachability and credentials without exposing the underlying error text.
+    """
 
 
 @dataclass(frozen=True, slots=True)

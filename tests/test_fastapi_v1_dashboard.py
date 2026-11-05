@@ -3003,6 +3003,55 @@ async def test_plugin_service_validate_plugin_repo_hides_internal_errors(
 
 
 @pytest.mark.asyncio
+async def test_plugin_service_reports_a_clone_timeout_to_the_caller(
+    asgi_app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.repository import GitCloneTimeoutError
+
+    plugin_service = asgi_app.state.services.plugins
+
+    async def fail_inspect_plugin_repository(repo_url: str, proxy: str):  # noqa: ARG001
+        raise GitCloneTimeoutError("Git clone timed out after 180s.")
+
+    async def fail_install(*_args, **_kwargs):
+        raise GitCloneTimeoutError("Git clone timed out after 180s.")
+
+    monkeypatch.setattr(
+        plugin_service.plugin_manager,
+        "inspect_plugin_repository",
+        fail_inspect_plugin_repository,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        plugin_service.plugin_manager,
+        "install_plugin",
+        fail_install,
+        raising=False,
+    )
+
+    with pytest.raises(PluginServiceError) as validate_info:
+        await plugin_service.validate_plugin_repo(
+            {"url": "git@github.com:AstrBotDevs/astrbot-plugin-demo.git"}
+        )
+
+    with pytest.raises(PluginServiceError) as install_info:
+        await plugin_service.install_plugin(
+            {
+                "url": "git@github.com:AstrBotDevs/astrbot-plugin-demo.git",
+                "repository_transport": "git",
+            }
+        )
+
+    # A deadline the caller has to wait out deserves a message about reachability
+    # and credentials instead of the generic "check the server log" answer.
+    expected = "克隆仓库超时，请检查网络连接，并确认该仓库无需登录凭据即可访问。"
+    assert validate_info.value.public_message == expected
+    assert install_info.value.public_message == expected
+    assert "Git clone timed out" not in validate_info.value.public_message
+
+
+@pytest.mark.asyncio
 async def test_plugin_service_bind_market_source_validates_and_persists(
     asgi_app: FastAPI,
     monkeypatch: pytest.MonkeyPatch,
