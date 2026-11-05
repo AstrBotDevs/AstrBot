@@ -1,4 +1,5 @@
 import json
+import socket
 from types import SimpleNamespace
 
 import pytest
@@ -13,6 +14,7 @@ from astrbot.core.tools.web_search_tools import (
 
 class _FakeAnysearchResponse:
     """Fake HTTP response for AnySearch API tests."""
+
     def __init__(self, status=200, json_data=None, text_data=""):
         self.status = status
         self.json_data = json_data or {}
@@ -33,6 +35,7 @@ class _FakeAnysearchResponse:
 
 class _FakeAnysearchSession:
     """Fake ClientSession for AnySearch API tests."""
+
     def __init__(self, response):
         self.response = response
         self.trust_env = None
@@ -55,6 +58,7 @@ class _FakeAnysearchSession:
 
 class _FakeAnysearchCycleSession:
     """Return the next response for each post() call in key rotation tests."""
+
     def __init__(self, responses: list):
         self.responses = responses
         self.cursor = 0
@@ -76,6 +80,7 @@ class _FakeAnysearchCycleSession:
         self.cursor = (self.cursor + 1) % len(self.responses)
         self.calls.append({"url": url, "json": json, "headers": headers})
         return resp
+
 
 class _FakeConfig(dict):
     def __init__(self, *args, **kwargs):
@@ -496,11 +501,13 @@ def _resetKeyRotators():
     tools._BOCHA_KEY_ROTATOR.index = 0
     tools._BRAVE_KEY_ROTATOR.index = 0
     tools._FIRECRAWL_KEY_ROTATOR.index = 0
+    tools._KEENABLE_KEY_ROTATOR.index = 0
     yield
     tools._TAVILY_KEY_ROTATOR.index = 0
     tools._BOCHA_KEY_ROTATOR.index = 0
     tools._BRAVE_KEY_ROTATOR.index = 0
     tools._FIRECRAWL_KEY_ROTATOR.index = 0
+    tools._KEENABLE_KEY_ROTATOR.index = 0
 
 
 # ---------------------------------------------------------------------------
@@ -533,7 +540,11 @@ async def test_tavily_search_key_failover_on_quota_exceeded_432(
                 status=200,
                 jsonData={
                     "results": [
-                        {"title": "AstrBot", "url": "https://example.com", "content": "OK"}
+                        {
+                            "title": "AstrBot",
+                            "url": "https://example.com",
+                            "content": "OK",
+                        }
                     ]
                 },
             ),
@@ -571,7 +582,11 @@ async def test_tavily_search_key_failover_on_rate_limited_429(
                 status=200,
                 jsonData={
                     "results": [
-                        {"title": "RateLimitOK", "url": "https://example2.com", "content": "OK"}
+                        {
+                            "title": "RateLimitOK",
+                            "url": "https://example2.com",
+                            "content": "OK",
+                        }
                     ]
                 },
             ),
@@ -878,10 +893,10 @@ async def test_exa_get_contents_raises_on_http_error(monkeypatch):
         )
 
 
-
 # ============================================================================
 # AnySearch provider tests
 # ============================================================================
+
 
 @pytest.mark.asyncio
 async def test_anysearch_search_maps_results(monkeypatch):
@@ -899,21 +914,18 @@ async def test_anysearch_search_maps_results(monkeypatch):
                             "title": "AstrBot - AI Chatbot Framework",
                             "url": "https://github.com/AstrBotDevs/AstrBot",
                             "snippet": "A powerful AI chatbot framework for Python",
-                            "content": "AstrBot is a flexible AI chatbot framework..."
+                            "content": "AstrBot is a flexible AI chatbot framework...",
                         },
                         {
                             "title": "AstrBot Documentation",
                             "url": "https://astrbot.dev/docs",
                             "snippet": "Official documentation for AstrBot",
-                            "content": "Getting started with AstrBot..."
-                        }
+                            "content": "Getting started with AstrBot...",
+                        },
                     ],
-                    "metadata": {
-                        "total_results": 100,
-                        "search_time_ms": 150
-                    }
-                }
-            }
+                    "metadata": {"total_results": 100, "search_time_ms": 150},
+                },
+            },
         )
     )
 
@@ -963,10 +975,12 @@ async def test_anysearch_search_supports_anonymous_mode(monkeypatch):
 @pytest.mark.asyncio
 async def test_anysearch_search_key_failover_on_quota_exhausted_402(monkeypatch):
     """A 402 response retries with the next configured key."""
-    session = _FakeAnysearchCycleSession([
-        _FakeAnysearchResponse(status=402, text_data="quota exhausted"),
-        _FakeAnysearchResponse(status=200, json_data={"data": {"results": []}}),
-    ])
+    session = _FakeAnysearchCycleSession(
+        [
+            _FakeAnysearchResponse(status=402, text_data="quota exhausted"),
+            _FakeAnysearchResponse(status=200, json_data={"data": {"results": []}}),
+        ]
+    )
 
     def fake_client_session(*, trust_env):
         session.trust_env = trust_env
@@ -983,10 +997,12 @@ async def test_anysearch_search_key_failover_on_quota_exhausted_402(monkeypatch)
 @pytest.mark.asyncio
 async def test_anysearch_search_does_not_failover_on_server_error_500(monkeypatch):
     """A 500 response fails fast instead of burning through keys."""
-    session = _FakeAnysearchCycleSession([
-        _FakeAnysearchResponse(status=500, text_data="internal server error"),
-        _FakeAnysearchResponse(status=200, json_data={"data": {"results": []}}),
-    ])
+    session = _FakeAnysearchCycleSession(
+        [
+            _FakeAnysearchResponse(status=500, text_data="internal server error"),
+            _FakeAnysearchResponse(status=200, json_data={"data": {"results": []}}),
+        ]
+    )
 
     def fake_client_session(*, trust_env):
         session.trust_env = trust_env
@@ -1032,7 +1048,9 @@ async def test_anysearch_search_tool_clamps_max_results(monkeypatch):
 
 def test_normalize_legacy_config_converts_anysearch_string_key():
     """A legacy string key is migrated to a single-element list."""
-    config = _FakeConfig({"provider_settings": {"websearch_anysearch_key": "old-string-key"}})
+    config = _FakeConfig(
+        {"provider_settings": {"websearch_anysearch_key": "old-string-key"}}
+    )
     normalize_legacy_web_search_config(config)  # ֱ�ӵ��ã������շ���ֵ
     assert config["provider_settings"]["websearch_anysearch_key"] == ["old-string-key"]
 
@@ -1049,12 +1067,12 @@ async def test_anysearch_search_falls_back_to_content_for_snippet(monkeypatch):
                         {
                             "title": "Test Title",
                             "url": "https://example.com",
-                            "content": "Full content text here"
+                            "content": "Full content text here",
                             # ע�⣺û�� snippet �ֶ�
                         }
                     ]
                 }
-            }
+            },
         )
     )
 
@@ -1786,6 +1804,7 @@ async def test_deepseek_fetch_reports_empty_content(deepseek_session):
 
     assert result == "Error: DeepSeek fetch does not return any content."
 
+
 _KEY_FAILOVER_CASES = [
     (tools._tavily_search, "tavily", 433),
     (tools._tavily_extract, "tavily", 433),
@@ -1806,7 +1825,13 @@ _KEY_FAILOVER_CASES = [
 @pytest.mark.parametrize("interleaved", [False, True])
 @pytest.mark.parametrize("duplicate_first", [False, True])
 async def test_search_key_errors_try_next_key(
-    monkeypatch, search_function, provider, status, exhausted, interleaved, duplicate_first
+    monkeypatch,
+    search_function,
+    provider,
+    status,
+    exhausted,
+    interleaved,
+    duplicate_first,
 ):
     setting_name = f"websearch_{provider}_key"
     monkeypatch.setattr(
@@ -1840,6 +1865,7 @@ async def test_search_key_errors_try_next_key(
         keys.insert(0, "first-key")
     settings = {setting_name: keys}
     if interleaved:
+
         async def advance_other_request():
             # Another request advances the shared cursor before this retry.
             await getattr(tools, f"_{provider.upper()}_KEY_ROTATOR").get(settings)
@@ -1906,7 +1932,7 @@ class _BraveCycleSession(_CycleSession):
         ('{"error":{"code":"SUBSCRIPTION_TOKEN_INVALID"}}', True),
         ('{"error":{"code":"VALIDATION"}}', False),
         ('{"error":null}', False),
-        ('[]', False),
+        ("[]", False),
         ("not JSON", False),
     ],
 )
@@ -1929,6 +1955,7 @@ async def test_brave_only_retries_invalid_subscription_token(
         keys.insert(0, "first-key")
     settings = {"websearch_brave_key": keys}
     if interleaved:
+
         async def advance_other_request():
             await tools._BRAVE_KEY_ROTATOR.get(settings)
             return reason
@@ -1988,11 +2015,14 @@ async def test_deepseek_key_errors_try_next_key(
     context = _context_with_provider_settings(settings)
     monkeypatch.setattr(tools.uuid, "uuid4", lambda: "test-reference")
     if interleaved:
+
         async def advance_other_request():
             await tools._DEEPSEEK_KEY_ROTATOR.get(settings)
             return "first key failed"
 
-        monkeypatch.setattr(deepseek_session.responses[0], "text", advance_other_request)
+        monkeypatch.setattr(
+            deepseek_session.responses[0], "text", advance_other_request
+        )
 
     if exhausted:
         with pytest.raises(
@@ -2016,7 +2046,9 @@ async def test_deepseek_key_errors_try_next_key(
                 ]
             }
         else:
-            assert result == "URL: https://example.com\nTitle: Example\nContent: # Example"
+            assert (
+                result == "URL: https://example.com\nTitle: Example\nContent: # Example"
+            )
 
     assert [call["headers"]["Authorization"] for call in deepseek_session.calls] == [
         "Bearer first-key",
@@ -2044,3 +2076,641 @@ async def test_key_rotator_keeps_request_attempts_independent():
     assert await rotator.get(settings) == "first"
     assert await rotator.get(settings) == "first"
     assert await rotator.get(settings) == "second"
+
+
+# ============================================================================
+# Keenable provider tests
+# ============================================================================
+
+
+class _FakeKeenableSession:
+    """Return the next response for each request and record what was sent."""
+
+    def __init__(self, responses: list):
+        self.responses = responses
+        self.cursor = 0
+        self.trust_env = None
+        self.calls: list[dict] = []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return None
+
+    def _next(self, call: dict):
+        self.calls.append(call)
+        resp = self.responses[self.cursor]
+        self.cursor = (self.cursor + 1) % len(self.responses)
+        return resp
+
+    def post(self, url, json, headers):
+        return self._next(
+            {"method": "POST", "url": url, "json": json, "headers": headers}
+        )
+
+    def get(self, url, params, headers):
+        return self._next(
+            {"method": "GET", "url": url, "params": params, "headers": headers}
+        )
+
+
+def _install_keenable_session(monkeypatch, responses: list) -> _FakeKeenableSession:
+    session = _FakeKeenableSession(responses)
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    # Extract resolves the host before fetching; keep tests off the real DNS.
+    def public_getaddrinfo(host, port, *args, **kwargs):
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.215.14", 0))]
+
+    monkeypatch.setattr(tools.socket, "getaddrinfo", public_getaddrinfo)
+    return session
+
+
+# Shaped like a real response: `description` is empty and `snippet` holds the
+# page text with its line breaks.
+_KEENABLE_SEARCH_RESPONSE = {
+    "query": "AstrBot",
+    "mode": "pro",
+    "results": [
+        {
+            "title": "AstrBotDevs/AstrBot",
+            "url": "https://github.com/AstrBotDevs/AstrBot",
+            "description": "",
+            "snippet": "AstrBot is an agentic\nchatbot framework.\n\n  It supports many IM platforms.",
+            "acquired_at": "2026-10-01T00:00:00Z",
+        },
+        {
+            "title": "Docs",
+            "url": "https://docs.astrbot.app",
+            "description": "Official documentation",
+            "snippet": "",
+        },
+        {"title": "No URL", "url": "", "description": "", "snippet": "dropped"},
+    ],
+}
+
+
+def test_normalize_legacy_web_search_config_migrates_keenable_key():
+    config = _FakeConfig(
+        {"provider_settings": {"websearch_keenable_key": "keenable-key"}}
+    )
+
+    tools.normalize_legacy_web_search_config(config)
+
+    assert config["provider_settings"]["websearch_keenable_key"] == ["keenable-key"]
+    assert config.saved is True
+
+
+@pytest.mark.asyncio
+async def test_keenable_search_without_key_uses_public_endpoint(monkeypatch):
+    session = _install_keenable_session(
+        monkeypatch,
+        [_TavilyResponse(status=200, jsonData=_KEENABLE_SEARCH_RESPONSE)],
+    )
+
+    results = await tools._keenable_search(
+        {"websearch_keenable_key": []}, {"query": "AstrBot"}
+    )
+
+    assert session.trust_env is True
+    assert len(session.calls) == 1
+    call = session.calls[0]
+    assert call["method"] == "POST"
+    assert call["url"] == "https://api.keenable.ai/v1/search/public"
+    assert call["json"] == {"query": "AstrBot"}
+    assert call["headers"] == {"X-Keenable-Title": "astrbot"}
+    assert [result.url for result in results] == [
+        "https://github.com/AstrBotDevs/AstrBot",
+        "https://docs.astrbot.app",
+    ]
+    assert results[0].snippet == (
+        "AstrBot is an agentic chatbot framework. It supports many IM platforms."
+    )
+    assert results[1].snippet == "Official documentation"
+
+
+@pytest.mark.asyncio
+async def test_keenable_search_with_key_uses_authenticated_endpoint(monkeypatch):
+    session = _install_keenable_session(
+        monkeypatch,
+        [_TavilyResponse(status=200, jsonData={"results": []})],
+    )
+
+    results = await tools._keenable_search(
+        {"websearch_keenable_key": ["key-1"]}, {"query": "AstrBot"}
+    )
+
+    assert results == []
+    call = session.calls[0]
+    assert call["url"] == "https://api.keenable.ai/v1/search"
+    assert call["headers"] == {"X-Keenable-Title": "astrbot", "X-API-Key": "key-1"}
+
+
+@pytest.mark.asyncio
+async def test_keenable_search_key_failover_on_rate_limited_429(monkeypatch):
+    session = _install_keenable_session(
+        monkeypatch,
+        [
+            _TavilyResponse(status=429, textData="rate limited"),
+            _TavilyResponse(status=200, jsonData=_KEENABLE_SEARCH_RESPONSE),
+        ],
+    )
+
+    results = await tools._keenable_search(
+        {"websearch_keenable_key": ["key-1", "key-2"]}, {"query": "AstrBot"}
+    )
+
+    assert len(results) == 2
+    assert [call["headers"]["X-API-Key"] for call in session.calls] == [
+        "key-1",
+        "key-2",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_keenable_search_fails_when_all_keys_exhausted(monkeypatch):
+    session = _install_keenable_session(
+        monkeypatch,
+        [
+            _TavilyResponse(status=401, textData="invalid key"),
+            _TavilyResponse(status=429, textData="rate limited"),
+        ],
+    )
+
+    with pytest.raises(Exception, match="Keenable web search failed.*status: 429"):
+        await tools._keenable_search(
+            {"websearch_keenable_key": ["key-1", "key-2"]}, {"query": "AstrBot"}
+        )
+
+    assert len(session.calls) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("interleaved", [False, True])
+async def test_keenable_failover_tries_each_distinct_key_once(monkeypatch, interleaved):
+    session = _install_keenable_session(
+        monkeypatch,
+        [
+            _TavilyResponse(status=401, textData="invalid key"),
+            _TavilyResponse(status=200, jsonData=_KEENABLE_SEARCH_RESPONSE),
+        ],
+    )
+    settings = {"websearch_keenable_key": ["key-1", "key-1", "key-2"]}
+    if interleaved:
+
+        async def advance_other_request():
+            # Another request advances the shared cursor before this retry.
+            await tools._KEENABLE_KEY_ROTATOR.get(settings)
+            return "invalid key"
+
+        monkeypatch.setattr(session.responses[0], "text", advance_other_request)
+
+    results = await tools._keenable_search(settings, {"query": "AstrBot"})
+
+    assert len(results) == 2
+    assert [call["headers"]["X-API-Key"] for call in session.calls] == [
+        "key-1",
+        "key-2",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_keenable_search_does_not_failover_on_server_error_500(monkeypatch):
+    session = _install_keenable_session(
+        monkeypatch,
+        [
+            _TavilyResponse(status=500, textData="internal error"),
+            _TavilyResponse(status=200, jsonData=_KEENABLE_SEARCH_RESPONSE),
+        ],
+    )
+
+    with pytest.raises(Exception, match="Keenable web search failed.*status: 500"):
+        await tools._keenable_search(
+            {"websearch_keenable_key": ["key-1", "key-2"]}, {"query": "AstrBot"}
+        )
+
+    assert len(session.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_keenable_search_without_key_surfaces_rate_limit(monkeypatch):
+    session = _install_keenable_session(
+        monkeypatch,
+        [_TavilyResponse(status=429, textData="Public API hourly limit reached")],
+    )
+
+    with pytest.raises(Exception, match="hourly limit reached, status: 429"):
+        await tools._keenable_search({}, {"query": "AstrBot"})
+
+    assert len(session.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_keenable_search_tool_builds_payload(monkeypatch):
+    session = _install_keenable_session(
+        monkeypatch,
+        [_TavilyResponse(status=200, jsonData=_KEENABLE_SEARCH_RESPONSE)],
+    )
+    tool = tools.KeenableWebSearchTool()
+    context = _context_with_provider_settings({})
+
+    result = await tool.call(context, query="AstrBot", site=" github.com ")
+    await tool.call(context, query="AstrBot", max_results=99, site="  ")
+    await tool.call(context, query="AstrBot", max_results=0)
+
+    assert [call["json"] for call in session.calls] == [
+        {
+            "query": "AstrBot",
+            "max_results": 10,
+            "snippet_max_length": 500,
+            "site": "github.com",
+        },
+        {"query": "AstrBot", "max_results": 50, "snippet_max_length": 500},
+        {"query": "AstrBot", "max_results": 1, "snippet_max_length": 500},
+    ]
+    payload = json.loads(result)
+    assert [item["url"] for item in payload["results"]] == [
+        "https://github.com/AstrBotDevs/AstrBot",
+        "https://docs.astrbot.app",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("date_filters", "expected_filters"),
+    [
+        ({"published_after": "7d"}, {"published_after": "7d"}),
+        (
+            {
+                "published_after": " 2026-10-01 ",
+                "published_before": "\t2026-10-31T12:00:00Z\n",
+            },
+            {
+                "published_after": "2026-10-01",
+                "published_before": "2026-10-31T12:00:00Z",
+            },
+        ),
+        (
+            {"acquired_after": " 30min ", "acquired_before": "1mo"},
+            {"acquired_after": "30min", "acquired_before": "1mo"},
+        ),
+        # The API validates the syntax, so values are not parsed locally.
+        ({"published_after": "last week"}, {"published_after": "last week"}),
+        (
+            {
+                "published_after": "",
+                "published_before": "   ",
+                "acquired_after": "\t",
+                "acquired_before": None,
+            },
+            {},
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_keenable_search_tool_passes_date_filters(
+    monkeypatch, date_filters, expected_filters
+):
+    session = _install_keenable_session(
+        monkeypatch,
+        [_TavilyResponse(status=200, jsonData=_KEENABLE_SEARCH_RESPONSE)],
+    )
+    tool = tools.KeenableWebSearchTool()
+
+    await tool.call(
+        _context_with_provider_settings({}), query="AstrBot", **date_filters
+    )
+
+    assert session.calls[0]["json"] == {
+        "query": "AstrBot",
+        "max_results": 10,
+        "snippet_max_length": 500,
+        **expected_filters,
+    }
+
+
+def test_keenable_search_tool_schema_lists_date_filters():
+    properties = tools.KeenableWebSearchTool().parameters["properties"]
+
+    for name in (
+        "published_after",
+        "published_before",
+        "acquired_after",
+        "acquired_before",
+    ):
+        assert properties[name]["type"] == "string"
+    assert "query" in tools.KeenableWebSearchTool().parameters["required"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("tool_name", ["search", "extract"])
+async def test_keenable_key_failover_on_exhausted_credits_402(monkeypatch, tool_name):
+    """A key whose organization has no credits left fails over to the next key."""
+    if tool_name == "search":
+        tool = tools.KeenableWebSearchTool()
+        kwargs = {"query": "AstrBot"}
+        success = _TavilyResponse(status=200, jsonData=_KEENABLE_SEARCH_RESPONSE)
+        expected = "https://github.com/AstrBotDevs/AstrBot"
+    else:
+        tool = tools.KeenableExtractWebPageTool()
+        kwargs = {"url": "https://docs.astrbot.app"}
+        success = _TavilyResponse(
+            status=200,
+            jsonData={"url": "https://docs.astrbot.app", "content": "# AstrBot"},
+        )
+        expected = "URL: https://docs.astrbot.app\nContent: # AstrBot"
+    session = _install_keenable_session(
+        monkeypatch,
+        [_TavilyResponse(status=402, textData="No credits available"), success],
+    )
+    context = _context_with_provider_settings(
+        {"websearch_keenable_key": ["key-1", "key-2"]}
+    )
+
+    result = await tool.call(context, **kwargs)
+
+    assert [call["headers"]["X-API-Key"] for call in session.calls] == [
+        "key-1",
+        "key-2",
+    ]
+    assert expected in result
+
+
+@pytest.mark.asyncio
+async def test_keenable_search_tool_reports_no_results(monkeypatch):
+    _install_keenable_session(
+        monkeypatch,
+        [_TavilyResponse(status=200, jsonData={"results": []})],
+    )
+    tool = tools.KeenableWebSearchTool()
+
+    result = await tool.call(_context_with_provider_settings({}), query="AstrBot")
+
+    assert result == "Error: Keenable web search does not return any results."
+
+
+@pytest.mark.asyncio
+async def test_keenable_extract_tool_returns_page_content(monkeypatch):
+    session = _install_keenable_session(
+        monkeypatch,
+        [
+            _TavilyResponse(
+                status=200,
+                jsonData={
+                    "url": "https://docs.astrbot.app/en/use/websearch.html",
+                    "title": "Web Search | AstrBot",
+                    "content": "# Web Search",
+                    "description": "",
+                },
+            )
+        ],
+    )
+    tool = tools.KeenableExtractWebPageTool()
+    context = _context_with_provider_settings({"websearch_keenable_key": ["key-1"]})
+
+    result = await tool.call(
+        context,
+        url=" https://docs.astrbot.app/en/use/websearch.html ",
+        max_chars=2000,
+    )
+
+    call = session.calls[0]
+    assert call["method"] == "GET"
+    assert call["url"] == "https://api.keenable.ai/v1/fetch"
+    assert call["params"] == {
+        "url": "https://docs.astrbot.app/en/use/websearch.html",
+        "max_chars": 2000,
+    }
+    assert call["headers"] == {"X-Keenable-Title": "astrbot", "X-API-Key": "key-1"}
+    assert result == (
+        "URL: https://docs.astrbot.app/en/use/websearch.html\nContent: # Web Search"
+    )
+
+
+@pytest.mark.asyncio
+async def test_keenable_extract_tool_without_key_uses_public_endpoint(monkeypatch):
+    session = _install_keenable_session(
+        monkeypatch,
+        [
+            _TavilyResponse(
+                status=200, jsonData={"url": "https://a.example", "content": ""}
+            )
+        ],
+    )
+    tool = tools.KeenableExtractWebPageTool()
+
+    result = await tool.call(
+        _context_with_provider_settings({}), url="https://a.example", max_chars="x"
+    )
+
+    call = session.calls[0]
+    assert call["url"] == "https://api.keenable.ai/v1/fetch/public"
+    assert call["params"] == {"url": "https://a.example"}
+    assert result == "Error: Keenable page fetch does not return any content."
+
+
+@pytest.mark.asyncio
+async def test_keenable_extract_tool_rejects_empty_url(monkeypatch):
+    session = _install_keenable_session(monkeypatch, [_TavilyResponse(status=200)])
+    tool = tools.KeenableExtractWebPageTool()
+
+    result = await tool.call(_context_with_provider_settings({}), url="  ")
+
+    assert result == "Error: url must be a non-empty string."
+    assert session.calls == []
+
+
+@pytest.mark.asyncio
+async def test_keenable_search_treats_null_key_setting_as_keyless(monkeypatch):
+    session = _install_keenable_session(
+        monkeypatch,
+        [_TavilyResponse(status=200, jsonData={"results": []})],
+    )
+
+    await tools._keenable_search({"websearch_keenable_key": None}, {"query": "q"})
+
+    assert session.calls[0]["url"] == "https://api.keenable.ai/v1/search/public"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "url",
+    [
+        "file:///etc/passwd",
+        "ftp://example.com/x",
+        "example.com/page",
+        # urlsplit raises ValueError for these.
+        "https://[::1",
+        "http://[not-an-ip]/",
+        # Scheme is fine but there is no host.
+        "http:example.com",
+        "https:///page",
+        "http://",
+        "http://:80/page",
+        # Port out of range.
+        "http://example.com:99999/",
+        # Embedded credentials.
+        "https://user:pass@example.com/",
+        "https://user@example.com/",
+        # Malformed or overlong host names.
+        "https://example..com/",
+        "https://" + "a" * 64 + ".com/",
+        "https://" + ".".join(["abcdefghi"] * 26) + ".com/",
+    ],
+)
+async def test_keenable_extract_tool_rejects_invalid_urls(monkeypatch, url):
+    session = _install_keenable_session(monkeypatch, [_TavilyResponse(status=200)])
+    tool = tools.KeenableExtractWebPageTool()
+
+    result = await tool.call(_context_with_provider_settings({}), url=url)
+
+    assert result == (
+        "Error: url must be an http or https URL with a valid host"
+        " and no embedded credentials."
+    )
+    assert session.calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://127.0.0.1/",
+        "http://10.0.0.1/internal",
+        "http://192.168.0.1/",
+        "http://169.254.169.254/latest/meta-data/",
+        "http://[::1]:8080/path",
+        "https://[2001:db8::1]/page",
+        "http://localhost/admin",
+        "http://service.local/status",
+        # Shared address space (CGNAT), alone and IPv4-mapped.
+        "http://100.64.0.1/",
+        "http://[::ffff:100.64.0.1]/",
+        "http://[::ffff:127.0.0.1]/",
+        # 6to4 of 127.0.0.1 and NAT64 of 10.0.0.1.
+        "http://[2002:7f00:1::]/",
+        "http://[64:ff9b::a00:1]/",
+        "http://0.0.0.0/",
+        "http://224.0.0.1/",
+    ],
+)
+async def test_keenable_extract_tool_rejects_private_or_local_urls(monkeypatch, url):
+    session = _install_keenable_session(monkeypatch, [_TavilyResponse(status=200)])
+    tool = tools.KeenableExtractWebPageTool()
+
+    result = await tool.call(_context_with_provider_settings({}), url=url)
+
+    assert result == "Error: url must resolve to a public internet address."
+    assert session.calls == []
+
+
+@pytest.mark.asyncio
+async def test_keenable_extract_tool_rejects_dns_to_private_address(monkeypatch):
+    session = _install_keenable_session(monkeypatch, [_TavilyResponse(status=200)])
+    tool = tools.KeenableExtractWebPageTool()
+
+    def fake_getaddrinfo(host, port, *args, **kwargs):
+        assert host == "internal.example"
+        return [
+            (
+                socket.AF_INET,
+                socket.SOCK_STREAM,
+                6,
+                "",
+                ("10.0.0.5", 0),
+            )
+        ]
+
+    monkeypatch.setattr(tools.socket, "getaddrinfo", fake_getaddrinfo)
+
+    result = await tool.call(
+        _context_with_provider_settings({}),
+        url="https://internal.example/page",
+    )
+
+    assert result == "Error: url must resolve to a public internet address."
+    assert session.calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "error", [socket.gaierror(socket.EAI_NONAME, "no name"), UnicodeError("label")]
+)
+async def test_keenable_extract_tool_fails_closed_when_dns_fails(monkeypatch, error):
+    session = _install_keenable_session(monkeypatch, [_TavilyResponse(status=200)])
+    tool = tools.KeenableExtractWebPageTool()
+
+    def failing_getaddrinfo(host, port, *args, **kwargs):
+        raise error
+
+    monkeypatch.setattr(tools.socket, "getaddrinfo", failing_getaddrinfo)
+
+    result = await tool.call(
+        _context_with_provider_settings({}),
+        url="https://unresolvable.example/page",
+    )
+
+    assert result == "Error: url must resolve to a public internet address."
+    assert session.calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://example.com/page",
+        "https://[2606:4700:4700::1111]/x",
+        "HTTPS://Example.com/x",
+    ],
+)
+async def test_keenable_extract_tool_accepts_valid_urls(monkeypatch, url):
+    session = _install_keenable_session(
+        monkeypatch,
+        [_TavilyResponse(status=200, jsonData={"url": url, "content": "# Page"})],
+    )
+    tool = tools.KeenableExtractWebPageTool()
+
+    result = await tool.call(_context_with_provider_settings({}), url=url)
+
+    assert session.calls[0]["params"] == {"url": url}
+    assert result == f"URL: {url}\nContent: # Page"
+
+
+def test_dashboard_citations_include_keenable_results():
+    from astrbot.dashboard.services.chat_service import extract_web_search_refs
+    from astrbot.dashboard.services.live_chat_service import LiveChatService
+
+    parts = [
+        {
+            "type": "tool_call",
+            "tool_calls": [
+                {
+                    "name": "web_search_keenable",
+                    "result": json.dumps(
+                        {
+                            "results": [
+                                {
+                                    "title": "AstrBot",
+                                    "url": "https://github.com/AstrBotDevs/AstrBot",
+                                    "snippet": "Agentic chatbot framework.",
+                                    "index": "ab12.1",
+                                }
+                            ]
+                        }
+                    ),
+                }
+            ],
+        }
+    ]
+    text = "AstrBot is a chatbot framework <ref>ab12.1</ref>."
+
+    for extract in (extract_web_search_refs, LiveChatService.extract_web_search_refs):
+        refs = extract(text, parts)
+        assert [ref["url"] for ref in refs["used"]] == [
+            "https://github.com/AstrBotDevs/AstrBot"
+        ]

@@ -718,6 +718,13 @@ class TestBuiltinToolInjection:
                 "web_search_deepseek",
                 "deepseek_fetch_web_page",
             ),
+            (
+                "keenable",
+                web_search_build.KeenableWebSearchTool,
+                web_search_build.KeenableExtractWebPageTool,
+                "web_search_keenable",
+                "keenable_extract_web_page",
+            ),
         ],
     )
     async def test_apply_web_search_tools_adds_search_and_extract_tools(
@@ -771,6 +778,7 @@ class TestBuiltinToolInjection:
             "image_search_serpapi",
             "finance_search_serpapi",
             "scholar_search_serpapi",
+            "web_search_keenable",
         ],
     )
     def test_apply_web_search_citation_prompt_for_webchat(self, mock_event, tool_name):
