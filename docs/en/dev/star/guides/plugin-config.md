@@ -263,6 +263,29 @@ Templates also support these optional fields:
 
 <img width="1000" alt="image" src="https://github.com/user-attachments/assets/74876d30-11a4-491b-a7a0-8ebe8d603782" />
 
+#### Nested template lists
+
+A template can contain another `template_list` field, either directly in its `items` or inside an `object` field. Each nested list defines its own `templates`, and each saved child entry keeps its own `__template_key`. For example, add this field to `templates.template_1.items` in the schema above:
+
+```json
+{
+  "children": {
+    "type": "template_list",
+    "default": [],
+    "templates": {
+      "child": {
+        "name": "Child",
+        "items": {
+          "name": {"type": "string", "default": ""}
+        }
+      }
+    }
+  }
+}
+```
+
+In the plugin configuration dialog, expand the parent entry, add an entry in the nested list, edit its fields, and save the plugin configuration. Expanding the configuration again preserves the nested entries. The same steps apply to deeper template lists.
+
 ## Using Configuration in Plugins
 
 When loading plugins, AstrBot will check if there's a `_conf_schema.json` file in the plugin directory. If it exists, it will automatically parse the configuration and save it under `data/config/<plugin_name>_config.json` (a configuration file entity created according to the Schema), and pass it to `__init__()` when instantiating the plugin class.
