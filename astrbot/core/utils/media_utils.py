@@ -105,6 +105,27 @@ DEFAULT_MEDIA_SUFFIXES = {
     "file": ".bin",
 }
 
+# Containers whose payload is normally a video. Used to recognise a video that a
+# caller handed over through an audio slot before any audio pipeline converts it
+# to WAV. Extension-only detection is deliberate: probing the payload would cost
+# an ffprobe run on the hot path, and these containers are not produced by the
+# voice attachments AstrBot receives.
+VIDEO_MEDIA_SUFFIXES = frozenset(
+    {
+        ".3gp",
+        ".avi",
+        ".flv",
+        ".m4v",
+        ".mkv",
+        ".mov",
+        ".mp4",
+        ".mpeg",
+        ".mpg",
+        ".webm",
+        ".wmv",
+    }
+)
+
 
 MediaRefStr: TypeAlias = str
 """
@@ -382,6 +403,47 @@ def describe_media_ref(media_ref: object | None) -> str:
         return f"unresolved media ref name={Path(media_ref).name!r} len={ref_len}"
 
     return f"local media path name={Path(media_ref).name!r} len={ref_len}"
+
+
+def looks_like_video_media_ref(media_ref: object | None) -> bool:
+    """Tell whether a media reference carries a video instead of audio.
+
+    Some callers can only attach media through an audio slot, so a video may
+    arrive as an ``audio_url`` payload: a ``data:video/mp4`` URI or a saved
+    ``.mp4`` path. Audio pipelines re-encode whatever they are given to WAV, which
+    keeps the soundtrack and drops the picture, so the family has to be known
+    before that step.
+
+    Detection reads the declared MIME type of a data URI and the extension of a
+    path or URL. References that declare neither (bare base64, unknown
+    extensions) keep their declared family, so genuine audio is unaffected.
+
+    Args:
+        media_ref: Media reference from a platform, plugin, or provider request.
+
+    Returns:
+        True when the reference is recognisably a video.
+    """
+
+    if not isinstance(media_ref, str) or not media_ref:
+        return False
+
+    if media_ref.startswith("data:"):
+        mime_type = media_ref.partition(",")[0][5:].split(";", 1)[0].strip().lower()
+        return mime_type.startswith("video/")
+
+    if media_ref.startswith("base64://"):
+        return False
+
+    if is_file_uri(media_ref):
+        suffix = Path(file_uri_to_path(media_ref)).suffix
+    elif urlparse(media_ref).scheme in {"http", "https"}:
+        # Signed CDN URLs carry their extension before the query string.
+        suffix = Path(unquote(urlparse(media_ref).path)).suffix
+    else:
+        suffix = Path(media_ref.split("?", 1)[0].split("#", 1)[0]).suffix
+
+    return suffix.lower() in VIDEO_MEDIA_SUFFIXES
 
 
 def detect_image_mime_type(
