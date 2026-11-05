@@ -158,6 +158,7 @@ uv tool upgrade astrbot --python 3.12
 | [优云智算](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74) | LLM (API 网关, 支持所有模型) |
 | [302.AI](https://share.302.ai/rr1M3l) | LLM (API 网关, 支持所有模型)|
 | [小马算力](https://www.tokenpony.cn/3YPyf) | LLM (API 网关, 支持所有模型)|
+| [IO Intelligence](https://io.net/intelligence) | LLM |
 | [硅基流动](https://docs.siliconflow.cn/cn/usercases/use-siliconcloud-in-astrbot) | LLM (API 网关, 支持所有模型)  |
 | [PPIO 派欧云](https://ppio.com/user/register?invited_by=AIOONE) | LLM (API 网关, 支持所有模型) |
 | ModelScope | LLM |

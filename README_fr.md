@@ -156,6 +156,7 @@ Connectez AstrBot à vos plateformes de chat préférées.
 | [CompShare](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74) | Services LLM |
 | [302.AI](https://share.302.ai/rr1M3l) | Services LLM |
 | [TokenPony](https://www.tokenpony.cn/3YPyf) | Services LLM |
+| [IO Intelligence](https://io.net/intelligence) | Services LLM |
 | [SiliconFlow](https://docs.siliconflow.cn/cn/usercases/use-siliconcloud-in-astrbot) | Services LLM |
 | [PPIO Cloud](https://ppio.com/user/register?invited_by=AIOONE) | Services LLM |
 | ModelScope | Services LLM |
