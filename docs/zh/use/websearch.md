@@ -40,7 +40,7 @@
 | <span id="firecrawl">Firecrawl</span> | [Firecrawl](https://firecrawl.dev/) | 网页搜索、按 URL 提取网页正文 |
 | <span id="exa">Exa</span> | [Exa 控制台](https://dashboard.exa.ai/) | 关键词或语义搜索、按 URL 获取正文，支持域名、日期等筛选 |
 | <span id="anysearch">AnySearch</span> | [AnySearch 控制台](https://anysearch.com/console/api-keys) | 通用搜索，以及学术、代码文档、金融、法律等垂直领域检索 |
-| <span id="keenable">Keenable</span> | [Keenable 控制台](https://keenable.ai/console) | 网页搜索（可限定站点）、按 URL 提取网页正文 |
+| <span id="keenable">Keenable</span> | [Keenable 控制台](https://keenable.ai/console) | 网页搜索，支持站点和日期筛选（发布时间或收录时间，可用 `7d` 等相对时间），以及按 URL 提取网页正文 |
 
 AnySearch 的 Key 留空时会使用匿名模式，服务提供每日免费额度；Keenable 的 Key 留空时也可免费使用，但有请求频率限制，填写 Key 可提高限额。其他提供商需要填写相应的 Key。服务的额度、收费、可用地区和授权方式以各自官网为准。
 

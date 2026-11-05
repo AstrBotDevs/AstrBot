@@ -145,6 +145,8 @@ _TAVILY_RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({401, 403, 429, 432,
 _FIRECRAWL_RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({401, 402, 403, 429})
 _EXA_RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({401, 402, 429})
 _DEEPSEEK_RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({401, 402, 429})
+# Keenable returns 402 when a key's organization has no credits left.
+_KEENABLE_RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({401, 402, 403, 429})
 
 _TAVILY_KEY_ROTATOR = _KeyRotator("websearch_tavily_key", "Tavily")
 _BOCHA_KEY_ROTATOR = _KeyRotator("websearch_bocha_key", "BoCha")
@@ -2393,7 +2395,7 @@ async def _keenable_request(
                 error = Exception(
                     f"Keenable {action} failed: {reason}, status: {response.status}",
                 )
-                if keys and response.status in _RETRYABLE_HTTP_STATUSES:
+                if keys and response.status in _KEENABLE_RETRYABLE_HTTP_STATUSES:
                     last_error = error
                     continue
                 raise error
@@ -2441,7 +2443,8 @@ class KeenableWebSearchTool(FunctionTool[AstrAgentContext]):
     name: str = "web_search_keenable"
     description: str = (
         "A web search tool powered by Keenable. Returns relevant web pages "
-        "with a text excerpt of each, and can restrict results to one site."
+        "with a text excerpt of each, and can restrict results to one site "
+        "and to a publish or index date range."
     )
     parameters: dict = Field(
         default_factory=lambda: {
@@ -2455,6 +2458,22 @@ class KeenableWebSearchTool(FunctionTool[AstrAgentContext]):
                 "site": {
                     "type": "string",
                     "description": 'Optional. Restrict results to one domain, for example "github.com".',
+                },
+                "published_after": {
+                    "type": "string",
+                    "description": 'Optional. Only return pages published at or after this time: a date (YYYY-MM-DD), an ISO 8601 timestamp, or a time back from now such as "7d", "12h" or "1mo". Use this for recent results.',
+                },
+                "published_before": {
+                    "type": "string",
+                    "description": 'Optional. Only return pages published at or before this time: a date (YYYY-MM-DD), an ISO 8601 timestamp, or a time back from now such as "30d".',
+                },
+                "acquired_after": {
+                    "type": "string",
+                    "description": 'Optional. Only return pages Keenable indexed at or after this time: a date (YYYY-MM-DD), an ISO 8601 timestamp, or a time back from now such as "7d".',
+                },
+                "acquired_before": {
+                    "type": "string",
+                    "description": 'Optional. Only return pages Keenable indexed at or before this time: a date (YYYY-MM-DD), an ISO 8601 timestamp, or a time back from now such as "30d".',
                 },
             },
             "required": ["query"],
@@ -2476,9 +2495,18 @@ class KeenableWebSearchTool(FunctionTool[AstrAgentContext]):
             "snippet_max_length": 500,
         }
 
-        site = str(kwargs.get("site") or "").strip()
-        if site:
-            payload["site"] = site
+        # Date values are passed through as given: the API accepts dates,
+        # timestamps and relative values such as "7d" and validates them.
+        for name in (
+            "site",
+            "published_after",
+            "published_before",
+            "acquired_after",
+            "acquired_before",
+        ):
+            value = str(kwargs.get(name) or "").strip()
+            if value:
+                payload[name] = value
 
         results = await _keenable_search(provider_settings, payload)
         if not results:
@@ -2516,7 +2544,19 @@ class KeenableExtractWebPageTool(FunctionTool[AstrAgentContext]):
         url = str(kwargs.get("url", "")).strip()
         if not url:
             return "Error: url must be a non-empty string."
-        if urlsplit(url).scheme.lower() not in ("http", "https"):
+        try:
+            # Raises ValueError for malformed hosts such as "https://[::1".
+            parsed = urlsplit(url)
+            # Port syntax and range are validated only when this property is read.
+            _ = parsed.port
+            valid_url = (
+                parsed.scheme.lower() in ("http", "https")
+                and bool(parsed.netloc)
+                and bool(parsed.hostname)
+            )
+        except ValueError:
+            valid_url = False
+        if not valid_url:
             return "Error: url must be an http or https URL."
 
         params: dict = {"url": url}

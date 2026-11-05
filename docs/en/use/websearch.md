@@ -40,7 +40,7 @@ AstrBot supports ten providers. Configure one to start; you do not need an accou
 | <span id="firecrawl">Firecrawl</span> | [Firecrawl](https://firecrawl.dev/) | Web search and page content extraction from a URL |
 | <span id="exa">Exa</span> | [Exa dashboard](https://dashboard.exa.ai/) | Keyword or semantic search, page contents, and filters such as domain and date |
 | <span id="anysearch">AnySearch</span> | [AnySearch console](https://anysearch.com/console/api-keys) | General search and specialized retrieval for research, code documentation, finance, legal information, and other domains |
-| <span id="keenable">Keenable</span> | [Keenable console](https://keenable.ai/console) | Web search, optionally limited to one site, and page content extraction from a URL |
+| <span id="keenable">Keenable</span> | [Keenable console](https://keenable.ai/console) | Web search with site and date filters (publish or index date, including relative values such as `7d`), and page content extraction from a URL |
 
 AnySearch uses anonymous mode with a daily free quota when its key list is empty, and Keenable works without a key under a rate limit that a key raises. Other providers require their own keys. Check each service's website for current quotas, pricing, regional availability, and authorization requirements.
 

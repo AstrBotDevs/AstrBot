@@ -2305,6 +2305,106 @@ async def test_keenable_search_tool_builds_payload(monkeypatch):
     ]
 
 
+@pytest.mark.parametrize(
+    ("date_filters", "expected_filters"),
+    [
+        ({"published_after": "7d"}, {"published_after": "7d"}),
+        (
+            {
+                "published_after": " 2026-10-01 ",
+                "published_before": "\t2026-10-31T12:00:00Z\n",
+            },
+            {
+                "published_after": "2026-10-01",
+                "published_before": "2026-10-31T12:00:00Z",
+            },
+        ),
+        (
+            {"acquired_after": " 30min ", "acquired_before": "1mo"},
+            {"acquired_after": "30min", "acquired_before": "1mo"},
+        ),
+        # The API validates the syntax, so values are not parsed locally.
+        ({"published_after": "last week"}, {"published_after": "last week"}),
+        (
+            {
+                "published_after": "",
+                "published_before": "   ",
+                "acquired_after": "\t",
+                "acquired_before": None,
+            },
+            {},
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_keenable_search_tool_passes_date_filters(
+    monkeypatch, date_filters, expected_filters
+):
+    session = _install_keenable_session(
+        monkeypatch,
+        [_TavilyResponse(status=200, jsonData=_KEENABLE_SEARCH_RESPONSE)],
+    )
+    tool = tools.KeenableWebSearchTool()
+
+    await tool.call(
+        _context_with_provider_settings({}), query="AstrBot", **date_filters
+    )
+
+    assert session.calls[0]["json"] == {
+        "query": "AstrBot",
+        "max_results": 10,
+        "snippet_max_length": 500,
+        **expected_filters,
+    }
+
+
+def test_keenable_search_tool_schema_lists_date_filters():
+    properties = tools.KeenableWebSearchTool().parameters["properties"]
+
+    for name in (
+        "published_after",
+        "published_before",
+        "acquired_after",
+        "acquired_before",
+    ):
+        assert properties[name]["type"] == "string"
+    assert "query" in tools.KeenableWebSearchTool().parameters["required"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("tool_name", ["search", "extract"])
+async def test_keenable_key_failover_on_exhausted_credits_402(monkeypatch, tool_name):
+    """A key whose organization has no credits left fails over to the next key."""
+    if tool_name == "search":
+        tool = tools.KeenableWebSearchTool()
+        kwargs = {"query": "AstrBot"}
+        success = _TavilyResponse(status=200, jsonData=_KEENABLE_SEARCH_RESPONSE)
+        expected = "https://github.com/AstrBotDevs/AstrBot"
+    else:
+        tool = tools.KeenableExtractWebPageTool()
+        kwargs = {"url": "https://docs.astrbot.app"}
+        success = _TavilyResponse(
+            status=200,
+            jsonData={"url": "https://docs.astrbot.app", "content": "# AstrBot"},
+        )
+        expected = "URL: https://docs.astrbot.app\nContent: # AstrBot"
+    session = _install_keenable_session(
+        monkeypatch,
+        [_TavilyResponse(status=402, textData="No credits available"), success],
+    )
+    context = _context_with_provider_settings(
+        {"websearch_keenable_key": ["key-1", "key-2"]}
+    )
+
+    result = await tool.call(context, **kwargs)
+
+    assert [call["headers"]["X-API-Key"] for call in session.calls] == [
+        "key-1",
+        "key-2",
+    ]
+    assert expected in result
+
+
 @pytest.mark.asyncio
 async def test_keenable_search_tool_reports_no_results(monkeypatch):
     _install_keenable_session(
@@ -2403,9 +2503,24 @@ async def test_keenable_search_treats_null_key_setting_as_keyless(monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "url", ["file:///etc/passwd", "ftp://example.com/x", "example.com/page"]
+    "url",
+    [
+        "file:///etc/passwd",
+        "ftp://example.com/x",
+        "example.com/page",
+        # urlsplit raises ValueError for these.
+        "https://[::1",
+        "http://[not-an-ip]/",
+        # Scheme is fine but there is no host.
+        "http:example.com",
+        "https:///page",
+        "http://",
+        "http://:80/page",
+        # Port out of range.
+        "http://example.com:99999/",
+    ],
 )
-async def test_keenable_extract_tool_rejects_non_http_urls(monkeypatch, url):
+async def test_keenable_extract_tool_rejects_invalid_urls(monkeypatch, url):
     session = _install_keenable_session(monkeypatch, [_TavilyResponse(status=200)])
     tool = tools.KeenableExtractWebPageTool()
 
@@ -2413,6 +2528,28 @@ async def test_keenable_extract_tool_rejects_non_http_urls(monkeypatch, url):
 
     assert result == "Error: url must be an http or https URL."
     assert session.calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://[2001:db8::1]/page",
+        "http://[::1]:8080/path",
+        "HTTPS://Example.com/x",
+    ],
+)
+async def test_keenable_extract_tool_accepts_valid_urls(monkeypatch, url):
+    session = _install_keenable_session(
+        monkeypatch,
+        [_TavilyResponse(status=200, jsonData={"url": url, "content": "# Page"})],
+    )
+    tool = tools.KeenableExtractWebPageTool()
+
+    result = await tool.call(_context_with_provider_settings({}), url=url)
+
+    assert session.calls[0]["params"] == {"url": url}
+    assert result == f"URL: {url}\nContent: # Page"
 
 
 def test_dashboard_citations_include_keenable_results():
