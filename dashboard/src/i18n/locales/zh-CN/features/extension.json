@@ -109,6 +109,7 @@
     "contents": "插件行为",
     "noContents": "暂无行为",
     "notFound": "未找到该插件",
+    "logsTitle": "插件日志",
     "docsTitle": "文档",
     "docsEmpty": "暂无文档",
     "changelogTitle": "更新日志",
