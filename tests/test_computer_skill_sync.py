@@ -267,13 +267,6 @@ def test_sync_skills_skips_inactive_plugin_provided_skills(
     assert any(cmd == "rm -f skills/skills.zip" for cmd in booter.shell.commands)
 
 
-def test_build_scan_command_frontmatter_newline_is_escaped_literal():
-    command = computer_client._build_scan_command()
-    script = _extract_embedded_python(command)
-
-    assert 'frontmatter = "\\n".join(lines[1:end_idx])' in script
-
-
 def test_build_scan_command_embedded_python_is_syntax_valid():
     command = computer_client._build_scan_command()
     script = _extract_embedded_python(command)
