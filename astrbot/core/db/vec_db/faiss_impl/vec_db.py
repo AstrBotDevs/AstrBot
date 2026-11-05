@@ -6,6 +6,7 @@ import numpy as np
 from astrbot import logger
 from astrbot.core.exceptions import KnowledgeBaseUploadError
 from astrbot.core.provider.provider import EmbeddingProvider, RerankProvider
+from astrbot.core.utils.error_redaction import redact_sensitive_text
 
 from ..base import BaseVecDB, Result
 from .document_storage import DocumentStorage
@@ -125,13 +126,35 @@ class FaissVecDB(BaseVecDB):
 
         start = time.time()
         logger.debug(f"Generating embeddings for {len(contents)} contents...")
-        vectors = await self.embedding_provider.get_embeddings_batch(
-            embedding_contents,
-            batch_size=batch_size,
-            tasks_limit=tasks_limit,
-            max_retries=max_retries,
-            progress_callback=progress_callback,
-        )
+        try:
+            vectors = await self.embedding_provider.get_embeddings_batch(
+                embedding_contents,
+                batch_size=batch_size,
+                tasks_limit=tasks_limit,
+                max_retries=max_retries,
+                progress_callback=progress_callback,
+            )
+        except KnowledgeBaseUploadError:
+            raise
+        except Exception as exc:
+            # Provider failures (invalid API key, unreachable endpoint, timeout,
+            # quota exhaustion, incompatible batch format) happen before any
+            # local write, so they must not surface as a storage failure.
+            raise KnowledgeBaseUploadError(
+                stage="embedding",
+                user_message=(
+                    "向量化失败：调用 Embedding 模型接口时出错，未能生成文本向量。"
+                    "这不是知识库存储故障，请检查 Embedding Provider 的 API Key、"
+                    "接口地址、网络连通性与额度是否正常。"
+                ),
+                details={
+                    "content_count": content_count,
+                    "batch_size": batch_size,
+                    "tasks_limit": tasks_limit,
+                    "max_retries": max_retries,
+                    "cause": redact_sensitive_text(str(exc)),
+                },
+            ) from exc
         end = time.time()
         logger.debug(
             f"Generated embeddings for {len(contents)} contents in {end - start:.2f} seconds.",

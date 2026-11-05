@@ -650,3 +650,149 @@ async def test_cleanup_failed_upload_real_vec_db_by_kb_doc_id(
     await helper._cleanup_failed_upload(doc_id=kb_doc_id, media_paths=[])
     assert await vec_db.count_documents(metadata_filter={"kb_doc_id": kb_doc_id}) == 0
     await vec_db.close()
+@pytest.mark.asyncio
+async def test_insert_batch_reports_embedding_provider_failure_as_embedding_stage() -> None:
+    """A failing Embedding provider is an embedding-stage error, not a storage error."""
+    vec_db = _make_vec_db()
+    provider_error = RuntimeError("Gemini Embedding API批量请求失败: Invalid token")
+    vec_db.embedding_provider.get_embeddings_batch.side_effect = provider_error
+
+    with pytest.raises(KnowledgeBaseUploadError) as exc_info:
+        await FaissVecDB.insert_batch(
+            vec_db,
+            contents=["chunk-1", "chunk-2"],
+            metadatas=[{"kb_doc_id": "doc-1"}, {"kb_doc_id": "doc-1"}],
+            ids=["c1", "c2"],
+        )
+
+    error = exc_info.value
+    assert error.stage == "embedding"
+    assert "存储" in error.user_message
+    assert error.details["content_count"] == 2
+    assert "Invalid token" in error.details["cause"]
+    assert error.__cause__ is provider_error
+    vec_db.document_storage.insert_documents_batch.assert_not_awaited()
+    vec_db.embedding_storage.insert_batch.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_insert_batch_preserves_knowledge_base_upload_error_from_provider() -> None:
+    """An already classified upload error from the provider must not be re-wrapped."""
+    vec_db = _make_vec_db()
+    original = KnowledgeBaseUploadError(
+        stage="embedding",
+        user_message="向量化失败：嵌入模型返回的向量数量与文本分块数量不一致",
+        details={"expected_contents": 2, "actual_vectors": 1},
+    )
+    vec_db.embedding_provider.get_embeddings_batch.side_effect = original
+
+    with pytest.raises(KnowledgeBaseUploadError) as exc_info:
+        await FaissVecDB.insert_batch(
+            vec_db,
+            contents=["chunk-1", "chunk-2"],
+            metadatas=[{"kb_doc_id": "doc-1"}, {"kb_doc_id": "doc-1"}],
+            ids=["c1", "c2"],
+        )
+
+    assert exc_info.value is original
+    assert exc_info.value.details == {"expected_contents": 2, "actual_vectors": 1}
+
+
+@pytest.mark.asyncio
+async def test_insert_batch_real_storage_provider_failure_writes_nothing(
+    tmp_path: Path,
+) -> None:
+    """Provider failure must leave DocumentStorage and FAISS untouched."""
+    vec_db = await _make_real_vec_db(tmp_path, dim=4)
+    vec_db.embedding_provider.get_embeddings_batch.side_effect = RuntimeError(
+        "Cannot connect to host 127.0.0.1:1",
+    )
+
+    with pytest.raises(KnowledgeBaseUploadError) as exc_info:
+        await vec_db.insert_batch(
+            contents=["one", "two"],
+            metadatas=[
+                {"kb_id": "kb-1", "kb_doc_id": "doc-1", "chunk_index": 0},
+                {"kb_id": "kb-1", "kb_doc_id": "doc-1", "chunk_index": 1},
+            ],
+            ids=["p1", "p2"],
+        )
+
+    assert exc_info.value.stage == "embedding"
+    assert "Cannot connect to host" in exc_info.value.details["cause"]
+    assert await vec_db.count_documents() == 0
+    await vec_db.close()
+
+
+@pytest.mark.asyncio
+async def test_upload_document_surfaces_embedding_stage_and_rolls_back(
+    tmp_path: Path,
+    stub_provider_manager_module,
+) -> None:
+    """Embedding-stage errors reach the caller as embedding, with cleanup applied."""
+    KBHelper = _import_kb_helper()
+
+    helper = KBHelper.__new__(KBHelper)
+    helper.kb = KnowledgeBase(
+        kb_name="Test KB",
+        description="",
+        embedding_provider_id="emb",
+    )
+    helper.kb_db = MagicMock()
+    helper.vec_db = AsyncMock()
+    helper.kb_medias_dir = tmp_path / "medias"
+    helper.kb_medias_dir.mkdir()
+    helper.chunker = AsyncMock()
+    helper.chunker.chunk = AsyncMock(return_value=["hello world"])
+    helper.vec_db.insert_batch.side_effect = KnowledgeBaseUploadError(
+        stage="embedding",
+        user_message="向量化失败：调用 Embedding 模型接口时出错，未能生成文本向量。",
+        details={"cause": "Invalid token"},
+    )
+    helper.vec_db.delete_documents = AsyncMock()
+    helper.kb_db.get_db = _successful_get_db(_session_with_begin())
+
+    parse_result = MagicMock()
+    parse_result.text = "hello world"
+    parse_result.media = []
+
+    with (
+        patch(
+            "astrbot.core.knowledge_base.kb_helper.select_parser",
+            new=AsyncMock(
+                return_value=MagicMock(parse=AsyncMock(return_value=parse_result)),
+            ),
+        ),
+        patch.object(helper, "_ensure_vec_db", new=AsyncMock()),
+        pytest.raises(KnowledgeBaseUploadError) as exc_info,
+    ):
+        await helper.upload_document(
+            file_name="demo.txt",
+            file_content=b"hello world",
+            file_type="txt",
+        )
+
+    assert exc_info.value.stage == "embedding"
+    helper.vec_db.delete_documents.assert_awaited()
+@pytest.mark.asyncio
+async def test_insert_batch_redacts_credentials_in_cause() -> None:
+    """The stored cause must not leak API keys into logs or the dashboard."""
+    vec_db = _make_vec_db()
+    secret = "sk-abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGH"
+    vec_db.embedding_provider.get_embeddings_batch.side_effect = RuntimeError(
+        f"Incorrect API key provided: {secret}. You can obtain an API key at "
+        "https://platform.openai.com/account/api-keys."
+    )
+
+    with pytest.raises(KnowledgeBaseUploadError) as exc_info:
+        await FaissVecDB.insert_batch(
+            vec_db,
+            contents=["chunk-1"],
+            metadatas=[{"kb_doc_id": "doc-1"}],
+            ids=["c1"],
+        )
+
+    cause = exc_info.value.details["cause"]
+    assert secret not in cause
+    assert "[REDACTED]" in cause
+    assert "Incorrect API key provided" in cause
