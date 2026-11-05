@@ -49,8 +49,20 @@ jobs:
       - name: Install Linux sandbox and audio test dependencies
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y bubblewrap ffmpeg
+          # Keep suites and signing keys while avoiding the slow Azure archive route.
+          for source_file in /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+            if [ -f "$source_file" ]; then
+              sudo sed -Ei '
+                /^[[:space:]]*(deb(-src)?[[:space:]]|URIs:|https?:\/\/)/ {
+                  :azure
+                  s#(^|[[:space:]])https?://azure\.archive\.ubuntu\.com/ubuntu/?([[:space:]]|$)#\1https://archive.ubuntu.com/ubuntu/\2#g
+                  t azure
+                }
+              ' "$source_file"
+            fi
+          done
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 install -y bubblewrap ffmpeg
 
       - name: Install FFmpeg for audio tests
         if: runner.os == 'Windows' || runner.os == 'macOS'
