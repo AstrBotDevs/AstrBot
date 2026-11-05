@@ -234,6 +234,7 @@ class STTProvider(AbstractProvider):
     async def test(self) -> None:
         sample_audio_path = os.path.join(
             get_astrbot_path(),
+            "astrbot",
             "samples",
             "stt_health_check.wav",
         )
