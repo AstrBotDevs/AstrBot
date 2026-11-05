@@ -28,6 +28,7 @@ from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
 from astrbot.core.utils.media_utils import (
     describe_media_ref,
+    looks_like_video_media_ref,
     resolve_media_ref_to_base64_data,
 )
 from astrbot.core.utils.network_utils import is_connection_error, log_connection_failure
@@ -1166,6 +1167,17 @@ class ProviderGoogleGenAI(Provider):
             }
 
         async def resolve_audio_part(audio_path: str) -> dict | None:
+            # A caller that can only attach media through the audio slot may hand
+            # over a video (`data:video/mp4;...` or a saved .mp4 path). Resolving
+            # it as audio re-encodes it to WAV, which keeps the soundtrack and
+            # drops the picture, so route it to the video channel this path
+            # already has: `_prepare_conversation` turns the `video_url` block
+            # into an inline data part with the video MIME type.
+            if looks_like_video_media_ref(audio_path):
+                video_part = await resolve_video_part(audio_path)
+                # Reporting nothing would reproduce the silent loss this branch
+                # exists to prevent, so leave a placeholder instead.
+                return video_part or {"type": "text", "text": "[Video]"}
             try:
                 audio_data = await resolve_media_ref_to_base64_data(
                     audio_path,
