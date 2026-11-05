@@ -296,6 +296,10 @@ const props = defineProps({
     type: Function,
     required: true
   },
+  supportsVideoInput: {
+    type: Function,
+    required: true
+  },
   supportsToolCall: {
     type: Function,
     required: true
@@ -366,6 +370,15 @@ const capabilityBadges = (entry) => {
       supported: props.supportsAudioInput(metadata),
       enabled: !isConfigured || modalities.includes('audio'),
       label: props.tm('models.metadata.audio')
+    },
+    {
+      key: 'video',
+      icon: 'mdi-video-outline',
+      supported: props.supportsVideoInput(metadata),
+      // Video is opt-in on the backend, so an unconfigured provider must not
+      // report it as enabled the way image/audio do.
+      enabled: modalities.includes('video'),
+      label: props.tm('models.metadata.video')
     },
     {
       key: 'tool_use',
