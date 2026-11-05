@@ -2553,6 +2553,96 @@ async def test_uninstall_failed_plugin_without_plugin_id_in_record(
 
 
 @pytest.mark.asyncio
+async def test_dashboard_update_executes_new_code_after_reenable(
+    plugin_manager_pm: PluginManager,
+    local_updater: Path,
+    monkeypatch,
+    tmp_path: Path,
+):
+    """Reproduce a metadata update that leaves disabled plugin code cached."""
+    from astrbot.dashboard.services.plugin_service import PluginService
+
+    _clear_star_runtime_state()
+    module_path = f"data.plugins.{TEST_PLUGIN_DIR}.main"
+    source = (
+        "from astrbot.api.star import Star\n"
+        "from astrbot.api.event import filter\n"
+        "class Main(Star):\n"
+        "    @filter.command('disabled_update_probe')\n"
+        "    async def command(self, event):\n"
+        "        return 'old-code'\n"
+    )
+    main_path = local_updater / "main.py"
+    main_path.write_text(source, encoding="utf-8")
+    # Import real files through isolated package paths, preserving sys.modules behavior.
+    for package_name, package_path in (
+        ("data", local_updater.parent.parent),
+        ("data.plugins", local_updater.parent),
+    ):
+        package = ModuleType(package_name)
+        package.__path__ = [str(package_path)]
+        monkeypatch.setitem(sys.modules, package_name, package)
+    monkeypatch.setattr(
+        plugin_manager_pm.context, "stars", star_manager_module.star_registry
+    )
+    monkeypatch.setattr(
+        plugin_manager_pm, "reserved_plugin_path", str(tmp_path / "reserved")
+    )
+    preferences = {}
+
+    async def global_get(key, default=None):
+        return preferences.get(key, default)
+
+    async def global_put(key, value):
+        preferences[key] = value
+
+    async def download_update(*args, **kwargs):
+        metadata_path = local_updater / "metadata.yaml"
+        metadata = yaml.safe_load(metadata_path.read_text(encoding="utf-8"))
+        metadata["version"] = "2.0.0"
+        metadata_path.write_text(yaml.safe_dump(metadata), encoding="utf-8")
+        # Different source lengths exclude same-second bytecode-cache collisions.
+        main_path.write_text(source.replace("old-code", "updated-code"), encoding="utf-8")
+
+    monkeypatch.setattr(star_manager_module.sp, "global_get", global_get)
+    monkeypatch.setattr(star_manager_module.sp, "global_put", global_put)
+    monkeypatch.setattr(star_manager_module, "sync_command_configs", AsyncMock())
+    monkeypatch.setattr(plugin_manager_pm._updater, "update", download_update)
+    service = PluginService(None, plugin_manager_pm)
+    monkeypatch.setattr(service, "resolve_market_update_info", AsyncMock(return_value={}))
+    monkeypatch.setattr(service, "refresh_plugin_install_source_after_update", AsyncMock())
+    monkeypatch.setattr(service, "sync_skills_after_plugin_change", AsyncMock())
+
+    try:
+        success, error = await plugin_manager_pm.load(specified_dir_name=TEST_PLUGIN_DIR)
+        assert success, error
+        original_plugin = star_manager_module.star_map[module_path]
+        assert await original_plugin.star_cls.command(None) == "old-code"
+        await service.set_plugin_enabled({"name": TEST_PLUGIN_NAME}, enabled=False)
+
+        _, message = await service.update_plugin({"name": TEST_PLUGIN_NAME})
+        current_plugin = star_manager_module.star_map[module_path]
+        displayed = service.serialize_plugin_base(
+            current_plugin, logo_url=None, installed_at=None, install_source=None
+        )
+        assert message == "更新成功。"
+        assert displayed["version"] == "2.0.0"
+        assert displayed["activated"] is False
+        assert current_plugin.star_cls is None
+        await service.set_plugin_enabled({"name": TEST_PLUGIN_NAME}, enabled=True)
+
+        handlers = star_manager_module.star_handlers_registry.get_handlers_by_module_name(
+            module_path
+        )
+        assert len(handlers) == 1
+        assert await handlers[0].handler(None) == "updated-code"
+        assert star_manager_module.star_map[module_path].activated is True
+    finally:
+        _clear_module_cache()
+        _clear_star_runtime_state()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("inactivated_plugins", "expected_activated"),
     [
@@ -2636,10 +2726,10 @@ async def test_load_syncs_existing_metadata_activation_from_preferences(
 
 
 @pytest.mark.asyncio
-async def test_reload_deactivated_plugin_preserves_tools(
+async def test_reload_deactivated_plugin_clears_stale_tools_before_load(
     plugin_manager_pm: PluginManager, monkeypatch
 ):
-    """Specified reload of a deactivated plugin keeps its tools in func_list."""
+    """Disabled reload removes stale registrations before importing new code."""
     _clear_star_runtime_state()
     plugin_name = "demo_plugin"
     module_path = f"data.plugins.{plugin_name}.main"
@@ -2662,18 +2752,15 @@ async def test_reload_deactivated_plugin_preserves_tools(
     original_func_list = llm_tools.func_list
     llm_tools.func_list = [plugin_tool]
 
-    async def mock_terminate(smd):
-        pass  # deactivated → no-op
-
     async def mock_load(specified_module_path=None, **kwargs):
+        assert plugin_tool not in llm_tools.func_list
+        assert module_path not in star_manager_module.star_map
         return True, None
 
-    monkeypatch.setattr(plugin_manager_pm, "_terminate_plugin", mock_terminate)
     monkeypatch.setattr(plugin_manager_pm, "load", mock_load)
 
     try:
         await plugin_manager_pm.reload(plugin_name)
-        assert plugin_tool in llm_tools.func_list
     finally:
         llm_tools.func_list = original_func_list
         _clear_star_runtime_state()
@@ -2912,6 +2999,12 @@ async def test_repeated_deactivated_loads_bind_handlers_once_when_activated(
     ):
         del module_str, root_dir_name, requirements_path, reserved
         assert path == module_path
+        if module_path not in star_manager_module.star_map:
+            # A fresh import runs the plugin and handler registration decorators again.
+            star_manager_module.star_map[module_path] = metadata
+            star_manager_module.star_registry.append(metadata)
+            star_manager_module.star_handlers_registry.append(event_handler)
+            llm_tools.func_list.append(plugin_tool)
         return ModuleType(module_path)
 
     async def mock_sync_command_configs():
