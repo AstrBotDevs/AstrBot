@@ -50,8 +50,26 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           # Keep suites and signing keys while avoiding the slow Azure archive route.
-          for source_file in /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
-            if [ -f "$source_file" ]; then
+          source_files=(/etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources)
+          ubuntu_mirrorlist_referenced=0
+          for source_file in "${source_files[@]}"; do
+            if [ -f "$source_file" ] && [ ! -L "$source_file" ] &&
+              sed -n '/^[[:space:]]*\(deb\(-src\)\?[[:space:]]\|URIs:\|mirror+file:\)/p' "$source_file" |
+                grep -Eq '(^|[[:space:]])mirror\+file:/+etc/apt/apt-mirrors\.txt([[:space:]]|$)'; then
+              ubuntu_mirrorlist_referenced=1
+              source_files+=(/etc/apt/apt-mirrors.txt)
+              break
+            fi
+          done
+          if [ "$ubuntu_mirrorlist_referenced" = 1 ] &&
+            { [ ! -f /etc/apt/apt-mirrors.txt ] || [ -L /etc/apt/apt-mirrors.txt ]; }; then
+            printf '%s\n' 'Referenced Ubuntu mirrorlist is missing or is a symlink.' >&2
+            exit 1
+          fi
+          rewritten_source_files=0
+          for source_file in "${source_files[@]}"; do
+            if [ -f "$source_file" ] && [ ! -L "$source_file" ]; then
+              source_hash_before="$(sha256sum "$source_file")"
               sudo sed -Ei '
                 /^[[:space:]]*(deb(-src)?[[:space:]]|URIs:|https?:\/\/)/ {
                   :azure
@@ -59,9 +77,39 @@ jobs:
                   t azure
                 }
               ' "$source_file"
+              if [ "$source_hash_before" != "$(sha256sum "$source_file")" ]; then
+                printf 'Rewrote Azure Ubuntu URI in %q\n' "$source_file"
+                rewritten_source_files=$((rewritten_source_files + 1))
+              fi
             fi
           done
+          printf 'Rewritten APT source files: %s\n' "$rewritten_source_files"
           sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update
+          index_uris="$(apt-get indextargets --format '$(URI)')"
+          if ! grep -q '[^[:space:]]' <<< "$index_uris"; then
+            printf '%s\n' 'APT index check returned no active indexes.' >&2
+            exit 1
+          fi
+          if grep -Eiq '^https?://([^/@]+@)?azure\.archive\.ubuntu\.com(:[0-9]+)?/ubuntu(/|$)' <<< "$index_uris"; then
+            printf '%s\n' 'Azure Ubuntu index remains active; check APT source paths above.' >&2
+            exit 1
+          fi
+          mirror_index_uris="$(grep -E '^mirror\+' <<< "$index_uris" || true)"
+          if grep -Evq '^mirror\+file:/+etc/apt/apt-mirrors\.txt(/|$)|^[[:space:]]*$' <<< "$mirror_index_uris"; then
+            printf '%s\n' 'APT index check found an unverified mirror URI.' >&2
+            exit 1
+          fi
+          if grep -Eq '^mirror\+file:' <<< "$index_uris" &&
+            [ "$ubuntu_mirrorlist_referenced" != 1 ]; then
+            printf '%s\n' 'APT index check could not verify the Ubuntu mirrorlist reference.' >&2
+            exit 1
+          fi
+          if [ "$ubuntu_mirrorlist_referenced" = 1 ] &&
+            grep -Eiq '^[[:space:]]*https?://([^/@]+@)?azure\.archive\.ubuntu\.com(:[0-9]+)?/ubuntu(/|[[:space:]]|$)' /etc/apt/apt-mirrors.txt; then
+            printf '%s\n' 'Azure Ubuntu entry remains in the referenced /etc/apt/apt-mirrors.txt.' >&2
+            exit 1
+          fi
+          printf '%s\n' 'APT index check: no active Azure Ubuntu URI.'
           sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 install -y bubblewrap ffmpeg
 
       - name: Install FFmpeg for audio tests
