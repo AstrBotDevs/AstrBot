@@ -22,33 +22,58 @@ def _needs_bridge(path: str) -> bool:
 
 
 def _safe_temp_dir() -> str:
-    """返回保证纯 ASCII 且可写的临时目录，用于 Faiss I/O 桥接。
+    """返回可写的纯 ASCII 临时目录，用于 Faiss I/O 桥接。
 
     优先级:
     1. %SystemRoot%\\Temp（Windows 系统临时目录）
     2. tempfile.gettempdir()（当其为纯 ASCII 时）
     3. 非 Windows 平台使用 tempfile.gettempdir()
+
+    候选目录按顺序实际创建探测文件；创建成功的目录才可用。
+
+    Returns:
+        第一个能创建探测文件的候选目录。
+
+    Raises:
+        OSError: 所有候选目录都无法创建探测文件。
     """
     if os.name == "nt":
         root = os.environ.get("SystemRoot", r"C:\Windows")
-        temp_dir = os.path.join(root, "Temp")
-        if (
-            temp_dir.isascii()
-            and os.path.isdir(temp_dir)
-            and os.access(temp_dir, os.W_OK)
-        ):
-            return temp_dir
+        candidates = [os.path.join(root, "Temp")]
+    else:
+        candidates = []
 
-        tmp = tempfile.gettempdir()
-        if tmp.isascii():
-            return tmp
+    failures: list[str] = []
+    try:
+        candidates.append(tempfile.gettempdir())
+    except OSError as exc:
+        failures.append(f"tempfile.gettempdir() ({exc})")
 
-        raise OSError(
-            "_safe_temp_dir: 无法找到可写的纯 ASCII 临时目录。"
-            f" 检查过 SystemRoot\\Temp={temp_dir}, gettempdir={tmp}"
-        )
+    for temp_dir in candidates:
+        if os.name == "nt" and not temp_dir.isascii():
+            failures.append(f"{temp_dir} (非 ASCII 路径)")
+            continue
+        try:
+            fd, probe = tempfile.mkstemp(
+                prefix="_faiss_probe_",
+                suffix=".tmp",
+                dir=temp_dir,
+            )
+        except OSError as exc:
+            failures.append(f"{temp_dir} ({exc})")
+            continue
+        os.close(fd)
+        try:
+            os.remove(probe)
+        except OSError:
+            pass
+        return temp_dir
 
-    return tempfile.gettempdir()
+    raise OSError(
+        "_safe_temp_dir: 无法找到可写的纯 ASCII 临时目录。"
+        f" 检查过: {', '.join(failures)}"
+        " 请将数据目录改为纯 ASCII 路径，或让系统临时目录可写。"
+    )
 
 
 def _make_temp_file(prefix: str) -> str:
