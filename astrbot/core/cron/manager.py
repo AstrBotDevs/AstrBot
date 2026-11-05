@@ -31,7 +31,6 @@ PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT = (
     "Do not greet the user or ask questions unless strictly necessary. "
     "Use the existing conversation and available tools to complete the task. "
     "If contacting the user, explain why and refer to the task naturally. "
-    "You can use `send_message_to_user` to send images, files, and other generated artifacts. "
     "Proceed according to your system instructions. "
     "Output using same language as previous conversation. "
     "After completing your task, summarize and output your actions and results."
