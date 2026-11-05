@@ -12,6 +12,7 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.log import LogManager
 from astrbot.dashboard.responses import ApiError, error
+from astrbot.dashboard.services.agent_config_service import AgentConfigService
 from astrbot.dashboard.services.api_key_service import ApiKeyService
 from astrbot.dashboard.services.auth_service import AuthService
 from astrbot.dashboard.services.backup_service import BackupService
@@ -146,6 +147,11 @@ def create_dashboard_asgi_app(
         skills=SkillsService(core_lifecycle),
         stats=stats,
         subagents=SubAgentService(core_lifecycle),
+        agent_configs=AgentConfigService(
+            core_lifecycle.agent_configs,
+            core_lifecycle.agent_runtimes,
+            core_lifecycle.astrbot_config_mgr,
+        ),
         t2i=T2iService(core_lifecycle),
         tools=ToolsService(core_lifecycle),
         updates=UpdateService(

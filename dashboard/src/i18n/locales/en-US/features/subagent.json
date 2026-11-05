@@ -3,9 +3,9 @@
     "eyebrow": "Orchestration"
   },
   "page": {
-    "title": "SubAgent Orchestration",
+    "title": "Subagent Management",
     "beta": "Experimental",
-    "subtitle": "The main LLM can use its own tools directly and delegate tasks to SubAgents via handoff."
+    "subtitle": "Create reusable agents and choose their runtimes. Select available agents in each configuration profile."
   },
   "actions": {
     "refresh": "Refresh",
@@ -14,7 +14,12 @@
     "expand": "Expand",
     "collapse": "Collapse",
     "delete": "Delete",
-    "close": "Close"
+    "close": "Close",
+    "create": "Create Agent",
+    "cancel": "Cancel",
+    "more": "More",
+    "edit": "Edit Agent",
+    "remove": "Delete Agent"
   },
   "overview": {
     "totalAgents": "Total SubAgents",
@@ -27,19 +32,19 @@
   },
   "switches": {
     "enable": "Enable SubAgent orchestration",
-    "enableHint": "Enable sub-agent functionality",
-    "dedupe": "Deduplicate main LLM tools (hide tools duplicated by SubAgents)",
-    "dedupeHint": "Remove duplicate tools from main agent"
+    "enableHint": "Enable sub-agent functionality"
   },
   "description": {
-    "disabled": "When off: SubAgent is disabled; the main LLM mounts tools via persona rules (all by default) and calls them directly.",
-    "enabled": "When on: the main LLM keeps its own tools and mounts transfer_to_* delegate tools. With deduplication, tools overlapping with SubAgents are removed from the main tool set."
+    "disabled": "Disabled. Main completes tasks with its own tools.",
+    "enabled": "Enabled. Main retains its tools and starts background workers through spawn_agent."
   },
   "section": {
     "title": "SubAgents",
     "subtitle": "Configure delegate agents, personas, and descriptions for the main LLM",
     "globalSettings": "Global Settings",
-    "agentSetup": "Agent Setup"
+    "agentSetup": "Agent Setup",
+    "empty": "Create an agent to get started.",
+    "noDescription": "No description"
   },
   "cards": {
     "statusEnabled": "Enabled",
@@ -54,15 +59,24 @@
     "previewHint": "Review the currently selected persona to verify the handoff target."
   },
   "form": {
-    "nameLabel": "Agent name (used for transfer_to_{name})",
+    "nameLabel": "Name",
     "nameHint": "Use lowercase letters + underscores; must be globally unique.",
-    "providerLabel": "Chat Provider (optional)",
+    "providerLabel": "Chat Model",
     "providerHint": "Leave empty to follow the global default provider.",
-    "personaLabel": "Choose Persona",
-    "personaHint": "The SubAgent inherits the selected Persona's system settings and tools.",
+    "personaLabel": "Persona",
+    "personaHint": "Select a persona or configure a custom prompt and tools.",
     "personaPreview": "Persona Preview",
-    "descriptionLabel": "Description for the main LLM (used to decide handoff)",
-    "descriptionHint": "Shown to the main LLM as the transfer_to_* tool description—keep it short and clear."
+    "descriptionLabel": "Description",
+    "descriptionHint": "Describe when the main agent should delegate to this agent.",
+    "customPersona": "Use custom prompt and tools",
+    "runtime": "Agent Runtime",
+    "runtimeConfig": "Runtime Configuration (JSON)",
+    "followProvider": "Follow conversation model",
+    "externalRuntime": "External runtime configuration",
+    "inheritPersona": "Leave empty to use the main agent’s persona",
+    "inheritProvider": "Leave empty to use the main agent’s chat model",
+    "inheritSettings": "Other runtime settings follow the main agent.",
+    "followPersona": "Uses main agent persona"
   },
   "messages": {
     "loadConfigFailed": "Failed to load config",
@@ -77,11 +91,27 @@
     "saveSuccess": "Saved successfully",
     "saveFailed": "Failed to save",
     "nameRequired": "Name is required",
-    "namePattern": "Lowercase letters, numbers, underscore only"
+    "namePattern": "Lowercase letters, numbers, underscore only",
+    "deleteConfirm": "Delete {name}? Existing sessions retain their configuration and history.",
+    "jsonObject": "Enter a valid JSON object."
   },
   "empty": {
     "title": "No Agents Configured",
     "subtitle": "Add a new sub-agent to get started",
     "action": "Create First Agent"
+  },
+  "limits": {
+    "concurrency": "Concurrent workers per session",
+    "timeout": "Task timeout (seconds, including queue time)",
+    "steps": "Maximum steps per turn"
+  },
+  "status": {
+    "disabled": "Disabled",
+    "unavailable": "Runtime unavailable",
+    "missing": "Missing configuration"
+  },
+  "selection": {
+    "label": "Specialized Agent Configurations",
+    "manage": "Configure Specialized Agents"
   }
 }

@@ -10,8 +10,8 @@ from astrbot.core.db.po import Persona
 def make_acm(persona_id: str = "default") -> MagicMock:
     """Build a mocked AstrBotConfigManager with the given default persona."""
     conf = {
-        "agent_runner": {
-            "runner_type": "local",
+        "agent": {
+            "runtime": "astrbot",
             "config": {"persona": {"persona_id": persona_id}},
         },
         "provider_settings": {},

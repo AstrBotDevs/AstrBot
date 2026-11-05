@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 from fastapi.routing import APIRoute
 
+from .agent_configs import router as agent_configs_router
 from .api_keys import router as api_keys_router
 from .auth import ScopeDependency
 from .auth import router as auth_router
@@ -54,6 +55,7 @@ def build_api_router() -> APIRouter:
         skills_router,
         sessions_router,
         subagents_router,
+        agent_configs_router,
         logs_router,
         stats_router,
         tools_router,
