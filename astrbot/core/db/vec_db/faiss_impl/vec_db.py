@@ -35,6 +35,8 @@ class FaissVecDB(BaseVecDB):
 
     async def initialize(self) -> None:
         await self.document_storage.initialize()
+        # 加载旧索引时可能做过向量归一化重建，这里统一落盘一次。
+        await self.embedding_storage.flush()
 
     async def insert(
         self,
@@ -233,14 +235,17 @@ class FaissVecDB(BaseVecDB):
             List[Result]: 查询结果
 
         """
-        embedding = await self.embedding_provider.get_embedding(query)
+        embedding = await self.embedding_provider.get_query_embedding(query)
         scores, indices = await self.embedding_storage.search(
             vector=np.array(embedding).astype("float32"),
             k=fetch_k if metadata_filters else k,
         )
         if len(indices[0]) == 0 or indices[0][0] == -1:
             return []
-        # normalize scores
+        # FAISS IndexFlatL2 返回的是欧氏距离的平方；对单位向量有
+        # ``L2^2 = 2 - 2 * cos``，因此 ``1 - L2^2 / 2`` 就是余弦相似度。
+        # 这里只在入库与查询两侧保证向量已归一化（见 EmbeddingStorage），
+        # 公式本身保持不变。
         scores[0] = 1.0 - (scores[0] / 2.0)
         # NOTE: maybe the size is less than k.
         fetched_docs = await self.document_storage.get_documents(
@@ -323,6 +328,8 @@ class FaissVecDB(BaseVecDB):
         await self.embedding_storage.delete([int_id])
 
     async def close(self) -> None:
+        # 归一化重建可能因为写盘失败而留在内存里，关闭时再试一次。
+        await self.embedding_storage.flush()
         await self.document_storage.close()
 
     async def count_documents(self, metadata_filter: dict | None = None) -> int:
