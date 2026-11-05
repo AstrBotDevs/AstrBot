@@ -242,6 +242,7 @@ class _PermissionGuardedTool(FunctionTool):
         # Mirror mutable state from the underlying tool
         self.active = getattr(tool, "active", True)
         self.handler_module_path = getattr(tool, "handler_module_path", None)
+        self.is_background_task = getattr(tool, "is_background_task", False)
 
     async def call(self, context: Any, **kwargs: Any) -> Any:
         import inspect as _inspect
