@@ -1707,7 +1707,27 @@
         "hint": "如果测试不通过，可以尝试添加 /v1 在末尾以兼容部分 OpenAI API 版本。"
       },
       "gemini_embedding": {
-        "hint": "Gemini Embedding 无需手动添加 /v1beta。"
+        "hint": "Gemini Embedding 无需手动添加 /v1beta。",
+        "embedding_task_type_mode": {
+          "description": "任务类型传递方式",
+          "hint": "auto：按模型代际自动选择（gemini-embedding-001 走 task_type 参数，gemini-embedding-2 走文本前缀）；never：强制走 task_type；always：强制走文本前缀。"
+        },
+        "embedding_query_task_type": {
+          "description": "查询侧 task_type",
+          "hint": "仅 task_type 模式生效。检索查询用 RETRIEVAL_QUERY，代码检索可用 CODE_RETRIEVAL_QUERY。"
+        },
+        "embedding_document_task_type": {
+          "description": "文档侧 task_type",
+          "hint": "仅 task_type 模式生效。入库文档用 RETRIEVAL_DOCUMENT，可配合 title 提升效果。"
+        },
+        "embedding_query_task_name": {
+          "description": "查询侧任务前缀（gemini-embedding-2）",
+          "hint": "仅文本前缀模式生效，可选：search result / question answering / fact checking / code retrieval。填错会自动回退为 search result。"
+        },
+        "embedding_document_title": {
+          "description": "文档标题（gemini-embedding-2）",
+          "hint": "留空时使用 title: none。注意知识库入库时已把文档标题拼进正文，这里再填会让标题重复两遍，一般保持留空。"
+        }
       },
       "dashscope_embedding": {
         "hint": "阿里云百炼 Embedding，默认地址为 https://dashscope.aliyuncs.com/api/v1。"
