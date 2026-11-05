@@ -31,6 +31,7 @@ from astrbot.core import (
 from astrbot.core.agent.handoff import FunctionTool, HandoffTool
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import VERSION
+from astrbot.core.log import LogManager
 from astrbot.core.platform.register import unregister_platform_adapters_by_module
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.utils.astrbot_path import (
@@ -777,6 +778,9 @@ class PluginManager:
         plugin_root_name = "astrbot.builtin_stars." if is_reserved else "data.plugins."
         module_prefix = f"{plugin_root_name}{dir_name}"
 
+        # The plugin no longer owns its log attribution once its state is dropped.
+        LogManager.forget_plugin_name_alias(dir_name)
+
         # 清理 sys.modules
         for key in list(sys.modules.keys()):
             if self._is_plugin_module_path(key, module_prefix):
@@ -1387,6 +1391,10 @@ class PluginManager:
                     star_map[path] = metadata
                     star_registry.append(metadata)
 
+                # Records from this plugin can be attributed either by its
+                # logger or by its source file; both resolve to the same name.
+                LogManager.register_plugin_name_alias(root_dir_name, metadata.name)
+
                 # 禁用/启用插件
                 metadata.activated = metadata.module_path not in inactivated_plugins
 
@@ -1880,6 +1888,9 @@ class PluginManager:
         if plugin is None:
             return
 
+        # The plugin no longer owns its directory, so it must not keep the log
+        # attribution of that directory either.
+        LogManager.forget_plugin_name_alias(plugin.root_dir_name)
         self._purge_modules(
             root_dir_name=plugin.root_dir_name,
             is_reserved=plugin.reserved,
