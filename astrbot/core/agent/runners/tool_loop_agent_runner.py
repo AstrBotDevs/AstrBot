@@ -959,6 +959,23 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 if self._is_stop_requested():
                     yield await self._finalize_aborted_step()
                     return
+                if requery_resp is None:
+                    logger.warning(
+                        "skills_like tool parameter generation failed; no tool was executed."
+                    )
+                    self.run_context.messages.append(
+                        Message(
+                            role="user",
+                            content=(
+                                "Tool parameter generation failed for "
+                                f"{', '.join(llm_resp.tools_call_name)} after repeated empty "
+                                "model responses. No tool was executed. Decide whether "
+                                "to retry with complete parameters or explain the failure "
+                                "to the user."
+                            ),
+                        )
+                    )
+                    return
                 if not requery_resp.tools_call_name:
                     llm_resp = requery_resp
                     logger.warning(
@@ -1482,10 +1499,64 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 subset.add_tool(tool)
         return subset
 
+    async def _requery_text_chat(
+        self,
+        contexts: list[dict[str, T.Any]],
+        func_tool: ToolSet,
+    ) -> LLMResponse | None:
+        """Re-query the LLM for tool parameters, retrying empty completions.
+
+        The main step loop already retries ``EmptyModelOutputError`` and switches
+        to a fallback provider, but the skills_like re-query used to call
+        ``text_chat`` directly, so a single empty completion raised out of the
+        runner and aborted the whole agent run. Retry empty completions with
+        the main loop's retry timing, without switching providers mid-re-query.
+        On exhaustion, notify the agent without executing unvalidated arguments.
+        """
+        retrying = AsyncRetrying(
+            retry=retry_if_exception_type(EmptyModelOutputError),
+            stop=stop_after_attempt(self.EMPTY_OUTPUT_RETRY_ATTEMPTS),
+            wait=wait_exponential(
+                multiplier=1,
+                min=self.EMPTY_OUTPUT_RETRY_WAIT_MIN_S,
+                max=self.EMPTY_OUTPUT_RETRY_WAIT_MAX_S,
+            ),
+            before_sleep=lambda state: logger.warning(
+                "skills_like tool re-query returned an empty completion on attempt %s/%s.",
+                state.attempt_number,
+                self.EMPTY_OUTPUT_RETRY_ATTEMPTS,
+            ),
+            reraise=True,
+        )
+        response: LLMResponse | None = None
+        try:
+            async for attempt in retrying:
+                with attempt:
+                    response = await self._await_or_stop(
+                        self.provider.text_chat(
+                            contexts=self._sanitize_contexts_for_provider(contexts),
+                            func_tool=func_tool,
+                            model=self.req.model,
+                            session_id=self.req.session_id,
+                            extra_user_content_parts=self.req.extra_user_content_parts,
+                            # tool_choice="required",
+                            abort_signal=self._abort_signal,
+                            request_max_retries=self.request_max_retries,
+                        )
+                    )
+        except EmptyModelOutputError:
+            logger.warning(
+                "skills_like tool re-query still returned an empty completion after %s attempts; skipping the re-query.",
+                self.EMPTY_OUTPUT_RETRY_ATTEMPTS,
+                exc_info=True,
+            )
+            return None
+        return response
+
     async def _resolve_tool_exec(
         self,
         llm_resp: LLMResponse,
-    ) -> tuple[LLMResponse, ToolSet | None]:
+    ) -> tuple[LLMResponse | None, ToolSet | None]:
         """Used in 'skills_like' tool schema mode to re-query LLM with param-only tool schemas."""
         tool_names = llm_resp.tools_call_name
         if not tool_names:
@@ -1504,21 +1575,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
             if param_subset.tools and tool_names:
                 contexts = self._build_tool_requery_context(tool_names)
-                requery_resp = await self._await_or_stop(
-                    self.provider.text_chat(
-                        contexts=self._sanitize_contexts_for_provider(contexts),
-                        func_tool=param_subset,
-                        model=self.req.model,
-                        session_id=self.req.session_id,
-                        extra_user_content_parts=self.req.extra_user_content_parts,
-                        # tool_choice="required",
-                        abort_signal=self._abort_signal,
-                        request_max_retries=self.request_max_retries,
-                    )
-                )
-                if requery_resp:
-                    llm_resp = requery_resp
-                    self._sanitize_malformed_tool_calls(llm_resp)
+                requery_resp = await self._requery_text_chat(contexts, param_subset)
+                if requery_resp is None:
+                    return None, subset
+                llm_resp = requery_resp
+                self._sanitize_malformed_tool_calls(llm_resp)
 
                 # If the re-query still returns no tool calls, and also does not have a meaningful assistant reply,
                 # we consider it as a failure of the LLM to follow the tool-use instruction,
@@ -1534,23 +1595,18 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         tool_names,
                         extra_instruction=self.SKILLS_LIKE_REQUERY_REPAIR_INSTRUCTION,
                     )
-                    repair_resp = await self._await_or_stop(
-                        self.provider.text_chat(
-                            contexts=self._sanitize_contexts_for_provider(
-                                repair_contexts
-                            ),
-                            func_tool=param_subset,
-                            model=self.req.model,
-                            session_id=self.req.session_id,
-                            extra_user_content_parts=self.req.extra_user_content_parts,
-                            # tool_choice="required",
-                            abort_signal=self._abort_signal,
-                            request_max_retries=self.request_max_retries,
-                        )
+                    repair_resp = await self._requery_text_chat(
+                        repair_contexts, param_subset
                     )
-                    if repair_resp:
-                        llm_resp = repair_resp
-                        self._sanitize_malformed_tool_calls(llm_resp)
+                    if repair_resp is None:
+                        return None, subset
+                    llm_resp = repair_resp
+                    self._sanitize_malformed_tool_calls(llm_resp)
+                    if (
+                        not llm_resp.tools_call_name
+                        and not self._has_meaningful_assistant_reply(llm_resp)
+                    ):
+                        return None, subset
 
         return llm_resp, subset
 
