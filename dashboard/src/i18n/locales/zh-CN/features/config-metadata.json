@@ -1527,6 +1527,17 @@
         "description": "文本截断策略",
         "hint": "当输入文本过长时，是否截断输入以适应模型的最大上下文长度。"
       },
+      "nvidia_embedding": {
+        "hint": "NVIDIA NIM Embedding，默认地址为 https://integrate.api.nvidia.com/v1。",
+        "input_type": {
+          "description": "文档侧 input_type",
+          "hint": "文档入库时使用。NV-Embed-QA / E5 / nemotron 等模型要求区分 passage 与 query，文档侧填 passage。"
+        },
+        "query_input_type": {
+          "description": "查询侧 input_type",
+          "hint": "检索查询时使用，默认 query。NVIDIA 官方说明：填错会显著降低检索准确率。"
+        }
+      },
       "tei_rerank_truncate": {
         "description": "截断超长文本",
         "hint": "当输入超过模型最大上下文长度时，是否自动截断。启用后需配合 截断方向 使用。"
@@ -1730,7 +1741,11 @@
         }
       },
       "dashscope_embedding": {
-        "hint": "阿里云百炼 Embedding，默认地址为 https://dashscope.aliyuncs.com/api/v1。"
+        "hint": "阿里云百炼 Embedding，默认地址为 https://dashscope.aliyuncs.com/api/v1。",
+        "embedding_text_type_mode": {
+          "description": "查询/文档区分模式",
+          "hint": "auto：检索查询用 text_type=query，入库文档用 text_type=document（推荐，检索效果更好）；never：不发送 text_type。多模态模型不受此开关影响。"
+        }
       },
       "volcengine_cluster": {
         "description": "火山引擎集群",
