@@ -253,6 +253,7 @@ outline: deep
 | `POST` | `/api/v1/plugins/install/url` | — |
 | `GET` | `/api/v1/plugins/market` | — |
 | `GET` | `/api/v1/plugins/market/categories` | — |
+| `GET` | `/api/v1/plugins/market/readme` | — |
 | `GET` | `/api/v1/plugins/page` | — |
 | `GET` | `/api/v1/plugins/page-bridge-sdk.js` | — |
 | `GET` | `/api/v1/plugins/pages` | — |

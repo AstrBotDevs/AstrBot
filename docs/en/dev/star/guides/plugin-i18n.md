@@ -16,6 +16,19 @@ your_plugin/
 
 Locale file names use WebUI locales, such as `zh-CN.json` and `en-US.json`. Each file must contain a JSON object.
 
+README files can also be provided per language. AstrBot checks the full locale first, then the short language, and finally falls back to `README.md`:
+
+```text
+README.md
+README_zh-CN.md
+README_zh.md
+README.zh.md
+README_en-US.md
+README_en.md
+```
+
+The `README_<locale>.md`, `README-<locale>.md`, and `README.<locale>.md` forms are supported, and filename matching is case-insensitive. If there is no default README but the plugin provides exactly one localized README, AstrBot displays that file. For uninstalled GitHub plugins in the marketplace, AstrBot checks the default branch using the same order. Non-GitHub repositories must provide a `readme_url` from the plugin registry.
+
 When the current locale has no translation, a field is missing, or the locale file does not exist, AstrBot falls back to the default text:
 
 - Plugin names, card short descriptions, and descriptions fall back to `display_name`, `short_desc`, and `desc` in `metadata.yaml`.

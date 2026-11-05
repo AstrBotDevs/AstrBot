@@ -1946,11 +1946,12 @@ export type DeletePluginConfigFileByIdError = unknown;
 
 export type GetPluginReadmeByIdData = {
     query: {
+        locale?: string;
         plugin_id: string;
     };
 };
 
-export type GetPluginReadmeByIdResponse = (string);
+export type GetPluginReadmeByIdResponse = (SuccessEnvelope);
 
 export type GetPluginReadmeByIdError = unknown;
 
@@ -2109,9 +2110,12 @@ export type GetPluginReadmeData = {
     path: {
         plugin_id: string;
     };
+    query?: {
+        locale?: string;
+    };
 };
 
-export type GetPluginReadmeResponse = (string);
+export type GetPluginReadmeResponse = (SuccessEnvelope);
 
 export type GetPluginReadmeError = unknown;
 
@@ -2268,6 +2272,18 @@ export type ListPluginMarketData = {
 export type ListPluginMarketResponse = (SuccessEnvelope);
 
 export type ListPluginMarketError = unknown;
+
+export type GetMarketPluginReadmeData = {
+    query: {
+        custom_registry?: string;
+        locale?: string;
+        plugin_id: string;
+    };
+};
+
+export type GetMarketPluginReadmeResponse = (SuccessEnvelope);
+
+export type GetMarketPluginReadmeError = unknown;
 
 export type ListPluginMarketCategoriesResponse = (SuccessEnvelope);
 
