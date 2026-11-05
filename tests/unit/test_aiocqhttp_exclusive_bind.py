@@ -52,20 +52,26 @@ class _FakeSocket:
         self.family = family
         self.type = type_
         self.options: list[tuple[int, int, int]] = []
+        # Ordered operation log. Real sockets need the option set before bind, and
+        # checking only `options` would accept the reverse order.
+        self.ops: list[str] = []
         self.bind_args: tuple[str, int] | None = None
         self.closed = False
         self.bind_error: OSError | None = None
         _FakeSocket.instances.append(self)
 
     def setsockopt(self, level: int, option: int, value: int) -> None:
+        self.ops.append("setsockopt")
         self.options.append((level, option, value))
 
     def bind(self, address: tuple[str, int]) -> None:
+        self.ops.append("bind")
         self.bind_args = address
         if self.bind_error is not None:
             raise self.bind_error
 
     def close(self) -> None:
+        self.ops.append("close")
         self.closed = True
 
 
@@ -212,6 +218,20 @@ def test_posix_uses_reuseaddr(monkeypatch):
     ]
 
 
+def test_probe_sets_option_before_bind(monkeypatch):
+    """The socket option must be set before bind, otherwise a real socket ignores it."""
+    logger = _RecordingLogger()
+    monkeypatch.setattr(aiocqhttp_platform_adapter, "logger", logger)
+    _FakeSocket.instances = []
+    monkeypatch.setattr(aiocqhttp_platform_adapter, "socket", _fake_socket_module())
+    monkeypatch.setattr(sys, "platform", "linux")
+
+    adapter = _make_adapter("127.0.0.1", 47500)
+    adapter.run()
+
+    assert _last_fake_socket().ops == ["setsockopt", "bind", "close"]
+
+
 def test_ipv6_host_uses_inet6(monkeypatch):
     """A colon in the host selects AF_INET6 for the probe."""
     logger = _RecordingLogger()
@@ -225,6 +245,23 @@ def test_ipv6_host_uses_inet6(monkeypatch):
 
     assert _last_fake_socket().family == socket.AF_INET6
     assert _last_fake_socket().bind_args == ("::1", 47501)
+
+
+def test_bracketed_ipv6_host_is_normalised(monkeypatch):
+    """A "[::1]" host is probed without brackets, matching what hypercorn binds."""
+    logger = _RecordingLogger()
+    monkeypatch.setattr(aiocqhttp_platform_adapter, "logger", logger)
+    _FakeSocket.instances = []
+    monkeypatch.setattr(aiocqhttp_platform_adapter, "socket", _fake_socket_module())
+    monkeypatch.setattr(sys, "platform", "win32")
+
+    adapter = _make_adapter("[::1]", 47501)
+    adapter.run()
+
+    assert _last_fake_socket().family == socket.AF_INET6
+    assert _last_fake_socket().bind_args == ("::1", 47501)
+    adapter.bot.run_task.assert_called_once()
+    assert adapter.bot.run_task.call_args.kwargs["host"] == "::1"
 
 
 def test_ipv4_host_uses_inet(monkeypatch):

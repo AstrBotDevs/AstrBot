@@ -454,6 +454,12 @@ class AiocqhttpAdapter(Platform):
             self.port = 6199
 
         bind_host = str(self.host)
+        # An IPv6 literal is commonly written as "[::1]". getaddrinfo rejects the
+        # brackets while hypercorn strips them before binding, so probing the raw value
+        # would refuse a configuration that would otherwise work. Normalise here and
+        # hand the same value to the server afterwards.
+        if bind_host.startswith("[") and bind_host.endswith("]"):
+            bind_host = bind_host[1:-1]
         bind_port = int(self.port)
         family = socket.AF_INET6 if ":" in bind_host else socket.AF_INET
         probe = socket.socket(family, socket.SOCK_STREAM)
