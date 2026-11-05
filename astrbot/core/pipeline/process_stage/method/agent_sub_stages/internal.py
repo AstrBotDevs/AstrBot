@@ -209,6 +209,7 @@ class InternalAgentSubStage(Stage):
                         streaming_response=streaming_response,
                         call_request_hook=True,
                         validate_provider_endpoint=True,
+                        proactive=is_wakeup,
                     )
                     plugin_context = self.ctx.plugin_manager.context
                     build_result: MainAgentBuildResult | None = await build_main_agent(

@@ -92,6 +92,8 @@ async def build_main_agent(
 
     # Seed caller capabilities before persona selection and subagent deduplication.
     tool_mgr = plugin_context.get_llm_tool_manager()
+    if config.proactive:
+        persona.apply_proactive_registered_tools(req, plugin_context)
     if config.enable_message_delivery:
         if req.func_tool is None:
             req.func_tool = ToolSet()

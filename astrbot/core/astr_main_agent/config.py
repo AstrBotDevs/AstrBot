@@ -64,6 +64,8 @@ class MainAgentBuildConfig:
     sandbox_cfg: dict = field(default_factory=dict)
     add_cron_tools: bool = True
     """This will add cron job management tools to the main agent for proactive cron job execution."""
+    proactive: bool = False
+    """Whether this build serves a programmatic wakeup rather than a user turn."""
     provider_settings: dict = field(default_factory=dict)
     fallback_provider_ids: list[str] = field(default_factory=list)
     request_max_retries: int = 5

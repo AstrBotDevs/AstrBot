@@ -58,6 +58,7 @@ async def runtime(monkeypatch):
         cleaned=asyncio.Event(),
         requests=[],
         events=[],
+        build_configs=[],
         deliver=False,
         fail=False,
     )
@@ -115,6 +116,7 @@ async def runtime(monkeypatch):
     )
 
     async def build(*, event, plugin_context, config):
+        control.build_configs.append(config)
         prepared = await prepare_request(event, plugin_context, config, provider, None)
         assert prepared is not None
         control.events.append(event)
@@ -195,6 +197,7 @@ async def test_wakeup_uses_current_context_and_sends_final_reply(
     )
     await asyncio.wait_for(runtime.drain(), 1)
     event = runtime.events[0]
+    assert runtime.build_configs[-1].proactive is True
     assert event.unified_msg_origin == umo
     assert event.role == "member"
     assert runtime.requests[0][0] == history[0]

@@ -17,6 +17,7 @@ from astrbot.core.persona_error_reply import (
 )
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import ProviderRequest
+from astrbot.core.provider.func_tool_manager import FunctionToolManager
 from astrbot.core.skills.skill_manager import (
     SkillInfo,
     SkillManager,
@@ -131,10 +132,7 @@ async def apply_persona(
 
     # inject toolset in the persona
     if (persona and persona.get("tools") is None) or not persona:
-        persona_toolset = tmgr.get_full_tool_set()
-        for tool in list(persona_toolset):
-            if not tool.active:
-                persona_toolset.remove_tool(tool.name)
+        persona_toolset = _active_registered_tool_set(tmgr)
     else:
         persona_toolset = ToolSet()
         if persona["tools"]:
@@ -146,6 +144,33 @@ async def apply_persona(
         req.func_tool = persona_toolset
     else:
         req.func_tool.merge(persona_toolset)
+
+
+def _active_registered_tool_set(tool_mgr: FunctionToolManager) -> ToolSet:
+    """Return the registered plugin/MCP tools that are currently active."""
+    tool_set = tool_mgr.get_full_tool_set()
+    for tool in list(tool_set):
+        if not tool.active:
+            tool_set.remove_tool(tool.name)
+    return tool_set
+
+
+def apply_proactive_registered_tools(
+    req: ProviderRequest,
+    plugin_context: Context,
+) -> None:
+    """Give programmatic wakeups the plugin tools registered for this session.
+
+    Wakeups enter the normal pipeline without a user message, so their tool set
+    can miss tools registered through ``@llm_tool`` and the model may print
+    raw tool-call text instead. Call this before ``subagent.apply_subagents``
+    so tools assigned to subagents stay deduplicated from the main agent.
+    """
+    if req.func_tool is None:
+        req.func_tool = ToolSet()
+    req.func_tool.merge(
+        _active_registered_tool_set(plugin_context.get_llm_tool_manager())
+    )
 
 
 def apply_safety_instructions(
