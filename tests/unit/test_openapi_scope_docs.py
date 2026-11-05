@@ -29,6 +29,9 @@ def test_public_openapi_is_filtered_by_supported_scope() -> None:
     assert "/api/v1/files/tokens/{file_token}" not in spec["paths"]
     assert "/api/v1/stats/versions" not in spec["paths"]
 
+    for path in ("/api/v1/stats", "/api/v1/stats/provider-tokens"):
+        assert spec["paths"][path]["get"]["x-astrbot-scope"] == "stats"
+
     for methods in spec["paths"].values():
         for operation in methods.values():
             assert operation["x-astrbot-scope"] in PUBLIC_OPEN_API_SCOPES

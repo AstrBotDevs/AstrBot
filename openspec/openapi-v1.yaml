@@ -8,10 +8,13 @@ info:
     JSON objects because their schemas are provided at runtime by template
     endpoints.
     Developer API keys currently support these scopes only: bot, provider,
-    persona, im, config, chat, data, file, plugin, mcp, skill, plus the sensitive
+    persona, im, config, chat, data, file, plugin, mcp, skill, stats, plus the sensitive
     config:edit_admin and chat:admin sub-scopes. The config scope also grants bot
     and provider access, but no parent scope grants a sensitive sub-scope.
 x-astrbot-scope-definitions:
+  stats:
+    description: Read runtime and token usage statistics.
+    description_zh: 读取运行状态和 Token 使用统计。
   bot:
     description: Manage bot and platform configurations.
     description_zh: 管理机器人及平台配置。
@@ -4583,7 +4586,7 @@ paths:
       tags: [Stats]
       summary: Get runtime statistics
       operationId: getStats
-      x-astrbot-scope: system
+      x-astrbot-scope: stats
       parameters:
         - name: offset_sec
           in: query
@@ -4599,7 +4602,7 @@ paths:
       tags: [Stats]
       summary: Get provider token usage statistics
       operationId: getProviderTokenStats
-      x-astrbot-scope: system
+      x-astrbot-scope: stats
       parameters:
         - name: days
           in: query
@@ -5833,8 +5836,8 @@ components:
           type: array
           items:
             type: string
-            enum: [bot, provider, persona, im, config, "config:edit_admin", chat, "chat:admin", data, file, plugin, mcp, skill]
-          example: [bot, provider, persona, im, config, "config:edit_admin", chat, "chat:admin", data, file, plugin, mcp, skill]
+            enum: [bot, provider, persona, im, config, "config:edit_admin", chat, "chat:admin", data, file, plugin, mcp, skill, stats]
+          example: [bot, provider, persona, im, config, "config:edit_admin", chat, "chat:admin", data, file, plugin, mcp, skill, stats]
         expires_at:
           type: string
           format: date-time
