@@ -1,4 +1,5 @@
 from collections.abc import AsyncGenerator
+from contextlib import aclosing
 
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import ProviderRequest
@@ -45,19 +46,25 @@ class ProcessStage(Stage):
         )
         # 有插件 Handler 被激活
         if activated_handlers:
-            async for resp in self.star_request_sub_stage.process(event):
-                # 生成器返回值处理
-                if isinstance(resp, ProviderRequest):
-                    # Handler 的 LLM 请求
-                    event.set_extra("provider_request", resp)
-                    _t = False
-                    async for _ in self.agent_sub_stage.process(event):
-                        _t = True
+            async with aclosing(
+                self.star_request_sub_stage.process(event)
+            ) as plugin_responses:
+                async for resp in plugin_responses:
+                    # 生成器返回值处理
+                    if isinstance(resp, ProviderRequest):
+                        # Handler 的 LLM 请求
+                        event.set_extra("provider_request", resp)
+                        _t = False
+                        async with aclosing(
+                            self.agent_sub_stage.process(event)
+                        ) as responses:
+                            async for _ in responses:
+                                _t = True
+                                yield
+                        if not _t:
+                            yield
+                    else:
                         yield
-                    if not _t:
-                        yield
-                else:
-                    yield
 
         # 调用 LLM 相关请求
         if not self.ctx.astrbot_config["provider_settings"].get("enable", True):
@@ -72,5 +79,6 @@ class ProcessStage(Stage):
             if (
                 event.get_result() and not event.is_stopped()
             ) or not event.get_result():
-                async for _ in self.agent_sub_stage.process(event):
-                    yield
+                async with aclosing(self.agent_sub_stage.process(event)) as responses:
+                    async for _ in responses:
+                        yield
