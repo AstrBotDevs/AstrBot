@@ -1440,7 +1440,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         ],
                     )
                 )
-                logger.info(f"Tool `{func_tool_name}` Result: {tool_result_content}")
+                logger.info(
+                    "Tool `%s` completed; result_chars=%d",
+                    func_tool_name,
+                    len(tool_result_content),
+                )
 
         # 处理函数调用响应
         if tool_call_result_blocks:

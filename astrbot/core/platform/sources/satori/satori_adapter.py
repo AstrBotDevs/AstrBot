@@ -472,7 +472,11 @@ class SatoriPlatformAdapter(Platform):
                         quote = quote_info["quote"]
                         content_for_parsing = quote_info["content_without_quote"]
                 except Exception as e:
-                    logger.error(f"解析<quote>标签时发生错误: {e}, 错误内容: {content}")
+                    logger.error(
+                        "解析<quote>标签时发生错误: %s, 内容长度: %d",
+                        e,
+                        len(content),
+                    )
 
             if quote:
                 # 引用消息
@@ -734,7 +738,11 @@ class SatoriPlatformAdapter(Platform):
             root = ET.fromstring(processed_content)
             await self._parse_xml_node(root, elements)
         except ET.ParseError as e:
-            logger.warning(f"解析 Satori 元素时发生解析错误: {e}, 错误内容: {content}")
+            logger.warning(
+                "解析 Satori 元素时发生解析错误: %s, 内容长度: %d",
+                e,
+                len(content),
+            )
             # 如果解析失败，将整个内容当作纯文本
             if content.strip():
                 elements.append(Plain(text=content))

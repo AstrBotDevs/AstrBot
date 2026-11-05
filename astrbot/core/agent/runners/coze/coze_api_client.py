@@ -159,7 +159,12 @@ class CozeAPIClient:
         if conversation_id:
             params["conversation_id"] = conversation_id
 
-        logger.debug(f"Coze chat_messages payload: {payload}, params: {params}")
+        logger.debug(
+            "Coze chat_messages request: messages=%d has_conversation=%s stream=%s",
+            len(additional_messages or []),
+            bool(conversation_id),
+            stream,
+        )
 
         try:
             async with session.post(

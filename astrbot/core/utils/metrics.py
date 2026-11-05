@@ -1,11 +1,10 @@
 import asyncio
 import os
 import platform
-import socket
 import sys
-import uuid
 from contextlib import suppress
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 import aiohttp
 
@@ -14,7 +13,6 @@ from astrbot.core.config import VERSION
 
 
 class Metric:
-    _iid_cache = None
     _has_uploaded_once = False
     _upload_interval_seconds = 10 * 60
     _max_pending_metric_groups = 64
@@ -35,33 +33,6 @@ class Metric:
             return astrbot_config.get("disable_metrics", False)
         except (ImportError, AttributeError, KeyError):
             return False
-
-    @staticmethod
-    def get_installation_id():
-        """获取或创建一个唯一的安装ID"""
-        if Metric._iid_cache is not None:
-            return Metric._iid_cache
-
-        config_dir = os.path.join(os.path.expanduser("~"), ".astrbot")
-        id_file = os.path.join(config_dir, ".installation_id")
-
-        if os.path.exists(id_file):
-            try:
-                with open(id_file) as f:
-                    Metric._iid_cache = f.read().strip()
-                    return Metric._iid_cache
-            except Exception:
-                pass
-        try:
-            os.makedirs(config_dir, exist_ok=True)
-            installation_id = str(uuid.uuid4())
-            with open(id_file, "w") as f:
-                f.write(installation_id)
-            Metric._iid_cache = installation_id
-            return installation_id
-        except Exception:
-            Metric._iid_cache = "null"
-            return "null"
 
     @staticmethod
     def _get_lock() -> asyncio.Lock:
@@ -194,14 +165,6 @@ class Metric:
         payload_metrics["v"] = VERSION
         payload_metrics["os"] = sys.platform
         payload_metrics["python_version"] = platform.python_version()
-        try:
-            payload_metrics["hn"] = socket.gethostname()
-        except Exception:
-            pass
-        try:
-            payload_metrics["iid"] = Metric.get_installation_id()
-        except Exception:
-            pass
         payload = {"metrics_data": payload_metrics}
 
         try:
@@ -221,5 +184,34 @@ class Metric:
         if Metric._is_disabled():
             return
 
+        kwargs = dict(kwargs)
+        if "repo" in kwargs:
+            # Strip credentials and volatile URL parts before sending telemetry.
+            repo = str(kwargs["repo"]).strip()
+            if repo.startswith("git@") and ":" in repo:
+                host, path = repo[4:].split(":", 1)
+                repo = f"https://{host}/{path}"
+            try:
+                parsed = urlsplit(repo)
+                host = parsed.hostname or ""
+                port = parsed.port
+                if parsed.scheme.lower() in {"http", "https", "ssh"} and host:
+                    if ":" in host and not host.startswith("["):
+                        host = f"[{host}]"
+                    netloc = f"{host}:{port}" if port else host
+                    kwargs["repo"] = urlunsplit(
+                        (
+                            parsed.scheme.lower(),
+                            netloc,
+                            parsed.path.rstrip("/"),
+                            "",
+                            "",
+                        )
+                    )
+                else:
+                    kwargs["repo"] = "<invalid>"
+            except ValueError:
+                kwargs["repo"] = "<invalid>"
+
         await Metric._save_platform_stats(kwargs)
-        await Metric._add_pending_metrics(dict(kwargs))
+        await Metric._add_pending_metrics(kwargs)

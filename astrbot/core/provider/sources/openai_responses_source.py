@@ -363,7 +363,11 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                 f"{response}."
             )
 
-        logger.debug("response: %s", response)
+        logger.debug(
+            "response: id=%s model=%s",
+            getattr(response, "id", ""),
+            getattr(response, "model", ""),
+        )
         return await self._parse_response(response, tools)
 
     async def _query_stream(
