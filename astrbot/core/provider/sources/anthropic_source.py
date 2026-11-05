@@ -392,7 +392,7 @@ class ProviderAnthropic(Provider):
 
     @staticmethod
     def _sanitize_assistant_messages(payloads: dict) -> None:
-        """Remove orphaned tool results from Anthropic messages.
+        """Remove empty user messages and orphaned tool results.
 
         Args:
             payloads: Anthropic request payload containing a messages list.
@@ -426,10 +426,19 @@ class ProviderAnthropic(Provider):
                 sanitized.append(msg)
                 continue
 
+            if role == "user" and content == "":
+                continue
+
             if role == "user" and isinstance(content, list):
                 tool_results: list[Any] = []
                 other_blocks: list[Any] = []
                 for block in content:
+                    if (
+                        isinstance(block, dict)
+                        and block.get("type") == "text"
+                        and block.get("text") == ""
+                    ):
+                        continue
                     if isinstance(block, dict) and block.get("type") == "tool_result":
                         tool_use_id = block.get("tool_use_id")
                         if tool_use_id in pending_tool_use_ids:
