@@ -1,4 +1,6 @@
 import asyncio
+import base64
+import json
 import os
 import sys
 from pathlib import Path
@@ -1735,6 +1737,215 @@ async def test_skills_like_requery_passes_extra_user_content_parts(streaming):
     parts = captured_kwargs["extra_user_content_parts"]
     assert len(parts) == 1
     assert parts[0].text == "<image_caption>一张猫的照片</image_caption>"
+
+
+_SELECT_SIGNATURE = base64.b64encode(b"select-call").decode()
+_ACTUAL_SIGNATURE = base64.b64encode(b"actual-call").decode()
+
+
+class RequeryMetadataProvider(MockProvider):
+    """Reply with a tool selection, then the re-query result, then plain text."""
+
+    def __init__(self, first: LLMResponse, second: LLMResponse):
+        super().__init__()
+        self.responses = [first, second]
+
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        if self.responses:
+            return self.responses.pop(0)
+        return LLMResponse(
+            role="assistant",
+            completion_text="最终回复",
+            usage=TokenUsage(input_other=10, output=5),
+        )
+
+
+async def _run_skills_like_requery_step(
+    provider: MockProvider, tool_names: list[str]
+) -> ToolLoopAgentRunner:
+    """Run one skills_like step so the re-query result is recorded as history.
+
+    Args:
+        provider: Provider that answers the selection and re-query calls.
+        tool_names: Names of the tools to expose through the light schema.
+
+    Returns:
+        The runner after one step, with the tool-call turn in its messages.
+    """
+    tool_set = ToolSet(
+        tools=[
+            FunctionTool(
+                name=name,
+                description="测试",
+                parameters={
+                    "type": "object",
+                    "properties": {"query": {"type": "string"}},
+                },
+                handler=AsyncMock(),
+            )
+            for name in tool_names
+        ]
+    )
+    req = ProviderRequest(prompt="请帮我查询信息", func_tool=tool_set, contexts=[])
+    event = MockEvent(umo="test_umo", sender_id="test_sender")
+    run_context = ContextWrapper(context=MockAgentContext(event))
+    runner = ToolLoopAgentRunner()
+    await runner.reset(
+        provider=provider,
+        request=req,
+        run_context=run_context,
+        tool_executor=cast(Any, MockToolExecutor()),
+        agent_hooks=MockHooks(),
+        tool_schema_mode="skills_like",
+    )
+    async for _ in runner.step():
+        pass
+    return runner
+
+
+def _recorded_tool_turn(runner: ToolLoopAgentRunner):
+    """Return the assistant message that records the executed tool calls."""
+    return next(
+        msg
+        for msg in runner.run_context.messages
+        if msg.role == "assistant" and getattr(msg, "tool_calls", None)
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("same_ids", [False, True])
+async def test_skills_like_requery_keeps_tool_call_extra_content(same_ids):
+    """The recorded tool call must carry the re-query's provider metadata.
+
+    Gemini falls back to the tool name as the call ID, so both replies often
+    share one ID; the stale selection signature must still be replaced. The
+    reasoning/signature pair travels with the call, the narration does not.
+    """
+    first_id = "test_tool"
+    second_id = "test_tool" if same_ids else "call_actual"
+    select_signature = {"google": {"thought_signature": _SELECT_SIGNATURE}}
+    actual_signature = {"google": {"thought_signature": _ACTUAL_SIGNATURE}}
+    provider = RequeryMetadataProvider(
+        LLMResponse(
+            role="assistant",
+            completion_text="选择工具",
+            reasoning_content="pick a tool",
+            reasoning_signature=_SELECT_SIGNATURE,
+            tools_call_name=["test_tool"],
+            tools_call_args=[{"query": "select"}],
+            tools_call_ids=[first_id],
+            tools_call_extra_content={first_id: select_signature},
+        ),
+        LLMResponse(
+            role="assistant",
+            completion_text="调用工具",
+            reasoning_content="fill the arguments",
+            reasoning_signature=_ACTUAL_SIGNATURE,
+            tools_call_name=["test_tool"],
+            tools_call_args=[{"query": "actual"}],
+            tools_call_ids=[second_id],
+            tools_call_extra_content={second_id: actual_signature},
+        ),
+    )
+
+    runner = await _run_skills_like_requery_step(provider, ["test_tool"])
+
+    assert provider.call_count == 2
+    turn = _recorded_tool_turn(runner)
+    assert [call.id for call in turn.tool_calls] == [second_id]
+    assert turn.tool_calls[0].function.arguments == json.dumps({"query": "actual"})
+    assert turn.tool_calls[0].extra_content == actual_signature
+    parts = {part.type: part for part in turn.content}
+    assert parts["think"].think == "fill the arguments"
+    assert parts["think"].encrypted == _ACTUAL_SIGNATURE
+    assert parts["text"].text == "选择工具"
+
+
+@pytest.mark.asyncio
+async def test_skills_like_requery_keeps_extra_content_per_tool_call():
+    """Each re-queried call keeps its own metadata; nothing is broadcast."""
+    signatures = {
+        "call_a": {"google": {"thought_signature": _ACTUAL_SIGNATURE}},
+        "call_b": {"google": {"thought_signature": _SELECT_SIGNATURE}},
+    }
+    provider = RequeryMetadataProvider(
+        LLMResponse(
+            role="assistant",
+            completion_text="选择工具",
+            tools_call_name=["test_tool", "other_tool"],
+            tools_call_args=[{}, {}],
+            tools_call_ids=["test_tool", "other_tool"],
+            tools_call_extra_content={
+                "test_tool": {"google": {"thought_signature": "c3RhbGU="}},
+            },
+        ),
+        LLMResponse(
+            role="assistant",
+            completion_text="调用工具",
+            tools_call_name=["test_tool", "other_tool"],
+            tools_call_args=[{"query": "a"}, {"query": "b"}],
+            tools_call_ids=["call_a", "call_b"],
+            tools_call_extra_content=signatures,
+        ),
+    )
+
+    runner = await _run_skills_like_requery_step(provider, ["test_tool", "other_tool"])
+
+    tool_calls = _recorded_tool_turn(runner).tool_calls
+    assert {call.id: call.extra_content for call in tool_calls} == signatures
+
+
+@pytest.mark.asyncio
+async def test_skills_like_requery_signature_round_trips_to_gemini():
+    """Gemini must replay one signature, the re-query's, on the whole model turn."""
+    from astrbot.core.provider.sources.gemini_source import ProviderGoogleGenAI
+
+    provider = RequeryMetadataProvider(
+        LLMResponse(
+            role="assistant",
+            completion_text="选择工具",
+            reasoning_signature=_SELECT_SIGNATURE,
+            tools_call_name=["test_tool"],
+            tools_call_args=[{"query": "select"}],
+            tools_call_ids=["test_tool"],
+            tools_call_extra_content={
+                "test_tool": {"google": {"thought_signature": _SELECT_SIGNATURE}},
+            },
+        ),
+        LLMResponse(
+            role="assistant",
+            completion_text="调用工具",
+            reasoning_signature=_ACTUAL_SIGNATURE,
+            tools_call_name=["test_tool"],
+            tools_call_args=[{"query": "actual"}],
+            tools_call_ids=["test_tool"],
+            tools_call_extra_content={
+                "test_tool": {"google": {"thought_signature": _ACTUAL_SIGNATURE}},
+            },
+        ),
+    )
+    runner = await _run_skills_like_requery_step(provider, ["test_tool"])
+
+    gemini = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    contents = await gemini._prepare_conversation(
+        {"messages": [msg.model_dump() for msg in runner.run_context.messages]}
+    )
+
+    model_turn = next(
+        content
+        for content in contents
+        if any(part.function_call is not None for part in (content.parts or []))
+    )
+    assert model_turn.parts is not None
+    # Narration text part plus the function call, both carrying the re-query
+    # signature, which is the shape a single full-mode Gemini reply produces.
+    assert [part.text for part in model_turn.parts] == ["选择工具", None]
+    assert model_turn.parts[1].function_call.args == {"query": "actual"}
+    assert [part.thought_signature for part in model_turn.parts] == [
+        b"actual-call",
+        b"actual-call",
+    ]
 
 
 @pytest.mark.asyncio
