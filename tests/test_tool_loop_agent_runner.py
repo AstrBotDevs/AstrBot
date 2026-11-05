@@ -975,6 +975,68 @@ async def test_tool_result_includes_all_calltoolresult_content(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("modalities", "expect_image"),
+    [
+        ([], False),
+        (None, False),
+        (["text", "tool_use"], False),
+        (["image", "tool_use"], True),
+    ],
+)
+async def test_tool_result_images_require_explicit_image_modality(
+    runner, provider_request, mock_hooks, monkeypatch, modalities, expect_image
+):
+    from astrbot.core.agent.tool_image_cache import tool_image_cache
+
+    provider = SingleToolThenFinalProvider("test_tool")
+    provider.provider_config["modalities"] = modalities
+    image_reads = []
+
+    def fake_save_image(
+        base64_data, tool_call_id, tool_name, index=0, mime_type="image/png"
+    ):
+        return SimpleNamespace(
+            file_path="call_123_0.png", mime_type=mime_type, tool_name=tool_name
+        )
+
+    def fake_read_image(file_path, mime_type):
+        image_reads.append((file_path, mime_type))
+        return "dGVzdA==", mime_type
+
+    monkeypatch.setattr(tool_image_cache, "save_image", fake_save_image)
+    monkeypatch.setattr(tool_image_cache, "get_image_base64_by_path", fake_read_image)
+
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=MockMixedContentToolExecutor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(3):
+        pass
+
+    image_messages = [
+        message
+        for message in runner.run_context.messages
+        if isinstance(message.content, list)
+        and any(isinstance(part, ImageURLPart) for part in message.content)
+    ]
+    assert len(image_messages) == int(expect_image)
+    assert image_reads == ([("call_123_0.png", "image/png")] if expect_image else [])
+
+    tool_messages = [
+        message for message in runner.run_context.messages if message.role == "tool"
+    ]
+    assert "Image returned and cached at path='call_123_0.png'." in str(
+        tool_messages[0].content
+    )
+
+
+@pytest.mark.asyncio
 async def test_runner_replaces_runtime_image_context_before_provider_call(
     runner, provider_request, mock_hooks
 ):
