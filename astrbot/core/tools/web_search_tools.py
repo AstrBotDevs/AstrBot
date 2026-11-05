@@ -2430,20 +2430,28 @@ async def _keenable_search(
     ]
 
 
+_KEENABLE_NAT64_PREFIX = ipaddress.IPv6Network("64:ff9b::/96")
+
+
 def _keenable_extract_ip_is_blocked(
     address: ipaddress.IPv4Address | ipaddress.IPv6Address,
 ) -> bool:
-    """Return whether an IP must not be fetched via Keenable extract."""
+    """Return whether an IP must not be fetched via Keenable extract.
+
+    Only globally routable unicast addresses pass. An IPv6 address that carries
+    an IPv4 one (mapped, 6to4, Teredo, NAT64) is judged by that IPv4 address too.
+    """
     if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped:
         address = address.ipv4_mapped
-    return (
-        address.is_private
-        or address.is_loopback
-        or address.is_link_local
-        or address.is_multicast
-        or address.is_reserved
-        or address.is_unspecified
-    )
+    candidates: list[ipaddress.IPv4Address | ipaddress.IPv6Address] = [address]
+    if isinstance(address, ipaddress.IPv6Address):
+        if address.sixtofour:
+            candidates.append(address.sixtofour)
+        if address.teredo:
+            candidates.extend(address.teredo)
+        if address in _KEENABLE_NAT64_PREFIX:
+            candidates.append(ipaddress.IPv4Address(int(address) & 0xFFFFFFFF))
+    return any(not ip.is_global or ip.is_multicast for ip in candidates)
 
 
 def _keenable_extract_hostname_is_blocked(hostname: str) -> bool:
@@ -2457,8 +2465,29 @@ def _keenable_extract_hostname_is_blocked(hostname: str) -> bool:
         return False
 
 
+def _keenable_extract_hostname_is_valid(hostname: str) -> bool:
+    """Return whether a URL host is a well-formed DNS name or IP literal."""
+    try:
+        ipaddress.ip_address(hostname)
+    except ValueError:
+        pass
+    else:
+        return True
+    if len(hostname.rstrip(".")) > 253:
+        return False
+    try:
+        # Rejects empty labels ("example..com") and labels over 63 characters.
+        hostname.rstrip(".").encode("idna")
+    except UnicodeError:
+        return False
+    return True
+
+
 async def _keenable_extract_url_resolves_to_blocked(hostname: str) -> bool:
-    """Return whether DNS resolution yields a blocked address for extract fetches."""
+    """Return whether DNS resolution yields a blocked address for extract fetches.
+
+    A name that cannot be resolved fails closed, as if it were blocked.
+    """
     try:
         ipaddress.ip_address(hostname)
     except ValueError:
@@ -2473,8 +2502,8 @@ async def _keenable_extract_url_resolves_to_blocked(hostname: str) -> bool:
             None,
             type=socket.SOCK_STREAM,
         )
-    except socket.gaierror:
-        return False
+    except (OSError, UnicodeError):
+        return True
 
     for addr_info in addr_infos:
         sockaddr = addr_info[4]
@@ -2615,19 +2644,20 @@ class KeenableExtractWebPageTool(FunctionTool[AstrAgentContext]):
                 parsed.scheme.lower() in ("http", "https")
                 and bool(parsed.netloc)
                 and bool(parsed.hostname)
+                and parsed.username is None
+                and parsed.password is None
+                and _keenable_extract_hostname_is_valid(parsed.hostname)
             )
         except ValueError:
             valid_url = False
         if not valid_url:
-            return "Error: url must be an http or https URL."
+            return "Error: url must be an http or https URL with a valid host and no embedded credentials."
 
         hostname = parsed.hostname
         if _keenable_extract_hostname_is_blocked(hostname) or (
             await _keenable_extract_url_resolves_to_blocked(hostname)
         ):
-            return (
-                "Error: url must not target private, loopback, or link-local addresses."
-            )
+            return "Error: url must resolve to a public internet address."
 
         params: dict = {"url": url}
         try:

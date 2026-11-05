@@ -2123,6 +2123,12 @@ def _install_keenable_session(monkeypatch, responses: list) -> _FakeKeenableSess
         return session
 
     monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    # Extract resolves the host before fetching; keep tests off the real DNS.
+    def public_getaddrinfo(host, port, *args, **kwargs):
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.215.14", 0))]
+
+    monkeypatch.setattr(tools.socket, "getaddrinfo", public_getaddrinfo)
     return session
 
 
@@ -2548,6 +2554,13 @@ async def test_keenable_search_treats_null_key_setting_as_keyless(monkeypatch):
         "http://:80/page",
         # Port out of range.
         "http://example.com:99999/",
+        # Embedded credentials.
+        "https://user:pass@example.com/",
+        "https://user@example.com/",
+        # Malformed or overlong host names.
+        "https://example..com/",
+        "https://" + "a" * 64 + ".com/",
+        "https://" + ".".join(["abcdefghi"] * 26) + ".com/",
     ],
 )
 async def test_keenable_extract_tool_rejects_invalid_urls(monkeypatch, url):
@@ -2556,7 +2569,10 @@ async def test_keenable_extract_tool_rejects_invalid_urls(monkeypatch, url):
 
     result = await tool.call(_context_with_provider_settings({}), url=url)
 
-    assert result == "Error: url must be an http or https URL."
+    assert result == (
+        "Error: url must be an http or https URL with a valid host"
+        " and no embedded credentials."
+    )
     assert session.calls == []
 
 
@@ -2572,6 +2588,15 @@ async def test_keenable_extract_tool_rejects_invalid_urls(monkeypatch, url):
         "https://[2001:db8::1]/page",
         "http://localhost/admin",
         "http://service.local/status",
+        # Shared address space (CGNAT), alone and IPv4-mapped.
+        "http://100.64.0.1/",
+        "http://[::ffff:100.64.0.1]/",
+        "http://[::ffff:127.0.0.1]/",
+        # 6to4 of 127.0.0.1 and NAT64 of 10.0.0.1.
+        "http://[2002:7f00:1::]/",
+        "http://[64:ff9b::a00:1]/",
+        "http://0.0.0.0/",
+        "http://224.0.0.1/",
     ],
 )
 async def test_keenable_extract_tool_rejects_private_or_local_urls(monkeypatch, url):
@@ -2580,10 +2605,7 @@ async def test_keenable_extract_tool_rejects_private_or_local_urls(monkeypatch, 
 
     result = await tool.call(_context_with_provider_settings({}), url=url)
 
-    assert (
-        result
-        == "Error: url must not target private, loopback, or link-local addresses."
-    )
+    assert result == "Error: url must resolve to a public internet address."
     assert session.calls == []
 
 
@@ -2611,10 +2633,29 @@ async def test_keenable_extract_tool_rejects_dns_to_private_address(monkeypatch)
         url="https://internal.example/page",
     )
 
-    assert (
-        result
-        == "Error: url must not target private, loopback, or link-local addresses."
+    assert result == "Error: url must resolve to a public internet address."
+    assert session.calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "error", [socket.gaierror(socket.EAI_NONAME, "no name"), UnicodeError("label")]
+)
+async def test_keenable_extract_tool_fails_closed_when_dns_fails(monkeypatch, error):
+    session = _install_keenable_session(monkeypatch, [_TavilyResponse(status=200)])
+    tool = tools.KeenableExtractWebPageTool()
+
+    def failing_getaddrinfo(host, port, *args, **kwargs):
+        raise error
+
+    monkeypatch.setattr(tools.socket, "getaddrinfo", failing_getaddrinfo)
+
+    result = await tool.call(
+        _context_with_provider_settings({}),
+        url="https://unresolvable.example/page",
     )
+
+    assert result == "Error: url must resolve to a public internet address."
     assert session.calls == []
 
 
