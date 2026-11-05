@@ -1,6 +1,6 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 from zoneinfo import ZoneInfoNotFoundError
 
 import pytest
@@ -44,6 +44,11 @@ def test_get_system_config_falls_back_for_timezone_errors(timezone_error) -> Non
         timezone_error: Lookup failure raised by the timezone database.
     """
     fixed_time = datetime(2026, 8, 7, 2, 31, tzinfo=timezone.utc)
+    local_timezone = timezone(timedelta(hours=5, minutes=30))
+    server_time = Mock(wraps=fixed_time)
+    server_time.astimezone.side_effect = lambda tz=None: fixed_time.astimezone(
+        local_timezone if tz is None else tz
+    )
     timezone_name = "America/Toronto\tEastern"
     service = ConfigProfileService(
         SimpleNamespace(
@@ -61,14 +66,12 @@ def test_get_system_config_falls_back_for_timezone_errors(timezone_error) -> Non
             side_effect=timezone_error,
         ),
     ):
-        mock_datetime.now.return_value = fixed_time
+        mock_datetime.now.return_value = server_time
         result = service.get_system_config()
 
     assert result["config"]["timezone"] == timezone_name
     assert result["server_utc_time"] == fixed_time.isoformat()
-    assert result["server_utc_offset_minutes"] == int(
-        fixed_time.astimezone().utcoffset().total_seconds() / 60
-    )
+    assert result["server_utc_offset_minutes"] == 330
 
 
 @pytest.mark.asyncio
