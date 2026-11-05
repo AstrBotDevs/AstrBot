@@ -1,4 +1,4 @@
-"""Verify rejected cron edits preserve durable jobs and their live schedules."""
+"""Verify rejected cron operations preserve durable jobs and live schedules."""
 
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -9,6 +9,7 @@ import pytest_asyncio
 
 from astrbot.core.cron.manager import CronJobManager, CronJobSchedulingError
 from astrbot.core.db.sqlite import SQLiteDatabase
+from astrbot.core.tools.cron_tools import FutureTaskTool
 from astrbot.dashboard.services.cron_service import CronService, CronServiceError
 
 
@@ -27,9 +28,84 @@ async def cron_store(tmp_path):
         await db.engine.dispose()
 
 
+@pytest.mark.parametrize("expression", ["not a cron", "60 8 * * *"])
+@pytest.mark.asyncio
+async def test_rejected_basic_creation_leaves_no_job_or_handler(cron_store, expression):
+    """Reject invalid basic schedules without persisting or registering them.
+
+    Args:
+        cron_store: Real database and paused scheduler.
+        expression: Cron expression with an invalid field count or minute.
+    """
+    db, manager = cron_store
+    with pytest.raises(CronJobSchedulingError):
+        await manager.add_basic_job(
+            name="Rejected basic job",
+            cron_expression=expression,
+            handler=AsyncMock(),
+            persistent=True,
+        )
+
+    assert await db.list_cron_jobs() == []
+    assert manager.scheduler.get_jobs() == []
+    assert manager._basic_handlers == {}
+
+
+@pytest.mark.parametrize("entrypoint", ["tool", "dashboard"])
+@pytest.mark.parametrize(
+    "timing",
+    [
+        {"cron_expression": "not a cron"},
+        {"cron_expression": "60 8 * * *"},
+        {"run_once": True, "run_at": "invalid-date"},
+        {"run_once": True},
+    ],
+)
+@pytest.mark.asyncio
+async def test_rejected_creation_does_not_leave_a_durable_job(
+    cron_store, entrypoint, timing
+):
+    """A rejected task must not remain enabled in the database after creation.
+
+    Args:
+        cron_store: Real database and paused scheduler.
+        entrypoint: Task creation through the chat tool or dashboard service.
+        timing: Invalid cron expression or one-shot timestamp fields.
+    """
+    db, manager = cron_store
+    context = SimpleNamespace(
+        cron_manager=manager,
+        get_config=lambda: {"timezone": "Etc/GMT-2"},
+        astrbot_config_mgr=SimpleNamespace(
+            get_conf=lambda umo: {"timezone": "Etc/GMT-2"}
+        ),
+    )
+    payload = {"name": "Rejected reminder", "note": "Send a report", **timing}
+    if entrypoint == "tool":
+        wrapper = SimpleNamespace(
+            context=SimpleNamespace(
+                context=context,
+                event=SimpleNamespace(
+                    unified_msg_origin="test:FriendMessage:user",
+                    get_sender_id=lambda: "user",
+                ),
+            )
+        )
+        result = await FutureTaskTool().call(wrapper, action="create", **payload)
+        assert result.startswith("error:"), result
+    else:
+        with pytest.raises(CronServiceError):
+            await CronService(context).create_job(payload)
+
+    assert await db.list_cron_jobs() == []
+    assert manager.scheduler.get_jobs() == []
+
+
 @pytest.mark.parametrize("expression", ["not a cron", "60 9 * * *", "0 9 * * 8"])
 @pytest.mark.asyncio
-async def test_invalid_dashboard_edit_preserves_job_and_schedule(cron_store, expression):
+async def test_invalid_dashboard_edit_preserves_job_and_schedule(
+    cron_store, expression
+):
     """A rejected edit must not stop a previously working reminder.
 
     Args:
