@@ -47,6 +47,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Check Bash installer syntax
+      - name: Test Bash installer
         shell: bash
-        run: /bin/bash -n docs/public/install.sh
+        run: |
+          /bin/bash -n docs/public/install.sh
+          python3 tests/test_install_script.py
