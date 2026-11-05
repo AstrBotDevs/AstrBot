@@ -30,7 +30,11 @@ class NvidiaEmbeddingProvider(EmbeddingProvider):
         self.model = provider_config.get(
             "embedding_model", "nvidia/nemotron-3-embed-1b"
         )
+        # 文档侧 input_type。索引阶段用 passage。
         self.input_type = provider_config.get("input_type", "passage")
+        # 查询侧 input_type。NV-Embed-QA / E5 / nemotron 这类模型必须区分
+        # passage 与 query，混用会显著降低检索准确率。
+        self.query_input_type = provider_config.get("query_input_type") or "query"
 
         proxy = provider_config.get("proxy", "")
         self.proxy = proxy
@@ -54,7 +58,11 @@ class NvidiaEmbeddingProvider(EmbeddingProvider):
             )
         return self.client
 
-    def _build_payload(self, text: str | list[str]) -> dict:
+    def _build_payload(
+        self,
+        text: str | list[str],
+        input_type: str | None = None,
+    ) -> dict:
         if isinstance(text, str):
             input_text = [text]
         else:
@@ -63,7 +71,7 @@ class NvidiaEmbeddingProvider(EmbeddingProvider):
         return {
             "input": input_text,
             "model": self.model,
-            "input_type": self.input_type,
+            "input_type": input_type or self.input_type,
             "encoding_format": "float",
         }
 
@@ -76,15 +84,33 @@ class NvidiaEmbeddingProvider(EmbeddingProvider):
         return embeddings
 
     async def get_embedding(self, text: str) -> list[float]:
+        """单条文本按文档侧（passage）语义嵌入。"""
         embeddings = await self.get_embeddings([text])
         return embeddings[0] if embeddings else []
 
+    async def get_query_embedding(self, text: str) -> list[float]:
+        """检索查询按 query 侧语义嵌入。
+
+        NVIDIA 文档明确要求检索查询使用 ``input_type=query``，混用 passage
+        会显著降低检索准确率。
+        """
+        embeddings = await self._get_embeddings_with_type([text], self.query_input_type)
+        return embeddings[0] if embeddings else []
+
     async def get_embeddings(self, text: list[str]) -> list[list[float]]:
+        """批量按文档侧（passage）语义嵌入。"""
+        return await self._get_embeddings_with_type(text, self.input_type)
+
+    async def _get_embeddings_with_type(
+        self,
+        text: list[str],
+        input_type: str,
+    ) -> list[list[float]]:
         client = await self._get_client()
         if not client or client.closed:
             raise Exception("[NVIDIA Embedding] Client session not initialized")
 
-        payload = self._build_payload(text)
+        payload = self._build_payload(text, input_type=input_type)
         request_url = f"{self.base_url}/embeddings"
 
         try:

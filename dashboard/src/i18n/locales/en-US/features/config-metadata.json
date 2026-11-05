@@ -1506,6 +1506,17 @@
         "description": "Text Truncation Strategy",
         "hint": "Whether to truncate the input to fit the model's maximum context length when the input text is too long."
       },
+      "nvidia_embedding": {
+        "hint": "NVIDIA NIM Embedding, default endpoint https://integrate.api.nvidia.com/v1.",
+        "input_type": {
+          "description": "Document-side input_type",
+          "hint": "Used when indexing documents. Models such as NV-Embed-QA, E5 and nemotron require distinguishing passage from query; use passage for documents."
+        },
+        "query_input_type": {
+          "description": "Query-side input_type",
+          "hint": "Used for retrieval queries, defaults to query. NVIDIA states that a wrong value sharply lowers retrieval accuracy."
+        }
+      },
       "tei_rerank_truncate": {
         "description": "Truncate Long Text",
         "hint": "Whether to automatically truncate input when it exceeds the model's maximum context length. Requires Truncation Direction when enabled."
@@ -1709,7 +1720,11 @@
         }
       },
       "dashscope_embedding": {
-        "hint": "Aliyun DashScope Embedding. Default base URL: https://dashscope.aliyuncs.com/api/v1."
+        "hint": "Aliyun DashScope Embedding. Default base URL: https://dashscope.aliyuncs.com/api/v1.",
+        "embedding_text_type_mode": {
+          "description": "Query/document distinction mode",
+          "hint": "auto: retrieval queries use text_type=query and stored documents use text_type=document (recommended, better retrieval); never: do not send text_type. Multimodal models ignore this switch."
+        }
       },
       "volcengine_cluster": {
         "description": "Volcengine cluster",
