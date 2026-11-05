@@ -17,6 +17,33 @@ class Main(star.Star):
         await self.delete_kv_data("greeted")
 ```
 
+### Updating a shared counter
+
+Two handlers can both read `used = 4` and both write `5`. The store processes queued writes in order, but a call to `get_kv_data` followed by `put_kv_data` is not an atomic update.
+
+For a quota on one plugin instance, create one lock in `__init__` and use it everywhere that changes the counter. Hold it from the first read through the quota check and the write.
+
+```py
+import asyncio
+
+from astrbot.api.star import Context, Star
+
+
+class Main(Star):
+    def __init__(self, context: Context):
+        super().__init__(context)
+        self._quota_lock = asyncio.Lock()
+
+    async def claim_slot(self, limit: int) -> bool:
+        async with self._quota_lock:
+            used = await self.get_kv_data("used", 0)
+            if used >= limit:
+                return False
+            await self.put_kv_data("used", used + 1)
+            return True
+```
+
+This lock only coordinates tasks that share the same plugin instance. On a hot reload, a task from the old instance may still be running while the new instance uses a different lock. Separate processes also have separate locks. If the quota must hold across instances or processes, use storage that can check and update the counter in a single transaction.
 
 ## Large File Storage Convention
 
