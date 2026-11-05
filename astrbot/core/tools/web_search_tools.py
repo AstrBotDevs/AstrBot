@@ -1,5 +1,7 @@
 import asyncio
+import ipaddress
 import json
+import socket
 import uuid
 from dataclasses import dataclass as std_dataclass
 from dataclasses import field
@@ -2428,6 +2430,66 @@ async def _keenable_search(
     ]
 
 
+def _keenable_extract_ip_is_blocked(
+    address: ipaddress.IPv4Address | ipaddress.IPv6Address,
+) -> bool:
+    """Return whether an IP must not be fetched via Keenable extract."""
+    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped:
+        address = address.ipv4_mapped
+    return (
+        address.is_private
+        or address.is_loopback
+        or address.is_link_local
+        or address.is_multicast
+        or address.is_reserved
+        or address.is_unspecified
+    )
+
+
+def _keenable_extract_hostname_is_blocked(hostname: str) -> bool:
+    """Return whether a URL host must not be fetched via Keenable extract."""
+    host = hostname.rstrip(".").lower()
+    if host == "localhost" or host.endswith(".localhost") or host.endswith(".local"):
+        return True
+    try:
+        return _keenable_extract_ip_is_blocked(ipaddress.ip_address(host))
+    except ValueError:
+        return False
+
+
+async def _keenable_extract_url_resolves_to_blocked(hostname: str) -> bool:
+    """Return whether DNS resolution yields a blocked address for extract fetches."""
+    try:
+        ipaddress.ip_address(hostname)
+    except ValueError:
+        pass
+    else:
+        return False
+
+    try:
+        addr_infos = await asyncio.to_thread(
+            socket.getaddrinfo,
+            hostname,
+            None,
+            type=socket.SOCK_STREAM,
+        )
+    except socket.gaierror:
+        return False
+
+    for addr_info in addr_infos:
+        sockaddr = addr_info[4]
+        if not sockaddr:
+            continue
+        host_ip = sockaddr[0]
+        try:
+            address = ipaddress.ip_address(host_ip)
+        except ValueError:
+            continue
+        if _keenable_extract_ip_is_blocked(address):
+            return True
+    return False
+
+
 async def _keenable_fetch(provider_settings: dict, params: dict) -> dict:
     """Call the Keenable fetch endpoint and return the page as a dict."""
     return await _keenable_request(
@@ -2558,6 +2620,14 @@ class KeenableExtractWebPageTool(FunctionTool[AstrAgentContext]):
             valid_url = False
         if not valid_url:
             return "Error: url must be an http or https URL."
+
+        hostname = parsed.hostname
+        if _keenable_extract_hostname_is_blocked(hostname) or (
+            await _keenable_extract_url_resolves_to_blocked(hostname)
+        ):
+            return (
+                "Error: url must not target private, loopback, or link-local addresses."
+            )
 
         params: dict = {"url": url}
         try:
