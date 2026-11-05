@@ -913,16 +913,6 @@ def reconcile(
                 desired["发布版本"] = current.get("发布版本", "")
                 desired["发布说明"] = current.get("发布说明", "")
             else:
-                desired["交付进度"] = (
-                    "已合入待发布"
-                    if any(
-                        pr["state"] == "MERGED"
-                        for pr in linked.get(content["number"], [])
-                    )
-                    else "尚未合入"
-                    if desired["实现关联"]
-                    else "未关联实现"
-                )
                 desired["发布版本"] = ""
                 desired["发布说明"] = ""
         desired["Status"] = status_names[desired["Status"]]
