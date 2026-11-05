@@ -101,6 +101,15 @@ class MockToolExecutor:
         return generator()
 
 
+class SilentToolExecutor:
+    """Executor that completes without yielding a tool result."""
+
+    @staticmethod
+    async def execute(tool, run_context, **tool_args):
+        if False:
+            yield None
+
+
 class LargeTextToolExecutor:
     """模拟返回超长文本的工具执行器"""
 
@@ -617,6 +626,127 @@ async def test_tool_loop_next_request_includes_tool_result(
     assert len(tool_messages) == 1
     assert tool_messages[0].tool_call_id == "call_context_refresh"
     assert "工具执行结果" in tool_messages[0].content
+
+
+@pytest.mark.asyncio
+async def test_silent_tool_executor_still_emits_matching_result(
+    runner, provider_request, mock_hooks
+):
+    """An executor that yields nothing must not leave an orphaned tool call.
+
+    Args:
+        runner: Agent runner fixture.
+        provider_request: Request containing the registered test tool.
+        mock_hooks: Agent hooks fixture.
+    """
+    provider = CapturingToolLoopProvider("test_tool")
+
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=SilentToolExecutor(),
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async def snapshot_context_manager(messages, trusted_token_usage=0):
+        return list(messages)
+
+    runner.request_context_manager.process = snapshot_context_manager
+
+    async for _ in runner.step_until_done(3):
+        pass
+
+    assert provider.call_count == 2
+    second_contexts = provider.received_contexts[1]
+    tool_messages = [message for message in second_contexts if message.role == "tool"]
+    assert len(tool_messages) == 1
+    assert tool_messages[0].tool_call_id == "call_context_refresh"
+    assert "The tool returned no result." in str(tool_messages[0].content)
+
+
+@pytest.mark.asyncio
+async def test_missing_toolset_still_emits_matching_result(runner, mock_hooks):
+    """A hallucinated tool call without available tools gets an error receipt.
+
+    Args:
+        runner: Agent runner fixture.
+        mock_hooks: Agent hooks fixture.
+    """
+    provider = MockToolCallProvider("test_tool")
+    request = ProviderRequest(
+        prompt="call the unavailable tool", func_tool=None, contexts=[]
+    )
+
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=SilentToolExecutor(),
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step():
+        pass
+
+    assert provider.call_count == 1
+    tool_messages = [
+        message for message in runner.run_context.messages if message.role == "tool"
+    ]
+    assert len(tool_messages) == 1
+    assert tool_messages[0].tool_call_id == "call_test_tool"
+    assert "No tools are available" in str(tool_messages[0].content)
+
+
+@pytest.mark.asyncio
+async def test_silent_executor_repeated_calls_include_guidance(runner, mock_hooks):
+    """Repeated silent executions receive the existing repetition guidance.
+
+    Args:
+        runner: Agent runner fixture.
+        mock_hooks: Agent hooks fixture.
+    """
+    call_count = runner.REPEATED_TOOL_NOTICE_L1_THRESHOLD
+    provider = SequentialToolProvider(
+        ["test_tool"] * call_count,
+        [{"query": "same"}] * call_count,
+    )
+    tool = FunctionTool(
+        name="test_tool",
+        description="Test tool",
+        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+        handler=AsyncMock(),
+    )
+    request = ProviderRequest(
+        prompt="call the same tool repeatedly",
+        func_tool=ToolSet(tools=[tool]),
+        contexts=[],
+    )
+
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=SilentToolExecutor(),
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(call_count + 1):
+        pass
+
+    tool_messages = [
+        message for message in runner.run_context.messages if message.role == "tool"
+    ]
+    assert len(tool_messages) == call_count
+    notice = runner.REPEATED_TOOL_NOTICE_L1_TEMPLATE.format(
+        tool_name="test_tool",
+        streak=call_count,
+    )
+    assert all(notice not in str(message.content) for message in tool_messages[:-1])
+    assert notice in str(tool_messages[-1].content)
 
 
 @pytest.mark.asyncio
