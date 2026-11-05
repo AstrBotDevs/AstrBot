@@ -17,7 +17,9 @@ from PIL import Image as PILImage
 from astrbot.core import astr_main_agent as main
 from astrbot.core.agent.message import (
     ImageURLPart,
+    Message,
     TextPart,
+    bind_checkpoint_messages,
     dump_messages_with_checkpoints,
 )
 from astrbot.core.agent.tool import FunctionTool, ToolSet
@@ -352,12 +354,40 @@ async def test_animation_montage_notice_reaches_model(harness, tmp_path):
         ]
         assert len(notices) == int(expected)
         if expected:
-            assert notices[0]._no_save
+            assert not notices[0]._no_save
             assert notices[0].text.startswith("<system_notice>\n")
             assert notices[0].text.endswith("\n</system_notice>")
             assert "contain frames in reading order" in notices[0].text
             assert "Treat them as animations" in notices[0].text
             assert "do not mention the conversion or frame layout" in notices[0].text
+
+
+@pytest.mark.asyncio
+async def test_persistent_animation_guidance_survives_history_reload(harness, tmp_path):
+    req = ProviderRequest(
+        prompt="describe",
+        image_urls=[str(source_image(tmp_path))],
+    )
+    await image_input.prepare_request_images(
+        req,
+        make_event(),
+        max_size=90,
+        output_dir=harness.work,
+        prepared={},
+    )
+
+    message = Message.model_validate(await req.assemble_context())
+    sent = Provider._ensure_message_to_dicts(harness.provider, [message])
+    saved = dump_messages_with_checkpoints([message])
+    replayed = Provider._ensure_message_to_dicts(
+        harness.provider, bind_checkpoint_messages(saved)
+    )
+
+    assert any(
+        "Images labeled as animation montages" in part.get("text", "")
+        for part in sent[0]["content"]
+    )
+    assert replayed == sent
 
 
 @pytest.mark.asyncio
