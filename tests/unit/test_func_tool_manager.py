@@ -2,6 +2,7 @@ import asyncio
 import inspect
 import json
 import os
+from types import SimpleNamespace
 from unittest.mock import ANY, AsyncMock
 
 import pytest
@@ -969,6 +970,50 @@ async def test_mcp_shutdown_cleanup_survives_late_cancellation(monkeypatch):
 
     assert len(cleanup_calls) == 2
     assert "dummy" not in manager.mcp_client_dict
+
+
+@pytest.mark.asyncio
+async def test_mcp_registration_error_surfaces_instead_of_timeout(monkeypatch):
+    """A tool that cannot be registered must fail fast with the real error.
+
+    Registration happens after the handshake succeeded, so an exception raised
+    there used to kill the lifecycle task silently and resurface as an
+    initialization timeout long after the connection was actually usable.
+    """
+    manager = FunctionToolManager()
+    cleanup_calls = []
+    previous_tool = ftm.MCPTool(
+        mcp_tool=SimpleNamespace(name="previous_tool", description="", inputSchema={}),
+        mcp_client=SimpleNamespace(),
+        mcp_server_name="dummy",
+    )
+    manager.func_list.append(previous_tool)
+
+    async def fake_connect(self, config, name):
+        pass
+
+    async def fake_list_tools(self):
+        # Tool names must be strings to be sanitized for the LLM API.
+        self.tools = [SimpleNamespace(name=123, description="", inputSchema={})]
+
+    async def fake_cleanup(self):
+        cleanup_calls.append(self)
+
+    monkeypatch.setattr(ftm.MCPClient, "connect_to_server", fake_connect)
+    monkeypatch.setattr(ftm.MCPClient, "list_tools_and_save", fake_list_tools)
+    monkeypatch.setattr(ftm.MCPClient, "cleanup", fake_cleanup)
+
+    start = asyncio.get_running_loop().time()
+    with pytest.raises(TypeError):
+        await manager.enable_mcp_server("dummy", {"command": "python"}, timeout=5)
+    elapsed = asyncio.get_running_loop().time() - start
+
+    assert elapsed < 2, "registration errors must not wait for the timeout"
+    assert len(cleanup_calls) == 1
+    assert "dummy" not in manager.mcp_client_dict
+    assert manager.func_list == [previous_tool], (
+        "failed registration must not touch func_list"
+    )
 
 
 @pytest.mark.asyncio

@@ -679,6 +679,18 @@ class FunctionToolManager:
             try:
                 await mcp_client.connect_to_server(cfg, name)
                 await mcp_client.list_tools_and_save()
+                # Register tools. Build every tool before touching func_list so
+                # a rejected tool schema leaves the previous registration
+                # intact. Failures are routed through connect_error instead of
+                # letting this task die silently and hitting the timeout.
+                registered_tools = [
+                    MCPTool(
+                        mcp_tool=tool,
+                        mcp_client=mcp_client,
+                        mcp_server_name=name,
+                    )
+                    for tool in mcp_client.tools
+                ]
             except asyncio.CancelledError:
                 # cleanup on cancellation
                 try:
@@ -695,19 +707,12 @@ class FunctionToolManager:
                 connect_done.set()
                 return
 
-            # Register tools
             self.func_list = [
                 f
                 for f in self.func_list
                 if not (isinstance(f, MCPTool) and f.mcp_server_name == name)
             ]
-            for tool in mcp_client.tools:
-                func_tool = MCPTool(
-                    mcp_tool=tool,
-                    mcp_client=mcp_client,
-                    mcp_server_name=name,
-                )
-                self.func_list.append(func_tool)
+            self.func_list.extend(registered_tools)
 
             logger.info(
                 f"Connected to MCP server {name}, "
