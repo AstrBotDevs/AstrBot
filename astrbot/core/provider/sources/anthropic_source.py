@@ -421,7 +421,7 @@ class ProviderAnthropic(Provider):
                     for block in content:
                         if isinstance(block, dict) and block.get("type") == "tool_use":
                             tool_use_id = block.get("id")
-                            if tool_use_id:
+                            if isinstance(tool_use_id, str) and tool_use_id:
                                 pending_tool_use_ids.add(tool_use_id)
                 sanitized.append(msg)
                 continue
@@ -432,7 +432,11 @@ class ProviderAnthropic(Provider):
                 for block in content:
                     if isinstance(block, dict) and block.get("type") == "tool_result":
                         tool_use_id = block.get("tool_use_id")
-                        if tool_use_id in pending_tool_use_ids:
+                        if (
+                            isinstance(tool_use_id, str)
+                            and tool_use_id
+                            and tool_use_id in pending_tool_use_ids
+                        ):
                             tool_results.append(block)
                             pending_tool_use_ids.remove(tool_use_id)
                         continue
@@ -446,6 +450,63 @@ class ProviderAnthropic(Provider):
 
             sanitized.append(msg)
             pending_tool_use_ids = set()
+
+        # Remove tool_use blocks without a matching result in the
+        # immediately following user message.
+        for index, msg in enumerate(sanitized):
+            if not isinstance(msg, dict) or msg.get("role") != "assistant":
+                continue
+
+            content = msg.get("content")
+            if not isinstance(content, list):
+                continue
+
+            following = sanitized[index + 1] if index + 1 < len(sanitized) else None
+            result_ids = {
+                block.get("tool_use_id")
+                for block in (
+                    following["content"]
+                    if (
+                        isinstance(following, dict)
+                        and following.get("role") == "user"
+                        and isinstance(following.get("content"), list)
+                    )
+                    else []
+                )
+                if isinstance(block, dict)
+                and block.get("type") == "tool_result"
+                and isinstance(block.get("tool_use_id"), str)
+            }
+
+            seen_ids: set[str] = set()
+            clean_content = []
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "tool_use":
+                    tool_id = block.get("id")
+                    if (
+                        not isinstance(tool_id, str)
+                        or not tool_id
+                        or tool_id not in result_ids
+                        or tool_id in seen_ids
+                    ):
+                        continue
+                    seen_ids.add(tool_id)
+
+                clean_content.append(block)
+
+            if clean_content != content:
+                sanitized[index] = {**msg, "content": clean_content}
+
+        # Drop assistant messages emptied by the cleanup.
+        sanitized = [
+            msg
+            for msg in sanitized
+            if not (
+                isinstance(msg, dict)
+                and msg.get("role") == "assistant"
+                and msg.get("content") == []
+            )
+        ]
 
         payloads["messages"] = ProviderAnthropic._merge_consecutive_anthropic_messages(
             sanitized
