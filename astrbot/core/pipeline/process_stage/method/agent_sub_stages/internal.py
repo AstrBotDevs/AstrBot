@@ -181,7 +181,9 @@ class InternalAgentSubStage(Stage):
 
             await _prepare_file_attachments(event)
 
-            async with session_lock_manager.acquire_lock(event.unified_msg_origin):
+            async with session_lock_manager.acquire_lock(
+                event.get_llm_session_lock_key()
+            ):
                 logger.debug("acquired session lock for llm request")
                 if (
                     is_wakeup

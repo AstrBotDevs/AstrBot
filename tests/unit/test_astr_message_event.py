@@ -85,6 +85,21 @@ def astr_message_event(platform_meta, astrbot_message):
     )
 
 
+def test_llm_session_lock_key_defaults_to_umo(astr_message_event):
+    """A custom lock key overrides the unified message origin only explicitly."""
+    assert astr_message_event.get_llm_session_lock_key() == (
+        astr_message_event.unified_msg_origin
+    )
+
+    astr_message_event.set_llm_session_lock_key("topic:123")
+    assert astr_message_event.get_llm_session_lock_key() == "topic:123"
+
+    astr_message_event.set_llm_session_lock_key("")
+    assert astr_message_event.get_llm_session_lock_key() == (
+        astr_message_event.unified_msg_origin
+    )
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("tool_response", [False, True])
 async def test_streaming_trace_only_records_final_response(

@@ -5,6 +5,7 @@ import threading
 import time
 import weakref
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -151,6 +152,60 @@ class TestCrossLoopIsolation:
 
 class TestConcurrency:
     """Tests for concurrent access."""
+
+    @pytest.mark.asyncio
+    async def test_llm_request_uses_event_owned_lock_key(self, monkeypatch):
+        """Use an event-provided key while keeping the default UMO behavior."""
+        acquired_keys = []
+
+        class RecordingLockManager:
+            @asynccontextmanager
+            async def acquire_lock(self, key):
+                """Record the key selected by the pipeline.
+
+                Args:
+                    key: The event-provided LLM session lock key.
+                """
+                acquired_keys.append(key)
+                yield
+
+        event = SimpleNamespace(
+            unified_msg_origin="test:GroupMessage:group",
+            message_str="hello",
+            message_obj=SimpleNamespace(message=[]),
+            get_extra=lambda key, default=None: (
+                object() if key == "provider_request" else default
+            ),
+            get_llm_session_lock_key=lambda: "topic:42",
+            send_typing=AsyncMock(),
+        )
+        stage = InternalAgentSubStage()
+        stage.streaming_response = False
+        stage.show_reasoning = False
+        stage.main_agent_cfg = internal.MainAgentBuildConfig(tool_call_timeout=1)
+        stage.ctx = SimpleNamespace(
+            plugin_manager=SimpleNamespace(
+                context=SimpleNamespace(
+                    get_config=lambda **_kwargs: {
+                        "provider_settings": {"enable": False}
+                    }
+                )
+            )
+        )
+
+        monkeypatch.setattr(
+            internal,
+            "session_lock_manager",
+            RecordingLockManager(),
+        )
+        monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
+        monkeypatch.setattr(internal, "_prepare_file_attachments", AsyncMock())
+        monkeypatch.setattr(internal, "try_capture_follow_up", lambda _event: None)
+
+        async for _ in stage.process(event, ""):
+            pass
+
+        assert acquired_keys == ["topic:42"]
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
