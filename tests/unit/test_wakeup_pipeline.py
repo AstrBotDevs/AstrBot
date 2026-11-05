@@ -197,6 +197,8 @@ async def test_wakeup_uses_current_context_and_sends_final_reply(
     event = runtime.events[0]
     assert event.unified_msg_origin == umo
     assert event.role == "member"
+    assert event.get_self_id() == "astrbot"
+    assert event.get_sender_id() == "user_group"
     assert runtime.requests[0][0] == history[0]
     assert json.loads(runtime.conversation.history) == history + [
         {"role": "user", "content": [{"type": "text", "text": "Continue"}]},

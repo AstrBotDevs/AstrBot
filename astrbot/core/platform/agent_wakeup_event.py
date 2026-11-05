@@ -62,10 +62,10 @@ class AgentWakeupEvent(AstrMessageEvent):
 
         message = AstrBotMessage()
         message.type = session.message_type
-        message.self_id = ""
+        message.self_id = "astrbot"
         message.session_id = session.session_id
         message.message_id = uuid.uuid4().hex
-        message.sender = MessageMember(user_id="astrbot", nickname="System")
+        message.sender = MessageMember(user_id=session.session_id, nickname="System")
         message.message = [Plain(prompt)]
         message.message_str = prompt
         message.raw_message = prompt
@@ -108,7 +108,7 @@ class AgentWakeupEvent(AstrMessageEvent):
             await super().send(message)
 
     async def send_streaming(
-        self, generator: AsyncGenerator[MessageChain, None], use_fallback: bool = False
+        self, generator: AsyncGenerator[MessageChain], use_fallback: bool = False
     ) -> None:
         """Buffer streaming output and deliver it as one complete message.
 
