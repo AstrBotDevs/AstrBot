@@ -215,10 +215,32 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
             return text
         return build_query_prefix(self.query_prefix_task) + text
 
+    def _split_leading_title(self, text: str) -> tuple[str | None, str]:
+        """拆分 AstrBot 入库时拼在正文前的文档标题。
+
+        ``kb_helper`` 会把标题以 ``{title}\\n\\n{chunk}`` 的形式并进
+        ``embedding_contents``，标题本身不单独传递。``gemini-embedding-2`` 的
+        文档前缀另有 ``title:`` 位，若把整段再塞进 ``text:`` 会让标题重复，
+        且 ``title:`` 恒为 ``none``。这里把首段识别为标题拆出来。
+
+        Args:
+            text: 待嵌入的原始文本。
+
+        Returns:
+            ``(标题或 None, 正文)``。没有可识别的标题时标题为 ``None``。
+        """
+        head, sep, rest = text.partition("\n\n")
+        # 只有"独立成段且不为空"的首段才当作标题；正文里偶发的空行不误判。
+        if sep and head.strip() and rest.strip() and "\n" not in head.strip():
+            return head.strip(), rest
+        return None, text
+
     def _prepare_document(self, text: str) -> str:
         if not self._uses_task_prefix():
             return text
-        return build_document_prefix(self.document_title) + text
+        title, body = self._split_leading_title(text)
+        effective_title = title or self.document_title or None
+        return build_document_prefix(effective_title) + body
 
     # ── EmbeddingProvider 接口 ──────────────────────────────────
 

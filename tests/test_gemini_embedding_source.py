@@ -288,3 +288,63 @@ async def test_embedding_2_never_mode_omits_task_type_in_request():
     assert call["config"].task_type is None
     # 也不加前缀
     assert call["contents"] == "查询词"
+
+
+# ── 文档标题拆分 ────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("text", "expect_title", "expect_body"),
+    [
+        # kb_helper 拼接的形态：{title}\n\n{chunk}
+        ("学生优惠\n\n群里聊到 API 额度", "学生优惠", "群里聊到 API 额度"),
+        # 无标题：整段都是正文
+        ("纯正文没有标题", None, "纯正文没有标题"),
+        # 单换行不当作标题分隔
+        ("标题行\n正文", None, "标题行\n正文"),
+        # 首段为空不算标题
+        ("\n\n正文开头有空行", None, "\n\n正文开头有空行"),
+        # 首段本身是多行则不是标题
+        ("多行\n标题\n\n正文", None, "多行\n标题\n\n正文"),
+    ],
+)
+def test_split_leading_title(text, expect_title, expect_body):
+    provider = _make_provider("gemini-embedding-2")
+    title, body = provider._split_leading_title(text)
+    assert title == expect_title
+    assert body == expect_body
+
+
+@pytest.mark.asyncio
+async def test_embedding_2_uses_per_document_title_from_content():
+    """issue #11006：文档前缀应使用该文档自己的标题，而不是恒为 none。"""
+    provider = _make_provider("gemini-embedding-2")
+
+    await provider.get_embeddings(["学生优惠\n\n群里聊到 API 额度"])
+
+    sent = provider.client.calls[0]["contents"][0].parts[0].text
+    assert sent == "title: 学生优惠 | text: 群里聊到 API 额度"
+
+
+@pytest.mark.asyncio
+async def test_embedding_2_falls_back_to_none_without_title():
+    provider = _make_provider("gemini-embedding-2")
+
+    await provider.get_embeddings(["没有标题的正文"])
+
+    sent = provider.client.calls[0]["contents"][0].parts[0].text
+    assert sent == "title: none | text: 没有标题的正文"
+
+
+@pytest.mark.asyncio
+async def test_configured_title_still_wins_when_content_has_none():
+    """全局配置的标题作为兜底，正文自带标题优先。"""
+    provider = _make_provider("gemini-embedding-2", embedding_document_title="知识库")
+
+    await provider.get_embeddings(["没有标题的正文"])
+    await provider.get_embeddings(["文档A\n\n正文"])
+
+    first = provider.client.calls[0]["contents"][0].parts[0].text
+    second = provider.client.calls[1]["contents"][0].parts[0].text
+    assert first == "title: 知识库 | text: 没有标题的正文"
+    assert second == "title: 文档A | text: 正文"
