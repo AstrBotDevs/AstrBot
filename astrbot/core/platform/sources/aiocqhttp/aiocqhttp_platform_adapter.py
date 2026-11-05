@@ -478,11 +478,37 @@ class AiocqhttpAdapter(Platform):
             # machine) fails the bind for a reason that has nothing to do with a
             # port conflict, so only EADDRINUSE gets the "already in use" wording.
             if exc.errno == errno.EADDRINUSE:
-                logger.error(
-                    f"aiocqhttp: ws_reverse port {bind_host}:{bind_port} is already in use. "
-                    "Another AstrBot instance, or a stale backend process that was never "
-                    f"stopped, may still be listening on it. Original error: {exc!r}"
+                # This probe is deliberately stricter than the server that follows it: a
+                # listener holding a single address (say 127.0.0.1) blocks a 0.0.0.0 bind
+                # here, while hypercorn would have accepted it with SO_REUSEADDR. Splitting
+                # the message tells the operator which of the two situations they are in,
+                # because only one of them is a competing backend.
+                connect_host = {"0.0.0.0": "127.0.0.1", "::": "::1"}.get(
+                    bind_host, bind_host
                 )
+                answering = False
+                try:
+                    with socket.create_connection(
+                        (connect_host, bind_port), timeout=1.0
+                    ):
+                        answering = True
+                except OSError:
+                    answering = False
+                if answering:
+                    logger.error(
+                        f"aiocqhttp: ws_reverse port {bind_host}:{bind_port} is already served. "
+                        "Another AstrBot instance, a backend that was never stopped, or another "
+                        f"program accepts connections there. Stop it before starting this one. "
+                        f"Original error: {exc!r}"
+                    )
+                else:
+                    logger.error(
+                        f"aiocqhttp: ws_reverse port {bind_host}:{bind_port} is held by a socket "
+                        "that does not accept connections. This is normally a backend still "
+                        "shutting down, or a listener bound to one address of this port while "
+                        f"this instance wants all of them. Retry shortly, or stop that listener. "
+                        f"Original error: {exc!r}"
+                    )
             else:
                 logger.error(
                     f"aiocqhttp: cannot bind ws_reverse address {bind_host}:{bind_port}: "

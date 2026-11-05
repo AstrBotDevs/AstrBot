@@ -146,7 +146,31 @@ def test_bound_port_raises_with_port_in_message(monkeypatch):
     assert len(logger.errors) == 1
     assert "ws_reverse port 127.0.0.1:" in logger.errors[0]
     assert str(port) in logger.errors[0]
-    assert "is already in use" in logger.errors[0]
+    # A listener that accepts connections is reported as a competing server.
+    assert "is already served" in logger.errors[0]
+
+
+def test_silent_holder_gets_the_retry_wording(monkeypatch):
+    """An address that is bound but not listening is reported differently."""
+    logger = _RecordingLogger()
+    monkeypatch.setattr(aiocqhttp_platform_adapter, "logger", logger)
+    holder = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        # Bound but never listening: nothing answers, which is the "still shutting down"
+        # case rather than a competing backend.
+        holder.bind(("127.0.0.1", 0))
+        port = holder.getsockname()[1]
+        adapter = _make_adapter("127.0.0.1", port)
+
+        with pytest.raises(OSError):
+            adapter.run()
+    finally:
+        holder.close()
+
+    adapter.bot.run_task.assert_not_called()
+    assert len(logger.errors) == 1
+    assert str(port) in logger.errors[0]
+    assert "does not accept connections" in logger.errors[0]
 
 
 def test_probe_socket_is_closed_on_success(monkeypatch):
