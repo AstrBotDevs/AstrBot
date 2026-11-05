@@ -1558,6 +1558,18 @@
         ]
       },
 
+      "oauth_image_model": {
+        "description": "Codex 图像模型请求（实验性）",
+        "hint": "向图像工具请求指定模型，不改变主调用模型。默认使用 gpt-image-2.6-sunburst；显式留空由后端选择。后端可能忽略或替换指定模型，也可能拒绝 GIF 输出。成功出图不能确认实际采用的模型。",
+        "labels": [
+          "后端选择",
+          "Images 2.0",
+          "Images 2.5 Flare",
+          "Images 2.5 Sunburst",
+          "Images 2.6 Flare",
+          "Images 2.6 Sunburst（默认）"
+        ]
+      },
       "custom_headers": {
         "description": "自定义请求头",
         "hint": "此处添加的键值对将作为自定义 HTTP 请求头，附加到 AstrBot 发往模型服务商的请求中。值必须为字符串。"

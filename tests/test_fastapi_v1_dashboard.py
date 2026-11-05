@@ -5143,7 +5143,14 @@ async def test_v1_persistent_trace_routes(asgi_client, asgi_app, monkeypatch, tm
                 },
             }
         )
-        assert store.flush()
+        assert store.flush(), {
+            "last_error": store.last_error,
+            "writer_failed": store._failed,
+            "writer_stopping": store._stop.is_set(),
+            "writer_ready": store._ready.is_set(),
+            "writer_alive": store._thread.is_alive(),
+            "queued_items": store.queue.qsize(),
+        }
         response = await asgi_client.get("/api/v1/trace/history")
         assert response.status_code == 401
         token = jwt.encode(

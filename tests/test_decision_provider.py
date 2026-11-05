@@ -23,6 +23,12 @@ from astrbot.core.provider.sources.system_one_decision_source import (
 )
 
 
+@pytest.fixture(autouse=True)
+def capture_astrbot_logs(caplog, monkeypatch):
+    logger = logging.getLogger("astrbot")
+    monkeypatch.setattr(logger, "handlers", [*logger.handlers, caplog.handler])
+
+
 def _provider(handler, **overrides) -> SystemOneDecisionProvider:
     config = {
         "id": "decision_test",
