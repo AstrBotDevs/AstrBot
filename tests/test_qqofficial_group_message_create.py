@@ -781,6 +781,7 @@ async def test_result_decorate_segments_qqofficial_ws_plain_result():
     stage.enable_segmented_reply = True
     stage.only_llm_result = False
     stage.words_count_threshold = 100
+    stage.max_segments = 0
     stage.split_mode = "words"
     stage.split_words = ["。"]
     stage.split_words_pattern = re.compile(r"(.*?(。)|.+$)", re.DOTALL)
@@ -838,6 +839,117 @@ async def test_result_decorate_segments_qqofficial_ws_plain_result():
         "第一段",
         "第二段",
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("split_mode", "max_segments", "content_cleanup_rule", "expected"),
+    [
+        (
+            "regex",
+            4,
+            "",
+            ["一。", "二。", "三。", "四。五。"],
+        ),
+        (
+            "words",
+            4,
+            "",
+            ["一", "二", "三", "四五"],
+        ),
+        (
+            "regex",
+            0,
+            "",
+            ["一。", "二。", "三。", "四。", "五。"],
+        ),
+        (
+            "words",
+            -1,
+            "",
+            ["一", "二", "三", "四", "五"],
+        ),
+        (
+            "regex",
+            1,
+            "",
+            ["一。二。三。四。五。"],
+        ),
+        (
+            "regex",
+            3,
+            "[。]",
+            ["一", "二", "三四五"],
+        ),
+    ],
+)
+async def test_result_decorate_applies_max_segments(
+    split_mode: str,
+    max_segments: int,
+    content_cleanup_rule: str,
+    expected: list[str],
+):
+    stage = ResultDecorateStage()
+    stage.reply_prefix = ""
+    stage.content_safe_check_reply = False
+    stage.enable_segmented_reply = True
+    stage.only_llm_result = False
+    stage.words_count_threshold = 100
+    stage.max_segments = max_segments
+    stage.split_mode = split_mode
+    stage.regex = r".*?[。？！~…]+|.+$"
+    stage.split_words = ["。"]
+    stage.split_words_pattern = re.compile(r"(.*?(。)|.+$)", re.DOTALL)
+    stage.content_cleanup_rule = content_cleanup_rule
+    stage.show_reasoning = False
+    stage.tts_trigger_probability = 0
+    stage.reply_with_mention = False
+    stage.reply_with_quote = False
+    stage.forward_threshold = 1000
+    setattr(
+        stage,
+        "ctx",
+        SimpleNamespace(
+            plugin_manager=SimpleNamespace(
+                context=SimpleNamespace(
+                    get_using_tts_provider_async=AsyncMock(return_value=None)
+                )
+            ),
+            astrbot_config={
+                "provider_tts_settings": {
+                    "enable": False,
+                    "use_file_service": False,
+                    "dual_output": False,
+                },
+                "callback_api_base": "",
+                "t2i": False,
+            },
+        ),
+    )
+    result = MessageEventResult(
+        chain=[Plain("一。二。三。四。五。")],
+        result_content_type=ResultContentType.LLM_RESULT,
+    )
+    event = SimpleNamespace(
+        plugins_name=None,
+        unified_msg_origin="qq_official:GroupMessage:group-1",
+        get_result=lambda: result,
+        get_platform_name=lambda: "qq_official",
+        is_stopped=lambda: False,
+        get_extra=lambda *_args, **_kwargs: None,
+    )
+
+    processed = stage.process(cast(Any, event))
+    if hasattr(processed, "__aiter__"):
+        async for _ in cast(Any, processed):
+            pass
+    else:
+        yielded = await cast(Any, processed)
+        if yielded is not None:
+            async for _ in cast(Any, yielded):
+                pass
+
+    assert [comp.text for comp in result.chain if isinstance(comp, Plain)] == expected
 
 
 @pytest.mark.asyncio

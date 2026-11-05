@@ -61,6 +61,18 @@ class ResultDecorateStage(Stage):
                 "words_count_threshold"
             ],
         )
+        try:
+            self.max_segments = max(
+                int(
+                    ctx.astrbot_config["platform_settings"]["segmented_reply"].get(
+                        "max_segments",
+                        0,
+                    )
+                ),
+                0,
+            )
+        except (TypeError, ValueError):
+            self.max_segments = 0
         self.enable_segmented_reply = ctx.astrbot_config["platform_settings"][
             "segmented_reply"
         ]["enable"]
@@ -247,6 +259,16 @@ class ResultDecorateStage(Stage):
                             if not split_response:
                                 new_chain.append(comp)
                                 continue
+                            if (
+                                self.max_segments > 0
+                                and len(split_response) > self.max_segments
+                            ):
+                                split_response = [
+                                    *split_response[: self.max_segments - 1],
+                                    "".join(
+                                        split_response[self.max_segments - 1 :],
+                                    ),
+                                ]
                             for seg in split_response:
                                 if self.content_cleanup_rule:
                                     try:
