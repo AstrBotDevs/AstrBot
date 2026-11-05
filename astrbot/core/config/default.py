@@ -2170,6 +2170,21 @@ CONFIG_METADATA_2 = {
                         "proxy": "",
                         "custom_headers": {},
                     },
+                    "OpenAI Decisions": {
+                        "id": "openai_decision",
+                        "type": "openai_decision",
+                        "provider": "openai",
+                        "provider_type": "decision",
+                        "enable": True,
+                        "key": "",
+                        "api_base": "https://api.openai.com/v1",
+                        "model": "gpt-6-luna",
+                        "timeout": 5,
+                        "total_timeout": 10,
+                        "max_concurrency": 4,
+                        "proxy": "",
+                        "custom_headers": {},
+                    },
                     "Xinference STT": {
                         "id": "xinference_stt",
                         "type": "xinference_stt",
@@ -2891,7 +2906,7 @@ CONFIG_METADATA_2 = {
                     "total_timeout": {
                         "description": "总超时时间",
                         "type": "float",
-                        "hint": "单次决策请求的总超时时间（秒），包含等待并发名额、重试与退避；默认 5 秒。",
+                        "hint": "单次决策请求的总超时时间（秒），包含等待并发名额、重试与退避。",
                         "condition": {"type": "system_one_decision"},
                     },
                     "max_concurrency": {
