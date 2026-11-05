@@ -117,13 +117,6 @@ async def test_dashscope_multimodal_does_not_send_text_type():
     assert "text_type" not in captured[0]
 
 
-def test_dashscope_invalid_mode_falls_back_to_auto():
-    provider = _make_dashscope(embedding_text_type_mode="bogus")
-    # __init__ 会校验并回退；这里直接验证判定函数的结果
-    provider.text_type_mode = "auto"
-    assert provider._should_send_text_type() is True
-
-
 # ── NVIDIA ──────────────────────────────────────────────────
 
 
@@ -162,3 +155,37 @@ def test_nvidia_payload_defaults_to_passage_for_documents():
 def test_nvidia_payload_allows_custom_query_input_type():
     provider = _make_nvidia(query_input_type="query")
     assert provider._build_payload(["q"], input_type="query")["input_type"] == "query"
+
+
+def test_dashscope_init_falls_back_to_auto_for_invalid_mode(caplog):
+    """非法 mode 必须在构造期收敛为 auto，并留下 warning。
+
+    之前的用例绕过 __init__ 直接赋值，构造逻辑一变就测试不到，等于空转。
+    """
+    import logging
+
+    config = {
+        "embedding_api_key": "test-key",
+        "embedding_model": "text-embedding-v4",
+        "embedding_dimensions": 1024,
+        "embedding_text_type_mode": "bogus",
+    }
+
+    with caplog.at_level(logging.WARNING):
+        provider = DashScopeEmbeddingProvider(config, {})
+
+    assert provider.text_type_mode == "auto"
+    assert "bogus" in caplog.text
+
+
+def test_dashscope_init_keeps_valid_never_mode():
+    config = {
+        "embedding_api_key": "test-key",
+        "embedding_model": "text-embedding-v4",
+        "embedding_text_type_mode": "never",
+    }
+
+    provider = DashScopeEmbeddingProvider(config, {})
+
+    assert provider.text_type_mode == "never"
+    assert provider._should_send_text_type() is False

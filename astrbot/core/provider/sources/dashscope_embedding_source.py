@@ -16,6 +16,10 @@ _DEFAULT_MODEL = "text-embedding-v4"
 #: ``text_type`` 的合法取值。多模态端点不接受该参数。
 _TEXT_TYPES = {"query", "document"}
 
+#: 官方文档明确支持 ``text_type`` 的文本模型。更早的模型没有出现在支持列表
+#: 里，无法确认其行为，因此默认不发，避免旧部署在升级后直接报错。
+_TEXT_TYPE_MODEL_PREFIXES = ("text-embedding-v3", "text-embedding-v4")
+
 
 @register_provider_adapter(
     "dashscope_embedding",
@@ -73,11 +77,21 @@ class DashScopeEmbeddingProvider(EmbeddingProvider):
             or self.model.startswith("tongyi-embedding-vision")
         )
 
+    def supports_text_type(self) -> bool:
+        """该模型是否支持 ``text_type`` 参数。
+
+        多模态端点不接受该参数；更早的文本模型没有出现在官方支持列表里，
+        同样按不支持处理。
+        """
+        if self._is_multimodal():
+            return False
+        model = str(self.model or "").strip().lower().rsplit("/", 1)[-1]
+        return model.startswith(_TEXT_TYPE_MODEL_PREFIXES)
+
     def _should_send_text_type(self) -> bool:
-        """多模态端点不接受 text_type；旧版模型也不支持。"""
         if self.text_type_mode == "never":
             return False
-        return not self._is_multimodal()
+        return self.supports_text_type()
 
     async def get_embedding(self, text: str) -> list[float]:
         """Get the embedding vector for a single text.
