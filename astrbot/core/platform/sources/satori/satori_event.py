@@ -19,7 +19,10 @@ from astrbot.api.message_components import (
 )
 from astrbot.api.platform import AstrBotMessage, Group, MessageMember, PlatformMetadata
 from astrbot.core.platform.button_interaction import encode_button_callback
-from astrbot.core.utils.media_utils import resolve_media_ref_to_base64_data
+from astrbot.core.utils.media_utils import (
+    detect_audio_mime_type_from_base64,
+    resolve_media_ref_to_base64_data,
+)
 
 if TYPE_CHECKING:
     from .satori_adapter import SatoriPlatformAdapter
@@ -390,7 +393,16 @@ class SatoriPlatformEvent(AstrMessageEvent):
                 try:
                     record_base64 = await component.convert_to_base64()
                     if record_base64:
-                        return f'<audio src="data:audio/wav;base64,{record_base64}"/>'
+                        # Outbound audio keeps its original container (MP3
+                        # passthrough), so the MIME type has to follow the real
+                        # payload instead of assuming WAV.
+                        record_mime_type = detect_audio_mime_type_from_base64(
+                            record_base64
+                        )
+                        return (
+                            f'<audio src="data:{record_mime_type};base64,'
+                            f'{record_base64}"/>'
+                        )
                 except Exception as e:
                     logger.error(f"语音转换为base64失败: {e}")
 
@@ -530,7 +542,16 @@ class SatoriPlatformEvent(AstrMessageEvent):
                 try:
                     record_base64 = await component.convert_to_base64()
                     if record_base64:
-                        return f'<audio src="data:audio/wav;base64,{record_base64}"/>'
+                        # Outbound audio keeps its original container (MP3
+                        # passthrough), so the MIME type has to follow the real
+                        # payload instead of assuming WAV.
+                        record_mime_type = detect_audio_mime_type_from_base64(
+                            record_base64
+                        )
+                        return (
+                            f'<audio src="data:{record_mime_type};base64,'
+                            f'{record_base64}"/>'
+                        )
                 except Exception as e:
                     logger.error(f"语音转换为base64失败: {e}")
 
