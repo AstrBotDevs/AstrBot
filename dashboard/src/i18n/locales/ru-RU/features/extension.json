@@ -141,6 +141,7 @@
         }
     },
     "market": {
+        "itemsPerPage": "Элементов на странице",
         "recommended": "🥳 Рекомендуем",
         "allPlugins": "📦 Все плагины",
         "category": "Категория",
