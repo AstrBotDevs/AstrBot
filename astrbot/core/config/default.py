@@ -1695,6 +1695,18 @@ CONFIG_METADATA_2 = {
                         "proxy": "",
                         "custom_headers": {},
                     },
+                    "Runcrate": {
+                        "id": "runcrate",
+                        "provider": "runcrate",
+                        "type": "openai_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://api.runcrate.ai/v1",
+                        "timeout": 120,
+                        "proxy": "",
+                        "custom_headers": {},
+                    },
                     "ModelScope": {
                         "id": "modelscope",
                         "provider": "modelscope",
