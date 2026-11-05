@@ -5257,6 +5257,34 @@ paths:
         - name: plugins
           in: query
           schema: {type: boolean, default: false}
+        - name: commands
+          in: query
+          schema: {type: boolean, default: false}
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [running, completed, error]
+        - name: platforms
+          in: query
+          description: Comma-separated platform IDs.
+          schema: {type: string, maxLength: 1024, default: ""}
+        - name: message_types
+          in: query
+          description: Comma-separated message type names.
+          schema: {type: string, maxLength: 512, default: ""}
+        - name: umo
+          in: query
+          description: Exact unified message origin.
+          schema: {type: string, maxLength: 1024, default: ""}
+        - name: start_time
+          in: query
+          description: Inclusive minimum trace start time, in Unix seconds.
+          schema: {type: integer, minimum: 0}
+        - name: end_time
+          in: query
+          description: Inclusive maximum trace start time, in Unix seconds. The whole final second is included. Must not be before start_time.
+          schema: {type: integer, minimum: 0}
       responses:
         "200":
           $ref: "#/components/responses/Ok"

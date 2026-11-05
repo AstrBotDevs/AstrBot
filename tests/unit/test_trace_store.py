@@ -384,6 +384,7 @@ def test_database_pages_filters_details_and_restart(persisted, capture):
                 plugin="test",
                 plugin_display_name="Display Test",
                 handler_full_name="test.handler",
+                handler_category="command" if index == 0 else "listener",
             )
             trace.record(
                 "handler_end",
@@ -420,6 +421,15 @@ def test_database_pages_filters_details_and_restart(persisted, capture):
     assert persisted.list_traces(errors=True)["total"] == 1
     assert persisted.list_traces(plugins=True, query="Display Test")["total"] == 4
     assert persisted.list_traces(models=True)["total"] == 0
+    assert persisted.list_traces(commands=True)["total"] == 1
+    assert persisted.list_traces(status="running")["total"] == 1
+    assert persisted.list_traces(status="completed")["total"] == 2
+    assert persisted.list_traces(status="error")["total"] == 1
+    assert persisted.list_traces(platforms=["qq"])["total"] == 4
+    assert persisted.list_traces(platforms=["telegram"])["total"] == 0
+    assert persisted.list_traces(message_types=["Group"])["total"] == 4
+    assert persisted.list_traces(message_types=["FriendMessage"])["total"] == 0
+    assert persisted.list_traces(umo="qq:Group:123")["total"] == 4
     detail = persisted.get_trace(traces[0].trace_id)
     assert len(detail["spans"]) == 2
     assert any(
@@ -438,6 +448,48 @@ def test_database_pages_filters_details_and_restart(persisted, capture):
         assert all(span["end_time_unix_nano"] for span in detail["spans"])
     finally:
         restarted.close()
+
+
+def test_failed_completion_is_in_error_filter(persisted, capture):
+    """Persist a root failure as an error instead of a completed success."""
+    trace = TraceSpan("message")
+    with pytest.raises(RuntimeError, match="Cancelled"), trace_execution(trace):
+        trace.record("event_received")
+        raise RuntimeError("Cancelled")
+    for frame in capture:
+        assert persisted.append(frame)
+    assert persisted.flush()
+
+    assert capture[-1]["trace"]["has_errors"] is True
+    assert persisted.list_traces(status="error")["total"] == 1
+    assert persisted.list_traces(status="completed")["total"] == 0
+
+
+def test_end_time_includes_the_whole_final_second(persisted):
+    """Include a trace whose start timestamp is later in the final second."""
+    end_second = time.time_ns() // 1_000_000_000
+    start_ns = end_second * 1_000_000_000 + 500_000_000
+    trace_id = "d" * 32
+    stamp = str(start_ns)
+    summary = {
+        "trace_id": trace_id,
+        "root_span_id": "e" * 16,
+        "start_time_unix_nano": stamp,
+        "end_time_unix_nano": stamp,
+        "updated_time_unix_nano": stamp,
+        "state": "completed",
+        "has_errors": False,
+        "has_models": False,
+        "has_plugins": False,
+        "has_commands": False,
+        "span_count": 0,
+        "attributes": {},
+    }
+    assert persisted.append({"trace": summary, "time_unix_nano": stamp})
+    assert persisted.flush()
+
+    assert persisted.list_traces(end_time=end_second)["total"] == 1
+    assert persisted.list_traces(end_time=end_second - 1)["total"] == 0
 
 
 # Keep node IDs below Windows' PYTEST_CURRENT_TEST environment variable limit.
