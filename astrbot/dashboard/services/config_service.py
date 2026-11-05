@@ -609,7 +609,7 @@ class ConfigProfileService:
         if timezone_name:
             try:
                 configured_time = server_utc_time.astimezone(ZoneInfo(timezone_name))
-            except (ValueError, ZoneInfoNotFoundError):
+            except (ValueError, ZoneInfoNotFoundError, OSError):
                 configured_time = server_utc_time.astimezone()
         else:
             configured_time = server_utc_time.astimezone()

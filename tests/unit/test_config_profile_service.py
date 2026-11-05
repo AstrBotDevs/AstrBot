@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
+from zoneinfo import ZoneInfoNotFoundError
 
 import pytest
 
@@ -26,6 +27,48 @@ def test_get_system_config_includes_effective_server_time() -> None:
     assert result["server_utc_time"] == "2026-08-07T02:31:00+00:00"
     assert result["server_utc_offset_minutes"] == 480
     assert result["config"]["timezone"] == "Asia/Shanghai"
+
+
+@pytest.mark.parametrize(
+    "timezone_error",
+    [
+        OSError(22, "Invalid argument"),
+        ValueError("Invalid timezone path"),
+        ZoneInfoNotFoundError("Unknown timezone"),
+    ],
+)
+def test_get_system_config_falls_back_for_timezone_errors(timezone_error) -> None:
+    """Keep system settings accessible when timezone lookup fails.
+
+    Args:
+        timezone_error: Lookup failure raised by the timezone database.
+    """
+    fixed_time = datetime(2026, 8, 7, 2, 31, tzinfo=timezone.utc)
+    timezone_name = "America/Toronto\tEastern"
+    service = ConfigProfileService(
+        SimpleNamespace(
+            astrbot_config_mgr=SimpleNamespace(
+                confs={"default": {"timezone": timezone_name}}
+            )
+        ),
+        runtime={},
+    )
+
+    with (
+        patch("astrbot.dashboard.services.config_service.datetime") as mock_datetime,
+        patch(
+            "astrbot.dashboard.services.config_service.ZoneInfo",
+            side_effect=timezone_error,
+        ),
+    ):
+        mock_datetime.now.return_value = fixed_time
+        result = service.get_system_config()
+
+    assert result["config"]["timezone"] == timezone_name
+    assert result["server_utc_time"] == fixed_time.isoformat()
+    assert result["server_utc_offset_minutes"] == int(
+        fixed_time.astimezone().utcoffset().total_seconds() / 60
+    )
 
 
 @pytest.mark.asyncio
