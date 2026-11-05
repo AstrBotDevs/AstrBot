@@ -1491,6 +1491,8 @@ class MyPlugin(Star):
         tool_mgr.func_list.append(HelloWorldTool())
 ```
 
+如果用 `@dataclass` 定义工具，可以直接声明 `declared_permission_type` 字段作为工具默认权限，建议写字符串 `"admin"` / `"member"`（也接受 `filter.PermissionType.ADMIN` / `MEMBER`，运行时会归一化）；无法识别的值会按「仅管理员」处理并记录错误日志。未在管理面板中配置时生效，面板中的设置优先。
+
 ##### 以装饰器的形式
 
 这个形式定义的工具函数会被自动加载到 AstrBot Core 中，在 Core 请求大模型时会被自动带上。
@@ -1514,6 +1516,17 @@ async def get_weather(
 在 `location(string): 地点` 中，`location` 是参数名，`string` 是参数类型，`地点` 是参数描述。
 
 支持的参数类型有 `string`, `number`, `object`, `boolean`。
+
+使用 `permission_type` 参数可以为工具声明默认权限，效果与指令的 `@filter.permission_type()` 类似：
+
+```py
+@filter.llm_tool(name="restart_server", permission_type=filter.PermissionType.ADMIN)
+async def restart_server(self, event: AstrMessageEvent) -> MessageEventResult:
+    """重启服务器。"""
+    ...
+```
+
+该声明只是默认值：管理员在管理面板的 `插件 → 管理行为` 中为该工具设置的权限会覆盖它；`permission_type` 只接受 `filter.PermissionType.ADMIN` 和 `filter.PermissionType.MEMBER`，并且必须作为关键字参数传入。
 
 > [!NOTE]
 > 对于装饰器注册的 llm_tool，如果需要调用 Provider.text_chat()，func_tool（ToolSet 类型） 可以通过以下方式获取：

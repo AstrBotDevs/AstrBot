@@ -119,7 +119,7 @@ The following settings control different things:
 | Extensions → Plugins → the plugin's gear icon | The plugin's own parameters, such as service URLs, credentials, and feature switches. These are typically shared across the AstrBot instance; a plugin may implement more specific settings itself. |
 | Config → select a profile → Plugin | Which plugins that profile can use. By default, it uses all plugins that have not been closed; you can select a subset. Save the profile after changes. |
 | The persona's capabilities settings | Which tools and skills the current persona can use. For plugins with AI tools, check that the relevant tool is allowed here. |
-| Extensions → Handlers | Registered commands, function tools, and other handlers. Commands can have their own enabled state, name, and permission settings. |
+| Extensions → Handlers | Registered commands, function tools, and other handlers. Commands can have their own enabled state, name, and permission settings; function tools can also be enabled and set to Admin or All Users (`admin` / `member`; plugins may declare a default, and the dashboard setting wins). |
 
 **First check that the plugin is open, then check the profile and persona used by the current conversation.** Selecting a closed plugin in a profile does not open it. If you route platforms or conversations to different profiles, edit the one that actually applies.
 

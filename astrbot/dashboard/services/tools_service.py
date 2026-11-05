@@ -593,7 +593,11 @@ class ToolsService:
                 perms_store.get("_default", {}) if isinstance(perms_store, dict) else {}
             )
             configured = tool.name in defaults
-            permission = defaults[tool.name] if configured else "member"
+            permission = (
+                defaults[tool.name]
+                if configured
+                else self.tool_mgr._default_permission(tool.name, tool)
+            )
             tool_info["permission"] = permission
             tool_info["permission_configured"] = configured
         return tool_info
