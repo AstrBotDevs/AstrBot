@@ -1153,6 +1153,15 @@ class ProviderGoogleGenAI(Provider):
     ):
         """组装上下文。"""
 
+        # Video input is strictly opt-in, the same rule the agent runner applies
+        # to `ProviderRequest.video_urls` before it assembles a message. This
+        # method builds the user message for `text_chat(prompt=...)` directly and
+        # never meets that gate, so a video routed here (including one that
+        # arrived through the audio slot) is degraded below instead of reaching a
+        # provider that never declared the modality and failing the whole request.
+        modalities = self.provider_config.get("modalities", None)
+        supports_video_input = isinstance(modalities, list) and "video" in modalities
+
         async def resolve_image_part(image_url: str) -> dict | None:
             image_data = await resolve_media_ref_to_base64_data(
                 image_url,
@@ -1199,6 +1208,12 @@ class ProviderGoogleGenAI(Provider):
             }
 
         async def resolve_video_part(video_ref: str) -> dict | None:
+            # A `[Video]` placeholder keeps the attachment visible in the message
+            # while sparing the model a payload it cannot take. The resolution is
+            # skipped as well: its result would be discarded, and the reference
+            # may be a multi-megabyte file that has to be read and encoded first.
+            if not supports_video_input:
+                return {"type": "text", "text": "[Video]"}
             try:
                 video_data = await resolve_media_ref_to_base64_data(
                     video_ref,
