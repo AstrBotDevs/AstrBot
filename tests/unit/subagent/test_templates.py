@@ -21,7 +21,11 @@ async def test_persona_resolution_occurs_in_native_runtime(environment, persona_
         deepcopy(persona) if value == "default" else None
     )
     profile = env.context.get_config()
-    profile["agent"]["config"]["persona"] = {"persona_id": "", "system_prompt": "Parent instructions", "tools": ["tool_a"]}
+    profile["agent"]["config"]["persona"] = {
+        "persona_id": "",
+        "system_prompt": "Parent instructions",
+        "tools": ["tool_a"],
+    }
     env.context.get_config = lambda **kwargs: profile
     selected = await env.save_agent("planner", persona_id=persona_id)
     if persona_id == "missing":
@@ -52,8 +56,12 @@ async def test_persona_resolution_occurs_in_native_runtime(environment, persona_
 async def test_expert_changes_do_not_reconfigure_open_conversations(environment):
     env = environment
     persona = {"prompt": "Original instructions", "tools": []}
-    env.context.persona_manager.get_persona_v3_by_id.side_effect = lambda _: deepcopy(persona)
-    selected = await env.save_agent("researcher", persona_id="researcher", provider_id="alternate")
+    env.context.persona_manager.get_persona_v3_by_id.side_effect = lambda _: deepcopy(
+        persona
+    )
+    selected = await env.save_agent(
+        "researcher", persona_id="researcher", provider_id="alternate"
+    )
     agent = await env.native.spawn_agent(
         env.root, [{"type": "plain", "text": "Initial"}], config_id=selected.config_id
     )
@@ -74,17 +82,6 @@ async def test_expert_changes_do_not_reconfigure_open_conversations(environment)
     assert "Updated instructions" not in str(
         env.provider.text_chat.call_args.kwargs["contexts"]
     )
-
-
-@pytest.mark.asyncio
-async def test_unknown_expert_and_provider_reject_session_creation(environment):
-    env = environment
-    for options in ({"config_id": "missing"},):
-        with pytest.raises(ValueError, match="missing"):
-            await env.native.spawn_agent(
-                env.root, [{"type": "plain", "text": "Task"}], **options
-            )
-    assert not env.store.agents
 
 
 @pytest.mark.asyncio

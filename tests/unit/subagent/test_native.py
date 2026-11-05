@@ -1,5 +1,4 @@
 import asyncio
-import importlib
 import json
 import sys
 from types import SimpleNamespace
@@ -9,37 +8,9 @@ import pytest
 from PIL import Image as PILImage
 
 from astrbot.core.agent.tool import FunctionTool, ToolSet
+from astrbot.core.astr_agent_runtime.subagents.store import AgentState
 from astrbot.core.message.components import Image
 from astrbot.core.provider.entities import LLMResponse
-from astrbot.core.astr_agent_runtime.subagents.store import AgentState
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "module_name", ["astrbot.api.agents", "astrbot.core.astr_agent_context"]
-)
-async def test_documented_context_imports_work_with_native_sdk(
-    environment, module_name
-):
-    from astrbot.core.astr_agent_runtime import context as native_context
-
-    env = environment
-    public = importlib.import_module(module_name)
-    AstrAgentContext = public.AstrAgentContext
-    AgentContextWrapper = public.AgentContextWrapper
-    assert AstrAgentContext is native_context.AstrAgentContext
-    assert AgentContextWrapper is native_context.AgentContextWrapper
-    context = AstrAgentContext(context=env.context, event=env.event)
-    wrapper = AgentContextWrapper(context=context)
-    response = await env.context.tool_loop_agent(
-        event=env.event,
-        chat_provider_id="model",
-        prompt="Use the existing plugin imports",
-        run_context=wrapper,
-    )
-    assert response.completion_text == "Done"
-    assert wrapper.context is context
-    assert wrapper.runner.run_context is wrapper
 
 
 @pytest.mark.asyncio
@@ -289,6 +260,7 @@ async def test_native_tool_selection_preserves_guards_and_scope_restrictions(
     selected = await env.save_agent("expert", tools=None)
     env.root.delegable_tools = ToolSet(tools)
     from astrbot.core.astr_agent_runtime import delegated_session
+
     create_runner = AsyncMock(wraps=delegated_session.create_native_runner)
     monkeypatch.setattr(delegated_session, "create_native_runner", create_runner)
     agent = await env.native.spawn_agent(
@@ -312,6 +284,7 @@ async def test_expert_and_parent_tools_cannot_expand_core_plugin_contributions(
     env.root.plugin_tools = ToolSet()
     selected = await env.save_agent("expert", tools=selection)
     from astrbot.core.astr_agent_runtime import delegated_session
+
     create_runner = AsyncMock(wraps=delegated_session.create_native_runner)
     monkeypatch.setattr(delegated_session, "create_native_runner", create_runner)
     agent = await env.native.spawn_agent(

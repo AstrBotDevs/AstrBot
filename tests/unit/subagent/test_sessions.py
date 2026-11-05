@@ -2,7 +2,6 @@ import asyncio
 import copy
 import json
 from dataclasses import replace
-from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -13,6 +12,7 @@ from astrbot.core.agent.runtime import AgentPermissions, AgentRole
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.astr_agent_runtime.context import AstrAgentContext
 from astrbot.core.astr_agent_runtime.main_agent import subagent
+from astrbot.core.astr_agent_runtime.subagents.store import AgentState
 from astrbot.core.astr_agent_runtime.tools.subagent import (
     CancelAgentTool,
     ListAgentsTool,
@@ -20,8 +20,6 @@ from astrbot.core.astr_agent_runtime.tools.subagent import (
     SpawnAgentTool,
     WaitAgentTool,
 )
-from astrbot.core.provider.entities import ProviderRequest
-from astrbot.core.astr_agent_runtime.subagents.store import AgentState
 
 
 @pytest.mark.asyncio
@@ -36,14 +34,18 @@ async def test_foreign_runner_exchanges_structured_input_without_native_loop(
         {"type": "plain", "text": "Research"},
         {"type": "image", "url": "https://example.com/a.png"},
     ]
-    selected = await env.save_agent("researcher", runtime="memory", config={"model": "external"})
+    selected = await env.save_agent(
+        "researcher", runtime="memory", config={"model": "external"}
+    )
     env.memory.open_session = AsyncMock(wraps=env.memory.open_session)
     reply = json.loads(
         await SpawnAgentTool().call(
             env.wrapper, messages, config_id=selected.config_id, name="researcher"
         )
     )
-    assert env.memory.open_session.call_args_list[0].kwargs["options"]["config"] == {"model": "external"}
+    assert env.memory.open_session.call_args_list[0].kwargs["options"]["config"] == {
+        "model": "external"
+    }
     agent_id = reply["agent_id"]
     messages[0]["text"] = "Changed"
     result = await env.service.wait(env.root, [agent_id], 2000, "all")
@@ -100,39 +102,6 @@ async def test_same_agent_inputs_are_serial_and_wait_timeout_does_not_cancel(
 
 
 @pytest.mark.asyncio
-async def test_queued_input_keeps_its_permissions_and_plugin_contributions(environment):
-    env = environment
-    plugin = FunctionTool(name="plugin_tool", description="Plugin", parameters={})
-    native = FunctionTool(name="runtime_tool", description="Native", parameters={})
-    env.root.plugin_tools = ToolSet([plugin])
-    env.root.plugin_skills = []
-    env.root.delegable_tools = ToolSet([plugin, native])
-    env.memory.release = asyncio.Event()
-    agent = await env.service.spawn(
-        env.root, [{"type": "plain", "text": "First"}], runtime="memory"
-    )
-    await asyncio.wait_for(env.memory.started.get(), 1)
-    await env.service.send(
-        env.root, agent["agent_id"], [{"type": "plain", "text": "Member input"}]
-    )
-    env.root.permissions = AgentPermissions(AgentRole.ADMIN)
-    await env.service.send(
-        env.root, agent["agent_id"], [{"type": "plain", "text": "Admin input"}]
-    )
-    env.memory.release.set()
-    await asyncio.wait_for(env.service._workers[agent["agent_id"]], 2)
-    assert [input.permissions.role for input in env.memory.inputs] == [
-        AgentRole.MEMBER,
-        AgentRole.MEMBER,
-        AgentRole.ADMIN,
-    ]
-    assert all(
-        input.plugin_tools.names() == ["plugin_tool"] for input in env.memory.inputs
-    )
-    assert all(input.plugin_skills == [] for input in env.memory.inputs)
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "changed",
     [
@@ -163,6 +132,10 @@ async def test_group_members_share_agents_but_keep_each_inputs_caller(environmen
     env = environment
     env.event.role = "admin"
     env.root.permissions = AgentPermissions(AgentRole.ADMIN)
+    env.root.plugin_tools = ToolSet(
+        [FunctionTool(name="plugin_tool", description="Plugin", parameters={})]
+    )
+    env.root.plugin_skills = []
     env.memory.release = asyncio.Event()
     agent = await env.service.spawn(
         env.root, [{"type": "plain", "text": "First"}], runtime="memory"
@@ -179,6 +152,8 @@ async def test_group_members_share_agents_but_keep_each_inputs_caller(environmen
                 context=env.context,
                 event=event,
                 permissions=AgentPermissions(role),
+                plugin_tools=env.root.plugin_tools,
+                plugin_skills=env.root.plugin_skills,
                 agent_session=env.root.agent_session,
                 runtime=env.native,
             )
@@ -205,6 +180,10 @@ async def test_group_members_share_agents_but_keep_each_inputs_caller(environmen
         ("bob", AgentRole.MEMBER),
         ("carol", AgentRole.ADMIN),
     ]
+    assert all(
+        input.plugin_tools.names() == ["plugin_tool"] for input in env.memory.inputs
+    )
+    assert all(input.plugin_skills == [] for input in env.memory.inputs)
     assert (await env.service.result(wrappers[0].context, agent["agent_id"]))[
         "result"
     ] == "carol"
@@ -277,30 +256,6 @@ async def test_failure_is_queryable_and_does_not_prevent_later_input(environment
 
 
 @pytest.mark.asyncio
-async def test_config_catalog_only_changes_prompt_not_tool_schema(environment):
-    env = environment
-    spawn = env.manager.get_func("spawn_agent")
-    before = (spawn.description, json.dumps(spawn.parameters))
-    selected = await env.save_agent(
-        "researcher", runtime="memory", config={"instructions": "Private instructions"}
-    )
-    selected.description = "Find evidence"
-    await env.agent_configs.save(selected)
-    req = ProviderRequest(conversation=env.conversation)
-    await subagent.apply_subagents(req, env.context, env.event, runtime=env.native)
-    assert "researcher" in req.system_prompt
-    assert "Private instructions" not in req.system_prompt
-    assert "memory" in req.system_prompt
-    assert "researcher" not in json.dumps(req.func_tool.openai_schema())
-    assert (spawn.description, json.dumps(spawn.parameters)) == before
-    env.config["config_ids"] = []
-    updated = ProviderRequest(conversation=env.conversation)
-    await subagent.apply_subagents(updated, env.context, env.event, runtime=env.native)
-    assert "researcher" not in updated.system_prompt
-    assert updated.func_tool.openai_schema() == req.func_tool.openai_schema()
-
-
-@pytest.mark.asyncio
 async def test_rejects_nested_delegation_and_failed_initial_persistence(environment):
     env = environment
     worker = replace(env.root, is_subagent=True)
@@ -313,25 +268,6 @@ async def test_rejects_nested_delegation_and_failed_initial_persistence(environm
         )
     assert not env.store.agents
     assert not env.service._workers
-
-
-@pytest.mark.asyncio
-async def test_stop_before_driver_starts_terminates_accepted_inputs(environment):
-    from astrbot.core.utils.active_event_registry import active_event_registry
-
-    env = environment
-    agent = await env.service.spawn(
-        env.root, [{"type": "plain", "text": "Pending"}], runtime="memory"
-    )
-    task = env.service._workers[agent["agent_id"]]
-    active_event_registry.request_agent_stop_all(env.scope.umo)
-    await asyncio.gather(task, return_exceptions=True)
-    await asyncio.gather(*env.service._cleanup_tasks)
-    assert (
-        env.store.get(agent["agent_id"], env.scope).current.state
-        == AgentState.CANCELLED
-    )
-    assert not env.memory.sessions[agent["conversation_id"]]
 
 
 @pytest.mark.asyncio

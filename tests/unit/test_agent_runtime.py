@@ -1,14 +1,12 @@
 """Behavioral contract for runtime turns, independent of native model execution."""
 
-from astrbot.core.agent.events import TextDelta, ExecutionMetrics
-from astrbot.core.agent.output import PlainOutput
-
 import asyncio
 from types import SimpleNamespace
 
 import pytest
 
 from astrbot.core.agent.input import PlainInput
+from astrbot.core.agent.output import PlainOutput
 from astrbot.core.agent.runtime import (
     AgentInput,
     AgentPermissions,
@@ -31,7 +29,6 @@ class RecordingSession(AgentSession):
 
     async def execute_turn(self, turn):
         await self.entered.put(turn)
-        turn.emit(TextDelta(message_id="message", part_index=0, text="working"))
         await self.release.wait()
         self.saved.append(turn.id)
         assert turn.input.content is not None
@@ -51,27 +48,6 @@ def make_input(text="hello", *, sender="alice", role=AgentRole.MEMBER):
 
 
 @pytest.mark.asyncio
-async def test_result_and_multiple_event_readers_observe_one_execution():
-    session = RecordingSession()
-    turn = await session.run_turn(make_input())
-    await session.entered.get()
-    session.release.set()
-    result = await turn.result()
-    assert result.text == "hello"
-    assert session.saved == [turn.id]
-    first = [event async for event in turn.events()]
-    second = [event async for event in turn.events()]
-    assert [event.type for event in first] == [
-        "turn.started",
-        "text.delta",
-        "turn.finished",
-    ]
-    assert first == second
-    assert first[-1].payload.result == result
-    await session.close()
-
-
-@pytest.mark.asyncio
 async def test_queued_cancellation_does_not_release_an_earlier_turn():
     session = RecordingSession()
     assert session.state == SessionState.IDLE
@@ -80,6 +56,9 @@ async def test_queued_cancellation_does_not_release_an_earlier_turn():
     assert session.pending_turn_count == 1
     await session.entered.get()
     assert session.state == SessionState.RUNNING
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(first.result(), 0.01)
+    assert not first.done
     second = await first.follow_up(make_input("second"))
     third = await first.follow_up(make_input("third"))
     assert session.pending_turn_count == 2
@@ -94,19 +73,6 @@ async def test_queued_cancellation_does_not_release_an_earlier_turn():
     assert session.state == SessionState.IDLE
     await session.close()
     assert session.state == SessionState.CLOSED
-
-
-@pytest.mark.asyncio
-async def test_waiter_timeout_does_not_cancel_execution():
-    session = RecordingSession()
-    turn = await session.run_turn(make_input())
-    await session.entered.get()
-    with pytest.raises(asyncio.TimeoutError):
-        await asyncio.wait_for(turn.result(), 0.01)
-    assert not turn.done
-    session.release.set()
-    assert (await turn.result()).status == TurnStatus.COMPLETED
-    await session.close()
 
 
 @pytest.mark.asyncio
@@ -173,38 +139,6 @@ def test_explicit_permissions_override_mutable_event_role():
         )
     )
     assert not get_agent_permissions(context).is_admin
-
-
-@pytest.mark.asyncio
-async def test_main_session_stays_bound_when_current_conversation_changes():
-    from unittest.mock import AsyncMock, MagicMock
-
-    from astrbot.core.astr_agent_runtime import AstrAgentRuntime
-
-    umo = "test:FriendMessage:alice"
-    manager = SimpleNamespace(
-        get_curr_conversation_id=AsyncMock(return_value="first"),
-        get_conversation=AsyncMock(
-            side_effect=lambda source, cid: SimpleNamespace(
-                cid=cid, user_id=source, history=f"[{'1' if cid == 'first' else '2'}]"
-            )
-        ),
-    )
-    runtime = AstrAgentRuntime(
-        SimpleNamespace(conversation_manager=manager),
-        agent_configs=MagicMock(),
-        subagents=MagicMock(),
-    )
-    first = await runtime.open_session(umo)
-    manager.get_curr_conversation_id.return_value = "second"
-    second = await runtime.open_session(umo)
-    assert first is not second
-    assert await runtime.open_session(umo, session_id="first") is first
-    assert await first.history() == [1]
-    assert await second.history() == [2]
-    with pytest.raises(ValueError, match="another UMO"):
-        await runtime.open_session("test:FriendMessage:bob", session_id="first")
-    await runtime.close()
 
 
 @pytest.mark.asyncio

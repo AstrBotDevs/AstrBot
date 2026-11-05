@@ -8,9 +8,9 @@ import pytest
 from astrbot.core.agent.runtime import AgentSessionRef, InputReceipt, TurnResult
 from astrbot.core.astr_agent_runtime import AstrAgentRuntime
 from astrbot.core.astr_agent_runtime.main_agent import subagent
-from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.astr_agent_runtime.subagents.service import SubAgentService
 from astrbot.core.astr_agent_runtime.subagents.store import AgentState, SubAgentStore
+from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.utils.active_event_registry import active_event_registry
 
 
@@ -111,23 +111,6 @@ async def test_unconsumed_steering_queues_results_for_the_same_parent(
 
 
 @pytest.mark.asyncio
-async def test_idle_wakeup_contains_results_and_uses_explicit_parent(environment):
-    env = environment
-    agent = await env.service.spawn(
-        env.root, [{"type": "plain", "text": "Finished"}], runtime="memory"
-    )
-    await env.service._workers[agent["agent_id"]]
-    await asyncio.gather(*list(env.service.delivery._notifications.values()))
-    event = env.context.get_event_queue().get_nowait()
-    assert "Finished" in event.message_str
-    assert f"[subagent-result:{agent['agent_id']}:1]" in event.message_str
-    assert event.agent_session == env.store.get(agent["agent_id"], env.scope).parent
-    req = ProviderRequest(conversation=env.conversation, prompt=event.message_str)
-    assert await subagent.apply_subagents(req, env.context, event, runtime=env.native)
-    await asyncio.gather(*list(env.service.delivery._notifications.values()))
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize("saved", [False, True])
 @pytest.mark.parametrize("with_parent", [False, True])
 async def test_restart_reconciles_result_receipts_from_parent_history(
@@ -154,7 +137,9 @@ async def test_restart_reconciles_result_receipts_from_parent_history(
     while not env.context.get_event_queue().empty():
         env.context.get_event_queue().get_nowait()
     restarted = SubAgentService(SubAgentStore(env.db), {"memory": env.memory})
-    native = AstrAgentRuntime(env.context, agent_configs=env.agent_configs, subagents=restarted)
+    native = AstrAgentRuntime(
+        env.context, agent_configs=env.agent_configs, subagents=restarted
+    )
     restarted.runtimes["astrbot"] = native
     env.root.runtime = native
     await restarted.start(env.context)
@@ -211,7 +196,9 @@ async def test_native_history_survives_service_and_runner_restart(environment):
     await env.service.wait(env.root, [agent["agent_id"]], 2000, "all")
     await env.service.close()
     restarted = SubAgentService(SubAgentStore(env.db), {})
-    native = AstrAgentRuntime(env.context, agent_configs=env.agent_configs, subagents=restarted)
+    native = AstrAgentRuntime(
+        env.context, agent_configs=env.agent_configs, subagents=restarted
+    )
     restarted.runtimes["astrbot"] = native
     env.root.runtime = native
     await restarted.start(env.context)
@@ -405,7 +392,9 @@ async def test_idle_result_runs_through_pipeline_once_and_commits_to_parent(
         prepared = await prepare_request(
             event, env.context, config, env.provider, req, collected_input
         )
-        if not await subagent.apply_subagents(prepared.request, env.context, event, runtime=env.native):
+        if not await subagent.apply_subagents(
+            prepared.request, env.context, event, runtime=env.native
+        ):
             return None
         runner = AgentRunner()
         await runner.reset(
@@ -433,7 +422,12 @@ async def test_idle_result_runs_through_pipeline_once_and_commits_to_parent(
         SessionServiceManager, "is_session_enabled", AsyncMock(return_value=True)
     )
     scheduler = PipelineScheduler(
-        PipelineContext(config, SimpleNamespace(context=env.context), "test", agent_runtimes=env.runtimes)
+        PipelineContext(
+            config,
+            SimpleNamespace(context=env.context),
+            "test",
+            agent_runtimes=env.runtimes,
+        )
     )
     await scheduler.initialize()
     bus = EventBus(

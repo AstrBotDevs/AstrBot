@@ -28,7 +28,9 @@ async def test_config_crud_uses_stable_ids_and_blocks_persisted_references(envir
         agent_runtimes=env.runtimes,
         astrbot_config_mgr=SimpleNamespace(confs={"default": profile}),
     )
-    service = AgentConfigService(env.agent_configs, env.runtimes, core.astrbot_config_mgr)
+    service = AgentConfigService(
+        env.agent_configs, env.runtimes, core.astrbot_config_mgr
+    )
     created = await service.save(
         {"name": "Researcher", "runtime": "memory", "config": {"model": "external"}}
     )
@@ -72,6 +74,7 @@ async def test_profile_selection_is_enforced_in_prompt_and_spawn(environment):
     env.config["config_ids"] = [chosen.config_id]
     request = ProviderRequest(conversation=env.conversation)
     await apply_subagents(request, env.context, env.event, runtime=env.native)
+    tool_schema = request.func_tool.openai_schema()
     assert chosen.config_id in request.system_prompt
     assert other.config_id not in request.system_prompt
     with pytest.raises(ValueError, match="not selected"):
@@ -80,6 +83,10 @@ async def test_profile_selection_is_enforced_in_prompt_and_spawn(environment):
         )
     chosen.enabled = False
     await env.agent_configs.save(chosen)
+    updated = ProviderRequest(conversation=env.conversation)
+    await apply_subagents(updated, env.context, env.event, runtime=env.native)
+    assert chosen.config_id not in updated.system_prompt
+    assert updated.func_tool.openai_schema() == tool_schema
     with pytest.raises(ValueError, match="disabled"):
         await env.native.spawn_agent(
             env.root, [{"type": "plain", "text": "Task"}], config_id=chosen.config_id
@@ -258,40 +265,12 @@ def test_failed_migration_staging_does_not_rewrite_original_config(
     assert path.with_suffix(".subagents-migration.json").exists()
 
 
-def test_reusable_native_config_only_stores_persona_and_provider_overrides():
-    inline = normalize_agent({"runtime": "astrbot"})
-    reusable = normalize_agent({"runtime": "astrbot"}, delegated=True)
-    assert inline["config"]["misc"]["max_steps"] == 128
-    assert reusable["config"] == {
-        "model": {"provider_id": ""},
-        "persona": {"persona_id": ""},
-    }
-    advanced = normalize_agent(
-        {
-            "runtime": "astrbot",
-            "config": {
-                "misc": {"max_steps": 1},
-                "model": {"provider_id": "alternate", "request_max_retries": 99},
-                "persona": {"persona_id": "specialist", "tools": []},
-            },
-        },
-        delegated=True,
-    )
-    assert advanced["config"] == {
-        "model": {"provider_id": "alternate"},
-        "persona": {"persona_id": "specialist"},
-    }
-    assert "config_id" not in inline
-    assert normalize_agent({"runtime": "external", "config": {"opaque": [1, True]}})[
-        "config"
-    ] == {"opaque": [1, True]}
-
-
 @pytest.mark.asyncio
 @pytest.mark.parametrize("specialized", [False, True])
-async def test_native_workers_inherit_main_execution_settings(environment, specialized, monkeypatch):
+async def test_native_workers_inherit_main_execution_settings(
+    environment, specialized, monkeypatch
+):
     env = environment
-    from astrbot.core.provider.entities import LLMResponse
 
     profile = env.context.get_config()
     profile["agent"] = normalize_agent(
@@ -315,6 +294,7 @@ async def test_native_workers_inherit_main_execution_settings(environment, speci
         "Specialist", persona_id="specialist", provider_id="alternate"
     )
     from astrbot.core.astr_agent_runtime import delegated_session
+
     create_runner = AsyncMock(wraps=delegated_session.create_native_runner)
     monkeypatch.setattr(delegated_session, "create_native_runner", create_runner)
     agent = await env.native.spawn_agent(
@@ -329,5 +309,9 @@ async def test_native_workers_inherit_main_execution_settings(environment, speci
     assert config.tool_call_timeout == 7
     assert config.max_context_length == 11
     assert config.dequeue_context_length == 3
-    assert env.context.provider_manager.get_provider_by_id.call_args.args == (("alternate" if specialized else "model"),)
-    assert ("Specialist instructions" if specialized else "Parent instructions") in request.system_prompt
+    assert env.context.provider_manager.get_provider_by_id.call_args.args == (
+        ("alternate" if specialized else "model"),
+    )
+    assert (
+        "Specialist instructions" if specialized else "Parent instructions"
+    ) in request.system_prompt

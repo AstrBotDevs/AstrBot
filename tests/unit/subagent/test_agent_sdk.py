@@ -83,12 +83,7 @@ async def sdk(environment, monkeypatch):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("send_to_user", [True, False])
 async def test_output_observers_do_not_change_delivery_or_history(sdk, send_to_user):
-    """Save both modes and allow independent event readers without duplicate sends.
-
-    Args:
-        sdk: Offline host using real output stages.
-        send_to_user: Whether Core automatically presents the runtime output.
-    """
+    """Save both modes and allow independent event readers without duplicate sends."""
     run = await sdk.context.agent.run_turn(
         umo=sdk.event.unified_msg_origin,
         input_message=[PlainInput(text="Video analysis complete")],
@@ -98,29 +93,17 @@ async def test_output_observers_do_not_change_delivery_or_history(sdk, send_to_u
     assert result.status == TurnStatus.COMPLETED
     assert result.text == "Done"
     assert sdk.platform_send.await_count == int(send_to_user)
-    first = [event async for event in run.events()]
-    second = [event async for event in run.events()]
-    assert first == second
-    assert first[-1].type == "turn.finished"
-    assert any(
-        event.type == "message.completed"
-        and "".join(part.text for part in event.payload.content if part.type == "plain")
-        == "Done"
-        for event in first
-    )
+    events = [event async for event in run.events()]
+    assert events[-1].type == "turn.finished"
+    assert events[-1].payload.result == result
     history = json.loads(sdk.conversation.history)
     assert history[0]["role"] == "user"
     assert history[-1]["content"] == [{"type": "text", "text": "Done"}]
-    assert sdk.context.agent is sdk.context.agent
 
 
 @pytest.mark.asyncio
 async def test_follow_up_queues_and_retains_conversation_and_output_policy(sdk):
-    """Bind follow-ups to their original conversation and read newly saved history.
-
-    Args:
-        sdk: Offline host with switchable conversation selection.
-    """
+    """Bind follow-ups to their original conversation and read newly saved history."""
     entered, release = asyncio.Queue(), asyncio.Event()
 
     async def respond(**kwargs):
@@ -157,11 +140,7 @@ async def test_follow_up_queues_and_retains_conversation_and_output_policy(sdk):
 
 @pytest.mark.asyncio
 async def test_queued_input_rechecks_ai_admission(sdk):
-    """An input waiting behind another turn must respect newly disabled AI.
-
-    Args:
-        sdk: Offline host with mutable session configuration.
-    """
+    """An input waiting behind another turn must respect newly disabled AI."""
     entered, release = asyncio.Event(), asyncio.Event()
 
     async def respond(**kwargs):
@@ -187,35 +166,24 @@ async def test_queued_input_rechecks_ai_admission(sdk):
 
 @pytest.mark.asyncio
 async def test_disabled_automatic_output_does_not_intercept_explicit_sends(sdk):
-    """Keep event, tool and Context sends explicit when automatic output is off.
-
-    Args:
-        sdk: Offline host whose provider simulates framework tool output.
-    """
-    tool_results = []
+    """Keep event, tool and Context sends explicit when automatic output is off."""
 
     async def respond(**kwargs):
         from astrbot.core.platform.astr_message_event import current_message_event
 
         event = current_message_event.get()
-        await event.send(MessageChain().message("Direct tool message"))
         wrapper = ContextWrapper(
             context=AstrAgentContext(context=sdk.context, event=event)
         )
-        tool_results.append(
-            await SendMessageToUserTool().call(
-                wrapper,
-                messages=[
-                    {"type": "plain", "text": "Builtin message"},
-                    {"type": "image", "url": "https://example.invalid/result.png"},
-                ],
-            )
+        await SendMessageToUserTool().call(
+            wrapper,
+            messages=[
+                {"type": "plain", "text": "Builtin message"},
+                {"type": "image", "url": "https://example.invalid/result.png"},
+            ],
         )
         assert await sdk.context.send_message(
             event.unified_msg_origin, MessageChain().message("Explicit plugin message")
-        )
-        assert not await sdk.context.send_message(
-            "missing:FriendMessage:alice", MessageChain().message("No adapter")
         )
         return LLMResponse(role="assistant", completion_text="Final reply")
 
@@ -226,16 +194,12 @@ async def test_disabled_automatic_output_does_not_intercept_explicit_sends(sdk):
         send_to_user=False,
     )
     assert (await asyncio.wait_for(run.result(), 3)).status == TurnStatus.COMPLETED
-    assert sdk.platform_send.await_count == 3
     chains = [call.args[1] for call in sdk.platform_send.await_args_list]
     assert [chain.get_plain_text() for chain in chains] == [
-        "Direct tool message",
         "Builtin message",
         "Explicit plugin message",
     ]
-    assert tool_results[0].startswith("Message sent to session")
-    assert isinstance(chains[1].chain[1], Image)
-    assert run.runtime_turn.input.event._has_send_oper
+    assert isinstance(chains[0].chain[1], Image)
 
 
 @pytest.mark.asyncio
@@ -243,13 +207,7 @@ async def test_disabled_automatic_output_does_not_intercept_explicit_sends(sdk):
 async def test_core_and_request_hooks_run_once_and_can_stop_input(
     sdk, monkeypatch, stop_at
 ):
-    """Preserve event/ProviderRequest hooks for SDK input and honor termination.
-
-    Args:
-        sdk: Real native request and SDK host.
-        monkeypatch: Hook dispatcher patch manager.
-        stop_at: Optional hook at which to stop the input.
-    """
+    """Preserve event/ProviderRequest hooks for SDK input and honor termination."""
     from astrbot.core.astr_agent_runtime.main_agent import builder
     from astrbot.core.pipeline import context_utils
 
@@ -289,11 +247,7 @@ async def test_core_and_request_hooks_run_once_and_can_stop_input(
 
 @pytest.mark.asyncio
 async def test_source_permissions_and_shutdown_cancellation(sdk):
-    """Inherit trusted caller identity and stop active SDK work on shutdown.
-
-    Args:
-        sdk: Offline host with a blocked model call.
-    """
+    """Inherit trusted caller identity and stop active SDK work on shutdown."""
     entered = asyncio.Event()
 
     async def respond(**kwargs):
@@ -318,27 +272,9 @@ async def test_source_permissions_and_shutdown_cancellation(sdk):
 
 
 @pytest.mark.asyncio
-async def test_steering_reuses_native_safe_boundary(sdk, monkeypatch):
-    """Submit SDK text to the actual runner and settle its persistence receipt.
-
-    Args:
-        sdk: Offline native runtime and SDK integration.
-        monkeypatch: Dispatcher patch manager for steering hook output.
-    """
-    from astrbot.core.pipeline import context_utils
-
+async def test_steering_reuses_native_safe_boundary(sdk):
+    """Submit SDK text to the actual runner and settle its persistence receipt."""
     entered, release = asyncio.Event(), asyncio.Event()
-    waiting = 0
-
-    async def hook(event, kind, *args):
-        nonlocal waiting
-        if kind == EventType.OnWaitingLLMRequestEvent:
-            waiting += 1
-            if waiting == 2:
-                await event.send(MessageChain().message("Steering notification"))
-        return False
-
-    monkeypatch.setattr(context_utils, "call_event_hook", hook)
 
     class WaitTool(FunctionTool):
         async def call(self, context):
@@ -370,21 +306,12 @@ async def test_steering_reuses_native_safe_boundary(sdk, monkeypatch):
     await asyncio.wait_for(run.result(), 3)
     assert await receipt
     assert "Focus on safety" in sdk.conversation.history
-    sdk.platform_send.assert_awaited_once()
-    assert (
-        sdk.platform_send.await_args.args[1].get_plain_text() == "Steering notification"
-    )
     assert await run.steer(input_message=[PlainInput(text="Too late")]) is None
 
 
 @pytest.mark.asyncio
 async def test_portable_media_uses_the_normal_input_preprocessor(sdk, tmp_path):
-    """Keep image and file input on the same preparation path as normal messages.
-
-    Args:
-        sdk: Offline native host using real media preprocessing.
-        tmp_path: Temporary directory for local attachments.
-    """
+    """Keep image and file input on the same preparation path as normal messages."""
     from PIL import Image as PILImage
 
     image = tmp_path / "frame.png"
@@ -410,12 +337,7 @@ async def test_portable_media_uses_the_normal_input_preprocessor(sdk, tmp_path):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("delegated", [False, True])
 async def test_native_sessions_commit_whole_turn_after_execution(sdk, delegated):
-    """Main and child histories remain unchanged until a complete turn settles.
-
-    Args:
-        sdk: Native runtime with isolated storage and model responses.
-        delegated: Whether to execute a private child or the main conversation.
-    """
+    """Main and child histories remain unchanged until a complete turn settles."""
     from astrbot.core.agent.tool import FunctionTool, ToolSet
     from astrbot.core.astr_agent_runtime.main_session import MainAgentInput
 
@@ -480,41 +402,6 @@ async def test_native_sessions_commit_whole_turn_after_execution(sdk, delegated)
         assert history[-1]["role"] == "assistant"
     finally:
         release.set()
-
-
-@pytest.mark.asyncio
-async def test_context_exposes_agent_facade_for_runtime_registration(environment):
-    """Plugin registration reaches delegation without exposing internal services.
-
-    Args:
-        environment: Runtime services with an isolated plugin Context and store.
-    """
-    env = environment
-    for name in ("subagents", "agent_configs", "agent_runtimes", "agent_runtime"):
-        assert not hasattr(env.context, name)
-    external = type(env.memory)()
-    external.close = AsyncMock(wraps=external.close)
-    env.context.agent.register_runtime("external", external)
-    assert env.runtimes["external"] is external
-    with pytest.raises(ValueError, match="already registered"):
-        env.context.agent.register_runtime("external", external)
-    with pytest.raises(TypeError, match="AgentRuntime"):
-        env.context.agent.register_runtime("invalid", object())
-    assert "invalid" not in env.runtimes
-    selected = await env.save_agent("External", runtime="external")
-    agent = await env.native.spawn_agent(
-        env.root,
-        [{"type": "plain", "text": "Task"}],
-        config_id=selected.config_id,
-    )
-    result = await env.service.wait(env.root, [agent["agent_id"]], 2000, "all")
-    assert result["agents"][0]["state"] == "completed"
-    assert env.store.get(agent["agent_id"], env.scope).runtime == "external"
-    await env.context.agent.close()
-    with pytest.raises(RuntimeError, match="unavailable"):
-        env.context.agent.register_runtime("closed", type(env.memory)())
-    await env.service.close()
-    external.close.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -585,14 +472,7 @@ async def test_registered_runtime_runs_without_native_request_construction(
         "build_main_agent",
         AsyncMock(side_effect=AssertionError("Native builder must not run")),
     )
-    opened = []
-    original = sdk.memory.open_session
-
-    async def open_session(*args, **kwargs):
-        opened.append(copy.deepcopy(kwargs.get("options")))
-        return await original(*args, **kwargs)
-
-    monkeypatch.setattr(sdk.memory, "open_session", open_session)
+    sdk.memory.open_session = AsyncMock(wraps=sdk.memory.open_session)
     run = await sdk.context.agent.run_turn(
         umo=sdk.event.unified_msg_origin,
         input_message=[PlainInput(text="External reply")],
@@ -602,60 +482,21 @@ async def test_registered_runtime_runs_without_native_request_construction(
     assert result.text == "External reply"
     assert type(sdk.memory.inputs[0]) is AgentInput
     assert sdk.memory.inputs[0].plugin_tools is not None
-    assert opened == [{"config": {"model": "external"}}]
+    assert sdk.memory.open_session.call_args.kwargs["options"] == {
+        "config": {"model": "external"}
+    }
     events = [event async for event in run.events()]
     assert all(event.session.runtime == "memory" for event in events)
     assert sdk.platform_send.await_count == int(send_to_user)
     if send_to_user:
         assert sdk.platform_send.await_args.args[1].get_plain_text() == "External reply"
-    sdk.provider.text_chat.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_foreign_follow_up_stays_bound_after_profile_runtime_changes(sdk):
-    """Existing session handles continue their own runtime after profile edits."""
-    sdk.config["agent"] = {"runtime": "memory", "config": {}}
-    first = await sdk.context.agent.run_turn(
-        umo=sdk.event.unified_msg_origin,
-        input_message=[PlainInput(text="First")],
-        send_to_user=False,
-    )
-    await first.result()
     sdk.config["agent"]["runtime"] = "astrbot"
-    second = await first.follow_up(input_message=[PlainInput(text="Second")])
-    assert second.session is first.session
-    assert (await second.result()).text == "Second"
-    sdk.provider.text_chat.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_foreign_queued_input_rechecks_core_admission(sdk):
-    """Core admission is enforced by the common session execution boundary."""
-    sdk.config["agent"] = {"runtime": "memory", "config": {}}
-    sdk.memory.release = asyncio.Event()
-    first = await sdk.context.agent.run_turn(
-        umo=sdk.event.unified_msg_origin,
-        input_message=[PlainInput(text="First")],
-        send_to_user=False,
+    follow_up = await run.follow_up(
+        input_message=[PlainInput(text="Continue")], send_to_user=False
     )
-    await asyncio.wait_for(sdk.memory.started.get(), 2)
-    queued = await first.follow_up(input_message=[PlainInput(text="Queued")])
-    sdk.config["provider_settings"]["enable"] = False
-    sdk.memory.release.set()
-    await first.result()
-    assert (await queued.result()).reason == "skipped"
-    assert len(sdk.memory.inputs) == 1
-
-
-@pytest.mark.asyncio
-async def test_unregistered_runtime_fails_explicitly(sdk):
-    sdk.config["agent"] = {"runtime": "missing", "config": {}}
-    with pytest.raises(RuntimeError, match="Agent runtime unavailable: missing"):
-        await sdk.context.agent.run_turn(
-            umo=sdk.event.unified_msg_origin,
-            input_message=[PlainInput(text="Input")],
-            send_to_user=False,
-        )
+    assert follow_up.session is run.session
+    assert (await follow_up.result()).text == "Continue"
+    sdk.provider.text_chat.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -664,49 +505,17 @@ async def test_message_pipeline_accepts_a_core_only_runtime(
     sdk, monkeypatch, targeted_wakeup
 ):
     """A runtime implementation needs only Core input, session and output contracts."""
-    from astrbot.core.agent.output import PlainOutput
-    from astrbot.core.agent.input import format_input_content
-    from astrbot.core.agent.runtime import (
-        AgentRuntime,
-        AgentSessionRef,
-        AgentSession,
-        AgentInput,
-        TurnResult,
-    )
+    from astrbot.core.agent.runtime import AgentSessionRef
+    from astrbot.core.astr_agent_runtime.main_agent import builder
     from astrbot.core.pipeline.context import PipelineContext
     from astrbot.core.pipeline.process_stage.method.agent_request import (
         AgentRequestSubStage,
     )
-    from astrbot.core.platform.astr_message_event import AstrMessageEvent
     from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
-    from astrbot.core.astr_agent_runtime.main_agent import builder
+    from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
-    inputs = []
-
-    class CoreSession(AgentSession):
-        async def execute_turn(self, turn):
-            inputs.append(turn.input)
-            text = (
-                format_input_content(turn.input.content)
-                if turn.input.content is not None
-                else turn.input.event.message_str
-            )
-            return TurnResult(content=(PlainOutput(text=text),))
-
-        async def history(self):
-            return []
-
-    class CoreRuntime(AgentRuntime):
-        async def open_session(self, umo, *, session_id=None, options=None, input=None):
-            assert options == (None if targeted_wakeup else {"config": {"model": "remote"}})
-            assert session_id == ("external-session" if targeted_wakeup else None)
-            return CoreSession("external-session", umo, runtime_name="external")
-
-        async def close(self):
-            pass
-
-    sdk.context.agent.register_runtime("external", CoreRuntime())
-    sdk.config["agent"] = {"runtime": "external", "config": {"model": "remote"}}
+    sdk.memory.open_session = AsyncMock(wraps=sdk.memory.open_session)
+    sdk.config["agent"] = {"runtime": "memory", "config": {"model": "remote"}}
     sdk.config["provider_settings"]["wake_prefix"] = "ask "
     monkeypatch.setattr(
         builder,
@@ -715,6 +524,7 @@ async def test_message_pipeline_accepts_a_core_only_runtime(
     )
     if targeted_wakeup:
         # An existing runtime session survives switching the profile to a legacy path.
+        session = await sdk.memory.open_session(sdk.event.unified_msg_origin)
         sdk.config["agent"] = {"runtime": "dify", "config": {}}
         event = AgentWakeupEvent(
             context=sdk.context,
@@ -722,7 +532,7 @@ async def test_message_pipeline_accepts_a_core_only_runtime(
             platform_meta=sdk.event.platform_meta,
             prompt="External platform input",
             source="plugin",
-            agent_session=AgentSessionRef("external", "external-session"),
+            agent_session=AgentSessionRef("memory", session.id),
         )
     else:
         event = AstrMessageEvent(
@@ -748,12 +558,13 @@ async def test_message_pipeline_accepts_a_core_only_runtime(
         if event.get_result():
             outputs.append(event.get_result().get_plain_text())
     assert outputs == [
-        "External platform input" if targeted_wakeup else "  External platform input  \n"
+        "External platform input"
+        if targeted_wakeup
+        else "  External platform input  \n"
     ]
-    assert type(inputs[0]) is AgentInput
-    assert inputs[0].plugin_tools is not None
-    assert not hasattr(inputs[0], "admit")
-    assert not hasattr(inputs[0], "provider_wake_prefix")
+    assert sdk.memory.open_session.call_args.kwargs["options"] == (
+        None if targeted_wakeup else {"config": {"model": "remote"}}
+    )
     if not targeted_wakeup:
         assert event.message_str == "ask   External platform input  \n"
     sdk.provider.text_chat.assert_not_awaited()

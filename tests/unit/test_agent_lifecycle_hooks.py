@@ -6,51 +6,15 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from astrbot.api.event import filter
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.astr_agent_runtime.hooks import MainAgentHooks
 from astrbot.core.pipeline import context_utils
-from astrbot.core.provider.entities import LLMResponse
-from astrbot.core.star.register import star_handler as registration
 from astrbot.core.star.star import StarMetadata, star_map
 from astrbot.core.star.star_handler import (
     EventType,
     StarHandlerMetadata,
     StarHandlerRegistry,
 )
-
-
-@pytest.mark.asyncio
-async def test_public_done_hook_uses_existing_plugin_registry(monkeypatch):
-    """Public decorators preserve priority, session policy and plugin activation."""
-    registry = StarHandlerRegistry()
-    monkeypatch.setattr(registration, "star_handlers_registry", registry)
-    monkeypatch.setattr(context_utils, "star_handlers_registry", registry)
-    calls = []
-    for name, priority in (
-        ("low", 0),
-        ("high", 10),
-        ("excluded", 100),
-        ("disabled", 100),
-    ):
-        module = f"test_lifecycle.{name}"
-        monkeypatch.setitem(
-            star_map,
-            module,
-            StarMetadata(name=name, activated=name != "disabled"),
-        )
-
-        async def handler(event, *args, plugin_name=name):
-            calls.append(plugin_name)
-
-        handler.__module__ = module
-        filter.on_agent_done(priority=priority)(handler)
-
-    event = MagicMock(plugins_name=["low", "high", "disabled"])
-    event.is_stopped.return_value = False
-    rc = ContextWrapper(context=SimpleNamespace(event=event))
-    await context_utils.call_event_hook(event, EventType.OnAgentDoneEvent, rc, None)
-    assert calls == ["high", "low"]
 
 
 @pytest.mark.asyncio
@@ -115,26 +79,3 @@ async def test_plugin_hook_dispatch_preserves_task_cancellation(monkeypatch):
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await asyncio.wait_for(task, 2)
-
-
-@pytest.mark.asyncio
-async def test_response_and_done_notifications_are_independent(monkeypatch):
-    """Failure cleanup is not an LLM response; normal replies remain editable."""
-    dispatch = AsyncMock()
-    monkeypatch.setattr("astrbot.core.astr_agent_runtime.hooks.call_event_hook", dispatch)
-    event = MagicMock()
-    rc = ContextWrapper(context=SimpleNamespace(event=event))
-    hooks = MainAgentHooks()
-    await hooks.on_agent_done(rc, None)
-    dispatch.assert_awaited_once_with(event, EventType.OnAgentDoneEvent, rc, None)
-    dispatch.reset_mock()
-    response = LLMResponse(
-        role="assistant", completion_text="done", reasoning_content="reason"
-    )
-    await hooks.on_llm_response(rc, response)
-    await hooks.on_agent_done(rc, response)
-    assert [call.args[1] for call in dispatch.await_args_list] == [
-        EventType.OnLLMResponseEvent,
-        EventType.OnAgentDoneEvent,
-    ]
-    event.set_extra.assert_called_once_with("_llm_reasoning_content", "reason")

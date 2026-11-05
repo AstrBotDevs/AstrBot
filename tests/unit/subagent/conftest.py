@@ -1,7 +1,4 @@
 import asyncio
-from astrbot.core.agent.events import TextDelta, ExecutionMetrics
-from astrbot.core.agent.output import PlainOutput
-
 import copy
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -10,10 +7,11 @@ from uuid import uuid4
 import pytest_asyncio
 
 from astrbot.core.agent.config_store import AgentConfigStore
-from astrbot.core.agent.input import PlainInput, format_input_content
+from astrbot.core.agent.events import ExecutionMetrics
+from astrbot.core.agent.input import format_input_content
+from astrbot.core.agent.output import PlainOutput
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runtime import (
-    AgentPermissions,
     AgentRuntime,
     AgentSession,
     AgentSessionRef,
@@ -23,6 +21,9 @@ from astrbot.core.agent.tool import ToolSet
 from astrbot.core.astr_agent_runtime import AstrAgentRuntime
 from astrbot.core.astr_agent_runtime.context import AstrAgentContext
 from astrbot.core.astr_agent_runtime.main_agent import subagent
+from astrbot.core.astr_agent_runtime.subagents.messages import format_agent_messages
+from astrbot.core.astr_agent_runtime.subagents.service import SubAgentService
+from astrbot.core.astr_agent_runtime.subagents.store import SubAgentStore
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
 from astrbot.core.platform.message_session import MessageSession
@@ -31,10 +32,6 @@ from astrbot.core.provider.entities import LLMResponse, ProviderRequest
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
 from astrbot.core.provider.provider import Provider
 from astrbot.core.star.context import Context
-from astrbot.core.astr_agent_runtime.subagents.caller import DelegatedAgentInput
-from astrbot.core.astr_agent_runtime.subagents.messages import format_agent_messages
-from astrbot.core.astr_agent_runtime.subagents.service import SubAgentService
-from astrbot.core.astr_agent_runtime.subagents.store import SubAgentStore
 
 
 class MemorySession(AgentSession):
@@ -60,9 +57,6 @@ class MemorySession(AgentSession):
             metrics=ExecutionMetrics(steps=1),
         )
 
-    async def cancel_turn(self, turn):
-        self.runtime.cancelled.append(self.id)
-
     async def history(self):
         return [
             {"role": "user", "content": format_agent_messages(messages)}
@@ -79,7 +73,6 @@ class MemoryAgentRuntime(AgentRuntime):
         self.handles = {}
         self.started = asyncio.Queue()
         self.release = None
-        self.cancelled = []
         self.failure = None
 
     async def open_session(self, umo, *, session_id=None, options=None, input=None):
@@ -224,13 +217,6 @@ async def environment(tmp_path, request):
         wrapper=wrapper,
         root=wrapper.context,
         scope=wrapper.context.subagent_scope,
-        caller=service.delivery.callers[wrapper.context.subagent_scope],
-        input=DelegatedAgentInput(
-            event=event,
-            permissions=AgentPermissions.from_event(event),
-            content=[PlainInput(text="Task")],
-            caller=service.delivery.callers[wrapper.context.subagent_scope],
-        ),
     )
     try:
         yield env

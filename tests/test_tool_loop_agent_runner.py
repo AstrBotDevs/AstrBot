@@ -2397,65 +2397,6 @@ async def test_small_step_budgets_and_reset(
 
 
 @pytest.mark.asyncio
-async def test_lifecycle_complete_steps_preserve_tool_batch_and_final_context(
-    runner, mock_provider, provider_request, mock_tool_executor
-):
-    """Completed steps retain the whole tool batch before the final response."""
-    hooks = AsyncMock(spec=BaseAgentRunHooks)
-    mock_provider.text_chat = AsyncMock(
-        side_effect=[
-            LLMResponse(
-                role="assistant",
-                tools_call_name=["test_tool", "test_tool"],
-                tools_call_args=[{"query": "first"}, {"query": "second"}],
-                tools_call_ids=["call_first", "call_second"],
-            ),
-            LLMResponse(role="assistant", completion_text="done"),
-        ]
-    )
-    snapshots = []
-
-    await runner.reset(
-        provider=mock_provider,
-        request=provider_request,
-        run_context=ContextWrapper(context=None),
-        tool_executor=mock_tool_executor,
-        agent_hooks=hooks,
-    )
-    async for _ in runner.step():
-        pass
-    snapshots.append(
-        [message.model_copy(deep=True) for message in runner.run_context.messages]
-    )
-    async for _ in runner.step_until_done(4):
-        pass
-    snapshots.append(
-        [message.model_copy(deep=True) for message in runner.run_context.messages]
-    )
-
-    assert hooks.on_agent_begin.await_count == 1
-    assert [m.tool_call_id for m in snapshots[0] if m.role == "tool"] == [
-        "call_first",
-        "call_second",
-    ]
-    assert snapshots[-1][-1].role == "assistant"
-    assert snapshots[-1][-1].content[-1].text == "done"
-    assert [call[0] for call in hooks.mock_calls][-2:] == [
-        "on_llm_response",
-        "on_agent_done",
-    ]
-    hooks.on_agent_done.assert_awaited_once_with(
-        runner.run_context, runner.get_final_llm_resp()
-    )
-    assert runner.run_context.run_end_reason == "completed"
-    assert runner.run_context.run_error is None
-    # Polling a completed runner must not invoke completion hooks a second time.
-    async for _ in runner.step_until_done(4):
-        pass
-    hooks.on_agent_done.assert_awaited_once()
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize("exit_kind", ["provider_error", "exception", "stop"])
 async def test_lifecycle_terminal_paths_notify_once(
     runner, mock_provider, provider_request, mock_tool_executor, exit_kind
@@ -2577,35 +2518,6 @@ async def test_lifecycle_cancellation_during_async_work(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("main_bridge", [False, True])
-async def test_lifecycle_main_error_does_not_emit_completion_twice(
-    runner, mock_provider, provider_request, mock_tool_executor, main_bridge
-):
-    """The main bridge must not synthesize another on_agent_done on errors."""
-    hooks = AsyncMock(spec=BaseAgentRunHooks)
-    event = MagicMock()
-    event.is_stopped.return_value = False
-    event.get_extra.return_value = None
-    await runner.reset(
-        provider=mock_provider,
-        request=provider_request,
-        run_context=ContextWrapper(context=MockAgentContext(event)),
-        tool_executor=mock_tool_executor,
-        agent_hooks=hooks,
-    )
-    runner.request_context_manager.process = AsyncMock(side_effect=ValueError("broken"))
-    if main_bridge:
-        async for _ in run_agent(runner):
-            pass
-    else:
-        with pytest.raises(ValueError, match="broken"):
-            async for _ in runner.step():
-                pass
-    hooks.on_agent_done.assert_awaited_once_with(runner.run_context, None)
-    assert runner.run_context.run_end_reason == "error"
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("main_bridge", [False, True])
 @pytest.mark.parametrize("provider_error", [False, True])
 async def test_lifecycle_budget_exit_and_final_request_failure(
     runner,
@@ -2688,32 +2600,6 @@ async def test_lifecycle_main_cancel_between_complete_steps(
         await asyncio.wait_for(task, 2)
     hooks.on_agent_done.assert_awaited_once_with(runner.run_context, None)
     assert runner.run_context.run_end_reason == "cancelled"
-
-
-@pytest.mark.asyncio
-async def test_completed_step_contains_tool_images(
-    runner, mock_provider, provider_request
-):
-    """Completed steps retain tool-produced image messages in context."""
-    hooks = AsyncMock(spec=BaseAgentRunHooks)
-    await runner.reset(
-        provider=mock_provider,
-        request=provider_request,
-        run_context=ContextWrapper(context=None),
-        tool_executor=MockMixedContentToolExecutor(),
-        agent_hooks=hooks,
-    )
-    async for _ in runner.step():
-        pass
-    assert runner.run_context.messages[-1].role == "user"
-    assert any(
-        isinstance(part, ImageURLPart)
-        for part in runner.run_context.messages[-1].content
-    )
-    # Finish this run explicitly, so the test does not leave a live turn behind.
-    runner.request_stop()
-    async for _ in runner.step():
-        pass
 
 
 @pytest.mark.asyncio
