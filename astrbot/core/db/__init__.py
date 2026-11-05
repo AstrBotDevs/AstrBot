@@ -205,8 +205,14 @@ class BaseDatabase(abc.ABC):
         persona_id: str | None = None,
         content: list[dict] | None = None,
         token_usage: int | None = None,
+        expected_history_epoch: int | None = None,
     ) -> None:
-        """Update a conversation's history."""
+        """Update history, invalidating earlier epochs when content is cleared.
+
+        Args:
+            expected_history_epoch: Only update if the stored epoch still matches.
+                None leaves the update unconditional.
+        """
         ...
 
     @abc.abstractmethod

@@ -483,6 +483,7 @@ class InternalAgentSubStage(Stage):
                     req.conversation.cid,
                     history=message_to_save,
                     token_usage=token_usage,
+                    expected_history_epoch=req.conversation.history_epoch,
                 )
             return
 
@@ -529,6 +530,7 @@ class InternalAgentSubStage(Stage):
             req.conversation.cid,
             history=message_to_save,
             token_usage=token_usage,
+            expected_history_epoch=req.conversation.history_epoch,
         )
 
 
