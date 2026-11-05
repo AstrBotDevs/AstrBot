@@ -74,6 +74,98 @@ def test_spreadsheet_skill_converts_inspects_and_validates_csv(tmp_path: Path) -
     assert json.loads(validated.stdout)["valid"] is True
 
 
+def test_spreadsheet_skill_inspects_legacy_xls_values_not_their_storage(
+    tmp_path: Path,
+) -> None:
+    """xlrd hands back the raw storage, so the two formats described one sheet
+    two different ways: a date as its serial number, a boolean as 1, and a whole
+    number as a float.
+    """
+    import pytest
+
+    xlwt = pytest.importorskip("xlwt")
+
+    import datetime
+
+    date_style = xlwt.XFStyle()
+    date_style.num_format_str = "YYYY-MM-DD"
+
+    book = xlwt.Workbook()
+    sheet = book.add_sheet("Data")
+    for column, heading in enumerate(["When", "Active", "Units", "Rate"]):
+        sheet.write(0, column, heading)
+    sheet.write(1, 0, datetime.date(2024, 1, 1), date_style)
+    sheet.write(1, 1, True)
+    sheet.write(1, 2, 12)
+    sheet.write(1, 3, 1.5)
+    legacy = tmp_path / "legacy.xls"
+    book.save(legacy)
+
+    modern = tmp_path / "modern.xlsx"
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.title = "Data"
+    worksheet.append(["When", "Active", "Units", "Rate"])
+    worksheet.append([datetime.date(2024, 1, 1), True, 12, 1.5])
+    workbook.save(modern)
+    workbook.close()
+
+    inspected_xls = _run_script(SPREADSHEET_SCRIPTS / "inspect_workbook.py", legacy)
+    inspected_xlsx = _run_script(SPREADSHEET_SCRIPTS / "inspect_workbook.py", modern)
+
+    assert inspected_xls.returncode == 0, inspected_xls.stderr
+    assert inspected_xlsx.returncode == 0, inspected_xlsx.stderr
+
+    xls_sample = json.loads(inspected_xls.stdout)["sheets"][0]["sample"]
+    xlsx_sample = json.loads(inspected_xlsx.stdout)["sheets"][0]["sample"]
+
+    # [45292.0, 1, 12.0, 1.5] before this.
+    assert xls_sample[1] == ["2024-01-01 00:00:00", True, 12, 1.5]
+    assert xls_sample == xlsx_sample
+
+
+def test_spreadsheet_skill_inspects_a_legacy_xls_time_only_cell(
+    tmp_path: Path,
+) -> None:
+    """A time carries no date, so xlrd reports year, month and day as zero."""
+    import pytest
+
+    xlwt = pytest.importorskip("xlwt")
+
+    import datetime
+
+    time_style = xlwt.XFStyle()
+    time_style.num_format_str = "HH:MM:SS"
+
+    book = xlwt.Workbook()
+    sheet = book.add_sheet("Data")
+    sheet.write(0, 0, "Starts")
+    sheet.write(1, 0, datetime.time(12, 0, 0), time_style)
+    legacy = tmp_path / "legacy.xls"
+    book.save(legacy)
+
+    modern = tmp_path / "modern.xlsx"
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.title = "Data"
+    worksheet.append(["Starts"])
+    worksheet.append([datetime.time(12, 0, 0)])
+    workbook.save(modern)
+    workbook.close()
+
+    inspected_xls = _run_script(SPREADSHEET_SCRIPTS / "inspect_workbook.py", legacy)
+    inspected_xlsx = _run_script(SPREADSHEET_SCRIPTS / "inspect_workbook.py", modern)
+
+    assert inspected_xls.returncode == 0, inspected_xls.stderr
+    assert inspected_xlsx.returncode == 0, inspected_xlsx.stderr
+
+    xls_sample = json.loads(inspected_xls.stdout)["sheets"][0]["sample"]
+    xlsx_sample = json.loads(inspected_xlsx.stdout)["sheets"][0]["sample"]
+
+    assert xls_sample[1] == ["12:00:00"]
+    assert xls_sample == xlsx_sample
+
+
 def test_spreadsheet_skill_rejects_broken_formula_reference(tmp_path: Path) -> None:
     path = tmp_path / "broken.xlsx"
     workbook = Workbook()
