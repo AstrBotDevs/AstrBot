@@ -26,7 +26,13 @@ class CronService:
     @staticmethod
     def serialize_job(job) -> dict:
         data = job.model_dump() if hasattr(job, "model_dump") else job.__dict__
-        for key in ["created_at", "updated_at", "last_run_at", "next_run_time"]:
+        for key in [
+            "created_at",
+            "updated_at",
+            "last_run_at",
+            "next_run_time",
+            "interval_anchor_at",
+        ]:
             value = data.get(key)
             if isinstance(value, datetime):
                 if value.tzinfo is None:
@@ -58,7 +64,8 @@ class CronService:
                 raise CronServiceError("Invalid payload")
 
             name = payload.get("name") or "active_agent_task"
-            cron_expression = payload.get("cron_expression")
+            cron_expression = str(payload.get("cron_expression") or "").strip() or None
+            interval_seconds = payload.get("interval_seconds")
             note = payload.get("note") or payload.get("description") or name
             session = str(payload.get("session") or "").strip()
             persona_id = payload.get("persona_id")
@@ -75,11 +82,15 @@ class CronService:
             run_once = bool(payload.get("run_once", False))
             run_at = payload.get("run_at")
 
+            if interval_seconds is not None and (run_once or cron_expression or run_at):
+                raise CronServiceError(
+                    "interval cannot be combined with cron or run_at"
+                )
             if run_once and not run_at:
                 raise CronServiceError("run_at is required when run_once=true")
-            if (not run_once) and not cron_expression:
+            if (not run_once) and not cron_expression and interval_seconds is None:
                 raise CronServiceError(
-                    "cron_expression is required when run_once=false"
+                    "cron_expression or interval_seconds is required when run_once=false"
                 )
             if run_once and cron_expression:
                 cron_expression = None
@@ -103,6 +114,7 @@ class CronService:
                 enabled=enabled,
                 run_once=run_once,
                 run_at=run_at_dt,
+                interval_seconds=interval_seconds,
             )
             return self.serialize_job(job)
         except CronServiceError:
@@ -226,8 +238,19 @@ class CronService:
             else merged_payload.get("run_at")
         )
         run_at_iso = self._normalize_run_at_iso(run_at_raw)
+        next_interval_seconds = (
+            payload["interval_seconds"]
+            if "interval_seconds" in payload
+            else job.interval_seconds
+        )
 
-        if next_run_once:
+        if next_interval_seconds is not None:
+            if next_run_once or next_cron_expression or run_at_iso:
+                raise CronServiceError(
+                    "interval cannot be combined with cron or run_at"
+                )
+            merged_payload.pop("run_at", None)
+        elif next_run_once:
             if not run_at_iso:
                 raise CronServiceError("run_at is required when run_once=true")
             next_cron_expression = None
@@ -235,12 +258,13 @@ class CronService:
         else:
             if not next_cron_expression:
                 raise CronServiceError(
-                    "cron_expression is required when run_once=false"
+                    "cron_expression or interval_seconds is required when run_once=false"
                 )
             merged_payload.pop("run_at", None)
 
         updates["run_once"] = next_run_once
         updates["cron_expression"] = next_cron_expression
+        updates["interval_seconds"] = next_interval_seconds
         updates["payload"] = merged_payload
 
     @staticmethod

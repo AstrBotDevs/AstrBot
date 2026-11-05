@@ -25,7 +25,10 @@ def get_service(request: Request) -> CronService:
 
 
 def _payload_dict(payload: CronJobRequest) -> dict:
-    return payload.model_dump(exclude_none=True)
+    data = payload.model_dump(exclude_none=True)
+    if "interval_seconds" in payload.model_fields_set:
+        data["interval_seconds"] = payload.interval_seconds
+    return data
 
 
 def _raise_cron_error(exc: CronServiceError) -> None:
