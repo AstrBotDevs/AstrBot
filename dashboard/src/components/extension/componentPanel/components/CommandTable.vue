@@ -86,7 +86,7 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
 </script>
 
 <template>
-  <v-card class="rounded-lg overflow-hidden elevation-1">
+  <v-card class="rounded-lg overflow-hidden" variant="outlined">
     <v-data-table
       :headers="commandHeaders"
       :items="items"
@@ -246,6 +246,19 @@ code {
 code.sub-command-code {
   background-color: rgba(var(--v-theme-secondary), 0.1);
   color: rgb(var(--v-theme-secondary));
+}
+
+:deep(.v-data-table-footer__items-per-page .v-field) {
+  background-color: rgba(var(--v-theme-on-surface), 0.04);
+  border-radius: 8px;
+}
+
+:deep(.v-data-table-footer__items-per-page .v-field__outline) {
+  opacity: 0;
+}
+
+:deep(.v-data-table-footer__items-per-page .v-field--focused .v-field__outline) {
+  opacity: 1;
 }
 </style>
 

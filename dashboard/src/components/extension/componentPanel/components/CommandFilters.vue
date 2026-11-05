@@ -69,7 +69,8 @@ const statusItems = [
         :items="pluginItems"
         :label="tm('filters.byPlugin')"
         density="compact"
-        variant="outlined"
+        variant="solo-filled"
+        flat
         hide-details
       />
     </v-col>
@@ -80,7 +81,8 @@ const statusItems = [
         :items="typeItems"
         :label="tm('filters.byType')"
         density="compact"
-        variant="outlined"
+        variant="solo-filled"
+        flat
         hide-details
       />
     </v-col>
@@ -91,7 +93,8 @@ const statusItems = [
         :items="permissionItems"
         :label="tm('filters.byPermission')"
         density="compact"
-        variant="outlined"
+        variant="solo-filled"
+        flat
         hide-details
       />
     </v-col>
@@ -102,7 +105,8 @@ const statusItems = [
         :items="statusItems"
         :label="tm('filters.byStatus')"
         density="compact"
-        variant="outlined"
+        variant="solo-filled"
+        flat
         hide-details
       />
     </v-col>
@@ -110,7 +114,7 @@ const statusItems = [
 
   <!-- 搜索栏 + 统计信息行 -->
   <div class="mb-4 d-flex flex-wrap align-center ga-4">
-    <div style="min-width: 200px; max-width: 350px; flex: 1; border: 1px solid #B9B9B9; border-radius: 16px;">
+    <div style="min-width: 200px; max-width: 350px; flex: 1;">
       <v-text-field
         :model-value="searchQuery"
         @update:model-value="emit('update:searchQuery', normalizeTextInput($event))"
