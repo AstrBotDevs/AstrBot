@@ -1,9 +1,7 @@
 import abc
 import asyncio
-import hashlib
 import os
 import re
-import uuid
 from collections.abc import AsyncGenerator, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -587,14 +585,10 @@ class AstrMessageEvent(abc.ABC):
                 component_count=len(message.chain),
                 message_type=message.type,
             )
-        # Leverage BLAKE2 hash function to generate a non-reversible hash of the sender ID for privacy.
-        hash_obj = hashlib.blake2b(self.get_sender_id().encode("utf-8"), digest_size=16)
-        sid = str(uuid.UUID(bytes=hash_obj.digest()))
         asyncio.create_task(
             Metric.upload(
                 msg_event_tick=1,
                 adapter_name=self.platform_meta.name,
-                sid=sid,
             ),
         )
         self._has_send_oper = True

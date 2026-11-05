@@ -983,6 +983,26 @@ class TestSendStreaming:
         assert astr_message_event._has_send_oper is True
 
 
+class TestSend:
+    """Tests for the default send implementation."""
+
+    @pytest.mark.asyncio
+    async def test_send_does_not_upload_sender_identifier(self, astr_message_event):
+        metrics_upload = AsyncMock()
+
+        with patch(
+            "astrbot.core.platform.astr_message_event.Metric.upload",
+            new=metrics_upload,
+        ):
+            await astr_message_event.send(MessageChain())
+            await asyncio.sleep(0)
+
+        metrics_upload.assert_awaited_once_with(
+            msg_event_tick=1,
+            adapter_name="test_platform",
+        )
+
+
 class TestSendTyping:
     """Tests for send_typing method."""
 

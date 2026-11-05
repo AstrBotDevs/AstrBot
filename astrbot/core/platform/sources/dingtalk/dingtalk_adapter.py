@@ -96,7 +96,7 @@ class DingtalkPlatformAdapter(Platform):
 
         class AstrCallbackClient(dingtalk_stream.ChatbotHandler):
             async def process(self, message: dingtalk_stream.CallbackMessage):
-                logger.debug(f"dingtalk: {message.data}")
+                logger.debug("DingTalk callback received")
                 im = dingtalk_stream.ChatbotMessage.from_dict(message.data)
                 abm = await outer_self.convert_msg(im)
                 await outer_self.handle_msg(abm)

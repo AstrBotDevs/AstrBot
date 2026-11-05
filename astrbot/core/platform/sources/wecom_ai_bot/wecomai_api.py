@@ -66,10 +66,14 @@ class WecomAIBotAPIClient:
             if decrypted_msg:
                 try:
                     message_data = json.loads(decrypted_msg)
-                    logger.debug(f"解密成功，消息内容: {message_data}")
+                    logger.debug("WeCom AI message decrypted")
                     return WecomAIBotConstants.SUCCESS, message_data
                 except json.JSONDecodeError as e:
-                    logger.error(f"JSON 解析失败: {e}, 原始消息: {decrypted_msg}")
+                    logger.error(
+                        "JSON 解析失败: %s, 消息长度: %d",
+                        e,
+                        len(decrypted_msg),
+                    )
                     return WecomAIBotConstants.PARSE_XML_ERROR, None
             else:
                 logger.error("解密消息为空")

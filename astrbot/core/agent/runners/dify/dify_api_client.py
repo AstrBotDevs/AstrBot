@@ -57,7 +57,12 @@ class DifyAPIClient:
         payload = locals()
         payload.pop("self")
         payload.pop("timeout")
-        logger.info(f"chat_messages payload: {payload}")
+        logger.info(
+            "Dify chat_messages request: query_chars=%d files=%d has_conversation=%s",
+            len(query),
+            len(files),
+            bool(conversation_id),
+        )
         async with self.session.post(
             url,
             json=payload,

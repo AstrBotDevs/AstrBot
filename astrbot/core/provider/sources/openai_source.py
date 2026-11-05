@@ -583,7 +583,11 @@ class ProviderOpenAIOfficial(Provider):
                 f"API 返回的 completion 类型错误：{type(completion)}: {completion}。",
             )
 
-        logger.debug(f"completion: {completion}")
+        logger.debug(
+            "completion: id=%s model=%s",
+            getattr(completion, "id", ""),
+            getattr(completion, "model", ""),
+        )
 
         llm_response = await self._parse_openai_completion(completion, tools)
 

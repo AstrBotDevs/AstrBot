@@ -76,7 +76,7 @@ class AstrBotCoreLifecycle:
         if proxy_config != "":
             os.environ["https_proxy"] = proxy_config
             os.environ["http_proxy"] = proxy_config
-            logger.debug(f"Using proxy: {proxy_config}")
+            logger.debug("HTTP proxy configured")
             # 设置 no_proxy
             no_proxy_list = self.astrbot_config.get("no_proxy", [])
             os.environ["no_proxy"] = ",".join(no_proxy_list)

@@ -579,7 +579,11 @@ class ProviderAnthropic(Provider):
             raise
 
         assert isinstance(completion, Message)
-        logger.debug(f"completion: {completion}")
+        logger.debug(
+            "completion: id=%s model=%s",
+            getattr(completion, "id", ""),
+            getattr(completion, "model", ""),
+        )
 
         if len(completion.content) == 0:
             raise EmptyModelOutputError(

@@ -201,7 +201,7 @@ class WecomAIBotAdapter(Platform):
             return None
         msgtype = message_data.get("msgtype")
         if not msgtype:
-            logger.warning(f"消息类型未知，忽略: {message_data}")
+            logger.warning("消息类型未知，已忽略")
             return None
         session_id = self._extract_session_id(message_data)
         if msgtype in ("text", "image", "mixed"):
