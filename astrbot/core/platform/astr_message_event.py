@@ -359,7 +359,7 @@ class AstrMessageEvent(abc.ABC):
     async def process_buffer(self, buffer: str, pattern: re.Pattern) -> str:
         """将消息缓冲区中的文本按指定正则表达式分割后发送至消息平台，作为不支持流式输出平台的Fallback。"""
         while True:
-            match = re.search(pattern, buffer)
+            match = pattern.match(buffer)
             if not match:
                 break
             matched_text = match.group().strip()

@@ -11,7 +11,7 @@ from .client import MattermostClient
 
 
 class MattermostMessageEvent(AstrMessageEvent):
-    _FALLBACK_SENTENCE_PATTERN = re.compile(r"[^。？！~…]+[。？！~…]+")
+    _FALLBACK_SENTENCE_PATTERN = re.compile(r"[^。？！~…]*[。？！~…]+")
 
     def __init__(
         self,

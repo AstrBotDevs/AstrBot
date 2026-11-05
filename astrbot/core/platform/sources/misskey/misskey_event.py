@@ -145,7 +145,7 @@ class MisskeyPlatformEvent(AstrMessageEvent):
             return await super().send_streaming(generator, use_fallback)
 
         buffer = ""
-        pattern = re.compile(r"[^。？！~…]+[。？！~…]+")
+        pattern = re.compile(r"[^。？！~…]*[。？！~…]+")
 
         async for chain in generator:
             if isinstance(chain, MessageChain):
