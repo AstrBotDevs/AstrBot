@@ -198,8 +198,13 @@
       if (message.state === "open" && handlers?.onOpen) {
         handlers.onOpen();
       }
-      if (message.state === "error" && handlers?.onError) {
-        handlers.onError();
+      if (message.state === "closed" || message.state === "error") {
+        sseHandlers.delete(message.subscriptionId);
+        if (message.state === "closed" && handlers?.onClose) {
+          handlers.onClose();
+        } else if (message.state === "error" && handlers?.onError) {
+          handlers.onError();
+        }
       }
     }
   });

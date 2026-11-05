@@ -91,22 +91,22 @@ def test_local_permission_validation_does_not_inject_missing_policies():
 
 
 @pytest.mark.parametrize("role", ["member", "admin"])
-@pytest.mark.parametrize("status", ["detected", "missing", "unavailable", "unsupported"])
 @pytest.mark.parametrize(
-    ("scope", "execution", "network", "denied_on"),
+    "status", ["detected", "missing", "unavailable", "unsupported"]
+)
+@pytest.mark.parametrize(
+    ("scope", "execution", "network"),
     [
-        ("none", False, False, ()),
-        ("workspace", False, False, ("unsupported",)),
-        ("host", False, False, ()),
-        ("workspace", True, False, ("missing", "unavailable", "unsupported")),
-        ("workspace", True, True, ("missing", "unavailable", "unsupported")),
-        ("host", True, False, ("missing", "unavailable", "unsupported")),
-        ("host", True, True, ()),
+        ("none", False, False),
+        ("workspace", False, False),
+        ("host", False, False),
+        ("workspace", True, False),
+        ("workspace", True, True),
+        ("host", True, False),
+        ("host", True, True),
     ],
 )
-def test_local_permission_platform_matrix(
-    role, status, scope, execution, network, denied_on
-):
+def test_local_permission_platform_matrix(role, status, scope, execution, network):
     permissions = {r: {"filesystem_scope": "none"} for r in ("member", "admin")}
     permissions[role] = {
         "filesystem_scope": scope,
@@ -123,31 +123,28 @@ def test_local_permission_platform_matrix(
         CONFIG_METADATA_2,
         is_core=True,
         runtime={
-            "os": "windows" if status == "unsupported" else "linux",
+            "os": "freebsd" if status == "unsupported" else "linux",
             "sandbox": {"status": status, "backend": "bubblewrap"},
         },
     )
 
-    assert bool(errors) == (status in denied_on)
-    if errors:
-        assert len(errors) == 1
-        assert errors[0].startswith(f"Local permission {role}:")
+    assert errors == []
 
 
 @pytest.mark.parametrize(
-    ("old_mode", "new_mode", "role", "change", "rejected"),
+    ("old_mode", "new_mode", "role", "change"),
     [
-        ("local", "local", "member", {}, False),
-        ("local", "local", "admin", {"filesystem_scope": "host"}, False),
-        ("local", "local", "member", {"allow_execution": True}, True),
-        ("local", "local", "member", None, False),
-        ("none", "local", "member", {}, True),
-        ("local", "none", "member", {}, False),
-        ("local", "sandbox", "member", {}, False),
-        ("local", "local", "member", {"filesystem_scope": "none"}, False),
+        ("local", "local", "member", {}),
+        ("local", "local", "admin", {"filesystem_scope": "host"}),
+        ("local", "local", "member", {"allow_execution": True}),
+        ("local", "local", "member", None),
+        ("none", "local", "member", {}),
+        ("local", "none", "member", {}),
+        ("local", "sandbox", "member", {}),
+        ("local", "local", "member", {"filesystem_scope": "none"}),
     ],
 )
-def test_windows_legacy_permissions(old_mode, new_mode, role, change, rejected):
+def test_windows_legacy_permissions(old_mode, new_mode, role, change):
     old = {
         "provider_settings": {
             "computer_use_runtime": old_mode,
@@ -174,19 +171,53 @@ def test_windows_legacy_permissions(old_mode, new_mode, role, change, rejected):
         payload,
         CONFIG_METADATA_2,
         is_core=True,
-        current_config=old,
         runtime={"os": "windows", "sandbox": {"status": "unsupported"}},
     )
 
-    assert bool(errors) == rejected
-    if not rejected:
-        saved = normalized["provider_settings"]["computer_use_local_permissions"]
-        assert all(not policy["allow_network"] for policy in saved.values())
+    assert errors == []
+    saved = normalized["provider_settings"]["computer_use_local_permissions"]
+    for policy in saved.values():
+        assert policy["allow_network"] == (
+            policy.get("allow_execution", False)
+            and policy["filesystem_scope"] != "none"
+        )
 
 
 # ═══════════════════════════════════════════════════════════════
 # _discover_bay_credentials
 # ═══════════════════════════════════════════════════════════════
+
+
+@pytest.mark.parametrize("status", ["detected", "unavailable"])
+def test_windows_appcontainer_policy_can_be_saved_before_restart(status):
+    payload = {
+        "provider_settings": {
+            "computer_use_runtime": "local",
+            "computer_use_local_permissions": {
+                "member": {
+                    "filesystem_scope": "workspace",
+                    "allow_execution": True,
+                    "allow_network": False,
+                }
+            },
+        }
+    }
+    runtime = {
+        "os": "windows",
+        "sandbox": {"backend": "appcontainer", "status": status},
+    }
+    errors, _ = validate_config(
+        payload, CONFIG_METADATA_2, is_core=True, runtime=runtime
+    )
+    assert not errors
+    payload["provider_settings"]["computer_use_local_permissions"]["member"][
+        "filesystem_scope"
+    ] = "host"
+    errors, _ = validate_config(
+        payload, CONFIG_METADATA_2, is_core=True, runtime=runtime
+    )
+    assert len(errors) == 1
+    assert "workspace scope only" in errors[0]
 
 
 class TestDiscoverBayCredentials:

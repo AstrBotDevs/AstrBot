@@ -24,6 +24,40 @@ interface VADInstance {
     listening: boolean;
 }
 
+const VAD_BASE_ASSET_PATH = 'https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.29/dist/';
+const VAD_ONNX_WASM_BASE_PATH = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/';
+const VAD_SCRIPT_URLS = [
+    `${VAD_ONNX_WASM_BASE_PATH}ort.wasm.min.js`,
+    `${VAD_BASE_ASSET_PATH}bundle.min.js`
+];
+
+let vadScriptsPromise: Promise<void> | null = null;
+
+/**
+ * Lazily inject the VAD dependency scripts so they don't block the first paint.
+ * Scripts must load sequentially because vad-web expects onnxruntime on window.
+ */
+function ensureVADScriptsLoaded(): Promise<void> {
+    if (!vadScriptsPromise) {
+        vadScriptsPromise = (async () => {
+            for (const src of VAD_SCRIPT_URLS) {
+                await new Promise<void>((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = src;
+                    script.onload = () => resolve();
+                    script.onerror = () => reject(new Error(`Failed to load VAD dependency: ${src}`));
+                    document.head.appendChild(script);
+                });
+            }
+        })();
+        // Allow retrying on the next init attempt if loading failed.
+        vadScriptsPromise.catch(() => {
+            vadScriptsPromise = null;
+        });
+    }
+    return vadScriptsPromise;
+}
+
 // 声明全局 vad 对象类型
 declare global {
     interface Window {
@@ -52,8 +86,15 @@ export function useVADRecording() {
 
     // 初始化 VAD
     async function initVAD() {
+        try {
+            await ensureVADScriptsLoaded();
+        } catch (error) {
+            console.error('Failed to load VAD library:', error);
+            return;
+        }
+
         if (!window.vad) {
-            console.error('VAD library not loaded. Please ensure the scripts are included in index.html');
+            console.error('VAD library not loaded.');
             return;
         }
 
@@ -102,8 +143,8 @@ export function useVADRecording() {
                 minSpeechMs: 400,
                 submitUserSpeechOnPause: false,
                 model: 'v5',
-                baseAssetPath: 'https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.29/dist/',
-                onnxWASMBasePath: 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/'
+                baseAssetPath: VAD_BASE_ASSET_PATH,
+                onnxWASMBasePath: VAD_ONNX_WASM_BASE_PATH
             });
 
             isInitialized.value = true;

@@ -541,6 +541,51 @@ async def test_convert_audio_format_keeps_missing_target_path():
 
 
 @pytest.mark.asyncio
+async def test_convert_audio_format_offloads_magic_byte_probe(tmp_path, monkeypatch):
+    source_path = tmp_path / "voice.wav"
+    source_path.write_bytes(b"RIFF\x24\x00\x00\x00WAVEfmt " + b"\x00" * 16)
+    probe_calls = []
+
+    async def fake_to_thread(func, *args):
+        probe_calls.append((func, args))
+        return "wav"
+
+    monkeypatch.setattr(media_utils.asyncio, "to_thread", fake_to_thread)
+
+    result = await media_utils.convert_audio_format(
+        str(source_path),
+        output_format="wav",
+    )
+
+    assert result == str(source_path)
+    assert probe_calls == [(media_utils._get_audio_magic_type, (str(source_path),))]
+
+
+@pytest.mark.asyncio
+async def test_convert_audio_format_keeps_ogg_opus_without_reencoding(
+    tmp_path, monkeypatch
+):
+    source_path = tmp_path / "voice.ogg"
+    source_path.write_bytes(b"OggS" + b"\x00" * 20 + b"OpusHead" + b"\x00" * 32)
+
+    async def fail_create_subprocess_exec(*args, **kwargs):
+        raise AssertionError("an Ogg/Opus source should not be re-encoded")
+
+    monkeypatch.setattr(
+        media_utils.asyncio,
+        "create_subprocess_exec",
+        fail_create_subprocess_exec,
+    )
+
+    result = await media_utils.convert_audio_format(
+        str(source_path),
+        output_format="ogg",
+    )
+
+    assert result == str(source_path)
+
+
+@pytest.mark.asyncio
 async def test_media_resolver_cleans_http_target_when_download_fails(
     tmp_path, monkeypatch
 ):
@@ -559,6 +604,154 @@ async def test_media_resolver_cleans_http_target_when_download_fails(
         ).to_base64_data(strict=True)
 
     assert not list(tmp_path.iterdir())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("media_type", ["image", "audio", "file"])
+async def test_media_resolver_rejects_directory_ref(tmp_path, media_type):
+    with pytest.raises(ValueError, match="not a regular file"):
+        await media_utils.MediaResolver(str(tmp_path), media_type=media_type).to_path()
+
+    with pytest.raises(ValueError, match="not a regular file"):
+        await media_utils.MediaResolver(tmp_path.as_uri(), media_type=media_type).to_path()
+
+
+@pytest.mark.asyncio
+async def test_media_resolver_rejects_unresolved_image_url_path():
+    ref = "/api/v1/files/tokens/ddbb1afd-84d9-4b1d-9b0e-5c7e6fe75684"
+
+    with pytest.raises(FileNotFoundError) as excinfo:
+        await media_utils.MediaResolver(ref, media_type="image").to_path()
+
+    assert ref in str(excinfo.value)
+
+
+@pytest.mark.asyncio
+async def test_media_resolver_rejects_missing_image_file_uri(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        await media_utils.MediaResolver(
+            (tmp_path / "missing.png").as_uri(),
+            media_type="image",
+        ).to_path()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("media_type", ["audio", "file"])
+async def test_media_resolver_keeps_pending_path_for_non_image(tmp_path, media_type):
+    # Platforms such as NapCat can hand over a path before the file is readable.
+    missing = str(tmp_path / "not-written-yet.amr")
+
+    resolved = await media_utils.MediaResolver(missing, media_type=media_type).to_path()
+
+    assert resolved == missing
+
+
+@pytest.mark.asyncio
+async def test_record_keeps_pending_local_path_for_platform_races(tmp_path):
+    # The STT stage retries this path until the platform finishes writing it.
+    missing = tmp_path / "not-written-yet.amr"
+
+    resolved = await Record(file=str(missing)).convert_to_file_path()
+
+    assert resolved == str(missing)
+
+
+@pytest.mark.asyncio
+async def test_image_base64_data_degrades_for_unresolved_ref_when_not_strict():
+    ref = "/api/v1/files/tokens/ddbb1afd-84d9-4b1d-9b0e-5c7e6fe75684"
+
+    assert await media_utils.resolve_image_ref_to_base64_data(ref) is None
+    assert await media_utils.MediaResolver(ref, media_type="image").to_data_url() is None
+
+    with pytest.raises(FileNotFoundError):
+        await media_utils.resolve_image_ref_to_base64_data(ref, strict=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["directory", "empty"])
+async def test_image_base64_data_degrades_for_non_regular_ref_when_not_strict(
+    tmp_path, kind
+):
+    ref = str(tmp_path) if kind == "directory" else ""
+
+    assert await media_utils.resolve_image_ref_to_base64_data(ref) is None
+    assert await media_utils.MediaResolver(ref, media_type="image").to_data_url() is None
+
+    with pytest.raises(ValueError):
+        await media_utils.resolve_image_ref_to_base64_data(ref, strict=True)
+
+
+@pytest.mark.asyncio
+async def test_media_resolver_materializes_oversized_bare_base64_image(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    # Past the Windows path limit stat() raises ValueError while pathlib's
+    # exists() reports False, so the payload must still be decoded and stored.
+    payload = base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"a" * (30 * 1024)).decode()
+    assert len(payload) > 32767
+
+    resolved = await media_utils.MediaResolver(payload, media_type="image").to_path()
+
+    assert Path(resolved).read_bytes() == base64.b64decode(payload)
+
+
+@pytest.mark.asyncio
+async def test_media_resolver_keeps_oversized_pending_path_for_audio():
+    # An over-long reference is not a usable path, so audio keeps retrying it.
+    # to_path() additionally calls Path.resolve(), which rejects over-long
+    # Windows paths on its own, so assert at the materialization layer.
+    ref = "/api/v1/files/tokens/" + "a" * 40000
+
+    async with media_utils.MediaResolver(ref, media_type="audio").as_path() as resolved:
+        assert resolved.path == Path(ref)
+
+
+@pytest.mark.asyncio
+async def test_media_resolver_prefers_existing_file_over_base64(tmp_path):
+    # "abcd" is both a valid file name and a valid bare base64 payload.
+    image_path = tmp_path / "abcd"
+    image_path.write_bytes(b"not-really-an-image")
+
+    resolved = await media_utils.MediaResolver(
+        str(image_path),
+        media_type="image",
+    ).to_path()
+
+    assert resolved == str(image_path.resolve())
+
+
+@pytest.mark.asyncio
+async def test_media_resolver_still_materializes_bare_base64_image(tmp_path, monkeypatch):
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    payload = base64.b64encode(b"abcd").decode()
+
+    resolved = await media_utils.MediaResolver(payload, media_type="image").to_path()
+
+    assert Path(resolved).read_bytes() == b"abcd"
+
+
+@pytest.mark.asyncio
+async def test_media_resolver_follows_symlink_to_regular_file(tmp_path):
+    target = tmp_path / "target.png"
+    target.write_bytes(b"png-bytes")
+    link = tmp_path / "link.png"
+    try:
+        link.symlink_to(target)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks are not available in this environment")
+
+    resolved = await media_utils.MediaResolver(str(link), media_type="image").to_path()
+
+    assert resolved == str(link.resolve())
+
+
+def test_describe_media_ref_marks_unresolved_ref():
+    ref = "/api/v1/files/tokens/ddbb1afd-84d9-4b1d-9b0e-5c7e6fe75684"
+
+    assert media_utils.describe_media_ref(ref) == (
+        f"unresolved media ref name={Path(ref).name!r} len={len(ref)}"
+    )
 
 
 def test_describe_media_ref_does_not_include_payload_or_query():

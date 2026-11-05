@@ -89,6 +89,65 @@ Comp.Video.fromFileSystem(path=path)
 Comp.Video.fromURL(url="https://example.com/video.mp4")
 ```
 
+## Interactive Buttons
+
+Create button actions and styles with `Button.CallbackAction`, `Button.UrlAction`, and `Button.Style`. `ActionRow` is a separate message component.
+
+Wrap `Button` components in an `ActionRow` and handle clicks with `@filter.button_action("button ID")`. Add these methods to an existing `Star` plugin class.
+
+Current platform support:
+
+| Support | Platforms |
+| --- | --- |
+| Callback and URL buttons | QQ Official Bot, Telegram, Lark, DingTalk, Discord, Slack, LINE, KOOK, Satori, WeCom (including WeChat Customer Service), WeCom AI Bot, WebChat |
+| Callback buttons; URL actions appear as regular links | Mattermost |
+| Text or link fallback without button callbacks | OneBot v11 (aiocqhttp), Misskey, Weixin Official Account, Weixin Personal (weixin_oc) |
+
+Satori button support depends on the connected platform and client. Mattermost callback buttons require a callback URL reachable by the Mattermost server. For platforms using text fallbacks, set `fallback_text` to explain the available text commands.
+
+```python
+from astrbot.api.event import AstrMessageEvent, filter
+import astrbot.api.message_components as Comp
+
+
+@filter.command("buttons")
+async def buttons(self, event: AstrMessageEvent):
+    yield event.chain_result([
+        Comp.Plain("Choose an action:"),
+        Comp.ActionRow(
+            buttons=[
+                Comp.Button(
+                    id="my_plugin:confirm",
+                    label="Confirm",
+                    action=Comp.Button.CallbackAction(data={"item_id": 42}),
+                    style=Comp.Button.Style.PRIMARY,
+                ),
+                Comp.Button(
+                    id="my_plugin:docs",
+                    label="Docs",
+                    action=Comp.Button.UrlAction(url="https://docs.astrbot.app"),
+                ),
+            ],
+            action_timeout=60,
+            fallback_text="Buttons are unavailable here. Use text commands instead.",
+        ),
+    ])
+
+
+@filter.button_action("my_plugin:confirm")
+async def confirm(self, event: AstrMessageEvent):
+    interaction = event.get_button_interaction()
+    if interaction is None:
+        return
+    yield event.plain_result(f"Confirmed item: {interaction.data['item_id']}")
+```
+
+- `action_timeout` is the lifetime of the row's callback buttons in seconds. It must be a finite positive number; the default `None` means unlimited. The shared deadline starts when the row is first rendered for sending. Reusing the same `ActionRow` instance preserves its deadline; create a new instance to start a new lifetime.
+- The deadline is persisted with the callback data and survives restarts. Expired clicks receive “按钮已过期，请重新发起操作。 / This button has expired. Please start again.” without running plugin handlers. Telegram uses an alert; Discord and Slack use replies visible only to the clicking user. Other platforms send a message, with WeCom AI Bot updating its card. Repeated expired clicks also receive the notice. Operations already accepted can finish, and buttons may remain visible in the original message.
+- `Button.CallbackAction.data` must be JSON-compatible and is returned as `interaction.data`. The button ID becomes `interaction.action_id`; prefix IDs with your plugin name to avoid collisions.
+- `Button.UrlAction` opens a link without invoking a plugin callback and is unaffected by `action_timeout`. `fallback_text` is used on platforms without button support, rather than as an expiry notice.
+- `@filter.button_action()` without an ID matches all button callbacks. Use `event.get_button_interaction()` to access the `ButtonInteraction` event component.
+
 ## Sending Video Messages
 
 ```python

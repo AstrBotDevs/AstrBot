@@ -556,7 +556,7 @@ def test_agent_step_limit_upgrade_is_persisted_once(
     expected_steps = 128 if config_version < 4 and max_steps == 30 else max_steps
     assert loaded["agent_runner"]["config"]["misc"]["max_steps"] == expected_steps
     persisted = json.loads(config_path.read_text(encoding="utf-8-sig"))
-    assert persisted["config_version"] == max(config_version, 4)
+    assert persisted["config_version"] == max(config_version, DEFAULT_CONFIG["config_version"])
     assert persisted["agent_runner"]["config"]["misc"]["max_steps"] == expected_steps
 
     loaded["agent_runner"]["config"]["misc"]["max_steps"] = 30
