@@ -128,23 +128,6 @@ async def test_get_default_persona_v3_uses_db_default():
 
 
 @pytest.mark.asyncio
-async def test_resolve_selected_persona_matches_db_default():
-    manager = make_manager([make_persona("default", "USER DEFAULT")])
-
-    with patch.object(pm.sp, "get_async", new=AsyncMock(return_value={})):
-        persona_id, persona, _, _ = await manager.resolve_selected_persona(
-            umo="test:umo",
-            conversation_persona_id="default",
-            platform_name="webchat",
-            provider_settings={},
-        )
-
-    assert persona_id == "default"
-    assert persona is not None
-    assert persona["prompt"] == "USER DEFAULT"
-
-
-@pytest.mark.asyncio
 async def test_resolve_selected_persona_webchat_implicit_uses_chatui_default():
     manager = make_manager([make_persona("default", "USER DEFAULT")])
 

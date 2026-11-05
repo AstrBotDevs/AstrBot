@@ -68,7 +68,7 @@ def _log_retry(
     logger.warning(
         f"[{provider_label}] Request failed with retryable error; "
         f"retrying ({retry_state.attempt_number + 1}/{max_attempts}): "
-        f"{error}"
+        f"{type(error).__name__}: {error}"
     )
 
 

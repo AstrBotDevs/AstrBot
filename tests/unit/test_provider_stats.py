@@ -371,6 +371,7 @@ async def test_cancelled_agent_finally_schedules_stats_once(
                 request,
                 runner,
                 runner.get_final_llm_resp(),
+                aborted=True,
             )
             internal._schedule_internal_agent_stats(
                 scheduled,
@@ -387,4 +388,4 @@ async def test_cancelled_agent_finally_schedules_stats_once(
         await task
     await asyncio.sleep(0)
 
-    writer.assert_awaited_once_with(event, request, runner, None)
+    writer.assert_awaited_once_with(event, request, runner, None, aborted=True)

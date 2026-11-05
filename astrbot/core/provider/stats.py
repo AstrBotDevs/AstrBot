@@ -58,6 +58,7 @@ async def record_agent_runner_stats(
     agent_runner: Any,
     final_response: LLMResponse | None,
     agent_type: str = "internal",
+    aborted: bool = False,
 ) -> None:
     """Persist aggregate agent runner stats without affecting its response."""
     if agent_runner is None:
@@ -133,7 +134,7 @@ async def record_agent_runner_stats(
             provider_model=provider.get_model(),
             status=_runner_status(
                 final_response,
-                agent_runner.was_aborted(),
+                aborted or agent_runner.was_aborted(),
                 getattr(agent_runner, "state", None),
             ),
             stats=aggregate_stats,
