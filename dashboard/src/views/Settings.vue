@@ -157,6 +157,18 @@
                         <div class="settings-list-card">
                             <div class="settings-item settings-item--stack settings-item--proxy">
                                 <div class="settings-item__label">
+                                    <div class="settings-item__title">{{ tm('network.pypiMirror.title') }}</div>
+                                    <div class="settings-item__subtitle">{{ tm('network.pypiMirror.subtitle') }}</div>
+                                </div>
+                                <div class="settings-item__control settings-item__control--proxy">
+                                    <PypiMirrorSelector v-model="systemConfigData.pypi_index_url" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="settings-list-card">
+                            <div class="settings-item settings-item--stack settings-item--proxy">
+                                <div class="settings-item__label">
                                     <div class="settings-item__title">{{ tm('network.githubProxy.title') }}</div>
                                     <div class="settings-item__subtitle">{{ tm('network.githubProxy.subtitle') }}</div>
                                 </div>
@@ -490,6 +502,7 @@ import { apiKeyApi, systemConfigApi } from '@/api/v1';
 import AstrBotConfigV4 from '@/components/shared/AstrBotConfigV4.vue';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import ProxySelector from '@/components/shared/ProxySelector.vue';
+import PypiMirrorSelector from '@/components/shared/PypiMirrorSelector.vue';
 import BackupDialog from '@/components/shared/BackupDialog.vue';
 import StorageCleanupPanel from '@/components/shared/StorageCleanupPanel.vue';
 import LogExportButton from '@/components/shared/LogExportButton.vue';
@@ -741,7 +754,7 @@ const systemConfigGroups = computed(() => {
 
     return [
         createGroup('runtime', ['timezone', 'callback_api_base']),
-        createGroup('network', ['http_proxy', 'no_proxy', 'pip_install_arg', 'pypi_index_url']),
+        createGroup('network', ['http_proxy', 'no_proxy', 'pip_install_arg']),
         createGroup('webuiSecurity', [
             'dashboard.trust_proxy_headers',
             'dashboard.ssl.enable',

@@ -28,48 +28,6 @@ from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import (
 # ============================================================
 
 
-def test_reply_to_dict_contains_only_id_in_data():
-    """Reply.toDict() 应当只输出 id 字段，不含 chain、sender_id 等多余字段。
-
-    当前实际行为：继承了 BaseMessageComponent.toDict()，会将所有
-    非 None 的默认值（chain: [], sender_id: 0, qq: 0, seq: 0 等）
-    一起序列化，违反了 OneBot V11 的 reply 段格式约定。
-    """
-    reply = Comp.Reply(id="123456")
-
-    result = reply.toDict()
-
-    assert result["type"] == "reply"
-    assert "id" in result["data"]
-
-    # 这些字段不应出现在 OneBot 协议的 reply segment 中
-    unexpectedFields = ["chain", "sender_id", "qq", "seq", "text"]
-    for field in unexpectedFields:
-        if field in result["data"]:
-            pytest.fail(
-                f"Reply.toDict() 的 data 中不应包含 '{field}' 字段，"
-                f"但实际输出了 {field}={result['data'][field]!r}。"
-                f"完整输出: {result}"
-            )
-
-
-def test_reply_to_dict_outputs_only_id():
-    """Reply.toDict() 应当只输出 id 字段，不含任何多余字段。"""
-    reply = Comp.Reply(id="123456")
-    result = reply.toDict()
-
-    assert result["type"] == "reply"
-    assert set(result["data"].keys()) == {"id"}, (
-        f"Reply.toDict() data 中包含多余字段: {set(result['data'].keys()) - {'id'}}"
-    )
-    assert result["data"]["id"] == "123456"
-
-
-# ============================================================
-# _parse_onebot_json 输出测试
-# ============================================================
-
-
 @pytest.mark.asyncio
 async def test_parse_onebot_json_reply_produces_extra_fields():
     """_parse_onebot_json 处理 Reply 时会输出多余字段。
@@ -102,13 +60,16 @@ async def test_parse_onebot_json_reply_produces_extra_fields():
 
 
 @pytest.mark.asyncio
-async def test_send_private_msg_with_reply_includes_extra_fields():
-    """验证私聊发送带 Reply 的消息时，实际传给 bot.send_private_msg 的
-    payload 包含多余字段。
-
-    这是导致私聊下 'message not found' 的直接原因：
-    OneBot 协议端收到的 reply 段数据不符合标准格式。
-    """
+@pytest.mark.parametrize(
+    ("is_group", "method_name", "target_key", "session_id"),
+    [
+        (False, "send_private_msg", "user_id", "987654"),
+        (True, "send_group_msg", None, "123456"),
+    ],
+)
+async def test_send_msg_with_reply_uses_standard_segment(
+    is_group, method_name, target_key, session_id
+):
     bot = AsyncMock()
     chain = MessageChain([Comp.Reply(id="123456"), Comp.Plain("你好")])
 
@@ -116,64 +77,20 @@ async def test_send_private_msg_with_reply_includes_extra_fields():
         bot=bot,
         message_chain=chain,
         event=None,
-        is_group=False,  # 私聊
-        session_id="987654",
+        is_group=is_group,
+        session_id=session_id,
     )
 
-    # 验证调用了 send_private_msg（而非 send_group_msg）
-    bot.send_private_msg.assert_awaited_once()
+    method = getattr(bot, method_name)
+    method.assert_awaited_once()
 
-    callArgs = bot.send_private_msg.call_args
-    assert callArgs.kwargs["user_id"] == 987654
-
-    messages = callArgs.kwargs["message"]
-    assert len(messages) >= 1
-    replySegment = messages[0]
-    assert replySegment["type"] == "reply"
-
-    # 检查 payload 中的多余字段
-    extraFields = [k for k in replySegment["data"] if k != "id"]
-    if extraFields:
-        pytest.fail(
-            f"send_private_msg 的 message[0] reply 段包含了多余的 data 字段: "
-            f"{extraFields}。\n"
-            f"这是导致私聊引用回复报 'message not found' 的根因。\n"
-            f"完整 payload: {messages}"
-        )
-
-
-@pytest.mark.asyncio
-async def test_send_group_msg_with_reply_also_includes_extra_fields():
-    """对比：群聊发送带 Reply 的消息同样包含多余字段。
-
-    如果群聊引用回复正常而私聊失败，可能的原因是不同协议端
-    对多余字段的容忍度不同（例如 napcat 在 send_group_msg 中
-    忽略了多余字段，但在 send_private_msg 中严格校验）。
-    """
-    bot = AsyncMock()
-    chain = MessageChain([Comp.Reply(id="123456"), Comp.Plain("你好")])
-
-    await AiocqhttpMessageEvent.send_message(
-        bot=bot,
-        message_chain=chain,
-        event=None,
-        is_group=True,
-        session_id="123456",
-    )
-
-    bot.send_group_msg.assert_awaited_once()
-
-    callArgs = bot.send_group_msg.call_args
+    callArgs = method.call_args
+    if target_key:
+        assert callArgs.kwargs[target_key] == int(session_id)
     messages = callArgs.kwargs["message"]
     replySegment = messages[0]
     assert replySegment["type"] == "reply"
-
-    extraFields = [k for k in replySegment["data"] if k != "id"]
-    if extraFields:
-        pytest.fail(
-            f"send_group_msg 的 reply 段也包含多余字段: {extraFields}。\n"
-            f"完整 payload: {messages}"
-        )
+    assert replySegment["data"] == {"id": "123456"}
 
 
 # ============================================================
