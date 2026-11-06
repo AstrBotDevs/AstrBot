@@ -739,26 +739,35 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         try:
             return await send_func(payload)
         except _QQOFFICIAL_SEND_API_ERRORS as err:
-            logger.info("[QQOfficial] 回复消息失败: %s, 尝试使用主动发送接口。", err)
-            if payload.get("msg_id") or payload.get("event_id"):
+            # markdown 被服务端拒绝（50056）时，保留 msg_id 退化为纯 content
+            # 被动回复。先去掉 msg_id 会把被动回复变成主动消息，既烧主动
+            # 配额也可能直接失败（如 304049 主动消息限频）。
+            if (
+                isinstance(err, botpy.errors.ServerError)
+                and QQOfficialMessageEvent.MARKDOWN_NOT_ALLOWED_ERROR in str(err)
+                and payload.get("markdown")
+                and plain_text
+            ):
+                logger.warning(
+                    "[QQOfficial] markdown 发送被拒绝，回退到 content 模式重试。"
+                )
                 fallback_payload = payload.copy()
-                fallback_payload.pop("msg_id", None)
-                fallback_payload.pop("event_id", None)
-                try:
-                    ret = await send_func(fallback_payload)
-                    logger.info("[QQOfficial] 使用主动发送接口发送成功。")
-                    return ret
-                except _QQOFFICIAL_SEND_API_ERRORS as fallback_err:
-                    err = fallback_err
-                    payload = fallback_payload
-
-            if not isinstance(err, botpy.errors.ServerError):
-                raise
+                fallback_payload.pop("markdown", None)
+                fallback_payload["content"] = plain_text
+                if fallback_payload.get("msg_type") == 2:
+                    fallback_payload["msg_type"] = 0
+                if stream:
+                    fallback_content = cast(str, fallback_payload.get("content") or "")
+                    if fallback_content and not fallback_content.endswith("\n"):
+                        fallback_payload["content"] = fallback_content + "\n"
+                return await send_func(fallback_payload)
 
             # QQ 流式 markdown 分片校验：内容必须以换行结尾。
             # 某些边界场景服务端仍可能判定失败，这里做一次修正重试。
-            if stream and QQOfficialMessageEvent.STREAM_MARKDOWN_NEWLINE_ERROR in str(
-                err
+            if (
+                isinstance(err, botpy.errors.ServerError)
+                and stream
+                and QQOfficialMessageEvent.STREAM_MARKDOWN_NEWLINE_ERROR in str(err)
             ):
                 retry_payload = payload.copy()
 
@@ -776,6 +785,22 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     "[QQOfficial] 流式 markdown 分片换行校验失败，已修正后重试一次。"
                 )
                 return await send_func(retry_payload)
+
+            logger.info("[QQOfficial] 回复消息失败: %s, 尝试使用主动发送接口。", err)
+            if payload.get("msg_id") or payload.get("event_id"):
+                fallback_payload = payload.copy()
+                fallback_payload.pop("msg_id", None)
+                fallback_payload.pop("event_id", None)
+                try:
+                    ret = await send_func(fallback_payload)
+                    logger.info("[QQOfficial] 使用主动发送接口发送成功。")
+                    return ret
+                except _QQOFFICIAL_SEND_API_ERRORS as fallback_err:
+                    err = fallback_err
+                    payload = fallback_payload
+
+            if not isinstance(err, botpy.errors.ServerError):
+                raise
 
             if (
                 QQOfficialMessageEvent.MARKDOWN_NOT_ALLOWED_ERROR not in str(err)
