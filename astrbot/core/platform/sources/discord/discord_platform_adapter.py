@@ -547,11 +547,32 @@ class DiscordPlatformAdapter(Platform):
         """收集所有指令并注册到Discord"""
         logger.info("[Discord] Collecting and registering slash commands...")
         registered_commands = []
+        enabled_plugins: set[str] | None = None
+        if self.astrbot_config_mgr is not None:
+            enabled_plugins = set()
+            # Discord registers commands per bot, not per AstrBot session. Keep
+            # commands usable in any profile that may serve this bot.
+            for config in self.astrbot_config_mgr.get_platform_configs(
+                self.meta().id,
+                (MessageType.GROUP_MESSAGE, MessageType.FRIEND_MESSAGE),
+            ):
+                plugin_set = config.get("plugin_set", ["*"])
+                if plugin_set is None or plugin_set == ["*"]:
+                    enabled_plugins = None
+                    break
+                enabled_plugins.update(plugin_set)
 
         for handler_md in star_handlers_registry:
-            if not star_map[handler_md.handler_module_path].activated:
+            plugin = star_map[handler_md.handler_module_path]
+            if not plugin.activated:
                 continue
             if not handler_md.enabled:
+                continue
+            if (
+                enabled_plugins is not None
+                and plugin.name not in enabled_plugins
+                and not plugin.reserved
+            ):
                 continue
             for event_filter in handler_md.event_filters:
                 cmd_info = self._extract_command_info(event_filter, handler_md)

@@ -1,4 +1,5 @@
 import asyncio
+import fnmatch
 import os
 import uuid
 from typing import TypedDict, TypeVar
@@ -7,6 +8,7 @@ from astrbot.core import AstrBotConfig, logger
 from astrbot.core.config.astrbot_config import ASTRBOT_CONFIG_PATH
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.platform.message_session import MessageSession
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core.umop_config_router import UmopConfigRouter
 from astrbot.core.utils.astrbot_path import get_astrbot_config_path
 from astrbot.core.utils.shared_preferences import SharedPreferences
@@ -163,6 +165,56 @@ class AstrBotConfigManager:
             conf = self.confs["default"]  # default MUST exists
 
         return conf
+
+    def get_platform_configs(
+        self, platform_id: str, message_types: tuple[MessageType, ...]
+    ) -> list[AstrBotConfig]:
+        """Collect possible profiles for bot-wide command registration.
+
+        Args:
+            platform_id: Adapter instance ID, not the platform type.
+            message_types: Message types supported by the registered commands.
+
+        Returns:
+            A conservative union of profiles matching the adapter. Ordered
+            catch-all routes and shadowed literal or identical session patterns
+            are respected. Overlapping complex globs can overestimate this union;
+            per-session message dispatch remains the authorization boundary.
+        """
+        profiles: dict[str, AstrBotConfig] = {}
+        metadata = self._get_abconf_data()
+        for message_type in message_types:
+            seen_patterns: set[str] = set()
+            for pattern, conf_id in self.ucr.umop_to_conf_id.items():
+                parts = self.ucr._split_umo(pattern)
+                if parts is None:
+                    continue
+                platform_pattern, type_pattern, session_pattern = parts
+                if not fnmatch.fnmatchcase(platform_id, platform_pattern or "*"):
+                    continue
+                if not fnmatch.fnmatchcase(message_type.value, type_pattern or "*"):
+                    continue
+                session_pattern = session_pattern or "*"
+                if session_pattern in seen_patterns:
+                    continue
+                if not any(char in session_pattern for char in "*?[") and any(
+                    fnmatch.fnmatchcase(session_pattern, previous)
+                    for previous in seen_patterns
+                ):
+                    continue
+                seen_patterns.add(session_pattern)
+                meta = metadata.get(conf_id)
+                config = self.confs.get(conf_id)
+                if not (meta and isinstance(meta, dict) and config):
+                    conf_id, config = "default", self.default_conf
+                profiles[conf_id] = config
+                if not session_pattern.strip("*"):
+                    break
+            else:
+                # Without a session catch-all, unmatched sessions still use
+                # the default profile, even when some sessions are routed.
+                profiles["default"] = self.default_conf
+        return list(profiles.values())
 
     @property
     def default_conf(self) -> AstrBotConfig:
