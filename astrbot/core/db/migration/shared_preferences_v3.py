@@ -1,4 +1,5 @@
 import json
+import locale
 import os
 from typing import TypeVar
 
@@ -17,14 +18,19 @@ class SharedPreferences:
     def _load_preferences(self):
         if os.path.exists(self.path):
             try:
-                with open(self.path) as f:
+                with open(self.path, encoding="utf-8") as f:
+                    return json.load(f)
+            except UnicodeDecodeError:
+                # Older v3 files used the system codec. Preserve the file if
+                # this fallback also fails, so migration cannot destroy it.
+                with open(self.path, encoding=locale.getencoding()) as f:
                     return json.load(f)
             except json.JSONDecodeError:
                 os.remove(self.path)
         return {}
 
     def _save_preferences(self) -> None:
-        with open(self.path, "w") as f:
+        with open(self.path, "w", encoding="utf-8") as f:
             json.dump(self._data, f, indent=4, ensure_ascii=False)
             f.flush()
 

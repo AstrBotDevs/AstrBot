@@ -1,4 +1,6 @@
 import asyncio
+import json
+import locale
 import time
 
 import pytest
@@ -266,3 +268,91 @@ async def test_sync_get_reads_persisted_value_with_exhausted_pool(preferences):
     finally:
         for connection in connections:
             await connection.close()
+
+
+def test_legacy_shared_preferences_file_is_read_as_utf8(tmp_path):
+    """The v3 file holds raw non-ASCII, so the charset cannot depend on the OS locale."""
+    from astrbot.core.db.migration.shared_preferences_v3 import SharedPreferences
+
+    path = tmp_path / "shared_preferences.json"
+    path.write_text(
+        json.dumps({"greeting": "こんにちは \u2603 snowman"}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    store = SharedPreferences(path)
+
+    assert store.get("greeting") == "こんにちは \u2603 snowman"
+
+
+def test_legacy_put_preserves_the_file_when_a_value_is_unencodable(tmp_path):
+    """``open(path, "w")`` truncates before encoding, so a failed write must not
+    destroy the preferences that are already on disk."""
+    from astrbot.core.db.migration.shared_preferences_v3 import SharedPreferences
+
+    path = tmp_path / "shared_preferences.json"
+    original = {"keep": "value"}
+    path.write_text(json.dumps(original, ensure_ascii=False), encoding="utf-8")
+
+    store = SharedPreferences(path)
+    store.put("extra", "☃ snowman")
+
+    assert json.loads(path.read_text(encoding="utf-8")) == {
+        "keep": "value",
+        "extra": "☃ snowman",
+    }
+
+
+@pytest.mark.parametrize(
+    ("encoding", "greeting"), [("gbk", "旧版偏好"), ("cp1252", "café")]
+)
+def test_legacy_preferences_preserve_locale_encoded_values(
+    tmp_path, monkeypatch, encoding, greeting
+):
+    """Load files written by v3 before explicit UTF-8 persistence was introduced."""
+    from astrbot.core.db.migration.shared_preferences_v3 import SharedPreferences
+
+    path = tmp_path / "shared_preferences.json"
+    original = json.dumps({"greeting": greeting}, ensure_ascii=False).encode(encoding)
+    path.write_bytes(original)
+    monkeypatch.setattr(locale, "getencoding", lambda: encoding)
+
+    store = SharedPreferences(path)
+
+    assert store.get("greeting") == greeting
+    assert path.read_bytes() == original
+    store.put("extra", "☃")
+    assert json.loads(path.read_text(encoding="utf-8")) == {
+        "greeting": greeting,
+        "extra": "☃",
+    }
+
+
+def test_legacy_preferences_preserve_undecodable_file(tmp_path, monkeypatch):
+    """A failed charset fallback must leave the original file available for recovery."""
+    from astrbot.core.db.migration.shared_preferences_v3 import SharedPreferences
+
+    path = tmp_path / "shared_preferences.json"
+    original = b'{"greeting": "\xff"}'
+    path.write_bytes(original)
+    monkeypatch.setattr(locale, "getencoding", lambda: "utf-8")
+
+    with pytest.raises(UnicodeDecodeError):
+        SharedPreferences(path)
+
+    assert path.read_bytes() == original
+
+
+def test_legacy_preferences_preserve_invalid_json_after_fallback(tmp_path, monkeypatch):
+    """Do not delete a legacy file if a fallback codec does not yield valid JSON."""
+    from astrbot.core.db.migration.shared_preferences_v3 import SharedPreferences
+
+    path = tmp_path / "shared_preferences.json"
+    original = b'{"greeting": "caf\xe9"'
+    path.write_bytes(original)
+    monkeypatch.setattr(locale, "getencoding", lambda: "cp1252")
+
+    with pytest.raises(json.JSONDecodeError):
+        SharedPreferences(path)
+
+    assert path.read_bytes() == original
