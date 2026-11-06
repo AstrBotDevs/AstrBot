@@ -8,6 +8,7 @@ from datetime import datetime
 
 import pytest
 
+from astrbot.core.utils.error_redaction import redact_sensitive_text
 from astrbot.dashboard.services.diagnostic_service import DiagnosticRedactor
 
 
@@ -335,3 +336,60 @@ def test_public_ip_aliases_are_shared_across_config_logs_and_trace_spellings():
 )
 def test_local_non_global_and_non_ip_text_remains_unchanged(value):
     assert DiagnosticRedactor().text(value) == value
+
+
+@pytest.mark.parametrize(
+    "secret",
+    [
+        "sk-abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGH",
+        "sk-proj-AbCd1234EfGh5678IjKl9012",
+        "sk-svcacct-AbCd1234EfGh5678IjKl9012",
+        "sk-live-9f8e7d6c5b4a3210",
+    ],
+)
+def test_sk_style_keys_are_redacted(secret):
+    assert secret not in redact_sensitive_text(f"request failed: {secret}")
+
+
+def test_openai_incorrect_api_key_message_is_redacted():
+    message = (
+        "Incorrect API key provided: sk-proj-AbCd1234EfGh5678IjKl9012. "
+        "You can obtain an API key at https://platform.openai.com/account/api-keys."
+    )
+    redacted = redact_sensitive_text(message)
+    assert "sk-proj-AbCd1234EfGh5678IjKl9012" not in redacted
+    assert "Incorrect API key provided: [REDACTED]." in redacted
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "sk-short",
+        "task-runner-abcdefghijklmnop",
+        "disk-usage-abcdefghijklmnop",
+        "risk-assessment-1234567890",
+    ],
+)
+def test_non_secret_text_is_untouched(text):
+    assert redact_sensitive_text(text) == text
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "sk-learn-model-abcdefghijkl",
+        "we import sk-learn-model-abcdefghijkl in the pipeline",
+    ],
+)
+def test_sk_prefixed_identifier_is_redacted_by_design(text):
+    """Documents the over-matching accepted by the hyphenated ``sk-`` pattern.
+
+    A ``sk-`` prefixed identifier cannot be told apart from a real key, so the
+    pattern errs on the side of redaction: a false positive only hides a
+    harmless word, while a false negative writes a live credential into the
+    log. Whitelisting known vendor prefixes was rejected because it misses
+    hyphenated key shapes such as ``sk-<uuid>`` and self-hosted gateway keys.
+    """
+    redacted = redact_sensitive_text(text)
+    assert "sk-learn" not in redacted
+    assert "[REDACTED]" in redacted

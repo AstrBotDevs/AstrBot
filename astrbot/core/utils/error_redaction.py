@@ -20,7 +20,9 @@ _AUTH_HEADER_PATTERN = re.compile(
     r"(?i)(?P<prefix>\bauthorization\s*:\s*bearer\s+)(?P<token>[A-Za-z0-9._\-]+)"
 )
 _BEARER_PATTERN = re.compile(r"(?i)(?P<prefix>\bbearer\s+)(?P<token>[A-Za-z0-9._\-]+)")
-_SK_PATTERN = re.compile(r"\bsk-[A-Za-z0-9]{16,}\b")
+# Modern OpenAI-style keys carry a hyphenated prefix ("sk-proj-",
+# "sk-svcacct-", "sk-live-"), so the body must allow "-" and "_".
+_SK_PATTERN = re.compile(r"\bsk-[A-Za-z0-9][A-Za-z0-9_-]{15,}\b")
 
 
 def _redact_json_field(match: re.Match[str]) -> str:
