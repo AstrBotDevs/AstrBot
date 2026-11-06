@@ -68,6 +68,7 @@ class RetrievalManager:
         kb_id_helper_map: dict[str, KBHelper],
         top_k_fusion: int = 20,
         top_m_final: int = 5,
+        dense_weight: float | None = None,
     ) -> list[RetrievalResult]:
         """混合检索
 
@@ -139,6 +140,7 @@ class RetrievalManager:
             dense_results=dense_results,
             sparse_results=sparse_results,
             top_k=top_k_fusion,
+            dense_weight=dense_weight,
         )
         time_end = time.time()
         logger.debug(

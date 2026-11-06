@@ -77,6 +77,7 @@ async def retrieve_knowledge_base(
         logger.debug(f"[知识库] 使用全局配置，知识库数量: {len(kb_names)}")
 
     top_k_fusion = config.get("kb_fusion_top_k", 20)
+    dense_weight = config.get("kb_dense_weight", 0.9)
     if not kb_names:
         return None
 
@@ -91,6 +92,7 @@ async def retrieve_knowledge_base(
         kb_names=kb_names,
         top_k_fusion=top_k_fusion,
         top_m_final=top_k,
+        dense_weight=dense_weight,
     )
     if not kb_context:
         return None

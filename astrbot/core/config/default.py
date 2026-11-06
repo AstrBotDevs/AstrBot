@@ -322,6 +322,7 @@ DEFAULT_CONFIG = {
     "plugin_set": ["*"],  # "*" 表示使用所有可用的插件, 空列表表示不使用任何插件
     "kb_names": [],  # 默认知识库名称列表
     "kb_fusion_top_k": 20,  # 知识库检索融合阶段返回结果数量
+    "kb_dense_weight": 0.9,  # 知识库检索稠密权重, 稀疏权重为 1 - 该值
     "kb_final_top_k": 5,  # 知识库检索最终返回结果数量
     "kb_agentic_mode": False,
     "disable_builtin_commands": False,
@@ -3338,6 +3339,7 @@ CONFIG_METADATA_2 = {
             },
             "kb_names": {"type": "list", "items": {"type": "string"}},
             "kb_fusion_top_k": {"type": "int", "default": 20},
+            "kb_dense_weight": {"type": "float", "default": 0.9},
             "kb_final_top_k": {"type": "int", "default": 5},
             "kb_agentic_mode": {"type": "bool"},
         },
@@ -3718,6 +3720,11 @@ CONFIG_METADATA_3 = {
                         "description": "融合检索结果数",
                         "type": "int",
                         "hint": "多个知识库检索结果融合后的返回结果数量",
+                    },
+                    "kb_dense_weight": {
+                        "description": "稠密检索权重",
+                        "type": "float",
+                        "hint": "稠密与稀疏检索结果的融合权重，取值 0~1，默认 0.9。知识库以精确专名（人名、技能名、型号）为主时，可调低至 0.4~0.5 以提升关键词精确命中率。",
                     },
                     "kb_final_top_k": {
                         "description": "最终返回结果数",
