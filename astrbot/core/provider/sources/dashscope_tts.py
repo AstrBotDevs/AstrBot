@@ -2,6 +2,7 @@ import asyncio
 import base64
 import logging
 import os
+import struct
 
 import aiohttp
 import dashscope
@@ -57,6 +58,25 @@ class ProviderDashscopeTTSAPI(TTSProvider):
             raise RuntimeError(
                 "Audio synthesis failed, returned empty content. The model may not be supported or the service is unavailable.",
             )
+
+        if (
+            ext == ".wav"
+            and audio_bytes[:4] == b"RIFF"
+            and audio_bytes[8:12] == b"WAVE"
+        ):
+            # Streamed synthesis leaves "unknown length" placeholders in the RIFF
+            # and data sizes. Decoders that trust them (e.g. SILK conversion for
+            # QQ) try to read ~2 GB and fail, so rewrite them from the real size.
+            buf = bytearray(audio_bytes)
+            pos = 12
+            while pos + 8 <= len(buf):
+                chunk_size = struct.unpack_from("<I", buf, pos + 4)[0]
+                if buf[pos : pos + 4] == b"data":
+                    struct.pack_into("<I", buf, 4, len(buf) - 8)
+                    struct.pack_into("<I", buf, pos + 4, len(buf) - pos - 8)
+                    audio_bytes = bytes(buf)
+                    break
+                pos += 8 + chunk_size + (chunk_size & 1)
 
         path = os.path.join(temp_dir, f"dashscope_tts_{generate_timestamp_id()}{ext}")
         with open(path, "wb") as f:
