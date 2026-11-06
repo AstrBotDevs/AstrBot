@@ -403,14 +403,10 @@ class MockHooks(BaseAgentRunHooks):
         self.agent_responses = []
         self.event_order = []
         self.events = []
-        self.buffer_streaming_response = False
         self.rewrite_response = False
         self.clear_tool_calls = False
         self.tool_start_called = False
         self.tool_end_called = False
-
-    def should_buffer_streaming_response(self, run_context):
-        return self.buffer_streaming_response
 
     async def on_agent_begin(self, run_context):
         self.agent_begin_called = True
@@ -938,7 +934,6 @@ async def test_tool_call_response_invokes_response_hook(
 ):
     mock_provider.should_call_tools = True
     mock_provider.max_calls_before_normal_response = 100
-    mock_hooks.buffer_streaming_response = True
     mock_hooks.rewrite_response = True
 
     await runner.reset(
@@ -977,11 +972,11 @@ async def test_tool_call_response_invokes_response_hook(
     )
     assert any(
         response.type == "streaming_delta"
-        and response.data["chain"].get_plain_text() == "hooked: 我需要使用工具来帮助您"
+        and response.data["chain"].get_plain_text() == "我需要使用工具来帮助您"
         for response in responses
     )
-    assert mock_hooks.events.index("response_hook") < mock_hooks.events.index(
-        "streaming_delta"
+    assert mock_hooks.events.index("streaming_delta") < mock_hooks.events.index(
+        "response_hook"
     )
 
 
@@ -1012,91 +1007,12 @@ async def test_cleared_tool_calls_finalize_as_assistant_response(
 
 
 @pytest.mark.asyncio
-async def test_buffered_stream_chunks_are_flushed_when_provider_fails(
-    runner, provider_request, mock_tool_executor, mock_hooks
-):
-    class FailingStreamingProvider(MockProvider):
-        async def text_chat_stream(self, **kwargs):
-            yield LLMResponse(
-                role="assistant",
-                completion_text="partial response",
-                is_chunk=True,
-            )
-            raise RuntimeError("stream failed")
-
-    mock_hooks.buffer_streaming_response = True
-
-    await runner.reset(
-        provider=FailingStreamingProvider(),
-        request=provider_request,
-        run_context=ContextWrapper(context=None),
-        tool_executor=mock_tool_executor,
-        agent_hooks=mock_hooks,
-        streaming=True,
-    )
-
-    responses = [response async for response in runner.step()]
-
-    assert any(
-        response.type == "streaming_delta"
-        and response.data["chain"].get_plain_text() == "partial response"
-        for response in responses
-    )
-    assert any(response.type == "err" for response in responses)
-
-
-@pytest.mark.asyncio
-async def test_buffered_partial_stream_is_flushed_when_stopped(
-    runner, provider_request, mock_tool_executor, mock_hooks
-):
-    class PausedStreamingProvider(MockProvider):
-        def __init__(self):
-            super().__init__()
-            self.chunk_yielded = asyncio.Event()
-
-        async def text_chat_stream(self, **kwargs):
-            yield LLMResponse(
-                role="assistant",
-                completion_text="partial response",
-                is_chunk=True,
-            )
-            self.chunk_yielded.set()
-            await asyncio.Future()
-
-    provider = PausedStreamingProvider()
-    mock_hooks.buffer_streaming_response = True
-
-    await runner.reset(
-        provider=provider,
-        request=provider_request,
-        run_context=ContextWrapper(context=None),
-        tool_executor=mock_tool_executor,
-        agent_hooks=mock_hooks,
-        streaming=True,
-    )
-
-    async def collect_responses():
-        return [response async for response in runner.step()]
-
-    step_task = asyncio.create_task(collect_responses())
-    await asyncio.wait_for(provider.chunk_yielded.wait(), timeout=5)
-    runner.request_stop()
-    responses = await asyncio.wait_for(step_task, timeout=5)
-
-    assert any(
-        response.type == "streaming_delta"
-        and response.data["chain"].get_plain_text() == "partial response"
-        for response in responses
-    )
-    assert any(response.type == "aborted" for response in responses)
-
-
-@pytest.mark.asyncio
 async def test_main_agent_response_hook_dispatches_llm_response_event(monkeypatch):
     event = MagicMock()
     llm_response = LLMResponse(
         role="assistant",
         completion_text="intermediate response",
+        reasoning_content="intermediate reasoning",
         tools_call_name=["test_tool"],
         tools_call_args=[{"query": "test"}],
         tools_call_ids=["call_123"],
@@ -1110,36 +1026,11 @@ async def test_main_agent_response_hook_dispatches_llm_response_event(monkeypatc
         ContextWrapper(context=MockAgentContext(event)), llm_response
     )
 
+    event.set_extra.assert_called_once_with(
+        "_llm_reasoning_content", "intermediate reasoning"
+    )
     call_event_hook.assert_awaited_once_with(
         event, EventType.OnLLMResponseEvent, llm_response
-    )
-
-
-@pytest.mark.parametrize(
-    ("reserved", "expected"),
-    [(True, False), (False, True)],
-)
-def test_main_agent_buffers_only_for_external_response_handlers(
-    monkeypatch, reserved, expected
-):
-    from astrbot.core.star.star import star_map
-    from astrbot.core.star.star_handler import EventType
-
-    module_path = "tests.response_handler"
-    handler = SimpleNamespace(handler_module_path=module_path)
-    event = SimpleNamespace(plugins_name="test_plugin")
-    run_context = ContextWrapper(context=SimpleNamespace(event=event))
-    mock_get_handlers = MagicMock(return_value=[handler])
-    monkeypatch.setattr(
-        "astrbot.core.astr_agent_hooks.star_handlers_registry.get_handlers_by_event_type",
-        mock_get_handlers,
-    )
-    monkeypatch.setitem(star_map, module_path, SimpleNamespace(reserved=reserved))
-
-    assert MainAgentHooks().should_buffer_streaming_response(run_context) is expected
-    mock_get_handlers.assert_called_once_with(
-        EventType.OnLLMResponseEvent,
-        plugins_name="test_plugin",
     )
 
 

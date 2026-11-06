@@ -7,24 +7,10 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.pipeline.context_utils import call_event_hook
-from astrbot.core.star.star import star_map
-from astrbot.core.star.star_handler import EventType, star_handlers_registry
+from astrbot.core.star.star_handler import EventType
 
 
 class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
-    def should_buffer_streaming_response(
-        self, run_context: ContextWrapper[AstrAgentContext]
-    ) -> bool:
-        event = run_context.context.event
-        for handler in star_handlers_registry.get_handlers_by_event_type(
-            EventType.OnLLMResponseEvent,
-            plugins_name=event.plugins_name,
-        ):
-            plugin = star_map.get(handler.handler_module_path)
-            if plugin and not plugin.reserved:
-                return True
-        return False
-
     async def on_agent_begin(
         self, run_context: ContextWrapper[AstrAgentContext]
     ) -> None:
@@ -55,6 +41,11 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
         )
 
     async def on_agent_response(self, run_context, llm_response) -> None:
+        if llm_response and llm_response.reasoning_content:
+            run_context.context.event.set_extra(
+                "_llm_reasoning_content", llm_response.reasoning_content
+            )
+
         await call_event_hook(
             run_context.context.event,
             EventType.OnLLMResponseEvent,
