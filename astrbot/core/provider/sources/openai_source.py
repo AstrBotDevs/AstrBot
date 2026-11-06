@@ -642,6 +642,12 @@ class ProviderOpenAIOfficial(Provider):
         llm_response = LLMResponse("assistant", is_chunk=True)
 
         state = ChatCompletionStreamState()
+        # Repeated metadata and legitimate identical fragments are ambiguous.
+        # Only opt in for gateways known to resend complete id/name pairs.
+        deduplicate_metadata = (
+            self.provider_config.get("deduplicate_streaming_tool_metadata") is True
+        )
+        tool_call_metadata: dict[int, tuple[str, str] | None] = {}
 
         async for chunk in stream:
             choice = chunk.choices[0] if chunk.choices else None
@@ -652,10 +658,32 @@ class ProviderOpenAIOfficial(Provider):
                     # siliconflow workaround
                     if tc.function and tc.function.arguments:
                         tc.type = "function"
+
                     # Fix for #6661: Add missing 'index' field to tool_call deltas
                     # Gemini and some OpenAI-compatible proxies omit this field
                     if not hasattr(tc, "index") or tc.index is None:
                         tc.index = idx
+
+                    if deduplicate_metadata:
+                        raw_id = tc.id
+                        raw_name = tc.function.name if tc.function else None
+                        metadata = (
+                            (raw_id, raw_name)
+                            if isinstance(raw_id, str)
+                            and raw_id
+                            and isinstance(raw_name, str)
+                            and raw_name
+                            else None
+                        )
+                        if tc.index not in tool_call_metadata:
+                            tool_call_metadata[tc.index] = metadata
+                        elif metadata and metadata == tool_call_metadata[tc.index]:
+                            tc.id = None
+                            tc.function.name = None
+                        elif raw_id is not None or raw_name is not None:
+                            # Partial or changing metadata is not an exact replay.
+                            # Keep SDK delta semantics for the rest of this slot.
+                            tool_call_metadata[tc.index] = None
             # 跳过 delta=None 的 chunk，避免 SDK 内部 _convert_initial_chunk_into_snapshot
             # 第 747 行 choice.delta.to_dict() 抛出 NoneType 错误。
             # refs: AstrBot#6689 / openai-python#5069 / #5047
