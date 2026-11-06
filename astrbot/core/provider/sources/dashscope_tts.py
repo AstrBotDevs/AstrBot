@@ -1,7 +1,10 @@
 import asyncio
 import base64
+import io
 import logging
 import os
+import threading
+import wave
 
 import aiohttp
 import dashscope
@@ -13,6 +16,17 @@ except (
     ImportError
 ):  # pragma: no cover - older dashscope versions without Qwen TTS support
     MultiModalConversation = None
+
+try:
+    from dashscope.audio.qwen_tts_realtime import (
+        QwenTtsRealtime,
+        QwenTtsRealtimeCallback,
+    )
+except (
+    ImportError
+):  # pragma: no cover - older dashscope versions without realtime TTS support
+    QwenTtsRealtime = None
+    QwenTtsRealtimeCallback = object
 
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.datetime_utils import generate_timestamp_id
@@ -48,7 +62,11 @@ class ProviderDashscopeTTSAPI(TTSProvider):
         temp_dir = get_astrbot_temp_path()
         os.makedirs(temp_dir, exist_ok=True)
 
-        if self._is_qwen_tts_model(model):
+        if self._is_qwen_tts_realtime_model(model):
+            audio_bytes, ext = await self._synthesize_with_qwen_tts_realtime(
+                model, text
+            )
+        elif self._is_qwen_tts_model(model):
             audio_bytes, ext = await self._synthesize_with_qwen_tts(model, text)
         else:
             audio_bytes, ext = await self._synthesize_with_cosyvoice(model, text)
@@ -163,6 +181,110 @@ class ProviderDashscopeTTSAPI(TTSProvider):
                     f"Audio synthesis failed for model '{model}'. {resp}".strip(),
                 )
         return audio_bytes, ".wav"
+
+    def _collect_realtime_audio(
+        self,
+        model: str,
+        text: str,
+    ) -> tuple[bytes, str]:
+        """Drive one QwenTtsRealtime session and return a WAV byte string.
+
+        ``QwenTtsRealtime`` is a websocket client that receives audio chunks on
+        its own thread, so this method is blocking and is meant to be called
+        from an executor.
+        """
+        if QwenTtsRealtime is None:
+            raise RuntimeError(
+                "dashscope SDK missing QwenTtsRealtime. Please upgrade the dashscope package to use realtime TTS models.",
+            )
+
+        chunks: list[bytes] = []
+        finished = threading.Event()
+        failure: dict[str, str] = {}
+
+        class _CollectingCallback(QwenTtsRealtimeCallback):
+            def on_event(self, message: dict) -> None:
+                message_type = message.get("type", "")
+                if message_type == "response.audio.delta":
+                    delta = message.get("delta")
+                    if delta:
+                        chunks.append(base64.b64decode(delta))
+                elif message_type == "response.done":
+                    finished.set()
+                elif "error" in message_type:
+                    failure["message"] = str(
+                        message.get("message") or message,
+                    )
+                    finished.set()
+
+            def on_close(self, close_status_code, close_msg) -> None:
+                finished.set()
+
+        client = QwenTtsRealtime(model=model, callback=_CollectingCallback())
+        try:
+            client.connect()
+            client.update_session(voice=self.voice, mode="server_commit")
+            client.append_text(text)
+            client.commit()
+            finished.wait(max(self.timeout_ms / 1000, 30))
+        finally:
+            try:
+                client.close()
+            except Exception:
+                logging.debug(
+                    "Failed to close the realtime TTS websocket, ignoring.",
+                    exc_info=True,
+                )
+
+        if failure:
+            raise RuntimeError(
+                f"Realtime audio synthesis failed for model '{model}'. {failure['message']}".strip(),
+            )
+
+        pcm = b"".join(chunks)
+        if not pcm:
+            return b"", ".wav"
+
+        buffer = io.BytesIO()
+        with wave.open(buffer, "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(24000)
+            wav_file.writeframes(pcm)
+        return buffer.getvalue(), ".wav"
+
+    async def _synthesize_with_qwen_tts_realtime(
+        self,
+        model: str,
+        text: str,
+    ) -> tuple[bytes, str]:
+        loop = asyncio.get_running_loop()
+        audio_bytes, ext = await loop.run_in_executor(
+            None,
+            self._collect_realtime_audio,
+            model,
+            text,
+        )
+        if not audio_bytes:
+            raise RuntimeError(
+                f"Audio synthesis failed for model '{model}'. No audio was returned by the realtime API.",
+            )
+        return audio_bytes, ext
+
+    @staticmethod
+    def _is_qwen_tts_realtime_model(model: str) -> bool:
+        """Realtime TTS models only accept the websocket protocol and cannot be
+        called through the HTTP APIs.
+
+        Covers the Qwen3-TTS realtime family (``qwen3-tts-flash-realtime``,
+        ``qwen3-tts-vc-realtime-*``, ``qwen3-tts-vd-realtime-*``,
+        ``qwen3-tts-instruct-flash-realtime``) as well as the older
+        ``qwen-tts-realtime``. ``qwen-audio-*`` models never carry ``-realtime``.
+        """
+        model_lower = model.lower()
+        if "-realtime" not in model_lower:
+            return False
+        return model_lower.startswith(("qwen3-tts-", "qwen-tts-"))
 
     def _is_qwen_tts_model(self, model: str) -> bool:
         model_lower = model.lower()
