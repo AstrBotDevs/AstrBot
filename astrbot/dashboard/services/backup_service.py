@@ -198,7 +198,13 @@ class BackupService:
                 logger.debug(f"跳过无效备份文件: {filename}")
                 continue
 
-            stat = os.stat(file_path)
+            try:
+                stat = os.stat(file_path)
+            except FileNotFoundError:
+                # The archive was removed or renamed after its manifest was read;
+                # skip it instead of failing the whole listing.
+                logger.debug(f"Backup file vanished while listing: {filename}")
+                continue
             backup_files.append(
                 {
                     "filename": filename,
