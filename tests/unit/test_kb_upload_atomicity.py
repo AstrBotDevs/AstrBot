@@ -512,9 +512,10 @@ async def test_upload_document_redacts_api_key_from_logged_cause(
     helper.chunker = AsyncMock()
 
     secret = "sk-proj-AbCd1234EfGh5678IjKl9012"
-    boom = UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
-    # Simulate a provider error that echoes the request credentials.
-    boom.args = (*boom.args, f"Incorrect API key provided: {secret}")
+    # A provider error that echoes the request credentials. ValueError renders
+    # its message verbatim, unlike UnicodeDecodeError whose str() ignores
+    # extra args, so this actually carries the key into the cause text.
+    boom = ValueError(f"Incorrect API key provided: {secret}")
 
     with (
         patch(
