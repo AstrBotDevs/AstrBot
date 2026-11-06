@@ -256,3 +256,72 @@ async def test_rank_fusion_does_not_promote_a_single_low_scoring_kb_result():
         "weak",
     ]
     assert results[-1].score == pytest.approx(0.1)
+
+
+@pytest.mark.asyncio
+async def test_rank_fusion_overrides_dense_weight_per_call():
+    dense_results = [
+        make_dense_result("dense-best", 0.99),
+        make_dense_result("sparse-best", 0.50),
+    ]
+    sparse_results = [
+        make_sparse_result("sparse-best", "kb", 10.0, 1),
+        make_sparse_result("dense-best", "kb", 1.0, 2),
+    ]
+
+    default_results = await RankFusion(kb_db=None).fuse(
+        dense_results=dense_results,
+        sparse_results=sparse_results,
+    )
+    tuned_results = await RankFusion(kb_db=None).fuse(
+        dense_results=dense_results,
+        sparse_results=sparse_results,
+        dense_weight=0.2,
+    )
+
+    assert [result.chunk_id for result in default_results] == [
+        "dense-best",
+        "sparse-best",
+    ]
+    assert [result.chunk_id for result in tuned_results] == [
+        "sparse-best",
+        "dense-best",
+    ]
+    assert tuned_results[0].score == pytest.approx(0.8)
+    assert tuned_results[1].score == pytest.approx(0.2)
+
+
+@pytest.mark.asyncio
+async def test_rank_fusion_falls_back_to_constructor_weight_when_override_is_none():
+    dense_results = [
+        make_dense_result("dense-best", 0.99),
+        make_dense_result("sparse-best", 0.50),
+    ]
+    sparse_results = [
+        make_sparse_result("sparse-best", "kb", 10.0, 1),
+        make_sparse_result("dense-best", "kb", 1.0, 2),
+    ]
+
+    results = await RankFusion(kb_db=None).fuse(
+        dense_results=dense_results,
+        sparse_results=sparse_results,
+        dense_weight=None,
+    )
+
+    assert [result.chunk_id for result in results] == [
+        "dense-best",
+        "sparse-best",
+    ]
+    assert results[0].score == pytest.approx(0.9)
+    assert results[1].score == pytest.approx(0.1)
+
+
+@pytest.mark.parametrize("dense_weight", [-0.1, 1.1])
+@pytest.mark.asyncio
+async def test_rank_fusion_fuse_rejects_invalid_dense_weight(dense_weight):
+    with pytest.raises(ValueError, match="dense_weight"):
+        await RankFusion(kb_db=None).fuse(
+            dense_results=[make_dense_result("chunk", 0.99)],
+            sparse_results=[make_sparse_result("chunk", "kb", 10.0, 1)],
+            dense_weight=dense_weight,
+        )
