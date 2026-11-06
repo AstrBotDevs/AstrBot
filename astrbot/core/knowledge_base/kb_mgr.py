@@ -285,6 +285,7 @@ class KnowledgeBaseManager:
         kb_names: list[str],
         top_k_fusion: int = 20,
         top_m_final: int = 5,
+        dense_weight: float | None = None,
     ) -> dict | None:
         """从指定知识库中检索相关内容"""
         kb_ids = []
@@ -313,6 +314,7 @@ class KnowledgeBaseManager:
             kb_id_helper_map=kb_id_helper_map,
             top_k_fusion=top_k_fusion,
             top_m_final=top_m_final,
+            dense_weight=dense_weight,
         )
         if not results:
             return None
