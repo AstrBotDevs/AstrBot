@@ -679,6 +679,32 @@ class FunctionToolManager:
             try:
                 await mcp_client.connect_to_server(cfg, name)
                 await mcp_client.list_tools_and_save()
+                remaining_tools = [
+                    f
+                    for f in self.func_list
+                    if not (isinstance(f, MCPTool) and f.mcp_server_name == name)
+                ]
+                registered_mcp_tools = {
+                    f.name: f for f in remaining_tools if isinstance(f, MCPTool)
+                }
+                new_tools = []
+                for tool in mcp_client.tools:
+                    func_tool = MCPTool(
+                        mcp_tool=tool,
+                        mcp_client=mcp_client,
+                        mcp_server_name=name,
+                    )
+                    existing = registered_mcp_tools.get(func_tool.name)
+                    if existing is not None:
+                        raise ValueError(
+                            f"MCP tool {tool.name!r} from server {name!r} "
+                            f"conflicts with {existing.mcp_tool.name!r} from server "
+                            f"{existing.mcp_server_name!r}: provider name {func_tool.name!r}"
+                        )
+                    new_tools.append(func_tool)
+                # Keep validation and publication together without yielding.
+                # Reserve inactive tools too: they can be reactivated by name.
+                self.func_list = remaining_tools + new_tools
             except asyncio.CancelledError:
                 # cleanup on cancellation
                 try:
@@ -694,20 +720,6 @@ class FunctionToolManager:
                     pass
                 connect_done.set()
                 return
-
-            # Register tools
-            self.func_list = [
-                f
-                for f in self.func_list
-                if not (isinstance(f, MCPTool) and f.mcp_server_name == name)
-            ]
-            for tool in mcp_client.tools:
-                func_tool = MCPTool(
-                    mcp_tool=tool,
-                    mcp_client=mcp_client,
-                    mcp_server_name=name,
-                )
-                self.func_list.append(func_tool)
 
             logger.info(
                 f"Connected to MCP server {name}, "

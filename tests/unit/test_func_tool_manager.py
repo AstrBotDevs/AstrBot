@@ -5,6 +5,7 @@ import os
 from unittest.mock import ANY, AsyncMock
 
 import pytest
+from mcp import types
 
 from astrbot.core import sp
 from astrbot.core.computer.booters.local import LocalShellComponent
@@ -910,6 +911,77 @@ def test_search_tools_are_registered_as_builtin_tools(
     assert manager.is_builtin_tool(extract_name) is True
     assert manager.get_func(search_name) is search_tool
     assert manager.get_func(extract_name) is extract_tool
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("second_name", ["foo_bar", "foo.bar", "other.tool"])
+async def test_mcp_registration_preserves_unique_names_across_servers(
+    monkeypatch, second_name
+):
+    manager = FunctionToolManager()
+    names = {"first": "foo.bar", "second": second_name}
+    clients, connect_tasks, cleanup_tasks = {}, {}, {}
+    connected = asyncio.Event()
+
+    async def fake_connect(self, config, name):
+        clients[name] = self
+        connect_tasks[name] = asyncio.current_task()
+        if len(clients) == 2:
+            connected.set()
+        await connected.wait()
+
+    async def fake_list_tools(self):
+        self.tools = [
+            types.Tool(name=tool_name, inputSchema={"type": "object"})
+            for tool_name in (f"unique_{self.name}", names[self.name])
+        ]
+
+    async def fake_cleanup(self):
+        cleanup_tasks[self.name] = asyncio.current_task()
+
+    monkeypatch.setattr(ftm.MCPClient, "connect_to_server", fake_connect)
+    monkeypatch.setattr(ftm.MCPClient, "list_tools_and_save", fake_list_tools)
+    monkeypatch.setattr(ftm.MCPClient, "cleanup", fake_cleanup)
+    try:
+        results = await asyncio.gather(
+            *(manager.enable_mcp_server(name, {}, timeout=5) for name in names),
+            return_exceptions=True,
+        )
+        if second_name == "other.tool":
+            assert results == [None, None]
+            assert len(manager.func_list) == 4
+            assert manager.get_func("foo_bar").mcp_client is clients["first"]
+            assert manager.get_func("other_tool").mcp_client is clients["second"]
+            return
+
+        winner = next(name for name, result in zip(names, results) if result is None)
+        loser = next(name for name in names if name != winner)
+        error = results[list(names).index(loser)]
+        assert isinstance(error, ValueError)
+        assert all(value in str(error) for value in (*names, *names.values(), "foo_bar"))
+        assert set(manager.mcp_client_dict) == {winner}
+        assert cleanup_tasks[loser] is connect_tasks[loser]
+        assert len(manager.func_list) == 2
+        original = manager.get_func("foo_bar")
+        assert original.mcp_client is clients[winner]
+        assert original.mcp_tool.name == names[winner]
+        assert manager.get_func(f"unique_{loser}") is None
+
+        # A disabled tool still reserves its name for later reactivation.
+        original.active = False
+        with pytest.raises(ValueError, match="conflicts with"):
+            await manager.enable_mcp_server(loser, {}, timeout=5)
+        assert manager.get_func("foo_bar") is original
+        assert set(manager.mcp_client_dict) == {winner}
+        assert cleanup_tasks[loser] is connect_tasks[loser]
+
+        # Disabling the server releases its names for a subsequent startup.
+        await manager.disable_mcp_server(winner, timeout=5)
+        await manager.enable_mcp_server(loser, {}, timeout=5)
+        assert set(manager.mcp_client_dict) == {loser}
+        assert manager.get_func("foo_bar").mcp_client is clients[loser]
+    finally:
+        await manager.disable_mcp_server(timeout=5)
 
 
 @pytest.mark.asyncio
