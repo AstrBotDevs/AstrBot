@@ -64,7 +64,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                     if len(candidate) >= 4096:
                         continue
                     candidate_path = Path(candidate)
-                    if candidate_path.is_absolute() or candidate_path.is_file():
+                    if candidate_path.is_file():
                         file_ref = candidate_path.resolve().as_uri()
                         break
                 if file_ref:

@@ -80,6 +80,23 @@ async def test_oversized_media_with_local_path_uses_file_uri(fake_logger, tmp_pa
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("candidate_kind", ["missing", "directory"])
+async def test_oversized_media_with_invalid_local_path_raises(
+    fake_logger, tmp_path, candidate_kind
+):
+    candidate = tmp_path / candidate_kind
+    if candidate_kind == "directory":
+        candidate.mkdir()
+    segment = OversizedImage(file=str(candidate), path=str(candidate))
+
+    with pytest.raises(ValueError, match="4 MB"):
+        await AiocqhttpMessageEvent._from_segment_to_dict(segment)
+
+    fake_logger.error.assert_called_once()
+    fake_logger.warning.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_oversized_media_with_http_url_reuses_the_url(fake_logger):
     url = "https://example.com/large.gif"
     segment = OversizedImage(file=url)
