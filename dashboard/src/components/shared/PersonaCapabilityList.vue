@@ -1,6 +1,5 @@
 <script setup>
 import { computed } from "vue";
-import CapabilitySourceChip from "./CapabilitySourceChip.vue";
 
 const props = defineProps({
   title: {
@@ -105,11 +104,6 @@ const partiallySelected = computed(
 
         <v-list-item-title class="capability-list__item-title">
           <span>{{ item.name }}</span>
-          <CapabilitySourceChip
-            v-if="item.badge"
-            :label="item.badge"
-            :tone="item.badgeTone || 'local'"
-          />
         </v-list-item-title>
         <v-list-item-subtitle v-if="item.meta || item.description">
           <span v-if="item.meta">{{ item.meta }}</span>

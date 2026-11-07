@@ -1,7 +1,7 @@
 <script setup>
 import MarketPluginCard from "@/components/extension/MarketPluginCard.vue";
 import PluginSortControl from "@/components/extension/PluginSortControl.vue";
-import defaultPluginIcon from "@/assets/images/plugin_icon.png";
+import defaultPluginIcon from "/favicon.svg";
 import { computed } from "vue";
 import { normalizeTextInput } from "@/utils/inputValue";
 
@@ -80,6 +80,7 @@ const {
   randomPluginNames,
   marketCategoryFilter,
   marketCategoryItems,
+  getMarketPluginKey,
   normalizeStr,
   toPinyinText,
   toInitials,
@@ -162,6 +163,7 @@ const currentSourceName = computed(() => {
 const marketSortItems = computed(() => [
   { title: tm("sort.default"), value: "default" },
   { title: tm("sort.stars"), value: "stars" },
+  { title: tm("sort.downloads"), value: "downloads" },
   { title: tm("sort.author"), value: "author" },
   { title: tm("sort.updated"), value: "updated" },
 ]);
@@ -173,11 +175,14 @@ const marketCategorySelectItems = computed(() =>
   })),
 );
 
+// Navigate with the unique market plugin key instead of the metadata name —
+// two market entries can share the same `name`.
 const openMarketPluginDetail = (plugin) => {
-  if (!plugin?.name) return;
+  const pluginKey = getMarketPluginKey(plugin);
+  if (!pluginKey) return;
   router.push({
     name: "ExtensionMarketDetails",
-    params: { pluginId: plugin.name },
+    params: { pluginId: pluginKey },
   });
 };
 </script>
@@ -338,7 +343,7 @@ const openMarketPluginDetail = (plugin) => {
       <v-row style="min-height: 26rem" dense>
         <v-col
           v-for="plugin in paginatedPlugins"
-          :key="plugin.name"
+          :key="getMarketPluginKey(plugin)"
           cols="12"
           md="6"
           lg="4"
@@ -386,7 +391,7 @@ const openMarketPluginDetail = (plugin) => {
           <v-row class="mb-6" dense>
             <v-col
               v-for="plugin in randomPlugins"
-              :key="`random-${plugin.name}`"
+              :key="getMarketPluginKey(plugin)"
               cols="12"
               md="6"
               lg="4"

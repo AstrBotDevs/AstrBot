@@ -46,6 +46,7 @@ from astrbot.core.provider.modalities import (
     sanitize_contexts_by_modalities,
 )
 from astrbot.core.provider.provider import Provider
+from astrbot.core.utils.async_generator import iterate_in_task
 
 from ..context.compressor import ContextCompressor
 from ..context.config import ContextConfig
@@ -104,6 +105,7 @@ class _ToolExecutionInterrupted(Exception):
 
 
 ToolExecutorResultT = T.TypeVar("ToolExecutorResultT")
+AwaitableResultT = T.TypeVar("AwaitableResultT")
 
 
 class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
@@ -112,10 +114,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     EMPTY_OUTPUT_RETRY_ATTEMPTS = 3
     EMPTY_OUTPUT_RETRY_WAIT_MIN_S = 1
     EMPTY_OUTPUT_RETRY_WAIT_MAX_S = 4
-    USER_INTERRUPTION_MESSAGE = (
-        "[SYSTEM: User actively interrupted the response generation. "
-        "Partial output before interruption is preserved.]"
-    )
+    USER_INTERRUPTION_REQUEST = "Stop output."
+    USER_INTERRUPTION_MESSAGE = "Output stopped."
     FOLLOW_UP_NOTICE_TEMPLATE = (
         "\n\n[SYSTEM NOTICE] User sent follow-up messages while tool execution "
         "was in progress. Prioritize these follow-up instructions in your next "
@@ -124,9 +124,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         "{follow_up_lines}"
     )
     MAX_STEPS_REACHED_PROMPT = (
-        "Maximum tool call limit reached. "
-        "Stop calling tools, and based on the information you have gathered, "
-        "summarize your task and findings, and reply to the user directly."
+        "[SYSTEM NOTICE: Agent step budget exhausted] "
+        "Remaining steps: 0. Stop using tools; summarize results and unfinished work. "
+        "If unfinished, tell the user they can simply ask you to continue with a fresh "
+        "step budget. Optionally, they can raise the tool-call round limit in "
+        "AstrBot WebUI to allow longer runs."
     )
     SKILLS_LIKE_REQUERY_INSTRUCTION_TEMPLATE = (
         "You have decided to call tool(s): {tool_names}. Now call the tool(s) "
@@ -230,6 +232,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         request_max_retries: int | None = None,
         tool_result_overflow_dir: str | None = None,
         read_tool: FunctionTool | None = None,
+        max_context_tokens: int | None = None,
         **kwargs: T.Any,
     ) -> None:
         self.req = request
@@ -247,7 +250,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._tool_result_token_counter = EstimateTokenCounter()
         self.request_context_manager_config = ContextConfig(
             # <=0 disables token-based guarding.
-            max_context_tokens=provider.provider_config.get("max_context_tokens", 0),
+            max_context_tokens=(
+                max_context_tokens
+                if max_context_tokens is not None
+                else provider.provider_config.get("max_context_tokens", 0)
+            ),
             # Enforce max turns before token-based guarding.
             enforce_max_turns=self.enforce_max_turns,
             truncate_turns=self.truncate_turns,
@@ -285,6 +292,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._last_tool_name: str | None = None
         self._last_tool_args: dict[str, T.Any] | None = None
         self._same_tool_streak = 0
+        self._step_budget_max: int | None = None
+        self._step_budget_used = 0
+        self._step_budget_notified: set[int] = set()
 
         # These two are used for tool schema mode handling
         # We now have two modes:
@@ -459,6 +469,45 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             preview = preview[:next_len]
         return preview
 
+    async def _await_or_stop(
+        self,
+        awaitable: T.Awaitable[AwaitableResultT],
+    ) -> AwaitableResultT | None:
+        """Await work while allowing a stop request to cancel it immediately.
+
+        Args:
+            awaitable: Provider or context-processing operation to execute.
+
+        Returns:
+            The operation result, or None when user cancellation wins the race.
+
+        Raises:
+            asyncio.CancelledError: If the outer Agent task is cancelled.
+            Exception: Any exception raised by the awaited operation.
+        """
+        operation_task = asyncio.create_task(awaitable)
+        abort_task = asyncio.create_task(self._abort_signal.wait())
+        try:
+            done, _ = await asyncio.wait(
+                {operation_task, abort_task},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if abort_task in done:
+                if not operation_task.done():
+                    operation_task.cancel()
+                await asyncio.gather(operation_task, return_exceptions=True)
+                return None
+            return operation_task.result()
+        except asyncio.CancelledError:
+            if not operation_task.done():
+                operation_task.cancel()
+            await asyncio.gather(operation_task, return_exceptions=True)
+            raise
+        finally:
+            if not abort_task.done():
+                abort_task.cancel()
+            await asyncio.gather(abort_task, return_exceptions=True)
+
     async def _iter_llm_responses(
         self, *, include_model: bool = True
     ) -> T.AsyncGenerator[LLMResponse, None]:
@@ -467,6 +516,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             "contexts": self._sanitize_contexts_for_provider(self.run_context.messages),
             "func_tool": self._func_tool_for_provider(),
             "session_id": self.req.session_id,
+            "conversation_id": (
+                self.req.conversation.cid if self.req.conversation else None
+            ),
             "extra_user_content_parts": self.req.extra_user_content_parts,  # list[ContentPart]
             "abort_signal": self._abort_signal,
             "request_max_retries": self.request_max_retries,
@@ -476,21 +528,45 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             payload["model"] = self.req.model
         if self.streaming:
             stream = self.provider.text_chat_stream(**payload)
-            async for resp in stream:  # type: ignore
-                yield resp
+            try:
+                while True:
+                    try:
+                        resp = await self._await_or_stop(anext(stream))  # type: ignore
+                    except StopAsyncIteration:
+                        return
+                    if resp is None:
+                        return
+                    yield resp
+            finally:
+                await self._close_executor(stream)
         else:
-            yield await self.provider.text_chat(**payload)
+            resp = await self._await_or_stop(self.provider.text_chat(**payload))
+            if resp is not None:
+                yield resp
 
     async def _iter_llm_responses_with_fallback(
         self,
     ) -> T.AsyncGenerator[LLMResponse, None]:
         """Wrap _iter_llm_responses with provider fallback handling."""
+        if not self.run_context.messages:
+            logger.warning(
+                "Skipping LLM request because no messages remain after agent/request "
+                "hooks and context processing."
+            )
+            yield LLMResponse(
+                role="err",
+                completion_text="No messages remain for the LLM request.",
+            )
+            return
+
         candidates = [self.provider, *self.fallback_providers]
         total_candidates = len(candidates)
         last_exception: Exception | None = None
         last_err_response: LLMResponse | None = None
 
         for idx, candidate in enumerate(candidates):
+            if self._is_stop_requested():
+                return
             candidate_id = candidate.provider_config.get("id", "<unknown>")
             is_last_candidate = idx == total_candidates - 1
             if idx > 0:
@@ -513,6 +589,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 )
 
                 async for attempt in retrying:
+                    if self._is_stop_requested():
+                        return
                     has_stream_output = False
                     with attempt:
                         try:
@@ -556,6 +634,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                     self.EMPTY_OUTPUT_RETRY_ATTEMPTS,
                                 )
                             raise
+                    if self._is_stop_requested():
+                        return
             except Exception as exc:  # noqa: BLE001
                 last_exception = exc
                 logger.warning(
@@ -736,6 +816,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if not self.req:
             raise ValueError("Request is not set. Please call reset() first.")
 
+        if self._step_budget_max is not None:
+            self._step_budget_used += 1
+
         if self._state == AgentState.IDLE:
             try:
                 await self.agent_hooks.on_agent_begin(self.run_context)
@@ -749,9 +832,16 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         # Process request-time context before sending it to the provider.
         token_usage = self.req.conversation.token_usage if self.req.conversation else 0
         self._simple_print_message_role("[BefCompact]", self.run_context.messages)
-        self.run_context.messages = await self.request_context_manager.process(
-            self.run_context.messages, trusted_token_usage=token_usage
+        processed_messages = await self._await_or_stop(
+            self.request_context_manager.process(
+                self.run_context.messages,
+                trusted_token_usage=token_usage,
+            )
         )
+        if processed_messages is None:
+            yield await self._finalize_aborted_step()
+            return
+        self.run_context.messages = processed_messages
         self._simple_print_message_role("[AftCompact]", self.run_context.messages)
 
         async for llm_response in self._iter_llm_responses_with_fallback():
@@ -781,12 +871,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         ),
                     )
                 if self._is_stop_requested():
-                    llm_resp_result = LLMResponse(
-                        role="assistant",
-                        completion_text=self.USER_INTERRUPTION_MESSAGE,
-                        reasoning_content=llm_response.reasoning_content,
-                        reasoning_signature=llm_response.reasoning_signature,
-                    )
                     break
                 continue
             llm_resp_result = llm_response
@@ -801,6 +885,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 self.stats.current_context_tokens = llm_response.usage.input
                 if self.req.conversation:
                     self.req.conversation.token_usage = llm_response.usage.total
+            # end_time must be set before the yield serializes to_dict().
+            self.stats.end_time = time.time()
             yield AgentResponse(
                 type="agent_stats",
                 data=AgentResponseData(
@@ -812,14 +898,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
             break  # got final response
 
-        if not llm_resp_result:
-            if self._is_stop_requested():
-                llm_resp_result = LLMResponse(role="assistant", completion_text="")
-            else:
-                return
-
         if self._is_stop_requested():
-            yield await self._finalize_aborted_step(llm_resp_result)
+            yield await self._finalize_aborted_step()
+            return
+
+        if not llm_resp_result:
             return
 
         # 处理 LLM 响应
@@ -873,6 +956,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if llm_resp.tools_call_name:
             if self.tool_schema_mode == "skills_like":
                 requery_resp, _ = await self._resolve_tool_exec(llm_resp)
+                if self._is_stop_requested():
+                    yield await self._finalize_aborted_step()
+                    return
                 if not requery_resp.tools_call_name:
                     llm_resp = requery_resp
                     logger.warning(
@@ -901,6 +987,26 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         )
 
                     await self._complete_with_assistant_response(llm_resp)
+                    # Re-query uses text_chat(), so its reply has no stream chunks.
+                    # Supply them after hooks without changing llm_result ordering.
+                    if self.streaming:
+                        if llm_resp.reasoning_content:
+                            yield AgentResponse(
+                                type="streaming_delta",
+                                data=AgentResponseData(
+                                    chain=MessageChain(type="reasoning").message(
+                                        llm_resp.reasoning_content,
+                                    ),
+                                ),
+                            )
+                        chain = llm_resp.result_chain
+                        if not chain and llm_resp.completion_text:
+                            chain = MessageChain().message(llm_resp.completion_text)
+                        if chain:
+                            yield AgentResponse(
+                                type="streaming_delta",
+                                data=AgentResponseData(chain=chain),
+                            )
                     return
                 else:
                     llm_resp.tools_call_name = requery_resp.tools_call_name
@@ -932,8 +1038,51 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             data=AgentResponseData(chain=chain),
                         )
             except _ToolExecutionInterrupted:
-                yield await self._finalize_aborted_step(llm_resp)
+                yield await self._finalize_aborted_step()
                 return
+
+            # Keep budget state outside messages so compression cannot reset it.
+            if tool_call_result_blocks and self._step_budget_max is not None:
+                notices = []
+                max_steps = self._step_budget_max
+                used_steps = self._step_budget_used
+                remaining = max(0, max_steps - used_steps)
+                if max_steps >= 16:
+                    for percent, guidance in (
+                        (80, "Focus on the core goal; avoid new exploration."),
+                        (
+                            90,
+                            "Wrap up; prioritize essential fixes and verification.",
+                        ),
+                        (
+                            95,
+                            "Finish verification and reply; report unfinished or unverified work.",
+                        ),
+                    ):
+                        if (
+                            used_steps * 100 >= max_steps * percent
+                            and percent not in self._step_budget_notified
+                        ):
+                            self._step_budget_notified.add(percent)
+                            notices.append(
+                                f"[SYSTEM NOTICE: Agent step budget {percent}%] "
+                                f"Steps used: {used_steps}/{max_steps}. Remaining steps: {remaining}. "
+                                f"{guidance}"
+                            )
+                if used_steps >= max_steps and 100 not in self._step_budget_notified:
+                    self._step_budget_notified.add(100)
+                    notices.append(self.MAX_STEPS_REACHED_PROMPT)
+                if notices:
+                    # Annotate only this round's final result, preserving tool-call IDs.
+                    notice = "\n\n" + "\n".join(notices)
+                    last_result = tool_call_result_blocks[-1]
+                    if isinstance(last_result.content, str):
+                        last_result.content += notice
+                    else:
+                        last_result.content = [
+                            *(last_result.content or []),
+                            TextPart(text=notice),
+                        ]
 
             # 将结果添加到上下文中
             parts = []
@@ -1003,6 +1152,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self, max_step: int
     ) -> T.AsyncGenerator[AgentResponse, None]:
         """Process steps until the agent is done."""
+        self._step_budget_max = max_step
+        self._step_budget_used = 0
+        self._step_budget_notified = set()
         step_count = 0
         while not self.done() and step_count < max_step:
             step_count += 1
@@ -1313,11 +1465,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         )
         if extra_instruction:
             instruction = f"{instruction}\n{extra_instruction}"
-        if contexts and contexts[0].get("role") == "system":
-            content = contexts[0].get("content") or ""
-            contexts[0]["content"] = f"{content}\n{instruction}"
-        else:
-            contexts.insert(0, {"role": "system", "content": instruction})
+        contexts.append({"role": "user", "content": instruction})
         return contexts
 
     @staticmethod
@@ -1356,15 +1504,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
             if param_subset.tools and tool_names:
                 contexts = self._build_tool_requery_context(tool_names)
-                requery_resp = await self.provider.text_chat(
-                    contexts=self._sanitize_contexts_for_provider(contexts),
-                    func_tool=param_subset,
-                    model=self.req.model,
-                    session_id=self.req.session_id,
-                    extra_user_content_parts=self.req.extra_user_content_parts,
-                    # tool_choice="required",
-                    abort_signal=self._abort_signal,
-                    request_max_retries=self.request_max_retries,
+                requery_resp = await self._await_or_stop(
+                    self.provider.text_chat(
+                        contexts=self._sanitize_contexts_for_provider(contexts),
+                        func_tool=param_subset,
+                        model=self.req.model,
+                        session_id=self.req.session_id,
+                        extra_user_content_parts=self.req.extra_user_content_parts,
+                        # tool_choice="required",
+                        abort_signal=self._abort_signal,
+                        request_max_retries=self.request_max_retries,
+                    )
                 )
                 if requery_resp:
                     llm_resp = requery_resp
@@ -1384,15 +1534,19 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         tool_names,
                         extra_instruction=self.SKILLS_LIKE_REQUERY_REPAIR_INSTRUCTION,
                     )
-                    repair_resp = await self.provider.text_chat(
-                        contexts=self._sanitize_contexts_for_provider(repair_contexts),
-                        func_tool=param_subset,
-                        model=self.req.model,
-                        session_id=self.req.session_id,
-                        extra_user_content_parts=self.req.extra_user_content_parts,
-                        # tool_choice="required",
-                        abort_signal=self._abort_signal,
-                        request_max_retries=self.request_max_retries,
+                    repair_resp = await self._await_or_stop(
+                        self.provider.text_chat(
+                            contexts=self._sanitize_contexts_for_provider(
+                                repair_contexts
+                            ),
+                            func_tool=param_subset,
+                            model=self.req.model,
+                            session_id=self.req.session_id,
+                            extra_user_content_parts=self.req.extra_user_content_parts,
+                            # tool_choice="required",
+                            abort_signal=self._abort_signal,
+                            request_max_retries=self.request_max_retries,
+                        )
                     )
                     if repair_resp:
                         llm_resp = repair_resp
@@ -1416,38 +1570,33 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     def get_final_llm_resp(self) -> LLMResponse | None:
         return self.final_llm_resp
 
-    async def _finalize_aborted_step(
-        self,
-        llm_resp: LLMResponse | None = None,
-    ) -> AgentResponse:
+    async def _finalize_aborted_step(self) -> AgentResponse:
         logger.info("Agent execution was requested to stop by user.")
-        if llm_resp is None:
-            llm_resp = LLMResponse(role="assistant", completion_text="")
-        if llm_resp.role != "assistant":
-            llm_resp = LLMResponse(
-                role="assistant",
-                completion_text=self.USER_INTERRUPTION_MESSAGE,
-            )
-        self.final_llm_resp = llm_resp
+
+        self.run_context.messages.extend(
+            [
+                Message(
+                    role="user",
+                    content=[TextPart(text=self.USER_INTERRUPTION_REQUEST)],
+                ),
+                Message(
+                    role="assistant",
+                    content=[TextPart(text=self.USER_INTERRUPTION_MESSAGE)],
+                ),
+            ]
+        )
+
+        interrupted_resp = LLMResponse(
+            role="assistant",
+            completion_text=self.USER_INTERRUPTION_MESSAGE,
+        )
+        self.final_llm_resp = interrupted_resp
         self._aborted = True
         self._transition_state(AgentState.DONE)
         self.stats.end_time = time.time()
 
-        parts = []
-        if llm_resp.reasoning_content is not None or llm_resp.reasoning_signature:
-            parts.append(
-                ThinkPart(
-                    think=llm_resp.reasoning_content or "",
-                    encrypted=llm_resp.reasoning_signature,
-                )
-            )
-        if llm_resp.completion_text:
-            parts.append(TextPart(text=llm_resp.completion_text))
-        if parts:
-            self.run_context.messages.append(Message(role="assistant", content=parts))
-
         try:
-            await self.agent_hooks.on_agent_done(self.run_context, llm_resp)
+            await self.agent_hooks.on_agent_done(self.run_context, interrupted_resp)
         except Exception as e:
             logger.error(f"Error in on_agent_done hook: {e}", exc_info=True)
 
@@ -1468,42 +1617,49 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self,
         executor: T.AsyncGenerator[ToolExecutorResultT, None],
     ) -> T.AsyncGenerator[ToolExecutorResultT, None]:
+        executor = iterate_in_task(executor)
+
         async def _next_executor_result() -> ToolExecutorResultT:
             return await anext(executor)
 
-        while True:
-            if self._is_stop_requested():
-                await self._close_executor(executor)
-                raise _ToolExecutionInterrupted(
-                    "Tool execution interrupted before reading the next tool result."
-                )
-
-            next_result_task = asyncio.create_task(_next_executor_result())
-            abort_task = asyncio.create_task(self._abort_signal.wait())
-            try:
-                done, _ = await asyncio.wait(
-                    {next_result_task, abort_task},
-                    return_when=asyncio.FIRST_COMPLETED,
-                )
-
-                if abort_task in done:
-                    if not next_result_task.done():
-                        next_result_task.cancel()
-                        with suppress(asyncio.CancelledError, StopAsyncIteration):
-                            await next_result_task
-
-                    await self._close_executor(executor)
-
+        try:
+            while True:
+                if self._is_stop_requested():
                     raise _ToolExecutionInterrupted(
-                        "Tool execution interrupted by a stop request."
+                        "Tool execution interrupted before reading the next tool result."
                     )
 
+                next_result_task = asyncio.create_task(_next_executor_result())
+                abort_task = asyncio.create_task(self._abort_signal.wait())
                 try:
-                    yield next_result_task.result()
-                except StopAsyncIteration:
-                    return
-            finally:
-                if not abort_task.done():
-                    abort_task.cancel()
-                    with suppress(asyncio.CancelledError):
-                        await abort_task
+                    done, _ = await asyncio.wait(
+                        {next_result_task, abort_task},
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+
+                    if abort_task in done:
+                        if not next_result_task.done():
+                            next_result_task.cancel()
+                            with suppress(asyncio.CancelledError, StopAsyncIteration):
+                                await next_result_task
+                        raise _ToolExecutionInterrupted(
+                            "Tool execution interrupted by a stop request."
+                        )
+
+                    try:
+                        yield next_result_task.result()
+                    except StopAsyncIteration:
+                        return
+                except asyncio.CancelledError:
+                    if not next_result_task.done():
+                        next_result_task.cancel()
+                    # The reader must finish before its async generator can be closed.
+                    await asyncio.gather(next_result_task, return_exceptions=True)
+                    raise
+                finally:
+                    if not abort_task.done():
+                        abort_task.cancel()
+                        with suppress(asyncio.CancelledError):
+                            await abort_task
+        finally:
+            await executor.aclose()

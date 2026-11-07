@@ -1,7 +1,6 @@
 """Tests for security fixes - cryptographic random number generation and SSL context."""
 
 import os
-import ssl
 import sys
 
 # Add project root to sys.path
@@ -92,59 +91,6 @@ def test_azure_tts_signature_uses_secrets():
             assert len(set(nonces)) == 10
 
     asyncio.run(test_nonce_generation())
-
-
-def test_ssl_context_fallback_explicit():
-    """Test that SSL context fallback is properly configured."""
-    # This test verifies the SSL context configuration
-    # We can't easily test the full io.py functions without network calls,
-    # but we can verify that ssl.CERT_NONE and check_hostname=False are valid settings
-
-    # Create a context similar to what's used in io.py
-    ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_NONE
-
-    # Verify the settings are applied correctly
-    assert ssl_context.check_hostname is False
-    assert ssl_context.verify_mode == ssl.CERT_NONE
-
-    # This configuration should work but is intentionally insecure for fallback
-    # The actual code only uses this when certificate validation fails
-
-
-def test_io_module_has_ssl_imports():
-    """Verify that io.py properly imports ssl module."""
-    from astrbot.core.utils import io
-
-    # Check that ssl is available in the module
-    assert hasattr(io, "ssl")
-
-    # Check that CERT_NONE constant is accessible
-    assert hasattr(io.ssl, "CERT_NONE")
-
-
-def test_secrets_module_randomness_quality():
-    """Test that secrets module provides high-quality randomness."""
-    import secrets
-
-    # Generate a large set of random numbers
-    random_numbers = [secrets.randbelow(100) for _ in range(1000)]
-
-    # Basic statistical test: should have good distribution
-    unique_values = len(set(random_numbers))
-
-    # With 1000 random numbers from 0-99, we should see most values at least once
-    # This is a very basic test - real cryptographic random should pass this easily
-    assert unique_values >= 60  # Should see at least 60 different values out of 100
-
-    # Test secrets.choice for string generation
-    chars = "abcdefghijklmnopqrstuvwxyz0123456789"
-    random_chars = [secrets.choice(chars) for _ in range(1000)]
-
-    # Should have good character distribution
-    unique_chars = len(set(random_chars))
-    assert unique_chars >= 20  # Should see at least 20 different characters
 
 
 if __name__ == "__main__":

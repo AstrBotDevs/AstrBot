@@ -30,17 +30,13 @@
 
 ## 配置 AstrBot
 
-1. 进入 AstrBot 的管理面板，点击左侧栏 `机器人`（旧版本为 `消息平台`），然后在右侧的界面中，点击 `+ 新增适配器`，选择 `企业微信智能机器人`，进入配置页面。
-
-![新增适配器](https://files.astrbot.app/docs/source/images/wecom_ai_bot/image-2.png)
+1. 进入 AstrBot 的管理面板，点击左侧栏 `机器人`，点击机器人列表上方的 `创建机器人`，选择 `企业微信智能机器人`，进入配置页面。
 
 2. 在弹出的配置项中将 `企业微信智能机器人的名字`、`token`、`encoding_aes_key` 从上一步创建智能机器人时填写的值复制粘贴到对应的输入框中。ID 可以随意填写，用于区分不同的消息平台实例。`port` 默认为 `6198`，可以根据需要修改，但请确保该端口未被占用。请保持 `统一 Webhook 模式 (unified_webhook_mode)` 为开启状态。点击 `保存`。
 
 3. 回到企业微信智能机器人创建页面，填写 `URL`：
 
-   - 如果开启了 `统一 Webhook 模式`，点击保存之后，AstrBot 将会自动为你生成唯一的 Webhook 回调链接，你可以在日志中或者 WebUI 的机器人页的卡片上找到，将该链接填入 `URL` 处。
-
-   ![unified_webhook](https://files.astrbot.app/docs/source/images/use/unified-webhook.png)
+   - 如果开启了 `统一 Webhook 模式`，点击保存之后，AstrBot 将会自动为你生成唯一的 Webhook 回调链接，你可以在 `数据与日志 → 日志` 中查看，或在 `机器人` 页选中该机器人，点击 `查看 Webhook 链接`，将该链接填入 `URL` 处。
 
    - 如果没有开启 `统一 Webhook 模式`，填写 `http://IP:port/webhook/wecom-ai-bot`，其中 `IP` 替换为你的 AstrBot 服务器的公网 IP 地址，`port` 替换为上一步填写的端口号。
 

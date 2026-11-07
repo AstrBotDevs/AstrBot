@@ -8,7 +8,7 @@ Starting from v4.18.0, AstrBot provides API Key based HTTP APIs for programmatic
 
 ## Quick Start
 
-1. Create an API key in WebUI - Settings.
+1. Open `Settings → OpenAPI` in the WebUI and click `Create API Key`.
 2. Include the API key in request headers:
 
 ```http

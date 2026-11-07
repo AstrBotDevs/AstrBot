@@ -115,3 +115,18 @@ class TestMCPToolSchemaNormalization:
         assert tool.parameters["required"] == ["stock_code"]
         assert "required" not in tool.parameters["properties"]["stock_code"]
         assert "required" not in tool.parameters["properties"]["market"]
+
+    def test_mcp_tool_sanitizes_llm_facing_name_but_keeps_original_for_call(self):
+        mcp_tool = SimpleNamespace(
+            name="t_drive.create_doc",
+            description="Create a doc",
+            inputSchema={"type": "object", "properties": {}},
+        )
+
+        tool = MCPTool(mcp_tool, MagicMock(), "tencent-docs")
+
+        # The name exposed to the LLM must match the OpenAI/Anthropic
+        # [a-zA-Z0-9_-] pattern; the original dotted name is preserved for the
+        # actual MCP call.
+        assert tool.name == "t_drive_create_doc"
+        assert tool.mcp_tool.name == "t_drive.create_doc"

@@ -1,4 +1,4 @@
-import { createApp } from 'vue';
+import { createApp, watch } from 'vue';
 import { createPinia } from 'pinia';
 import App from './App.vue';
 import { router } from './router';
@@ -6,48 +6,12 @@ import vuetify from './plugins/vuetify';
 import confirmPlugin from './plugins/confirmPlugin';
 import { setupI18n } from './i18n/composables';
 import '@/scss/style.scss';
-import VueApexCharts from 'vue3-apexcharts';
 
 import print from 'vue3-print-nb';
-import { loader } from '@guolao/vue-monaco-editor'
-import * as monaco from 'monaco-editor/esm/vs/editor/editor.api';
-import 'monaco-editor/esm/vs/basic-languages/dockerfile/dockerfile.contribution';
-import 'monaco-editor/esm/vs/basic-languages/ini/ini.contribution';
-import 'monaco-editor/esm/vs/basic-languages/javascript/javascript.contribution';
-import 'monaco-editor/esm/vs/basic-languages/markdown/markdown.contribution';
-import 'monaco-editor/esm/vs/basic-languages/powershell/powershell.contribution';
-import 'monaco-editor/esm/vs/basic-languages/python/python.contribution';
-import 'monaco-editor/esm/vs/basic-languages/shell/shell.contribution';
-import 'monaco-editor/esm/vs/basic-languages/sql/sql.contribution';
-import 'monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution';
-import 'monaco-editor/esm/vs/basic-languages/xml/xml.contribution';
-import 'monaco-editor/esm/vs/basic-languages/yaml/yaml.contribution';
-import 'monaco-editor/esm/vs/language/css/monaco.contribution';
-import 'monaco-editor/esm/vs/language/html/monaco.contribution';
-import 'monaco-editor/esm/vs/language/json/monaco.contribution';
-import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
-import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker';
-import cssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker';
-import htmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker';
 import { setupHttpClient } from './api/http';
 import { waitForRouterReadyInBackground } from './utils/routerReadiness.mjs';
 
 setupHttpClient();
-
-(self as any).MonacoEnvironment = {
-  getWorker(_: string, label: string) {
-    if (label === 'json') {
-      return new jsonWorker();
-    }
-    if (label === 'css' || label === 'scss' || label === 'less') {
-      return new cssWorker();
-    }
-    if (label === 'html' || label === 'handlebars' || label === 'razor') {
-      return new htmlWorker();
-    }
-    return new editorWorker();
-  },
-};
 
 /**
  * 挂载后初始化主题并注册全局系统主题监听器。
@@ -97,6 +61,16 @@ function setupThemeSync(pinia: ReturnType<typeof createPinia>) {
       localStorage.setItem('uiTheme', uiTheme);
       vuetify.theme.global.name.value = uiTheme;
     });
+
+    // 5. Sync the desktop window's appearance with the app theme, so the native
+    //    vibrancy material matches the sidebar/header in both light and dark mode.
+    const syncDesktopWindowTheme = () => {
+      const setWindowTheme = window.astrbotDesktop?.setWindowTheme;
+      if (typeof setWindowTheme !== 'function') return;
+      setWindowTheme(customizer.uiTheme === 'PurpleThemeDark' ? 'dark' : 'light');
+    };
+    syncDesktopWindowTheme();
+    watch(() => customizer.uiTheme, syncDesktopWindowTheme);
   });
 }
 
@@ -109,7 +83,6 @@ setupI18n().then(async () => {
   app.use(pinia);
   app.use(router);
   app.use(print);
-  app.use(VueApexCharts);
   app.use(vuetify);
   app.use(confirmPlugin);
   await router.isReady();
@@ -125,7 +98,6 @@ setupI18n().then(async () => {
   app.use(pinia);
   app.use(router);
   app.use(print);
-  app.use(VueApexCharts);
   app.use(vuetify);
   app.use(confirmPlugin);
   app.mount('#app');
@@ -133,6 +105,3 @@ setupI18n().then(async () => {
 
   setupThemeSync(pinia);
 });
-
-
-loader.config({ monaco })

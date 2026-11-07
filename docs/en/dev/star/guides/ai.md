@@ -24,11 +24,89 @@ provider_id = await self.context.get_current_chat_provider_id(umo=umo)
 
 ```py
 llm_resp = await self.context.llm_generate(
-    chat_provider_id=provider_id, # Chat model ID
+    chat_provider_id=provider_id,  # Chat model ID
     prompt="Hello, world!",
 )
 # print(llm_resp.completion_text) # Get the returned text
 ```
+
+## Structured Decisions
+
+A Decision Provider handles low-latency structured choices, such as whether to reply, which message to answer, or which branch to execute. Configure one under **Providers → Decision** in the WebUI, then call it from a plugin through `self.context.decision`. It is independent of the chat model.
+
+One request can answer multiple questions. `state` is passed to the decision model as-is and must be a `str`, `list`, or `dict`:
+
+```py
+from astrbot.api.provider import (
+    DecisionBooleanQuestion,
+    DecisionChoiceAnswer,
+    DecisionChoiceQuestion,
+    DecisionScoreQuestion,
+)
+
+
+recent_messages = [
+    {"role": "user", "content": "I cannot log in; every request returns 500."},
+]
+
+answers = await self.context.decision.ask(
+    {
+        "should_reply": DecisionChoiceQuestion(
+            instructions="Should the assistant reply to this message?",
+            criteria={"reply": "Reply now", "ignore": "Stay silent"},
+        ),
+        "target": DecisionChoiceQuestion(
+            instructions="Which message should the reply focus on?",
+            criteria={"latest": "Latest message", "previous": "Previous message"},
+        ),
+        "needs_tool": DecisionBooleanQuestion(
+            "Does this request require a tool call?"
+        ),
+        "severity": DecisionScoreQuestion(
+            instructions="How severe is the reported problem?",
+            criteria=[
+                "No impact on normal use",
+                "Some features fail, but a workaround exists",
+                "Core features are unavailable with no workaround",
+            ],
+        ),
+    },
+    state={"messages": recent_messages},
+)
+
+should_reply = answers["should_reply"]
+if (
+    isinstance(should_reply, DecisionChoiceAnswer)
+    and should_reply.choice == "reply"
+    and should_reply.probability >= 0.7
+):
+    target = answers["target"]
+    # Use target.choice and answers["needs_tool"].probability in later logic
+```
+
+`DecisionChoiceQuestion.criteria` maps option IDs to descriptions and corresponds to `criteria` in the System One request. For choice questions, `choice` is the selected option ID, `probabilities` contains the full distribution, and `confidence` is the model confidence. For boolean questions, `probability` is the probability that the statement is true. Business rules such as proactive-reply thresholds remain the caller's responsibility.
+
+Results use three independent frozen dataclasses: `DecisionChoiceAnswer`, `DecisionBooleanAnswer`, and `DecisionScoreAnswer`. `DecisionAnswer` is their union type. After calling `ask()`, use `isinstance()` to identify the result type before accessing its fields. `choose()` returns `DecisionChoiceAnswer`, while `yes_no()` returns `bool`.
+
+`DecisionScoreQuestion.criteria` is a list of 2–10 string levels, ordered from lowest to highest and numbered from 0. `DecisionScoreAnswer.score` is a probability-weighted rating, possibly fractional, from `0` to `len(criteria) - 1`. Both `legend` and `probabilities` use string level numbers such as `"0"` as keys, mapping to descriptions and probabilities; `confidence` reports certainty. A score answer contains only these four fields. All three question types can be mixed in one `ask()` call.
+
+Use the convenience methods for a single question:
+
+```py
+choice = await self.context.decision.choose(
+    question="Which reply strategy should be used?",
+    criteria={"short": "A brief reply", "detailed": "A detailed reply"},
+    state=recent_messages,
+)
+
+should_reply = await self.context.decision.yes_no(
+    question="Should the assistant reply now?",
+    state=recent_messages,
+    threshold=0.7,
+)
+```
+
+Pass `provider_id="provider_id"` to use a specific configured decision provider; otherwise the default one is used. `DecisionError` is raised for an unconfigured provider, timeout, connection failure, HTTP error, invalid JSON, or an answer outside the requested contract. Underlying details are written to the AstrBot log, so plugins can catch the exception and decide whether to skip or degrade this decision.
 
 ## Defining Tools
 
@@ -97,12 +175,14 @@ Alternatively, you can use the `@filter.llm_tool` decorator to define and regist
 
 ```py{3,4,5,6,7}
 @filter.llm_tool(name="get_weather")  # If name is omitted, the function name is used
-async def get_weather(self, event: AstrMessageEvent, location: str) -> MessageEventResult:
-    '''Get weather information.
+async def get_weather(
+    self, event: AstrMessageEvent, location: str
+) -> MessageEventResult:
+    """Get weather information.
 
     Args:
         location(string): The location to query
-    '''
+    """
     resp = self.get_weather_from_api(location)
     yield event.plain_result("Weather: " + resp)
 ```
@@ -134,8 +214,8 @@ llm_resp = await self.context.tool_loop_agent(
     chat_provider_id=prov_id,
     prompt="Search for videos related to AstrBot on Bilibili.",
     tools=ToolSet([BilibiliTool()]),
-    max_steps=30, # Maximum agent execution steps
-    tool_call_timeout=120, # Tool invocation timeout
+    max_steps=30,  # Maximum agent execution steps
+    tool_call_timeout=120,  # Tool invocation timeout
 )
 # print(llm_resp.completion_text) # Get the returned text
 ```
@@ -358,7 +438,9 @@ curr_cid = await conv_mgr.get_curr_conversation_id(event.unified_msg_origin)
 user_msg = UserMessageSegment(content=[TextPart(text="hi")])
 llm_resp = await self.context.llm_generate(
     chat_provider_id=provider_id,  # Chat model ID
-    contexts=[user_msg],  # When prompt is not specified, contexts is used as input; if both prompt and contexts are provided, prompt is appended to the end of the LLM input
+    contexts=[
+        user_msg
+    ],  # When prompt is not specified, contexts is used as input; if both prompt and contexts are provided, prompt is appended to the end of the LLM input
 )
 await conv_mgr.add_message_pair(
     cid=curr_cid,
@@ -526,7 +608,6 @@ persona_mgr = self.context.persona_manager
 ::: details Persona / Personality Type Definition
 
 ```py
-
 class Persona(SQLModel, table=True):
     """Persona is a set of instructions for LLMs to follow.
 

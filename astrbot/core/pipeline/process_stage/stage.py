@@ -3,6 +3,7 @@ from collections.abc import AsyncGenerator
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.star.star_handler import StarHandlerMetadata
+from astrbot.core.utils.session_waiter import FILTERS, USER_SESSIONS, SessionWaiter
 
 from ..context import PipelineContext
 from ..stage import Stage, register_stage
@@ -30,6 +31,15 @@ class ProcessStage(Stage):
         event: AstrMessageEvent,
     ) -> None | AsyncGenerator[None, None]:
         """处理事件"""
+        # Dispatch after access/safety checks and preprocessing, before plugins.
+        for session_filter in tuple(FILTERS):
+            session_id = session_filter.filter(event)
+            session = USER_SESSIONS.get(session_id)
+            if session and not session.session_controller.future.done():
+                await SessionWaiter.trigger(session_id, event)
+                event.stop_event()
+                return
+
         activated_handlers: list[StarHandlerMetadata] = event.get_extra(
             "activated_handlers",
         )

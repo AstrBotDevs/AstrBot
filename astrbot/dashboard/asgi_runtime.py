@@ -15,6 +15,8 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from starlette.datastructures import UploadFile as StarletteUploadFile
 from starlette.responses import StreamingResponse
 
+from astrbot.core.utils.upload import save_upload_stream
+
 _request_var: contextvars.ContextVar[DashboardRequest] = contextvars.ContextVar(
     "dashboard_request"
 )
@@ -99,18 +101,12 @@ class RequestUploadFile:
         except (TypeError, ValueError):
             return None
 
-    async def save(self, destination: str | Path) -> None:
-        path = Path(destination)
-        try:
-            await self._upload_file.seek(0)
-        except Exception:
-            pass
-        with path.open("wb") as output:
-            while True:
-                chunk = await self._upload_file.read(1024 * 1024)
-                if not chunk:
-                    break
-                output.write(chunk)
+    async def save(
+        self, destination: str | Path, *, max_bytes: int | None = None
+    ) -> int:
+        return await save_upload_stream(
+            self._upload_file, destination, max_bytes=max_bytes
+        )
 
     def __getattr__(self, key: str):
         return getattr(self._upload_file, key)

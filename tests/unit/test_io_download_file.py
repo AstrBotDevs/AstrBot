@@ -70,15 +70,20 @@ async def test_download_file_rejects_non_200_response(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("ssl_fallback", [False, True])
 async def test_download_file_raises_ssl_error_immediately(
     monkeypatch,
     tmp_path,
+    ssl_fallback,
 ):
     """Test that SSL errors are raised immediately without fallback retry.
 
     This test validates the fix for Issue #9446 - SSL verification should not
-    be downgraded when certificate validation fails.
+    be downgraded when certificate validation fails. The deprecated
+    ``allow_insecure_ssl_fallback`` flag is ignored, so even ``True`` must not
+    trigger an unverified retry.
     """
+
     class FakeSSLError(Exception):
         pass
 
@@ -91,7 +96,11 @@ async def test_download_file_raises_ssl_error_immediately(
     monkeypatch.setattr(io.aiohttp, "ClientConnectorCertificateError", FakeSSLError)
 
     with pytest.raises(FakeSSLError):
-        await io.download_file("https://example.test/missing", str(target_path))
+        await io.download_file(
+            "https://example.test/missing",
+            str(target_path),
+            allow_insecure_ssl_fallback=ssl_fallback,
+        )
 
     assert not target_path.exists()
 

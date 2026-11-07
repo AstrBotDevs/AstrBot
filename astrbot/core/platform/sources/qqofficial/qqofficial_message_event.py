@@ -4,6 +4,7 @@ import copy
 import logging
 import os
 import random
+from pathlib import Path
 from typing import cast
 
 import aiofiles
@@ -14,6 +15,7 @@ import botpy.types
 import botpy.types.message
 from botpy import Client
 from botpy.http import Route
+from botpy.interaction import Interaction
 from botpy.types import message
 from botpy.types.message import MarkdownPayload, Media
 from tenacity import (
@@ -26,13 +28,33 @@ from tenacity import (
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import File, Image, Plain, Record, Video
-from astrbot.api.platform import AstrBotMessage, PlatformMetadata
+from astrbot.api.message_components import (
+    ActionRow,
+    At,
+    Button,
+    File,
+    Image,
+    Plain,
+    Record,
+    Reply,
+    Video,
+)
+from astrbot.api.platform import AstrBotMessage, Group, PlatformMetadata
+from astrbot.core.platform.button_interaction import encode_button_callback
+from astrbot.core.platform.sources.qqofficial.qqofficial_chunked_upload import (
+    QQOFFICIAL_CHUNKED_UPLOAD_THRESHOLD,
+    QQOfficialChunkedUploader,
+)
 from astrbot.core.utils.media_utils import MediaResolver, file_uri_to_path, is_file_uri
+
+from .qqofficial_group_info import get_qq_group
 
 
 class APIReturnNoneError(Exception):
     pass
+
+
+_IMAGE_UPLOAD_MAX_ATTEMPTS = 3
 
 
 def _patch_qq_botpy_formdata() -> None:
@@ -55,7 +77,7 @@ def _patch_qq_botpy_formdata() -> None:
 _patch_qq_botpy_formdata()
 
 
-def _qqofficial_retry(max_attempts: int = 5):
+def _qqofficial_retry(max_attempts: int = 5, *, log_retries: bool = True):
     """Retry decorator for QQ Official API transient errors (HTTP 500/504)"""
     return retry(
         retry=retry_if_exception_type(
@@ -69,7 +91,7 @@ def _qqofficial_retry(max_attempts: int = 5):
         ),
         stop=stop_after_attempt(max_attempts),
         wait=wait_exponential(multiplier=2, min=2, max=30),
-        before_sleep=before_sleep_log(logger, logging.WARNING),
+        before_sleep=before_sleep_log(logger, logging.WARNING) if log_retries else None,
         reraise=True,
     )
 
@@ -90,6 +112,10 @@ class QQOfficialMessageEvent(AstrMessageEvent):
     VOICE_FILE_TYPE = 3
     FILE_FILE_TYPE = 4
     STREAM_MARKDOWN_NEWLINE_ERROR = "流式消息md分片需要\\n结束"
+    KEYBOARD_MAX_ROWS = 5
+    KEYBOARD_MAX_BUTTONS_PER_ROW = 5
+    KEYBOARD_LABEL_MAX_CHARS = 10
+    KEYBOARD_ACTION_DATA_MAX_BYTES = 1024
 
     def __init__(
         self,
@@ -103,9 +129,127 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         self.bot = bot
         self.send_buffer = None
 
+    async def get_group(self, group_id: str | None = None, **kwargs) -> Group | None:
+        """Get QQ group or guild-channel information for this event.
+
+        QQ group lookups share the inbound adapter's per-client cache. Metadata
+        is restricted to allowlisted bots. When the API is
+        unavailable, the basic group object attached to the incoming message is
+        returned so callers can still rely on the group identifier.
+
+        Args:
+            group_id: Optional QQ group OpenID or guild channel ID. Defaults to
+                the current message group identifier.
+            **kwargs: Reserved for compatibility with the base event API.
+
+        Returns:
+            Available group information, or ``None`` for a private event without
+            an explicit group identifier.
+        """
+        del kwargs
+        target_id = group_id or self.message_obj.group_id
+        if not target_id:
+            return None
+
+        current_group = self.message_obj.group
+        group = (
+            current_group
+            if current_group and current_group.group_id == target_id
+            else Group(group_id=target_id)
+        )
+        source = self.message_obj.raw_message
+
+        if isinstance(source, botpy.message.GroupMessage):
+            return await get_qq_group(self.bot, group)
+
+        if isinstance(source, botpy.message.Message):
+            try:
+                channel = await self.bot.api.get_channel(target_id)
+                if not isinstance(channel, dict):
+                    logger.warning(
+                        "[QQOfficial] Channel API returned an invalid response for %s",
+                        target_id,
+                    )
+                    return group
+
+                group.group_name = channel.get("name") or group.group_name
+                guild_id = channel.get("guild_id") or getattr(source, "guild_id", None)
+                if guild_id:
+                    guild = await self.bot.api.get_guild(str(guild_id))
+                    if isinstance(guild, dict):
+                        # QQ subchannels have no independent avatar or member roster;
+                        # these fields describe their parent guild while the ID and
+                        # name above continue to identify the current subchannel.
+                        group.group_avatar = guild.get("icon") or group.group_avatar
+                        group.group_owner = guild.get("owner_id") or group.group_owner
+                        member_count = guild.get("member_count")
+                        if member_count is not None:
+                            try:
+                                group.member_count = int(member_count)
+                            except (TypeError, ValueError):
+                                logger.warning(
+                                    "[QQOfficial] Guild API returned an invalid member_count for %s",
+                                    guild_id,
+                                )
+            except Exception as exc:
+                logger.warning(
+                    "[QQOfficial] Failed to get channel info for %s: %s",
+                    target_id,
+                    exc,
+                )
+            return group
+
+        return group
+
     async def send(self, message: MessageChain) -> None:
         self.send_buffer = message
         await self._post_send()
+
+    async def _close_stream_segment(self, stream_payload: dict):
+        """以 state=10 收尾当前流式段；流已开但 buffer 恰好为空时补最小收尾帧。
+
+        QQ C2C 流式协议缺 state=10 会在超时后把整段回滚到首包（#10066）：
+        中间分片已把全文发完、结尾没有剩余内容时也必须补一个 "\n" 收尾帧，
+        否则客户端等不到结束帧，最终只显示首包几个字。
+        """
+        stream_payload["state"] = 10
+        has_content = self.send_buffer is not None and any(
+            (isinstance(c, Plain) and c.text) or not isinstance(c, Plain)
+            for c in self.send_buffer.chain
+        )
+        if not has_content:
+            # 只有空 Plain 的 buffer 也算空：_post_send_one 会拒掉空文本，
+            # 收尾帧照样缺席（#10069 review）
+            if stream_payload.get("id") is None:
+                # 从未发出任何分片，无流可收
+                return None
+            self.send_buffer = MessageChain(chain=[Plain(text="\n")])
+        return await self._post_send(stream=stream_payload)
+
+    @staticmethod
+    def _extract_self_ref_idx(message: object) -> str:
+        """取本条消息自身的引用 ID（REFIDX_...），用于出站引用回复。
+
+        QQ 官方文档：message_reference.message_id 对「非机器人发的消息」需从
+        消息事件的 message_scene.ext 数组的 msg_idx 字段获取；它与 message.id
+        （ROBOT1.0_...）不是同一个值，格式也不同。
+        """
+        try:
+            raw = getattr(message, "raw_data", None)
+            if not isinstance(raw, dict):
+                return ""
+            scene = raw.get("message_scene")
+            if not isinstance(scene, dict):
+                return ""
+            for item in scene.get("ext") or []:
+                text = str(item)
+                if text.startswith("msg_idx="):
+                    value = text[len("msg_idx=") :].strip()
+                    if value:
+                        return value
+        except Exception:
+            return ""
+        return ""
 
     async def send_streaming(self, generator, use_fallback: bool = False):
         """流式输出仅支持消息列表私聊（C2C），其他消息源退化为普通发送"""
@@ -132,9 +276,10 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
                 # tool_call break 信号：工具开始执行，先把已有 buffer 以 state=10 结束当前流式段
                 if chain.type == "break":
-                    if self.send_buffer:
-                        stream_payload["state"] = 10
-                        ret = await self._post_send(stream=stream_payload)
+                    if (self.send_buffer and self.send_buffer.chain) or (
+                        stream_payload.get("id") is not None
+                    ):
+                        ret = await self._close_stream_segment(stream_payload)
                         ret_id = self._extract_response_message_id(ret)
                         if ret_id is not None:
                             stream_payload["id"] = ret_id
@@ -166,9 +311,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     self.send_buffer = None  # 清空已发送的分片，避免下次重复发送旧内容
 
             if isinstance(source, botpy.message.C2CMessage):
-                # 结束流式对话，发送 buffer 中剩余内容
-                stream_payload["state"] = 10
-                ret = await self._post_send(stream=stream_payload)
+                # 结束流式对话，发送 buffer 中剩余内容（空尾也要补收尾帧）
+                ret = await self._close_stream_segment(stream_payload)
             else:
                 ret = await self._post_send()
 
@@ -220,13 +364,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         for component in message.chain:
             is_media = isinstance(component, Image | Record | Video | File)
             if is_media and current_has_media:
-                chunks.append(
-                    MessageChain(
-                        chain=current_chain,
-                        use_t2i_=message.use_t2i_,
-                        type=message.type,
-                    )
-                )
+                chunks.append(message.derive(current_chain))
                 current_chain = []
                 current_has_media = False
 
@@ -234,13 +372,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             current_has_media = current_has_media or is_media
 
         if current_chain or not message.chain:
-            chunks.append(
-                MessageChain(
-                    chain=current_chain,
-                    use_t2i_=message.use_t2i_,
-                    type=message.type,
-                )
-            )
+            chunks.append(message.derive(current_chain))
 
         return chunks
 
@@ -274,7 +406,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             botpy.message.Message
             | botpy.message.GroupMessage
             | botpy.message.DirectMessage
-            | botpy.message.C2CMessage,
+            | botpy.message.C2CMessage
+            | Interaction,
         ):
             logger.warning(f"[QQOfficial] 不支持的消息源类型: {type(source)}")
             return None
@@ -288,6 +421,21 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             file_source,
             file_name,
         ) = await QQOfficialMessageEvent._parse_to_qqofficial(message_to_send)
+        keyboard = QQOfficialMessageEvent._parse_keyboard(message_to_send)
+        if keyboard and not plain_text:
+            plain_text = next(
+                (
+                    row.fallback_text
+                    for row in message_to_send.chain
+                    if isinstance(row, ActionRow) and row.fallback_text
+                ),
+                "",
+            ) or " / ".join(
+                button.label
+                for row in message_to_send.chain
+                if isinstance(row, ActionRow)
+                for button in row.buttons
+            )
 
         # C2C 流式仅用于文本分片，富媒体时降级为普通发送，避免平台侧流式校验报错。
         if stream and (
@@ -303,6 +451,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             and not record_file_path
             and not video_file_source
             and not file_source
+            and not keyboard
         ):
             return None
 
@@ -323,17 +472,49 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             payload: dict = {
                 "content": plain_text,
                 "msg_type": 0,
-                "msg_id": self.message_obj.message_id,
             }
         else:
             payload = {
                 "markdown": MarkdownPayload(content=plain_text) if plain_text else None,
                 "msg_type": 2,
-                "msg_id": self.message_obj.message_id,
             }
+        if isinstance(source, Interaction):
+            if source.event_id:
+                payload["event_id"] = source.event_id
+        else:
+            payload["msg_id"] = self.message_obj.message_id
+        if keyboard:
+            payload["keyboard"] = keyboard
 
-        if not isinstance(source, botpy.message.Message | botpy.message.DirectMessage):
+        if not isinstance(
+            source,
+            botpy.message.Message | botpy.message.DirectMessage,
+        ) and not (isinstance(source, Interaction) and source.scene == "guild"):
             payload["msg_seq"] = random.randint(1, 10000)
+
+        # 出站引用回复：消息链里存在 Reply 组件时填 message_reference。
+        # 注意 botpy 在同时传 message_reference 与 file_image 时会主动去除前者（SDK 限制）。
+        _reply_id = next(
+            (
+                str(_component.id).strip()
+                for _component in (getattr(message_to_send, "chain", None) or [])
+                if isinstance(_component, Reply) and str(_component.id or "").strip()
+            ),
+            "",
+        )
+        if _reply_id:
+            # 调用方已经给出 REFIDX_... 时直接使用（插件可借此引用任意消息）；
+            # 否则回退到本条消息自身的 msg_idx。注意 message.id（ROBOT1.0_...）
+            # 不可直接用作 message_reference.message_id。
+            _ref_idx = (
+                _reply_id
+                if _reply_id.startswith("REFIDX_")
+                else QQOfficialMessageEvent._extract_self_ref_idx(
+                    self.message_obj.raw_message
+                )
+            )
+            if _ref_idx:
+                payload["message_reference"] = {"message_id": _ref_idx}
 
         ret = None
 
@@ -495,6 +676,52 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     stream=stream,
                 )
 
+            case Interaction():
+                if any(
+                    (
+                        image_base64,
+                        image_path,
+                        record_file_path,
+                        video_file_source,
+                        file_source,
+                    )
+                ):
+                    logger.warning(
+                        "[QQOfficial] Button interaction replies currently ignore media."
+                    )
+                if source.scene == "group" and source.group_openid:
+                    ret = await self._send_with_markdown_fallback(
+                        send_func=lambda retry_payload: self.bot.api.post_group_message(
+                            group_openid=source.group_openid,
+                            **retry_payload,
+                        ),
+                        payload=payload,
+                        plain_text=plain_text,
+                    )
+                elif source.scene == "c2c" and source.user_openid:
+                    ret = await self._send_with_markdown_fallback(
+                        send_func=lambda retry_payload: self.post_c2c_message(
+                            openid=source.user_openid,
+                            **retry_payload,
+                        ),
+                        payload=payload,
+                        plain_text=plain_text,
+                    )
+                elif source.scene == "guild" and source.channel_id:
+                    payload.pop("msg_type", None)
+                    ret = await self._send_with_markdown_fallback(
+                        send_func=lambda retry_payload: self.bot.api.post_message(
+                            channel_id=source.channel_id,
+                            **retry_payload,
+                        ),
+                        payload=payload,
+                        plain_text=plain_text,
+                    )
+                else:
+                    logger.warning(
+                        "[QQOfficial] Cannot reply to button interaction without a scene target."
+                    )
+
             case _:
                 pass
 
@@ -502,8 +729,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         return ret
 
+    @staticmethod
     async def _send_with_markdown_fallback(
-        self,
         send_func,
         payload: dict,
         plain_text: str,
@@ -513,9 +740,10 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             return await send_func(payload)
         except _QQOFFICIAL_SEND_API_ERRORS as err:
             logger.info("[QQOfficial] 回复消息失败: %s, 尝试使用主动发送接口。", err)
-            if payload.get("msg_id"):
+            if payload.get("msg_id") or payload.get("event_id"):
                 fallback_payload = payload.copy()
                 fallback_payload.pop("msg_id", None)
+                fallback_payload.pop("event_id", None)
                 try:
                     ret = await send_func(fallback_payload)
                     logger.info("[QQOfficial] 使用主动发送接口发送成功。")
@@ -529,7 +757,9 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
             # QQ 流式 markdown 分片校验：内容必须以换行结尾。
             # 某些边界场景服务端仍可能判定失败，这里做一次修正重试。
-            if stream and self.STREAM_MARKDOWN_NEWLINE_ERROR in str(err):
+            if stream and QQOfficialMessageEvent.STREAM_MARKDOWN_NEWLINE_ERROR in str(
+                err
+            ):
                 retry_payload = payload.copy()
 
                 markdown_payload = retry_payload.get("markdown")
@@ -548,7 +778,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 return await send_func(retry_payload)
 
             if (
-                self.MARKDOWN_NOT_ALLOWED_ERROR not in str(err)
+                QQOfficialMessageEvent.MARKDOWN_NOT_ALLOWED_ERROR not in str(err)
                 or not payload.get("markdown")
                 or not plain_text
             ):
@@ -580,7 +810,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             "srv_send_msg": False,
         }
 
-        @_qqofficial_retry()
+        @_qqofficial_retry(_IMAGE_UPLOAD_MAX_ATTEMPTS, log_retries=False)
         async def _do_upload():
             if "openid" in kwargs:
                 payload["openid"] = kwargs["openid"]
@@ -606,7 +836,14 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         try:
             result = await _do_upload()
         except APIReturnNoneError:
-            logger.warning(f"上传图片API返回None，共尝试5次后放弃: {payload}")
+            logger.warning(
+                "[QQOfficial] 上传图片失败：API 返回 None（共尝试 %s 次），"
+                "file_type=%s, target=%s, data_size=%s bytes",
+                _IMAGE_UPLOAD_MAX_ATTEMPTS,
+                file_type,
+                kwargs.get("group_openid") or kwargs.get("openid") or "-",
+                len(image_base64),
+            )
             raise
 
         if not isinstance(result, dict):
@@ -627,8 +864,49 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         srv_send_msg: bool = False,
         file_name: str | None = None,
         **kwargs,
-    ) -> Media | None:
-        """上传媒体文件"""
+    ) -> Media:
+        """Upload media to a QQ group or C2C session.
+
+        Args:
+            file_source: Local file path or remote URL to upload.
+            file_type: QQ media type identifier.
+            srv_send_msg: Whether QQ should send the media immediately.
+            file_name: Optional display name for the uploaded file.
+            **kwargs: Recipient identifier as ``openid`` or ``group_openid``.
+
+        Returns:
+            Metadata for the uploaded media.
+
+        Raises:
+            ValueError: No supported recipient identifier was provided.
+            Exception: The upload request fails or returns an invalid response.
+        """
+        local_file = Path(file_source)
+        if (
+            local_file.is_file()
+            and local_file.stat().st_size > QQOFFICIAL_CHUNKED_UPLOAD_THRESHOLD
+        ):
+            openid = kwargs.get("openid")
+            group_openid = None if openid else kwargs.get("group_openid")
+            if not openid and not group_openid:
+                raise ValueError("Invalid upload parameters")
+            uploader = QQOfficialChunkedUploader(self.bot.api._http)
+            if openid:
+                return await uploader.upload_c2c(
+                    file_path=local_file,
+                    file_type=file_type,
+                    file_name=file_name or local_file.name,
+                    user_openid=openid,
+                    srv_send_msg=srv_send_msg,
+                )
+            return await uploader.upload_group(
+                file_path=local_file,
+                file_type=file_type,
+                file_name=file_name or local_file.name,
+                group_openid=group_openid,
+                srv_send_msg=srv_send_msg,
+            )
+
         # 构建基础payload
         payload: dict = {"file_type": file_type, "srv_send_msg": srv_send_msg}
         if file_name:
@@ -657,7 +935,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 group_openid=kwargs["group_openid"],
             )
         else:
-            return None
+            raise ValueError("Invalid upload parameters")
 
         @_qqofficial_retry()
         async def _do_upload():
@@ -669,25 +947,29 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         try:
             result = await _do_upload()
-
-            if result:
-                if not isinstance(result, dict):
-                    logger.error(f"上传文件响应格式错误: {result}")
-                    return None
-
-                return Media(
-                    file_uuid=result["file_uuid"],
-                    file_info=result["file_info"],
-                    ttl=result.get("ttl", 0),
-                )
         except APIReturnNoneError:
-            logger.warning(f"上传文件API返回None，共尝试5次后放弃: {file_source}")
+            logger.warning(
+                "Media upload API returned None after 5 attempts: %s",
+                file_source,
+            )
+            raise
         except (botpy.errors.ServerError, botpy.errors.SequenceNumberError):
-            logger.error(f"上传媒体文件失败，共尝试5次后放弃: {file_source}")
-        except Exception as e:
-            logger.error(f"上传请求错误: {e}")
+            logger.error("Media upload failed after 5 attempts: %s", file_source)
+            raise
+        except Exception as exc:
+            logger.error("Media upload request failed: %s", exc)
+            raise
 
-        return None
+        if not isinstance(result, dict):
+            raise RuntimeError(
+                f"Failed to upload media, response is not dict: {result}"
+            )
+
+        return Media(
+            file_uuid=result["file_uuid"],
+            file_info=result["file_info"],
+            ttl=result.get("ttl", 0),
+        )
 
     async def post_c2c_message(
         self,
@@ -709,6 +991,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         payload.pop("self", None)
         if payload.get("msg_id") is None:
             payload.pop("msg_id", None)
+        if payload.get("event_id") is None:
+            payload.pop("event_id", None)
         # QQ API does not accept stream.id=None; remove it when not yet assigned
         if "stream" in payload and payload["stream"] is not None:
             stream_data = dict(payload["stream"])
@@ -743,6 +1027,92 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         return message.Message(**result)
 
     @staticmethod
+    def _parse_keyboard(message_chain: MessageChain) -> dict | None:
+        """Convert portable action rows into a QQ inline keyboard.
+
+        Args:
+            message_chain: Portable message chain containing action rows.
+
+        Returns:
+            QQ keyboard payload, or None when no action rows are present.
+
+        Raises:
+            ValueError: The keyboard exceeds QQ limits or contains invalid data.
+        """
+        action_rows = [
+            component
+            for component in message_chain.chain
+            if isinstance(component, ActionRow) and component.buttons
+        ]
+        if not action_rows:
+            return None
+        if len(action_rows) > QQOfficialMessageEvent.KEYBOARD_MAX_ROWS:
+            raise ValueError("QQ inline keyboards support at most 5 rows.")
+
+        rows = []
+        button_ids: set[str] = set()
+        style_map = {
+            Button.Style.DEFAULT: 0,
+            Button.Style.PRIMARY: 3,
+            Button.Style.SUCCESS: 1,
+            Button.Style.DANGER: 0,
+        }
+        for row in action_rows:
+            if len(row.buttons) > QQOfficialMessageEvent.KEYBOARD_MAX_BUTTONS_PER_ROW:
+                raise ValueError("QQ inline keyboard rows support at most 5 buttons.")
+            buttons = []
+            for button in row.buttons:
+                if not button.id or button.id in button_ids:
+                    raise ValueError(
+                        "QQ inline keyboard button IDs must be non-empty and unique."
+                    )
+                if not button.label:
+                    raise ValueError(
+                        "QQ inline keyboard button labels cannot be empty."
+                    )
+                button_ids.add(button.id)
+
+                if isinstance(button.action, Button.CallbackAction):
+                    action_type = 1
+                    action_data = encode_button_callback(
+                        button.id, button.action.data, expires_at=row.action_expires_at
+                    )
+                elif isinstance(button.action, Button.UrlAction):
+                    action_type = 0
+                    action_data = button.action.url
+                else:
+                    raise ValueError("Unsupported QQ inline keyboard button action.")
+                if (
+                    len(action_data.encode("utf-8"))
+                    > QQOfficialMessageEvent.KEYBOARD_ACTION_DATA_MAX_BYTES
+                ):
+                    raise ValueError(
+                        "QQ inline keyboard button action data exceeds 1024 bytes."
+                    )
+
+                buttons.append(
+                    {
+                        "id": button.id,
+                        "render_data": {
+                            "label": button.label[
+                                : QQOfficialMessageEvent.KEYBOARD_LABEL_MAX_CHARS
+                            ],
+                            "visited_label": button.label[
+                                : QQOfficialMessageEvent.KEYBOARD_LABEL_MAX_CHARS
+                            ],
+                            "style": style_map[button.style],
+                        },
+                        "action": {
+                            "type": action_type,
+                            "permission": {"type": 2},
+                            "data": action_data,
+                        },
+                    }
+                )
+            rows.append({"buttons": buttons})
+        return {"content": {"rows": rows}}
+
+    @staticmethod
     async def _parse_to_qqofficial(message: MessageChain):
         plain_text = ""
         image_base64 = None  # only one img supported
@@ -754,6 +1124,10 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         for i in message.chain:
             if isinstance(i, Plain):
                 plain_text += i.text
+            elif isinstance(i, At):
+                mention_id = str(i.qq) if i.qq else ""
+                if mention_id and mention_id != "all":
+                    plain_text += f'<qqbot-at-user id="{mention_id}" />'
             elif isinstance(i, Image) and not image_base64:
                 if not i.file:
                     raise ValueError("Unsupported image file format")
@@ -798,6 +1172,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     file_source = file_path
                 elif i.url:
                     file_source = i.url
+            elif isinstance(i, ActionRow):
+                continue
             else:
                 logger.debug(f"qq_official 忽略 {i.type}")
         return (

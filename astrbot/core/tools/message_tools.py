@@ -21,6 +21,7 @@ from astrbot.core.platform.message_type import MessageType
 from astrbot.core.tools.computer_tools.fs import _remote_basename
 from astrbot.core.tools.computer_tools.util import (
     check_admin_permission,
+    get_local_permission_policy,
     is_local_runtime,
     workspace_root,
     workspace_root_for_context,
@@ -53,14 +54,9 @@ def _is_path_within(path: Path, roots: tuple[Path, ...]) -> bool:
 
 
 def _is_restricted_local_env(context: ContextWrapper[AstrAgentContext]) -> bool:
-    if not is_local_runtime(context):
-        return False
-    cfg = context.context.context.get_config(
-        umo=context.context.event.unified_msg_origin
+    return is_local_runtime(context) and (
+        get_local_permission_policy(context).filesystem_scope != "host"
     )
-    provider_settings = cfg.get("provider_settings", {})
-    require_admin = provider_settings.get("computer_use_require_admin", True)
-    return require_admin and context.context.event.role != "admin"
 
 
 def _can_send_local_file(
@@ -182,6 +178,12 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                         f"Allowed directories: {allowed}. "
                         f"Blocked path: {local_candidate}."
                     )
+
+        # Local runtime has no separate sandbox: the workspace and local-file
+        # branches above already enforced the caller's permissions, so probing
+        # the host shell here would bypass them and expose host paths.
+        if is_local_runtime(context):
+            raise FileNotFoundError(f"{component_type} path does not exist: {path}")
 
         try:
             sb = await get_booter(
@@ -335,7 +337,15 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                 return f"error: invalid session: {session}"
 
         message_chain = MessageChain(chain=components)
-        await context.context.context.send_message(target_session, message_chain)
+        try:
+            sent = await context.context.context.send_message(
+                target_session,
+                message_chain,
+            )
+        except Exception as exc:
+            return f"error: failed to send message to session {target_session}: {exc}"
+        if not sent:
+            return f"error: failed to find platform for session {target_session}."
         if str(target_session) == current_session:
             context.context.event._has_send_oper = True
             sent_plain_text = message_chain.get_plain_text().strip()

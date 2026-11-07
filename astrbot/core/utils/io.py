@@ -158,13 +158,13 @@ async def download_image_by_url(
                     with open(path, "wb") as f:
                         f.write(await resp.read())
                     return path
-    except aiohttp.ClientConnectorSSLError as e:
+    except aiohttp.ClientConnectorSSLError:
         logger.error(
             f"SSL certificate verification failed for {_safe_url_for_log(url)}. "
             "Please check the server's SSL certificate configuration."
         )
         raise
-    except aiohttp.ClientConnectorCertificateError as e:
+    except aiohttp.ClientConnectorCertificateError:
         logger.error(
             f"SSL certificate error for {_safe_url_for_log(url)}. "
             "Certificate may be expired or invalid."
@@ -322,13 +322,13 @@ async def download_file(
                         show_progress,
                         progress_callback,
                     )
-    except aiohttp.ClientConnectorSSLError as e:
+    except aiohttp.ClientConnectorSSLError:
         logger.error(
             f"SSL certificate verification failed for {_safe_url_for_log(url)}. "
             "Please check the server's SSL certificate configuration."
         )
         raise
-    except aiohttp.ClientConnectorCertificateError as e:
+    except aiohttp.ClientConnectorCertificateError:
         logger.error(
             f"SSL certificate error for {_safe_url_for_log(url)}. "
             "Certificate may be expired or invalid."

@@ -1,0 +1,65 @@
+{
+  "title": "ダッシュボード",
+  "subtitle": "リアルタイム監視と統計",
+  "lastUpdate": "最終更新",
+  "status": {
+    "loading": "読み込み中…",
+    "dataError": "データを取得できませんでした",
+    "noticeError": "お知らせを取得できませんでした",
+    "online": "オンライン",
+    "uptime": "稼働時間",
+    "memoryUsage": "メモリ使用量"
+  },
+  "stats": {
+    "totalMessage": {
+      "title": "メッセージ総数",
+      "subtitle": "すべてのプラットフォームから送信されたメッセージの合計"
+    },
+    "onlinePlatform": {
+      "title": "メッセージプラットフォーム",
+      "subtitle": "接続中のメッセージプラットフォーム数"
+    },
+    "runningTime": {
+      "title": "稼働時間",
+      "subtitle": "システムの稼働時間",
+      "format": "{hours}時間 {minutes}分 {seconds}秒"
+    },
+    "memoryUsage": {
+      "title": "メモリ使用量",
+      "subtitle": "システムメモリの使用状況",
+      "cpuLoad": "CPU 負荷",
+      "status": {
+        "good": "良好",
+        "normal": "正常",
+        "high": "高負荷"
+      }
+    }
+  },
+  "charts": {
+    "messageTrend": {
+      "title": "メッセージ傾向分析",
+      "subtitle": "メッセージ数の推移を時系列で確認します",
+      "totalMessages": "メッセージ総数",
+      "dailyAverage": "1 日平均",
+      "growthRate": "増加率",
+      "timeLabel": "時刻",
+      "messageCount": "メッセージ数",
+      "timeRanges": {
+        "1day": "過去 1 日",
+        "3days": "過去 3 日",
+        "1week": "過去 7 日",
+        "1month": "過去 30 日"
+      }
+    },
+    "platformStat": {
+      "title": "プラットフォーム別メッセージ統計",
+      "subtitle": "プラットフォーム別のメッセージ数分布",
+      "total": "合計",
+      "noData": "プラットフォームデータはありません",
+      "messageUnit": "件",
+      "platformCount": "プラットフォーム数",
+      "mostActive": "最多使用",
+      "totalPercentage": "総メッセージに占める割合"
+    }
+  }
+}

@@ -212,6 +212,54 @@ async def test_failed_llm_response_persists_checkpoint_for_retry():
 
 
 @pytest.mark.asyncio
+async def test_aborted_response_persists_synthetic_stop_turn():
+    conversation_manager = AsyncMock()
+    stage = InternalAgentSubStage()
+    stage.conv_manager = conversation_manager
+    event = SimpleNamespace(
+        unified_msg_origin="webchat:FriendMessage:test",
+        get_extra=lambda _key: None,
+    )
+    request = ProviderRequest(
+        conversation=Conversation(
+            platform_id="webchat",
+            user_id="webchat:FriendMessage:test",
+            cid="conversation-1",
+        )
+    )
+
+    await stage._save_to_history(
+        event,
+        request,
+        LLMResponse(role="assistant", completion_text="Output stopped."),
+        [
+            Message(role="user", content="Explain the result."),
+            Message(role="user", content=[TextPart(text="Stop output.")]),
+            Message(role="assistant", content=[TextPart(text="Output stopped.")]),
+        ],
+        runner_stats=None,
+        user_aborted=True,
+    )
+
+    conversation_manager.update_conversation.assert_awaited_once_with(
+        "webchat:FriendMessage:test",
+        "conversation-1",
+        history=[
+            {"role": "user", "content": "Explain the result."},
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": "Stop output."}],
+            },
+            {
+                "role": "assistant",
+                "content": [{"type": "text", "text": "Output stopped."}],
+            },
+        ],
+        token_usage=None,
+    )
+
+
+@pytest.mark.asyncio
 async def test_terminal_tool_result_persists_history_without_checkpoint():
     conversation_manager = AsyncMock()
     stage = InternalAgentSubStage()

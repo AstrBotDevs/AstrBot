@@ -1,107 +1,75 @@
-<script setup>
-import TraceDisplayer from '@/components/shared/TraceDisplayer.vue';
-import { traceApi } from '@/api/v1';
-import { useModuleI18n } from '@/i18n/composables';
-import { computed, ref, onMounted } from 'vue';
-import { useTheme } from 'vuetify';
+<script setup lang="ts">
+import { onMounted, ref } from "vue";
+import TraceDisplayer from "@/components/shared/TraceDisplayer.vue";
+import { traceApi } from "@/api/v1";
+import { useModuleI18n } from "@/i18n/composables";
+import { useToast } from "@/utils/toast";
 
-const { tm } = useModuleI18n('features/trace');
-const theme = useTheme();
-
-const isDark = computed(() => theme.global.current.value.dark);
+const { tm } = useModuleI18n("features/trace");
+const toast = useToast();
 const traceEnabled = ref(true);
-const loading = ref(false);
-const traceDisplayerKey = ref(0);
+const loading = ref(true);
 
-const fetchTraceSettings = async () => {
+async function fetchTraceSettings() {
   try {
-    const res = await traceApi.getSettings();
-    if (res.data?.status === 'ok') {
-      traceEnabled.value = res.data.data?.trace_enable ?? true;
-    }
-  } catch (err) {
-    console.error('Failed to fetch trace settings:', err);
-  }
-};
-
-const updateTraceSettings = async () => {
-  loading.value = true;
-  try {
-    await traceApi.updateSettings({
-      trace_enable: traceEnabled.value
-    });
-    // Refresh the TraceDisplayer component to reconnect SSE
-    traceDisplayerKey.value += 1;
-  } catch (err) {
-    console.error('Failed to update trace settings:', err);
+    const response = await traceApi.getSettings();
+    if (response.data?.status !== "ok")
+      throw new Error("Trace settings are unavailable");
+    const enabled = response.data.data?.trace_enable;
+    traceEnabled.value = typeof enabled === "boolean" ? enabled : true;
+  } catch (error) {
+    console.error("Failed to fetch trace settings:", error);
+    toast.error(tm("controls.loadFailed"));
   } finally {
     loading.value = false;
   }
-};
+}
 
-onMounted(() => {
-  fetchTraceSettings();
-});
+async function updateTraceSettings() {
+  if (loading.value) return;
+  const nextEnabled = !traceEnabled.value;
+  loading.value = true;
+  try {
+    const response = await traceApi.updateSettings({
+      trace_enable: nextEnabled,
+    });
+    if (response.data?.status !== "ok")
+      throw new Error("Trace settings update failed");
+    traceEnabled.value = nextEnabled;
+  } catch (error) {
+    console.error("Failed to update trace settings:", error);
+    toast.error(tm("controls.updateFailed"));
+  } finally {
+    loading.value = false;
+  }
+}
+
+onMounted(fetchTraceSettings);
 </script>
 
 <template>
-  <div class="dashboard-page trace-page" :class="{ 'is-dark': isDark }">
-    <v-container fluid class="dashboard-shell trace-shell pa-4 pa-md-6">
-      <div class="dashboard-header trace-header">
-        <div class="dashboard-header-main">
-          <h1 class="dashboard-title">{{ tm('title') }}</h1>
-          <p class="dashboard-subtitle">
-            {{ tm('hint') }}
-          </p>
-        </div>
-        <div class="dashboard-header-actions">
-          <v-switch
-            v-model="traceEnabled"
-            :loading="loading"
-            :disabled="loading"
-            color="primary"
-            hide-details
-            density="compact"
-            inset
-            @update:model-value="updateTraceSettings"
-          >
-            <template #label>
-              <span class="switch-label">{{ traceEnabled ? tm('recording') : tm('paused') }}</span>
-            </template>
-          </v-switch>
-        </div>
-      </div>
-      <div class="trace-body">
-        <TraceDisplayer :key="traceDisplayerKey" />
-      </div>
-    </v-container>
+  <div class="trace-page">
+    <div class="trace-body">
+      <TraceDisplayer
+        :recording-enabled="traceEnabled"
+        :recording-busy="loading"
+        @toggle-recording="updateTraceSettings"
+      />
+    </div>
   </div>
 </template>
 
-<script>
-export default {
-  name: 'TracePage',
-  components: {
-    TraceDisplayer
-  }
-};
-</script>
-
 <style scoped>
-@import '@/styles/dashboard-shell.css';
-
-.trace-page,
-.trace-shell {
-  height: 100%;
-}
-
-.trace-shell {
+.trace-page {
   display: flex;
   flex-direction: column;
-}
-
-.trace-header {
-  flex: 0 0 auto;
+  height: calc(100dvh - 112px);
+  margin: 0 auto;
+  max-width: 1560px;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0 12px 8px;
+  width: 100%;
 }
 
 .trace-body {
@@ -109,15 +77,9 @@ export default {
   min-height: 0;
 }
 
-.switch-label {
-  color: var(--dashboard-muted);
-  font-size: 13px;
-  white-space: nowrap;
-}
-
-@media (max-width: 768px) {
-  .trace-header {
-    align-items: flex-start;
+@media (max-width: 800px) {
+  .trace-page {
+    padding: 0 4px 6px;
   }
 }
 </style>

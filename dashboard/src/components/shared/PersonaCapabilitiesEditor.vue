@@ -72,7 +72,7 @@ const selectableToolNames = computed(() =>
 );
 const selectableSkillNames = computed(() =>
   props.availableSkills
-    .filter((skill) => skill.active !== false)
+    .filter((skill) => skill.active !== false && skill.plugin_active !== false)
     .map((skill) => skill.name),
 );
 
@@ -182,7 +182,10 @@ const skillItems = computed(() => {
     if (!item.skills) {
       return item;
     }
-    const selectedCount = item.skills.filter((skill) =>
+    const activeSkills = item.skills.filter(
+      (skill) => skill.plugin_active !== false,
+    );
+    const selectedCount = activeSkills.filter((skill) =>
       isCapabilitySelected("skills", skill.name),
     ).length;
     return {
@@ -191,13 +194,14 @@ const skillItems = computed(() => {
       badgeTone: "plugin",
       meta: tm("personaQuickPreview.skillCount", {
         selected: selectedCount,
-        total: item.skills.length,
+        total: activeSkills.length,
       }),
-      selected: item.skills.length > 0 && selectedCount === item.skills.length,
-      indeterminate: selectedCount > 0 && selectedCount < item.skills.length,
-      disabled: item.skills.length === 0,
-      configurable: true,
-      skillNames: item.skills.map((skill) => skill.name),
+      selected:
+        activeSkills.length > 0 && selectedCount === activeSkills.length,
+      indeterminate: selectedCount > 0 && selectedCount < activeSkills.length,
+      disabled: activeSkills.length === 0,
+      configurable: activeSkills.length > 0,
+      skillNames: activeSkills.map((skill) => skill.name),
     };
   });
 });

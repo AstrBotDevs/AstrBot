@@ -1,16 +1,19 @@
 from collections.abc import AsyncGenerator
+from typing import cast
 
 from astrbot.core import logger
+from astrbot.core.log import log_context
 from astrbot.core.platform import AstrMessageEvent
+from astrbot.core.platform.astr_message_event import event_context
 from astrbot.core.platform.sources.webchat.webchat_event import WebChatMessageEvent
 from astrbot.core.platform.sources.wecom_ai_bot.wecomai_event import (
     WecomAIBotMessageEvent,
 )
-from astrbot.core.utils.active_event_registry import active_event_registry
+from astrbot.core.utils.trace import trace_execution
 
 from .bootstrap import ensure_builtin_stages_registered
 from .context import PipelineContext
-from .stage import registered_stages
+from .stage import Stage, registered_stages
 from .stage_order import STAGES_ORDER
 
 
@@ -23,7 +26,7 @@ class PipelineScheduler:
             key=lambda x: STAGES_ORDER.index(x.__name__),
         )  # 按照顺序排序
         self.ctx = context  # 上下文对象
-        self.stages = []  # 存储阶段实例
+        self.stages: list[Stage] = []  # 存储阶段实例
 
     async def initialize(self) -> None:
         """初始化管道调度器时, 初始化所有阶段"""
@@ -49,7 +52,8 @@ class PipelineScheduler:
 
             if isinstance(coroutine, AsyncGenerator):
                 # 如果返回的是异步生成器, 实现洋葱模型的核心
-                async for _ in coroutine:
+                agen = cast(AsyncGenerator[None], coroutine)
+                async for _ in agen:
                     # 此处是前置处理完成后的暂停点(yield), 下面开始执行后续阶段
                     if event.is_stopped():
                         logger.debug(
@@ -84,15 +88,15 @@ class PipelineScheduler:
             event (AstrMessageEvent): 事件对象
 
         """
-        active_event_registry.register(event)
-        try:
+        with (
+            log_context(event.get_platform_id(), event.get_platform_name()),
+            event_context(event),
+            trace_execution(event.trace),
+        ):
             await self._process_stages(event)
 
-            # 发送一个空消息, 以便于后续的处理
+            # Send the closing frame before the event is marked complete.
             if isinstance(event, WebChatMessageEvent | WecomAIBotMessageEvent):
                 await event.send(None)
 
             logger.debug("pipeline execution completed.")
-        finally:
-            event.cleanup_temporary_local_files()
-            active_event_registry.unregister(event)

@@ -5,10 +5,19 @@
   "providers": "Providers",
   "commands": "Commands",
   "persona": "Persona",
+  "data": "Data & Logs",
+  "dataTabs": {
+    "statistics": "Statistics",
+    "conversations": "Conversations",
+    "logs": "Logs",
+    "trace": "Trace"
+  },
   "subagent": "SubAgents",
   "toolUse": "MCP Tools",
   "config": "Config",
   "chat": "Chat",
+  "botMode": "Bot",
+  "options": "Options",
   "cron": "Future Tasks",
   "extension": "Extensions",
   "extensionTabs": {
@@ -25,14 +34,22 @@
   "alkaid": "Alkaid Lab",
   "knowledgeBase": "Knowledge Base",
   "about": "About",
-  "settings": "Settings",
+  "settings": "System Settings",
+  "pin": "Pin to top",
+  "unpin": "Unpin",
+  "groupByPlugin": "Group by plugin",
+  "ungroupByPlugin": "Ungroup plugin views",
+  "expandSidebar": "Expand sidebar",
+  "collapseSidebar": "Collapse sidebar",
   "changelog": "Changelog",
   "documentation": "Documentation",
   "faq": "FAQ",
   "github": "GitHub",
   "drag": "Drag",
   "groups": {
-    "more": "More Features"
+    "more": "More Features",
+    "system": "System",
+    "extension": "Extensions"
   },
   "changelogDialog": {
     "title": "Changelog",
@@ -46,5 +63,6 @@
     "normal": "Normal Config",
     "system": "System Config"
   },
-  "pluginWebui": "Plugin Pages"
+  "pluginView": "Plugin Views",
+  "pluginViewType": "Plugin View"
 }
