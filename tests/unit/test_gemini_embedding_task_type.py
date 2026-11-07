@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 
 import numpy as np
 import pytest
+from google.genai.errors import APIError
 
 from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
 from astrbot.core.provider.provider import EmbeddingProvider
@@ -122,6 +123,29 @@ async def test_plain_embedding_unprefixed_for_embedding_v2() -> None:
     assert len(records) == 1
     assert records[0]["config"].task_type is None
     assert _embedded_texts(records[0]) == ["astrbot"]
+
+
+@pytest.mark.asyncio
+async def test_api_error_is_wrapped_with_context() -> None:
+    provider = _make_provider("gemini-embedding-001")
+
+    async def failing_embed_content(**kwargs):
+        raise APIError(400, {"error": {"message": "bad request"}}, None)
+
+    provider.client.models.embed_content = failing_embed_content
+
+    with pytest.raises(Exception, match="Gemini Embedding API请求失败: bad request"):
+        await provider.get_query_embedding("q")
+
+
+@pytest.mark.asyncio
+async def test_terminate_closes_client() -> None:
+    provider = _make_provider("gemini-embedding-001")
+    provider.client.aclose = AsyncMock()
+
+    await provider.terminate()
+
+    provider.client.aclose.assert_awaited_once()
 
 
 class _RecordingProvider(EmbeddingProvider):
