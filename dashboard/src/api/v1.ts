@@ -1809,11 +1809,11 @@ export const conversationApi = {
       }),
     );
   },
-  delete(userId: string, cid: string) {
+  delete(userId: string, cid: string, cleanupMetadata = false) {
     return typed<any>(
       openApiV1.deleteConversation({
         path: { conversation_id: cid },
-        query: { user_id: userId },
+        query: { user_id: userId, cleanup_metadata: cleanupMetadata },
       }),
     );
   },
