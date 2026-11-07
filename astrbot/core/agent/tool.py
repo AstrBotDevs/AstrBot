@@ -266,13 +266,23 @@ class ToolSet:
                 "number": {"float", "double"},
             }
 
-            if "anyOf" in schema:
+            origin_type = schema.get("type")
+            is_object_node = "properties" in schema or (
+                "object" in origin_type
+                if isinstance(origin_type, list)
+                else origin_type == "object"
+            )
+
+            # A plain union such as {"anyOf": [{"type": "string"}, {"type": "null"}]}
+            # maps to Gemini's any_of. An anyOf on an object node (e.g. "either
+            # these or those fields are required") is handled below instead, so
+            # the node keeps its type and properties.
+            if "anyOf" in schema and not is_object_node:
                 return {"anyOf": [convert_schema(s) for s in schema["anyOf"]]}
 
             result = {}
 
             # Avoid side effects by not modifying the original schema
-            origin_type = schema.get("type")
             target_type = origin_type
 
             # Compatibility fix: Gemini API expects 'type' to be a string (enum),
@@ -322,6 +332,21 @@ class ToolSet:
                     result["description"] = (
                         f"{description}\nAllowed values: {allowed}".strip()
                     )
+
+            # Gemini only allows any_of as the sole field of a schema node, and
+            # tool parameters must be an OBJECT, so required-field combinations
+            # from an object-level anyOf are listed in the description instead.
+            if "anyOf" in schema:
+                groups = [
+                    "[" + ", ".join(branch["required"]) + "]"
+                    for branch in schema["anyOf"]
+                    if isinstance(branch, dict) and branch.get("required")
+                ]
+                if groups:
+                    description = result.get("description", "")
+                    result["description"] = (
+                        f"{description}\nRequired fields: one of " + " or ".join(groups)
+                    ).strip()
 
             if "properties" in schema:
                 properties = {}
