@@ -103,7 +103,9 @@
     "charCount": "{count} characters",
     "searchSuccess": "Search completed, found {count} results",
     "searchFailed": "Search failed",
-    "queryRequired": "Please enter a query"
+    "queryRequired": "Please enter a query",
+    "debugMode": "Debug Mode (t-SNE)",
+    "tsneVisualization": "t-SNE Visualization"
   },
   "settings": {
     "title": "Knowledge Base Settings",

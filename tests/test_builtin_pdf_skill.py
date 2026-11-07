@@ -74,17 +74,3 @@ def test_builtin_pdf_skill_rejects_unsupported_default_font_character(
     assert result.returncode != 0
     assert "Pass --font" in result.stderr
     assert not output.exists()
-
-
-def test_builtin_pdf_skill_documents_system_and_downloaded_fonts() -> None:
-    skill = (PDF_SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
-
-    assert "search common system locations" in skill
-    assert "--font path/to/font.ttf" in skill
-    assert "https://hyperos.mi.com/font/zh/download/" in skill
-    assert "https://github.com/notofonts/noto-cjk/" in skill
-    assert "https://edgeone.gh-proxy.com/https://github.com/" in skill
-    assert "https://hk.gh-proxy.com/" in skill
-    assert "https://gh-proxy.com/" in skill
-    assert "https://gh.dpik.top/" in skill
-    assert "Never send credentials" in skill

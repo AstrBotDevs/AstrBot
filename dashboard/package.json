@@ -14,6 +14,7 @@
     "generate:docs:openapi": "uv run python ../docs/scripts/update_openapi_json.py",
     "typecheck": "vue-tsc --noEmit",
     "test": "node --test",
+    "i18n:check": "node scripts/check-i18n-keys.mjs",
     "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix --ignore-path .gitignore"
   },
   "dependencies": {
@@ -75,11 +76,5 @@
     "vue-cli-plugin-vuetify": "2.5.8",
     "vue-tsc": "1.8.8",
     "vuetify-loader": "^2.0.0-alpha.9"
-  },
-  "pnpm": {
-    "overrides": {
-      "immutable": "4.3.8",
-      "lodash-es": "4.17.23"
-    }
   }
 }

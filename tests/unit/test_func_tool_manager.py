@@ -17,6 +17,8 @@ from astrbot.core.tools.computer_tools.shell import (
 )
 from astrbot.core.tools.message_tools import SendMessageToUserTool
 from astrbot.core.tools.web_search_tools import (
+    DeepSeekFetchWebPageTool,
+    DeepSeekWebSearchTool,
     FirecrawlExtractWebPageTool,
     FirecrawlWebSearchTool,
 )
@@ -148,7 +150,7 @@ async def test_local_execute_shell_manages_running_and_closed_results(
                 "provider_settings": {
                     "computer_use_runtime": "local",
                     "computer_use_local_permissions": {
-                        "admin": {"allow_network": allow_network}
+                        "admin": {"allow_network": allow_network, "filesystem_scope": "workspace"}
                     },
                 }
             }
@@ -349,7 +351,9 @@ async def test_local_member_shell_uses_sandbox_backend(
     async def fake_get_booter(context, session_id):
         return booter
 
-    monkeypatch.setattr(computer_util, "create_process_sandbox", object)
+    monkeypatch.setattr(
+        computer_util, "get_process_sandbox_status", lambda: {"status": "detected"}
+    )
     monkeypatch.setattr(shell_tools, "get_booter", fake_get_booter)
     monkeypatch.setattr(
         shell_tools,
@@ -414,14 +418,19 @@ async def test_local_member_shell_is_denied_without_supported_sandbox(monkeypatc
         },
     )()
 
-    def unavailable_sandbox():
-        raise RuntimeError("No Local process sandbox backend is available.")
-
-    monkeypatch.setattr(computer_util, "create_process_sandbox", unavailable_sandbox)
+    monkeypatch.setattr(
+        computer_util, "get_process_sandbox_status", lambda: {"status": "unsupported"}
+    )
 
     result = await LocalExecuteShellTool().call(wrapper, command="pwd")
 
-    assert "No Local process sandbox backend" in result
+    assert "Local isolation unavailable" in result
+    assert "not supported on this platform" in result
+    assert "Shell execution was blocked" in result
+    assert "1. Keep the configured restrictions:" in result
+    assert "2. Allow execution without Local isolation:" in result
+    assert "Local Permission Policies" in result
+    assert "Do not bypass" not in result
 
 
 @pytest.mark.asyncio
@@ -870,16 +879,37 @@ async def test_execute_shell_reports_blank_exception_type(monkeypatch):
     assert result == "Error executing command: BlankError"
 
 
-def test_firecrawl_tools_are_registered_as_builtin_tools():
+@pytest.mark.parametrize(
+    ("search_class", "extract_class", "search_name", "extract_name"),
+    [
+        (
+            FirecrawlWebSearchTool,
+            FirecrawlExtractWebPageTool,
+            "web_search_firecrawl",
+            "firecrawl_extract_web_page",
+        ),
+        (
+            DeepSeekWebSearchTool,
+            DeepSeekFetchWebPageTool,
+            "web_search_deepseek",
+            "deepseek_fetch_web_page",
+        ),
+    ],
+)
+def test_search_tools_are_registered_as_builtin_tools(
+    search_class, extract_class, search_name, extract_name
+):
     manager = FunctionToolManager()
 
-    search_tool = manager.get_builtin_tool(FirecrawlWebSearchTool)
-    extract_tool = manager.get_builtin_tool(FirecrawlExtractWebPageTool)
+    search_tool = manager.get_builtin_tool(search_class)
+    extract_tool = manager.get_builtin_tool(extract_class)
 
-    assert search_tool.name == "web_search_firecrawl"
-    assert extract_tool.name == "firecrawl_extract_web_page"
-    assert manager.is_builtin_tool("web_search_firecrawl") is True
-    assert manager.is_builtin_tool("firecrawl_extract_web_page") is True
+    assert search_tool.name == search_name
+    assert extract_tool.name == extract_name
+    assert manager.is_builtin_tool(search_name) is True
+    assert manager.is_builtin_tool(extract_name) is True
+    assert manager.get_func(search_name) is search_tool
+    assert manager.get_func(extract_name) is extract_tool
 
 
 @pytest.mark.asyncio

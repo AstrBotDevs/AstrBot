@@ -7,4 +7,4 @@ You can configure model parameters in the WebUI:
 3. Under `Custom request body parameters` (`custom_extra_body`), add the parameters required by your model, such as `temperature`, `top_p`, or `max_tokens`.
 4. Click `Save`.
 
-Available fields depend on the provider. For example, Gemini exposes its own generation settings instead of the generic `custom_extra_body` field. Refer to your provider's documentation for supported parameters and values.
+Available fields depend on the provider. Refer to your provider's documentation for supported parameters and values.

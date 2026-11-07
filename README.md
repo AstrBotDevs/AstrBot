@@ -102,7 +102,7 @@ Visit [AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) to down
 
 **More deployment methods**
 
-If you need panel-based management or deeper customization, see [BT-Panel Deployment](https://docs.astrbot.app/deploy/astrbot/btpanel.html) for BT Panel app-store setup, [1Panel Deployment](https://docs.astrbot.app/deploy/astrbot/1panel.html) for 1Panel app-market deployment, [CasaOS Deployment](https://docs.astrbot.app/deploy/astrbot/casaos.html) for NAS/home-server visual deployment, and [Manual Deployment](https://docs.astrbot.app/deploy/astrbot/cli.html) for fully custom source-based installation with `uv`.
+If you need panel-based management or deeper customization, see [BT-Panel Deployment](https://docs.astrbot.app/deploy/astrbot/btpanel.html), [1Panel Deployment](https://docs.astrbot.app/deploy/astrbot/1panel.html), [CasaOS Deployment](https://docs.astrbot.app/deploy/astrbot/casaos.html), or [Source Deployment](https://docs.astrbot.app/deploy/astrbot/cli.html).
 
 
 ## ❤️ Sponsors
@@ -154,6 +154,7 @@ Connect AstrBot to your favorite chat platform.
 | Ollama (Self-hosted) | LLM Services |
 | LM Studio (Self-hosted) | LLM Services |
 | [MiraRouter](https://mirarouter.com/) | LLM Services (API Gateway, supports all models) |
+| [ShengSuanYun](https://www.shengsuanyun.com/?from=CH_T70U2X9L) | LLM Services |
 | [AIHubMix](https://aihubmix.com/?aff=4bfH) | LLM Services (API Gateway, supports all models) |
 | [CompShare](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74) | LLM Services |
 | [302.AI](https://share.302.ai/rr1M3l) | LLM Services |
@@ -214,7 +215,7 @@ We have 15+ chat groups, please see: [Community](https://docs.astrbot.app/commun
 Special thanks to all Contributors and plugin developers for their contributions to AstrBot ❤️
 
 <a href="https://github.com/AstrBotDevs/AstrBot/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=AstrBotDevs/AstrBot&max=300&columns=15" />
+  <img src="https://contrib.rocks/image?repo=AstrBotDevs/AstrBot&max=500&columns=17" />
 </a>
 
 Open Source Friends ❤️

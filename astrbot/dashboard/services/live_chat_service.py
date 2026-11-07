@@ -287,6 +287,12 @@ class LiveChatService:
             "web_search_tavily",
             "web_search_bocha",
             "web_search_brave",
+            "web_search_deepseek",
+            "web_search_serpapi",
+            "news_search_serpapi",
+            "image_search_serpapi",
+            "finance_search_serpapi",
+            "scholar_search_serpapi",
         ]
         web_search_results = {}
         tool_call_parts = [
@@ -574,6 +580,7 @@ class LiveChatService:
                         "persona_prompt": persona_prompt,
                         "show_reasoning": show_reasoning,
                         "flags": flags,
+                        "locale": message.get("locale"),
                         "message_id": message_id,
                         "llm_checkpoint_id": llm_checkpoint_id,
                     },
@@ -713,12 +720,12 @@ class LiveChatService:
                 elif result_type == "image":
                     filename = str(result_text).replace("[IMAGE]", "")
                     part = await self.create_attachment_from_file(filename, "image")
-                    message_accumulator.add_attachment(part)
+                    message_accumulator.add_part(part)
                     await send_attachment_saved_event(part)
                 elif result_type == "record":
                     filename = str(result_text).replace("[RECORD]", "")
                     part = await self.create_attachment_from_file(filename, "record")
-                    message_accumulator.add_attachment(part)
+                    message_accumulator.add_part(part)
                     await send_attachment_saved_event(part)
                 elif result_type == "file":
                     filename = str(result_text).replace("[FILE]", "", 1)
@@ -730,7 +737,7 @@ class LiveChatService:
                         "file",
                         display_name=display_name,
                     )
-                    message_accumulator.add_attachment(part)
+                    message_accumulator.add_part(part)
                     await send_attachment_saved_event(part)
                 elif result_type == "video":
                     filename = str(result_text).replace("[VIDEO]", "", 1)
@@ -742,8 +749,10 @@ class LiveChatService:
                         "video",
                         display_name=display_name,
                     )
-                    message_accumulator.add_attachment(part)
+                    message_accumulator.add_part(part)
                     await send_attachment_saved_event(part)
+                elif result_type == "actionrow" and isinstance(result_text, dict):
+                    message_accumulator.add_part({"type": "actionrow", **result_text})
 
                 should_save = False
                 if result_type == "end":

@@ -16,16 +16,24 @@ from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.db import BaseDatabase
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
+from astrbot.core.llm_error_messages import LLM_ERROR_MESSAGES
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.platform import Platform
-from astrbot.core.platform.astr_message_event import AstrMessageEvent, MessageSesion
+from astrbot.core.platform.astr_message_event import (
+    AstrMessageEvent,
+    MessageSesion,
+    current_message_event,
+    streaming_response_event,
+)
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
+from astrbot.core.provider.decision import DecisionService
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, ProviderType
 from astrbot.core.provider.func_tool_manager import FunctionTool, FunctionToolManager
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.provider.provider import (
+    DecisionProvider,
     EmbeddingProvider,
     Provider,
     RerankProvider,
@@ -170,6 +178,8 @@ class Context:
         self.cron_manager = cron_manager
         """Cron job manager, initialized by core lifecycle."""
         self.subagent_orchestrator = subagent_orchestrator
+        self.decision = DecisionService(provider_manager)
+        """Decision service backed by the configured decision provider."""
 
     async def llm_generate(
         self,
@@ -447,7 +457,13 @@ class Context:
         self,
         provider_id: str,
     ) -> (
-        Provider | TTSProvider | STTProvider | EmbeddingProvider | RerankProvider | None
+        Provider
+        | TTSProvider
+        | STTProvider
+        | EmbeddingProvider
+        | RerankProvider
+        | DecisionProvider
+        | None
     ):
         """通过 ID 获取对应的 LLM Provider。
 
@@ -513,11 +529,14 @@ class Context:
     async def get_using_provider_async(
         self,
         umo: str | None = None,
+        *,
+        locale: str = "zh-CN",
     ) -> Provider | None:
         """Asynchronously get the current text-generation provider.
 
         Args:
             umo: Unified message origin used for session-specific preferences.
+            locale: Language for the built-in provider type error.
 
         Returns:
             Current chat provider, or None if no provider is available.
@@ -532,8 +551,9 @@ class Context:
         if prov is None:
             return None
         if not isinstance(prov, Provider):
+            messages = LLM_ERROR_MESSAGES.get(locale, LLM_ERROR_MESSAGES["zh-CN"])
             raise ValueError(
-                f"该会话来源的对话模型（提供商）的类型不正确: {type(prov)}"
+                messages["invalidSessionProviderType"].format(provider_type=type(prov))
             )
         return prov
 
@@ -672,6 +692,24 @@ class Context:
         for platform in self.platform_manager.platform_insts:
             if platform.meta().id == session.platform_name:
                 await platform.send_by_session(session, message_chain)
+                event = current_message_event.get()
+                if (
+                    event is not None
+                    and event._execution_active
+                    and message_chain.chain
+                    and streaming_response_event.get() is not event
+                ):
+                    event.trace.record(
+                        "response_sent",
+                        kind="response",
+                        message=event._outline_chain(message_chain.chain),
+                        component_types=[
+                            str(component.type) for component in message_chain.chain
+                        ],
+                        component_count=len(message_chain.chain),
+                        message_type=message_chain.type,
+                        target_umo=str(session),
+                    )
                 settings = self.get_config(umo=str(session)).get(
                     "provider_ltm_settings",
                     {},

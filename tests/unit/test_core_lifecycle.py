@@ -895,8 +895,10 @@ class TestAstrBotCoreLifecycleRestart:
 
         lifecycle.astrbot_updater = MagicMock()
 
-        with patch("astrbot.core.core_lifecycle.threading.Thread") as mock_thread:
-            await lifecycle.restart()
+        # Replace only this module's reference; patching threading.Thread also
+        # disables the executor worker used by asyncio.to_thread during shutdown.
+        with patch("astrbot.core.core_lifecycle.threading") as mock_threading:
+            await asyncio.wait_for(lifecycle.restart(), timeout=5)
 
             # Verify managers were terminated
             lifecycle.provider_manager.terminate.assert_awaited_once()
@@ -904,8 +906,8 @@ class TestAstrBotCoreLifecycleRestart:
             lifecycle.kb_manager.terminate.assert_awaited_once()
 
             # Verify thread was started
-            mock_thread.assert_called_once()
-            mock_thread.return_value.start.assert_called_once()
+            mock_threading.Thread.assert_called_once()
+            mock_threading.Thread.return_value.start.assert_called_once()
 
 
 class TestAstrBotCoreLifecycleLoadPipelineScheduler:
