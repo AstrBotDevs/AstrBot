@@ -379,4 +379,4 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                 "session_id": stream_id,
             },
         )
-        await super().send_streaming(generator, use_fallback)
+        return await super().send_streaming(generator, use_fallback)

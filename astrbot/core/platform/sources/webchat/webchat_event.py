@@ -193,7 +193,7 @@ class WebChatMessageEvent(AstrMessageEvent):
             },
         )
 
-    async def send_streaming(self, generator, use_fallback: bool = False) -> None:
+    async def send_streaming(self, generator, use_fallback: bool = False) -> bool:
         final_data = ""
         reasoning_content = ""
         message_id = self.message_obj.message_id
@@ -260,4 +260,4 @@ class WebChatMessageEvent(AstrMessageEvent):
                 "message_id": message_id,
             },
         )
-        await super().send_streaming(generator, use_fallback)
+        return await super().send_streaming(generator, use_fallback)

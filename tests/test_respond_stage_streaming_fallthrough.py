@@ -83,3 +83,65 @@ async def test_after_sent_only_for_delivered_stream(monkeypatch, has_content):
         "after_sent_calls": int(has_content),
         "result_preserved": not has_content,
     }
+
+
+@pytest.mark.asyncio
+async def test_webchat_streaming_dispatches_after_sent(monkeypatch):
+    """WebChat default streaming: after_message_sent fires once the stream completes.
+
+    Covers the real-world report in issue #9740: memory plugins relying on
+    ``after_message_sent`` missed bot replies on WebChat streaming sessions.
+    """
+    from astrbot.core.platform.sources.webchat import webchat_event as webchat_module
+    from astrbot.core.platform.sources.webchat.webchat_event import WebChatMessageEvent
+
+    hook = AsyncMock(return_value=False)
+    monkeypatch.setattr(respond_module, "call_event_hook", hook)
+    monkeypatch.setattr(Metric, "upload", AsyncMock())
+    queued: list[dict] = []
+    monkeypatch.setattr(
+        webchat_module.webchat_queue_mgr,
+        "put_back_queue",
+        AsyncMock(side_effect=lambda rid, payload: queued.append(payload) or True),
+    )
+
+    message = AstrBotMessage()
+    message.type = MessageType.FRIEND_MESSAGE
+    message.sender = MessageMember(user_id="12345", nickname="WebChat")
+    message.self_id = "review-bot"
+    message.session_id = "review-session"
+    message.message_id = "review-message"
+    message.message = []
+    message.message_str = ""
+    message.raw_message = None
+    event = WebChatMessageEvent(
+        "", message, PlatformMetadata("webchat", "Review", "review"), "review-session",
+    )
+
+    async def stream():
+        yield MessageChain().message("Streaming reply part 1")
+        yield MessageChain().message(" part 2")
+
+    result = MessageEventResult(
+        result_content_type=ResultContentType.STREAMING_RESULT,
+        async_stream=stream(),
+    )
+    event.set_result(result)
+    config = {
+        "platform_settings": {
+            "reply_with_mention": False,
+            "reply_with_quote": False,
+            "segmented_reply": {
+                "enable": False, "only_llm_result": False,
+                "interval_method": "random", "log_base": 2,
+            },
+        },
+        "provider_settings": {"unsupported_streaming_strategy": "buffered"},
+    }
+    stage = respond_module.RespondStage()
+    await stage.initialize(PipelineContext(config, None, "review"))
+    await stage.process(event)
+
+    assert hook.await_count == 1
+    assert event.get_result() is None
+    assert any(p.get("type") == "complete" and p.get("data") for p in queued)

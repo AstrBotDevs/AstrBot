@@ -32,7 +32,7 @@ class MattermostMessageEvent(AstrMessageEvent):
         self,
         generator: AsyncGenerator,
         use_fallback: bool = False,
-    ) -> None:
+    ) -> bool:
         await super().send_streaming(generator, use_fallback)
 
         if not use_fallback:
@@ -46,7 +46,7 @@ class MattermostMessageEvent(AstrMessageEvent):
                 return False
             message_buffer.squash_plain()
             await self.send(message_buffer)
-            return None
+            return True
 
         text_buffer = ""
 
@@ -66,7 +66,7 @@ class MattermostMessageEvent(AstrMessageEvent):
 
         if text_buffer.strip():
             await self.send(MessageChain([Plain(text_buffer)]))
-        return None
+        return True
 
     async def get_group(self, group_id=None, **kwargs):
         """Gets Mattermost channel information and all visible members.
