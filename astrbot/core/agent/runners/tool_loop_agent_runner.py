@@ -843,12 +843,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             return
         self.run_context.messages = processed_messages
         self._simple_print_message_role("[AftCompact]", self.run_context.messages)
-
         async for llm_response in self._iter_llm_responses_with_fallback():
             if llm_response.is_chunk:
                 if self.stats.time_to_first_token == 0:
                     self.stats.time_to_first_token = time.time() - self.stats.start_time
-
                 if llm_response.reasoning_content:
                     yield AgentResponse(
                         type="streaming_delta",
@@ -928,6 +926,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         if not llm_resp.tools_call_name:
             await self._complete_with_assistant_response(llm_resp)
+        else:
+            try:
+                await self.agent_hooks.on_agent_response(self.run_context, llm_resp)
+            except Exception as e:
+                logger.error(f"Error in on_agent_response hook: {e}", exc_info=True)
+            if not llm_resp.tools_call_name:
+                await self._complete_with_assistant_response(llm_resp)
 
         # 返回 LLM 结果
         if llm_resp.reasoning_content:

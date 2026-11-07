@@ -18,12 +18,14 @@ from astrbot.core.agent.message import ImageURLPart, Message, TextPart
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool, ToolSet
+from astrbot.core.astr_agent_hooks import MainAgentHooks
 from astrbot.core.astr_agent_run_util import run_agent
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
 from astrbot.core.provider.provider import Provider
+from astrbot.core.star.star_handler import EventType
 
 
 class MockProvider(Provider):
@@ -398,6 +400,11 @@ class MockHooks(BaseAgentRunHooks):
     def __init__(self):
         self.agent_begin_called = False
         self.agent_done_called = False
+        self.agent_responses = []
+        self.event_order = []
+        self.events = []
+        self.rewrite_response = False
+        self.clear_tool_calls = False
         self.tool_start_called = False
         self.tool_end_called = False
 
@@ -412,6 +419,15 @@ class MockHooks(BaseAgentRunHooks):
 
     async def on_agent_done(self, run_context, llm_response):
         self.agent_done_called = True
+
+    async def on_agent_response(self, run_context, llm_response):
+        self.events.append("response_hook")
+        if self.clear_tool_calls:
+            llm_response.tools_call_name = []
+        if self.rewrite_response:
+            llm_response.completion_text = f"hooked: {llm_response.completion_text}"
+        self.agent_responses.append(llm_response)
+        self.event_order.append("hook")
 
 
 class ClearingAgentBeginHooks(MockHooks):
@@ -910,6 +926,173 @@ async def test_hooks_called_with_max_step(
     assert mock_hooks.agent_done_called, "on_agent_done应该被调用"
     assert mock_hooks.tool_start_called, "on_tool_start应该被调用"
     assert mock_hooks.tool_end_called, "on_tool_end应该被调用"
+
+
+@pytest.mark.asyncio
+async def test_tool_call_response_invokes_response_hook(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+):
+    mock_provider.should_call_tools = True
+    mock_provider.max_calls_before_normal_response = 100
+    mock_hooks.rewrite_response = True
+
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=True,
+    )
+
+    responses = []
+    async for response in runner.step():
+        responses.append(response)
+        if (
+            response.type == "llm_result"
+            and response.data["chain"].get_plain_text()
+            == "hooked: 我需要使用工具来帮助您"
+        ):
+            mock_hooks.event_order.append("text")
+        if response.type == "streaming_delta":
+            mock_hooks.events.append("streaming_delta")
+
+    assert len(mock_hooks.agent_responses) == 1
+    assert (
+        mock_hooks.agent_responses[0].completion_text
+        == "hooked: 我需要使用工具来帮助您"
+    )
+    assert mock_hooks.agent_responses[0].tools_call_name == ["test_tool"]
+    assert not mock_hooks.agent_done_called
+    assert mock_hooks.event_order == ["hook", "text"]
+    assert any(
+        response.type == "llm_result"
+        and response.data["chain"].get_plain_text() == "hooked: 我需要使用工具来帮助您"
+        for response in responses
+    )
+    assert any(
+        response.type == "streaming_delta"
+        and response.data["chain"].get_plain_text() == "我需要使用工具来帮助您"
+        for response in responses
+    )
+    assert mock_hooks.events.index("streaming_delta") < mock_hooks.events.index(
+        "response_hook"
+    )
+
+
+@pytest.mark.asyncio
+async def test_cleared_tool_calls_finalize_as_assistant_response(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+):
+    mock_provider.should_call_tools = True
+    mock_provider.max_calls_before_normal_response = 100
+    mock_hooks.clear_tool_calls = True
+
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    responses = [response async for response in runner.step()]
+
+    assert runner.done()
+    assert runner.get_final_llm_resp().tools_call_name == []
+    assert mock_hooks.agent_done_called
+    assert not mock_hooks.tool_start_called
+    assert any(response.type == "llm_result" for response in responses)
+
+
+@pytest.mark.asyncio
+async def test_main_agent_response_hook_dispatches_llm_response_event(monkeypatch):
+    event = MagicMock()
+    llm_response = LLMResponse(
+        role="assistant",
+        completion_text="intermediate response",
+        reasoning_content="intermediate reasoning",
+        tools_call_name=["test_tool"],
+        tools_call_args=[{"query": "test"}],
+        tools_call_ids=["call_123"],
+    )
+    call_event_hook = AsyncMock()
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_hooks.call_event_hook", call_event_hook
+    )
+
+    await MainAgentHooks().on_agent_response(
+        ContextWrapper(context=MockAgentContext(event)), llm_response
+    )
+
+    event.set_extra.assert_called_once_with(
+        "_llm_reasoning_content", "intermediate reasoning"
+    )
+    call_event_hook.assert_awaited_once_with(
+        event, EventType.OnLLMResponseEvent, llm_response
+    )
+
+
+@pytest.mark.asyncio
+async def test_main_agent_done_does_not_dispatch_response_hook_twice(monkeypatch):
+    event = MagicMock()
+    extras = {}
+    event.set_extra.side_effect = lambda key, value: extras.__setitem__(key, value)
+    event.get_extra.side_effect = lambda key=None, default=None: (
+        extras if key is None else extras.get(key, default)
+    )
+    run_context = ContextWrapper(context=MockAgentContext(event))
+    llm_response = LLMResponse(
+        role="assistant",
+        completion_text="response after tool calls were cleared",
+        tools_call_name=[],
+    )
+    call_event_hook = AsyncMock()
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_hooks.call_event_hook", call_event_hook
+    )
+    hooks = MainAgentHooks()
+
+    await hooks.on_agent_response(run_context, llm_response)
+    await hooks.on_agent_done(run_context, llm_response)
+
+    calls = call_event_hook.await_args_list
+    assert len(calls) == 2
+    assert calls[0].args == (event, EventType.OnLLMResponseEvent, llm_response)
+    assert calls[1].args == (
+        event,
+        EventType.OnAgentDoneEvent,
+        run_context,
+        llm_response,
+    )
+
+
+@pytest.mark.asyncio
+async def test_call_event_hook_reraises_cancelled_error(monkeypatch):
+    from astrbot.core.pipeline.context_utils import call_event_hook
+    from astrbot.core.star.star_handler import EventType
+
+    async def cancelling_handler(*args, **kwargs):
+        raise asyncio.CancelledError("task cancelled")
+
+    handler = SimpleNamespace(
+        handler=cancelling_handler,
+        handler_name="cancelling_handler",
+        handler_full_name="tests.cancelling_handler",
+        handler_module_path="tests.cancelling",
+        event_type=EventType.OnLLMResponseEvent,
+    )
+
+    event = MagicMock()
+    event.plugins_name = None
+    monkeypatch.setattr(
+        "astrbot.core.pipeline.context_utils.star_handlers_registry.get_handlers_by_event_type",
+        lambda *args, **kwargs: [handler],
+    )
+
+    with pytest.raises(asyncio.CancelledError):
+        await call_event_hook(event, EventType.OnLLMResponseEvent)
 
 
 @pytest.mark.asyncio
