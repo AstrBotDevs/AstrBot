@@ -257,9 +257,7 @@ def test_list_math_inside_blockquote_is_lifted(quote):
     assert outline(result) == [(1, "Equation:"), (1, "Next")]
 
 
-INLINE_FORMULA = (
-    r"(b_{2m-1} - a_{2m-1}) + (b_{2m} - a_{2m}) = -6 + a_{2m} = 4m - 3"
-)
+INLINE_FORMULA = r"(b_{2m-1} - a_{2m-1}) + (b_{2m} - a_{2m}) = -6 + a_{2m} = 4m - 3"
 INLINE_REPORTED = (
     "- Pair adjacent terms:\n"
     f"  Each pair gives ${INLINE_FORMULA}$.\n"
@@ -322,3 +320,28 @@ def test_long_inline_math_stream_boundaries(boundary):
     assert stream["reset"] is True
     assert stream["index"] == 1
     assert content == normalize_qq_list_math(INLINE_REPORTED)
+
+
+COMPACT_CHAIN = r"b_n = b_1 + (n-1)d = 2 + (n-1)d = (2-d) + dn"
+
+
+def test_compact_chain_equation_leaves_list():
+    source = f"* **实际情况：**\n  * ${COMPACT_CHAIN}$；\n"
+    result = normalize_qq_list_math(source)
+    blocks = math_blocks(result)
+    assert len(blocks) == 1
+    assert blocks[0].content.strip() == COMPACT_CHAIN
+    assert normalize_qq_list_math(result) == result
+
+
+def test_standalone_equation_in_list_item_leaves_list():
+    source = "- $a_n = n + 1$；\n"
+    result = normalize_qq_list_math(source)
+    blocks = math_blocks(result)
+    assert len(blocks) == 1
+    assert blocks[0].content.strip() == "a_n = n + 1"
+
+
+def test_short_inline_equation_in_prose_is_kept():
+    source = "- 当 $n=1$ 时，代入 $a_n$。\n"
+    assert normalize_qq_list_math(source) == source

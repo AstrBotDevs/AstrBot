@@ -154,18 +154,24 @@ def normalize_qq_list_math(text: str) -> str:
         if not opening:
             # Display delimiters belong to the existing display-math path.
             if "$$" not in rest and "\\[" not in rest and "\\]" not in rest:
+                marker = _LIST_MARKER.match(rest)
+                cursor = marker.end() if marker else len(rest) - len(rest.lstrip(" \t"))
                 matches = [
                     match
                     for match in _INLINE_MATH.finditer(rest)
                     if len(match[1].strip()) >= _LONG_INLINE_MATH_LENGTH
+                    # TeX source length is not rendered width: a compact
+                    # chain can overflow even below the old 48-char cutoff.
+                    or match[1].count("=") >= 2
+                    or (
+                        "=" in match[1]
+                        and not rest[cursor : match.start()].strip()
+                        and not rest[match.end() :].strip(
+                            " \t\r\n.,;:!?\u3002\uff0c\uff1b\uff1a\uff01\uff1f"
+                        )
+                    )
                 ]
                 if matches:
-                    marker = _LIST_MARKER.match(rest)
-                    cursor = (
-                        marker.end()
-                        if marker
-                        else len(rest) - len(rest.lstrip(" \t"))
-                    )
                     fragments: list[str] = []
                     for match in matches:
                         before = rest[cursor : match.start()].strip()
@@ -183,7 +189,9 @@ def normalize_qq_list_math(text: str) -> str:
                         quote + line for line in replacement.splitlines(keepends=True)
                     )
                     blocks.append(
-                        _MathBlock(line_number, line_number, 0, quote, ancestors, replacement)
+                        _MathBlock(
+                            line_number, line_number, 0, quote, ancestors, replacement
+                        )
                     )
             line_number += 1
             continue
