@@ -718,6 +718,13 @@ class TestBuiltinToolInjection:
                 "web_search_deepseek",
                 "deepseek_fetch_web_page",
             ),
+            (
+                "specstream",
+                web_search_build.SpecStreamWebSearchTool,
+                web_search_build.SpecStreamExtractWebPageTool,
+                "web_search_specstream",
+                "specstream_extract_web_page",
+            ),
         ],
     )
     async def test_apply_web_search_tools_adds_search_and_extract_tools(
@@ -766,6 +773,7 @@ class TestBuiltinToolInjection:
         [
             "web_search_tavily",
             "web_search_deepseek",
+            "web_search_specstream",
             "web_search_serpapi",
             "news_search_serpapi",
             "image_search_serpapi",

@@ -18,6 +18,7 @@ from astrbot.dashboard.services.live_chat_service import LiveChatService
     "tool_name",
     [
         "web_search_deepseek",
+        "web_search_specstream",
         "web_search_serpapi",
         "news_search_serpapi",
         "image_search_serpapi",
@@ -61,7 +62,7 @@ def test_search_refs_include_only_cited_sources(
     )
 
 
-@pytest.mark.parametrize("provider", ["deepseek", "serpapi"])
+@pytest.mark.parametrize("provider", ["deepseek", "specstream", "serpapi"])
 def test_search_configuration_is_available_in_webui(provider):
     settings = DEFAULT_CONFIG["provider_settings"]
     items = CONFIG_METADATA_3["ai_group"]["metadata"]["websearch"]["items"]

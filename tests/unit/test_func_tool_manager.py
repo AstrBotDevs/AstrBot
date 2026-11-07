@@ -21,6 +21,8 @@ from astrbot.core.tools.web_search_tools import (
     DeepSeekWebSearchTool,
     FirecrawlExtractWebPageTool,
     FirecrawlWebSearchTool,
+    SpecStreamExtractWebPageTool,
+    SpecStreamWebSearchTool,
 )
 
 
@@ -893,6 +895,12 @@ async def test_execute_shell_reports_blank_exception_type(monkeypatch):
             DeepSeekFetchWebPageTool,
             "web_search_deepseek",
             "deepseek_fetch_web_page",
+        ),
+        (
+            SpecStreamWebSearchTool,
+            SpecStreamExtractWebPageTool,
+            "web_search_specstream",
+            "specstream_extract_web_page",
         ),
     ],
 )

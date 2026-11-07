@@ -2044,3 +2044,304 @@ async def test_key_rotator_keeps_request_attempts_independent():
     assert await rotator.get(settings) == "first"
     assert await rotator.get(settings) == "first"
     assert await rotator.get(settings) == "second"
+
+
+class _SpecStreamSession:
+    """Fake ClientSession that records get() and post() calls for SpecStream tests."""
+
+    def __init__(self, responses: list):
+        self.responses = responses
+        self.cursor = 0
+        self.trust_env = None
+        self.calls: list[dict] = []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return None
+
+    def _next(self, call):
+        self.calls.append(call)
+        resp = self.responses[self.cursor]
+        self.cursor = (self.cursor + 1) % len(self.responses)
+        return resp
+
+    def get(self, url, params, headers):
+        return self._next(
+            {"method": "GET", "url": url, "params": params, "headers": headers}
+        )
+
+    def post(self, url, json, headers):
+        return self._next(
+            {"method": "POST", "url": url, "json": json, "headers": headers}
+        )
+
+
+@pytest.fixture
+def specstream_session(monkeypatch):
+    """Install an isolated mocked HTTP session and key rotator for SpecStream tests."""
+    session = _SpecStreamSession([_FakeFirecrawlResponse()])
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+    monkeypatch.setattr(
+        tools,
+        "_SPECSTREAM_KEY_ROTATOR",
+        tools._KeyRotator("websearch_specstream_key", "SpecStream"),
+    )
+    monkeypatch.setitem(tools.sp.temporary_cache, "_ws_favicon", {})
+    return session
+
+
+@pytest.mark.asyncio
+async def test_specstream_search_request_mapping_and_local_trim(specstream_session):
+    specstream_session.responses = [
+        _FakeFirecrawlResponse(
+            json_data={
+                "data": {
+                    "kind": "answer",
+                    "answer": None,
+                    "rows": [],
+                    "sources": [
+                        {
+                            "url": "https://example.com/a",
+                            "title": "First",
+                            "site": "example.com",
+                            "snippet": "First snippet",
+                            "published": "2026-10-01",
+                            "cited": True,
+                        },
+                        {"url": "", "title": "No url", "snippet": "dropped"},
+                        {"url": "https://example.com/b", "title": None},
+                        {"url": "https://example.com/c", "title": "Third"},
+                    ],
+                }
+            }
+        )
+    ]
+    context = _context_with_provider_settings({"websearch_specstream_key": ["key"]})
+
+    result = await tools.SpecStreamWebSearchTool().call(
+        context, query="who wrote AstrBot", count=2
+    )
+
+    assert specstream_session.calls == [
+        {
+            "method": "GET",
+            "url": "https://api.specstream.ai/v1/web-search",
+            "params": {"q": "who wrote AstrBot"},
+            "headers": {"Authorization": "Bearer key"},
+        }
+    ]
+    assert specstream_session.trust_env is True
+    results = json.loads(result)["results"]
+    reference = results[0]["index"].split(".")[0]
+    assert results == [
+        {
+            "title": "First",
+            "url": "https://example.com/a",
+            "snippet": "First snippet",
+            "index": f"{reference}.1",
+        },
+        {
+            "title": "",
+            "url": "https://example.com/b",
+            "snippet": "",
+            "index": f"{reference}.2",
+        },
+    ]
+
+
+@pytest.mark.asyncio
+async def test_specstream_search_without_sources_reports_no_results(
+    specstream_session,
+):
+    specstream_session.responses = [
+        _FakeFirecrawlResponse(json_data={"data": {"kind": "answer", "sources": []}})
+    ]
+    context = _context_with_provider_settings({"websearch_specstream_key": ["key"]})
+
+    result = await tools.SpecStreamWebSearchTool().call(context, query="q")
+
+    assert result == "Error: SpecStream web search does not return any results."
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"query": None}, "Error: query must be a non-blank string."),
+        ({"query": "   "}, "Error: query must be a non-blank string."),
+        (
+            {"query": "q", "count": 0},
+            "Error: count must be an integer between 1 and 50.",
+        ),
+        (
+            {"query": "q", "count": 51},
+            "Error: count must be an integer between 1 and 50.",
+        ),
+        (
+            {"query": "q", "count": True},
+            "Error: count must be an integer between 1 and 50.",
+        ),
+    ],
+)
+async def test_specstream_search_rejects_invalid_parameters(
+    specstream_session, kwargs, message
+):
+    context = _context_with_provider_settings({"websearch_specstream_key": ["key"]})
+
+    result = await tools.SpecStreamWebSearchTool().call(context, **kwargs)
+
+    assert result == message
+    assert specstream_session.calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "tool_class", [tools.SpecStreamWebSearchTool, tools.SpecStreamExtractWebPageTool]
+)
+async def test_specstream_tools_require_api_key(specstream_session, tool_class):
+    context = _context_with_provider_settings({})
+
+    result = await tool_class().call(context, query="q", url="https://example.com")
+
+    assert result == "Error: SpecStream API key is not configured in AstrBot."
+    assert specstream_session.calls == []
+
+
+@pytest.mark.asyncio
+async def test_specstream_search_rotates_key_on_empty_balance(specstream_session):
+    specstream_session.responses = [
+        _FakeFirecrawlResponse(status=402, text_data="empty balance"),
+        _FakeFirecrawlResponse(
+            json_data={"data": {"sources": [{"url": "https://example.com"}]}}
+        ),
+    ]
+    context = _context_with_provider_settings(
+        {"websearch_specstream_key": ["first-key", "second-key"]}
+    )
+
+    result = await tools.SpecStreamWebSearchTool().call(context, query="q")
+
+    assert json.loads(result)["results"][0]["url"] == "https://example.com"
+    assert [call["headers"]["Authorization"] for call in specstream_session.calls] == [
+        "Bearer first-key",
+        "Bearer second-key",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_specstream_search_raises_on_non_retryable_status(specstream_session):
+    specstream_session.responses = [
+        _FakeFirecrawlResponse(status=503, text_data="unavailable")
+    ]
+    context = _context_with_provider_settings(
+        {"websearch_specstream_key": ["first-key", "second-key"]}
+    )
+
+    with pytest.raises(RuntimeError, match="unavailable, status: 503"):
+        await tools.SpecStreamWebSearchTool().call(context, query="q")
+
+    assert len(specstream_session.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_specstream_search_raises_when_all_keys_fail(specstream_session):
+    specstream_session.responses = [_FakeFirecrawlResponse(status=401, text_data="bad")]
+    context = _context_with_provider_settings(
+        {"websearch_specstream_key": ["first-key", "second-key"]}
+    )
+
+    with pytest.raises(RuntimeError, match="bad, status: 401"):
+        await tools.SpecStreamWebSearchTool().call(context, query="q")
+
+    assert len(specstream_session.calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_specstream_extract_returns_title_and_markdown(specstream_session):
+    specstream_session.responses = [
+        _FakeFirecrawlResponse(
+            json_data={
+                "data": {
+                    "results": [
+                        {
+                            "url": "https://example.com/page",
+                            "status": "ok",
+                            "title": "Example",
+                            "text": "# Example\n\nMarkdown body",
+                        }
+                    ]
+                }
+            }
+        )
+    ]
+    context = _context_with_provider_settings({"websearch_specstream_key": ["key"]})
+
+    result = await tools.SpecStreamExtractWebPageTool().call(
+        context, url="https://example.com/page"
+    )
+
+    assert specstream_session.calls == [
+        {
+            "method": "POST",
+            "url": "https://api.specstream.ai/v1/extract",
+            "json": {"urls": ["https://example.com/page"], "format": "markdown"},
+            "headers": {
+                "Authorization": "Bearer key",
+                "Content-Type": "application/json",
+            },
+        }
+    ]
+    assert result == (
+        "URL: https://example.com/page\nTitle: Example\nContent: # Example\n\n"
+        "Markdown body"
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("page_status", ["blocked", "empty"])
+async def test_specstream_extract_reports_page_failure(specstream_session, page_status):
+    specstream_session.responses = [
+        _FakeFirecrawlResponse(
+            json_data={
+                "data": {
+                    "results": [
+                        {
+                            "url": "https://example.com",
+                            "status": page_status,
+                            "text": "",
+                        }
+                    ]
+                }
+            }
+        )
+    ]
+    context = _context_with_provider_settings({"websearch_specstream_key": ["key"]})
+
+    result = await tools.SpecStreamExtractWebPageTool().call(
+        context, url="https://example.com"
+    )
+
+    assert result == (
+        f"Error: SpecStream extract does not return any content (status: {page_status})."
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "url",
+    [None, 1, "", "ftp://example.com", "https:///page", "https://[broken"],
+)
+async def test_specstream_extract_rejects_invalid_url(specstream_session, url):
+    context = _context_with_provider_settings({"websearch_specstream_key": ["key"]})
+
+    result = await tools.SpecStreamExtractWebPageTool().call(context, url=url)
+
+    assert result == "Error: url must be an HTTP or HTTPS URL with a host."
+    assert specstream_session.calls == []

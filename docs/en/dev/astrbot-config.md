@@ -65,6 +65,7 @@ The default AstrBot configuration is as follows:
         "websearch_bocha_key": [],
         "websearch_brave_key": [],
         "websearch_deepseek_key": [],
+        "websearch_specstream_key": [],
         "websearch_serpapi_key": [],
         "web_search_link": False,
         "display_reasoning_text": False,
@@ -294,7 +295,7 @@ Whether to enable AstrBot's built-in web search capability. Default is `false`. 
 
 #### `provider_settings.websearch_provider`
 
-Web search provider type. Default is `tavily`. Currently supports `serpapi`, `deepseek`, `tavily`, `bocha`, `baidu_ai_search`, `brave`, `firecrawl`, `exa`, and `anysearch`.
+Web search provider type. Default is `tavily`. Currently supports `serpapi`, `deepseek`, `tavily`, `bocha`, `baidu_ai_search`, `brave`, `firecrawl`, `exa`, `anysearch`, and `specstream`.
 
 - `serpapi`: Uses SerpApi Google Search, Google News, Google Images Light, Google Finance, and Google Scholar.
 - `deepseek`: Uses the DeepSeek Search API.
@@ -305,6 +306,7 @@ Web search provider type. Default is `tavily`. Currently supports `serpapi`, `de
 - `firecrawl`: Uses the Firecrawl Search API.
 - `exa`: Uses the Exa Search API.
 - `anysearch`: Uses the AnySearch API.
+- `specstream`: Uses the SpecStream Search and Extract APIs.
 
 #### `provider_settings.websearch_tavily_key`
 
@@ -325,6 +327,10 @@ API Key list for the Firecrawl search engine. Required when using `firecrawl` as
 #### `provider_settings.websearch_deepseek_key`
 
 API Key list for the DeepSeek search engine. Required when using `deepseek` as the web search provider. Can use the same API key as the chat model, but must be configured separately. Multiple keys under the same account share rate limits.
+
+#### `provider_settings.websearch_specstream_key`
+
+API Key list for SpecStream. Required when using `specstream` as the web search provider. Multiple keys rotate, with failover on missing-key and empty-balance errors (HTTP 401 and 402).
 
 #### `provider_settings.websearch_serpapi_key`
 

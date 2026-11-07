@@ -65,6 +65,7 @@ AstrBot 默认配置如下：
         "websearch_bocha_key": [],
         "websearch_brave_key": [],
         "websearch_deepseek_key": [],
+        "websearch_specstream_key": [],
         "websearch_serpapi_key": [],
         "web_search_link": False,
         "display_reasoning_text": False,
@@ -294,7 +295,7 @@ ID 白名单。填写后，将只处理所填写的 ID 发来的消息事件。�
 
 #### `provider_settings.websearch_provider`
 
-网页搜索提供商类型。默认为 `tavily`。目前支持 `serpapi`、`deepseek`、`tavily`、`bocha`、`baidu_ai_search`、`brave`、`firecrawl`、`exa`、`anysearch`。
+网页搜索提供商类型。默认为 `tavily`。目前支持 `serpapi`、`deepseek`、`tavily`、`bocha`、`baidu_ai_search`、`brave`、`firecrawl`、`exa`、`anysearch`、`specstream`。
 
 - `serpapi`：使用 SerpApi Google Search、Google News、Google Images Light、Google Finance 和 Google Scholar。
 - `deepseek`：使用 DeepSeek Search API。
@@ -305,6 +306,7 @@ ID 白名单。填写后，将只处理所填写的 ID 发来的消息事件。�
 - `firecrawl`：使用 Firecrawl Search API。
 - `exa`：使用 Exa Search API。
 - `anysearch`：使用 AnySearch API。
+- `specstream`：使用 SpecStream 搜索与网页提取 API。
 
 #### `provider_settings.websearch_tavily_key`
 
@@ -325,6 +327,10 @@ Firecrawl 搜索引擎的 API Key 列表。使用 `firecrawl` 作为网页搜索
 #### `provider_settings.websearch_deepseek_key`
 
 DeepSeek 搜索引擎的 API Key 列表。使用 `deepseek` 作为网页搜索提供商时需要填写。可使用与对话模型相同的 API Key，配置相互独立。同账号下的多个 Key 共享 QPS 限制。
+
+#### `provider_settings.websearch_specstream_key`
+
+SpecStream 的 API Key 列表。使用 `specstream` 作为网页搜索提供商时需要填写。多个 Key 轮询，遇到缺少 Key 或余额为空（HTTP 401 和 402）时自动切换。
 
 #### `provider_settings.websearch_serpapi_key`
 
