@@ -74,9 +74,14 @@ class TestDownloadImageSSLVerification:
         with patch("aiohttp.ClientSession", return_value=mock_session):
             # After the fix, this should raise the SSL error instead of downgrading
             with pytest.raises(
-                (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError)
+                (
+                    aiohttp.ClientConnectorSSLError,
+                    aiohttp.ClientConnectorCertificateError,
+                )
             ):
-                await download_image_by_url("https://invalid-cert.example.com/image.jpg")
+                await download_image_by_url(
+                    "https://invalid-cert.example.com/image.jpg"
+                )
 
     @pytest.mark.asyncio
     async def test_download_image_certificate_error_should_raise(self):
@@ -93,9 +98,14 @@ class TestDownloadImageSSLVerification:
 
         with patch("aiohttp.ClientSession", return_value=mock_session):
             with pytest.raises(
-                (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError)
+                (
+                    aiohttp.ClientConnectorSSLError,
+                    aiohttp.ClientConnectorCertificateError,
+                )
             ):
-                await download_image_by_url("https://expired-cert.example.com/image.jpg")
+                await download_image_by_url(
+                    "https://expired-cert.example.com/image.jpg"
+                )
 
     @pytest.mark.asyncio
     async def test_download_image_http_url_still_works(self):
@@ -134,7 +144,10 @@ class TestDownloadImageSSLVerification:
 
         with patch("aiohttp.ClientSession", return_value=mock_session):
             with pytest.raises(
-                (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError)
+                (
+                    aiohttp.ClientConnectorSSLError,
+                    aiohttp.ClientConnectorCertificateError,
+                )
             ):
                 await download_image_by_url(
                     "https://invalid-cert.example.com/api/image",
@@ -161,7 +174,10 @@ class TestDownloadImageSSLVerification:
         try:
             with patch("aiohttp.ClientSession", return_value=mock_session):
                 with pytest.raises(
-                    (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError)
+                    (
+                        aiohttp.ClientConnectorSSLError,
+                        aiohttp.ClientConnectorCertificateError,
+                    )
                 ):
                     await download_image_by_url(
                         "https://invalid-cert.example.com/image.jpg",
@@ -225,7 +241,10 @@ class TestDownloadFileSSLVerification:
         try:
             with patch("aiohttp.ClientSession", return_value=mock_session):
                 with pytest.raises(
-                    (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError)
+                    (
+                        aiohttp.ClientConnectorSSLError,
+                        aiohttp.ClientConnectorCertificateError,
+                    )
                 ):
                     await download_file(
                         "https://invalid-cert.example.com/file.zip",
@@ -254,7 +273,10 @@ class TestDownloadFileSSLVerification:
         try:
             with patch("aiohttp.ClientSession", return_value=mock_session):
                 with pytest.raises(
-                    (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError)
+                    (
+                        aiohttp.ClientConnectorSSLError,
+                        aiohttp.ClientConnectorCertificateError,
+                    )
                 ):
                     await download_file(
                         "https://expired-cert.example.com/file.zip",
@@ -332,7 +354,9 @@ class TestSSLContextSecurity:
         """
         mock_context = ssl.create_default_context()
 
-        with patch("ssl.create_default_context", return_value=mock_context) as mock_ssl_context:
+        with patch(
+            "ssl.create_default_context", return_value=mock_context
+        ) as mock_ssl_context:
             mock_response = AsyncMock()
             mock_response.read = AsyncMock(return_value=b"data")
             mock_response.__aenter__ = AsyncMock(return_value=mock_response)
@@ -382,10 +406,17 @@ class TestSSLContextSecurity:
 
             with patch("aiohttp.ClientSession", return_value=mock_session):
                 with pytest.raises(
-                    (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError)
+                    (
+                        aiohttp.ClientConnectorSSLError,
+                        aiohttp.ClientConnectorCertificateError,
+                    )
                 ):
-                    await download_image_by_url("https://invalid-cert.example.com/image.jpg")
+                    await download_image_by_url(
+                        "https://invalid-cert.example.com/image.jpg"
+                    )
 
             # After the fix, SSL context should only be created once (for the initial attempt)
             # There should be no second context creation with CERT_NONE
-            assert call_count == 1, "SSL context should only be created once, not for a fallback retry"
+            assert call_count == 1, (
+                "SSL context should only be created once, not for a fallback retry"
+            )
