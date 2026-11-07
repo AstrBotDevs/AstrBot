@@ -1035,6 +1035,40 @@ async def test_main_agent_response_hook_dispatches_llm_response_event(monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_main_agent_done_does_not_dispatch_response_hook_twice(monkeypatch):
+    event = MagicMock()
+    extras = {}
+    event.set_extra.side_effect = lambda key, value: extras.__setitem__(key, value)
+    event.get_extra.side_effect = lambda key=None, default=None: (
+        extras if key is None else extras.get(key, default)
+    )
+    run_context = ContextWrapper(context=MockAgentContext(event))
+    llm_response = LLMResponse(
+        role="assistant",
+        completion_text="response after tool calls were cleared",
+        tools_call_name=[],
+    )
+    call_event_hook = AsyncMock()
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_hooks.call_event_hook", call_event_hook
+    )
+    hooks = MainAgentHooks()
+
+    await hooks.on_agent_response(run_context, llm_response)
+    await hooks.on_agent_done(run_context, llm_response)
+
+    calls = call_event_hook.await_args_list
+    assert len(calls) == 2
+    assert calls[0].args == (event, EventType.OnLLMResponseEvent, llm_response)
+    assert calls[1].args == (
+        event,
+        EventType.OnAgentDoneEvent,
+        run_context,
+        llm_response,
+    )
+
+
+@pytest.mark.asyncio
 async def test_call_event_hook_reraises_cancelled_error(monkeypatch):
     from astrbot.core.pipeline.context_utils import call_event_hook
     from astrbot.core.star.star_handler import EventType

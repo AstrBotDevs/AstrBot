@@ -11,6 +11,8 @@ from astrbot.core.star.star_handler import EventType
 
 
 class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
+    _RESPONSE_HOOKED_KEY = "_astrbot_response_hooked_llm_response"
+
     async def on_agent_begin(
         self, run_context: ContextWrapper[AstrAgentContext]
     ) -> None:
@@ -28,13 +30,18 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
                 "_llm_reasoning_content", llm_response.reasoning_content
             )
 
+        event = run_context.context.event
+        response_hooked = event.get_extra(self._RESPONSE_HOOKED_KEY) is llm_response
+        if response_hooked:
+            event.set_extra(self._RESPONSE_HOOKED_KEY, None)
+        else:
+            await call_event_hook(
+                event,
+                EventType.OnLLMResponseEvent,
+                llm_response,
+            )
         await call_event_hook(
-            run_context.context.event,
-            EventType.OnLLMResponseEvent,
-            llm_response,
-        )
-        await call_event_hook(
-            run_context.context.event,
+            event,
             EventType.OnAgentDoneEvent,
             run_context,
             llm_response,
@@ -51,6 +58,7 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
             EventType.OnLLMResponseEvent,
             llm_response,
         )
+        run_context.context.event.set_extra(self._RESPONSE_HOOKED_KEY, llm_response)
 
     async def on_tool_start(
         self,
