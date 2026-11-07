@@ -155,3 +155,58 @@ def test_openai_schema_sorts_tools_by_name_without_mutating_toolset_order():
         "zebra",
     ]
     assert [tool.name for tool in toolset.tools] == ["zebra", "alpha", "middle"]
+
+
+def test_google_schema_keeps_object_node_with_required_any_of():
+    tool_module = load_tool_module()
+    FunctionTool = tool_module.FunctionTool
+    ToolSet = tool_module.ToolSet
+
+    tool = FunctionTool(
+        name="demo_reminder_create",
+        description="Create a reminder",
+        parameters={
+            "type": "object",
+            "properties": {
+                "schedule": {
+                    "type": "object",
+                    "properties": {"anchor": {"type": "string"}},
+                },
+                "message": {"type": "string"},
+                "memo_id": {"type": "string"},
+                "expected_memo_revision": {"type": "integer"},
+                "note": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+            },
+            "required": [],
+            "anyOf": [
+                {"required": ["schedule", "message"]},
+                {"required": ["memo_id", "expected_memo_revision"]},
+            ],
+        },
+    )
+
+    schema = ToolSet([tool]).google_schema()
+    parameters = schema["function_declarations"][0]["parameters"]
+
+    assert "anyOf" not in parameters
+    assert parameters["type"] == "object"
+    assert set(parameters["properties"]) == {
+        "schedule",
+        "message",
+        "memo_id",
+        "expected_memo_revision",
+        "note",
+    }
+    assert parameters["properties"]["schedule"]["properties"] == {
+        "anchor": {"type": "string"}
+    }
+    assert parameters["description"] == (
+        "Required fields: one of [schedule, message] or "
+        "[memo_id, expected_memo_revision]"
+    )
+    # Plain type unions on properties are still passed through as anyOf.
+    assert parameters["properties"]["note"] == {
+        "anyOf": [{"type": "string"}, {"type": "null"}]
+    }
+    assert "anyOf" in tool.parameters
+    genai_types.Tool(function_declarations=schema["function_declarations"])
