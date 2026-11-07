@@ -347,6 +347,36 @@ class EmbeddingProvider(AbstractProvider):
         """获取向量的维度"""
         ...
 
+    async def get_query_embedding(self, text: str) -> list[float]:
+        """Get the embedding for a retrieval query.
+
+        Defaults to get_embedding(). Providers with task-aware embedding APIs
+        (e.g. Gemini task_type) override this so that queries and indexed
+        documents are embedded with the appropriate task signal, which
+        improves retrieval discrimination.
+
+        Args:
+            text: The query text.
+
+        Returns:
+            The query embedding vector.
+        """
+        return await self.get_embedding(text)
+
+    async def get_document_embeddings(self, texts: list[str]) -> list[list[float]]:
+        """Get embeddings for documents to be indexed for retrieval.
+
+        Defaults to get_embeddings(). Providers with task-aware embedding
+        APIs override this to pair with get_query_embedding().
+
+        Args:
+            texts: The document texts to index.
+
+        Returns:
+            The document embedding vectors, in input order.
+        """
+        return await self.get_embeddings(texts)
+
     async def test(self) -> None:
         await self.get_embedding("astrbot")
 
@@ -382,7 +412,9 @@ class EmbeddingProvider(AbstractProvider):
             async with semaphore:
                 for attempt in range(max_retries):
                     try:
-                        batch_embeddings = await self.get_embeddings(batch_texts)
+                        batch_embeddings = await self.get_document_embeddings(
+                            batch_texts
+                        )
                         batch_results[batch_idx] = batch_embeddings
                         completed_count += len(batch_texts)
                         if progress_callback:
