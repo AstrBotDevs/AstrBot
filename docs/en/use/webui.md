@@ -2,6 +2,10 @@
 
 The AstrBot admin panel features plugin management, log viewing, visual configuration, statistics viewing, and more.
 
+The Decisions source supports multiple configured models. This screenshot uses a synthetic test source; its example model IDs do not establish remote endpoint compatibility.
+
+![Multiple decision models in one source](./images/decision-models-en.png)
+
 ## Navigation and Previous Entry Points
 
 These paths use the current default sidebar with a fixed menu order. Extension items still support collapsing, pinning, and grouping by plugin.
