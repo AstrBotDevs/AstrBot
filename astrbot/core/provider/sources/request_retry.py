@@ -2,6 +2,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from typing import TypeVar
 
+import httpx
 from tenacity import (
     AsyncRetrying,
     RetryCallState,
@@ -42,6 +43,16 @@ def _is_retryable_provider_request_error(
     *,
     retry_rate_limits: bool,
 ) -> bool:
+    # SDKs can wrap invalid URLs or request headers in APIConnectionError.
+    # Retrying cannot repair these local HTTP configuration failures.
+    cause: BaseException | None = error
+    seen: set[int] = set()
+    while cause is not None and id(cause) not in seen:
+        if isinstance(cause, (httpx.UnsupportedProtocol, httpx.LocalProtocolError)):
+            return False
+        seen.add(id(cause))
+        cause = cause.__cause__
+
     if is_connection_error(error):
         return True
 
