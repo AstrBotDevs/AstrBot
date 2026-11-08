@@ -27,6 +27,9 @@ from astrbot.core.star.register import (
 from astrbot.core.star.register import register_on_llm_request as on_llm_request
 from astrbot.core.star.register import register_on_llm_response as on_llm_response
 from astrbot.core.star.register import (
+    register_on_llm_response_intermediate as on_llm_response_intermediate,
+)
+from astrbot.core.star.register import (
     register_on_llm_tool_respond as on_llm_tool_respond,
 )
 from astrbot.core.star.register import register_on_platform_loaded as on_platform_loaded
@@ -65,6 +68,7 @@ __all__ = [
     "on_decorating_result",
     "on_llm_request",
     "on_llm_response",
+    "on_llm_response_intermediate",
     "on_plugin_error",
     "on_plugin_loaded",
     "on_plugin_unloaded",
