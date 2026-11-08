@@ -114,6 +114,8 @@ In **Providers → Decision**, add **OpenAI Decisions**, save the source, then f
 
 OpenAI currently documents `gpt-6-luna` for Decisions. This is an example, not a fixed allowlist for gateways. The per-operation network timeout defaults to 30 seconds, the total request deadline to 60 seconds, and maximum concurrency to 4. `custom_extra_body` supports endpoint options such as prompt-cache controls; it cannot replace `model`, `input`, `questions`, or `stream`. See the [OpenAI Decisions guide](https://developers.openai.com/api/docs/guides/decisions) for the native content and cache format.
 
+Use HTTPS for remote endpoints: API keys, prompts, images and tool evidence are sent to the configured source. Plain HTTP is supported for explicitly configured local or trusted-network compatible services, but does not encrypt that traffic. The adapter does not follow redirects or automatically downgrade HTTPS to HTTP.
+
 Use explicit wrappers when passing native messages or question-level image parts:
 
 ```py

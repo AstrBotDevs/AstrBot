@@ -113,6 +113,8 @@ should_reply = await self.context.decision.yes_no(
 
 OpenAI 当前文档中的模型为 `gpt-6-luna`，该名称用于举例，不作为兼容网关的固定白名单。单次网络操作超时默认为 30 秒，请求总时限为 60 秒，最大并发数为 4。`custom_extra_body` 可以配置原生接口选项，例如提示缓存控制；不能替换 `model`、`input`、`questions` 和 `stream`。原生内容及缓存格式参见 [OpenAI Decisions 指南](https://developers.openai.com/api/docs/guides/decisions)。
 
+远程接口应使用 HTTPS；密钥、提示、图片和工具证据都会发送到配置的来源。HTTP 用于显式配置的本地或可信网络兼容服务，但不会加密传输内容。适配器不会跟随重定向，也不会自动将 HTTPS 降级为 HTTP。
+
 原生消息和问题级图片使用显式包装：
 
 ```py
