@@ -2111,7 +2111,7 @@ CONFIG_METADATA_2 = {
                         "tei_rerank_return_text": False,
                     },
                     "OpenAI Decisions": {
-                        "id": "openai_decision",
+                        "id": "openai-decisions",
                         "type": "openai_decision",
                         "provider": "openai",
                         "provider_type": "decision",

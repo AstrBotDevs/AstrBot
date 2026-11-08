@@ -2,11 +2,11 @@
 
 「模型提供商」→「判断」中的 **OpenAI Decisions** 使用来源与模型工作区：保存来源后获取模型目录或手动添加模型 ID，再测试配置的实例。模型出现在目录中不代表支持 `/decisions`。已有 **System One** 条目保留单模型表单。插件调用和兼容性说明参见[结构化判断](../dev/star/guides/ai.md#结构化判断)。本次扩展沿用已有导航和模型工作区，没有移动导航入口。
 
-下面展示判断模型来源的目录获取与多模型配置。截图使用合成测试来源，示例模型名称不代表已验证的远程接口能力。
+下面展示隔离测试界面的真实模型目录，以及添加 `gpt-6-luna` 后的测试通过结果。新建来源默认命名为 `openai-decisions`，与 Responses 使用相同的 OpenAI 图标；已有来源 ID 不变。模型目录不代表其中所有模型均支持 Decisions。截图中的延迟包含测试桥接开销，不作为性能基准。
 
 ![获取判断模型目录](./images/decision-model-directory-zh.png)
 
-![同一来源下的多个判断模型](./images/decision-models-zh.png)
+![添加判断模型并测试通过](./images/decision-models-zh.png)
 
 AstrBot 管理面板具有管理插件、查看日志、可视化配置、查看统计信息等功能。
 

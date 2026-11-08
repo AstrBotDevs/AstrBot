@@ -2,9 +2,9 @@
 
 The AstrBot admin panel features plugin management, log viewing, visual configuration, statistics viewing, and more.
 
-The Decisions source supports multiple configured models. This screenshot uses a synthetic test source; its example model IDs do not establish remote endpoint compatibility.
+The screenshot shows `gpt-6-luna` added and successfully tested against the real API from an isolated test UI. New sources default to `openai-decisions` and use the same OpenAI icon as Responses; existing source IDs remain unchanged. A model directory does not establish Decisions capability. The displayed latency includes test-bridge overhead and is not a performance benchmark.
 
-![Multiple decision models in one source](./images/decision-models-en.png)
+![Decision model added and successfully tested](./images/decision-models-en.png)
 
 ## Navigation and Previous Entry Points
 
