@@ -11,8 +11,8 @@ from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from astrbot.core import logger, sp
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
-from astrbot.core.astr_agent_context import AstrAgentContext
-from astrbot.core.tools.registry import builtin_tool
+from astrbot.core.astr_agent_runtime.context import AstrAgentContext
+from astrbot.core.astr_agent_runtime.tools.registry import builtin_tool
 
 WEB_SEARCH_TOOL_NAMES = [
     "web_search_baidu",

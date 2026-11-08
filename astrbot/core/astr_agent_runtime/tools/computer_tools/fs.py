@@ -42,10 +42,14 @@ from astrbot.api import FunctionTool, logger
 from astrbot.api.event import MessageChain
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import ToolExecResult
-from astrbot.core.astr_agent_context import AstrAgentContext
-from astrbot.core.computer.computer_client import get_booter
-from astrbot.core.computer.file_read_utils import read_file_tool_result
-from astrbot.core.computer.local_file_security import open_file_in_allowed_roots
+from astrbot.core.astr_agent_runtime.computer.computer_client import get_booter
+from astrbot.core.astr_agent_runtime.computer.file_read_utils import (
+    read_file_tool_result,
+)
+from astrbot.core.astr_agent_runtime.computer.local_file_security import (
+    open_file_in_allowed_roots,
+)
+from astrbot.core.astr_agent_runtime.context import AstrAgentContext
 from astrbot.core.message.components import File, Image
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_builtin_plugin_path,

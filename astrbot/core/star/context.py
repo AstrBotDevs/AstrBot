@@ -271,12 +271,12 @@ class Context:
             Exception: For other errors during LLM generation
         """
         # Import here to avoid circular imports
-        from astrbot.core.astr_agent_context import (
+        from astrbot.core.astr_agent_runtime.context import (
             AgentContextWrapper,
             AstrAgentContext,
         )
-        from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
-        from astrbot.core.tools.computer_tools.util import (
+        from astrbot.core.astr_agent_runtime.tool_executor import FunctionToolExecutor
+        from astrbot.core.astr_agent_runtime.tools.computer_tools.util import (
             LOCAL_NETWORK_POLICY_NOTICE,
             get_local_permission_policy,
             is_local_runtime,

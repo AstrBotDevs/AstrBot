@@ -17,19 +17,9 @@ from astrbot.core.agent.message import Message
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
-from astrbot.core.astr_agent_context import AstrAgentContext
-from astrbot.core.astr_agent_wakeup import wake_main_agent
-from astrbot.core.astr_main_agent_resources import (
-    BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT,
-)
-from astrbot.core.message.components import Image
-from astrbot.core.message.message_event_result import (
-    CommandResult,
-    MessageChain,
-    MessageEventResult,
-)
-from astrbot.core.provider.register import llm_tools
-from astrbot.core.tools.computer_tools import (
+from astrbot.core.agent_wakeup import wake_main_agent
+from astrbot.core.astr_agent_runtime.context import AstrAgentContext
+from astrbot.core.astr_agent_runtime.tools.computer_tools import (
     CuaKeyboardTypeTool,
     CuaMouseClickTool,
     CuaScreenshotTool,
@@ -45,6 +35,16 @@ from astrbot.core.tools.computer_tools import (
     PythonTool,
     ShellSessionTool,
 )
+from astrbot.core.astr_main_agent_resources import (
+    BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT,
+)
+from astrbot.core.message.components import Image
+from astrbot.core.message.message_event_result import (
+    CommandResult,
+    MessageChain,
+    MessageEventResult,
+)
+from astrbot.core.provider.register import llm_tools
 from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.async_generator import iterate_in_task

@@ -5,7 +5,7 @@ from mcp.types import CallToolResult
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool
-from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.core.astr_agent_runtime.context import AstrAgentContext
 from astrbot.core.pipeline.context_utils import call_event_hook
 from astrbot.core.star.star_handler import EventType
 

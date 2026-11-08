@@ -13,12 +13,19 @@ from astrbot.core.agent.message import (
 )
 from astrbot.core.agent.response import AgentStats
 from astrbot.core.agent.runners.base import AgentState
-from astrbot.core.astr_main_agent import (
+from astrbot.core.astr_agent_runtime.main_agent import (
     MainAgentBuildConfig,
     MainAgentBuildResult,
     build_main_agent,
 )
-from astrbot.core.astr_main_agent.request import matches_provider_wake_prefix
+from astrbot.core.astr_agent_runtime.main_agent.request import (
+    matches_provider_wake_prefix,
+)
+from astrbot.core.astr_agent_runtime.runner import (
+    AgentRunner,
+    run_agent,
+    run_live_agent,
+)
 from astrbot.core.astr_main_agent_resources import LLM_ERROR_MESSAGE_EXTRA_KEY
 from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.message.message_event_result import (
@@ -42,7 +49,6 @@ from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.session_lock import session_lock_manager
 
-from .....astr_agent_run_util import AgentRunner, run_agent, run_live_agent
 from ....context import PipelineContext, call_event_hook
 from ...follow_up import (
     FollowUpCapture,

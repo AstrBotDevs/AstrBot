@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from astrbot.core.agent.response import AgentResponse
-from astrbot.core.astr_agent_run_util import _simulated_stream_tts, run_agent
+from astrbot.core.astr_agent_runtime.runner import _simulated_stream_tts, run_agent
 from astrbot.core.message.message_event_result import MessageChain
 
 

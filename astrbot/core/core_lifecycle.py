@@ -20,8 +20,10 @@ from pathlib import Path
 
 from astrbot.api import logger, sp
 from astrbot.core import LogBroker, LogManager
+from astrbot.core.astr_agent_runtime.computer.computer_client import (
+    shutdown_local_booter,
+)
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
-from astrbot.core.computer.computer_client import shutdown_local_booter
 from astrbot.core.config.default import VERSION
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.cron import CronJobManager
@@ -198,7 +200,7 @@ class AstrBotCoreLifecycle:
             for config in self.astrbot_config_mgr.confs.values()
         ):
             try:
-                from astrbot.core.computer.process_sandbox.windows_setup import (
+                from astrbot.core.astr_agent_runtime.computer.process_sandbox.windows_setup import (
                     initialize_windows_sandbox,
                 )
 

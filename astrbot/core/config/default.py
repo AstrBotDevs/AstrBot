@@ -3,7 +3,9 @@
 import os
 
 from astrbot import __version__
-from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
+from astrbot.core.astr_agent_runtime.computer.booters.cua_defaults import (
+    CUA_DEFAULT_CONFIG,
+)
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from .agent_runner import get_agent_runner_config_default

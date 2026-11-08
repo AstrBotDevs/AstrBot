@@ -11,8 +11,8 @@ from typing import Any, get_args
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from astrbot.core import file_token_service, logger
-from astrbot.core.computer import computer_client
-from astrbot.core.computer.booters.local import LocalShellComponent
+from astrbot.core.astr_agent_runtime.computer import computer_client
+from astrbot.core.astr_agent_runtime.computer.booters.local import LocalShellComponent
 from astrbot.core.config.agent_runner import normalize_agent_runner
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import (
@@ -490,7 +490,9 @@ async def _validate_neo_connectivity(post_config: dict) -> str | None:
 
     access_token = sandbox.get("shipyard_neo_access_token", "")
     if not access_token:
-        from astrbot.core.computer.computer_client import _discover_bay_credentials
+        from astrbot.core.astr_agent_runtime.computer.computer_client import (
+            _discover_bay_credentials,
+        )
 
         access_token = _discover_bay_credentials(endpoint)
 

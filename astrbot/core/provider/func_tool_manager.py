@@ -18,7 +18,7 @@ from astrbot import logger
 from astrbot.core import sp
 from astrbot.core.agent.mcp_client import MCPClient, MCPTool
 from astrbot.core.agent.tool import FunctionTool, ToolSet
-from astrbot.core.tools.registry import (
+from astrbot.core.astr_agent_runtime.tools.registry import (
     ensure_builtin_tools_loaded,
     get_builtin_tool_class,
     get_builtin_tool_name,

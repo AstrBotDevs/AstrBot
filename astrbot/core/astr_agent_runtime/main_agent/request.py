@@ -10,6 +10,7 @@ import zoneinfo
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from astrbot.core import agent_media as media
 from astrbot.core import logger
 from astrbot.core.agent.message import TextPart
 from astrbot.core.astr_main_agent_resources import LLM_ERROR_MESSAGE_EXTRA_KEY
@@ -33,7 +34,7 @@ from astrbot.core.utils.quoted_message_parser import (
 )
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
-from . import media, providers
+from . import providers
 from .config import MainAgentBuildConfig
 
 WEEKDAY_NAMES = (

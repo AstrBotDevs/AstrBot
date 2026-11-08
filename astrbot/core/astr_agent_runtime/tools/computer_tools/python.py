@@ -6,9 +6,12 @@ import mcp
 from astrbot.api import FunctionTool
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import ToolExecResult
-from astrbot.core.astr_agent_context import AstrAgentContext, AstrMessageEvent
-from astrbot.core.computer.booters.local import LocalPythonComponent
-from astrbot.core.computer.computer_client import get_booter, get_local_booter
+from astrbot.core.astr_agent_runtime.computer.booters.local import LocalPythonComponent
+from astrbot.core.astr_agent_runtime.computer.computer_client import (
+    get_booter,
+    get_local_booter,
+)
+from astrbot.core.astr_agent_runtime.context import AstrAgentContext, AstrMessageEvent
 from astrbot.core.message.message_event_result import MessageChain
 
 from ..registry import builtin_tool
