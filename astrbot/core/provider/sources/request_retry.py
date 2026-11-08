@@ -15,6 +15,17 @@ from astrbot import logger
 from astrbot.core.utils.config_number import coerce_int_config
 from astrbot.core.utils.network_utils import is_connection_error
 
+_LOCAL_HTTP_PROTOCOL_ERRORS = (httpx.UnsupportedProtocol, httpx.LocalProtocolError)
+try:
+    import httpx2
+except ImportError:
+    pass
+else:
+    _LOCAL_HTTP_PROTOCOL_ERRORS += (
+        httpx2.UnsupportedProtocol,
+        httpx2.LocalProtocolError,
+    )
+
 T = TypeVar("T")
 
 REQUEST_RETRY_ATTEMPTS = 5  # default value
@@ -48,7 +59,7 @@ def _is_retryable_provider_request_error(
     cause: BaseException | None = error
     seen: set[int] = set()
     while cause is not None and id(cause) not in seen:
-        if isinstance(cause, (httpx.UnsupportedProtocol, httpx.LocalProtocolError)):
+        if isinstance(cause, _LOCAL_HTTP_PROTOCOL_ERRORS):
             return False
         seen.add(id(cause))
         cause = cause.__cause__
