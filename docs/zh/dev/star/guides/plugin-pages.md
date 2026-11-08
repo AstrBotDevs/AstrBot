@@ -641,6 +641,19 @@ body {
 
 通过 `bridge.onContext(handler)` 接收初始配色，以及主题切换、颜色修改和重置后的更新。服务端预注入的初始上下文和旧版 AstrBot 可能没有该字段；缺失时使用 View 的默认配色，不要仅依赖 `ready()` 的首次返回值。
 
+```js
+const bridge = window.AstrBotPluginView;
+
+await bridge.ready();
+const off = bridge.onContext((context) => {
+  const primary = context.themeColors?.primary ?? "#3c96ca";
+  const secondary = context.themeColors?.secondary ?? "#2f86bd";
+  // Apply the colors to your View.
+});
+
+// Call off() when the View is disposed.
+```
+
 ## 静态资源路径
 
 正常使用相对路径即可：

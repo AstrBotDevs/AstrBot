@@ -641,6 +641,19 @@ The server injects `data-theme` into returned HTML to reduce initial flashing. I
 
 Use `bridge.onContext(handler)` to receive the initial palette and updates after theme switches, color edits, or resets. Server-injected initial contexts and older AstrBot versions may omit this field; fall back to the View's default colors rather than relying only on the first `ready()` result.
 
+```js
+const bridge = window.AstrBotPluginView;
+
+await bridge.ready();
+const off = bridge.onContext((context) => {
+  const primary = context.themeColors?.primary ?? "#3c96ca";
+  const secondary = context.themeColors?.secondary ?? "#2f86bd";
+  // Apply the colors to your View.
+});
+
+// Call off() when the View is disposed.
+```
+
 ## Static Asset Paths
 
 Use normal relative paths:
