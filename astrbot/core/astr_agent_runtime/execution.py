@@ -83,7 +83,7 @@ async def create_native_runner(
             context=agent_context, tool_call_timeout=config.tool_call_timeout
         ),
         tool_executor=FunctionToolExecutor(),
-        agent_hooks=MainAgentHooks(),
+        agent_hooks=MainAgentHooks(request),
         streaming=config.streaming_response,
         max_context_tokens=max_context_tokens,
         llm_compress_instruction=config.llm_compress_instruction,

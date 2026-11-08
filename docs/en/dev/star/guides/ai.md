@@ -406,7 +406,7 @@ Submission returns after binding to a runtime turn, without waiting for model ex
 
 The returned `AgentRun` exposes turn identity, output, cancellation, steering, and follow-up. Its `session` property gives a read-only status snapshot.
 
-Built-in chat profiles use the native runtime. Existing Dify, Coze, and other third-party profile types keep their current execution path.
+Core selects a registered implementation using the profile's `agent.runtime`. After `ctx.agent.register_runtime(name, runtime)`, an implementation can serve main turns or be called as a subagent by the built-in runtime. Unregistered names fail explicitly; existing Dify, Coze and other legacy paths retain their execution flow.
 
 `/stop` calls `turn.request_stop()` for submitted turns in the matching UMO. For a running turn, `AgentSession.request_stop_turn(turn)` returns `True` if the runtime accepts the request and will settle the turn, or `False` to fall back to `cancel_turn()` and local task cancellation. Queued turns are cancelled directly. `request_stop()` returns immediately, and `await turn.result()` waits for cleanup.
 

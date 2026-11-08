@@ -34,7 +34,7 @@ from astrbot.core.astr_agent_runtime.main_agent import (
 )
 from astrbot.core.astr_agent_runtime.main_agent import providers as providers_build
 from astrbot.core.astr_agent_runtime.main_agent import request as request_build
-from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
+from astrbot.core.astr_agent_runtime.tools.subagent import SUBAGENT_TOOL_NAMES
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.message.components import Image, Plain, Reply
 from astrbot.core.pipeline import context_utils
@@ -112,7 +112,6 @@ def harness(tmp_path, monkeypatch):
         }
     )
     context = MagicMock(spec=builder_build.Context)
-    context.subagent_orchestrator = None
     context.persona_manager = MagicMock()
     context.conversation_manager = MagicMock()
     context.get_config.return_value = config
@@ -159,7 +158,9 @@ def harness(tmp_path, monkeypatch):
     provider.text_chat_stream = stream
     context.get_using_provider_async = AsyncMock(return_value=provider)
     context.get_provider_by_id.return_value = provider
-    runtime = AstrAgentRuntime(context)
+    runtime = AstrAgentRuntime(
+        context, agent_configs=MagicMock(), subagents=MagicMock()
+    )
     ctx = SimpleNamespace(
         astrbot_config=config,
         plugin_manager=SimpleNamespace(context=context),
@@ -461,8 +462,8 @@ async def test_profile_reload_and_concurrent_requests(harness, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_subagent_hot_reload_reuses_initialized_stage(harness):
-    """Apply live routing and deduplication changes without reinitializing the stage.
+async def test_subagent_config_does_not_remove_main_tools(harness):
+    """Keep expert tool selection independent of main-agent tool composition.
 
     Args:
         harness: Pipeline services and captured main-agent runs.
@@ -475,24 +476,18 @@ async def test_subagent_hot_reload_reuses_initialized_stage(harness):
     tool_mgr.func_list = tools
     tool_mgr.get_full_tool_set.side_effect = lambda: ToolSet(tools.copy())
     harness.context.persona_manager.get_persona_v3_by_id.return_value = None
-    orchestrator = SubAgentOrchestrator(tool_mgr, harness.context.persona_manager)
-    harness.context.subagent_orchestrator = orchestrator
-    harness.config["provider_settings"]["proactive_capability"]["add_cron_tools"] = False
+    harness.config["provider_settings"]["proactive_capability"]["add_cron_tools"] = (
+        False
+    )
     stage = None
     previous_router = None
 
-    for enabled, dedupe, assigned, router, expected in [
-        (False, True, "tool_a", "Router initial", ["tool_a", "tool_b"]),
-        (True, True, "tool_a", "Router enabled", ["tool_b", "transfer_to_worker"]),
-        (True, True, "tool_b", "Router reassigned", ["tool_a", "transfer_to_worker"]),
-        (
-            True,
-            False,
-            "tool_b",
-            "Router shared",
-            ["tool_a", "tool_b", "transfer_to_worker"],
-        ),
-        (False, False, "tool_b", "Router disabled", ["tool_a", "tool_b"]),
+    for enabled, dedupe, assigned, router in [
+        (False, True, "tool_a", "Router initial"),
+        (True, True, "tool_a", "Router enabled"),
+        (True, True, "tool_b", "Router reassigned"),
+        (True, False, "tool_b", "Router shared"),
+        (False, False, "tool_b", "Router disabled"),
     ]:
         config = {
             "main_enable": enabled,
@@ -500,15 +495,19 @@ async def test_subagent_hot_reload_reuses_initialized_stage(harness):
             "router_system_prompt": router,
             "agents": [{"name": "worker", "tools": [assigned]}],
         }
-        # The dashboard replaces the global policy and reloads only the orchestrator.
-        harness.config["subagent_orchestrator"] = config
-        await orchestrator.reload_from_config(config)
+        harness.config["agent"]["config"]["subagents"] = {
+            "enabled": enabled,
+            "config_ids": [],
+        }
         event = make_event()
         event.platform_meta.support_proactive_message = False
         stage = await process_event(harness, event, stage=stage)
         req = harness.captured[-1].req
-        assert req.func_tool.names() == expected
-        assert (router in req.system_prompt) is enabled
+        assert set(req.func_tool.names()) == {"tool_a", "tool_b"} | (
+            SUBAGENT_TOOL_NAMES if enabled else set()
+        )
+        assert ("<agent_configs>" in req.system_prompt) == enabled
+        assert router not in req.system_prompt
         if previous_router:
             assert previous_router not in req.system_prompt
         previous_router = router
@@ -517,10 +516,10 @@ async def test_subagent_hot_reload_reuses_initialized_stage(harness):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("global_enabled", [False, True])
 @pytest.mark.parametrize("session_enabled", [False, True])
-async def test_subagent_uses_global_policy_for_session_profile(
+async def test_subagents_use_session_profile_without_global_override(
     harness, global_enabled, session_enabled
 ):
-    """Keep routing policy in the same configuration scope as actual handoffs.
+    """Use the session delegation settings alongside its provider profile.
 
     Args:
         harness: Pipeline services and captured main-agent runs.
@@ -535,31 +534,28 @@ async def test_subagent_uses_global_policy_for_session_profile(
     tool_mgr.func_list = tools
     tool_mgr.get_full_tool_set.side_effect = lambda: ToolSet(tools.copy())
     harness.context.persona_manager.get_persona_v3_by_id.return_value = None
-    orchestrator = SubAgentOrchestrator(tool_mgr, harness.context.persona_manager)
-    harness.context.subagent_orchestrator = orchestrator
-    harness.config["provider_settings"]["proactive_capability"]["add_cron_tools"] = False
-    harness.config["subagent_orchestrator"] = {
-        "main_enable": global_enabled,
-        "remove_main_duplicate_tools": True,
-        "router_system_prompt": "Global router",
-        "agents": [{"name": "global_worker", "tools": ["global_tool"]}],
+    harness.config["provider_settings"]["proactive_capability"]["add_cron_tools"] = (
+        False
+    )
+    harness.config["agent"]["config"]["subagents"] = {
+        "enabled": global_enabled,
+        "config_ids": [],
     }
-    await orchestrator.reload_from_config(harness.config["subagent_orchestrator"])
     session_config = copy.deepcopy(harness.config)
     session_config["provider_settings"]["prompt_prefix"] = "Session: "
-    session_config["subagent_orchestrator"] = {
-        "main_enable": session_enabled,
-        "remove_main_duplicate_tools": True,
-        "router_system_prompt": "Session router",
-        "agents": [{"name": "session_worker", "tools": ["session_tool"]}],
+    session_config["agent"]["config"]["subagents"] = {
+        "enabled": session_enabled,
+        "config_ids": [],
     }
-    harness.context.get_config.side_effect = (
-        lambda umo=None: harness.config if umo is None else session_config
+    harness.context.get_config.side_effect = lambda umo=None: (
+        harness.config if umo is None else session_config
     )
     stage = ProcessStage()
     await stage.initialize(
         SimpleNamespace(
-            astrbot_config=session_config, plugin_manager=harness.ctx.plugin_manager, agent_runtimes=harness.ctx.agent_runtimes
+            astrbot_config=session_config,
+            plugin_manager=harness.ctx.plugin_manager,
+            agent_runtimes=harness.ctx.agent_runtimes,
         )
     )
 
@@ -568,13 +564,12 @@ async def test_subagent_uses_global_policy_for_session_profile(
     await process_event(harness, event, stage=stage)
 
     req = harness.captured[-1].req
-    expected = (
-        ["session_tool", "transfer_to_global_worker"]
-        if global_enabled
-        else ["global_tool", "session_tool"]
+    assert set(req.func_tool.names()) == {"global_tool", "session_tool"} | (
+        SUBAGENT_TOOL_NAMES if session_enabled else set()
     )
-    assert req.func_tool.names() == expected
-    assert ("Global router" in req.system_prompt) is global_enabled
+    assert ("<agent_configs>" in req.system_prompt) == session_enabled
+    assert "session_worker" not in req.system_prompt
+    assert "Global router" not in req.system_prompt
     assert "Session router" not in req.system_prompt
     assert req.prompt == "Session: hello"
 
@@ -1203,7 +1198,7 @@ async def test_third_party_route_retains_original_images(
         ThirdPartyAgentSubStage,
     )
 
-    harness.config["agent_runner"] = {"runner_type": "dify", "config": {}}
+    harness.config["agent"] = {"runtime": "dify", "config": {}}
     source = source_image(tmp_path)
     seen = []
 

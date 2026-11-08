@@ -180,6 +180,8 @@ class TestConcurrency:
         )
         runtime = AstrAgentRuntime(
             SimpleNamespace(get_config=lambda **_: config),
+            agent_configs=MagicMock(),
+            subagents=MagicMock(),
         )
         session = MainAgentSession(runtime, "conversation", session_id)
         monkeypatch.setattr(native_session, "session_lock_manager", manager)

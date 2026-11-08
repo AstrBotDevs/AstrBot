@@ -46,7 +46,6 @@ from astrbot.core.star.filter.platform_adapter_type import (
     ADAPTER_NAME_2_TYPE,
     PlatformAdapterType,
 )
-from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
 from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
 
 from ..exceptions import ProviderNotFoundError
@@ -157,8 +156,6 @@ class Context:
         astrbot_config_mgr: AstrBotConfigManager,
         knowledge_base_manager: KnowledgeBaseManager,
         cron_manager: CronJobManager,
-        subagent_orchestrator: SubAgentOrchestrator | None = None,
-        *,
         agent_runtimes: dict[str, AgentRuntime] | None = None,
     ) -> None:
         self._event_queue = event_queue
@@ -183,7 +180,6 @@ class Context:
         """知识库管理器"""
         self.cron_manager = cron_manager
         """Cron job manager, initialized by core lifecycle."""
-        self.subagent_orchestrator = subagent_orchestrator
         self.decision = DecisionService(provider_manager)
         """Decision service backed by the configured decision provider."""
         self.agent = AgentService(

@@ -300,11 +300,11 @@ class TestMainAgentBuildConfig:
         """Keep build settings stable when the source session config changes."""
         source = {
             "provider_settings": {"sandbox": {"booter": "test"}},
-            "agent_runner": {"config": {"model": {"fallback_provider_ids": ["backup"]}}},
+            "agent": {"config": {"model": {"fallback_provider_ids": ["backup"]}}},
         }
         config = ama.MainAgentBuildConfig.from_config(source)
         source["provider_settings"]["sandbox"]["booter"] = "changed"
-        source["agent_runner"]["config"]["model"]["fallback_provider_ids"].clear()
+        source["agent"]["config"]["model"]["fallback_provider_ids"].clear()
 
         assert config.sandbox_cfg == {"booter": "test"}
         assert config.provider_settings["sandbox"] == {"booter": "test"}
@@ -1195,8 +1195,8 @@ class TestEnsurePersonaAndSkills:
         from astrbot.core.db.po import Persona
 
         conf = {
-            "agent_runner": {
-                "runner_type": "local",
+            "agent": {
+                "runtime": "astrbot",
                 "config": {"persona": {"persona_id": "default"}},
             },
             "provider_settings": {},
@@ -3540,9 +3540,6 @@ async def test_feature_composition_preserves_tool_scope_and_instruction_order(
 ):
     """Compose real features to protect their filtering scopes and prompt order."""
 
-    from astrbot.core.agent.agent import Agent
-    from astrbot.core.agent.handoff import HandoffTool
-
     registered = [
         FunctionTool(name=name, description=name, parameters={"type": "object"})
         for name in ("kept", "delegated", "disabled_plugin")
@@ -3563,9 +3560,6 @@ async def test_feature_composition_preserves_tool_scope_and_instruction_order(
         selected,
         None,
         False,
-    )
-    mock_context.subagent_orchestrator = SimpleNamespace(
-        handoffs=[HandoffTool(Agent(name="worker"))]
     )
     mock_event.plugins_name = []
     mock_event.platform_meta.support_proactive_message = False
@@ -3589,7 +3583,7 @@ async def test_feature_composition_preserves_tool_scope_and_instruction_order(
     config = ama.MainAgentBuildConfig.from_config(
         {
             "kb_agentic_mode": agentic_kb,
-            "agent_runner": {"config": {"misc": {"tool_schema_mode": tool_schema_mode}}},
+            "agent": {"config": {"misc": {"tool_schema_mode": tool_schema_mode}}},
             "provider_settings": {
                 "computer_use_runtime": runtime,
                 "sandbox": {"booter": booter},
@@ -3663,8 +3657,9 @@ async def test_feature_composition_preserves_tool_scope_and_instruction_order(
         )
     assert result is not None
     names = req.func_tool.names()
-    assert names[:3] == ["caller", "kept", "transfer_to_worker"]
-    assert not {"delegated", "disabled_plugin", "send_message_to_user"}.intersection(names)
+    assert names[:4] == ["caller", "send_message_to_user", "kept", "delegated"]
+    assert not {"disabled_plugin", "transfer_to_worker"}.intersection(names)
+    assert "Router marker" not in req.system_prompt
     assert {
         "web_search_tavily",
         "astrbot_execute_shell",

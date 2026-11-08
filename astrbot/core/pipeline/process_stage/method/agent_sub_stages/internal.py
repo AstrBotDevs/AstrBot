@@ -74,14 +74,11 @@ class InternalAgentSubStage(Stage):
         is_wakeup = isinstance(event, AgentWakeupEvent)
         target = event.agent_session if isinstance(event, AgentWakeupEvent) else None
         try:
-            agent_config = self.ctx.astrbot_config.get("agent_runner", {})
-            runner_type = agent_config.get("runner_type", "local")
+            agent_config = self.ctx.astrbot_config.get("agent", {})
             runtime_name = (
                 target.runtime
                 if target is not None
-                else "astrbot"
-                if runner_type == "local"
-                else runner_type
+                else agent_config.get("runtime", "astrbot")
             )
             runtime = self.ctx.agent_runtimes.get(runtime_name)
             if runtime is None:

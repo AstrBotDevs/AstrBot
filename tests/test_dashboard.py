@@ -263,6 +263,13 @@ async def core_lifecycle_td(tmp_path_factory):
     db = SQLiteDatabase(str(tmp_db_path))
     log_broker = LogBroker()
     core_lifecycle = AstrBotCoreLifecycle(log_broker, db)
+    from astrbot.core.config.astrbot_config import AstrBotConfig
+    from astrbot.core.config.default import DEFAULT_CONFIG
+
+    core_lifecycle.astrbot_config = AstrBotConfig(
+        str(tmp_db_path.with_name("cmd_config.json")),
+        default_config=copy.deepcopy(DEFAULT_CONFIG),
+    )
     await core_lifecycle.initialize()
     generated_password = getattr(
         core_lifecycle.astrbot_config,
@@ -1138,7 +1145,7 @@ async def test_config_save_accepts_totp_code_for_protected_totp_changes(
             json={"conf_id": "default", "config": post_config},
         )
         data = await response.get_json()
-        assert data["status"] == "ok"
+        assert data["status"] == "ok", data
         assert core_lifecycle_td.astrbot_config["dashboard"]["totp"] == {
             "enable": False,
             "secret": "",
@@ -2358,52 +2365,23 @@ async def test_dashboard_ssl_missing_cert_and_key_falls_back_to_http(
 
 
 @pytest.mark.asyncio
-async def test_subagent_config_accepts_default_persona(
-    app: FastAPIAppAdapter,
-    authenticated_header: dict,
-    core_lifecycle_td: AstrBotCoreLifecycle,
+async def test_agent_config_accepts_default_persona(
+    app: FastAPIAppAdapter, authenticated_header: dict,
 ):
     test_client = app.test_client()
-    old_cfg = copy.deepcopy(
-        core_lifecycle_td.astrbot_config.get("subagent_orchestrator", {})
+    response = await test_client.post(
+        "/api/v1/agent-configs",
+        json={"name": "planner", "runtime": "astrbot", "config": {"persona": {"persona_id": "default"}}},
+        headers=authenticated_header,
     )
-    payload = {
-        "main_enable": True,
-        "remove_main_duplicate_tools": True,
-        "agents": [
-            {
-                "name": "planner",
-                "persona_id": "default",
-                "public_description": "planner",
-                "system_prompt": "",
-                "enabled": True,
-            }
-        ],
-    }
-
+    assert response.status_code == 200
+    saved = (await response.get_json())["data"]
     try:
-        response = await test_client.post(
-            "/api/subagent/config",
-            json=payload,
-            headers=authenticated_header,
-        )
+        response = await test_client.get(f"/api/v1/agent-configs/{saved['config_id']}", headers=authenticated_header)
         assert response.status_code == 200
-        data = await response.get_json()
-        assert data["status"] == "ok"
-
-        get_response = await test_client.get(
-            "/api/subagent/config", headers=authenticated_header
-        )
-        assert get_response.status_code == 200
-        get_data = await get_response.get_json()
-        assert get_data["status"] == "ok"
-        assert get_data["data"]["agents"][0]["persona_id"] == "default"
+        assert (await response.get_json())["data"]["config"]["persona"]["persona_id"] == "default"
     finally:
-        await test_client.post(
-            "/api/subagent/config",
-            json=old_cfg,
-            headers=authenticated_header,
-        )
+        await test_client.delete(f"/api/v1/agent-configs/{saved['config_id']}", headers=authenticated_header)
 
 
 @pytest.mark.asyncio
@@ -2601,6 +2579,7 @@ async def test_plugins(
 
     # 使用 MockPluginBuilder 创建测试插件
     plugin_store_path = core_lifecycle_td.plugin_manager.plugin_store_path
+    monkeypatch.syspath_prepend(str(Path(plugin_store_path).parent.parent))
     builder = MockPluginBuilder(plugin_store_path)
 
     # 定义测试插件

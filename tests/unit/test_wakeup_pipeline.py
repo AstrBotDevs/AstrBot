@@ -10,11 +10,11 @@ import pytest
 import pytest_asyncio
 from opentelemetry.trace import format_trace_id, get_current_span
 
+from astrbot.core.astr_agent_runtime import AstrAgentRuntime
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runtime import AgentSessionRef
 from astrbot.core.agent_wakeup import wake_main_agent
-from astrbot.core.astr_agent_runtime import AstrAgentRuntime
 from astrbot.core.astr_agent_runtime import session as native_session
 from astrbot.core.astr_agent_runtime.main_agent import MainAgentBuildResult
 from astrbot.core.astr_agent_runtime.main_agent import builder as native_builder
@@ -165,12 +165,10 @@ async def runtime(monkeypatch):
         lambda *_: SimpleNamespace(append=lambda *args, **kwargs: True),
     )
     monkeypatch.setattr(trace_module, "_get_log_broker", lambda: None)
-    native = AstrAgentRuntime(context)
+    native = AstrAgentRuntime(context, agent_configs=MagicMock(), subagents=MagicMock())
     runtimes = {"astrbot": native}
     scheduler = PipelineScheduler(
-        PipelineContext(
-            config, SimpleNamespace(context=context), "profile", agent_runtimes=runtimes
-        )
+        PipelineContext(config, SimpleNamespace(context=context), "profile", agent_runtimes=runtimes)
     )
     await scheduler.initialize()
     bus = EventBus(

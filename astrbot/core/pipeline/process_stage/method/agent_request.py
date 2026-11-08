@@ -1,7 +1,7 @@
 from collections.abc import AsyncGenerator
 
 from astrbot.core import logger
-from astrbot.core.config.agent_runner import normalize_agent_runner
+from astrbot.core.config.agent import normalize_agent
 from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.session_llm_manager import SessionServiceManager
@@ -28,12 +28,12 @@ class AgentRequestSubStage(Stage):
                 )
                 self.prov_wake_prefix = self.prov_wake_prefix[len(bwp) :]
 
-        agent_runner = normalize_agent_runner(self.config.get("agent_runner"))
-        self.config["agent_runner"] = agent_runner
-        agent_runner_type = agent_runner["runner_type"]
+        agent_runner = normalize_agent(self.config.get("agent"))
+        self.config["agent"] = agent_runner
+        agent_runner_type = agent_runner["runtime"]
         self.runtime_sub_stage = InternalAgentSubStage()
         await self.runtime_sub_stage.initialize(ctx)
-        if agent_runner_type == "local":
+        if agent_runner_type in ctx.agent_runtimes:
             self.agent_sub_stage = self.runtime_sub_stage
         elif agent_runner_type in ("dify", "coze", "dashscope", "deerflow"):
             self.agent_sub_stage = ThirdPartyAgentSubStage()
@@ -54,13 +54,11 @@ class AgentRequestSubStage(Stage):
             )
             return
 
-        runner_type = self.config["agent_runner"]["runner_type"]
+        agent_config = self.config.get("agent", {})
         runtime_name = (
             event.agent_session.runtime
             if isinstance(event, AgentWakeupEvent) and event.agent_session is not None
-            else "astrbot"
-            if runner_type == "local"
-            else runner_type
+            else agent_config.get("runtime", "astrbot")
         )
         event.trace.record(
             "agent_start",

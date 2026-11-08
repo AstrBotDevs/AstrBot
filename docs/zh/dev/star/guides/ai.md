@@ -404,7 +404,7 @@ result = await run.result()
 
 `run` 提供 turn ID、输出、取消、steer 和 follow-up 操作。`run.session` 返回只读状态快照。
 
-内置对话配置使用 AstrBot runtime。Dify、Coze 等现有第三方配置继续沿用原有执行路径。
+Core 按当前配置档的 `agent.runtime` 选择已注册实现；使用 `ctx.agent.register_runtime(name, runtime)` 注册后，该实现可用于主代理，也可由内置 runtime 作为子代理调用。未注册的名称明确报错；Dify、Coze 等现有第三方路径继续沿用原执行方式。
 
 `/stop` 按 UMO 向已提交的 turn 调用 `turn.request_stop()`。运行中的 turn 会调用 `AgentSession.request_stop_turn(turn)`。runtime 接受请求并负责执行收尾时返回 `True`，返回 `False` 则使用 `cancel_turn()` 和本地任务取消。排队中的 turn 直接取消。`request_stop()` 提交请求后立即返回，用 `await turn.result()` 等待收尾。
 

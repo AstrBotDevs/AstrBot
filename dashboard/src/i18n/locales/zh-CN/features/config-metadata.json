@@ -1,18 +1,43 @@
 {
   "ai_group": {
     "name": "AI",
-    "agent_runner": {
-      "description": "Agent 执行方式",
-      "hint": "选择 AI 对话的执行器。切换执行器会使用新类型的默认配置，不保留上一类型的参数。",
+    "subagents": {
+      "description": "子代理",
+      "agent": {
+        "config": {
+          "subagents": {
+            "enabled": {
+              "description": "启用子代理",
+              "hint": "允许 AstrBot 在合适的时机创建通用或专用子代理完成任务。"
+            },
+            "config_ids": {
+              "hint": "配置专用子代理（可指定人格、工具集等配置）。即使不配置，AstrBot 也会在需要的时候动态生成通用子代理完成任务。",
+              "description": "专用 Agent 配置"
+            },
+            "max_concurrent_agents": {
+              "description": "每会话并发数",
+              "hint": "其余任务排队，默认 3。"
+            },
+            "task_timeout": {
+              "description": "任务超时（秒）",
+              "hint": "包含排队时间，默认 600 秒。"
+            }
+          }
+        }
+      }
+    },
+    "agent": {
+      "description": "Agent 配置",
+      "hint": "选择 Agent Runtime。切换后使用对应运行环境的默认配置。",
       "provider_settings": {
         "enable": {
           "description": "启用",
           "hint": "AI 对话总开关"
         }
       },
-      "agent_runner": {
-        "runner_type": {
-          "description": "执行器",
+      "agent": {
+        "runtime": {
+          "description": "Agent Runtime",
           "labels": [
             "内置 Agent",
             "Dify",
@@ -25,7 +50,7 @@
     },
     "dify_runner": {
       "description": "Dify 配置",
-      "agent_runner": {
+      "agent": {
         "config": {
           "dify_api_type": { "description": "应用类型" },
           "dify_api_key": { "description": "API Key" },
@@ -40,7 +65,7 @@
     },
     "coze_runner": {
       "description": "Coze 配置",
-      "agent_runner": {
+      "agent": {
         "config": {
           "coze_api_key": { "description": "API Key" },
           "bot_id": { "description": "Bot ID" },
@@ -53,7 +78,7 @@
     },
     "dashscope_runner": {
       "description": "阿里云百炼应用配置",
-      "agent_runner": {
+      "agent": {
         "config": {
           "dashscope_app_type": { "description": "应用类型" },
           "dashscope_api_key": { "description": "API Key" },
@@ -71,7 +96,7 @@
     },
     "deerflow_runner": {
       "description": "DeerFlow 配置",
-      "agent_runner": {
+      "agent": {
         "config": {
           "deerflow_api_base": { "description": "API Base URL" },
           "deerflow_api_key": { "description": "API Key" },
@@ -91,7 +116,7 @@
     "ai": {
       "description": "模型",
       "hint": "配置内置 Agent 使用的对话模型，以及通用的图片转述、语音模型。",
-      "agent_runner": {
+      "agent": {
         "config": {
           "model": {
             "provider_id": {
@@ -147,7 +172,7 @@
     "persona": {
       "description": "人格",
       "hint": "赋予 AstrBot 人格。",
-      "agent_runner": {
+      "agent": {
         "config": {
           "persona": {
             "persona_id": { "description": "默认采用的人格" },
@@ -436,7 +461,7 @@
     "truncate_and_compress": {
       "hint": "AstrBot 如何管理工作记忆。详见: [上下文管理策略](https://docs.astrbot.app/use/context-compress.html)。",
       "description": "上下文管理策略",
-      "agent_runner": {
+      "agent": {
         "config": {
           "compression": {
             "max_turns": {
@@ -474,7 +499,7 @@
     },
     "others": {
       "description": "其他配置",
-      "agent_runner": {
+      "agent": {
         "config": {
           "misc": {
             "max_steps": { "description": "工具调用轮数上限" },
