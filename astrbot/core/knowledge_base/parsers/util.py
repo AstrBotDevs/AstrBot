@@ -2,7 +2,11 @@ from .base import BaseParser
 
 
 async def select_parser(ext: str) -> BaseParser:
-    if ext in {".md", ".txt", ".markdown", ".rst", ".adoc", ".xlsx", ".docx", ".xls"}:
+    if ext in {".txt", ".md", ".markdown"}:
+        from .text_parser import TextParser
+
+        return TextParser()
+    if ext in {".rst", ".adoc", ".xlsx", ".docx", ".xls"}:
         from .markitdown_parser import MarkitdownParser
 
         return MarkitdownParser()
