@@ -708,6 +708,36 @@ class TestAstrBotImporter:
 class TestBackupListing:
     """Backup listing must use metadata from the archive it actually read."""
 
+    @pytest.mark.parametrize("valid_zip", [False, True])
+    def test_list_backups_skips_archive_without_readable_manifest(
+        self, temp_backup_dir, monkeypatch, valid_zip
+    ):
+        """Unreadable archives and archives without manifests are omitted."""
+        invalid = temp_backup_dir / "invalid.zip"
+        if valid_zip:
+            with zipfile.ZipFile(invalid, "w") as archive:
+                archive.writestr("not-manifest.txt", "payload")
+        else:
+            invalid.write_bytes(b"not a zip archive")
+
+        survivor = temp_backup_dir / "survivor.zip"
+        with zipfile.ZipFile(survivor, "w") as archive:
+            archive.writestr(
+                "manifest.json",
+                json.dumps({"origin": "exported", "astrbot_version": "4.0.0"}),
+            )
+
+        service = BackupService.__new__(BackupService)
+        service.backup_dir = str(temp_backup_dir)
+        monkeypatch.setattr(
+            BackupService, "ensure_cleanup_task_started", lambda self: None
+        )
+
+        result = service.list_backups(page=1, page_size=10)
+
+        assert [item["filename"] for item in result["items"]] == ["survivor.zip"]
+        assert result["total"] == 1
+
     @pytest.mark.parametrize("replace_archive", [False, True])
     def test_list_backups_skips_archive_changed_after_manifest_read(
         self, temp_backup_dir, monkeypatch, replace_archive
