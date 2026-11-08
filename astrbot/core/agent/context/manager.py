@@ -4,6 +4,7 @@ from ..message import Message
 from .compressor import LLMSummaryCompressor, TruncateByTurnsCompressor
 from .config import ContextConfig
 from .round_utils import split_into_rounds
+from .sanitizer import ContextSanitizer
 from .token_counter import EstimateTokenCounter
 from .truncator import ContextTruncator
 
@@ -28,6 +29,12 @@ class ContextManager:
 
         self.token_counter = config.custom_token_counter or EstimateTokenCounter()
         self.truncator = ContextTruncator()
+        self.sanitizer = ContextSanitizer(
+            sanitize_historical_thoughts=config.sanitize_historical_thoughts,
+            sanitize_historical_tools=config.sanitize_historical_tools,
+            max_historical_tool_result_chars=config.max_historical_tool_result_chars,
+            sanitize_historical_images=config.sanitize_historical_images,
+        )
 
         if config.custom_compressor:
             self.compressor = config.custom_compressor
@@ -57,6 +64,10 @@ class ContextManager:
         try:
             result = messages
 
+            # 0. 历史上下文纯净化 (Sanitize historical context if configured to persist)
+            if self.config.persist_sanitized_history:
+                result = self.sanitizer.sanitize(result)
+
             # 1. 基于轮次的截断 (Enforce max turns)
             if self.config.enforce_max_turns != -1:
                 result = self.truncator.truncate_by_turns(
@@ -67,8 +78,13 @@ class ContextManager:
 
             # 2. 基于 token 的压缩
             if self.config.max_context_tokens > 0:
+                eval_messages = (
+                    result
+                    if self.config.persist_sanitized_history
+                    else self.sanitizer.sanitize(result)
+                )
                 total_tokens = self.token_counter.count_tokens(
-                    result, trusted_token_usage
+                    eval_messages, trusted_token_usage
                 )
 
                 if self.compressor.should_compress(
@@ -104,7 +120,9 @@ class ContextManager:
         messages = await self.compressor(messages)
 
         # double check
-        tokens_after_summary = self.token_counter.count_tokens(messages)
+        tokens_after_summary = self.token_counter.count_tokens(
+            self.sanitizer.sanitize(messages)
+        )
 
         # calculate compress rate
         compress_rate = (tokens_after_summary / self.config.max_context_tokens) * 100
@@ -143,7 +161,7 @@ class ContextManager:
             rounds.pop(0)
             dropped_rounds += 1
             messages = system_messages + [msg for rnd in rounds for msg in rnd]
-            tokens = self.token_counter.count_tokens(messages)
+            tokens = self.token_counter.count_tokens(self.sanitizer.sanitize(messages))
         logger.info(f"Dropped {dropped_rounds} oldest round(s).")
 
         if self.compressor.should_compress(
