@@ -10,6 +10,11 @@ from .run_context import ContextWrapper, TContext
 
 class BaseAgentRunHooks(Generic[TContext]):
     async def on_agent_begin(self, run_context: ContextWrapper[TContext]) -> None: ...
+    async def on_agent_response(
+        self,
+        run_context: ContextWrapper[TContext],
+        llm_response: LLMResponse,
+    ) -> None: ...
     async def on_tool_start(
         self,
         run_context: ContextWrapper[TContext],
