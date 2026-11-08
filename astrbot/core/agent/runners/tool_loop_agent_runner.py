@@ -187,7 +187,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.stats.end_time = time.time()
 
         parts = []
-        if llm_resp.reasoning_content is not None or llm_resp.reasoning_signature:
+        if llm_resp.reasoning_content or llm_resp.reasoning_signature:
             parts.append(
                 ThinkPart(
                     think=llm_resp.reasoning_content or "",
@@ -1086,7 +1086,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
             # 将结果添加到上下文中
             parts = []
-            if llm_resp.reasoning_content is not None or llm_resp.reasoning_signature:
+            if llm_resp.reasoning_content or llm_resp.reasoning_signature:
                 parts.append(
                     ThinkPart(
                         think=llm_resp.reasoning_content or "",
