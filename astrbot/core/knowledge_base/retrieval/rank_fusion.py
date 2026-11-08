@@ -60,6 +60,7 @@ class RankFusion:
         dense_results: list[Result],
         sparse_results: list[SparseResult],
         top_k: int = 20,
+        dense_weight: float | None = None,
     ) -> list[FusedResult]:
         """融合稠密和稀疏检索结果。
 
@@ -139,10 +140,14 @@ class RankFusion:
         fusion_scores: dict[str, float] = {}
         rrf_scores: dict[str, float] = {}
 
+        weight = self.dense_weight if dense_weight is None else dense_weight
+        if not 0 <= weight <= 1:
+            raise ValueError("dense_weight must be between 0 and 1")
+
         for identifier in all_chunk_ids:
-            fusion_scores[identifier] = self.dense_weight * normalized_dense.get(
+            fusion_scores[identifier] = weight * normalized_dense.get(
                 identifier, 0.0
-            ) + (1 - self.dense_weight) * normalized_sparse.get(identifier, 0.0)
+            ) + (1 - weight) * normalized_sparse.get(identifier, 0.0)
 
             rrf_score = 0.0
             if identifier in dense_ranks:
