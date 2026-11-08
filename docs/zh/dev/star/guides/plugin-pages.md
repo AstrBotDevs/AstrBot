@@ -648,10 +648,10 @@ await bridge.ready();
 const off = bridge.onContext((context) => {
   const primary = context.themeColors?.primary ?? "#3c96ca";
   const secondary = context.themeColors?.secondary ?? "#2f86bd";
-  // Apply the colors to your View.
+  // 将配色应用到视图样式。
 });
 
-// Call off() when the View is disposed.
+// 视图销毁时调用 off() 取消订阅。
 ```
 
 ## 静态资源路径
