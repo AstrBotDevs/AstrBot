@@ -13,6 +13,13 @@ from ..register import register_provider_adapter
 _DEFAULT_API_BASE = "https://dashscope.aliyuncs.com/api/v1"
 _DEFAULT_MODEL = "text-embedding-v4"
 
+#: ``text_type`` 的合法取值。多模态端点不接受该参数。
+_TEXT_TYPES = {"query", "document"}
+
+#: 官方文档明确支持 ``text_type`` 的文本模型。更早的模型没有出现在支持列表
+#: 里，无法确认其行为，因此默认不发，避免旧部署在升级后直接报错。
+_TEXT_TYPE_MODEL_PREFIXES = ("text-embedding-v3", "text-embedding-v4")
+
 
 @register_provider_adapter(
     "dashscope_embedding",
@@ -26,6 +33,10 @@ class DashScopeEmbeddingProvider(EmbeddingProvider):
     multimodal embedding models (qwen*-vl-embedding, multimodal-embedding-*,
     tongyi-embedding-vision-*) through MultiModalEmbedding, so that models
     unavailable in the OpenAI-compatible mode can be used.
+
+    检索场景下 ``text_type`` 区分查询与文档：``query`` 生成针对信息检索优化
+    的向量，``document`` 生成针对"被检索"优化的向量。两者不区分时查询与文档
+    落在同一编码模式里，检索区分度会下降。
     """
 
     def __init__(self, provider_config: dict, provider_settings: dict) -> None:
@@ -41,6 +52,17 @@ class DashScopeEmbeddingProvider(EmbeddingProvider):
         self.base_url = provider_config.get("embedding_api_base", _DEFAULT_API_BASE)
         self.model = provider_config.get("embedding_model", _DEFAULT_MODEL)
 
+        # 是否发送 text_type。默认开启——检索是知识库的主要用途。
+        self.text_type_mode = (
+            str(provider_config.get("embedding_text_type_mode", "auto")).strip().lower()
+        )
+        if self.text_type_mode not in {"auto", "never"}:
+            logger.warning(
+                f"[DashScope Embedding] 未知的 embedding_text_type_mode: "
+                f"{self.text_type_mode!r}，回退为 'auto'。",
+            )
+            self.text_type_mode = "auto"
+
         provider_id = provider_config.get("id", "unknown_id")
         logger.info(
             f"[DashScope Embedding] {provider_id} Initialized via native SDK, "
@@ -48,13 +70,53 @@ class DashScopeEmbeddingProvider(EmbeddingProvider):
         )
         self.set_model(self.model)
 
+    def _is_multimodal(self) -> bool:
+        return (
+            "vl-embedding" in self.model
+            or self.model.startswith("multimodal-embedding")
+            or self.model.startswith("tongyi-embedding-vision")
+        )
+
+    def supports_text_type(self) -> bool:
+        """该模型是否支持 ``text_type`` 参数。
+
+        多模态端点不接受该参数；更早的文本模型没有出现在官方支持列表里，
+        同样按不支持处理。
+        """
+        if self._is_multimodal():
+            return False
+        model = str(self.model or "").strip().lower().rsplit("/", 1)[-1]
+        return model.startswith(_TEXT_TYPE_MODEL_PREFIXES)
+
+    def _should_send_text_type(self) -> bool:
+        if self.text_type_mode == "never":
+            return False
+        return self.supports_text_type()
+
     async def get_embedding(self, text: str) -> list[float]:
-        """Get the embedding vector for a single text."""
-        embeddings = await self.get_embeddings([text])
+        """Get the embedding vector for a single text.
+
+        按文档侧语义嵌入，保持与既有调用方（入库、连通性测试）的兼容性。
+        检索查询请使用 :meth:`get_query_embedding`。
+        """
+        embeddings = await self._get_embeddings_with_type([text], "document")
+        return embeddings[0] if embeddings else []
+
+    async def get_query_embedding(self, text: str) -> list[float]:
+        """Get the embedding vector for a retrieval query."""
+        embeddings = await self._get_embeddings_with_type([text], "query")
         return embeddings[0] if embeddings else []
 
     async def get_embeddings(self, text: list[str]) -> list[list[float]]:
-        """Get the embedding vectors for a batch of texts via the dashscope SDK.
+        """Get the embedding vectors for a batch of documents."""
+        return await self._get_embeddings_with_type(text, "document")
+
+    async def _get_embeddings_with_type(
+        self,
+        text: list[str],
+        text_type: str,
+    ) -> list[list[float]]:
+        """Get embedding vectors, optionally tagging the input role.
 
         Multimodal models (e.g. qwen3-vl-embedding) use the
         multimodal-embedding endpoint and accept text wrapped in content dicts;
@@ -63,11 +125,7 @@ class DashScopeEmbeddingProvider(EmbeddingProvider):
         if not text:
             return []
 
-        is_multimodal = (
-            "vl-embedding" in self.model
-            or self.model.startswith("multimodal-embedding")
-            or self.model.startswith("tongyi-embedding-vision")
-        )
+        is_multimodal = self._is_multimodal()
 
         kwargs: dict = {
             "base_address": self.base_url,
@@ -83,6 +141,11 @@ class DashScopeEmbeddingProvider(EmbeddingProvider):
                     f"embedding_dimensions in embedding configs is not a valid integer: "
                     f"'{self.provider_config['embedding_dimensions']}', ignored."
                 )
+
+        if self._should_send_text_type():
+            if text_type not in _TEXT_TYPES:
+                text_type = "document"
+            kwargs["text_type"] = text_type
 
         # The dashscope SDK is synchronous; run it in a worker thread.
         # base_address is passed per-call to avoid racing on the module-level

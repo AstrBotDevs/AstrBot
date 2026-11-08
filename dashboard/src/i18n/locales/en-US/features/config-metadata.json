@@ -1506,6 +1506,17 @@
         "description": "Text Truncation Strategy",
         "hint": "Whether to truncate the input to fit the model's maximum context length when the input text is too long."
       },
+      "nvidia_embedding": {
+        "hint": "NVIDIA NIM Embedding, default endpoint https://integrate.api.nvidia.com/v1.",
+        "input_type": {
+          "description": "Document-side input_type",
+          "hint": "Used when indexing documents. Models such as NV-Embed-QA, E5 and nemotron require distinguishing passage from query; use passage for documents."
+        },
+        "query_input_type": {
+          "description": "Query-side input_type",
+          "hint": "Used for retrieval queries, defaults to query. NVIDIA states that a wrong value sharply lowers retrieval accuracy."
+        }
+      },
       "tei_rerank_truncate": {
         "description": "Truncate Long Text",
         "hint": "Whether to automatically truncate input when it exceeds the model's maximum context length. Requires Truncation Direction when enabled."
@@ -1686,10 +1697,34 @@
         "hint": "If testing fails, try adding /v1 at the end for some OpenAI API versions."
       },
       "gemini_embedding": {
-        "hint": "Gemini Embedding does not require manually adding /v1beta."
+        "hint": "Gemini Embedding does not require manually adding /v1beta.",
+        "embedding_task_type_mode": {
+          "description": "Task type delivery mode",
+          "hint": "auto: pick by model generation (gemini-embedding-001 uses the task_type parameter, gemini-embedding-2 uses text prefixes); never: always use task_type; always: always use text prefixes."
+        },
+        "embedding_query_task_type": {
+          "description": "Query-side task_type",
+          "hint": "Only applies in task_type mode. Use RETRIEVAL_QUERY for retrieval queries, CODE_RETRIEVAL_QUERY for code search."
+        },
+        "embedding_document_task_type": {
+          "description": "Document-side task_type",
+          "hint": "Only applies in task_type mode. Use RETRIEVAL_DOCUMENT for stored documents, optionally with a title."
+        },
+        "embedding_query_task_name": {
+          "description": "Query-side task prefix (gemini-embedding-2)",
+          "hint": "Only applies in text-prefix mode. One of: search result / question answering / fact checking / code retrieval. Invalid values fall back to search result."
+        },
+        "embedding_document_title": {
+          "description": "Document title (gemini-embedding-2)",
+          "hint": "Falls back to title: none when empty. Note that knowledge base ingestion already prepends the document title to the text, so setting this repeats the title; usually leave empty."
+        }
       },
       "dashscope_embedding": {
-        "hint": "Aliyun DashScope Embedding. Default base URL: https://dashscope.aliyuncs.com/api/v1."
+        "hint": "Aliyun DashScope Embedding. Default base URL: https://dashscope.aliyuncs.com/api/v1.",
+        "embedding_text_type_mode": {
+          "description": "Query/document distinction mode",
+          "hint": "auto: retrieval queries use text_type=query and stored documents use text_type=document (recommended, better retrieval); never: do not send text_type. Multimodal models ignore this switch."
+        }
       },
       "volcengine_cluster": {
         "description": "Volcengine cluster",
