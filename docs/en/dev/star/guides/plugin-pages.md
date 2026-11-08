@@ -332,7 +332,11 @@ The context usually contains:
   "pageTitle": "Bridge Demo",
   "locale": "en-US",
   "i18n": {},
-  "isDark": false
+  "isDark": false,
+  "themeColors": {
+    "primary": "#3c96ca",
+    "secondary": "#2f86bd"
+  }
 }
 ```
 
@@ -630,6 +634,25 @@ body {
 ```
 
 The server injects `data-theme` into returned HTML to reduce initial flashing. If JavaScript needs to react to theme changes, read `bridge.getContext()?.isDark` and listen with `onContext()`.
+
+### Following user-selected colors
+
+`context.themeColors` exposes the effective `primary` and `secondary` colors as CSS color strings. The View decides how to apply them.
+
+Use `bridge.onContext(handler)` to receive the initial palette and updates after theme switches, color edits, or resets. Server-injected initial contexts and older AstrBot versions may omit this field; fall back to the View's default colors rather than relying only on the first `ready()` result.
+
+```js
+const bridge = window.AstrBotPluginView;
+
+await bridge.ready();
+const off = bridge.onContext((context) => {
+  const primary = context.themeColors?.primary ?? "#3c96ca";
+  const secondary = context.themeColors?.secondary ?? "#2f86bd";
+  // Apply the colors to your View.
+});
+
+// Call off() when the View is disposed.
+```
 
 ## Static Asset Paths
 
