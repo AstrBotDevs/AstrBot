@@ -130,6 +130,69 @@ class TestSecurityRestrictions:
         for cmd in blocked_commands:
             assert _is_safe_command(cmd) is False, f"Command '{cmd}' should be blocked"
 
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "rm -r /tmp/my_build",
+            "rm -rf /tmp/my_build",
+            "rm -fr /var/tmp/my_build",
+            "rm -rf /var/tmp/my_build",
+            'rm -rf "/tmp/my build"',
+            "rm -rf -- /tmp/my_build",
+            "rm -rf /tmp/my_build 2>/dev/null",
+            "rm -rf /tmp/my_build >/tmp/rm.log",
+            "echo ok && rm -rf /tmp/my_build",
+            "echo ok; rm -rf /tmp/my_build",
+            "echo ok | rm -rf /tmp/my_build",
+        ],
+    )
+    def test_is_safe_command_allows_scoped_rm(self, command):
+        """Scoped temporary-directory cleanup is allowed."""
+        assert _is_safe_command(command) is True
+
+    def test_cua_shell_cleanup_command_remains_allowed(self):
+        """CuaFileSystemComponent quotes an rm path before shell execution."""
+        path = "folder/it's file.txt"
+        assert _is_safe_command(f"rm -rf {shlex.quote(path)}") is True
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "rm -rf /",
+            "rm -rf /*",
+            "rm -rf ~",
+            "rm -rf $HOME",
+            "rm -rf /etc",
+            "rm -rf /usr/local",
+            "rm -rf /var",
+            "rm -rf /opt",
+            "rm -rf /boot",
+            "rm -rf /dev/sda",
+            "rm -rf /tmp",
+            "rm -rf /var/tmp",
+            "rm -rf /tmp/../etc",
+            "rm -rf /tmp/my_build/../other",
+            "rm -rf /tmp/*",
+            "rm -rf",
+            "cd /etc && rm -rf passwd",
+            "echo ok && rm -rf /",
+            "rm -rf /tmp/my_build; rm -rf /",
+            "echo ok | rm -rf /",
+            "bash -c 'rm -rf /'",
+        ],
+    )
+    def test_is_safe_command_blocks_dangerous_rm_targets(self, command):
+        """Dangerous or unresolved rm targets remain blocked."""
+        assert _is_safe_command(command) is False
+
+    def test_is_safe_command_allows_scoped_rm_in_cwd(self, tmp_path):
+        """Relative cleanup is allowed only inside the selected working directory."""
+        assert _is_safe_command("rm -rf build", cwd=str(tmp_path)) is True
+        assert _is_safe_command("rm -rf ./build", cwd=str(tmp_path)) is True
+        assert _is_safe_command("rm -rf .", cwd=str(tmp_path)) is False
+        assert _is_safe_command("rm -rf ..", cwd=str(tmp_path)) is False
+        assert _is_safe_command("rm -rf ../outside", cwd=str(tmp_path)) is False
+
 
 class TestLocalShellComponent:
     """Tests for LocalShellComponent."""

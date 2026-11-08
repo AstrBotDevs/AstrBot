@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import locale
 import os
+import shlex
 import shutil
 import signal
 import subprocess
@@ -45,9 +46,6 @@ from .base import ComputerBooter
 from .shipyard_search_file_util import _truncate_long_lines
 
 _BLOCKED_COMMAND_PATTERNS = [
-    " rm -rf ",
-    " rm -fr ",
-    " rm -r ",
     " mkfs",
     " dd if=",
     " shutdown",
@@ -59,6 +57,7 @@ _BLOCKED_COMMAND_PATTERNS = [
     " kill -9 ",
     " killall ",
 ]
+_LOCAL_PATH = type(Path())
 _LOCAL_SANDBOX_MAX_OUTPUT_BYTES = 10 * 1024 * 1024
 _SANDBOXED_PYTHON_RIPGREP = """
 import sys
@@ -80,9 +79,136 @@ sys.stdout.write("".join(results))
 """
 
 
-def _is_safe_command(command: str) -> bool:
+def _is_safe_command(command: str, cwd: str | None = None) -> bool:
+    """Check a shell command against the local safety blocklist.
+
+    Args:
+        command: Shell command to inspect.
+        cwd: Directory the command starts in.
+
+    Returns:
+        Whether the command may run locally.
+    """
     cmd = f" {command.strip().lower()} "
-    return not any(pat in cmd for pat in _BLOCKED_COMMAND_PATTERNS)
+    if any(pat in cmd for pat in _BLOCKED_COMMAND_PATTERNS):
+        return False
+
+    try:
+        current_dir = (
+            _LOCAL_PATH(cwd).resolve()
+            if cwd
+            else _LOCAL_PATH(get_astrbot_root()).resolve()
+        )
+    except (OSError, RuntimeError):
+        return False
+
+    temp_roots = (_LOCAL_PATH("/tmp").resolve(), _LOCAL_PATH("/var/tmp").resolve())
+
+    for line in command.splitlines() or [""]:
+        try:
+            lexer = shlex.shlex(line, posix=True, punctuation_chars=True)
+            lexer.whitespace_split = True
+            lexer.commenters = ""
+            tokens = list(lexer)
+        except ValueError:
+            return False
+
+        segments: list[list[str]] = []
+        segment: list[str] = []
+        for token in tokens:
+            if token and set(token) <= set(";|&()"):
+                if segment:
+                    segments.append(segment)
+                segment = []
+            else:
+                segment.append(token)
+        if segment:
+            segments.append(segment)
+
+        for segment in segments:
+            for token in segment:
+                if token != "rm" and "rm " in token.lower():
+                    nested_cwd = str(current_dir) if current_dir is not None else "/"
+                    if not _is_safe_command(token, cwd=nested_cwd):
+                        return False
+
+            for index, token in enumerate(segment):
+                if token.lower() == "cd":
+                    current_dir = None
+                    continue
+
+                if token != "rm" and token.lstrip("`").lower() != "rm":
+                    continue
+
+                args: list[str] = []
+                skip_redirect_target = False
+                for arg in segment[index + 1 :]:
+                    if skip_redirect_target:
+                        skip_redirect_target = False
+                        continue
+                    if arg in {
+                        ">",
+                        ">>",
+                        ">|",
+                        "<",
+                        "<<",
+                        "<<<",
+                        "<>",
+                    } or arg.startswith((">", "<")):
+                        if args and args[-1].isdigit():
+                            args.pop()
+                        skip_redirect_target = True
+                        continue
+                    args.append(arg)
+
+                recursive = False
+                options_done = False
+                targets: list[str] = []
+                for arg in args:
+                    if not options_done and arg == "--":
+                        options_done = True
+                    elif not options_done and arg.startswith("-") and arg != "-":
+                        if arg == "--recursive":
+                            recursive = True
+                        elif not arg.startswith("--") and "r" in arg[1:].lower():
+                            recursive = True
+                    else:
+                        targets.append(arg)
+
+                if not recursive:
+                    continue
+                if not targets:
+                    return False
+
+                for target in targets:
+                    if any(char in target for char in "$`*?[]{}~"):
+                        return False
+                    target_path = _LOCAL_PATH(target)
+                    if ".." in target_path.parts:
+                        return False
+                    if not target_path.is_absolute():
+                        if current_dir is None:
+                            return False
+                        target_path = current_dir / target_path
+                    try:
+                        resolved = target_path.resolve()
+                    except (OSError, RuntimeError):
+                        return False
+
+                    if any(
+                        resolved != root and resolved.is_relative_to(root)
+                        for root in temp_roots
+                    ):
+                        continue
+                    if (
+                        current_dir is not None
+                        and resolved != current_dir
+                        and resolved.is_relative_to(current_dir)
+                    ):
+                        continue
+                    return False
+
+    return True
 
 
 def _decode_bytes_with_fallback(
@@ -177,7 +303,8 @@ class LocalShellComponent(ShellComponent):
         shell: bool = True,
         background: bool = False,
     ) -> dict[str, Any]:
-        if not _is_safe_command(command):
+        working_dir = os.path.abspath(cwd) if cwd else get_astrbot_root()
+        if not _is_safe_command(command, cwd=working_dir):
             raise PermissionError("Blocked unsafe shell command.")
 
         def _run() -> dict[str, Any]:
@@ -188,7 +315,6 @@ class LocalShellComponent(ShellComponent):
                 # Python children otherwise emit text in the ANSI code page
                 # (e.g. cp1252) and crash printing non-ASCII output.
                 run_env.setdefault("PYTHONIOENCODING", "utf-8")
-            working_dir = os.path.abspath(cwd) if cwd else get_astrbot_root()
             popen_command: str | list[str] = command
             popen_shell = shell
             if sys.platform == "win32" and shell:
@@ -305,7 +431,8 @@ class LocalShellComponent(ShellComponent):
             RuntimeError: If the requested platform sandbox is unavailable.
             ValueError: If a timing or output limit is invalid.
         """
-        if not _is_safe_command(command):
+        working_dir = Path(cwd).resolve() if cwd else Path(get_astrbot_root()).resolve()
+        if not _is_safe_command(command, cwd=str(working_dir)):
             raise PermissionError("Blocked unsafe shell command.")
         if yield_time_ms < 0 or yield_time_ms > 30_000:
             raise ValueError("`yield_time_ms` must be between 0 and 30000.")
@@ -314,7 +441,6 @@ class LocalShellComponent(ShellComponent):
         if max_output_chars < 1:
             raise ValueError("`max_output_chars` must be greater than 0.")
 
-        working_dir = Path(cwd).resolve() if cwd else Path(get_astrbot_root()).resolve()
         session_id = f"sh_{uuid.uuid4().hex[:16]}"
         output_dir = Path(get_astrbot_system_tmp_path())
         output_dir.mkdir(parents=True, exist_ok=True)
