@@ -24,6 +24,8 @@ These paths use the current default sidebar with a fixed menu order. Extension i
 
 Old log, trace, conversation, and statistics URLs still redirect to the corresponding tabs. Agent runners are now saved in each profile; they are no longer created as model providers. See [Agent Execution Mode](./agent-runner.md) for the setup steps.
 
+Under **Providers → Decision**, **OpenAI Decisions** uses the source-and-model workbench: save a source, fetch its model directory or add a model ID manually, then test each configured instance. A listed model is not guaranteed to support `/decisions`. Existing **System One** entries keep their single-model form. See [Structured Decisions](../dev/star/guides/ai.md#structured-decisions) for plugin calls and compatibility details. This addition reuses the existing navigation and model workbench; no navigation entries have moved.
+
 ## Documentation Navigation
 
 The **Usage → Plugins** documentation group contains Plugins, MCP, and Skills. **Usage → AstrBot Built-in AI** contains Agent Sandbox, SubAgent Orchestration, Proactive Capabilities, Web Search, Knowledge Base, and Context Compression. Their URLs remain unchanged.

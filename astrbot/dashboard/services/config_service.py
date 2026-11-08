@@ -1699,7 +1699,7 @@ class ProviderConfigService:
         if source is None:
             raise ValueError(f"Provider source {source_id} not found")
 
-        from astrbot.core.provider import Provider
+        from astrbot.core.provider.provider import DecisionProvider, Provider
         from astrbot.core.provider.register import provider_cls_map
         from astrbot.core.utils.llm_metadata import LLM_METADATAS
 
@@ -1712,14 +1712,14 @@ class ProviderConfigService:
             raise ValueError(f"动态导入提供商适配器失败: {exc!s}") from exc
         provider_metadata = provider_cls_map.get(provider_type)
         cls_type = provider_metadata.cls_type if provider_metadata else None
-        if cls_type is None or not issubclass(cls_type, Provider):
+        if cls_type is None or not issubclass(cls_type, (Provider, DecisionProvider)):
             raise ValueError(f"Provider source {source_id} does not support model list")
 
         inst = cls_type(source, {})
-        init_fn = getattr(inst, "initialize", None)
-        if callable(init_fn):
-            await run_maybe_async(init_fn)
         try:
+            init_fn = getattr(inst, "initialize", None)
+            if callable(init_fn):
+                await run_maybe_async(init_fn)
             models = await inst.get_models()
             models = models or []
             return {
@@ -1728,7 +1728,8 @@ class ProviderConfigService:
                 "model_metadata": {
                     model_id: LLM_METADATAS[model_id]
                     for model_id in models
-                    if model_id in LLM_METADATAS
+                    if not isinstance(inst, DecisionProvider)
+                    and model_id in LLM_METADATAS
                 },
             }
         finally:
@@ -1747,13 +1748,13 @@ class ProviderConfigService:
         return data
 
     async def list_provider_models(self, provider_id: str) -> dict:
-        from astrbot.core.provider import Provider
+        from astrbot.core.provider.provider import DecisionProvider, Provider
         from astrbot.core.utils.llm_metadata import LLM_METADATAS
 
         provider = self.provider_manager.inst_map.get(provider_id)
         if not provider:
             raise ValueError(f"未找到 ID 为 {provider_id} 的提供商")
-        if not isinstance(provider, Provider):
+        if not isinstance(provider, (Provider, DecisionProvider)):
             raise ValueError(f"提供商 {provider_id} 类型不支持获取模型列表")
 
         models = await provider.get_models()
@@ -1764,7 +1765,8 @@ class ProviderConfigService:
             "model_metadata": {
                 model_id: LLM_METADATAS[model_id]
                 for model_id in models
-                if model_id in LLM_METADATAS
+                if not isinstance(provider, DecisionProvider)
+                and model_id in LLM_METADATAS
             },
         }
 

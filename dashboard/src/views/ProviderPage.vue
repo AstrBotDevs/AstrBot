@@ -27,10 +27,8 @@
         <div class="provider-workbench">
           <div class="provider-workbench__sidebar">
             <ProviderSourcesPanel
-              :displayed-provider-sources="selectedProviderType === 'chat_completion'
-                ? displayedProviderSources
-                : displayedLegacyProviders"
-              :selected-provider-source="selectedProviderType === 'chat_completion'
+              :displayed-provider-sources="sidebarProviders"
+              :selected-provider-source="useSourceWorkbench
                 ? selectedProviderSource
                 : selectedLegacyProvider"
               :available-source-types="availableSourceTypes"
@@ -47,22 +45,17 @@
               :resolve-source-icon="resolveSourceIcon"
               :is-monochrome-source-icon="isMonochromeSourceIcon"
               :get-source-display-name="getSourceDisplayName"
-              @add-provider-source="selectedProviderType === 'chat_completion'
-                ? addProviderSource($event)
-                : addLegacyProvider($event)"
-              @select-provider-source="selectedProviderType === 'chat_completion'
-                ? selectProviderSource($event)
-                : selectLegacyProvider($event)"
-              @delete-provider-source="selectedProviderType === 'chat_completion'
-                ? deleteProviderSource($event)
-                : deleteLegacyProvider($event)"
+              @add-provider-source="addSidebarProvider"
+              @select-provider-source="selectSidebarProvider"
+              @delete-provider-source="selectedProviderType === 'chat_completion' || $event.type === 'openai_decision'
+                ? deleteProviderSource($event) : deleteLegacyProvider($event)"
             />
           </div>
 
           <div class="provider-workbench__divider"></div>
 
           <div class="provider-workbench__main">
-            <template v-if="selectedProviderType === 'chat_completion'">
+            <template v-if="useSourceWorkbench">
             <div v-if="selectedProviderSource" class="provider-config-shell">
               <div class="provider-config-header">
                 <div class="provider-config-headline">
@@ -130,6 +123,12 @@
                 <v-divider></v-divider>
 
                 <section class="provider-section provider-section--models">
+                  <v-alert
+                    v-if="selectedProviderSource.type === 'openai_decision'"
+                    type="info"
+                    variant="tonal"
+                    class="mb-4"
+                  >{{ tm('providers.openaiDecisionHints.models') }}</v-alert>
                   <ProviderModelsPanel
                     :entries="filteredMergedModelEntries"
                     :available-count="availableModels.length"
@@ -262,7 +261,9 @@
         <v-card-text class="py-4">
           <v-text-field
             v-model="manualModelId"
-            :label="tm('models.manualDialogModelLabel')"
+            :label="tm(selectedProviderSource?.type === 'openai_decision'
+              ? 'providers.openaiDecisionHints.model' : 'models.manualDialogModelLabel')"
+            :placeholder="selectedProviderSource?.type === 'openai_decision' ? 'gpt-6-luna' : undefined"
             flat
             variant="solo-filled"
             autofocus
@@ -461,11 +462,39 @@ const showManualModelDialog = ref(false)
 let suppressLegacyProviderWatch = false
 
 const displayedLegacyProviders = computed(() => [
-  ...filteredProviders.value,
+  ...filteredProviders.value.filter(provider => selectedProviderType.value !== 'decision' || !provider.provider_source_id),
   ...legacyProviderDrafts.value.filter(
     (provider) => provider.provider_type === selectedProviderType.value
   )
 ])
+
+const useSourceWorkbench = computed(() => selectedProviderType.value === 'chat_completion' ||
+  (selectedProviderType.value === 'decision' && !selectedLegacyProvider.value))
+
+const sidebarProviders = computed(() => selectedProviderType.value === 'chat_completion'
+  ? displayedProviderSources.value
+  : selectedProviderType.value === 'decision'
+    ? [...displayedProviderSources.value, ...displayedLegacyProviders.value]
+    : displayedLegacyProviders.value)
+
+function addSidebarProvider(templateName) {
+  if (selectedProviderType.value === 'chat_completion' ||
+      configSchema.value.provider?.config_template?.[templateName]?.type === 'openai_decision') {
+    selectedLegacyProvider.value = null
+    addProviderSource(templateName)
+  } else {
+    addLegacyProvider(templateName)
+  }
+}
+
+function selectSidebarProvider(provider) {
+  if (selectedProviderType.value === 'chat_completion' || provider.type === 'openai_decision') {
+    selectedLegacyProvider.value = null
+    selectProviderSource(provider)
+  } else {
+    selectLegacyProvider(provider)
+  }
+}
 
 const {
   showProviderEditDialog,
@@ -518,6 +547,7 @@ watch(() => props.defaultTab, (val) => {
 })
 
 watch(selectedProviderType, () => {
+  selectProviderSource(null)
   selectedLegacyProvider.value = null
   newProviderOriginalId.value = ''
   updatingMode.value = false

@@ -184,6 +184,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
   function buildMetadataFromProvider(provider: any) {
     if (!provider) return null
+    if (selectedProviderSource.value?.type === 'openai_decision') return null
     const mods = provider.modalities || []
     if (!mods.length && !provider.max_context_tokens) return null
     const input: string[] = []
@@ -318,6 +319,13 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       customSchema.provider.items.proxy.hint = tm('providerSources.hints.proxy')
     }
 
+    if (editableProviderSource.value?.type === 'openai_decision') {
+      const items = customSchema.provider.items
+      items.api_base.hint = tm('providers.openaiDecisionHints.apiBase')
+      items.custom_headers.hint = tm('providers.openaiDecisionHints.customHeaders')
+      delete items.custom_extra_body.template_schema
+    }
+
     return customSchema
   })
 
@@ -354,6 +362,8 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   function getModelMetadata(modelName?: string) {
+    // Chat metadata does not establish native Decisions endpoint support.
+    if (selectedProviderSource.value?.type === 'openai_decision') return null
     if (!modelName) return null
     // Schema refreshes only include configured models; retain fetched candidate metadata.
     const availableModel = availableModels.value.find((item) => item?.name === modelName)
@@ -411,7 +421,8 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       azure_tts: 'text_to_speech',
       minimax_tts_api: 'text_to_speech',
       volcengine_tts: 'text_to_speech',
-      system_one_decision: 'decision'
+      system_one_decision: 'decision',
+      openai_decision: 'decision'
     }
     return oldVersionProviderTypeMapping[provider.type]
   }
@@ -453,7 +464,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     const excludeKeys = ['id', 'enable', 'model', 'provider_source_id', 'modalities', 'custom_extra_body']
 
     for (const [key, value] of Object.entries(template)) {
-      if (!excludeKeys.includes(key)) {
+      if (!excludeKeys.includes(key) || (key === 'custom_extra_body' && template.type === 'openai_decision')) {
         sourceFields[key] = value
       }
     }
@@ -615,7 +626,8 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       const sourceId = String(editableProviderSource.value?.id || selectedProviderSource.value.id || '')
       const response = await providerApi.sourceModels(sourceId)
       if (response.data.status === 'ok') {
-        const metadataMap = (response.data.data.model_metadata || {}) as Record<string, any>
+        const metadataMap = (selectedProviderSource.value.type === 'openai_decision'
+          ? {} : response.data.data.model_metadata || {}) as Record<string, any>
         modelMetadata.value = metadataMap
         availableModels.value = (response.data.data.models || []).map((model: string) => ({
           name: model,
@@ -640,6 +652,10 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
     const sourceId = editableProviderSource.value?.id || selectedProviderSource.value.id
     const newId = `${sourceId}/${modelName}`
+
+    if (selectedProviderSource.value.type === 'openai_decision') {
+      return { id: newId, enable: true, provider_source_id: sourceId, model: modelName }
+    }
 
     const metadata = getModelMetadata(modelName)
     let modalities: string[]

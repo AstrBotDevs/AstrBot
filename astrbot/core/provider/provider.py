@@ -476,6 +476,11 @@ class DecisionProvider(AbstractProvider):
         """
         ...
 
+    async def get_models(self) -> list[str]:
+        """Return the configured model when the provider has no directory API."""
+        model = self.get_model()
+        return [model] if model else []
+
     async def test(self) -> None:
         await self.ask(
             {"test": DecisionBooleanQuestion("Is this provider available?")},
