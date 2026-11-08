@@ -2,6 +2,7 @@
 import axios from "axios";
 import { computed, onBeforeUnmount, onMounted, ref, toRaw, watch } from "vue";
 import { useRoute } from "vue-router";
+import { useTheme } from "vuetify";
 import { pluginApi } from "@/api/v1";
 import { fetchWithAuth } from "@/api/http";
 import { useModuleI18n } from "@/i18n/composables";
@@ -18,6 +19,7 @@ const {
   pluginViewTitle,
 } = usePluginI18n();
 const customizer = useCustomizerStore();
+const theme = useTheme();
 
 const loading = ref(true);
 const errorMessage = ref("");
@@ -368,6 +370,10 @@ const sendIframeContext = () => {
       locale: locale.value,
       i18n: toPostMessageData(plugin.value.i18n, {}),
       isDark: customizer.isDark,
+      themeColors: {
+        primary: theme.global.current.value.colors.primary,
+        secondary: theme.global.current.value.colors.secondary,
+      },
     },
   });
 };
@@ -624,9 +630,16 @@ watch([pluginName, pageName], loadPluginView, { immediate: true });
 watch(locale, () => {
   sendIframeContext();
 });
-watch(() => customizer.uiTheme, () => {
-  sendIframeContext();
-});
+watch(
+  [
+    () => customizer.uiTheme,
+    () => theme.global.current.value.colors.primary,
+    () => theme.global.current.value.colors.secondary,
+  ],
+  () => {
+    sendIframeContext();
+  },
+);
 </script>
 
 <template>
