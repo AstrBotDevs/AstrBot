@@ -335,7 +335,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.tool_executor = tool_executor
         self.agent_hooks = agent_hooks
         self.run_context = run_context
-        self.run_context.runner = self
         self.run_context.run_end_reason = None
         self.run_context.run_error = None
         self._done_hook_called = False

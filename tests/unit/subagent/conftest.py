@@ -28,7 +28,7 @@ from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.platform_metadata import PlatformMetadata
-from astrbot.core.provider.entities import LLMResponse, ProviderRequest
+from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
 from astrbot.core.provider.provider import Provider
 from astrbot.core.star.context import Context
@@ -170,10 +170,9 @@ async def environment(tmp_path, request):
             runtime=native,
         )
     )
-    wrapper.runner = SimpleNamespace(
-        req=ProviderRequest(conversation=conversation, func_tool=ToolSet())
+    await subagent.begin_main_agent(
+        wrapper, conversation_id=conversation.cid, tools=ToolSet()
     )
-    await subagent.begin_main_agent(wrapper)
 
     async def save_agent(name="worker", *, runtime="astrbot", config=None, **legacy):
         from astrbot.core.agent.config import StoredAgentConfig

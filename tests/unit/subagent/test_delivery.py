@@ -298,7 +298,7 @@ async def test_native_parent_waits_for_child_without_blocking_delivery(
                 context=AstrAgentContext(context=env.context, event=env.event)
             ),
             tool_executor=FunctionToolExecutor(),
-            agent_hooks=MainAgentHooks(),
+            agent_hooks=MainAgentHooks(req),
             streaming=False,
         )
         return MainAgentBuildResult(runner, req, env.provider)
@@ -404,7 +404,7 @@ async def test_idle_result_runs_through_pipeline_once_and_commits_to_parent(
                 context=AstrAgentContext(context=env.context, event=event)
             ),
             tool_executor=FunctionToolExecutor(),
-            agent_hooks=MainAgentHooks(),
+            agent_hooks=MainAgentHooks(prepared.request),
             streaming=False,
         )
         return MainAgentBuildResult(runner, prepared.request, env.provider)

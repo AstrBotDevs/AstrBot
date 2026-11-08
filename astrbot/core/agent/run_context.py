@@ -23,8 +23,6 @@ class ContextWrapper(Generic[TContext]):
     """Why execution ended; populated before on_agent_done is called."""
     run_error: str | None = None
     """Error description when execution failed, without retaining a traceback."""
-    runner: Any = Field(default=None, repr=False, exclude=True)
-    """Active runner, available to lifecycle hooks for steering and cancellation."""
 
 
 NoContext = ContextWrapper[None]

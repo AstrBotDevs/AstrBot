@@ -158,8 +158,9 @@ async def test_group_members_share_agents_but_keep_each_inputs_caller(environmen
                 runtime=env.native,
             )
         )
-        wrapper.runner = env.wrapper.runner
-        await subagent.begin_main_agent(wrapper)
+        await subagent.begin_main_agent(
+            wrapper, conversation_id=env.conversation.cid, tools=ToolSet()
+        )
         assert wrapper.context.subagent_scope == env.scope
         listing = json.loads(await ListAgentsTool().call(wrapper))["agents"]
         assert [item["agent_id"] for item in listing] == [agent["agent_id"]]

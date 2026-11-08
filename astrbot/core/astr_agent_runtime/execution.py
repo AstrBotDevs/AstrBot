@@ -50,7 +50,7 @@ async def create_native_runner(
     Returns:
         A runner ready for the shared native execution lifecycle.
     """
-    from astrbot.core.astr_agent_runtime.hooks import MAIN_AGENT_HOOKS
+    from astrbot.core.astr_agent_runtime.hooks import MainAgentHooks
     from astrbot.core.astr_agent_runtime.main_agent import providers
     from astrbot.core.astr_agent_runtime.tool_executor import FunctionToolExecutor
     from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
@@ -83,7 +83,7 @@ async def create_native_runner(
             context=agent_context, tool_call_timeout=config.tool_call_timeout
         ),
         tool_executor=FunctionToolExecutor(),
-        agent_hooks=MAIN_AGENT_HOOKS,
+        agent_hooks=MainAgentHooks(request),
         streaming=config.streaming_response,
         max_context_tokens=max_context_tokens,
         llm_compress_instruction=config.llm_compress_instruction,

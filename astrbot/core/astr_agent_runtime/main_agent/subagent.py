@@ -133,11 +133,18 @@ async def apply_subagents(
     return True
 
 
-async def begin_main_agent(run_context: ContextWrapper[AstrAgentContext]) -> None:
+async def begin_main_agent(
+    run_context: ContextWrapper[AstrAgentContext],
+    *,
+    conversation_id: str | None,
+    tools: ToolSet | None,
+) -> None:
     """Bind main's conversation ownership without constructing a worker or runner.
 
     Args:
         run_context: Main execution before its first model step.
+        conversation_id: Parent conversation ID from the prepared request.
+        tools: Parent tools available at the start of execution.
     """
     original = run_context.context
     if isinstance(original, SubAgentContext) and original.is_subagent:
@@ -148,7 +155,7 @@ async def begin_main_agent(run_context: ContextWrapper[AstrAgentContext]) -> Non
     if not isinstance(runtime, AstrAgentRuntime):
         return
     service = runtime.subagents
-    if not isinstance(service, SubAgentService) or run_context.runner is None:
+    if not isinstance(service, SubAgentService):
         return
     if (
         not original.context.get_config(umo=original.event.unified_msg_origin)
@@ -158,11 +165,9 @@ async def begin_main_agent(run_context: ContextWrapper[AstrAgentContext]) -> Non
         .get("enabled", False)
     ):
         return
-    conversation = run_context.runner.req.conversation
-    if conversation is None or original.agent_session is None:
+    if conversation_id is None or original.agent_session is None:
         return
-    scope = AgentScope(original.event.unified_msg_origin, conversation.cid)
-    tools = run_context.runner.req.func_tool
+    scope = AgentScope(original.event.unified_msg_origin, conversation_id)
     parent = SubAgentContext(
         context=original.context,
         event=original.event,
