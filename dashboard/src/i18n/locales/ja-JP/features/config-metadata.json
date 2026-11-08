@@ -1638,6 +1638,18 @@
         ]
       },
 
+      "oauth_image_model": {
+        "description": "Codex 画像モデルの指定（試験的）",
+        "hint": "メインモデルを変更せず、画像ツールのモデルを指定します。既定は gpt-image-2.6-sunburst です。明示的に空欄にするとバックエンドが選択します。指定モデルが無視・変更される場合や、GIF 出力が拒否される場合があります。生成成功だけでは使用モデルを確認できません。",
+        "labels": [
+          "バックエンドが選択",
+          "Images 2.0",
+          "Images 2.5 Flare",
+          "Images 2.5 Sunburst",
+          "Images 2.6 Flare",
+          "Images 2.6 Sunburst（既定）"
+        ]
+      },
       "custom_headers": {
         "description": "カスタムリクエストヘッダー",
         "hint": "ここで追加したキーと値のペアは、AstrBot からプロバイダーへの HTTP リクエストにカスタムヘッダーとして付加されます。値は文字列である必要があります。"
