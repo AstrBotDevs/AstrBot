@@ -523,7 +523,9 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
             ValueError: If the message output buffer cannot be resolved.
         """
         sender_id = getattr(getattr(message, "sender", None), "user_id", "")
-        buffer = self.user_buffer.get(sender_id, None)
+        # Active send mode never creates a passive reply buffer; replies are
+        # pushed through the customer service API instead.
+        buffer = {} if self.active_send_mode else self.user_buffer.get(sender_id)
         if buffer is None:
             raise ValueError(
                 "User message buffer not found: "
