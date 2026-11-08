@@ -193,18 +193,39 @@ class BackupService:
             if not os.path.isfile(file_path):
                 continue
 
-            manifest = self.get_backup_manifest(file_path)
+            try:
+                with open(file_path, "rb") as archive_file:
+                    with zipfile.ZipFile(archive_file, "r") as archive:
+                        if "manifest.json" in archive.namelist():
+                            manifest = json.loads(
+                                archive.read("manifest.json").decode("utf-8")
+                            )
+                        else:
+                            manifest = None
+
+                    # Use metadata from the same open file as the manifest.
+                    # A path replacement during the scan must not mix metadata
+                    # from a different archive into this row.
+                    stat = os.fstat(archive_file.fileno())
+                    path_stat = os.stat(file_path)
+                    if (stat.st_dev, stat.st_ino) != (
+                        path_stat.st_dev,
+                        path_stat.st_ino,
+                    ):
+                        logger.debug(f"Backup file changed while listing: {filename}")
+                        continue
+            except FileNotFoundError:
+                # The archive disappeared during the scan; skip this row.
+                logger.debug(f"Backup file vanished while listing: {filename}")
+                continue
+            except Exception as exc:
+                logger.debug(f"Failed to read backup manifest: {exc}")
+                manifest = None
+
             if manifest is None:
                 logger.debug(f"跳过无效备份文件: {filename}")
                 continue
 
-            try:
-                stat = os.stat(file_path)
-            except FileNotFoundError:
-                # The archive was removed or renamed after its manifest was read;
-                # skip it instead of failing the whole listing.
-                logger.debug(f"Backup file vanished while listing: {filename}")
-                continue
             backup_files.append(
                 {
                     "filename": filename,
