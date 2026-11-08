@@ -1015,6 +1015,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
             tool_call_result_blocks = []
             cached_images = []  # Collect cached images for LLM visibility
+            tool_execution_interrupted = False
             try:
                 async for result in self._handle_function_tools(self.req, llm_resp):
                     if result.kind == "tool_call_result_blocks":
@@ -1038,11 +1039,38 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             data=AgentResponseData(chain=chain),
                         )
             except _ToolExecutionInterrupted:
-                yield await self._finalize_aborted_step()
-                return
+                if not tool_call_result_blocks:
+                    yield await self._finalize_aborted_step()
+                    return
+                tool_execution_interrupted = True
+                completed_ids = {
+                    result.tool_call_id for result in tool_call_result_blocks
+                }
+                cached_images = [
+                    image
+                    for image in cached_images
+                    if image.tool_call_id in completed_ids
+                ]
+                for tool_call_id in llm_resp.tools_call_ids:
+                    if tool_call_id not in completed_ids:
+                        tool_call_result_blocks.append(
+                            ToolCallMessageSegment(
+                                tool_call_id=tool_call_id,
+                                content=(
+                                    "Tool execution was interrupted or not started "
+                                    "because the user requested a stop. This is not "
+                                    "a successful result. Check the current state "
+                                    "before retrying."
+                                ),
+                            )
+                        )
 
             # Keep budget state outside messages so compression cannot reset it.
-            if tool_call_result_blocks and self._step_budget_max is not None:
+            if (
+                not tool_execution_interrupted
+                and tool_call_result_blocks
+                and self._step_budget_max is not None
+            ):
                 notices = []
                 max_steps = self._step_budget_max
                 used_steps = self._step_budget_used
@@ -1086,14 +1114,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
             # 将结果添加到上下文中
             parts = []
-            if llm_resp.reasoning_content is not None or llm_resp.reasoning_signature:
+            if (
+                not tool_execution_interrupted
+                and llm_resp.reasoning_content is not None
+            ) or llm_resp.reasoning_signature:
                 parts.append(
                     ThinkPart(
                         think=llm_resp.reasoning_content or "",
                         encrypted=llm_resp.reasoning_signature,
                     )
                 )
-            if llm_resp.completion_text:
+            if llm_resp.completion_text and not tool_execution_interrupted:
                 parts.append(TextPart(text=llm_resp.completion_text))
             if len(parts) == 0:
                 parts = None
@@ -1147,6 +1178,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         )
 
             self.req.append_tool_calls_result(tool_calls_result)
+            if tool_execution_interrupted:
+                yield await self._finalize_aborted_step()
+                return
 
     async def step_until_done(
         self, max_step: int
@@ -1250,6 +1284,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     _append_tool_call_result(
                         func_tool_id,
                         f"error: Tool {func_tool_name} not found. Available tools are: {', '.join(available_tools)}",
+                    )
+                    yield _HandleFunctionToolsResult.from_tool_call_result_blocks(
+                        tool_call_result_blocks.copy()
                     )
                     continue
 
@@ -1425,6 +1462,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 )
 
             if len(tool_call_result_blocks) > tool_result_blocks_start:
+                # Commit only finished tools. A later tool may be interrupted
+                # before the batch's final result is yielded.
+                yield _HandleFunctionToolsResult.from_tool_call_result_blocks(
+                    tool_call_result_blocks.copy()
+                )
                 tool_result_content = str(tool_call_result_blocks[-1].content)
                 yield _HandleFunctionToolsResult.from_message_chain(
                     MessageChain(
