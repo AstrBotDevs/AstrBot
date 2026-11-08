@@ -33,7 +33,6 @@ from astrbot.core.message.message_event_result import (
 from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_event,
 )
-from astrbot.core.provider.provider import TTSProvider
 from astrbot.core.speech_output import _simulated_stream_tts as _simulated_stream_tts
 
 AgentRunner = ToolLoopAgentRunner[AstrAgentContext]
@@ -440,45 +439,3 @@ async def _watch_agent_stop_signal(agent_runner: AgentRunner, astr_event) -> Non
             agent_runner.request_stop()
             return
         await asyncio.sleep(0.5)
-
-
-async def run_live_agent(
-    agent_runner: AgentRunner,
-    tts_provider: TTSProvider | None = None,
-    max_step: int = 128,
-    show_tool_use: bool = True,
-    show_tool_call_result: bool = False,
-    show_reasoning: bool = False,
-    buffer_intermediate_messages: bool = False,
-) -> AsyncGenerator[MessageChain | None, None]:
-    """Present legacy SDK runner output through Core's shared speech pipeline.
-
-    Args:
-        agent_runner: SDK-owned native runner.
-        tts_provider: Optional TTS provider.
-        max_step: Native step budget.
-        show_tool_use: Whether tool activity is displayed.
-        show_tool_call_result: Whether tool result excerpts are displayed.
-        show_reasoning: Whether reasoning is displayed.
-        buffer_intermediate_messages: Whether intermediate replies are combined.
-
-    Yields:
-        Platform text or synthesized audio chunks.
-    """
-    from astrbot.core.speech_output import stream_speech
-
-    chains = run_agent(
-        agent_runner,
-        max_step=max_step,
-        show_tool_use=show_tool_use,
-        show_tool_call_result=show_tool_call_result,
-        show_reasoning=show_reasoning,
-        buffer_intermediate_messages=buffer_intermediate_messages,
-    )
-    async for chain in stream_speech(
-        chains,
-        tts_provider,
-        event=agent_runner.run_context.context.event,
-        model_name=agent_runner.provider.get_model(),
-    ):
-        yield chain
