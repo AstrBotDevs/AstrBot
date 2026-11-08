@@ -7,6 +7,7 @@
 - Remove eager expert orchestration. Keep selected agent configuration catalogs in system instructions, use fixed control-tool schemas, and resolve agent configurations only when spawning a worker.
 - Use explicit `messages` components for spawning and messaging workers. Initial inputs support text, images, and file references; follow-ups currently become text with attachment references. Remove automatic inheritance of parent-event images.
 - Use `/api/v1/agent-configs` for reusable agent configuration CRUD and `/api/v1/agent-runtimes` for runtime discovery. Retain subagent tools and legacy Agent handoff SDK compatibility.
+- Remove the unused tool catalog endpoints `/api/v1/subagents/available-tools` and `/api/subagent/available-tools`.
 - Separate public agent sessions from their runtime-owned conversations. Add an `AgentRuntime` session/turn contract with `AstrAgentRuntime` as the bundled implementation; extensions can register other runtimes without changing the tools or session store.
 - Remove synthetic parent-agent IDs and redundant worker/runtime state. Persist input executions and result delivery stages directly, and keep native history preparation and steering inside the built-in runtime.
 - Open runtime sessions before returning from `spawn_agent`, then execute model tasks asynchronously. Restore interrupted records without replaying queued inputs; continue existing runtime sessions by agent ID.

@@ -386,16 +386,6 @@ async def test(self, event: AstrMessageEvent):
     yield event.plain_result(llm_resp.completion_text)
 ```
 
-## 保留 SDK 执行上下文
-
-`tool_loop_agent(..., run_context=wrapper)` 可以复用调用方持有的 `ContextWrapper`，从而在生命周期回调中访问同一份消息和执行状态。该 wrapper 的 Context 和 event 必须与本次调用相同，否则抛出 `ValueError`。也可通过 `agent_context` 提供 Agent 上下文。
-
-`run_context.runner` 指向当前 runner；`run_end_reason` 和 `run_error` 在 `on_agent_done` 前填入。内置工具循环支持正常完成、错误、取消和步数耗尽的退出回调。外部 Agent runner 的生命周期取决于其实现。
-
-需要在后台持续工作的插件可用 `context.register_background_task(event, task)` 登记已创建的 asyncio Task，会话停止时会取消这些任务。后台事件可通过事件队列提交。事件默认使用 session 当前的 conversation；需要限定对话的插件应在入队前和处理事件时校验当前 CID，停止或切换对话后不再自动唤醒旧任务。
-
-`FunctionTool.execution_timeout` 可为等待类工具指定独立超时（秒），不填写时使用 runner 默认值；权限包装仍保留该设置。
-
 ## 在现有会话中运行 Agent
 
 通过 `self.context.agent.run_turn()` 提交程序触发的输入，可以沿用目标会话的人格、历史、工具、skills 和 Agent hooks，无需自行构造消息事件或 runner。目前支持内置 Agent runtime。
@@ -465,31 +455,6 @@ if receipt is not None:
 调用身份默认继承当前活跃的同 UMO 事件；后台程序调用默认 member。可通过 `source_event` 显式提供来源事件，或通过 `permissions=AgentPermissions(...)` 提供授权；API key 的管理员权限上限仍然有效。来源事件与目标 UMO 不一致会报错。
 
 不要在当前 turn 的工具中等待同 session 的排队 turn 完成，这会形成互相等待。可以提交后返回，或按目的使用 steer。
-
-## Agent 模块路径与导入兼容
-
-内置 Agent 的实现集中在 `astrbot.core.astr_agent_runtime`。插件从 `astrbot.api.agents` 导入 `AstrAgentContext`、`AgentContextWrapper`、`ContextWrapper` 和 LLM 消息类型，从 `astrbot.api` 导入 `FunctionTool`、`ToolExecResult`、`ToolSet`。这些公共入口重导出原有类型；已有的 `astrbot.core.astr_agent_context` 和 `astrbot.core.agent.*` 导入保持兼容。`Context.tool_loop_agent()` 的调用方式不变。
-
-`astrbot.api.agent` 是已有的 Agent 注册装饰器，类型入口使用复数 `astrbot.api.agents`。
-
-`astrbot.api.agents` 也集中导出 `FunctionTool`、`ToolSet`、`ToolExecResult`、`BaseFunctionToolExecutor` 和 `Conversation`；原有 `astrbot.api`、`astrbot.api.provider` 入口继续保留，导出的是同一对象。
-
-内部实现路径调整如下：
-
-| 原路径 | 新路径 |
-| --- | --- |
-| `core/astr_agent_context.py` | `core/astr_agent_runtime/context.py`，原路径保留重导出 |
-| `core/astr_agent_hooks.py` | `core/astr_agent_runtime/hooks.py` |
-| `core/astr_agent_tool_exec.py` | `core/astr_agent_runtime/tool_executor.py`；插件调用适配位于 `core/star/tool_execution.py` |
-| `core/astr_agent_run_util.py` | `core/astr_agent_runtime/runner.py` |
-| `core/astr_main_agent/` | 内置构建位于 `core/astr_agent_runtime/main_agent/`；子代理编排位于 `core/astr_agent_runtime/subagents/` |
-| `core/subagents/` | `core/astr_agent_runtime/subagents/` |
-| `core/computer/`、`core/tools/` | `core/astr_agent_runtime/computer/`、`core/astr_agent_runtime/tools/` |
-| `core/skills/neo_skill_sync.py` | `core/astr_agent_runtime/computer/neo_skill_sync.py` |
-| `core/astr_agent_wakeup.py` | `core/agent_wakeup.py` |
-| `core/astr_main_agent_resources.py` | 提示词按功能放回所属模块；共享错误约定位于 `core/llm_error_messages.py` |
-
-媒体输入前处理和插件工具、技能筛选继续由 Core 负责；cron、插件和后台任务仍通过事件队列触发输入。
 
 ## 对话管理器
 

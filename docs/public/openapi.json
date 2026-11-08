@@ -138,9 +138,6 @@
     },
     {
       "name": "Agent Configurations"
-    },
-    {
-      "name": "Subagents"
     }
   ],
   "paths": {
@@ -7010,22 +7007,6 @@
         ],
         "summary": "List registered callable agent runtimes",
         "operationId": "listAgentRuntimes",
-        "x-astrbot-scope": "config",
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Ok"
-          }
-        },
-        "description": "**Required scope:** `config`"
-      }
-    },
-    "/api/v1/subagents/available-tools": {
-      "get": {
-        "tags": [
-          "Subagents"
-        ],
-        "summary": "List tools available to subagents",
-        "operationId": "listSubagentAvailableTools",
         "x-astrbot-scope": "config",
         "responses": {
           "200": {

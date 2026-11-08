@@ -84,7 +84,7 @@ Extensions can register a runtime with `ctx.agent.register_runtime(name, runtime
 
 ## Entry points and APIs
 
-Open management through **Configuration → AI → Capabilities → Subagents → Configure Specialized Agents**, route `/subagent`. Use `/api/v1/agent-configs` to list/create records and `/api/v1/agent-configs/{config_id}` to read/update/delete one. `/api/v1/agent-runtimes` lists callable runtimes and their defaults. Tool listing remains at `/api/v1/subagents/available-tools`. All require the `config` scope. The former whole-configuration `/subagents/config` and `/api/subagent/config` endpoints are removed.
+Open management through **Configuration → AI → Capabilities → Subagents → Configure Specialized Agents**, route `/subagent`. Use `/api/v1/agent-configs` to list/create records and `/api/v1/agent-configs/{config_id}` to read/update/delete one. `/api/v1/agent-runtimes` lists callable runtimes and their defaults. These endpoints require the `config` scope. The former whole-configuration `/subagents/config` and `/api/subagent/config` endpoints are removed.
 
 
 ## Runtime output protocol

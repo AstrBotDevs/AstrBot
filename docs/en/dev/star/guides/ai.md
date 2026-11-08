@@ -388,16 +388,6 @@ async def test(self, event: AstrMessageEvent):
     yield event.plain_result(llm_resp.completion_text)
 ```
 
-## Retain an SDK execution context
-
-Pass `run_context=wrapper` to `tool_loop_agent` to reuse a caller-owned `ContextWrapper`, including its messages and execution state. The wrapper must belong to the same Context and event; mismatches raise `ValueError`. Use `agent_context` to supply an Agent context without a caller-owned wrapper.
-
-`run_context.runner` points to the active runner. `run_end_reason` and `run_error` are populated before `on_agent_done`. The built-in tool loop reports completion, errors, cancellation, and step-budget exhaustion; external Agent runners retain their own lifecycle behavior.
-
-Plugins can retain an already scheduled asyncio Task with `context.register_background_task(event, task)`; stopping its session cancels the task. Submit synthetic events through the event queue. Events use the session's current conversation. Plugins that require a particular conversation should validate the current CID before enqueueing and when handling the event, and avoid automatically resuming tasks belonging to a stopped session or a different conversation.
-
-`FunctionTool.execution_timeout` optionally gives waiting tools an independent timeout in seconds. Otherwise the runner default applies. Permission wrappers preserve this setting.
-
 ## Running an Agent in an Existing Conversation
 
 Use `self.context.agent.run_turn()` for programmatic inputs that inherit the target conversation's persona, history, tools, skills and Agent hooks. Plugins do not need to construct events or runners. The built-in Agent runtime is currently supported.
@@ -467,31 +457,6 @@ Follow-ups retain the original runtime and conversation even if the profile runt
 Authorization defaults to the current active same-UMO event, or member rights for background calls. Supply `source_event` explicitly or use `permissions=AgentPermissions(...)` for explicit authorization. API-key administrator ceilings still apply. A source event belonging to another UMO is rejected.
 
 A tool must not wait for another queued turn in its own session: that turn is waiting for the tool's current turn to finish. Submit and return, or use steering as appropriate.
-
-## Agent module paths and import compatibility
-
-The built-in Agent implementation lives under `astrbot.core.astr_agent_runtime`. Plugins import `AstrAgentContext`, `AgentContextWrapper`, `ContextWrapper`, and LLM message types from `astrbot.api.agents`, and `FunctionTool`, `ToolExecResult`, and `ToolSet` from `astrbot.api`. These public entry points re-export the original types; existing `astrbot.core.astr_agent_context` and `astrbot.core.agent.*` imports remain compatible. `Context.tool_loop_agent()` calls are unchanged.
-
-`astrbot.api.agent` remains the existing Agent registration decorator; the type module uses the plural name `astrbot.api.agents`.
-
-`astrbot.api.agents` also exports `FunctionTool`, `ToolSet`, `ToolExecResult`, `BaseFunctionToolExecutor`, and `Conversation`. Existing `astrbot.api` and `astrbot.api.provider` entry points continue to export the same objects.
-
-Internal implementation paths have changed as follows:
-
-| Previous path | Current path |
-| --- | --- |
-| `core/astr_agent_context.py` | `core/astr_agent_runtime/context.py`; the old path retains re-exports |
-| `core/astr_agent_hooks.py` | `core/astr_agent_runtime/hooks.py` |
-| `core/astr_agent_tool_exec.py` | `core/astr_agent_runtime/tool_executor.py`; plugin invocation lives in `core/star/tool_execution.py` |
-| `core/astr_agent_run_util.py` | `core/astr_agent_runtime/runner.py` |
-| `core/astr_main_agent/` | Native construction lives in `core/astr_agent_runtime/main_agent/`; native subagent orchestration lives in `core/astr_agent_runtime/subagents/` |
-| `core/subagents/` | `core/astr_agent_runtime/subagents/` |
-| `core/computer/`, `core/tools/` | `core/astr_agent_runtime/computer/`, `core/astr_agent_runtime/tools/` |
-| `core/skills/neo_skill_sync.py` | `core/astr_agent_runtime/computer/neo_skill_sync.py` |
-| `core/astr_agent_wakeup.py` | `core/agent_wakeup.py` |
-| `core/astr_main_agent_resources.py` | Prompts live with their owning features; shared error conventions live in `core/llm_error_messages.py` |
-
-Core still owns media input preprocessing and plugin tool/skill filtering. Cron, plugins, and background tasks continue to submit input through the event queue.
 
 ## Conversation Manager
 

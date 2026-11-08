@@ -3991,10 +3991,6 @@ export type ListAgentRuntimesResponse = (SuccessEnvelope);
 
 export type ListAgentRuntimesError = unknown;
 
-export type ListSubagentAvailableToolsResponse = (SuccessEnvelope);
-
-export type ListSubagentAvailableToolsError = unknown;
-
 export type VerifyPlatformWebhookData = {
     path: {
         webhook_uuid: string;

@@ -85,7 +85,7 @@ Runtime 适配器通过 `AgentInput.content` 接收有类型的输入：`PlainIn
 
 ## 入口与接口
 
-管理页入口为 **配置 → AI → 能力 → 子代理 → 配置专用 Agent**，路由 `/subagent`。配置接口使用 `/api/v1/agent-configs`（列表、新建）和 `/api/v1/agent-configs/{config_id}`（读取、更新、删除）；`/api/v1/agent-runtimes` 返回可调用 runtime 及默认配置。工具列表使用 `/api/v1/subagents/available-tools`。这些接口需要 `config` 权限，旧的整包 `/subagents/config` 与 `/api/subagent/config` 接口已移除。
+管理页入口为 **配置 → AI → 能力 → 子代理 → 配置专用 Agent**，路由 `/subagent`。配置接口使用 `/api/v1/agent-configs`（列表、新建）和 `/api/v1/agent-configs/{config_id}`（读取、更新、删除）。`/api/v1/agent-runtimes` 返回可调用 runtime 及默认配置。这些接口需要 `config` 权限。旧的整包 `/subagents/config` 与 `/api/subagent/config` 接口已移除。
 
 
 ## Runtime 输出协议

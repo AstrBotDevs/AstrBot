@@ -1134,12 +1134,6 @@ export const agentConfigApi = {
   },
 };
 
-export const subagentApi = {
-  availableTools() {
-    return typed<any>(openApiV1.listSubagentAvailableTools());
-  },
-};
-
 export const commandApi = {
   list(configId?: string) {
     return typed<CommandListData>(

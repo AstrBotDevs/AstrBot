@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from asyncio import Queue, Task
+from asyncio import Queue
 from collections.abc import Awaitable, Callable, Sequence
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -817,17 +817,6 @@ class Context:
     def get_event_queue(self) -> Queue:
         """获取事件队列。"""
         return self._event_queue
-
-    def register_background_task(self, event: AstrMessageEvent, task: Task) -> None:
-        """Retain a background task and cancel it when its session is stopped.
-
-        Args:
-            event: Original event owning the task and its session permissions.
-            task: Already scheduled task; its coroutine must clean up on cancellation.
-        """
-        from astrbot.core.utils.active_event_registry import active_event_registry
-
-        active_event_registry.register_background_task(event, task)
 
     @deprecated(version="4.0.0", reason="Use get_platform_inst instead")
     def get_platform(self, platform_type: PlatformAdapterType | str) -> Platform | None:

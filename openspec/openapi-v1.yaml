@@ -94,7 +94,6 @@ tags:
   - name: Logs
   - name: T2I
   - name: Agent Configurations
-  - name: Subagents
   - name: Webhooks
 
 paths:
@@ -5466,16 +5465,6 @@ paths:
       tags: [Agent Configurations]
       summary: List registered callable agent runtimes
       operationId: listAgentRuntimes
-      x-astrbot-scope: config
-      responses:
-        "200":
-          $ref: "#/components/responses/Ok"
-
-  /api/v1/subagents/available-tools:
-    get:
-      tags: [Subagents]
-      summary: List tools available to subagents
-      operationId: listSubagentAvailableTools
       x-astrbot-scope: config
       responses:
         "200":
