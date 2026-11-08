@@ -3730,8 +3730,8 @@ async def test_feature_composition_preserves_tool_scope_and_instruction_order(
     assert "Workspace marker" not in environment
     if runtime == "local":
         assert "## Shell and sessions" in environment
-        assert "## Execution policy" in environment
-        assert "Local execution policy:" in environment
+        assert "## Execution policy" not in environment
+        assert "Local execution policy:" not in environment
         assert f"Current workspace: `{workspace_root}`" in environment
     else:
         assert "sandboxed environment" in environment
@@ -3825,6 +3825,7 @@ async def test_local_network_notice_preserves_system_prompt(
     monkeypatch, mock_context, mock_event
 ):
     """Keep speaker permissions temporary and out of the shared prompt/history."""
+    mock_context.mock_add_spec(Context)
     notice = computer_use_build.LOCAL_NETWORK_POLICY_NOTICE
     monkeypatch.setattr(
         computer_use_build, "_apply_local_env_tools", lambda *args: "Local tools"
