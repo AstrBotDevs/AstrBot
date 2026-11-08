@@ -637,32 +637,9 @@ The server injects `data-theme` into returned HTML to reduce initial flashing. I
 
 ### Following user-selected colors
 
-The optional context field `themeColors` contains the effective `primary` and `secondary` colors, including colors selected in dashboard settings. The host sends these values through `onContext()` on initialization, light/dark mode changes, and color edits or resets. No View refresh or sandbox permission changes are required. The bridge exposes colors without overriding the View's styles.
+`context.themeColors` exposes the effective `primary` and `secondary` colors as CSS color strings. The View decides how to apply them.
 
-Server-injected initial contexts and older AstrBot versions may omit `themeColors`. Subscribe with `onContext()` instead of relying only on the first `ready()` result, and retain the View's CSS defaults when fields are absent. Keep warning and error colors independent, and ensure sufficient text contrast when applying a custom background color.
-
-```css
-:root {
-  --plugin-primary: #3c96ca;
-  --plugin-secondary: #2f86bd;
-}
-```
-
-```js
-await bridge.ready();
-const off = bridge.onContext((context) => {
-  for (const key of ["primary", "secondary"]) {
-    const value = context.themeColors?.[key];
-    const property = `--plugin-${key}`;
-    if (typeof value === "string" && CSS.supports("color", value)) {
-      document.documentElement.style.setProperty(property, value);
-    } else {
-      document.documentElement.style.removeProperty(property);
-    }
-  }
-});
-// Call off() when the View is disposed.
-```
+Use `bridge.onContext(handler)` to receive the initial palette and updates after theme switches, color edits, or resets. Server-injected initial contexts and older AstrBot versions may omit this field; fall back to the View's default colors rather than relying only on the first `ready()` result.
 
 ## Static Asset Paths
 

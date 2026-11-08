@@ -637,32 +637,9 @@ body {
 
 ### 跟随用户配色
 
-宿主上下文中的可选 `themeColors` 包含当前生效的 `primary`（主色）和 `secondary`（辅助色），包括用户在系统设置中选择的颜色。初始化、切换深浅模式、修改或重置配色后，宿主会通过 `onContext()` 发送当前值；View 无需刷新，iframe 沙盒权限保持不变。颜色只通过上下文提供，Bridge 不会强制覆盖 View 的样式。
+`context.themeColors` 提供当前生效的 `primary`（主色）和 `secondary`（辅助色），值为 CSS 颜色字符串，由 View 自行应用到样式。
 
-服务端预注入的初始上下文和旧版 AstrBot 可能没有 `themeColors`。不要只依赖 `ready()` 的一次返回值；监听 `onContext()`，缺少字段时使用 View 自己的 CSS 默认值。主色不能替代警告、错误等语义色；使用自定义色作背景时，应确保文字有足够对比度。
-
-```css
-:root {
-  --plugin-primary: #3c96ca;
-  --plugin-secondary: #2f86bd;
-}
-```
-
-```js
-await bridge.ready();
-const off = bridge.onContext((context) => {
-  for (const key of ["primary", "secondary"]) {
-    const value = context.themeColors?.[key];
-    const property = `--plugin-${key}`;
-    if (typeof value === "string" && CSS.supports("color", value)) {
-      document.documentElement.style.setProperty(property, value);
-    } else {
-      document.documentElement.style.removeProperty(property);
-    }
-  }
-});
-// Call off() when the View is disposed.
-```
+通过 `bridge.onContext(handler)` 接收初始配色，以及主题切换、颜色修改和重置后的更新。服务端预注入的初始上下文和旧版 AstrBot 可能没有该字段；缺失时使用 View 的默认配色，不要仅依赖 `ready()` 的首次返回值。
 
 ## 静态资源路径
 
