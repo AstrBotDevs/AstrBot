@@ -34,7 +34,7 @@ llm_resp = await self.context.llm_generate(
 
 A Decision Provider handles low-latency structured choices, such as whether to reply, which message to answer, or which branch to execute. Configure one under **Providers → Decision** in the WebUI, then call it from a plugin through `self.context.decision`. It is independent of the chat model.
 
-One request can answer multiple questions. `state` is passed to the decision model as-is and must be a `str`, `list`, or `dict`:
+One request can answer multiple questions. `state` accepts text or business JSON (`str`, `list`, or `dict`). With OpenAI Decisions, plain dictionaries and lists become `input_json`; lists containing non-object elements are wrapped as `{"state": [...]}`. They are not inferred to be conversation messages. Use `DecisionInput` for explicit native message input, as shown below. System One retains its existing `state` format.
 
 ```py
 from astrbot.api.provider import (
@@ -86,7 +86,7 @@ if (
 
 `DecisionChoiceQuestion.criteria` maps option IDs to descriptions and corresponds to `criteria` in the System One request. For choice questions, `choice` is the selected option ID, `probabilities` contains the full distribution, and `confidence` is the model confidence. For boolean questions, `probability` is the probability that the statement is true. Business rules such as proactive-reply thresholds remain the caller's responsibility.
 
-Results use three independent frozen dataclasses: `DecisionChoiceAnswer`, `DecisionBooleanAnswer`, and `DecisionScoreAnswer`. `DecisionAnswer` is their union type. After calling `ask()`, use `isinstance()` to identify the result type before accessing its fields. `choose()` returns `DecisionChoiceAnswer`, while `yes_no()` returns `bool`.
+Results use independent frozen dataclasses: `DecisionChoiceAnswer`, `DecisionBooleanAnswer`, `DecisionScoreAnswer`, and, for native OpenAI refusals, `DecisionRefusalAnswer`. After calling `ask()`, use `isinstance()` to identify the result type before accessing its fields. `choose()` returns `DecisionChoiceAnswer`, while `yes_no()` returns `bool`; a refusal follows their existing error or configured default behavior.
 
 `DecisionScoreQuestion.criteria` is a list of 2–10 string levels, ordered from lowest to highest and numbered from 0. `DecisionScoreAnswer.score` is a probability-weighted rating, possibly fractional, from `0` to `len(criteria) - 1`. Both `legend` and `probabilities` use string level numbers such as `"0"` as keys, mapping to descriptions and probabilities; `confidence` reports certainty. A score answer contains only these four fields. All three question types can be mixed in one `ask()` call.
 
@@ -107,6 +107,38 @@ should_reply = await self.context.decision.yes_no(
 ```
 
 Pass `provider_id="provider_id"` to use a specific configured decision provider; otherwise the default one is used. `DecisionError` is raised for an unconfigured provider, timeout, connection failure, HTTP error, invalid JSON, or an answer outside the requested contract. Underlying details are written to the AstrBot log, so plugins can catch the exception and decide whether to skip or degrade this decision.
+
+### Native OpenAI Decisions
+
+In **Providers → Decision**, add **OpenAI Decisions**, save the source, then fetch its model directory or enter a model ID manually. Multiple decision model instances can share one source. The default API base is `https://api.openai.com/v1`; compatible gateways may use a different prefix, such as `https://gateway.example/openai/v1`. Discovery uses `GET <base>/models`, and decisions use `POST <base>/decisions`, with the configured keys, headers, and proxy. The source can be saved without a model; each model instance requires one. The directory does not certify Decisions capability. An endpoint supporting `/responses` or chat may reject `/decisions`; the adapter reports that failure rather than falling back to chat.
+
+OpenAI currently documents `gpt-6-luna` for Decisions. This is an example, not a fixed allowlist for gateways. The per-operation network timeout defaults to 30 seconds, the total request deadline to 60 seconds, and maximum concurrency to 4. `custom_extra_body` supports endpoint options such as prompt-cache controls; it cannot replace `model`, `input`, `questions`, or `stream`. See the [OpenAI Decisions guide](https://developers.openai.com/api/docs/guides/decisions) for the native content and cache format.
+
+Use HTTPS for remote endpoints: API keys, prompts, images and tool evidence are sent to the configured source. Plain HTTP is supported for explicitly configured local or trusted-network compatible services, but does not encrypt that traffic. The adapter does not follow redirects or automatically downgrade HTTPS to HTTP.
+
+Use explicit wrappers when passing native messages or question-level image parts:
+
+```py
+from astrbot.api.provider import (
+    DecisionBooleanQuestion, DecisionContent, DecisionInput, DecisionRefusalAnswer,
+)
+
+result = await self.context.decision.ask(
+    {"visible": DecisionBooleanQuestion(DecisionContent(parts=[
+        {"type": "input_text", "text": "Is a warning visible in this image?"},
+        {"type": "input_image", "image_url": "https://example.com/screenshot.png"},
+    ]))},
+    state=DecisionInput(items=[
+        {"role": "user", "content": [{"type": "input_text", "text": "Check the screenshot."}]},
+    ]),
+    provider_id="openai_decision/gpt-6-luna",
+)
+if isinstance(result["visible"], DecisionRefusalAnswer):
+    # Handle a refused question without treating it as a negative answer.
+    pass
+```
+
+The OpenAI adapter returns `DecisionResult`, a mapping compatible with existing answer access. Its `model`, `request_id`, `usage`, and `attempt_usages` metadata belong to that request. Usage counts may be absent; a reported zero remains zero. Cached input counts are part of input tokens and must not be added again. These metadata do not imply that the Dashboard aggregates every Decision request. System One remains a separate protocol and does not accept native OpenAI input wrappers. Multimodal, cache, refusal, and usage support on third-party endpoints depends on their native Decisions implementation.
 
 ## Defining Tools
 

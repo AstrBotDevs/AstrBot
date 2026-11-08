@@ -1,4 +1,4 @@
-﻿{
+{
     "title": "Провайдеры моделей",
     "subtitle": "Настройка AI моделей для диалогов. Также поддерживает Dify, Coze, а также внешние Agent-сервисы.",
     "providers": {
@@ -26,6 +26,12 @@
             "kimi_code": "Специальная интеграция Kimi CodingPlan / Kimi Code с отдельной совместимой адаптацией Anthropic API.",
             "vllm_rerank": "Также поддерживает Jina AI, Cohere, PPIO и другие.",
             "default": "Преобразование речи в текст"
+        },
+        "openaiDecisionHints": {
+            "model": "ID модели",
+            "apiBase": "Базовый URL API, например https://api.openai.com/v1. Добавляются /models и /decisions с сохранением префикса пути шлюза.",
+            "customHeaders": "Дополнительные HTTP-заголовки для каталога моделей и нативных запросов Decisions.",
+            "models": "Наличие модели в каталоге не гарантирует поддержку /decisions. Выберите или введите ID модели (например gpt-6-luna), затем проверьте экземпляр. Поддержка Chat или Responses не означает поддержку Decisions."
         },
         "decisionHints": {
             "apiBase": "Адрес System One. К базовому URL автоматически добавляется /systemone; завершите URL символом /, чтобы использовать его без изменений.",

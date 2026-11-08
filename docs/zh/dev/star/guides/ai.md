@@ -33,7 +33,7 @@ llm_resp = await self.context.llm_generate(
 
 判断提供商（Decision Provider）用于低延迟的结构化选择，例如是否回复、回复哪条消息或选择执行分支。先在 WebUI 的「模型提供商」→「判断」中配置提供商，插件通过 `self.context.decision` 调用，它与聊天模型互不影响。
 
-一次请求可以同时回答多个问题。`state` 会原样传给判断模型，类型为 `str | list | dict`：
+一次请求可以同时回答多个问题。`state` 接受文本和业务 JSON，类型为 `str | list | dict`。OpenAI Decisions 将普通字典和列表作为 `input_json`；包含非对象元素的列表会包装为 `{"state": [...]}`，不会自动推断为消息历史。显式原生消息使用下文的 `DecisionInput`。System One 保持原有 `state` 格式。
 
 ```py
 from astrbot.api.provider import (
@@ -85,7 +85,7 @@ if (
 
 `DecisionChoiceQuestion.criteria` 是选项 ID 到选项描述的映射，与 System One 请求中的 `criteria` 对应。选择类结果的 `choice` 是选项 ID，`probabilities` 包含完整概率分布，`confidence` 是模型置信度；布尔类结果使用 `probability` 表示陈述为真的概率。主动回复阈值等业务规则由调用方决定。
 
-返回结果按题型分别是 `DecisionChoiceAnswer`、`DecisionBooleanAnswer` 和 `DecisionScoreAnswer`，它们是三个独立的冻结数据类。`DecisionAnswer` 是这三个类的联合类型。调用 `ask()` 后，可使用 `isinstance()` 确认结果类型再读取对应字段；`choose()` 明确返回 `DecisionChoiceAnswer`，`yes_no()` 返回 `bool`。
+返回结果按题型分别是 `DecisionChoiceAnswer`、`DecisionBooleanAnswer` 和 `DecisionScoreAnswer`，OpenAI 原生拒答使用 `DecisionRefusalAnswer`，它们是独立的冻结数据类。调用 `ask()` 后，可使用 `isinstance()` 确认结果类型再读取对应字段；`choose()` 明确返回 `DecisionChoiceAnswer`，`yes_no()` 返回 `bool`。拒答沿用快捷方法既有的异常或已配置默认值处理。
 
 评分类 `DecisionScoreQuestion.criteria` 是由低到高排列的 2～10 个字符串等级，等级从 0 编号。`DecisionScoreAnswer.score` 是概率加权评分，可以为小数，范围是 `0` 到 `len(criteria) - 1`；`legend` 和 `probabilities` 分别以字符串等级编号（如 `"0"`）映射到描述和概率，`confidence` 表示置信度。评分结果仅包含这四个字段。三种题型可以通过同一次 `ask()` 调用混合提交。
 
@@ -106,6 +106,38 @@ should_reply = await self.context.decision.yes_no(
 ```
 
 如需指定已配置的判断提供商，传入 `provider_id="provider_id"`；省略时使用默认判断提供商。提供商未配置、请求超时、连接失败、HTTP 错误、响应不是合法 JSON，或返回的选项与概率不符合请求契约时，统一抛出 `DecisionError`；底层异常详情会写入 AstrBot 日志。插件应捕获该异常并决定跳过本次判断或降级处理。
+
+### OpenAI 原生 Decisions
+
+在「模型提供商」→「判断」中添加 **OpenAI Decisions**，保存来源后获取模型目录，也可以手动填写模型 ID。同一来源可创建多个判断模型实例。默认 API 基础地址为 `https://api.openai.com/v1`；兼容网关可以使用其他路径前缀，例如 `https://gateway.example/openai/v1`。目录通过 `GET <base>/models` 获取，判断通过 `POST <base>/decisions` 请求，两者使用配置中的密钥、请求头和代理。来源可以不填模型，每个模型实例必须指定模型。目录中的模型不一定支持 Decisions；支持 `/responses` 或聊天接口也不代表支持 `/decisions`。判断接口不兼容时会报告失败，不会自动改用聊天接口。
+
+OpenAI 当前文档中的模型为 `gpt-6-luna`，该名称用于举例，不作为兼容网关的固定白名单。单次网络操作超时默认为 30 秒，请求总时限为 60 秒，最大并发数为 4。`custom_extra_body` 可以配置原生接口选项，例如提示缓存控制；不能替换 `model`、`input`、`questions` 和 `stream`。原生内容及缓存格式参见 [OpenAI Decisions 指南](https://developers.openai.com/api/docs/guides/decisions)。
+
+远程接口应使用 HTTPS；密钥、提示、图片和工具证据都会发送到配置的来源。HTTP 用于显式配置的本地或可信网络兼容服务，但不会加密传输内容。适配器不会跟随重定向，也不会自动将 HTTPS 降级为 HTTP。
+
+原生消息和问题级图片使用显式包装：
+
+```py
+from astrbot.api.provider import (
+    DecisionBooleanQuestion, DecisionContent, DecisionInput, DecisionRefusalAnswer,
+)
+
+result = await self.context.decision.ask(
+    {"visible": DecisionBooleanQuestion(DecisionContent(parts=[
+        {"type": "input_text", "text": "Is a warning visible in this image?"},
+        {"type": "input_image", "image_url": "https://example.com/screenshot.png"},
+    ]))},
+    state=DecisionInput(items=[
+        {"role": "user", "content": [{"type": "input_text", "text": "Check the screenshot."}]},
+    ]),
+    provider_id="openai_decision/gpt-6-luna",
+)
+if isinstance(result["visible"], DecisionRefusalAnswer):
+    # Handle a refused question without treating it as a negative answer.
+    pass
+```
+
+OpenAI 适配器返回 `DecisionResult`，保持按问题 ID 访问答案的映射接口。其 `model`、`request_id`、`usage` 和 `attempt_usages` 元数据属于当前请求。用量字段可能缺失，接口返回的零值会保留；缓存输入包含在输入词元中，不能再次累加。这些元数据不代表 Dashboard 已汇总所有判断调用。System One 仍为独立协议，不接受 OpenAI 原生输入包装。第三方接口的多模态、缓存、拒答及用量支持取决于其原生 Decisions 实现。
 
 ## 定义 Tool
 

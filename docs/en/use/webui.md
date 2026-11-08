@@ -2,6 +2,10 @@
 
 The AstrBot admin panel features plugin management, log viewing, visual configuration, statistics viewing, and more.
 
+The screenshot shows `gpt-6-luna` added and successfully tested against the real API from an isolated test UI. New sources default to `openai-decisions` and use the same OpenAI icon as Responses; existing source IDs remain unchanged. A model directory does not establish Decisions capability. The displayed latency includes test-bridge overhead and is not a performance benchmark.
+
+![Decision model added and successfully tested](./images/decision-models-en.png)
+
 ## Navigation and Previous Entry Points
 
 These paths use the current default sidebar with a fixed menu order. Extension items still support collapsing, pinning, and grouping by plugin.
@@ -23,6 +27,8 @@ These paths use the current default sidebar with a fixed menu order. Extension i
 | Custom Rules / Future Tasks / SubAgents | Custom Rules is under the sidebar `System` group; Future Tasks and SubAgents are under the `Extensions` group |
 
 Old log, trace, conversation, and statistics URLs still redirect to the corresponding tabs. Agent runners are now saved in each profile; they are no longer created as model providers. See [Agent Execution Mode](./agent-runner.md) for the setup steps.
+
+Under **Providers → Decision**, **OpenAI Decisions** uses the source-and-model workbench: save a source, fetch its model directory or add a model ID manually, then test each configured instance. A listed model is not guaranteed to support `/decisions`. Existing **System One** entries keep their single-model form. See [Structured Decisions](../dev/star/guides/ai.md#structured-decisions) for plugin calls and compatibility details. This addition reuses the existing navigation and model workbench; no navigation entries have moved.
 
 ## Documentation Navigation
 

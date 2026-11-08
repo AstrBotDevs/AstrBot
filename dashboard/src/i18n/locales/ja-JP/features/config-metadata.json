@@ -2069,7 +2069,7 @@
       },
       "total_timeout": {
         "description": "総タイムアウト",
-        "hint": "1 回の判定リクエストの総タイムアウト（秒）です。同時実行枠の待機、再試行、バックオフを含みます。既定値は 5 秒です。"
+        "hint": "待機、再試行、バックオフを含む判断リクエスト全体の制限時間（秒）。System One は既定 5 秒、OpenAI Decisions は既定 60 秒。"
       },
       "max_concurrency": {
         "description": "最大同時実行数",

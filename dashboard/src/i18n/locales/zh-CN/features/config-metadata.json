@@ -1989,7 +1989,7 @@
       },
       "total_timeout": {
         "description": "总超时时间",
-        "hint": "单次决策请求的总超时时间（秒），包含等待并发名额、重试与退避；默认 5 秒。"
+        "hint": "单次决策请求的总超时时间（秒），包含等待并发名额、重试与退避；System One 默认 5 秒，OpenAI Decisions 默认 60 秒。"
       },
       "max_concurrency": {
         "description": "最大并发数",

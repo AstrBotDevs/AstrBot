@@ -27,6 +27,12 @@
       "vllm_rerank": "也支持 Jina AI, Cohere, PPIO 等提供商。",
       "default": ""
     },
+    "openaiDecisionHints": {
+      "model": "模型 ID",
+      "apiBase": "API 基础地址，例如 https://api.openai.com/v1。获取目录时追加 /models，判断请求追加 /decisions；保留网关路径前缀。",
+      "customHeaders": "用于获取模型目录和原生 Decisions 请求的额外 HTTP 请求头，不影响其他提供商。",
+      "models": "模型目录不代表其中的模型均支持 /decisions。选择或手动填写模型 ID（例如 gpt-6-luna）后，请测试该实例。支持聊天或 Responses 接口不代表支持 Decisions。"
+    },
     "decisionHints": {
       "apiBase": "System One 接口地址。填写基础地址时自动补全 /systemone；以 / 结尾则按完整地址请求。",
       "model": "System One 模型 ID，如 jev-latest、jev-preview，或服务商指定的模型名。",

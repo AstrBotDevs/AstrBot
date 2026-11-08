@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import enum
 import json
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import Any, TypeAlias
 
 from anthropic.types import Message as AnthropicMessage
@@ -41,6 +42,20 @@ class ProviderType(enum.Enum):
 
 
 @dataclass(frozen=True, slots=True)
+class DecisionInput:
+    """Explicit native decision input, including messages and tool history."""
+
+    items: str | list[dict[str, Any]]
+
+
+@dataclass(frozen=True, slots=True)
+class DecisionContent:
+    """Explicit multimodal content for an individual decision question."""
+
+    parts: list[dict[str, Any]]
+
+
+@dataclass(frozen=True, slots=True)
 class DecisionChoiceQuestion:
     """A decision question with a fixed set of choices.
 
@@ -49,8 +64,8 @@ class DecisionChoiceQuestion:
         criteria: Mapping of option IDs to descriptions. At least two entries are required.
     """
 
-    instructions: str
-    criteria: Mapping[str, str]
+    instructions: str | DecisionContent
+    criteria: Mapping[str | bool, str]
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,7 +76,7 @@ class DecisionBooleanQuestion:
         instructions: The statement or question evaluated by the model.
     """
 
-    instructions: str
+    instructions: str | DecisionContent
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,14 +88,14 @@ class DecisionScoreQuestion:
         criteria: Two to ten level descriptions, ordered from lowest to highest.
     """
 
-    instructions: str
+    instructions: str | DecisionContent
     criteria: list[str]
 
 
 DecisionQuestion: TypeAlias = (
     DecisionChoiceQuestion | DecisionBooleanQuestion | DecisionScoreQuestion
 )
-DecisionState: TypeAlias = str | list[Any] | dict[str, Any]
+DecisionState: TypeAlias = str | list[Any] | dict[str, Any] | DecisionInput
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,9 +109,9 @@ class DecisionChoiceAnswer:
         confidence: Model confidence in the selected option.
     """
 
-    choice: str
+    choice: str | bool
     probability: float
-    probabilities: Mapping[str, float]
+    probabilities: Mapping[str | bool, float]
     confidence: float
 
 
@@ -128,13 +143,72 @@ class DecisionScoreAnswer:
     confidence: float
 
 
+@dataclass(frozen=True, slots=True)
+class DecisionRefusalAnswer:
+    """The model declined an individual question without an explanation."""
+
+
 DecisionAnswer: TypeAlias = (
-    DecisionChoiceAnswer | DecisionBooleanAnswer | DecisionScoreAnswer
+    DecisionChoiceAnswer
+    | DecisionBooleanAnswer
+    | DecisionScoreAnswer
+    | DecisionRefusalAnswer
 )
+
+
+@dataclass(frozen=True, slots=True)
+class DecisionUsage:
+    """Request token counts; absent counts remain unknown instead of zero."""
+
+    input_tokens: int | None = None
+    cached_tokens: int | None = None
+    cache_write_tokens: int | None = None
+    output_tokens: int | None = None
+    reasoning_tokens: int | None = None
+    total_tokens: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class DecisionResult(Mapping[str, DecisionAnswer]):
+    """Read-only answers with metadata belonging to this request only."""
+
+    answers: Mapping[str, DecisionAnswer]
+    model: str
+    usage: DecisionUsage | None = None
+    request_id: str | None = None
+    attempt_usages: tuple[DecisionUsage | None, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "answers", MappingProxyType(dict(self.answers)))
+        object.__setattr__(self, "attempt_usages", tuple(self.attempt_usages))
+
+    def __getitem__(self, key: str) -> DecisionAnswer:
+        return self.answers[key]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self.answers)
+
+    def __len__(self) -> int:
+        return len(self.answers)
 
 
 class DecisionError(RuntimeError):
     """Raised when a decision provider is unavailable or returns an invalid answer."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        usage: DecisionUsage | None = None,
+        status_code: int | None = None,
+        model: str | None = None,
+        attempt_usages: tuple[DecisionUsage | None, ...] = (),
+    ) -> None:
+        super().__init__(message)
+        self.usage = usage
+        self.status_code = status_code
+        self.model = model
+        self.attempt_usages = tuple(attempt_usages)
 
 
 @dataclass

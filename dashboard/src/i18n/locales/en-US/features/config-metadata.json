@@ -1968,7 +1968,7 @@
       },
       "total_timeout": {
         "description": "Total timeout",
-        "hint": "Total timeout in seconds for one decision request, including concurrency-slot wait, retries, and backoff; default 5 seconds."
+        "hint": "Total request timeout including queue, retries and backoff; System One defaults to 5 seconds, OpenAI Decisions to 60 seconds."
       },
       "max_concurrency": {
         "description": "Maximum concurrency",

@@ -27,6 +27,12 @@
       "vllm_rerank": "Jina AI、Cohere、PPIO などのプロバイダーにも対応しています。",
       "default": ""
     },
+    "openaiDecisionHints": {
+      "model": "モデル ID",
+      "apiBase": "API ベース URL（例：https://api.openai.com/v1）。モデル取得には /models、判断には /decisions を追加し、ゲートウェイのパス接頭辞を保持します。",
+      "customHeaders": "モデル一覧とネイティブ Decisions リクエストに追加する HTTP ヘッダー。他のプロバイダーには適用されません。",
+      "models": "モデル一覧への掲載は /decisions 対応を保証しません。モデル ID（例：gpt-6-luna）を選択または手入力し、インスタンスをテストしてください。Chat や Responses への対応だけでは Decisions 対応を意味しません。"
+    },
     "decisionHints": {
       "apiBase": "System One のエンドポイントです。ベース URL には /systemone が自動追加されます。末尾を / にするとそのまま使用します。",
       "model": "System One のモデル ID（例: jev-latest、jev-preview、またはサービス指定のモデル名）。",

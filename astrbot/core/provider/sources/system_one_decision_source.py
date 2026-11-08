@@ -17,6 +17,7 @@ from ..entities import (
     DecisionChoiceAnswer,
     DecisionChoiceQuestion,
     DecisionError,
+    DecisionInput,
     DecisionQuestion,
     DecisionScoreAnswer,
     DecisionScoreQuestion,
@@ -116,13 +117,19 @@ class SystemOneDecisionProvider(DecisionProvider):
         """
         if not questions:
             raise ValueError("questions must not be empty")
+        if isinstance(state, DecisionInput):
+            raise ValueError("System One does not support native DecisionInput")
 
         payload_questions: dict[str, dict[str, Any]] = {}
         for head, question in questions.items():
+            if not isinstance(question.instructions, str):
+                raise ValueError("System One requires text question instructions")
             instructions = question.instructions.strip()
             if not instructions:
                 raise ValueError(f"question {head} must not be empty")
             if isinstance(question, DecisionChoiceQuestion):
+                if any(not isinstance(value, str) for value in question.criteria):
+                    raise ValueError("System One requires string choice values")
                 if len(question.criteria) < 2:
                     raise ValueError(
                         f"question {head} requires at least two criteria entries"
