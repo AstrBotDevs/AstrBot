@@ -36,6 +36,7 @@ from astrbot.core.provider.entities import (
     ProviderRequest,
 )
 from astrbot.core.star.star_handler import EventType
+from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.config_number import coerce_int_config
 from astrbot.core.utils.media_utils import describe_media_ref
 from astrbot.core.utils.metrics import Metric
@@ -378,7 +379,10 @@ class ThirdPartyAgentSubStage(Stage):
             if stream_watchdog_task and not stream_watchdog_task.done():
                 stream_watchdog_task.cancel()
 
+        active_event_registry.register_agent_stop_callback(event, event.stop_event)
         try:
+            if active_event_registry.get_background_stop_signal(event).is_set():
+                return
             await runner.reset(
                 request=req,
                 run_context=AgentContextWrapper(
@@ -413,6 +417,9 @@ class ThirdPartyAgentSubStage(Stage):
                 ):
                     yield
         finally:
+            active_event_registry.unregister_agent_stop_callback(
+                event, event.stop_event
+            )
             if (
                 stream_watchdog_task
                 and not stream_watchdog_task.done()

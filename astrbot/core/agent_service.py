@@ -37,6 +37,7 @@ from astrbot.core.platform.astr_message_event import (
     event_context,
 )
 from astrbot.core.platform.message_session import MessageSession
+from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.trace import trace_execution
 
 if TYPE_CHECKING:
@@ -465,6 +466,9 @@ class AgentService:
                 session.runtime_name = run._runtime_name
                 event.agent_session = AgentSessionRef(run._runtime_name, session.id)
                 turn = await session.run_turn(input, admit=admit)
+                active_event_registry.register_agent_stop_callback(
+                    event, turn.request_stop
+                )
                 run._ready.set_result(turn)
                 if run.send_to_user:
                     try:
@@ -479,8 +483,12 @@ class AgentService:
                 run._ready.set_exception(exc)
             raise
         finally:
-            if turn is not None and not turn.done:
-                await turn.cancel()
+            if turn is not None:
+                active_event_registry.unregister_agent_stop_callback(
+                    event, turn.request_stop
+                )
+                if not turn.done:
+                    await turn.cancel()
             self._runs.discard(run)
 
     async def close(self) -> None:

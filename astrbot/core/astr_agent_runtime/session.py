@@ -109,9 +109,6 @@ class NativeAgentSession(AgentSession):
         runner.run_context.context.runtime = self.runtime
         if self.is_main:
             self.runtime._active_main[self.umo] = turn
-            active_event_registry.register_agent_stop_callback(
-                event, runner.request_stop
-            )
         metadata = {
             "user_prompt": req.prompt,
             "persona_id": event.get_extra("_trace_persona_id"),
@@ -205,7 +202,6 @@ class NativeAgentSession(AgentSession):
                     receipt.resolve(saved and ticket.consumed)
             self._steering.clear()
             if self.is_main:
-                active_event_registry.unregister_agent_stop_callback(event)
                 if self.runtime._active_main.get(self.umo) is turn:
                     self.runtime._active_main.pop(self.umo)
             self._runner = None
@@ -216,8 +212,21 @@ class NativeAgentSession(AgentSession):
         Args:
             turn: Exact execution being cancelled.
         """
+        await self.request_stop_turn(turn)
+
+    async def request_stop_turn(self, turn: AgentTurn) -> bool:
+        """Stop the native loop and allow the turn to save its history.
+
+        Args:
+            turn: Exact execution receiving the stop request.
+
+        Returns:
+            Whether the current loop can handle the stop itself.
+        """
         if self.active_turn is turn and self._runner is not None:
             self._runner.request_stop()
+            return True
+        return False
 
     def steer_turn(self, turn: AgentTurn, input: AgentInput) -> InputReceipt | None:
         """Submit additional input through the runner's safe-boundary mechanism.

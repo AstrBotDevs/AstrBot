@@ -33,18 +33,24 @@ class StubEvent:
 
 
 def test_request_agent_stop_invokes_registered_callback() -> None:
-    """Agent stop requests immediately invoke the active execution callback."""
+    """An event can own several executions with independent callbacks."""
     registry = ActiveEventRegistry()
     event = StubEvent("webchat:FriendMessage:webchat!alice!session")
-    callback = Mock()
+    callback, other = Mock(), Mock()
     registry.register(event)
     registry.register_agent_stop_callback(event, callback)
+    registry.register_agent_stop_callback(event, other)
 
     stopped_count = registry.request_agent_stop_all(event.unified_msg_origin)
 
     assert stopped_count == 1
     assert event.extras["agent_stop_requested"] is True
     callback.assert_called_once_with()
+    other.assert_called_once_with()
+    registry.unregister_agent_stop_callback(event, callback)
+    registry.request_agent_stop_all(event.unified_msg_origin)
+    callback.assert_called_once_with()
+    assert other.call_count == 2
 
 
 def test_unregister_removes_agent_stop_callback() -> None:

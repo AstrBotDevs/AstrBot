@@ -156,6 +156,7 @@ class InternalAgentSubStage(Stage):
                     admit_agent_input, self.ctx.plugin_manager.context, input
                 ),
             )
+            active_event_registry.register_agent_stop_callback(event, turn.request_stop)
             stream_to_general = (
                 self.unsupported_streaming_strategy == "turn_off"
                 and not event.platform_meta.support_streaming_message
@@ -239,8 +240,12 @@ class InternalAgentSubStage(Stage):
             )
             await event.send(MessageChain().message(str(error)))
         finally:
-            if turn is not None and not turn.done:
-                await turn.cancel()
+            if turn is not None:
+                active_event_registry.unregister_agent_stop_callback(
+                    event, turn.request_stop
+                )
+                if not turn.done:
+                    await turn.cancel()
             if typing:
                 try:
                     await event.stop_typing()

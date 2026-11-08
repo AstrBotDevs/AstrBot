@@ -416,6 +416,8 @@ result = await run.result()
 
 Core 按当前配置档的 `agent.runtime` 选择已注册实现；使用 `ctx.agent.register_runtime(name, runtime)` 注册后，该实现可用于主代理，也可由内置 runtime 作为子代理调用。未注册的名称明确报错；Dify、Coze 等现有第三方路径继续沿用原执行方式。
 
+`/stop` 按 UMO 向已提交的 turn 调用 `turn.request_stop()`。运行中的 turn 会调用 `AgentSession.request_stop_turn(turn)`。runtime 接受请求并负责执行收尾时返回 `True`，返回 `False` 则使用 `cancel_turn()` 和本地任务取消。排队中的 turn 直接取消。`request_stop()` 提交请求后立即返回，用 `await turn.result()` 等待收尾。
+
 Core 传入公共 `AgentInput`：原始 `AstrMessageEvent`、权限、可选的 `plain/image/file` 内容、授权后的插件 tools/skills，以及流式输出偏好。Core 在投递前完成额外唤醒前缀的匹配和剥离，通过 `content` 传入处理后的文本，不修改原始 event。无需覆盖文本的普通平台消息可保留 `content=None`；来源附件仍保留在 event 上。SDK 调用提供显式内容。配置通过 `open_session(..., options={"config": ...})` 交给 runtime 自行解释，Core 不构造内置 `MainAgentInput`、`MainAgentBuildConfig` 或模型请求。
 
 实现 runtime 时复用 `AgentSession.run_turn()`：Core 通过调度参数 `run_turn(input, admit=...)` 传入准入检查，与 `AgentInput` 分离。它在会话串行锁及实现提供的 `_execution_scope()` 内执行，再进入 `execute_turn()`。排队后会重新检查 AI 启用状态、权限和插件能力；不要通过重写调度绕过准入。额外的锁由 runtime 提供。可选的 `active_turn(umo)` 支持普通消息的活跃 turn 发现；未实现时返回 `None`，session 仍负责排队。内置 runtime 在自己的执行阶段构造 `ProviderRequest`、解析模型配置并调用现有模型 hooks；外部实现不需要导入 `astr_agent_runtime`。

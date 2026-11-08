@@ -160,6 +160,8 @@ class AgentTurn:
         self._events: list[RuntimeEvent] = []
         self._changed = asyncio.Event()
         self._task: asyncio.Task[TurnResult] | None = None
+        self._stop_task: asyncio.Task[None] | None = None
+        self._execution_started = False
         self._cancel_requested = False
 
     @property
@@ -226,6 +228,36 @@ class AgentTurn:
                 return TurnResult(status=TurnStatus.CANCELLED, reason="cancelled")
             raise
 
+    def request_stop(self) -> None:
+        """Request a stop once, allowing active execution to settle its history."""
+        if self.done or self._cancel_requested or self._stop_task is not None:
+            return
+        if not self._execution_started:
+            # Queued turns and admission checks have no runtime work to stop.
+            self._cancel_requested = True
+            if self._task is not None:
+                self._task.cancel()
+            return
+
+        async def stop() -> None:
+            if self.done or self._cancel_requested:
+                return
+            try:
+                if await self.session.request_stop_turn(self):
+                    return
+            except Exception:
+                logger.exception(
+                    "Unable to request a graceful stop for turn %s", self.id
+                )
+            try:
+                await self.cancel()
+            except Exception:
+                logger.exception(
+                    "Unable to cancel turn %s after a stop request", self.id
+                )
+
+        self._stop_task = asyncio.create_task(stop())
+
     async def cancel(self) -> None:
         """Cancel this turn while leaving its session and other turns reusable."""
         if self.done:
@@ -260,7 +292,12 @@ class AgentTurn:
         Returns:
             A receipt confirming durable consumption, or None when not accepted.
         """
-        if self.done or self.session.active_turn is not self:
+        if (
+            self.done
+            or self._cancel_requested
+            or self._stop_task is not None
+            or self.session.active_turn is not self
+        ):
             return None
         original = self.input
         if (
@@ -349,6 +386,7 @@ class AgentSession(ABC):
                         if admit is not None and not await admit():
                             result = TurnResult(reason="skipped")
                         else:
+                            turn._execution_started = True
                             result = await self.execute_turn(turn)
             except asyncio.CancelledError as exc:
                 result = TurnResult(
@@ -431,6 +469,18 @@ class AgentSession(ABC):
         Args:
             turn: Exact execution to stop, possibly still queued.
         """
+
+    async def request_stop_turn(self, turn: AgentTurn) -> bool:
+        """Ask the runtime to stop an active execution and handle its own cleanup.
+
+        Args:
+            turn: Exact active turn to stop.
+
+        Returns:
+            True if the runtime accepted the request and will settle the turn.
+            False to fall back to cancellation.
+        """
+        return False
 
     def steer_turn(self, turn: AgentTurn, input: AgentInput) -> InputReceipt | None:
         """Optionally append to an active execution without changing its identity.

@@ -272,6 +272,77 @@ async def test_source_permissions_and_shutdown_cancellation(sdk):
 
 
 @pytest.mark.asyncio
+async def test_stop_targets_registered_turns_across_runtimes(sdk):
+    """Stop native and external work by UMO even after the profile changes."""
+    from astrbot.builtin_stars.builtin_commands.commands.conversation import (
+        ConversationCommands,
+    )
+    from astrbot.core.pipeline.context import PipelineContext
+    from astrbot.core.pipeline.process_stage.method.agent_request import (
+        AgentRequestSubStage,
+    )
+    from astrbot.core.platform.astr_message_event import AstrMessageEvent
+
+    entered = asyncio.Event()
+
+    async def respond(**kwargs):
+        entered.set()
+        await asyncio.Event().wait()
+
+    sdk.provider.text_chat.side_effect = respond
+    native = await sdk.context.agent.run_turn(
+        umo=sdk.event.unified_msg_origin,
+        input_message=[PlainInput(text="Native input")],
+        send_to_user=False,
+    )
+    await asyncio.wait_for(entered.wait(), 3)
+    queued = await native.follow_up(input_message=[PlainInput(text="Queued input")])
+
+    sdk.config["agent"] = {"runtime": "memory", "config": {}}
+    sdk.config["provider_settings"]["wake_prefix"] = "ask "
+    sdk.memory.release = asyncio.Event()
+    event = AstrMessageEvent(
+        "ask External input",
+        sdk.event.message_obj,
+        sdk.event.platform_meta,
+        sdk.event.session_id,
+    )
+    stage = AgentRequestSubStage()
+    await stage.initialize(
+        PipelineContext(
+            sdk.config,
+            sdk.context._star_manager,
+            "profile",
+            agent_runtimes=sdk.runtimes,
+        )
+    )
+    platform_turn = asyncio.create_task(anext(stage.process(event)))
+    session_id, _ = await asyncio.wait_for(sdk.memory.started.get(), 3)
+    external = sdk.memory.handles[session_id]
+    external.request_stop_turn = AsyncMock(return_value=False)
+    external.cancel_turn = AsyncMock()
+
+    sdk.config["agent"]["runtime"] = "dify"
+    commands = ConversationCommands(sdk.context)
+    await commands.stop(sdk.event)
+    await commands.stop(sdk.event)
+
+    first, second, _ = await asyncio.wait_for(
+        asyncio.gather(
+            native.result(), queued.result(), platform_turn, return_exceptions=True
+        ),
+        3,
+    )
+    assert first.status == second.status == TurnStatus.CANCELLED
+    assert platform_turn.cancelled()
+    external.request_stop_turn.assert_awaited_once()
+    external.cancel_turn.assert_awaited_once()
+    assert "Output stopped." in sdk.conversation.history
+    assert "Queued input" not in sdk.conversation.history
+    sdk.provider.text_chat.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_steering_reuses_native_safe_boundary(sdk):
     """Submit SDK text to the actual runner and settle its persistence receipt."""
     entered, release = asyncio.Event(), asyncio.Event()
