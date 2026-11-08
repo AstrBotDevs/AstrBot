@@ -16,6 +16,19 @@ your_plugin/
 
 语言文件名使用 WebUI 的 locale，例如 `zh-CN.json`、`en-US.json`。文件内容必须是 JSON object。
 
+README 也可以按语言提供 Markdown 文件。AstrBot 会先读取完整 locale，再读取短语言，最后回退到 `README.md`：
+
+```text
+README.md
+README_zh-CN.md
+README_zh.md
+README.zh.md
+README_en-US.md
+README_en.md
+```
+
+`README_<locale>.md`、`README-<locale>.md` 和 `README.<locale>.md` 均可识别，文件名大小写不敏感。如果没有默认 README，但插件只提供一个本地化 README，AstrBot 会显示该文件。市场中的未安装 GitHub 插件会按同样的顺序读取默认分支中的 README；非 GitHub 仓库需要插件源提供 `readme_url`。
+
 当当前语言没有对应翻译、某个字段缺失，或语言文件不存在时，AstrBot 会回退到默认文案：
 
 - 插件名称、卡片短描述和描述回退到 `metadata.yaml` 中的 `display_name`、`short_desc`、`desc`。

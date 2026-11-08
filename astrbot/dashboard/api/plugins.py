@@ -619,6 +619,24 @@ async def list_plugin_market(
     )
 
 
+@router.get("/plugins/market/readme")
+async def get_market_plugin_readme(
+    plugin_id: str = Query(...),
+    locale: str | None = Query(default=None),
+    custom_registry: str | None = Query(default=None),
+    _auth: AuthContext = Depends(require_plugin_scope),
+    service: PluginService = Depends(get_service),
+):
+    return await _run_service(
+        service.get_market_plugin_readme(
+            plugin_id=plugin_id,
+            locale=locale,
+            custom_registry=custom_registry,
+        ),
+        log_label="/api/plugin/market-readme",
+    )
+
+
 @router.get("/plugins/market/categories")
 async def list_plugin_market_categories(
     _auth: AuthContext = Depends(require_plugin_scope),
@@ -832,11 +850,12 @@ async def delete_plugin_config_file_by_id(
 @router.get("/plugins/readme")
 async def get_plugin_readme_by_id(
     plugin_id: str = Query(...),
+    locale: str | None = Query(default=None),
     _auth: AuthContext = Depends(require_plugin_scope),
     service: PluginService = Depends(get_service),
 ):
     return await _run_service(
-        lambda: service.get_plugin_readme(plugin_id),
+        lambda: service.get_plugin_readme(plugin_id, locale=locale),
         log_label="/api/plugin/readme",
     )
 
@@ -1082,11 +1101,12 @@ async def delete_plugin_config_file(
 @router.get("/plugins/{plugin_id}/readme")
 async def get_plugin_readme(
     plugin_id: str,
+    locale: str | None = Query(default=None),
     _auth: AuthContext = Depends(require_plugin_scope),
     service: PluginService = Depends(get_service),
 ):
     return await _run_service(
-        lambda: service.get_plugin_readme(plugin_id),
+        lambda: service.get_plugin_readme(plugin_id, locale=locale),
         log_label="/api/plugin/readme",
     )
 
@@ -1424,7 +1444,10 @@ async def dashboard_get_plugin_readme(
     service: PluginService = Depends(get_service),
 ):
     return await _run_service(
-        lambda: service.get_plugin_readme(request.query_params.get("name")),
+        lambda: service.get_plugin_readme(
+            request.query_params.get("name"),
+            locale=request.query_params.get("locale"),
+        ),
         log_label="/api/plugin/readme",
     )
 

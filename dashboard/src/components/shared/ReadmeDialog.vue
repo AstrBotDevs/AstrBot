@@ -315,7 +315,7 @@ async function fetchContent() {
     if (props.mode === "changelog") {
       res = await pluginApi.changelog(props.pluginName);
     } else if (props.mode === "readme") {
-      res = await pluginApi.readme(props.pluginName);
+      res = await pluginApi.readme(props.pluginName, locale.value);
     } else if (props.mode === "first-notice") {
       res = await statsApi.firstNotice(locale.value);
     }
@@ -335,7 +335,7 @@ async function fetchContent() {
 }
 
 watch(
-  [() => props.show, () => props.pluginName, () => props.mode],
+  [() => props.show, () => props.pluginName, () => props.mode, locale],
   ([show, name]) => {
     if (!show) return;
     if (requiresPluginName.value && !name) return;
