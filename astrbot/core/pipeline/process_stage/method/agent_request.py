@@ -2,6 +2,7 @@ from collections.abc import AsyncGenerator
 
 from astrbot.core import logger
 from astrbot.core.config.agent_runner import normalize_agent_runner
+from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.session_llm_manager import SessionServiceManager
 
@@ -30,11 +31,15 @@ class AgentRequestSubStage(Stage):
         agent_runner = normalize_agent_runner(self.config.get("agent_runner"))
         self.config["agent_runner"] = agent_runner
         agent_runner_type = agent_runner["runner_type"]
+        self.runtime_sub_stage = InternalAgentSubStage()
+        await self.runtime_sub_stage.initialize(ctx)
         if agent_runner_type == "local":
-            self.agent_sub_stage = InternalAgentSubStage()
-        else:
+            self.agent_sub_stage = self.runtime_sub_stage
+        elif agent_runner_type in ("dify", "coze", "dashscope", "deerflow"):
             self.agent_sub_stage = ThirdPartyAgentSubStage()
-        await self.agent_sub_stage.initialize(ctx)
+            await self.agent_sub_stage.initialize(ctx)
+        else:
+            raise RuntimeError(f"Agent runtime unavailable: {agent_runner_type}")
 
     async def process(self, event: AstrMessageEvent) -> AsyncGenerator[None, None]:
         if not self.ctx.astrbot_config["provider_settings"]["enable"]:
@@ -49,18 +54,29 @@ class AgentRequestSubStage(Stage):
             )
             return
 
-        agent_config = self.config.get("agent_runner", {})
+        runner_type = self.config["agent_runner"]["runner_type"]
+        runtime_name = (
+            event.agent_session.runtime
+            if isinstance(event, AgentWakeupEvent) and event.agent_session is not None
+            else "astrbot"
+            if runner_type == "local"
+            else runner_type
+        )
         event.trace.record(
             "agent_start",
             kind="agent",
             status="running",
-            runner_type=agent_config.get("runner_type", "local"),
+            runner_type=runtime_name,
             provider_wake_prefix=self.prov_wake_prefix,
         )
         try:
-            async for resp in self.agent_sub_stage.process(
-                event, self.prov_wake_prefix
-            ):
+            stage = (
+                self.runtime_sub_stage
+                if isinstance(event, AgentWakeupEvent)
+                and event.agent_session is not None
+                else self.agent_sub_stage
+            )
+            async for resp in stage.process(event, self.prov_wake_prefix):
                 yield resp
         except BaseException as exc:
             event.trace.record(
@@ -68,7 +84,7 @@ class AgentRequestSubStage(Stage):
                 kind="agent",
                 status="error",
                 error=str(exc),
-                runner_type=agent_config.get("runner_type", "local"),
+                runner_type=runtime_name,
             )
             raise
         else:
@@ -76,5 +92,5 @@ class AgentRequestSubStage(Stage):
                 "agent_end",
                 kind="agent",
                 status="success",
-                runner_type=agent_config.get("runner_type", "local"),
+                runner_type=runtime_name,
             )

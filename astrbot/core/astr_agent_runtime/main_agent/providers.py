@@ -2,30 +2,23 @@
 
 from __future__ import annotations
 
+import base64
+
 from astrbot.core import logger
-from astrbot.core.astr_main_agent_resources import LLM_ERROR_MESSAGE_EXTRA_KEY
-from astrbot.core.llm_error_messages import LLM_ERROR_MESSAGES
+from astrbot.core.llm_error_messages import (
+    set_llm_error_message as set_llm_error_message,
+)
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider import Provider
+from astrbot.core.provider.capabilities import supports_modality as supports_modality
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.star.context import Context
 
 from .config import MainAgentBuildConfig
 
+BLOCKED = {"dGZid2h2d3IuY2xvdWQuc2VhbG9zLmlv", "a291cmljaGF0"}
 
-def set_llm_error_message(event: AstrMessageEvent, key: str, **params: str) -> None:
-    """Format an internal LLM error in the requesting client's language.
-
-    Args:
-        event: Message event carrying the optional UI locale.
-        key: Built-in error translation key.
-        **params: Values interpolated into the message.
-    """
-    locale = event.get_extra("locale")
-    if not isinstance(locale, str):
-        locale = "zh-CN"
-    messages = LLM_ERROR_MESSAGES.get(locale, LLM_ERROR_MESSAGES["zh-CN"])
-    event.set_extra(LLM_ERROR_MESSAGE_EXTRA_KEY, messages[key].format(**params))
+decoded_blocked = [base64.b64decode(b).decode("utf-8") for b in BLOCKED]
 
 
 async def select_chat_provider(
@@ -153,22 +146,6 @@ def resolve_fallback_providers(
         fallbacks.append(fallback_provider)
         seen_provider_ids.add(fallback_id)
     return fallbacks
-
-
-def supports_modality(provider: Provider, modality: str) -> bool:
-    """Check declared model capabilities, including the legacy empty-list setting.
-
-    Args:
-        provider: Model whose declared capabilities should be inspected.
-        modality: Required input modality, such as image.
-
-    Returns:
-        Whether the model declares support or uses the legacy unrestricted list.
-    """
-    modalities = provider.provider_config.get("modalities", None)
-    if modalities == []:
-        return True  # Empty list from migration is treated as unconfigured for backward compatibility
-    return isinstance(modalities, list) and modality in modalities
 
 
 def select_image_provider(

@@ -5,6 +5,7 @@ import mcp
 
 from astrbot.api import FunctionTool
 from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.runtime import get_agent_permissions
 from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_runtime.computer.booters.local import LocalPythonComponent
 from astrbot.core.astr_agent_runtime.computer.computer_client import (
@@ -170,7 +171,8 @@ class LocalPythonTool(FunctionTool):
                     "writable_roots": _write_allowed_roots(
                         umo,
                         current_workspace_root,
-                        include_installed_skills=context.context.event.role == "admin",
+                        include_installed_skills=get_agent_permissions(context).role
+                        == "admin",
                     ),
                 }
             result = await sb.python.exec(

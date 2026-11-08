@@ -41,6 +41,7 @@ from typing import Any, cast
 from astrbot.api import FunctionTool, logger
 from astrbot.api.event import MessageChain
 from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.runtime import get_agent_permissions
 from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_runtime.computer.computer_client import get_booter
 from astrbot.core.astr_agent_runtime.computer.file_read_utils import (
@@ -491,7 +492,9 @@ class FileWriteTool(FunctionTool):
                     local_env=local_env,
                     umo=context.context.event.unified_msg_origin,
                     write=True,
-                    allow_installed_skill_write=(context.context.event.role == "admin"),
+                    allow_installed_skill_write=(
+                        get_agent_permissions(context).role == "admin"
+                    ),
                     current_workspace_root=current_workspace_root,
                 )
                 if local_env
@@ -513,7 +516,7 @@ class FileWriteTool(FunctionTool):
                         context.context.event.unified_msg_origin,
                         current_workspace_root,
                         include_installed_skills=(
-                            context.context.event.role == "admin"
+                            get_agent_permissions(context).role == "admin"
                         ),
                     ),
                     access="write",
@@ -607,7 +610,9 @@ class FileEditTool(FunctionTool):
                     local_env=local_env,
                     umo=umo,
                     write=True,
-                    allow_installed_skill_write=(context.context.event.role == "admin"),
+                    allow_installed_skill_write=(
+                        get_agent_permissions(context).role == "admin"
+                    ),
                     current_workspace_root=current_workspace_root,
                 )
                 if local_env
@@ -635,7 +640,7 @@ class FileEditTool(FunctionTool):
                         umo,
                         current_workspace_root,
                         include_installed_skills=(
-                            context.context.event.role == "admin"
+                            get_agent_permissions(context).role == "admin"
                         ),
                     ),
                     access="edit",

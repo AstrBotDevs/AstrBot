@@ -4,41 +4,33 @@ from dataclasses import dataclass
 
 from astrbot.core import logger
 from astrbot.core.agent.tool import ToolSet
+from astrbot.core.agent_input import CollectedInput
 from astrbot.core.astr_agent_runtime.context import (
-    AgentContextWrapper,
     AstrAgentContext,
 )
-from astrbot.core.astr_agent_runtime.hooks import MAIN_AGENT_HOOKS
+from astrbot.core.astr_agent_runtime.main_agent.providers import decoded_blocked
 from astrbot.core.astr_agent_runtime.runner import AgentRunner
-from astrbot.core.astr_agent_runtime.tool_executor import FunctionToolExecutor
 from astrbot.core.astr_agent_runtime.tools.cron_tools import FutureTaskTool
 from astrbot.core.astr_agent_runtime.tools.message_tools import (
     GetGroupMessageHistoryTool,
     SendMessageToUserTool,
 )
-from astrbot.core.astr_main_agent_resources import (
-    LIVE_MODE_SYSTEM_PROMPT,
-    LLM_ERROR_MESSAGE_EXTRA_KEY,
-    TOOL_CALL_PROMPT,
-    TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
-    decoded_blocked,
-)
+from astrbot.core.llm_error_messages import LLM_ERROR_MESSAGE_EXTRA_KEY
 from astrbot.core.pipeline.context_utils import call_event_hook
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import ProviderRequest
+from astrbot.core.skills.skill_manager import SkillInfo
+from astrbot.core.star import agent_capabilities as plugins
 from astrbot.core.star.context import Context
 from astrbot.core.star.star_handler import EventType
-from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
 from astrbot.core.utils.image_input import prepare_request_images
-from astrbot.core.utils.llm_metadata import LLM_METADATAS
 
 from . import (
     computer_use,
     knowledge_base,
     persona,
-    plugins,
     providers,
     request,
     subagent,
@@ -46,6 +38,42 @@ from . import (
     workspace,
 )
 from .config import MainAgentBuildConfig
+
+TOOL_CALL_PROMPT = (
+    "<tool_use_instructions>\n"
+    "When using tools: "
+    "never return an empty response; "
+    "briefly explain the purpose when starting a new type of task, but not before every tool call; "
+    "follow the tool schema exactly and do not invent parameters; "
+    "keep the conversation style consistent."
+    "\n</tool_use_instructions>"
+)
+
+TOOL_CALL_PROMPT_SKILLS_LIKE_MODE = (
+    "<tool_use_instructions>\n"
+    "You MUST NOT return an empty response, especially after invoking a tool."
+    " Before calling any tool, provide a brief explanatory message to the user stating the purpose of the tool call."
+    " Tool schemas are provided in two stages: first only name and description; "
+    "if you decide to use a tool, the full parameter schema will be provided in "
+    "a follow-up step. Do not guess arguments before you see the schema."
+    " After the tool call is completed, you must briefly summarize the results returned by the tool for the user."
+    " Keep the role-play and style consistent throughout the conversation."
+    "\n</tool_use_instructions>"
+)
+
+LIVE_MODE_SYSTEM_PROMPT = (
+    "<live_mode_instructions>\n"
+    "You are in a real-time conversation. "
+    "Speak like a real person, casual and natural. "
+    "Keep replies short, one thought at a time. "
+    "No templates, no lists, no formatting. "
+    "No parentheses, quotes, or markdown. "
+    "It is okay to pause, hesitate, or speak in fragments. "
+    "Respond to tone and emotion. "
+    "Simple questions get simple answers. "
+    "Sound like a real conversation, not a Q&A system."
+    "\n</live_mode_instructions>"
+)
 
 
 @dataclass(slots=True)
@@ -64,16 +92,21 @@ async def build_main_agent(
     config: MainAgentBuildConfig,
     provider: Provider | None = None,
     req: ProviderRequest | None = None,
+    collected_input: CollectedInput | None = None,
+    plugin_tools: ToolSet | None = None,
+    plugin_skills: list[SkillInfo] | None = None,
 ) -> MainAgentBuildResult | None:
     """Build a main agent through the same ordered stages for every trigger.
 
     Args:
         event: Triggering event, including session identity and permissions.
         plugin_context: Provider, conversation, persona, and tool services.
-        config: Resolved session settings. Global subagent policy is read live
-            alongside the shared orchestrator.
+        config: Resolved session settings.
         provider: Explicit model, or None to select the session's model.
         req: Explicit request, or None to collect input from the event.
+        collected_input: Core-collected input and temporary media ownership.
+        plugin_tools: Core-authorized plugin tools, or None for legacy lookup.
+        plugin_skills: Core-authorized plugin skills, or None for legacy lookup.
 
     Returns:
         An initialized runner with its request and provider, or None when the
@@ -87,36 +120,46 @@ async def build_main_agent(
             providers.set_llm_error_message(event, "noProvider")
         return None
     prepared = await request.prepare_request(
-        event, plugin_context, config, provider, req
+        event, plugin_context, config, provider, req, collected_input
     )
     if prepared is None:
         return None
     req = prepared.request
 
-    # Seed caller capabilities before persona selection and subagent deduplication.
+    # Seed caller capabilities before persona selection.
     tool_mgr = plugin_context.get_llm_tool_manager()
     if config.enable_message_delivery:
         if req.func_tool is None:
             req.func_tool = ToolSet()
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(SendMessageToUserTool))
-    await persona.apply_persona(req, config.provider_settings, plugin_context, event)
+    await persona.apply_persona(
+        req,
+        config.provider_settings,
+        plugin_context,
+        event,
+        plugin_tools=plugin_tools,
+        plugin_skills=plugin_skills,
+    )
     subagent.apply_subagents(req, plugin_context)
 
     # Add session context before capability instructions.
-    request.append_system_reminders(
-        event, req, config.provider_settings, config.timezone
-    )
     await workspace.apply_workspace_instructions(event, req, plugin_context)
     await knowledge_base.apply_knowledge_base(event, req, plugin_context, config)
 
     # Session plugin filtering precedes builtins, which have their own settings.
-    plugins.filter_tools(event, req)
+    if req.func_tool is not None:
+        req.func_tool = plugins.filter_tools(event, req.func_tool)
     search_instructions = web_search.apply_web_search(
         req, plugin_context, config.provider_settings, event
     )
     if config.llm_safety_mode:
         persona.apply_safety_instructions(config, req)
-    agent_context = AstrAgentContext(context=plugin_context, event=event)
+    agent_context = AstrAgentContext(
+        context=plugin_context,
+        event=event,
+        plugin_tools=plugin_tools,
+        plugin_skills=plugin_skills,
+    )
     await computer_use.apply_computer_use(req, plugin_context, config, agent_context)
 
     builtin_types = []
@@ -186,41 +229,15 @@ async def build_main_agent(
             supports_image=providers.supports_modality(provider, "image"),
         )
 
-    # Apply limits per run without mutating the shared provider configuration.
-    max_context_tokens = provider.provider_config.get("max_context_tokens", 0)
-    if max_context_tokens <= 0:
-        model_info = LLM_METADATAS.get(provider.get_model())
-        max_context_tokens = (
-            model_info["limit"]["context"]
-            if model_info
-            else config.fallback_max_context_tokens
-        )
-    agent_runner = AgentRunner()
-    read_tool = (
-        req.func_tool.get_tool("astrbot_file_read_tool") if req.func_tool else None
-    )
-    await agent_runner.reset(
-        provider=provider,
-        request=req,
-        run_context=AgentContextWrapper(
-            context=agent_context, tool_call_timeout=config.tool_call_timeout
-        ),
-        tool_executor=FunctionToolExecutor(),
-        agent_hooks=MAIN_AGENT_HOOKS,
-        streaming=config.streaming_response,
-        max_context_tokens=max_context_tokens,
-        llm_compress_instruction=config.llm_compress_instruction,
-        llm_compress_keep_recent_ratio=config.llm_compress_keep_recent_ratio,
-        llm_compress_provider=await providers.resolve_compression_provider(
-            config, plugin_context, event
-        ),
-        truncate_turns=config.dequeue_context_length,
-        enforce_max_turns=config.max_context_length,
-        tool_schema_mode=config.tool_schema_mode,
+    from astrbot.core.astr_agent_runtime.execution import create_native_runner
+
+    agent_runner = await create_native_runner(
+        plugin_context,
+        provider,
+        req,
+        config,
+        agent_context,
         fallback_providers=fallbacks,
-        request_max_retries=config.request_max_retries,
-        tool_result_overflow_dir=get_astrbot_system_tmp_path() if read_tool else None,
-        read_tool=read_tool,
     )
     return MainAgentBuildResult(
         agent_runner=agent_runner, provider_request=req, provider=provider

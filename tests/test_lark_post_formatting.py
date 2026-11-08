@@ -190,7 +190,7 @@ async def test_lark_post_preserves_formatting(
         waking_stage.ctx.astrbot_config["wake_prefix"] = [wake_prefix]
         main_agent_build_config.provider_wake_prefix = provider_prefix
         monkeypatch.setattr(
-            'astrbot.core.astr_agent_runtime.main_agent.request._get_session_conv',
+            "astrbot.core.astr_agent_runtime.main_agent.request._get_session_conv",
             AsyncMock(return_value=SimpleNamespace(history="[]")),
         )
         await waking_stage.process(parsed_event)

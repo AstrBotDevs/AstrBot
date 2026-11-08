@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Literal
 
 from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.runtime import get_agent_permissions
 from astrbot.core.astr_agent_runtime.computer.process_sandbox import (
     get_process_sandbox_status,
 )
@@ -112,7 +113,11 @@ def get_local_permission_policy(
         umo=context.context.event.unified_msg_origin
     )
     provider_settings = cfg.get("provider_settings", {})
-    role = "admin" if (role or context.context.event.role) == "admin" else "member"
+    role = (
+        "admin"
+        if (role or get_agent_permissions(context).role) == "admin"
+        else "member"
+    )
     defaults = get_local_permission_defaults()[role]
 
     permissions = provider_settings.get("computer_use_local_permissions")
@@ -234,7 +239,7 @@ def check_admin_permission(
     )
     provider_settings = cfg.get("provider_settings", {})
     require_admin = provider_settings.get("computer_use_require_admin", True)
-    if require_admin and context.context.event.role != "admin":
+    if require_admin and get_agent_permissions(context).role != "admin":
         return (
             f"error: Permission denied. {operation_name} is only allowed for admin users. "
             "Tell user to add their user ID under `AstrBot WebUI -> Config -> "
@@ -270,7 +275,7 @@ def check_local_execution_permission(
             )
         if policy.filesystem_scope == "none":
             return policy, check_local_file_permission(context)
-        role = "admin" if context.context.event.role == "admin" else "member"
+        role = "admin" if get_agent_permissions(context).role == "admin" else "member"
         policy_location = (
             "AstrBot WebUI -> Config -> AI -> Capabilities -> "
             "Agent Computer Use -> Local Permission Policies"

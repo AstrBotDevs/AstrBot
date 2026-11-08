@@ -506,7 +506,7 @@ def register_on_agent_begin(**kwargs):
     Examples:
     ```py
     from astrbot.core.agent.run_context import ContextWrapper
-    from astrbot.core.astr_agent_runtime.context import AstrAgentContext
+    from astrbot.core.astr_agent_context import AstrAgentContext
 
     @on_agent_begin()
     async def test(
@@ -529,12 +529,15 @@ def register_on_agent_begin(**kwargs):
 
 
 def register_on_agent_done(**kwargs):
-    """当 Agent 运行完成后的事件
+    """Register an Agent exit handler, including errors and cancellation.
+
+    The response can be None when execution exits without a final response.
+    Inspect run_context.run_end_reason and run_context.run_error for details.
 
     Examples:
     ```py
     from astrbot.core.agent.run_context import ContextWrapper
-    from astrbot.core.astr_agent_runtime.context import AstrAgentContext
+    from astrbot.core.astr_agent_context import AstrAgentContext
     from astrbot.api.provider import LLMResponse
 
     @on_agent_done()
@@ -542,7 +545,7 @@ def register_on_agent_done(**kwargs):
         self,
         event: AstrMessageEvent,
         run_context: ContextWrapper[AstrAgentContext],
-        response: LLMResponse,
+        response: LLMResponse | None,
     ) -> None:
         ...
     ```
