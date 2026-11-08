@@ -82,6 +82,8 @@ The market is a place to discover and install community plugins. Installed plugi
 
 The market provides search, categories, and sorting. Beginners can usually use the **default plugin source**. If needed, use plugin source management to add or switch custom sources. A source determines the plugin list you browse; adding a source does not install all its plugins.
 
+Use **Supported platforms** next to the category filter to select one or more platforms. The list shows plugins that declare support for any selected platform. Select **Undeclared platforms** to show plugins without platform information, either on their own or alongside specific platforms; missing information does not mean a platform is unsupported. Clear the selection to show all platforms. Platform filtering works with search, categories, and sorting. Changing a filter returns to the first page; switching plugin sources clears the platform selection.
+
 ::: warning Understand the source before installing
 Plugins run in AstrBot's Python environment. Install plugins from sources you trust. Inclusion in the market does not guarantee stability or security. Agent local isolation settings restrict agent execution; they do not automatically isolate arbitrary plugin code.
 :::
