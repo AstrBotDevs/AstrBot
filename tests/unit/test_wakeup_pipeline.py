@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 import pytest_asyncio
 from opentelemetry.trace import format_trace_id, get_current_span
+from sqlmodel import select
 
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.run_context import ContextWrapper
@@ -17,6 +18,7 @@ from astrbot.core.astr_agent_wakeup import wake_main_agent
 from astrbot.core.astr_main_agent import MainAgentBuildResult
 from astrbot.core.astr_main_agent.request import prepare_request
 from astrbot.core.config.default import DEFAULT_CONFIG
+from astrbot.core.db.po import ProviderStat
 from astrbot.core.event_bus import EventBus
 from astrbot.core.log import _log_context
 from astrbot.core.message.message_event_result import MessageChain
@@ -30,7 +32,9 @@ from astrbot.core.platform.astr_message_event import (
 from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
-from astrbot.core.provider.entities import LLMResponse
+from astrbot.core.provider.entities import LLMResponse, TokenUsage
+from astrbot.core.provider.stats import record_agent_runner_stats
+from astrbot.core.provider.usage_recorder import instrument_provider
 from astrbot.core.utils import trace as trace_module
 
 
@@ -95,6 +99,7 @@ async def runtime(monkeypatch):
             return LLMResponse(
                 role="err" if control.fail else "assistant",
                 completion_text=f"Reply {len(control.requests)}",
+                usage=TokenUsage(input_other=3, output=2),
             )
         finally:
             control.cleaned.set()
@@ -113,6 +118,7 @@ async def runtime(monkeypatch):
         text_chat=respond,
         text_chat_stream=respond_stream,
     )
+    control.provider = provider
 
     async def build(*, event, plugin_context, config):
         prepared = await prepare_request(event, plugin_context, config, provider, None)
@@ -130,7 +136,8 @@ async def runtime(monkeypatch):
         return MainAgentBuildResult(runner, prepared.request, provider)
 
     monkeypatch.setattr(internal, "build_main_agent", build)
-    monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
+    control.record_stats = AsyncMock()
+    monkeypatch.setattr(internal, "_record_internal_agent_stats", control.record_stats)
     monkeypatch.setattr(internal.Metric, "upload", AsyncMock())
     monkeypatch.setattr(
         internal.SessionServiceManager,
@@ -210,6 +217,10 @@ async def test_wakeup_uses_current_context_and_sends_final_reply(
     assert event.trace._summary["state"] == "completed"
     assert not event.trace._summary["has_errors"]
     assert current_message_event.get() is None and _log_context.get() is None
+    await asyncio.sleep(0)
+    runtime.record_stats.assert_awaited_once()
+    assert runtime.record_stats.await_args.args[0] is event
+    assert runtime.record_stats.await_args.args[1].conversation.cid == "conversation"
 
 
 @pytest.mark.asyncio
@@ -228,6 +239,7 @@ async def test_wakeup_runs_normal_whitelist_check(runtime):
     )
     await asyncio.wait_for(runtime.drain(), 1)
     assert not runtime.events
+    runtime.record_stats.assert_not_awaited()
     runtime.context.conversation_manager.get_conversation.assert_not_awaited()
 
 
@@ -286,7 +298,74 @@ async def test_platform_stop_cancels_the_wakeup_provider_and_preserves_history(r
     await runtime.bus.stop_platform("target")
     assert runtime.cleaned.is_set()
     assert not runtime.bus._pending_tasks
+    await asyncio.sleep(0)
+    runtime.record_stats.assert_awaited_once()
     runtime.context.conversation_manager.update_conversation.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("instrumented", [False, True])
+@pytest.mark.parametrize("outcome", ["completed", "error", "aborted"])
+async def test_cron_wakeup_persists_usage_once(
+    runtime, temp_db, monkeypatch, instrumented, outcome
+):
+    """Record the new cron pipeline once for managed and aggregate providers."""
+    persisted = asyncio.Event()
+    writers = set()
+
+    async def write_usage(event, request, runner, final_response, *, aborted=False):
+        writers.add(asyncio.current_task())
+        try:
+            await record_agent_runner_stats(
+                temp_db,
+                umo=event.unified_msg_origin,
+                request=request,
+                agent_runner=runner,
+                final_response=final_response,
+                aborted=aborted,
+            )
+        finally:
+            persisted.set()
+
+    monkeypatch.setattr(internal, "_record_internal_agent_stats", write_usage)
+    if instrumented:
+        instrument_provider(runtime.provider, temp_db)
+    runtime.fail = outcome == "error"
+    if outcome == "aborted":
+        runtime.gate.clear()
+    await wake_main_agent(
+        runtime.context,
+        umo="target:FriendMessage:user",
+        user_prompt="Run a scheduled task",
+        source="cron",
+    )
+    try:
+        if outcome == "aborted":
+            await asyncio.wait_for(runtime.started.wait(), 1)
+            await runtime.bus.stop_platform("target")
+        else:
+            await asyncio.wait_for(runtime.drain(), 1)
+        # The first SQLite write can take longer on a loaded Windows runner.
+        await asyncio.wait_for(persisted.wait(), 10)
+    finally:
+        for task in writers:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*writers, return_exceptions=True)
+    async with temp_db.get_db() as session:
+        result = await session.execute(select(ProviderStat))
+        records = result.scalars().all()
+    assert len(records) == 1
+    assert records[0].provider_id == "offline"
+    assert records[0].conversation_id == "conversation"
+    assert records[0].umo == "target:FriendMessage:user"
+    assert records[0].status == outcome
+    if outcome != "aborted":
+        assert records[0].token_input_other == 3
+        assert records[0].token_output == 2
+    if instrumented:
+        assert records[0].stat_version == 1
+        assert records[0].request_id
 
 
 @pytest.mark.asyncio
@@ -303,6 +382,8 @@ async def test_wakeup_failure_is_traced_and_delivered(runtime, streaming):
     )
     await asyncio.wait_for(runtime.drain(), 1)
     assert runtime.events[0].trace._summary["has_errors"]
+    await asyncio.sleep(0)
+    runtime.record_stats.assert_awaited_once()
     runtime.context.send_message.assert_awaited_once()
     assert (
         runtime.context.send_message.await_args.args[1].get_plain_text()

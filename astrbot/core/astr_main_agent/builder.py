@@ -216,6 +216,7 @@ async def build_main_agent(
         tool_schema_mode=config.tool_schema_mode,
         fallback_providers=fallbacks,
         request_max_retries=config.request_max_retries,
+        provider_stats_managed_by_agent=True,
         tool_result_overflow_dir=get_astrbot_system_tmp_path() if read_tool else None,
         read_tool=read_tool,
     )

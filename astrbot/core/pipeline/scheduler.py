@@ -9,6 +9,7 @@ from astrbot.core.platform.sources.webchat.webchat_event import WebChatMessageEv
 from astrbot.core.platform.sources.wecom_ai_bot.wecomai_event import (
     WecomAIBotMessageEvent,
 )
+from astrbot.core.provider.usage_recorder import event_usage_scope
 from astrbot.core.utils.trace import trace_execution
 
 from .bootstrap import ensure_builtin_stages_registered
@@ -92,6 +93,7 @@ class PipelineScheduler:
             log_context(event.get_platform_id(), event.get_platform_name()),
             event_context(event),
             trace_execution(event.trace),
+            event_usage_scope(event),
         ):
             await self._process_stages(event)
 

@@ -36,6 +36,7 @@ from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
 )
+from astrbot.core.provider.stats import record_agent_runner_stats
 from astrbot.core.star.session_llm_manager import SessionServiceManager
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.active_event_registry import active_event_registry
@@ -201,7 +202,10 @@ class InternalAgentSubStage(Stage):
                     )
                     return
                 agent_runner: AgentRunner | None = None
+                req: ProviderRequest | None = None
                 runner_registered = False
+                stats_scheduled = False
+                cancelled = False
                 try:
                     build_cfg = replace(
                         self.main_agent_cfg,
@@ -386,13 +390,12 @@ class InternalAgentSubStage(Stage):
                         resp=final_resp.completion_text if final_resp else None,
                     )
 
-                    asyncio.create_task(
-                        _record_internal_agent_stats(
-                            event,
-                            req,
-                            agent_runner,
-                            final_resp,
-                        )
+                    stats_scheduled = _schedule_internal_agent_stats(
+                        stats_scheduled,
+                        event,
+                        req,
+                        agent_runner,
+                        final_resp,
                     )
 
                     # 检查事件是否被停止，如果被停止则不保存历史记录
@@ -413,7 +416,19 @@ class InternalAgentSubStage(Stage):
                             provider_type=agent_runner.provider.meta().type,
                         ),
                     )
+                except asyncio.CancelledError:
+                    cancelled = True
+                    raise
                 finally:
+                    if agent_runner is not None:
+                        stats_scheduled = _schedule_internal_agent_stats(
+                            stats_scheduled,
+                            event,
+                            req,
+                            agent_runner,
+                            agent_runner.get_final_llm_resp(),
+                            aborted=cancelled,
+                        )
                     if runner_registered and agent_runner is not None:
                         agent_runner._resolve_unconsumed_follow_ups()
                         unregister_active_runner(event.unified_msg_origin, agent_runner)
@@ -537,39 +552,34 @@ async def _record_internal_agent_stats(
     req: ProviderRequest | None,
     agent_runner: AgentRunner | None,
     final_resp: LLMResponse | None,
+    *,
+    aborted: bool = False,
 ) -> None:
     """Persist internal agent stats without affecting the user response flow."""
-    if agent_runner is None:
-        return
+    await record_agent_runner_stats(
+        db_helper,
+        umo=event.unified_msg_origin,
+        request=req,
+        agent_runner=agent_runner,
+        final_response=final_resp,
+        aborted=aborted,
+    )
 
-    provider = agent_runner.provider
-    stats = agent_runner.stats
-    if provider is None or stats is None:
-        return
 
-    try:
-        provider_config = getattr(provider, "provider_config", {}) or {}
-        conversation_id = (
-            req.conversation.cid
-            if req is not None and req.conversation is not None
-            else None
+def _schedule_internal_agent_stats(
+    already_scheduled: bool,
+    event: AstrMessageEvent,
+    req: ProviderRequest | None,
+    agent_runner: AgentRunner | None,
+    final_resp: LLMResponse | None,
+    *,
+    aborted: bool = False,
+) -> bool:
+    if already_scheduled or agent_runner is None:
+        return already_scheduled
+    asyncio.create_task(
+        _record_internal_agent_stats(
+            event, req, agent_runner, final_resp, aborted=aborted
         )
-
-        if agent_runner.was_aborted():
-            status = "aborted"
-        elif final_resp is not None and final_resp.role == "err":
-            status = "error"
-        else:
-            status = "completed"
-
-        await db_helper.insert_provider_stat(
-            umo=event.unified_msg_origin,
-            conversation_id=conversation_id,
-            provider_id=provider_config.get("id", "") or provider.meta().id,
-            provider_model=provider.get_model(),
-            status=status,
-            stats=stats.to_dict(),
-            agent_type="internal",
-        )
-    except Exception as e:
-        logger.warning("Persist provider stats failed: %s", e, exc_info=True)
+    )
+    return True
