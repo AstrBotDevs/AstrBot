@@ -21,7 +21,7 @@
   <!-- Key-Value Management Dialog -->
   <v-dialog v-model="dialog" max-width="600px">
     <v-card>
-      <v-card-title class="text-h3 py-4" style="font-weight: normal;">
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6">
         {{ resolveDialogTitle }}
       </v-card-title>
 
@@ -51,18 +51,28 @@
                   :placeholder="t('core.common.objectEditor.placeholders.stringValue')"
                 ></v-text-field>
                 <div v-else-if="pair.type === 'number' || pair.type === 'float' || pair.type === 'int'" class="d-flex align-center gap-2 flex-grow-1">
-                  <v-slider
-                    v-if="pair.slider"
-                    :model-value="Number(pair.value) || 0"
-                    @update:model-value="pair.value = $event"
-                    :min="pair.slider.min"
-                    :max="pair.slider.max"
-                    :step="pair.slider.step"
-                    color="primary"
-                    density="compact"
-                    hide-details
-                    class="flex-grow-1"
-                  ></v-slider>
+                  <template v-if="pair.slider">
+                    <span style="min-width: 5px; text-align: right;">
+                      {{ pair.slider.min }}
+                    </span>
+
+                    <v-slider
+                      :model-value="Number(pair.value) || 0"
+                      @update:model-value="pair.value = $event"
+                      :min="pair.slider.min"
+                      :max="pair.slider.max"
+                      :step="pair.slider.step"
+                      color="primary"
+                      density="compact"
+                      hide-details
+                      class="flex-grow-1"
+                    ></v-slider>
+
+                    <span style="min-width: 5px; text-align: left;">
+                      {{ pair.slider.max }}
+                    </span>
+                  </template>
+                  
                   <v-text-field
                     v-model.number="pair.value"
                     type="number"
@@ -129,18 +139,29 @@
                   :placeholder="t('core.common.objectEditor.placeholders.stringValue')"
                 ></v-text-field>
                 <div v-else-if="template.type === 'number' || template.type === 'float' || template.type === 'int'" class="d-flex align-center ga-4 flex-grow-1">
-                  <v-slider
-                    v-if="template.slider"
-                    :model-value="Number(getTemplateValue(templateKey)) || 0"
-                    @update:model-value="updateTemplateValue(templateKey, $event)"
-                    :min="template.slider.min"
-                    :max="template.slider.max"
-                    :step="template.slider.step"
-                    color="primary"
-                    density="compact"
-                    hide-details
-                    class="flex-grow-1"
-                  ></v-slider>
+                  <template v-if="template.slider">
+                    <span style="min-width: 5px; text-align: right;">
+                      {{ template.slider.min }}
+                    </span>
+
+                    <v-slider
+                      :model-value="Number(getTemplateValue(templateKey)) || 0"
+                      @update:model-value="updateTemplateValue(templateKey, $event)"
+                      :min="template.slider.min"
+                      :max="template.slider.max"
+                      :step="template.slider.step"
+                      color="primary"
+                      density="compact"
+                      hide-details
+                      class="flex-grow-1"
+                    ></v-slider>
+
+                    <span style="min-width: 5px; text-align: left;">
+                      {{ template.slider.max }}
+                    </span>
+                  </template>
+                  
+
                   <v-text-field
                     :model-value="getTemplateValue(templateKey)"
                     @update:model-value="updateTemplateValue(templateKey, $event)"
@@ -213,7 +234,7 @@
       <v-card-actions class="pa-4">
         <v-spacer></v-spacer>
         <v-btn variant="text" @click="cancelDialog">{{ t('core.common.cancel') }}</v-btn>
-        <v-btn color="primary" @click="confirmDialog">{{ t('core.common.confirm') }}</v-btn>
+        <v-btn color="primary" variant="tonal" @click="confirmDialog">{{ t('core.common.confirm') }}</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>

@@ -15,6 +15,7 @@ from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.provider.func_tool_manager import PY_TO_JSON_TYPE, SUPPORTED_TYPES
 from astrbot.core.provider.register import llm_tools
 
+from ..filter.button_action import ButtonActionFilter
 from ..filter.command import CommandFilter
 from ..filter.command_group import CommandGroupFilter
 from ..filter.custom_filter import CustomFilterAnd, CustomFilterOr
@@ -96,11 +97,14 @@ def register_command(
             command_name.parent_group.add_sub_command_filter(new_command)
         else:
             logger.warning(
-                f"注册指令{command_name} 的子指令时未提供 sub_command 参数。",
+                f"No sub_command argument was provided while registering a "
+                f"subcommand for {command_name}.",
             )
     # 裸指令
     elif command_name is None:
-        logger.warning("注册裸指令时未提供 command_name 参数。")
+        logger.warning(
+            "No command_name argument was provided while registering a bare command."
+        )
     else:
         new_command = CommandFilter(command_name, alias, None)
         add_to_event_filters = True
@@ -213,7 +217,10 @@ def register_command_group(
     if isinstance(command_group_name, RegisteringCommandable):
         # 子指令组
         if sub_command is None:
-            logger.warning(f"{command_group_name} 指令组的子指令组 sub_command 未指定")
+            logger.warning(
+                f"No sub_command was specified for a subgroup of command group "
+                f"{command_group_name}."
+            )
         else:
             new_group = CommandGroupFilter(
                 sub_command,
@@ -223,7 +230,7 @@ def register_command_group(
             command_group_name.parent_group.add_sub_command_filter(new_group)
     # 根指令组
     elif command_group_name is None:
-        logger.warning("根指令组的名称未指定")
+        logger.warning("No name was specified for the root command group.")
     else:
         new_group = CommandGroupFilter(command_group_name, alias)
 
@@ -268,6 +275,29 @@ def register_event_message_type(event_message_type: EventMessageType, **kwargs):
     return decorator
 
 
+def register_button_action(action_id: str | None = None, **kwargs):
+    """Register a handler for portable button interactions.
+
+    Args:
+        action_id: Optional action ID to match. ``None`` matches every button.
+        **kwargs: Handler metadata passed to the common registrar.
+
+    Returns:
+        A decorator for an adapter message event handler.
+    """
+
+    def decorator(awaitable):
+        handler_md = get_handler_or_create(
+            awaitable,
+            EventType.AdapterMessageEvent,
+            **kwargs,
+        )
+        handler_md.event_filters.append(ButtonActionFilter(action_id))
+        return awaitable
+
+    return decorator
+
+
 def register_platform_adapter_type(
     platform_adapter_type: PlatformAdapterType,
     **kwargs,
@@ -275,7 +305,11 @@ def register_platform_adapter_type(
     """注册一个 PlatformAdapterType"""
 
     def decorator(awaitable):
-        handler_md = get_handler_or_create(awaitable, EventType.AdapterMessageEvent)
+        handler_md = get_handler_or_create(
+            awaitable,
+            EventType.AdapterMessageEvent,
+            **kwargs,
+        )
         handler_md.event_filters.append(
             PlatformAdapterTypeFilter(platform_adapter_type),
         )
@@ -299,7 +333,9 @@ def register_regex(regex: str | re.Pattern, **kwargs):
     return decorator
 
 
-def register_permission_type(permission_type: PermissionType, raise_error: bool = True):
+def register_permission_type(
+    permission_type: PermissionType, raise_error: bool = True, **kwargs
+):
     """注册一个 PermissionType
 
     Args:
@@ -309,7 +345,11 @@ def register_permission_type(permission_type: PermissionType, raise_error: bool 
     """
 
     def decorator(awaitable):
-        handler_md = get_handler_or_create(awaitable, EventType.AdapterMessageEvent)
+        handler_md = get_handler_or_create(
+            awaitable,
+            EventType.AdapterMessageEvent,
+            **kwargs,
+        )
         handler_md.event_filters.append(
             PermissionTypeFilter(permission_type, raise_error),
         )
@@ -422,11 +462,11 @@ def register_on_llm_request(**kwargs):
     from astrbot.api.provider import ProviderRequest
 
     @on_llm_request()
-    async def test(self, event: AstrMessageEvent, request: ProviderRequest) -> None:
-        request.system_prompt += "你是一个猫娘..."
+    async def test(self, event: AstrMessageEvent, req: ProviderRequest) -> None:
+        req.system_prompt += "你是一个猫娘..."
     ```
 
-    请务必接收两个参数：event, request
+    请务必接收两个参数：event, req
 
     """
 
@@ -489,7 +529,10 @@ def register_on_agent_begin(**kwargs):
 
 
 def register_on_agent_done(**kwargs):
-    """当 Agent 运行完成后的事件
+    """Register an Agent exit handler, including errors and cancellation.
+
+    The response can be None when execution exits without a final response.
+    Inspect run_context.run_end_reason and run_context.run_error for details.
 
     Examples:
     ```py
@@ -502,7 +545,7 @@ def register_on_agent_done(**kwargs):
         self,
         event: AstrMessageEvent,
         run_context: ContextWrapper[AstrAgentContext],
-        response: LLMResponse,
+        response: LLMResponse | None,
     ) -> None:
         ...
     ```

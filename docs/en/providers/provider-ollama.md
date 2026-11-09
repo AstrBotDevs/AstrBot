@@ -21,10 +21,11 @@ Then use `ollama run <model_name>` to run the model.
 
 ## Configure AstrBot
 
-Open the AstrBot WebUI, locate Service Provider Management, click on Add Provider, find and click on `Ollama`.
-![image](https://files.astrbot.app/docs/source/images/ollama/image.png)
+Open **Providers → Chat Completion**, click **Add**, and select `Ollama`. The default API endpoint is `http://127.0.0.1:11434/v1`; adjust it to match your deployment.
 
-Save the configuration.
+Enter the provider name and check the `API Base URL`. The template pre-fills `API Key` with `ollama`; replace it if your server requires a different key. Click **Save and Fetch Models**. Click `+` beside the desired model and make sure it is enabled. Alternatively, click **Save Configuration**, then **Custom Model** and enter the exact model ID. Use **Test Model** beside the configured model to check availability.
+
+Open **Config**, select the profile to use, and go to **AI → Model**. Set **Chat Model** to the model you just added, then click **Save Configuration** at the bottom right. This setting is for AstrBot built-in AI.
 
 ::: tip
 

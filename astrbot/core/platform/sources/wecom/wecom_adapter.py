@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, cast
 from urllib.parse import unquote
 
-import quart
+from fastapi.responses import Response as FastAPIResponse
 from requests import Response
 from wechatpy.enterprise import WeChatClient, parse_message
 from wechatpy.enterprise.crypto import WeChatCrypto
@@ -17,7 +17,7 @@ from wechatpy.exceptions import InvalidSignatureException
 from wechatpy.messages import BaseMessage
 
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import File, Image, Plain, Record
+from astrbot.api.message_components import ButtonInteraction, File, Image, Plain, Record
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
@@ -28,8 +28,14 @@ from astrbot.api.platform import (
 )
 from astrbot.core import logger
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.button_interaction import decode_button_callback
+from astrbot.core.platform.webhook_server import FastAPIWebhookServer
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.media_utils import convert_audio_to_wav
+from astrbot.core.utils.media_utils import (
+    MEDIA_MIME_EXTENSIONS,
+    MediaResolver,
+    detect_image_mime_type_async,
+)
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from .wecom_event import WecomPlatformEvent
@@ -65,7 +71,7 @@ def _extract_wecom_media_filename(disposition: str | None) -> str | None:
 
 class WecomServer:
     def __init__(self, event_queue: asyncio.Queue, config: dict) -> None:
-        self.server = quart.Quart(__name__)
+        self.server = FastAPIWebhookServer("wecom-webhook")
         self.port = int(cast(str, config.get("port")))
         self.callback_server_host = config.get("callback_server_host", "0.0.0.0")
         self.server.add_url_rule(
@@ -89,15 +95,15 @@ class WecomServer:
         self.callback: Callable[[BaseMessage], Awaitable[None]] | None = None
         self.shutdown_event = asyncio.Event()
 
-    async def verify(self):
+    async def verify(self, request):
         """内部服务器的 GET 验证入口"""
-        return await self.handle_verify(quart.request)
+        return await self.handle_verify(request)
 
-    async def handle_verify(self, request) -> str:
+    async def handle_verify(self, request) -> FastAPIResponse:
         """处理验证请求，可被统一 webhook 入口复用
 
         Args:
-            request: Quart 请求对象
+            request: FastAPI webhook request 对象
 
         Returns:
             验证响应
@@ -112,20 +118,20 @@ class WecomServer:
                 args.get("echostr"),
             )
             logger.info("验证请求有效性成功。")
-            return echo_str
+            return FastAPIResponse(content=echo_str, media_type="text/plain")
         except InvalidSignatureException:
             logger.error("验证请求有效性失败，签名异常，请检查配置。")
             raise
 
-    async def callback_command(self):
+    async def callback_command(self, request):
         """内部服务器的 POST 回调入口"""
-        return await self.handle_callback(quart.request)
+        return await self.handle_callback(request)
 
     async def handle_callback(self, request) -> str:
         """处理回调请求，可被统一 webhook 入口复用
 
         Args:
-            request: Quart 请求对象
+            request: FastAPI webhook request 对象
 
         Returns:
             响应内容
@@ -267,15 +273,13 @@ class WecomPlatformAdapter(Platform):
     ) -> None:
         # 企业微信客服不支持主动发送
         if hasattr(self.client, "kf_message"):
-            logger.warning("企业微信客服模式不支持 send_by_session 主动发送。")
             await super().send_by_session(session, message_chain)
-            return
+            raise Exception("企业微信客服模式不支持 send_by_session 主动发送。")
         if not self.agent_id:
-            logger.warning(
+            await super().send_by_session(session, message_chain)
+            raise Exception(
                 f"send_by_session 失败：无法为会话 {session.session_id} 推断 agent_id。",
             )
-            await super().send_by_session(session, message_chain)
-            return
 
         message_obj = AstrBotMessage()
         message_obj.self_id = self.agent_id
@@ -287,13 +291,7 @@ class WecomPlatformAdapter(Platform):
         message_obj.message_id = uuid.uuid4().hex
         message_obj.raw_message = {"_proactive_send": True}
 
-        event = WecomPlatformEvent(
-            message_str=message_obj.message_str,
-            message_obj=message_obj,
-            platform_meta=self.meta(),
-            session_id=message_obj.session_id,
-            client=self.client,
-        )
+        event = self.create_event(message_obj)
         await event.send(message_chain)
         await super().send_by_session(session, message_chain)
 
@@ -304,7 +302,7 @@ class WecomPlatformAdapter(Platform):
             "wecom 适配器",
             id=self.config.get("id", "wecom"),
             support_streaming_message=False,
-            support_proactive_message=False,
+            support_proactive_message=True,
         )
 
     @override
@@ -373,6 +371,45 @@ class WecomPlatformAdapter(Platform):
             abm.timestamp = int(cast(int | str, msg.time))
             abm.session_id = abm.sender.user_id
             abm.raw_message = msg
+        elif msg.type == "unknown" and msg._data.get("Event") == "template_card_event":
+            callback_payload = msg._data.get("EventKey")
+            if not isinstance(callback_payload, str):
+                logger.debug("Ignored a WeCom template card callback without EventKey.")
+                return None
+            try:
+                action_id, data = decode_button_callback(
+                    callback_payload, allow_expired=True
+                )
+            except ValueError:
+                logger.debug("Ignored a template card callback not created by AstrBot.")
+                return None
+
+            sender_id = str(msg._data.get("FromUserName", ""))
+            if not sender_id:
+                logger.debug("Ignored a WeCom template card callback without a sender.")
+                return None
+            response_code = str(msg._data.get("ResponseCode") or "")
+            task_id = str(msg._data.get("TaskId") or "")
+            interaction_id = response_code or task_id or uuid.uuid4().hex
+            abm.message_str = action_id
+            abm.self_id = str(msg._data.get("AgentID", ""))
+            abm.message = [
+                ButtonInteraction(
+                    action_id=action_id,
+                    data=data,
+                    interaction_id=interaction_id,
+                    source_message_id=task_id or None,
+                    callback_data=callback_payload,
+                )
+            ]
+            abm.type = MessageType.FRIEND_MESSAGE
+            abm.sender = MessageMember(sender_id, sender_id)
+            abm.message_id = interaction_id
+            create_time = msg._data.get("CreateTime")
+            if create_time:
+                abm.timestamp = int(cast(int | str, create_time))
+            abm.session_id = sender_id
+            abm.raw_message = msg
         elif isinstance(msg, ImageMessage):
             abm.message_str = "[图片]"
             abm.self_id = str(msg.agent)
@@ -394,12 +431,14 @@ class WecomPlatformAdapter(Platform):
             )
             temp_dir = get_astrbot_temp_path()
             path = os.path.join(temp_dir, f"wecom_{msg.media_id}.amr")
-            with open(path, "wb") as f:
-                f.write(resp.content)
+            await asyncio.to_thread(Path(path).write_bytes, resp.content)
 
             try:
-                path_wav = os.path.join(temp_dir, f"wecom_{msg.media_id}.wav")
-                path_wav = await convert_audio_to_wav(path, path_wav)
+                path_wav = await MediaResolver(
+                    path,
+                    media_type="audio",
+                    default_suffix=".wav",
+                ).to_path(target_format="wav")
             except Exception as e:
                 logger.error(f"转换音频失败: {e}。如果没有安装 ffmpeg 请先安装。")
                 path_wav = path
@@ -424,6 +463,7 @@ class WecomPlatformAdapter(Platform):
         self.agent_id = abm.self_id
         logger.info(f"abm: {abm}")
         await self.handle_msg(abm)
+        return abm
 
     async def convert_wechat_kf_message(self, msg: dict) -> AstrBotMessage | None:
         msgtype = msg.get("msgtype")
@@ -431,14 +471,44 @@ class WecomPlatformAdapter(Platform):
         abm = AstrBotMessage()
         abm.raw_message = msg
         abm.raw_message["_wechat_kf_flag"] = None  # 方便处理
-        abm.self_id = msg["open_kfid"]
+        abm.self_id = msg.get("open_kfid") or msg.get("OpenKfId") or ""
         abm.sender = MessageMember(external_userid, external_userid)
         abm.session_id = external_userid
         abm.type = MessageType.FRIEND_MESSAGE
         abm.message_id = msg.get("msgid", uuid.uuid4().hex[:8])
         abm.message_str = ""
         if msgtype == "text":
-            text = msg.get("text", {}).get("content", "").strip()
+            text_data = msg.get("text", {})
+            text = text_data.get("content", "").strip()
+            menu_id = text_data.get("menu_id")
+            if isinstance(menu_id, str) and menu_id:
+                try:
+                    action_id, data = decode_button_callback(
+                        menu_id, allow_expired=True
+                    )
+                except ValueError:
+                    if menu_id.startswith("astrbot:"):
+                        logger.debug(
+                            "Ignored an expired or invalid AstrBot menu action."
+                        )
+                        return None
+                    logger.debug(
+                        "Treating an unrecognized WeCom customer-service menu "
+                        "callback as a regular text message."
+                    )
+                else:
+                    abm.message = [
+                        ButtonInteraction(
+                            action_id=action_id,
+                            data=data,
+                            interaction_id=abm.message_id,
+                            source_message_id=None,
+                            callback_data=menu_id,
+                        )
+                    ]
+                    abm.message_str = action_id
+                    await self.handle_msg(abm)
+                    return abm
             if self._is_duplicate_wechat_kf_text_message(abm.session_id, text):
                 logger.debug(
                     "忽略 15 秒内重复微信客服文本消息 session_id=%s text=%s",
@@ -456,9 +526,13 @@ class WecomPlatformAdapter(Platform):
                 media_id,
             )
             temp_dir = get_astrbot_temp_path()
-            path = os.path.join(temp_dir, f"weixinkefu_{media_id}.jpg")
-            with open(path, "wb") as f:
-                f.write(resp.content)
+            mime_type = await detect_image_mime_type_async(
+                resp.content,
+                default_mime_type=None,
+            )
+            suffix = MEDIA_MIME_EXTENSIONS.get(mime_type or "", ".jpg")
+            path = os.path.join(temp_dir, f"weixinkefu_{media_id}{suffix}")
+            await asyncio.to_thread(Path(path).write_bytes, resp.content)
             abm.message = [Image(file=path, url=path)]
         elif msgtype == "voice":
             media_id = msg.get("voice", {}).get("media_id", "")
@@ -470,12 +544,14 @@ class WecomPlatformAdapter(Platform):
 
             temp_dir = get_astrbot_temp_path()
             path = os.path.join(temp_dir, f"weixinkefu_{media_id}.amr")
-            with open(path, "wb") as f:
-                f.write(resp.content)
+            await asyncio.to_thread(Path(path).write_bytes, resp.content)
 
             try:
-                path_wav = os.path.join(temp_dir, f"weixinkefu_{media_id}.wav")
-                path_wav = await convert_audio_to_wav(path, path_wav)
+                path_wav = await MediaResolver(
+                    path,
+                    media_type="audio",
+                    default_suffix=".wav",
+                ).to_path(target_format="wav")
             except Exception as e:
                 logger.error(f"转换音频失败: {e}。如果没有安装 ffmpeg 请先安装。")
                 path_wav = path
@@ -509,16 +585,27 @@ class WecomPlatformAdapter(Platform):
             logger.warning(f"未实现的微信客服消息事件: {msg}")
             return
         await self.handle_msg(abm)
+        return abm
 
-    async def handle_msg(self, message: AstrBotMessage) -> None:
-        message_event = WecomPlatformEvent(
+    def create_event(self, message: AstrBotMessage) -> WecomPlatformEvent:
+        """Creates a WeCom message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created WeCom message event.
+        """
+        return WecomPlatformEvent(
             message_str=message.message_str,
             message_obj=message,
             platform_meta=self.meta(),
             session_id=message.session_id,
             client=self.client,
         )
-        self.commit_event(message_event)
+
+    async def handle_msg(self, message: AstrBotMessage) -> None:
+        self.commit_event(self.create_event(message))
 
     def get_client(self) -> WeChatClient:
         return self.client

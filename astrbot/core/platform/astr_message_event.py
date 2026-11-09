@@ -4,9 +4,13 @@ import hashlib
 import os
 import re
 import uuid
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from time import time
 from typing import Any
+
+from deprecated import deprecated
 
 from astrbot import logger
 from astrbot.core.agent.tool import ToolSet
@@ -15,6 +19,7 @@ from astrbot.core.message.components import (
     At,
     AtAll,
     BaseMessageComponent,
+    ButtonInteraction,
     Face,
     Forward,
     Image,
@@ -24,6 +29,7 @@ from astrbot.core.message.components import (
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider.entities import ProviderRequest
+from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.trace import TraceSpan
 
@@ -31,15 +37,68 @@ from .astrbot_message import AstrBotMessage, Group
 from .message_session import MessageSesion, MessageSession  # noqa
 from .platform_metadata import PlatformMetadata
 
+streaming_response_event: ContextVar["AstrMessageEvent | None"] = ContextVar(
+    "streaming_response_event", default=None
+)
+current_message_event: ContextVar["AstrMessageEvent | None"] = ContextVar(
+    "current_message_event", default=None
+)
+
+
+@contextmanager
+def event_context(event: "AstrMessageEvent") -> Iterator[None]:
+    """Bind the current event and clean up event-owned resources.
+
+    Logging and tracing scopes are owned separately by the framework entry
+    point. Nested scopes do not unregister the event or clean up files early.
+
+    Args:
+        event: Event whose outermost scope owns registration and cleanup.
+
+    Yields:
+        Control while the event is active.
+    """
+    if event._execution_active:
+        yield
+        return
+    event._execution_active = True
+    event_token = current_message_event.set(event)
+    active_event_registry.register(event)
+    try:
+        yield
+    finally:
+        try:
+            event.cleanup_temporary_local_files()
+        finally:
+            try:
+                active_event_registry.unregister(event)
+            finally:
+                event._execution_active = False
+                current_message_event.reset(event_token)
+
 
 class AstrMessageEvent(abc.ABC):
+    event_kind: str = "message"
+    trace_name: str = "AstrMessageEvent"
+
     def __init__(
         self,
         message_str: str,
         message_obj: AstrBotMessage,
         platform_meta: PlatformMetadata,
         session_id: str,
+        *,
+        event_metadata: dict[str, str] | None = None,
     ) -> None:
+        """Initialize shared event state and its initial trace record.
+
+        Args:
+            message_str: Text input associated with the event.
+            message_obj: Message components and sender information.
+            platform_meta: Metadata of the target platform.
+            session_id: Target session identifier within the platform.
+            event_metadata: Additional attributes for the initial trace record.
+        """
         self.message_str = message_str
         """纯文本的消息"""
         self.message_obj = message_obj
@@ -78,7 +137,7 @@ class AstrMessageEvent(abc.ABC):
         self.created_at = time()
         """事件创建时间(Unix timestamp)"""
         self.trace = TraceSpan(
-            name="AstrMessageEvent",
+            name=self.trace_name,
             umo=self.unified_msg_origin,
             sender_name=self.get_sender_name(),
             message_outline=self.get_message_outline(),
@@ -86,6 +145,17 @@ class AstrMessageEvent(abc.ABC):
         """用于记录事件处理的 TraceSpan 对象"""
         self.span = self.trace
         """事件级 TraceSpan(别名: span)"""
+        self.trace.record(
+            "event_received",
+            **{
+                **(event_metadata or {}),
+                "kind": self.event_kind,
+                "platform_id": platform_meta.id,
+                "platform_name": platform_meta.name,
+                "message_type": self.get_message_type().value,
+                "message": self.get_message_outline(),
+            },
+        )
 
         self._has_send_oper = False
         """在此次事件中是否有过至少一次发送消息的操作"""
@@ -99,6 +169,7 @@ class AstrMessageEvent(abc.ABC):
 
         # back_compability
         self.platform = platform_meta
+        self._execution_active = False
 
     @property
     def unified_msg_origin(self) -> str:
@@ -151,10 +222,10 @@ class AstrMessageEvent(abc.ABC):
                 parts.append("[图片]")
             elif isinstance(i, Face):
                 parts.append(f"[表情:{i.id}]")
-            elif isinstance(i, At):
-                parts.append(f"[At:{i.qq}]")
             elif isinstance(i, AtAll):
                 parts.append("[At:全体成员]")
+            elif isinstance(i, At):
+                parts.append(f"[At:{i.qq}]")
             elif isinstance(i, Forward):
                 # 转发消息
                 parts.append("[转发消息]")
@@ -166,8 +237,7 @@ class AstrMessageEvent(abc.ABC):
                     parts.append("[引用消息]")
             else:
                 parts.append(f"[{i.type}]")
-            parts.append(" ")
-        return "".join(parts)
+        return " ".join(parts)
 
     def get_message_outline(self) -> str:
         """获取消息概要。
@@ -179,6 +249,24 @@ class AstrMessageEvent(abc.ABC):
     def get_messages(self) -> list[BaseMessageComponent]:
         """获取消息链。"""
         return getattr(self.message_obj, "message", [])
+
+    def is_button_interaction(self) -> bool:
+        """Return whether this event represents a portable button click."""
+        return any(
+            isinstance(component, ButtonInteraction)
+            for component in self.get_messages()
+        )
+
+    def get_button_interaction(self) -> ButtonInteraction | None:
+        """Return the normalized button click carried by this event, if any."""
+        return next(
+            (
+                component
+                for component in self.get_messages()
+                if isinstance(component, ButtonInteraction)
+            ),
+            None,
+        )
 
     def get_message_type(self) -> MessageType:
         """获取消息类型。"""
@@ -237,6 +325,11 @@ class AstrMessageEvent(abc.ABC):
         if path and path not in self._temporary_local_files:
             self._temporary_local_files.append(path)
 
+    def untrack_temporary_local_file(self, path: str) -> None:
+        """Exclude a retained attachment from event-scoped cleanup."""
+        if path in self._temporary_local_files:
+            self._temporary_local_files.remove(path)
+
     def cleanup_temporary_local_files(self) -> None:
         paths = list(self._temporary_local_files)
         self._temporary_local_files.clear()
@@ -269,10 +362,11 @@ class AstrMessageEvent(abc.ABC):
             match = re.search(pattern, buffer)
             if not match:
                 break
-            matched_text = match.group()
-            await self.send(MessageChain([Plain(matched_text)]))
+            matched_text = match.group().strip()
+            if matched_text:
+                await self.send(MessageChain([Plain(matched_text)]))
+                await asyncio.sleep(1.5)  # 限速
             buffer = buffer[match.end() :]
-            await asyncio.sleep(1.5)  # 限速
         return buffer
 
     async def send_streaming(
@@ -301,9 +395,11 @@ class AstrMessageEvent(abc.ABC):
         默认实现为空，由具体平台按需重写。
         """
 
+    @deprecated(version="3.5.18", reason="No longer invoked by the message scheduler.")
     async def _pre_send(self) -> None:
         """调度器会在执行 send() 前调用该方法 deprecated in v3.5.18"""
 
+    @deprecated(version="3.5.18", reason="No longer invoked by the message scheduler.")
     async def _post_send(self) -> None:
         """调度器会在执行 send() 后调用该方法 deprecated in v3.5.18"""
 
@@ -478,6 +574,19 @@ class AstrMessageEvent(abc.ABC):
             message (MessageChain): 消息链，具体使用方式请参考文档。
 
         """
+        if (
+            message is not None
+            and message.chain
+            and streaming_response_event.get() is not self
+        ):
+            self.trace.record(
+                "response_sent",
+                kind="response",
+                message=self._outline_chain(message.chain),
+                component_types=[str(component.type) for component in message.chain],
+                component_count=len(message.chain),
+                message_type=message.type,
+            )
         # Leverage BLAKE2 hash function to generate a non-reversible hash of the sender ID for privacy.
         hash_obj = hashlib.blake2b(self.get_sender_id().encode("utf-8"), digest_size=16)
         sid = str(uuid.UUID(bytes=hash_obj.digest()))
@@ -500,9 +609,27 @@ class AstrMessageEvent(abc.ABC):
         await self.send(MessageChain([Plain(emoji)]))
 
     async def get_group(self, group_id: str | None = None, **kwargs) -> Group | None:
-        """获取一个群聊的数据, 如果不填写 group_id: 如果是私聊消息，返回 None。如果是群聊消息，返回当前群聊的数据。
+        """Get group information.
 
-        适配情况:
+        Platform event subclasses can enrich the result through their APIs. The
+        default implementation returns inbound group data, or an ID-only object
+        when an explicit group is queried.
 
-        - aiocqhttp(OneBotv11)
+        Args:
+            group_id: Group ID to query. Defaults to the current message group.
+            **kwargs: Extra platform-specific query options.
+
+        Returns:
+            Group information, or ``None`` for a private message without an
+            explicit group ID.
         """
+        resolved_group_id = group_id or self.get_group_id()
+        if not resolved_group_id:
+            return None
+        resolved_group_id = str(resolved_group_id)
+        if (
+            self.message_obj.group
+            and self.message_obj.group.group_id == resolved_group_id
+        ):
+            return self.message_obj.group
+        return Group(group_id=resolved_group_id)

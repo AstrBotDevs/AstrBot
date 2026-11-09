@@ -10,6 +10,7 @@ class WebChatQueueMgr:
         """Conversation ID to asyncio.Queue mapping"""
         self.back_queues: dict[str, asyncio.Queue] = {}
         """Request ID to asyncio.Queue mapping for responses"""
+        self._back_queue_close_events: dict[str, asyncio.Event] = {}
         self._conversation_back_requests: dict[str, set[str]] = {}
         self._request_conversation: dict[str, str] = {}
         self._queue_close_events: dict[str, asyncio.Event] = {}
@@ -36,6 +37,7 @@ class WebChatQueueMgr:
             self.back_queues[request_id] = asyncio.Queue(
                 maxsize=self.back_queue_maxsize
             )
+            self._back_queue_close_events[request_id] = asyncio.Event()
         if conversation_id:
             self._request_conversation[request_id] = conversation_id
             if conversation_id not in self._conversation_back_requests:
@@ -43,8 +45,49 @@ class WebChatQueueMgr:
             self._conversation_back_requests[conversation_id].add(request_id)
         return self.back_queues[request_id]
 
+    async def put_back_queue(self, request_id: str, data: object) -> bool:
+        """Write a response while the request queue remains active.
+
+        Args:
+            request_id: Response request identifier.
+            data: Payload to enqueue.
+
+        Returns:
+            Whether an active response queue accepted the payload.
+        """
+        queue = self.back_queues.get(request_id)
+        close_event = self._back_queue_close_events.get(request_id)
+        if queue is None or close_event is None or close_event.is_set():
+            return False
+
+        try:
+            queue.put_nowait(data)
+            return True
+        except asyncio.QueueFull:
+            pass
+
+        put_task = asyncio.create_task(queue.put(data))
+        close_task = asyncio.create_task(close_event.wait())
+        try:
+            done, _ = await asyncio.wait(
+                {put_task, close_task},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if close_task in done:
+                return False
+            await put_task
+            return True
+        finally:
+            for task in (put_task, close_task):
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(put_task, close_task, return_exceptions=True)
+
     def remove_back_queue(self, request_id: str):
         """Remove back queue for the given request ID"""
+        close_event = self._back_queue_close_events.pop(request_id, None)
+        if close_event is not None:
+            close_event.set()
         self.back_queues.pop(request_id, None)
         conversation_id = self._request_conversation.pop(request_id, None)
         if conversation_id:

@@ -10,6 +10,8 @@ AstrBot 的配置文件是一个 JSON 格式的文件。AstrBot 会在启动时�
 
 > 在 AstrBot v4.0.0 版本及之后，我们引入了[多配置文件](https://blog.astrbot.app/posts/what-is-changed-in-4.0.0/#%E5%A4%9A%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6)的概念。`data/cmd_config.json` 作为默认配置文件 `default`。其他您在 WebUI 新建的配置文件会存储在 `data/config/` 目录下，以 `abconf_` 开头。
 
+WebUI 中，按机器人或会话使用的行为配置（含文本转图像）在 `配置文件` 页面管理；全局运行、日志、网络和 WebUI 安全等配置在 `系统设置` 页面管理。模型连接和机器人连接分别在 `模型提供商` 和 `机器人` 页面管理。
+
 AstrBot 默认配置如下：
 
 ```jsonc
@@ -62,6 +64,8 @@ AstrBot 默认配置如下：
         "websearch_tavily_key": [],
         "websearch_bocha_key": [],
         "websearch_brave_key": [],
+        "websearch_deepseek_key": [],
+        "websearch_serpapi_key": [],
         "web_search_link": False,
         "display_reasoning_text": False,
         "identifier": False,
@@ -75,7 +79,7 @@ AstrBot 默认配置如下：
         "streaming_response": False,
         "show_tool_use_status": False,
         "streaming_segmented": False,
-        "max_agent_step": 30,
+        "max_agent_step": 128,
         "tool_call_timeout": 120,
     },
     "provider_stt_settings": {
@@ -90,7 +94,7 @@ AstrBot 默认配置如下：
     },
     "provider_ltm_settings": {
         "group_icl_enable": False,
-        "group_message_max_cnt": 300,
+        "group_message_max_cnt": 1000,
         "image_caption": False,
         "active_reply": {
             "enable": False,
@@ -116,7 +120,7 @@ AstrBot 默认配置如下：
     "dashboard": {
         "enable": True,
         "username": "astrbot",
-        "password": "77b90590a8945a7d36c963981a307dc9",
+        "password": "<your_password_md5>",
         "jwt_secret": "",
         "host": "0.0.0.0",
         "port": 6185,
@@ -159,7 +163,7 @@ AstrBot 默认配置如下：
 
 #### `platform_settings.unique_session`
 
-是否启用会话隔离。默认为 `false`。启用后，在群组或者频道中，每个人的对话的上下文都是独立的。
+是否启用「隔离对话」。默认为 `false`。启用后，支持隔离的渠道会为每位群成员使用独立上下文；不支持隔离的渠道仍使用原有上下文。`/new` 和 `/reset` 的权限由[指令管理设置](../use/command.md)决定，默认跟随对话是否隔离。
 
 #### `platform_settings.rate_limit`
 
@@ -174,6 +178,8 @@ AstrBot 默认配置如下：
 > 目前仅 QQ 平台适配器适用。
 
 消息转发阈值。当回复内容超过一定字数后，机器人会将消息折叠成 QQ 群聊的 “转发消息”，以防止刷屏。
+
+在 WebUI 中，选择机器人使用的配置文件，进入 `访问控制 → 白名单` 管理以下白名单设置。
 
 #### `platform_settings.enable_id_white_list`
 
@@ -288,12 +294,17 @@ ID 白名单。填写后，将只处理所填写的 ID 发来的消息事件。�
 
 #### `provider_settings.websearch_provider`
 
-网页搜索提供商类型。默认为 `tavily`。目前支持 `tavily`、`bocha`、`baidu_ai_search`、`brave`。
+网页搜索提供商类型。默认为 `tavily`。目前支持 `serpapi`、`deepseek`、`tavily`、`bocha`、`baidu_ai_search`、`brave`、`firecrawl`、`exa`、`anysearch`。
 
+- `serpapi`：使用 SerpApi Google Search、Google News、Google Images Light、Google Finance 和 Google Scholar。
+- `deepseek`：使用 DeepSeek Search API。
 - `tavily`：使用 Tavily 搜索引擎。
 - `bocha`：使用 BoCha 搜索引擎。
 - `baidu_ai_search`：使用百度 AI Search（MCP）。
 - `brave`：使用 Brave Search API。
+- `firecrawl`：使用 Firecrawl Search API。
+- `exa`：使用 Exa Search API。
+- `anysearch`：使用 AnySearch API。
 
 #### `provider_settings.websearch_tavily_key`
 
@@ -306,6 +317,18 @@ BoCha 搜索引擎的 API Key 列表。使用 `bocha` 作为网页搜索提供�
 #### `provider_settings.websearch_brave_key`
 
 Brave 搜索引擎的 API Key 列表。使用 `brave` 作为网页搜索提供商时需要填写。
+
+#### `provider_settings.websearch_firecrawl_key`
+
+Firecrawl 搜索引擎的 API Key 列表。使用 `firecrawl` 作为网页搜索提供商时需要填写。
+
+#### `provider_settings.websearch_deepseek_key`
+
+DeepSeek 搜索引擎的 API Key 列表。使用 `deepseek` 作为网页搜索提供商时需要填写。可使用与对话模型相同的 API Key，配置相互独立。同账号下的多个 Key 共享 QPS 限制。
+
+#### `provider_settings.websearch_serpapi_key`
+
+SerpApi Google Search、Google News、Google Images Light、Google Finance 和 Google Scholar 共用的 API Key 列表。使用 `serpapi` 作为网页搜索提供商时需要填写。前往 [SerpApi](https://serpapi.com/manage-api-key) 获取 Key。多个 Key 轮询使用，鉴权或额度错误时会尝试下一个 Key。
 
 #### `provider_settings.web_search_link`
 
@@ -361,7 +384,7 @@ Brave 搜索引擎的 API Key 列表。使用 `brave` 作为网页搜索提供�
 
 #### `provider_settings.max_agent_step`
 
-Agent 最大步骤数限制。默认为 `30`。模型的每次工具调用算作一步。
+Agent 最大步骤数限制。默认为 `128`。模型的每次工具调用算作一步。
 
 #### `provider_settings.tool_call_timeout`
 
@@ -407,17 +430,17 @@ Added in `v4.3.5`
 
 #### `provider_ltm_settings.group_icl_enable`
 
-是否启用群聊上下文感知。默认为 `false`。启用后，机器人会记录群聊中的对话内容，以便更好地理解群聊的上下文。
+是否将群聊记录注入模型上下文。默认为 `false`。启用后，机器人会暂存群聊中的对话内容，并在下一次回复时注入模型上下文。
 
 上下文的内容会被放在对话的系统提示词中。
 
 #### `provider_ltm_settings.group_message_max_cnt`
 
-群聊消息的最大记录数量。默认为 `100`。超过此数量的消息将被丢弃。
+注入上下文所保留的最大群聊消息数量。默认为 `1000`。超过此数量的消息将被丢弃。仅在群聊记录注入上下文开启时生效。
 
 #### `provider_ltm_settings.image_caption`
 
-是否记录群聊中的图片，并自动使用图像描述模型生成图片的描述文本。默认为 `false`。此配置项依赖于 `provider_settings.default_image_caption_provider_id` 的配置。请谨慎使用，因为这可能会增加大量的 API 调用和 token 开销。
+是否自动使用群聊图片转述模型生成图片描述并注入上下文。默认为 `false`。仅在群聊记录注入上下文开启时生效。请谨慎使用，因为这可能会增加大量的 API 调用和 token 开销。
 
 #### `provider_ltm_settings.active_reply`
 
@@ -457,6 +480,8 @@ Added in `v4.3.5`
 
 管理员 ID 列表。此外，还可以使用 `/op`, `/deop` 指令来添加或删除管理员。
 
+在 WebUI 的 `配置文件` 中选择机器人使用的配置文件，再进入 `访问控制 → 管理员 → 管理员 ID` 设置。给机器人发送 `/sid` 指令以获取 `UID`。
+
 ### `t2i`
 
 是否启用文本转图像功能。默认为 `false`。启用后，当用户发送的消息超过一定字数时，机器人会将消息渲染成图片发送给用户，以提高可读性并防止刷屏。支持 Markdown 渲染。
@@ -482,7 +507,7 @@ AstrBot API 的地址。用于渲染 Markdown 图片。当 `t2i_strategy` 为 `r
 
 ### `http_proxy`
 
-HTTP 代理。如 `http://localhost:7890`。
+HTTP 代理。如 `http://localhost:7890`。Docker 部署时请填写 AstrBot 容器能访问到的地址，见 [Docker 部署](/deploy/astrbot/docker.md)。
 
 ### `no_proxy`
 
@@ -492,11 +517,11 @@ HTTP 代理。如 `http://localhost:7890`。
 
 AstrBot WebUI 配置。
 
-请不要随意修改 `password` 的值。它是一个经过 `md5` 编码的密码。请在控制面板修改密码。
+请不要随意修改 `password` 的值。它是随机初始密码经过 `md5` 编码后的值。首次启动时请在日志中获取初始密码，并在控制面板中修改。
 
 - `enable`: 是否启用 AstrBot WebUI。默认为 `true`。
-- `username`: AstrBot WebUI 的用户名。默认为 `astrbot`。
-- `password`: AstrBot WebUI 的密码。默认为 `astrbot` 的 `md5` 编码值。请勿直接修改，除非您知道自己在做什么。
+- `username`: AstrBot WebUI 的用户名。
+- `password`: AstrBot WebUI 的密码。首次启动会随机生成初始密码（已在日志中打印），这里保存的是该密码的 `md5` 值。请勿直接修改，除非您知道自己在做什么。
 - `jwt_secret`: JWT 的密钥。AstrBot 会在初始化时随机生成。请勿修改，除非您知道自己在做什么。
 - `host`: AstrBot WebUI 监听的地址。默认为 `0.0.0.0`。
 - `port`: AstrBot WebUI 监听的端口。默认为 `6185`。
@@ -543,7 +568,30 @@ AstrBot WebUI 配置。
 
 ### `trace_enable`
 
-是否启用追踪记录。默认为 `false`。启用后，AstrBot 会记录运行追踪信息，可以在管理面板的 Trace 页面查看。
+是否启用追踪记录。默认为 `false`。可在 `设置 → 常规 → 日志 → 启用追踪记录` 中切换，与追踪页的启动/暂停按钮共用同一配置。启用后，AstrBot 会记录运行追踪信息，可以在管理面板的 `数据与日志 → 追踪` 页面查看。
+
+开启后自动持久化；暂停不删除历史，已开始的追踪仍会记录完成状态。OpenTelemetry API 和 SDK 负责 Span ID、父子关系、起止时间、状态、事件和活动上下文。日志会关联当前活动的 `trace_id` / `span_id`，插件仍使用原来的 `astrbot.api.logger`。AstrBot 使用独立的 TracerProvider，不替换全局 Provider，不添加导出器或自动埋点。SQLite 持久化、JSON API/SSE 和现有历史数据格式保持不变，不启用 OTLP 导出。标准环境变量 `OTEL_SDK_DISABLED=true` 也会关闭 SDK 追踪。
+
+框架入口组合使用 `log_context(...)`、`event_context(event)` 和独立的 `trace_execution(event.trace)`。只有最外层追踪执行作用域在消息处理、发送及历史保存结束后完成追踪；异常或取消会标记错误并原样抛出。`event_context(event)` 仅负责绑定当前事件、注册活动事件及清理临时文件；`TraceSpan.context()` 仅绑定根 Span，不负责结束追踪。插件无需在处理器中调用这些由框架入口管理的执行作用域。
+
+### `trace_db_path`
+
+独立 SQLite 路径，默认 `logs/traces.db`（相对 `data` 目录），更改路径后重启生效。数据库、WAL 和 SHM 不受“清理日志”影响。追踪正文可能包含消息、插件参数和工具结果，请限制数据库文件访问权限。
+
+### `trace_db_max_mb` / `trace_retention_days`
+
+正整数，默认容量目标 80 MB、保留 7 天，不支持无限容量。达到容量或过期后按完整 trace 淘汰旧数据；WAL、检查点和回收页面可能暂时增加磁盘占用，因此容量不是瞬时硬上限。单条追踪也有内容、Span 和事件数量限制，截断会在详情中提示。
+
+旧配置在加载时自动迁移，新配置优先，旧 JSONL 文件保留但不再写入或自动导入：
+
+| 旧配置 | 新配置/行为 |
+| --- | --- |
+| `trace_enable` | 保持不变，控制新追踪记录与持久化 |
+| `trace_log_enable` | 移除，不再单独开关 JSONL |
+| `trace_log_path` | 移除，默认改用 `trace_db_path: logs/traces.db` |
+| `trace_log_max_mb` | 未指定新容量时，正整数乘 4 迁移为 `trace_db_max_mb`（接近原当前文件加 3 份备份预算）；无效值改用 80 MB |
+
+新增 `trace_retention_days` 默认为 7 天。
 
 ### `pip_install_arg`
 

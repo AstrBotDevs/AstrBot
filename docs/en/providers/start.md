@@ -30,9 +30,19 @@ Using DeepSeek as an example, assuming you have registered and logged in to a De
 2. Click the "API Keys" menu in the left sidebar, create a new API Key, and copy the key.
 3. Click the "API Documentation" link near the bottom of the left sidebar to open the API documentation page.
 4. On the API documentation page, find the section about the "OpenAI-compatible interface" and note the API Base URL, for example `https://api.deepseek.com/v1`. (If there is no `/v1`, please add `/v1`.)
-5. Open the AstrBot Console -> Service Providers page, click Add Provider, find and click `OpenAI` (if the provider type you want to connect is listed, prefer clicking that type; for some providers like DeepSeek we provide optimized adapter support). Paste the API Key into the `API Key` field of the form and paste the API Base URL into the `API Base URL` field.
-6. Click Get Model List, find the model you want to use, click the + button on the right, then toggle the switch that appears on the right to enable it.
-7. Go to the Configuration page, find the conversational model, click the selection button on the right, choose the provider and model you just added, then click the Save Configuration button at the bottom-right of the screen.
+5. Open **Providers → Chat Completion**, click **Add**, and select `DeepSeek`. For other OpenAI-compatible services, select `OpenAI Compatible`. Enter the provider name, `API Key`, and `API Base URL`.
+6. Click **Save and Fetch Models**, find the desired model, click `+`, and make sure it is enabled. If the model list cannot be fetched, click **Save Configuration**, then **Custom Model** and enter the model ID. Use **Test Model** beside the model to check connectivity.
+7. Open **Config**, select the profile to use, and go to **AI → Model**. Set **Chat Model** to the model you just added, then click **Save Configuration** at the bottom right. This setting is for AstrBot built-in AI.
+
+## Provider Configuration in Narrow Windows
+
+The model configuration dialog on the Welcome and Chat pages, and the Providers page, adapt to the actual width of the configuration panel. When space is limited, the provider list collapses into a dropdown at the top. Use it to switch providers. Search and action controls wrap, and narrow forms place inputs below their descriptions.
+
+The configuration area supports vertical and horizontal scrolling. Use its bottom horizontal scrollbar or swipe sideways on a trackpad to view content that still exceeds the available width. Click **Advanced Configuration** to expand or collapse those settings.
+
+The dialog header shows the selected provider's icon, name, and endpoint, with the save button on the right. On phone-sized panels, the save button displays only a disk icon. The selected provider has a highlighted border, and configured models appear in separate list cards to distinguish model actions from provider settings.
+
+![Provider configuration in a narrow window (example data)](../use/images/provider-dialog-narrow-en.jpg)
 
 ## Using Environment Variables to Load Keys
 

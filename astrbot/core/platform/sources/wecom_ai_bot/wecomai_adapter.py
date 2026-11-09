@@ -6,6 +6,7 @@
 import asyncio
 import base64
 import hashlib
+import json
 import time
 import uuid
 from collections.abc import Awaitable, Callable
@@ -13,7 +14,7 @@ from typing import Any
 
 from astrbot.api import logger
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import At, Image, Plain
+from astrbot.api.message_components import At, ButtonInteraction, Image, Plain
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
@@ -22,6 +23,7 @@ from astrbot.api.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.button_interaction import decode_button_callback
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from ...register import register_platform_adapter
@@ -121,7 +123,7 @@ class WecomAIBotAdapter(Platform):
             name="wecom_ai_bot",
             description="企业微信智能机器人适配器，支持 HTTP 回调和长连接模式",
             id=self.config.get("id", "wecom_ai_bot"),
-            support_proactive_message=bool(self.msg_push_webhook_url),
+            support_proactive_message=True,
         )
 
         self.api_client: WecomAIBotAPIClient | None = None
@@ -266,6 +268,7 @@ class WecomAIBotAdapter(Platform):
             cached_plain_content = self._stream_plain_cache.get(stream_id, "")
             latest_plain_content = cached_plain_content
             image_base64 = []
+            template_card = None
             finish = False
             while not queue.empty():
                 msg = await queue.get()
@@ -280,6 +283,8 @@ class WecomAIBotAdapter(Platform):
                     latest_plain_content = cached_plain_content
                 elif msg["type"] == "image":
                     image_base64.append(msg["image_data"])
+                elif msg["type"] == "template_card":
+                    template_card = msg["template_card"]
                 elif msg["type"] == "break":
                     continue
                 elif msg["type"] in {"end", "complete"}:
@@ -294,7 +299,12 @@ class WecomAIBotAdapter(Platform):
             )
             if not finish:
                 self._stream_plain_cache[stream_id] = cached_plain_content
-            if finish and not latest_plain_content and not image_base64:
+            if (
+                finish
+                and not latest_plain_content
+                and not image_base64
+                and not template_card
+            ):
                 end_message = WecomAIBotStreamMessageBuilder.make_text_stream(
                     stream_id,
                     "",
@@ -305,7 +315,7 @@ class WecomAIBotAdapter(Platform):
                     callback_params["nonce"],
                     callback_params["timestamp"],
                 )
-            if latest_plain_content or image_base64:
+            if latest_plain_content or image_base64 or template_card:
                 msg_items = []
                 if finish and image_base64:
                     for img_b64 in image_base64:
@@ -320,12 +330,23 @@ class WecomAIBotAdapter(Platform):
                         )
                     image_base64 = []
 
-                plain_message = WecomAIBotStreamMessageBuilder.make_mixed_stream(
-                    stream_id,
-                    latest_plain_content,
-                    msg_items,
-                    finish,
-                )
+                if template_card:
+                    plain_message = (
+                        WecomAIBotStreamMessageBuilder.make_stream_with_template_card(
+                            stream_id,
+                            latest_plain_content,
+                            msg_items,
+                            template_card,
+                            finish,
+                        )
+                    )
+                else:
+                    plain_message = WecomAIBotStreamMessageBuilder.make_mixed_stream(
+                        stream_id,
+                        latest_plain_content,
+                        msg_items,
+                        finish,
+                    )
                 encrypted_message = await self.api_client.encrypt_message(
                     plain_message,
                     callback_params["nonce"],
@@ -340,8 +361,9 @@ class WecomAIBotAdapter(Platform):
                 return encrypted_message
             return None
         elif msgtype == "event":
-            event = message_data.get("event")
-            if event == "enter_chat" and self.friend_message_welcome_text:
+            event = message_data.get("event") or {}
+            event_type = event.get("eventtype") if isinstance(event, dict) else event
+            if event_type == "enter_chat" and self.friend_message_welcome_text:
                 # 用户进入会话，发送欢迎消息
                 try:
                     resp = WecomAIBotStreamMessageBuilder.make_text(
@@ -355,6 +377,54 @@ class WecomAIBotAdapter(Platform):
                 except Exception as e:
                     logger.error("处理欢迎消息时发生异常: %s", e)
                     return None
+            if event_type == "template_card_event" and isinstance(event, dict):
+                interaction = event.get("template_card_event") or event
+                event_key = interaction.get("event_key")
+                if not isinstance(event_key, str):
+                    logger.warning(
+                        "Ignored WeCom template-card callback without event_key."
+                    )
+                    return None
+                try:
+                    decode_button_callback(event_key, allow_expired=True)
+                except ValueError as e:
+                    logger.warning("Ignored unknown WeCom button callback: %s", e)
+                    return None
+
+                stream_id = f"{session_id}_interaction_{generate_random_string(10)}"
+                interaction_params = {
+                    **callback_params,
+                    "button_interaction": "true",
+                    "task_id": str(interaction.get("task_id") or ""),
+                }
+                self.queue_mgr.get_or_create_back_queue(stream_id)
+                self.queue_mgr.set_pending_response(stream_id, interaction_params)
+                await self._enqueue_message(
+                    message_data,
+                    interaction_params,
+                    stream_id,
+                    session_id,
+                )
+
+                queue = self.queue_mgr.get_or_create_back_queue(stream_id)
+                try:
+                    response = await asyncio.wait_for(queue.get(), timeout=4.5)
+                except TimeoutError:
+                    logger.warning(
+                        "WeCom template-card callback did not produce an update within 4.5 seconds: %s",
+                        message_data.get("msgid"),
+                    )
+                    self.queue_mgr.remove_queues(stream_id)
+                    return None
+
+                self.queue_mgr.remove_queues(stream_id)
+                if response.get("type") != "template_card_update":
+                    return None
+                return await self.api_client.encrypt_message(
+                    json.dumps(response["body"], ensure_ascii=False),
+                    callback_params["nonce"],
+                    callback_params["timestamp"],
+                )
 
     async def _process_long_connection_payload(
         self,
@@ -405,6 +475,38 @@ class WecomAIBotAdapter(Platform):
                 and req_id
             ):
                 await self._send_long_connection_respond_welcome(req_id)
+            elif event_type == "template_card_event":
+                interaction = event.get("template_card_event") or event
+                event_key = interaction.get("event_key")
+                if not isinstance(event_key, str):
+                    logger.warning(
+                        "[WecomAI][LongConn] Ignored template-card callback without event_key."
+                    )
+                    return
+                try:
+                    decode_button_callback(event_key, allow_expired=True)
+                except ValueError as e:
+                    logger.warning(
+                        "[WecomAI][LongConn] Ignored unknown button callback: %s", e
+                    )
+                    return
+
+                session_id = self._extract_session_id(body)
+                stream_id = f"{session_id}_interaction_{generate_random_string(10)}"
+                callback_params = {
+                    "req_id": req_id or "",
+                    "connection_mode": "long_connection",
+                    "button_interaction": "true",
+                    "task_id": str(interaction.get("task_id") or ""),
+                }
+                self.queue_mgr.get_or_create_back_queue(stream_id)
+                self.queue_mgr.set_pending_response(stream_id, callback_params)
+                await self._enqueue_message(
+                    body,
+                    callback_params,
+                    stream_id,
+                    session_id,
+                )
             elif event_type == "disconnected_event":
                 logger.warning(
                     "[WecomAI][LongConn] 收到 disconnected_event，旧连接将被关闭"
@@ -435,6 +537,29 @@ class WecomAIBotAdapter(Platform):
             return False
         return await client.send_command(
             cmd="aibot_respond_msg",
+            req_id=req_id,
+            body=body,
+        )
+
+    async def _send_long_connection_update_msg(
+        self,
+        req_id: str,
+        body: dict[str, Any],
+    ) -> bool:
+        """Replace a card in response to a WeCom interaction event.
+
+        Args:
+            req_id: Request ID from the template-card callback frame.
+            body: WeCom update-template-card response body.
+
+        Returns:
+            Whether WeCom accepted the update command.
+        """
+        client = self.long_connection_client
+        if not client:
+            return False
+        return await client.send_command(
+            cmd="aibot_respond_update_msg",
             req_id=req_id,
             body=body,
         )
@@ -480,6 +605,7 @@ class WecomAIBotAdapter(Platform):
         msgtype = message_data.get("msgtype")
         content = ""
         image_base64 = []
+        button_interaction = None
 
         _img_url_to_process: list[tuple[str, str | None]] = []
         msg_items = []
@@ -508,6 +634,26 @@ class WecomAIBotAdapter(Platform):
                             (image_url, image_payload.get("aeskey"))
                         )
             content = " ".join(text_parts) if text_parts else ""
+        elif msgtype == WecomAIBotConstants.MSG_TYPE_EVENT:
+            event = message_data.get("event") or {}
+            event_type = event.get("eventtype") if isinstance(event, dict) else event
+            if event_type == "template_card_event" and isinstance(event, dict):
+                native_interaction = event.get("template_card_event") or event
+                event_key = native_interaction.get("event_key")
+                if not isinstance(event_key, str):
+                    raise ValueError("WeCom template card event is missing event_key.")
+                action_id, data = decode_button_callback(event_key, allow_expired=True)
+                interaction_id = str(message_data.get("msgid") or uuid.uuid4())
+                button_interaction = ButtonInteraction(
+                    action_id=action_id,
+                    data=data,
+                    interaction_id=interaction_id,
+                    source_message_id=str(native_interaction.get("task_id") or "")
+                    or None,
+                    callback_data=event_key,
+                )
+            else:
+                content = f"[{event_type or 'event'}事件]"
         else:
             content = f"[{msgtype}消息]"
 
@@ -527,9 +673,9 @@ class WecomAIBotAdapter(Platform):
         # 构建 AstrBotMessage
         abm = AstrBotMessage()
         abm.self_id = self.bot_name
-        abm.message_str = content or "[未知消息]"
-        abm.message_id = str(uuid.uuid4())
-        abm.timestamp = int(time.time())
+        abm.message_str = "" if button_interaction else content or "[未知消息]"
+        abm.message_id = str(message_data.get("msgid") or uuid.uuid4())
+        abm.timestamp = int(message_data.get("create_time") or time.time())
         abm.raw_message = payload
 
         # 发送者信息
@@ -544,10 +690,17 @@ class WecomAIBotAdapter(Platform):
             if message_data.get("chattype") == "group"
             else MessageType.FRIEND_MESSAGE
         )
+        if abm.type == MessageType.GROUP_MESSAGE and message_data.get("chatid"):
+            abm.group_id = str(message_data["chatid"])
         abm.session_id = session_id
 
         # 消息内容
         abm.message = []
+
+        if button_interaction:
+            abm.message.append(button_interaction)
+            logger.debug(f"WecomAIAdapter: {abm.message}")
+            return abm
 
         # 处理 At
         if self.bot_name and f"@{self.bot_name}" in abm.message_str:
@@ -568,21 +721,18 @@ class WecomAIBotAdapter(Platform):
     ) -> None:
         """通过消息推送 webhook 发送消息。"""
         if not self.webhook_client:
-            logger.warning(
-                "主动消息发送失败: 未配置企业微信消息推送 Webhook URL，请前往配置添加。session_id=%s",
-                session.session_id,
+            raise RuntimeError(
+                "主动消息发送失败: 未配置企业微信消息推送 Webhook URL，请前往配置添加。"
+                "详见文档: https://docs.astrbot.app/platform/wecom_ai_bot.html#%E9%85%8D%E7%BD%AE-astrbot。"
+                f"session_id={session.session_id}"
             )
-            await super().send_by_session(session, message_chain)
-            return
 
         try:
             await self.webhook_client.send_message_chain(message_chain)
         except Exception as e:
-            logger.error(
-                "企业微信消息推送失败(session=%s): %s",
-                session.session_id,
-                e,
-            )
+            raise RuntimeError(
+                f"企业微信消息推送失败: session_id={session.session_id}, error={e}"
+            ) from e
         await super().send_by_session(session, message_chain)
 
     def run(self) -> Awaitable[Any]:
@@ -645,27 +795,36 @@ class WecomAIBotAdapter(Platform):
         """获取平台元数据"""
         return self.metadata
 
+    def create_event(self, message: AstrBotMessage) -> WecomAIBotMessageEvent:
+        """Creates a WeCom AI Bot message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created WeCom AI Bot message event.
+        """
+        message_event = WecomAIBotMessageEvent(
+            message_str=message.message_str,
+            message_obj=message,
+            platform_meta=self.meta(),
+            session_id=message.session_id,
+            api_client=self.api_client,
+            queue_mgr=self.queue_mgr,
+            webhook_client=self.webhook_client,
+            only_use_webhook_url_to_send=self.only_use_webhook_url_to_send,
+            long_connection_sender=self._send_long_connection_respond_msg,
+            long_connection_update_sender=self._send_long_connection_update_msg,
+        )
+        if not message_event.is_button_interaction():
+            message_event.is_at_or_wake_command = True
+            message_event.is_wake = True
+        return message_event
+
     async def handle_msg(self, message: AstrBotMessage) -> None:
         """处理消息，创建消息事件并提交到事件队列"""
         try:
-            message_event = WecomAIBotMessageEvent(
-                message_str=message.message_str,
-                message_obj=message,
-                platform_meta=self.meta(),
-                session_id=message.session_id,
-                api_client=self.api_client,
-                queue_mgr=self.queue_mgr,
-                webhook_client=self.webhook_client,
-                only_use_webhook_url_to_send=self.only_use_webhook_url_to_send,
-                long_connection_sender=self._send_long_connection_respond_msg,
-            )
-            message_event.is_at_or_wake_command = (
-                True  # 企业微信智能机器人默认消息都是 at 或唤醒命令
-            )
-            message_event.is_wake = True  # 企业微信智能机器人消息默认当做唤醒命令处理
-
-            self.commit_event(message_event)
-
+            self.commit_event(self.create_event(message))
         except Exception as e:
             logger.error("处理消息时发生异常: %s", e)
 

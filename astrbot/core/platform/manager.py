@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 from astrbot.core import logger
 from astrbot.core.config.astrbot_config import AstrBotConfig
+from astrbot.core.log import log_context
 from astrbot.core.star.star_handler import EventType, star_handlers_registry, star_map
 from astrbot.core.utils.webhook_utils import ensure_platform_webhook_config
 
@@ -22,7 +23,7 @@ class PlatformTasks:
 class PlatformManager:
     def __init__(self, config: AstrBotConfig, event_queue: Queue) -> None:
         self.platform_insts: list[Platform] = []
-        """加载的 Platform 的实例"""
+        """Loaded Platform instances."""
 
         self._inst_map: dict[str, dict] = {}
         self._platform_tasks: dict[str, PlatformTasks] = {}
@@ -30,9 +31,11 @@ class PlatformManager:
         self.astrbot_config = config
         self.platforms_config = config["platform"]
         self.settings = config["platform_settings"]
-        """NOTE: 这里是 default 的配置文件，以保证最大的兼容性；
-        这个配置中的 unique_session 需要特殊处理，
-        约定整个项目中对 unique_session 的引用都从 default 的配置中获取"""
+        """The default configuration is used here for maximum compatibility.
+
+        The unique_session setting requires special handling. All references to
+        unique_session in the project must use the default configuration.
+        """
         self.event_queue = event_queue
 
     def _is_valid_platform_id(self, platform_id: str | None) -> bool:
@@ -47,7 +50,10 @@ class PlatformManager:
         return sanitized, sanitized != platform_id
 
     def _start_platform_task(self, task_name: str, inst: Platform) -> None:
-        run_task = asyncio.create_task(inst.run(), name=task_name)
+        run_task = asyncio.create_task(
+            self._run_platform(inst),
+            name=task_name,
+        )
         wrapper_task = asyncio.create_task(
             self._task_wrapper(run_task, platform=inst),
             name=f"{task_name}_wrapper",
@@ -56,6 +62,17 @@ class PlatformManager:
             run=run_task,
             wrapper=wrapper_task,
         )
+
+    async def _run_platform(self, inst: Platform) -> None:
+        """Run an adapter with its platform metadata bound to emitted logs.
+
+        Args:
+            inst: Platform adapter instance to run.
+        """
+        meta = inst.meta()
+        platform_id = meta.id or inst.config.get("id")
+        with log_context(platform_id, meta.name):
+            await inst.run()
 
     async def _stop_platform_task(self, client_id: str) -> None:
         tasks = self._platform_tasks.pop(client_id, None)
@@ -76,7 +93,7 @@ class PlatformManager:
                     raise
                 except Exception as e:
                     logger.error(
-                        "终止平台适配器失败: client_id=%s, error=%s",
+                        "Failed to terminate platform adapter: client_id=%s, error=%s",
                         client_id,
                         e,
                     )
@@ -92,7 +109,7 @@ class PlatformManager:
                     self.astrbot_config.save_config()
                 await self.load_platform(platform)
             except Exception as e:
-                logger.error(f"初始化 {platform} 平台适配器失败: {e}")
+                logger.error(f"Failed to initialize platform adapter {platform}: {e}")
 
         # 网页聊天
         webchat_inst = WebChatAdapter({}, self.settings, self.event_queue)
@@ -110,7 +127,8 @@ class PlatformManager:
                 sanitized_id, changed = self._sanitize_platform_id(platform_id)
                 if sanitized_id and changed:
                     logger.warning(
-                        "平台 ID %r 包含非法字符 ':' 或 '!'，已替换为 %r。",
+                        "Platform ID %r contains invalid ':' or '!' characters and "
+                        "was changed to %r.",
                         platform_id,
                         sanitized_id,
                     )
@@ -118,7 +136,8 @@ class PlatformManager:
                     self.astrbot_config.save_config()
                 else:
                     logger.error(
-                        f"平台 ID {platform_id!r} 不能为空，跳过加载该平台适配器。",
+                        f"Platform ID {platform_id!r} cannot be empty; skipping "
+                        "the platform adapter.",
                     )
                     return
 
@@ -126,6 +145,10 @@ class PlatformManager:
                 "Loading IM platform adapter %s(%s) ...",
                 platform_config["type"],
                 platform_config["id"],
+                extra={
+                    "platform_id": platform_config["id"],
+                    "platform_type": platform_config["type"],
+                },
             )
             match platform_config["type"]:
                 case "aiocqhttp":
@@ -196,10 +219,14 @@ class PlatformManager:
                     )
         except (ImportError, ModuleNotFoundError) as e:
             logger.error(
-                f"加载平台适配器 {platform_config['type']} 失败，原因：{e}。请检查依赖库是否安装。提示：可以在 管理面板->平台日志->安装Pip库 中安装依赖库。",
+                f"Failed to load platform adapter {platform_config['type']}: {e}. "
+                "Check whether its dependencies are installed. You can install "
+                "them from Dashboard -> Logs -> Install Pip Package.",
             )
         except Exception as e:
-            logger.error(f"加载平台适配器 {platform_config['type']} 失败，原因：{e}。")
+            logger.error(
+                f"Failed to load platform adapter {platform_config['type']}: {e}."
+            )
 
         if platform_config["type"] not in platform_cls_map:
             logger.error(
@@ -232,26 +259,30 @@ class PlatformManager:
     async def _task_wrapper(
         self, task: asyncio.Task, platform: Platform | None = None
     ) -> None:
-        # 设置平台状态为运行中
-        if platform:
-            platform.status = PlatformStatus.RUNNING
-
-        try:
-            await task
-        except asyncio.CancelledError:
+        meta = platform.meta() if platform else None
+        platform_id = (meta.id or platform.config.get("id")) if meta else None
+        platform_type = meta.name if meta else None
+        with log_context(platform_id, platform_type):
+            # 设置平台状态为运行中
             if platform:
-                platform.status = PlatformStatus.STOPPED
-        except Exception as e:
-            error_msg = str(e)
-            tb_str = traceback.format_exc()
-            logger.error(f"------- 任务 {task.get_name()} 发生错误: {e}")
-            for line in tb_str.split("\n"):
-                logger.error(f"|    {line}")
-            logger.error("-------")
+                platform.status = PlatformStatus.RUNNING
 
-            # 记录错误到平台实例
-            if platform:
-                platform.record_error(error_msg, tb_str)
+            try:
+                await task
+            except asyncio.CancelledError:
+                if platform:
+                    platform.status = PlatformStatus.STOPPED
+            except Exception as e:
+                error_msg = str(e)
+                tb_str = traceback.format_exc()
+                logger.error(f"------- Task {task.get_name()} failed: {e}")
+                for line in tb_str.split("\n"):
+                    logger.error(f"|    {line}")
+                logger.error("-------")
+
+                # 记录错误到平台实例
+                if platform:
+                    platform.record_error(error_msg, tb_str)
 
     async def reload(self, platform_config: dict) -> None:
         await self.terminate_platform(platform_config["id"])
@@ -266,7 +297,7 @@ class PlatformManager:
 
     async def terminate_platform(self, platform_id: str) -> None:
         if platform_id in self._inst_map:
-            logger.info(f"正在尝试终止 {platform_id} 平台适配器 ...")
+            logger.info(f"Attempting to terminate platform adapter {platform_id} ...")
 
             # client_id = self._inst_map.pop(platform_id, None)
             info = self._inst_map.pop(platform_id)
@@ -281,7 +312,9 @@ class PlatformManager:
                     ),
                 )
             except Exception:
-                logger.warning(f"可能未完全移除 {platform_id} 平台适配器")
+                logger.warning(
+                    f"Platform adapter {platform_id} may not have been fully removed."
+                )
 
             await self._terminate_inst_and_tasks(inst)
 
@@ -328,7 +361,7 @@ class PlatformManager:
                     error_count += 1
             except Exception as e:
                 # 如果获取统计信息失败，记录基本信息
-                logger.warning(f"获取平台统计信息失败: {e}")
+                logger.warning(f"Failed to get platform statistics: {e}")
                 stats_list.append(
                     {
                         "id": getattr(inst, "config", {}).get("id", "unknown"),

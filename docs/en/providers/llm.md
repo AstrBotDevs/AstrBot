@@ -1,13 +1,11 @@
-# 大语言模型提供商
+# Large Language Model Providers
 
-你可在管理面板->服务提供商->+新增服务提供商 处配置各种大语言模型服务。
+In the WebUI, open **Providers → Chat Completion**, click **Add**, and select a provider type. For an OpenAI-compatible service, select `OpenAI Compatible` and enter the API Base URL and API key supplied by that service.
 
-> [!TIP]
-> 如果没有你希望接入的模型服务，你可以试着查看您希望接入的服务提供商处是否支持 兼容 OpenAI API，如果支持，那么你可以选择上面截图中的第一项 `OpenAI` 然后通过修改 API Base URL 的方式接入。
+Enter the provider name and `API Key`, check the `API Base URL`, then click **Save and Fetch Models**. Click `+` beside the desired model and make sure it is enabled. Alternatively, click **Save Configuration**, then **Custom Model** and enter the exact model ID. Use **Test Model** beside the configured model to check availability.
 
-![image](https://files.astrbot.app/docs/source/images/llm/image.png)
+Open **Config**, select the profile to use, and go to **AI → Model**. Set **Chat Model** to the model you just added, then click **Save Configuration** at the bottom right. This setting is for AstrBot built-in AI.
 
-![image](https://files.astrbot.app/docs/source/images/llm/image-1.png)
+See [Connecting Model Services](./start.md) for detailed steps.
 
-
-> 相应的配置保存在 `data/cmd_config.json` 的 `provider` 字段中。
+> Provider connection settings are stored in `provider_sources` in `data/cmd_config.json`; individual model configurations are stored in `provider`.

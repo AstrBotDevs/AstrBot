@@ -3,11 +3,14 @@ import mimetypes
 import shutil
 import uuid
 from collections.abc import Awaitable, Callable, Sequence
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from astrbot.core.db.po import Attachment
 from astrbot.core.message.components import (
+    ActionRow,
+    Button,
+    ButtonInteraction,
     File,
     Image,
     Json,
@@ -17,6 +20,12 @@ from astrbot.core.message.components import (
     Video,
 )
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.platform.button_interaction import (
+    decode_button_callback,
+    encode_button_callback,
+)
+from astrbot.core.utils.datetime_utils import generate_timestamp_id
+from astrbot.core.utils.media_utils import MediaResolver
 
 AttachmentGetter = Callable[[str], Awaitable[Attachment | None]]
 AttachmentInserter = Callable[[str, str, str], Awaitable[Attachment | None]]
@@ -28,14 +37,34 @@ ReplyHistoryGetter = Callable[
 MEDIA_PART_TYPES = {"image", "record", "file", "video"}
 
 
+def _safe_display_filename(filename: str | None) -> str:
+    """Return a safe basename for display-only filenames.
+
+    Args:
+        filename: Candidate filename from a message payload or component.
+
+    Returns:
+        Sanitized basename, or an empty string when the value is unusable.
+    """
+    if not filename:
+        return ""
+    basename = (
+        PurePosixPath(str(filename).replace("\\", "/")).name.replace("\x00", "").strip()
+    )
+    return "" if basename in {"", ".", ".."} else basename
+
+
 def strip_message_parts_path_fields(message_parts: list[dict]) -> list[dict]:
     return [{k: v for k, v in part.items() if k != "path"} for part in message_parts]
 
 
 def webchat_message_parts_have_content(message_parts: list[dict]) -> bool:
     return any(
-        part.get("type") in ("plain", "image", "record", "file", "video")
-        and (part.get("text") or part.get("attachment_id") or part.get("filename"))
+        (
+            part.get("type") in ("plain", "image", "record", "file", "video")
+            and (part.get("text") or part.get("attachment_id") or part.get("filename"))
+        )
+        or (part.get("type") == "button_interaction" and part.get("callback_data"))
         for part in message_parts
     )
 
@@ -127,6 +156,38 @@ async def parse_webchat_message_parts(
             )
             continue
 
+        if part_type == "button_interaction":
+            callback_payload = part.get("callback_data")
+            if not isinstance(callback_payload, str):
+                if strict:
+                    raise ValueError("button_interaction part missing callback_data")
+                continue
+            try:
+                action_id, data = decode_button_callback(
+                    callback_payload, allow_expired=True
+                )
+            except ValueError:
+                if strict:
+                    raise
+                continue
+            source_message_id = part.get("source_message_id")
+            components.append(
+                ButtonInteraction(
+                    action_id=action_id,
+                    data=data,
+                    interaction_id=str(part.get("interaction_id") or uuid.uuid4().hex),
+                    source_message_id=(
+                        str(source_message_id)
+                        if source_message_id is not None
+                        else None
+                    ),
+                    callback_data=callback_payload,
+                )
+            )
+            text_parts.append(action_id)
+            has_content = True
+            continue
+
         if part_type not in MEDIA_PART_TYPES:
             if strict:
                 raise ValueError(f"unsupported message part type: {part_type}")
@@ -151,7 +212,12 @@ async def parse_webchat_message_parts(
         if part_type == "image":
             components.append(Image.fromFileSystem(file_path_str))
         elif part_type == "record":
-            components.append(Record.fromFileSystem(file_path_str))
+            path_wav = await MediaResolver(
+                file_path_str,
+                media_type="audio",
+                default_suffix=".wav",
+            ).to_path(target_format="wav")
+            components.append(Record(file=path_wav, url=path_wav))
         elif part_type == "video":
             components.append(Video.fromFileSystem(file_path_str))
         else:
@@ -205,6 +271,28 @@ async def build_webchat_message_parts(
             )
             continue
 
+        if part_type == "button_interaction":
+            callback_payload = part.get("callback_data")
+            if not isinstance(callback_payload, str):
+                if strict:
+                    raise ValueError("button_interaction part missing callback_data")
+                continue
+            try:
+                decode_button_callback(callback_payload, allow_expired=True)
+            except ValueError:
+                if strict:
+                    raise
+                continue
+            message_parts.append(
+                {
+                    "type": "button_interaction",
+                    "callback_data": callback_payload,
+                    "source_message_id": part.get("source_message_id"),
+                    "interaction_id": uuid.uuid4().hex,
+                }
+            )
+            continue
+
         if part_type not in MEDIA_PART_TYPES:
             if strict:
                 raise ValueError(f"unsupported message part type: {part_type}")
@@ -223,14 +311,19 @@ async def build_webchat_message_parts(
             continue
 
         attachment_path = Path(attachment.path)
+        display_name = (
+            _safe_display_filename(part.get("filename")) or attachment_path.name
+        )
         message_parts.append(
             {
                 "type": attachment.type,
                 "attachment_id": attachment.attachment_id,
-                "filename": attachment_path.name,
+                "filename": display_name,
                 "path": str(attachment_path),
             }
         )
+        if display_name != attachment_path.name:
+            message_parts[-1]["stored_filename"] = attachment_path.name
 
     return message_parts
 
@@ -334,6 +427,7 @@ async def create_attachment_part_from_existing_file(
     insert_attachment: AttachmentInserter,
     attachments_dir: str | Path,
     fallback_dirs: Sequence[str | Path] = (),
+    display_name: str | None = None,
 ) -> dict | None:
     basename = Path(filename).name
     candidate_paths = [Path(attachments_dir) / basename]
@@ -352,11 +446,15 @@ async def create_attachment_part_from_existing_file(
     if not attachment:
         return None
 
-    return {
+    safe_display_name = _safe_display_filename(display_name)
+    part = {
         "type": attach_type,
         "attachment_id": attachment.attachment_id,
-        "filename": file_path.name,
+        "filename": safe_display_name or file_path.name,
     }
+    if part["filename"] != file_path.name:
+        part["stored_filename"] = file_path.name
+    return part
 
 
 async def message_chain_to_storage_message_parts(
@@ -379,6 +477,25 @@ async def message_chain_to_storage_message_parts(
             parts.append(
                 {"type": "plain", "text": json.dumps(comp.data, ensure_ascii=False)}
             )
+            continue
+
+        if isinstance(comp, ActionRow):
+            row_data = comp.toDict()["data"]
+            for button, serialized_button in zip(
+                comp.buttons,
+                row_data["buttons"],
+                strict=True,
+            ):
+                if isinstance(button.action, Button.CallbackAction):
+                    serialized_button["action"]["callback_data"] = (
+                        encode_button_callback(
+                            button.id,
+                            button.action.data,
+                            expires_at=comp.action_expires_at,
+                        )
+                    )
+                    serialized_button["action"].pop("data", None)
+            parts.append({"type": "actionrow", **row_data})
             continue
 
         if isinstance(comp, Image):
@@ -446,7 +563,7 @@ async def _copy_file_to_attachment_part(
         return None
 
     suffix = src_path.suffix
-    target_path = attachments_dir / f"{uuid.uuid4().hex}{suffix}"
+    target_path = attachments_dir / f"{generate_timestamp_id()}{suffix}"
     shutil.copy2(src_path, target_path)
 
     mime_type, _ = mimetypes.guess_type(target_path.name)
@@ -458,8 +575,11 @@ async def _copy_file_to_attachment_part(
     if not attachment:
         return None
 
-    return {
+    part = {
         "type": attach_type,
         "attachment_id": attachment.attachment_id,
-        "filename": display_name or src_path.name,
+        "filename": _safe_display_filename(display_name) or src_path.name,
     }
+    if part["filename"] != target_path.name:
+        part["stored_filename"] = target_path.name
+    return part

@@ -1,7 +1,6 @@
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.core.config.default import VERSION
-from astrbot.core.utils.io import download_dashboard
+from astrbot.core.updater import AstrBotUpdater
 
 
 class AdminCommands:
@@ -11,5 +10,5 @@ class AdminCommands:
     async def update_dashboard(self, event: AstrMessageEvent) -> None:
         """更新管理面板"""
         await event.send(MessageChain().message("⏳ Updating dashboard..."))
-        await download_dashboard(version=f"v{VERSION}", latest=False)
+        await AstrBotUpdater().ensure_dashboard()
         await event.send(MessageChain().message("✅ Dashboard updated successfully."))

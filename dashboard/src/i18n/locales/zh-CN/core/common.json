@@ -5,6 +5,8 @@
   "copy": "复制",
   "copied": "已复制",
   "copyFailed": "复制失败",
+  "collapse": "收起",
+  "expand": "展开",
   "delete": "删除",
   "edit": "编辑",
   "add": "添加",
@@ -38,6 +40,7 @@
   "no": "否",
   "imagePreview": "图片预览",
   "autoDetect": "自动检测",
+  "restoreDefault": "恢复默认值",
   "dialog": {
     "confirmTitle": "确认操作",
     "confirmMessage": "你确定要执行此操作吗？",
@@ -47,6 +50,16 @@
   "restart": {
     "waiting": "正在等待 AstrBot 重启...",
     "maxRetriesReached": "拉取状态达到最大次数，请手动检查。"
+  },
+  "upgradeRecovery": {
+    "title": "检测到升级未完成",
+    "description": "当前 WebUI 已更新到 {dashboardVersion}，但 AstrBot Core 仍是 {coreVersion}。这通常是升级过程中刷新页面导致重启流程被打断。如果重启后仍未解决，请尝试删除 AstrBot 运行时目录下的 data/dist 文件夹后重启 AstrBot。",
+    "hint": "请重启后端以完成升级，重启完成后页面会自动刷新。",
+    "restartButton": "立即重启后端",
+    "laterButton": "稍后处理",
+    "restarting": "正在请求后端重启...",
+    "waiting": "已发起重启，正在等待后端恢复...",
+    "failed": "重启请求失败，请手动重启 AstrBot。"
   },
   "readme": {
     "title": "插件说明文档",
@@ -82,7 +95,40 @@
     "missingTemplate": "找不到对应模板，请删除后重新添加。",
     "unknownTemplate": "未指定模板"
   },
+  "umoSelector": {
+    "group": "群聊",
+    "private": "私聊",
+    "title": "选择会话来源",
+    "hint": "会话来源（UMO）用于唯一标识消息来自哪个机器人的哪个群聊或私聊。你可以按群名、昵称、别名或 UMO 搜索和选择。可以对机器人使用 /sid 指令获取当前会话的 UMO。",
+    "selected": "已选择（{count}）",
+    "clear": "清空选择",
+    "remove": "移除 {umo}",
+    "known": "已记录的会话来源",
+    "refresh": "刷新",
+    "manual": "手动输入",
+    "search": "搜索群名、昵称、别名或 UMO",
+    "loadError": "无法加载会话，请重试。",
+    "loadMore": "显示更多",
+    "empty": "没有匹配的会话。",
+    "manualLabel": "UMO，每行一个",
+    "manualHint": "格式：平台实例 ID:消息类型:会话 ID。可输入尚未记录的会话，多选时每行一项。",
+    "invalidManual": "请检查会话是否属于指定平台、是否已存在，以及单选时是否只输入一项。"
+  },
   "list": {
+    "senderSearch": "搜索昵称或发送者 ID",
+    "senderRefresh": "刷新",
+    "senderPreviousPage": "上一页",
+    "senderNextPage": "下一页",
+    "senderPage": "第 {page} 页",
+    "senderHint": "按昵称、ID 或来源会话搜索和选择指定用户。可以对机器人使用 /sid 指令获取自己在某个消息平台的用户 ID。",
+    "senderManage": "选择用户",
+    "senderTitle": "选择用户",
+    "senderSelected": "已选择（{count}）",
+    "senderUnknown": "暂无已记录的昵称",
+    "senderRemove": "移除 {id}",
+    "senderAddId": "添加 ID「{id}」",
+    "senderEmpty": "没有匹配的用户。在聊天平台发送一条能唤醒机器人的消息后即可记录。也可直接添加该 ID。",
+    "senderLoadError": "无法加载用户，可直接添加输入的 ID。",
     "addItemPlaceholder": "添加新项，按回车确认添加",
     "addButton": "添加",
     "addMore": "添加更多",
@@ -122,6 +168,7 @@
       "jsonValue": "JSON"
     }
   },
+  "unauthorized": "未授权访问，请重新登录",
   "firstNotice": {
     "title": "首次提示",
     "loading": "正在加载首次提示...",

@@ -1,3 +1,4 @@
+# ruff: noqa: F401, F403, F811, I001
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot import logger
 from astrbot.core import html_renderer
@@ -14,6 +15,7 @@ from astrbot.core.platform import AstrMessageEvent
 
 # star register
 from astrbot.core.star.register import (
+    register_button_action as button_action,
     register_command as command,
     register_command_group as command_group,
     register_event_message_type as event_message_type,

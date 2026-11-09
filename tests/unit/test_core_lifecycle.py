@@ -1,6 +1,7 @@
 """Tests for AstrBotCoreLifecycle."""
 
 import asyncio
+import logging
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -44,7 +45,7 @@ class TestAstrBotCoreLifecycleInit:
 
         assert lifecycle.log_broker == mock_log_broker
         assert lifecycle.db == mock_db
-        assert lifecycle.subagent_orchestrator is None
+        assert lifecycle.subagents is None
         assert lifecycle.cron_manager is None
         assert lifecycle.temp_dir_cleaner is None
 
@@ -97,6 +98,8 @@ class TestAstrBotCoreLifecycleInit:
             # Verify proxy environment variables are cleared
             assert "http_proxy" not in os.environ
             assert "https_proxy" not in os.environ
+            # Verify local APIs always bypass proxies after clearing the environment.
+            assert os.environ.get("no_proxy") == "localhost,127.0.0.1,::1"
 
 
 class TestAstrBotCoreLifecycleStop:
@@ -218,47 +221,6 @@ class TestAstrBotCoreLifecycleLoadPlatform:
         assert any("inst2" in task.get_name() for task in tasks)
 
 
-class TestAstrBotCoreLifecycleErrorHandling:
-    """Tests for AstrBotCoreLifecycle error handling."""
-
-    @pytest.mark.asyncio
-    async def test_subagent_orchestrator_error_is_logged(
-        self, mock_log_broker, mock_db, mock_astrbot_config
-    ):
-        """Test that subagent orchestrator init errors are logged."""
-        lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
-        lifecycle.provider_manager = MagicMock()
-        lifecycle.provider_manager.llm_tools = MagicMock()
-        lifecycle.persona_mgr = MagicMock()
-        lifecycle.astrbot_config = mock_astrbot_config
-        lifecycle.astrbot_config.get = MagicMock(return_value={})
-
-        mock_subagent = MagicMock()
-        mock_subagent.reload_from_config = AsyncMock(
-            side_effect=Exception("Orchestrator init failed")
-        )
-
-        with (
-            patch(
-                "astrbot.core.core_lifecycle.SubAgentOrchestrator",
-                return_value=mock_subagent,
-            ) as mock_subagent_cls,
-            patch("astrbot.core.core_lifecycle.logger") as mock_logger,
-        ):
-            await lifecycle._init_or_reload_subagent_orchestrator()
-
-        mock_subagent_cls.assert_called_once_with(
-            lifecycle.provider_manager.llm_tools,
-            lifecycle.persona_mgr,
-        )
-        mock_subagent.reload_from_config.assert_awaited_once_with({})
-        assert mock_logger.error.called
-        assert any(
-            "Subagent orchestrator init failed" in str(call)
-            for call in mock_logger.error.call_args_list
-        )
-
-
 class TestAstrBotCoreLifecycleDefaultChatProviderWarning:
     """Tests for startup warning when default chat provider is unset."""
 
@@ -275,7 +237,7 @@ class TestAstrBotCoreLifecycleDefaultChatProviderWarning:
         provider_a = self._make_provider("openai_source/model-a")
         provider_b = self._make_provider("openai_source/model-b")
         lifecycle.provider_manager = MagicMock(
-            provider_settings={"default_provider_id": ""},
+            default_chat_provider_id="",
             provider_insts=[provider_a, provider_b],
             curr_provider_inst=provider_b,
         )
@@ -290,7 +252,7 @@ class TestAstrBotCoreLifecycleDefaultChatProviderWarning:
     def test_warns_only_once_per_lifecycle(self, mock_log_broker, mock_db):
         lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
         lifecycle.provider_manager = MagicMock(
-            provider_settings={"default_provider_id": ""},
+            default_chat_provider_id="",
             provider_insts=[
                 self._make_provider("openai_source/model-a"),
                 self._make_provider("openai_source/model-b"),
@@ -309,7 +271,7 @@ class TestAstrBotCoreLifecycleDefaultChatProviderWarning:
     ):
         lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
         lifecycle.provider_manager = MagicMock(
-            provider_settings={"default_provider_id": ""},
+            default_chat_provider_id="",
             provider_insts=[self._make_provider("openai_source/model-a")],
             curr_provider_inst=self._make_provider("openai_source/model-a"),
         )
@@ -324,7 +286,7 @@ class TestAstrBotCoreLifecycleDefaultChatProviderWarning:
     ):
         lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
         lifecycle.provider_manager = MagicMock(
-            provider_settings={"default_provider_id": "openai_source/model-a"},
+            default_chat_provider_id="openai_source/model-a",
             provider_insts=[
                 self._make_provider("openai_source/model-a"),
                 self._make_provider("openai_source/model-b"),
@@ -344,7 +306,7 @@ class TestAstrBotCoreLifecycleDefaultChatProviderWarning:
         provider_a = self._make_provider("openai_source/model-a")
         provider_b = self._make_provider("openai_source/model-b")
         lifecycle.provider_manager = MagicMock(
-            provider_settings={"default_provider_id": ""},
+            default_chat_provider_id="",
             provider_insts=[provider_a, provider_b],
             curr_provider_inst=None,
         )
@@ -361,7 +323,7 @@ class TestAstrBotCoreLifecycleDefaultChatProviderWarning:
     ):
         lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
         lifecycle.provider_manager = MagicMock(
-            provider_settings={"default_provider_id": "non-existent-id"},
+            default_chat_provider_id="non-existent-id",
             provider_insts=[
                 self._make_provider("openai_source/model-a"),
                 self._make_provider("openai_source/model-b"),
@@ -389,6 +351,7 @@ class TestAstrBotCoreLifecycleInitialize:
 
         # Mock all the dependencies
         mock_db.initialize = AsyncMock()
+        mock_db.get_preferences = AsyncMock(return_value=[])
         mock_html_renderer = MagicMock()
         mock_html_renderer.initialize = AsyncMock()
 
@@ -396,6 +359,7 @@ class TestAstrBotCoreLifecycleInitialize:
         mock_umop_config_router.initialize = AsyncMock()
 
         mock_astrbot_config_mgr = MagicMock()
+        mock_astrbot_config_mgr.initialize = AsyncMock()
         mock_astrbot_config_mgr.default_conf = {}
         mock_astrbot_config_mgr.confs = {}
 
@@ -426,7 +390,7 @@ class TestAstrBotCoreLifecycleInitialize:
         mock_pipeline_scheduler = MagicMock()
         mock_pipeline_scheduler.initialize = AsyncMock()
 
-        mock_astrbot_updator = MagicMock()
+        mock_astrbot_updater = MagicMock()
 
         mock_event_bus = MagicMock()
 
@@ -481,8 +445,8 @@ class TestAstrBotCoreLifecycleInitialize:
                 return_value=mock_pipeline_scheduler,
             ),
             patch(
-                "astrbot.core.core_lifecycle.AstrBotUpdator",
-                return_value=mock_astrbot_updator,
+                "astrbot.core.core_lifecycle.AstrBotUpdater",
+                return_value=mock_astrbot_updater,
             ),
             patch("astrbot.core.core_lifecycle.EventBus", return_value=mock_event_bus),
             patch("astrbot.core.core_lifecycle.migra", new_callable=AsyncMock),
@@ -501,6 +465,9 @@ class TestAstrBotCoreLifecycleInitialize:
 
         # Verify UMOP config router initialized
         mock_umop_config_router.initialize.assert_awaited_once()
+
+        # Verify config manager initialized
+        mock_astrbot_config_mgr.initialize.assert_awaited_once()
 
         # Verify persona manager initialized
         mock_persona_mgr.initialize.assert_awaited_once()
@@ -528,6 +495,7 @@ class TestAstrBotCoreLifecycleInitialize:
         lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
 
         mock_db.initialize = AsyncMock()
+        mock_db.get_preferences = AsyncMock(return_value=[])
 
         mock_html_renderer = MagicMock()
         mock_html_renderer.initialize = AsyncMock()
@@ -536,6 +504,7 @@ class TestAstrBotCoreLifecycleInitialize:
         mock_umop_config_router.initialize = AsyncMock()
 
         mock_astrbot_config_mgr = MagicMock()
+        mock_astrbot_config_mgr.initialize = AsyncMock()
         mock_astrbot_config_mgr.default_conf = {}
         mock_astrbot_config_mgr.confs = {}
 
@@ -592,7 +561,7 @@ class TestAstrBotCoreLifecycleInitialize:
                 return_value=MagicMock(initialize=AsyncMock()),
             ),
             patch(
-                "astrbot.core.core_lifecycle.AstrBotUpdator",
+                "astrbot.core.core_lifecycle.AstrBotUpdater",
                 return_value=MagicMock(),
             ),
             patch(
@@ -609,6 +578,7 @@ class TestAstrBotCoreLifecycleInitialize:
                 new_callable=AsyncMock,
             ),
         ):
+            mock_logger.level = logging.INFO
             # Should not raise, just log the error
             await lifecycle.initialize()
 
@@ -884,10 +854,12 @@ class TestAstrBotCoreLifecycleRestart:
 
         lifecycle.dashboard_shutdown_event = asyncio.Event()
 
-        lifecycle.astrbot_updator = MagicMock()
+        lifecycle.astrbot_updater = MagicMock()
 
-        with patch("astrbot.core.core_lifecycle.threading.Thread") as mock_thread:
-            await lifecycle.restart()
+        # Replace only this module's reference; patching threading.Thread also
+        # disables the executor worker used by asyncio.to_thread during shutdown.
+        with patch("astrbot.core.core_lifecycle.threading") as mock_threading:
+            await asyncio.wait_for(lifecycle.restart(), timeout=5)
 
             # Verify managers were terminated
             lifecycle.provider_manager.terminate.assert_awaited_once()
@@ -895,8 +867,8 @@ class TestAstrBotCoreLifecycleRestart:
             lifecycle.kb_manager.terminate.assert_awaited_once()
 
             # Verify thread was started
-            mock_thread.assert_called_once()
-            mock_thread.return_value.start.assert_called_once()
+            mock_threading.Thread.assert_called_once()
+            mock_threading.Thread.return_value.start.assert_called_once()
 
 
 class TestAstrBotCoreLifecycleLoadPipelineScheduler:

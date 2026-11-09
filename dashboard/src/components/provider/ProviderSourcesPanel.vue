@@ -2,7 +2,7 @@
   <div class="provider-sources-panel">
     <div class="provider-sources-head">
       <div class="provider-sources-head__copy">
-        <h3 class="provider-sources-title">{{ tm('providerSources.title') }}</h3>
+        <h3 class="provider-sources-title">{{ title || tm('providerSources.title') }}</h3>
       </div>
 
       <div class="provider-sources-controls">
@@ -16,7 +16,7 @@
             variant="solo-filled"
             flat
             hide-details
-            :placeholder="tm('providerSources.selectHint')"
+            :placeholder="selectHint || tm('providerSources.selectHint')"
             @update:model-value="selectSourceByValue"
         >
             <template #selection="{ item }">
@@ -25,6 +25,7 @@
                   <v-img
                     v-if="item.raw.source?.provider"
                     :src="resolveSourceIcon(item.raw.source)"
+                    :class="{ 'provider-icon--monochrome': isMonochromeSourceIcon(item.raw.source) }"
                     alt="provider logo"
                     cover
                   ></v-img>
@@ -44,6 +45,7 @@
                     <v-img
                       v-if="item.raw.source?.provider"
                       :src="resolveSourceIcon(item.raw.source)"
+                      :class="{ 'provider-icon--monochrome': isMonochromeSourceIcon(item.raw.source) }"
                       alt="provider logo"
                       cover
                     ></v-img>
@@ -55,41 +57,32 @@
           </v-select>
         </div>
 
-        <StyledMenu>
-          <template #activator="{ props }">
-            <v-btn
-              v-bind="props"
-              prepend-icon="mdi-plus"
-              color="primary"
-              variant="text"
-              size="small"
-              rounded="xl"
-            >
-              {{ tm('providerSources.add') }}
-            </v-btn>
-          </template>
+        <v-btn
+          v-if="canDeleteSelectedSource"
+          class="provider-sources-mobile-delete"
+          icon="mdi-delete-outline"
+          variant="text"
+          size="small"
+          color="error"
+          :aria-label="deleteLabel || tm('providerSources.delete')"
+          :title="deleteLabel || tm('providerSources.delete')"
+          @click.stop="deleteSelectedSource"
+        ></v-btn>
 
-          <v-list-item
-            v-for="sourceType in availableSourceTypes"
-            :key="sourceType.value"
-            class="styled-menu-item"
-            @click="emitAddSource(sourceType.value)"
-          >
-            <template #prepend>
-              <v-avatar size="18" rounded="0" class="me-2 provider-source-avatar">
-                <v-img
-                  v-if="sourceType.icon"
-                  :src="sourceType.icon"
-                  alt="provider icon"
-                  cover
-                ></v-img>
-                <v-icon v-else size="16">mdi-shape-outline</v-icon>
-              </v-avatar>
-            </template>
-            <v-list-item-title>{{ sourceType.label }}</v-list-item-title>
-          </v-list-item>
-        </StyledMenu>
+        <ProviderSourceDialog
+          :source-types="availableSourceTypes"
+          :tm="tm"
+          @select="emitAddSource"
+        />
       </div>
+
+      <v-progress-linear
+        v-if="loading"
+        class="provider-sources-progress"
+        color="primary"
+        height="2"
+        indeterminate
+      />
     </div>
 
     <div v-if="displayedProviderSources.length > 0" class="provider-sources-list">
@@ -109,6 +102,7 @@
           <v-img
             v-if="source?.provider"
             :src="resolveSourceIcon(source)"
+            :class="{ 'provider-icon--monochrome': isMonochromeSourceIcon(source) }"
             alt="provider logo"
             cover
           ></v-img>
@@ -130,22 +124,26 @@
             icon="mdi-delete-outline"
             variant="text"
             size="small"
+            :aria-label="deleteLabel || tm('providerSources.delete')"
+            :title="deleteLabel || tm('providerSources.delete')"
             @click.stop="emitDeleteSource(source)"
           ></v-btn>
         </div>
       </button>
     </div>
 
-    <div v-else class="provider-sources-empty">
+    <div v-else-if="!loading" class="provider-sources-empty">
       <v-icon size="44" color="grey-lighten-1">mdi-api-off</v-icon>
-      <p class="provider-sources-empty__text">{{ tm('providerSources.empty') }}</p>
+      <p class="provider-sources-empty__text">
+        {{ emptyText || tm('providerSources.empty') }}
+      </p>
     </div>
   </div>
 </template>
 
 <script setup>
 import { computed } from 'vue'
-import StyledMenu from '@/components/shared/StyledMenu.vue'
+import ProviderSourceDialog from '@/components/provider/ProviderSourceDialog.vue'
 
 const props = defineProps({
   displayedProviderSources: {
@@ -160,11 +158,35 @@ const props = defineProps({
     type: Array,
     default: () => []
   },
+  title: {
+    type: String,
+    default: ''
+  },
+  emptyText: {
+    type: String,
+    default: ''
+  },
+  selectHint: {
+    type: String,
+    default: ''
+  },
+  deleteLabel: {
+    type: String,
+    default: ''
+  },
+  loading: {
+    type: Boolean,
+    default: false
+  },
   tm: {
     type: Function,
     required: true
   },
   resolveSourceIcon: {
+    type: Function,
+    required: true
+  },
+  isMonochromeSourceIcon: {
     type: Function,
     required: true
   },
@@ -181,6 +203,9 @@ const emit = defineEmits([
 ])
 
 const selectedId = computed(() => props.selectedProviderSource?.id || null)
+const canDeleteSelectedSource = computed(() =>
+  Boolean(props.selectedProviderSource && !props.selectedProviderSource.isPlaceholder)
+)
 
 const isActive = (source) => {
   if (source.isPlaceholder) return false
@@ -211,6 +236,12 @@ const emitAddSource = (type) => emit('add-provider-source', type)
 const emitSelectSource = (source) => emit('select-provider-source', source)
 const emitDeleteSource = (source) => emit('delete-provider-source', source)
 
+const deleteSelectedSource = () => {
+  if (canDeleteSelectedSource.value) {
+    emitDeleteSource(props.selectedProviderSource)
+  }
+}
+
 const selectSourceByValue = (value) => {
   const option = sourceOptions.value.find((item) => item.value === value)
   if (option?.source) {
@@ -225,14 +256,24 @@ const selectSourceByValue = (value) => {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .provider-sources-head {
   display: flex;
   align-items: center;
+  flex: 0 0 auto;
   justify-content: space-between;
   gap: 12px;
-  padding: 20px 20px 12px;
+  padding: 24px 20px 16px;
+  position: relative;
+}
+
+.provider-sources-progress {
+  bottom: 0;
+  left: 0;
+  position: absolute;
+  right: 0;
 }
 
 .provider-sources-head__copy {
@@ -248,7 +289,7 @@ const selectSourceByValue = (value) => {
 
 .provider-sources-title {
   margin: 0;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 650;
   line-height: 1.3;
 }
@@ -261,6 +302,11 @@ const selectSourceByValue = (value) => {
   display: none;
   min-width: 0;
   flex: 1;
+}
+
+.provider-sources-mobile-delete {
+  display: none;
+  flex-shrink: 0;
 }
 
 .provider-source-select-value {
@@ -280,6 +326,7 @@ const selectSourceByValue = (value) => {
 .provider-sources-list {
   flex: 1;
   min-height: 0;
+  overscroll-behavior: contain;
   overflow-y: auto;
   padding: 6px 12px 16px;
   display: flex;
@@ -289,21 +336,30 @@ const selectSourceByValue = (value) => {
 
 .provider-source-item {
   width: 100%;
-  border: 0;
+  border: 1px solid transparent;
   border-radius: 12px;
   background: transparent;
   color: inherit;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 12px;
   cursor: pointer;
   text-align: left;
 }
 
-.provider-source-item:hover,
-.provider-source-item--active {
+.provider-source-item:hover {
   background: rgba(var(--v-theme-on-surface), 0.05);
+}
+
+.provider-source-item--active {
+  background: rgba(var(--v-theme-primary), 0.08);
+  border-color: rgba(var(--v-theme-primary), 0.2);
+}
+
+.provider-source-item:focus-visible {
+  outline: 2px solid rgb(var(--v-theme-primary));
+  outline-offset: 2px;
 }
 
 .provider-source-avatar {
@@ -338,6 +394,7 @@ const selectSourceByValue = (value) => {
 }
 
 .provider-source-item:hover .provider-source-item__actions,
+.provider-source-item:focus-within .provider-source-item__actions,
 .provider-source-item--active .provider-source-item__actions {
   opacity: 1;
 }
@@ -359,24 +416,26 @@ const selectSourceByValue = (value) => {
   font-size: 13px;
 }
 
-@media (max-width: 960px) {
+@container provider-workbench (max-width: 960px) {
   .provider-sources-panel {
     height: auto;
   }
 
   .provider-sources-head {
-    padding: 16px 16px 8px;
-    align-items: stretch;
-    flex-direction: column;
-    gap: 10px;
+    padding: 16px 24px;
+    gap: 20px;
   }
 
   .provider-sources-mobile-select {
     display: block;
   }
 
+  .provider-sources-mobile-delete {
+    display: inline-flex;
+  }
+
   .provider-sources-controls {
-    width: 100%;
+    flex: 1;
   }
 
   .provider-sources-list {
@@ -388,7 +447,14 @@ const selectSourceByValue = (value) => {
   }
 }
 
-@media (max-width: 600px) {
+@container provider-workbench (max-width: 600px) {
+  .provider-sources-head {
+    padding: 14px 20px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
   .provider-sources-controls :deep(.v-btn) {
     min-width: max-content;
   }

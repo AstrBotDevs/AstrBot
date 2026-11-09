@@ -1,4 +1,4 @@
-.PHONY: worktree worktree-add worktree-rm pr-test-neo pr-test-full pr-test-full-fast
+.PHONY: worktree worktree-add worktree-rm pr-test-neo pr-test-full pr-test-full-fast update-test-sandbox
 
 WORKTREE_DIR ?= ../astrbot_worktree
 BRANCH ?= $(word 2,$(MAKECMDGOALS))
@@ -35,6 +35,27 @@ pr-test-full:
 
 pr-test-full-fast:
 	./scripts/pr_test_env.sh --profile full --skip-sync --no-dashboard
+
+clean-temp-deployment:
+	@set -eu; \
+	update_sandbox="$$(mktemp -d "$${TMPDIR:-/tmp}/astrbot-update-test.XXXXXX")"; \
+	echo "Copying the current workspace to $$update_sandbox"; \
+	rsync -a \
+		--exclude='.git/' \
+		--exclude='.venv/' \
+		--exclude='data/' \
+		--exclude='node_modules/' \
+		--exclude='.pnpm-store/' \
+		--exclude='.pytest_cache/' \
+		--exclude='.ruff_cache/' \
+		--exclude='__pycache__/' \
+		./ "$$update_sandbox/"; \
+	cd "$$update_sandbox"; \
+	uv sync; \
+	echo; \
+	echo "Update test sandbox is ready: $$update_sandbox"; \
+	echo "Start it with:"; \
+	printf '  cd "%s" && uv run main.py\n' "$$update_sandbox"
 
 # Swallow extra args (branch/base) so make doesn't treat them as targets
 %:

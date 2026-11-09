@@ -5,11 +5,13 @@
     "title": "Service Providers",
     "settings": "Settings",
     "addProvider": "Add Provider",
+    "deleteProvider": "Delete provider",
+    "selectHint": "Please select a provider",
     "providerType": "Provider Type",
     "tabs": {
       "all": "All",
       "chatCompletion": "Chat Completion",
-      "agentRunner": "Agent Runner",
+      "decision": "Decision",
       "speechToText": "Speech to Text",
       "textToSpeech": "Text to Speech",
       "embedding": "Embedding",
@@ -20,9 +22,15 @@
       "typed": "No {type} type service providers available, click Add Provider to add one"
     },
     "description": {
-      "openai": "Supports all OpenAI API compatible providers.",
-      "kimi_code": "Dedicated Kimi CodingPlan / Kimi Code integration using a custom Anthropic API compatibility layer.",
+      "openai": "Supports all OpenAI API-style providers.",
+      "kimi_code": "Dedicated Kimi CodingPlan / Kimi Code integration using a custom Anthropic API adapter.",
+      "vllm_rerank": "Also supports Jina AI, Cohere, PPIO and other providers.",
       "default": ""
+    },
+    "decisionHints": {
+      "apiBase": "System One endpoint. /systemone is appended to base URLs; end the URL with / to use it as-is.",
+      "model": "System One model ID, such as jev-latest, jev-preview, or the provider's model name.",
+      "customHeaders": "HTTP headers added by AstrBot to decision requests."
     }
   },
   "availability": {
@@ -46,7 +54,7 @@
       "title": "Service Provider",
       "tabs": {
         "basic": "Basic",
-        "agentRunner": "Agent Runner",
+        "decision": "Decision",
         "speechToText": "Speech to Text",
         "textToSpeech": "Text to Speech",
         "embedding": "Embedding",
@@ -91,14 +99,29 @@
     "title": "Provider Types"
   },
   "providerSources": {
+    "website": "Website",
+    "setupGuide": "Setup guide",
+    "selector": {
+      "ssycloud": "SSYCloud",
+      "title": "New model provider",
+      "sponsors": "Sponsors",
+      "sponsorInfoTitle": "AstrBot sponsors",
+      "sponsorInfoBody": "AstrBot is a free, open-source project supported by sponsorships. We may receive a small amount of revenue when you access model resources through our sponsors. You are welcome to support us by using these services.",
+      "providers": "Providers",
+      "search": "Search",
+      "clearSearch": "Clear search",
+      "noResults": "No matching providers"
+    },
     "title": "Provider Sources",
     "add": "Add",
+    "delete": "Delete provider source",
     "empty": "No provider sources",
     "selectHint": "Please select a provider source",
     "selectCreated": "Select created provider source",
     "save": "Save Configuration",
     "saveAndFetchModels": "Save and Fetch Models",
     "fetchModels": "Fetch Model List",
+    "getApiKey": "Get API Key",
     "saveSuccess": "Provider source saved successfully",
     "saveError": "Failed to save provider source",
     "deleteConfirm": "Are you sure you want to delete provider source {id}? This will also delete all associated model configurations.",
@@ -145,6 +168,17 @@
     "manualModelRequired": "Please enter a model ID",
     "manualModelExists": "Model already exists",
     "configure": "Configure",
+    "testButton": "Test model",
+    "metadata": {
+      "image": "Image input",
+      "audio": "Audio input",
+      "toolUse": "Tool use",
+      "reasoning": "Reasoning",
+      "context": "{tokens} context window",
+      "available": "Model metadata supports {capability}",
+      "enabled": "{capability} enabled",
+      "supportedDisabled": "Model metadata supports {capability}, but it is not enabled in this provider's modalities."
+    },
     "tooltips": {
       "providerId": "Provider ID",
       "modelId": "Model ID"

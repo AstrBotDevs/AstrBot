@@ -1,3 +1,4 @@
-from .core.log import LogManager
+import logging
 
-logger = LogManager.GetLogger(log_name="astrbot")
+__version__ = "4.29.4"
+logger = logging.getLogger("astrbot")

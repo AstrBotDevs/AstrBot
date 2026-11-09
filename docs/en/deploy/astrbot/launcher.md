@@ -28,7 +28,7 @@ We still recommend the One-Click Launcher above because it is simpler, more auto
 The legacy installer is a `PowerShell` script, very small (<20KB). It requires `PowerShell` (usually built in on `Windows 10` and newer).
 
 > [!WARNING]
-> `Python 3.10` or later must be installed, and environment variables must be configured.
+> `Python 3.12` or later must be installed, and environment variables must be configured.
 
 > [!TIP]
 > If deployment fails, try Docker deployment or manual deployment instead.
@@ -66,7 +66,7 @@ If everything works, you will see AstrBot logs.
 Without errors, you should see a log like `🌈 Management panel started, accessible at` with several URLs. Open one URL to access AstrBot WebUI.
 
 > [!TIP]
-> Default username and password: `astrbot` / `astrbot`.
+> First-time logins use the random password generated on startup and printed to logs. Use that password (and the username shown in the logs, usually `astrbot`) to log in, then change it immediately.
 >
 > If WebUI returns 404:
 > Download `dist.zip` from [release](https://github.com/AstrBotDevs/AstrBot/releases), extract it into `AstrBot/data`, then restart the computer if needed.

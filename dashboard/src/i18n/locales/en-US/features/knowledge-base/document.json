@@ -1,6 +1,11 @@
 {
   "title": "Document Details",
   "backToKB": "Back to Knowledge Base",
+  "states": {
+    "loadError": "Failed to load document details",
+    "chunksLoadError": "Failed to load chunks",
+    "retry": "Retry"
+  },
   "info": {
     "title": "Document Information",
     "name": "Document Name",

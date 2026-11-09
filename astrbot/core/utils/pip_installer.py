@@ -116,14 +116,6 @@ def _cleanup_added_root_handlers(original_handlers: list[logging.Handler]) -> No
                 handler.close()
 
 
-def _get_trusted_host_for_index_url(index_url: str) -> str | None:
-    parsed = urlparse(index_url if "://" in index_url else f"//{index_url}")
-    host = parsed.hostname
-    if host == "mirrors.aliyun.com":
-        return host
-    return None
-
-
 def _normalize_sensitive_pip_key(raw_key: str) -> str:
     return raw_key.lstrip("-").replace("-", "_").lower()
 
@@ -458,24 +450,26 @@ def _classify_pip_failure(output_lines: list[str]) -> DependencyConflictError | 
     detail = ""
     if context.constraint_lines and context.requested_lines:
         detail = (
-            " 冲突详情: "
+            " Conflict details: "
             f"{_normalize_conflict_detail_line(context.requested_lines[0])} vs "
-            f"{_normalize_conflict_detail_line(context.constraint_lines[0])}。"
+            f"{_normalize_conflict_detail_line(context.constraint_lines[0])}."
         )
     elif len(context.dependency_detail_lines) >= 2:
         detail = (
-            " 冲突详情: "
+            " Conflict details: "
             f"{_normalize_conflict_detail_line(context.dependency_detail_lines[0])} vs "
-            f"{_normalize_conflict_detail_line(context.dependency_detail_lines[1])}。"
+            f"{_normalize_conflict_detail_line(context.dependency_detail_lines[1])}."
         )
 
     if is_core_conflict:
         message = (
-            f"检测到核心依赖版本保护冲突。{detail}插件要求的依赖版本与 AstrBot 核心不兼容，"
-            "为了系统稳定，已阻止该降级行为。请联系插件作者或调整 requirements.txt。"
+            f"A core dependency version protection conflict was detected.{detail} "
+            "The dependency version required by the plugin is incompatible with "
+            "AstrBot Core. The downgrade was blocked to preserve system stability. "
+            "Contact the plugin author or adjust requirements.txt."
         )
     else:
-        message = f"检测到依赖冲突。{detail}"
+        message = f"A dependency conflict was detected.{detail}"
 
     return DependencyConflictError(
         message,
@@ -518,7 +512,10 @@ def _collect_candidate_modules(
             canonical_name = _canonicalize_distribution_name(distribution_name)
             by_name.setdefault(canonical_name, []).append(distribution)
     except Exception as exc:
-        logger.warning("读取 site-packages 元数据失败，使用回退模块名: %s", exc)
+        logger.warning(
+            "Failed to read site-packages metadata; using fallback module names: %s",
+            exc,
+        )
 
     expanded_requirement_names: set[str] = set()
     pending = deque(requirement_names)
@@ -581,8 +578,9 @@ def _ensure_preferred_modules(
 
     if unresolved_modules:
         conflict_message = (
-            "检测到插件依赖与当前运行时发生冲突，无法安全加载该插件。"
-            f"冲突模块: {', '.join(unresolved_modules)}"
+            "A conflict between plugin dependencies and the current runtime was "
+            "detected, so the plugin cannot be loaded safely. "
+            f"Conflicting modules: {', '.join(unresolved_modules)}"
         )
         raise RuntimeError(conflict_message)
 
@@ -619,10 +617,34 @@ def _is_module_loaded_from_site_packages(
         return False
 
 
+def _has_loaded_c_extension(module_name: str) -> bool:
+    """检查 sys.modules 中目标模块的依赖子树是否已包含 C 扩展。
+
+    遍历已加载的 key（如 'pikepdf'、'pikepdf._core'），
+    检查其 __file__ 后缀是否为 .pyd / .so。
+    """
+    for key in list(sys.modules.keys()):
+        if not (key == module_name or key.startswith(f"{module_name}.")):
+            continue
+        mod = sys.modules.get(key)
+        if mod is None:
+            continue
+        mod_file = getattr(mod, "__file__", "") or ""
+        if os.path.splitext(mod_file)[1].lower() in (".pyd", ".so"):
+            return True
+    return False
+
+
 def _prefer_module_from_site_packages(
     module_name: str, site_packages_path: str
 ) -> bool:
     with _SITE_PACKAGES_IMPORT_LOCK:
+        if _has_loaded_c_extension(module_name):
+            logger.debug(
+                "Skipping prefer for %s: C extension detected in submodules",
+                module_name,
+            )
+            return False
         base_path = os.path.join(site_packages_path, *module_name.split("."))
         package_init = os.path.join(base_path, "__init__.py")
         module_file = f"{base_path}.py"
@@ -646,6 +668,8 @@ def _prefer_module_from_site_packages(
         if spec is None or spec.loader is None:
             return False
 
+        # 已在 _has_loaded_c_extension 中扫描过——此处收集 matched_keys
+        # 仅用于 pop 和异常恢复，不再重复检测 C 扩展
         matched_keys = [
             key
             for key in list(sys.modules.keys())
@@ -973,10 +997,10 @@ class PipInstaller:
         )
 
         if not _package_specs_override_index([*args[1:], *pip_install_args]):
+            # Never bypass TLS verification for the configured index. Users of
+            # self-signed/private-CA mirrors can opt in explicitly through
+            # pip_install_arg (e.g. --cert /path/to/ca.pem or --trusted-host).
             index_url = mirror or self.pypi_index_url or "https://pypi.org/simple"
-            trusted_host = _get_trusted_host_for_index_url(index_url)
-            if trusted_host:
-                args.extend(["--trusted-host", trusted_host])
             args.extend(["-i", index_url])
 
         if pip_install_args:
@@ -990,12 +1014,32 @@ class PipInstaller:
         requirements_path: str | None = None,
         mirror: str | None = None,
         allow_target_upgrade: bool = True,
+        bypass_core_constraints: bool = False,
     ) -> None:
+        """Install packages while protecting core dependency versions by default.
+
+        Args:
+            package_name: Package specifications to install.
+            requirements_path: Requirements file to install instead of packages.
+            mirror: Optional package index overriding the configured index.
+            allow_target_upgrade: Whether desktop target packages may be upgraded.
+            bypass_core_constraints: Skip automatically generated core and desktop
+                dependency locks when updating AstrBot itself. Plugin installs
+                should keep the default protection enabled.
+
+        Raises:
+            ValueError: Package input is invalid or both input forms are provided.
+            DependencyConflictError: Pip cannot resolve the requested dependencies.
+            PipInstallError: Pip fails without a classified dependency conflict.
+        """
         args, requested_requirements = self._build_pip_args(
             package_name, requirements_path, mirror
         )
         if not args:
-            logger.info("Pip 包管理器跳过安装：未提供有效的包名或 requirements 文件。")
+            logger.info(
+                "The pip package manager skipped installation because no valid "
+                "package name or requirements file was provided."
+            )
             return
 
         target_site_packages = None
@@ -1015,12 +1059,16 @@ class PipInstaller:
                     ]
                 )
 
-        with self._core_constraints.constraints_file() as constraints_file_path:
+        with (
+            contextlib.nullcontext(None)
+            if bypass_core_constraints
+            else self._core_constraints.constraints_file()
+        ) as constraints_file_path:
             if constraints_file_path:
                 args.extend(["-c", constraints_file_path])
 
             logger.info(
-                "Pip 包管理器 argv: %s",
+                "Pip package manager argv: %s",
                 ["pip", *_redact_pip_args_for_logging(args)],
             )
             await self._run_pip_with_classification(args)
@@ -1077,4 +1125,7 @@ class PipInstaller:
     async def _run_pip_with_classification(self, args: list[str]) -> None:
         result_code = await self._run_pip_in_process(args)
         if result_code != 0:
-            raise PipInstallError(f"安装失败，错误码：{result_code}", code=result_code)
+            raise PipInstallError(
+                f"Installation failed with error code {result_code}",
+                code=result_code,
+            )

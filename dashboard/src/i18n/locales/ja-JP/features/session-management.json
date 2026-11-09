@@ -1,0 +1,158 @@
+{
+  "title": "カスタムルール",
+  "subtitle": "特定のセッションに、グローバル設定より優先されるカスタムルールを設定します。",
+  "buttons": {
+    "refresh": "再読み込み",
+    "edit": "編集",
+    "editRule": "ルールを編集",
+    "deleteAllRules": "すべてのルールを削除",
+    "addRule": "ルールを追加",
+    "save": "保存",
+    "cancel": "キャンセル",
+    "delete": "削除",
+    "clear": "クリア",
+    "next": "次へ",
+    "editCustomName": "メモを編集",
+    "batchDelete": "一括削除"
+  },
+  "customRules": {
+    "title": "カスタムルール",
+    "rulesCount": "件のルール",
+    "hasRules": "設定済み",
+    "noRules": "カスタムルールがありません",
+    "noRulesDesc": "「ルールを追加」をクリックして、特定のセッションにカスタムルールを設定します",
+    "serviceConfig": "サービス設定",
+    "pluginConfig": "プラグイン設定",
+    "kbConfig": "ナレッジベース設定",
+    "providerConfig": "モデル設定",
+    "configured": "設定済み",
+    "noCustomName": "メモ未設定"
+  },
+  "quickEditName": {
+    "title": "メモ名を編集"
+  },
+  "search": {
+    "placeholder": "セッションを検索…"
+  },
+  "table": {
+    "headers": {
+      "umoInfo": "メッセージ送信元（UMO）",
+      "rulesOverview": "ルール概要",
+      "actions": "操作"
+    }
+  },
+  "persona": {
+    "none": "設定ファイルに従う"
+  },
+  "provider": {
+    "followConfig": "設定ファイルに従う"
+  },
+  "addRule": {
+    "title": "カスタムルールを追加",
+    "description": "メッセージ送信元（UMO）を選択してカスタムルールを設定します。カスタムルールは、その送信元が属する設定ファイルのグローバルルールより優先されます。/sid コマンドで送信元の UMO 情報を確認できます。",
+    "selectUmo": "セッションを選択",
+    "noUmos": "利用可能なセッションがありません"
+  },
+  "ruleEditor": {
+    "title": "カスタムルールを編集",
+    "description": "このセッションにカスタムルールを設定します。これらのルールはグローバル設定より優先されます。",
+    "serviceConfig": {
+      "title": "サービス設定",
+      "sessionEnabled": "このメッセージ送信元からのメッセージ処理を有効化",
+      "llmEnabled": "LLM を有効化",
+      "ttsEnabled": "TTS を有効化",
+      "customName": "メッセージ送信元の表示名"
+    },
+    "providerConfig": {
+      "title": "モデル設定",
+      "chatProvider": "チャットモデル",
+      "sttProvider": "音声認識モデル",
+      "ttsProvider": "音声合成モデル"
+    },
+    "personaConfig": {
+      "title": "ペルソナ設定",
+      "selectPersona": "ペルソナを選択",
+      "hint": "ペルソナ設定を適用すると、この送信元のすべての会話で選択したペルソナが強制的に使用されます。"
+    },
+    "pluginConfig": {
+      "title": "プラグイン設定",
+      "disabledPlugins": "無効にするプラグイン",
+      "hint": "このセッションで無効にするプラグインを選択します。選択していないプラグインは有効なままです。"
+    },
+    "kbConfig": {
+      "title": "ナレッジベース設定",
+      "selectKbs": "ナレッジベースを選択",
+      "topK": "返す結果の件数（Top K）",
+      "enableRerank": "リランキングを有効化"
+    }
+  },
+  "deleteConfirm": {
+    "title": "削除の確認",
+    "message": "このセッションのすべてのカスタムルールを削除してもよろしいですか？削除後はグローバル設定が使用されます。"
+  },
+  "batchDeleteConfirm": {
+    "title": "一括削除の確認",
+    "message": "選択した {count} 件のルールを削除してもよろしいですか？削除後はグローバル設定が使用されます。"
+  },
+  "batchOperations": {
+    "title": "一括操作",
+    "hint": "セッション設定をまとめてすばやく変更",
+    "scope": "適用範囲",
+    "scopeSelected": "選択したセッション",
+    "scopeAll": "すべてのセッション",
+    "scopeGroup": "すべてのグループチャット",
+    "scopePrivate": "すべての個別チャット",
+    "llmStatus": "LLM ステータス",
+    "ttsStatus": "TTS ステータス",
+    "chatProvider": "チャットモデル",
+    "ttsProvider": "TTS モデル",
+    "apply": "変更を適用"
+  },
+  "groups": {
+    "title": "グループ管理",
+    "count": "{count} グループ",
+    "addToGroup": "グループに追加",
+    "create": "グループを作成",
+    "edit": "グループを編集",
+    "name": "グループ名",
+    "sessionsCount": "{count} セッション",
+    "empty": "グループがありません。「グループを作成」をクリックして作成してください",
+    "availableSessions": "選択可能なセッション（{count}）",
+    "selectedSessions": "選択済みのセッション（{count}）",
+    "searchPlaceholder": "検索…",
+    "noMatch": "一致する項目がありません",
+    "noMembers": "メンバーがいません",
+    "customGroupDivider": "── カスタムグループ ──",
+    "customGroupOption": "📁 {name}（{count}）",
+    "groupOption": "{name}（{count} セッション）",
+    "deleteConfirm": "グループ \"{name}\" を削除してもよろしいですか？"
+  },
+  "status": {
+    "enabled": "有効",
+    "disabled": "無効"
+  },
+  "messages": {
+    "refreshSuccess": "データを再読み込みしました",
+    "loadError": "データの読み込みに失敗しました",
+    "saveSuccess": "保存しました",
+    "saveError": "保存に失敗しました",
+    "clearSuccess": "クリアしました",
+    "clearError": "クリアに失敗しました",
+    "deleteSuccess": "削除しました",
+    "deleteError": "削除に失敗しました",
+    "noChanges": "保存する変更はありません",
+    "batchDeleteSuccess": "一括削除しました",
+    "batchDeleteError": "一括削除に失敗しました",
+    "selectSessionsFirst": "操作するセッションを先に選択してください",
+    "selectAtLeastOneConfig": "変更する設定を 1 つ以上選択してください",
+    "batchUpdateSuccess": "一括更新しました",
+    "partialUpdateFailed": "一部の更新に失敗しました",
+    "batchUpdateError": "一括更新に失敗しました",
+    "groupNameRequired": "グループ名を入力してください",
+    "saveGroupError": "グループの保存に失敗しました",
+    "deleteGroupError": "グループの削除に失敗しました",
+    "selectSessionsToAddFirst": "追加するセッションを先に選択してください",
+    "addToGroupSuccess": "{count} 件のセッションをグループに追加しました",
+    "addToGroupError": "追加に失敗しました"
+  }
+}

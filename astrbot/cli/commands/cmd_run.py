@@ -9,6 +9,8 @@ from filelock import FileLock, Timeout
 
 from ..utils import check_astrbot_root, check_dashboard, get_astrbot_root
 
+DASHBOARD_RESET_PASSWORD_ENV = "ASTRBOT_RESET_DASHBOARD_PASSWORD"
+
 
 async def run_astrbot(astrbot_root: Path) -> None:
     """Run AstrBot"""
@@ -28,8 +30,13 @@ async def run_astrbot(astrbot_root: Path) -> None:
 
 @click.option("--reload", "-r", is_flag=True, help="Auto-reload plugins")
 @click.option("--port", "-p", help="AstrBot Dashboard port", required=False, type=str)
+@click.option(
+    "--reset-password",
+    is_flag=True,
+    help="Reset dashboard initial password on startup",
+)
 @click.command()
-def run(reload: bool, port: str) -> None:
+def run(reload: bool, port: str | None, reset_password: bool) -> None:
     """Run AstrBot"""
     try:
         os.environ["ASTRBOT_CLI"] = "1"
@@ -49,6 +56,9 @@ def run(reload: bool, port: str) -> None:
         if reload:
             click.echo("Plugin auto-reload enabled")
             os.environ["ASTRBOT_RELOAD"] = "1"
+
+        if reset_password:
+            os.environ[DASHBOARD_RESET_PASSWORD_ENV] = "1"
 
         lock_file = astrbot_root / "astrbot.lock"
         lock = FileLock(lock_file, timeout=5)

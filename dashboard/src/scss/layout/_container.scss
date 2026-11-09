@@ -80,7 +80,7 @@ $sizes: (
 
 body {
   .Outfit {
-    font-family: 'Outfit', $cjk-sans-fallback, sans-serif !important;
+    font-family: $body-font-family !important;
   }
 }
 

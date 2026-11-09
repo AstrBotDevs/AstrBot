@@ -2,8 +2,11 @@
 
 from typing import Any
 
+from deprecated import deprecated
+
 import astrbot.api.message_components as Comp
 from astrbot.api.platform import AstrBotMessage, MessageMember, MessageType
+from astrbot.core.utils.media_utils import MediaResolver
 
 
 class FileIDExtractor:
@@ -83,6 +86,33 @@ def serialize_message_chain(chain: list[Any]) -> tuple[str, bool]:
         nonlocal has_at
         if isinstance(component, Comp.Plain):
             return component.text
+        if isinstance(component, Comp.ActionRow):
+            # Misskey notes can render MFM links but do not expose a bot callback
+            # channel for controls embedded in a note.
+            has_callback = any(
+                isinstance(button.action, Comp.Button.CallbackAction)
+                for button in component.buttons
+            )
+
+            buttons = []
+            if component.fallback_text and has_callback:
+                buttons.append(component.fallback_text)
+            for button in component.buttons:
+                if isinstance(button.action, Comp.Button.UrlAction):
+                    label = button.label.replace("\\", "\\\\").replace("]", "\\]")
+                    url = button.action.url.replace("\\", "%5C").replace(")", "%29")
+                    buttons.append(f"[{label}]({url})")
+                elif not component.fallback_text:
+                    buttons.append(button.label)
+            return " | ".join(buttons)
+        if isinstance(component, Comp.Button):
+            if isinstance(component.action, Comp.Button.UrlAction):
+                label = component.label.replace("\\", "\\\\").replace("]", "\\]")
+                url = component.action.url.replace("\\", "%5C").replace(")", "%29")
+                return f"[{label}]({url})"
+            return component.label
+        if isinstance(component, Comp.ButtonInteraction):
+            return ""
         if isinstance(component, Comp.File):
             # 为文件组件返回占位符，但适配器仍会处理原组件
             return "[文件]"
@@ -173,6 +203,7 @@ def resolve_message_visibility(
 
 
 # 保留旧函数名作为向后兼容的别名
+@deprecated(reason="Use resolve_message_visibility instead.")
 def resolve_visibility_from_raw_message(
     raw_message: dict[str, Any],
     self_id: str | None = None,
@@ -266,7 +297,7 @@ def add_at_mention_if_needed(
     return text
 
 
-def create_file_component(file_info: dict[str, Any]) -> tuple[Any, str]:
+async def create_file_component(file_info: dict[str, Any]) -> tuple[Any, str]:
     """创建文件组件和描述文本"""
     file_url = file_info.get("url", "")
     file_name = file_info.get("name", "未知文件")
@@ -275,13 +306,18 @@ def create_file_component(file_info: dict[str, Any]) -> tuple[Any, str]:
     if file_type.startswith("image/"):
         return Comp.Image(url=file_url, file=file_name), f"图片[{file_name}]"
     if file_type.startswith("audio/"):
-        return Comp.Record(url=file_url, file=file_name), f"音频[{file_name}]"
+        path_wav = await MediaResolver(
+            file_url,
+            media_type="audio",
+            default_suffix=".wav",
+        ).to_path(target_format="wav")
+        return Comp.Record(url=path_wav, file=path_wav), f"音频[{file_name}]"
     if file_type.startswith("video/"):
         return Comp.Video(url=file_url, file=file_name), f"视频[{file_name}]"
     return Comp.File(name=file_name, url=file_url), f"文件[{file_name}]"
 
 
-def process_files(
+async def process_files(
     message: AstrBotMessage,
     files: list,
     include_text_parts: bool = True,
@@ -289,7 +325,7 @@ def process_files(
     """处理文件列表，添加到消息组件中并返回文本描述"""
     file_parts = []
     for file_info in files:
-        component, part_text = create_file_component(file_info)
+        component, part_text = await create_file_component(file_info)
         message.message.append(component)
         if include_text_parts:
             file_parts.append(part_text)

@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-
 # ═══════════════════════════════════════════════════════════════
 # _wait_until_ready
 # ═══════════════════════════════════════════════════════════════
@@ -40,7 +39,9 @@ def _make_sandbox_mock(statuses: list[str], *, delete_side_effect=None):
 
 class TestWaitUntilReady:
     def _make_booter(self):
-        from astrbot.core.computer.booters.shipyard_neo import ShipyardNeoBooter
+        from astrbot.core.astr_agent_runtime.computer.booters.shipyard_neo import (
+            ShipyardNeoBooter,
+        )
 
         return ShipyardNeoBooter(
             endpoint_url="http://localhost:8114",
@@ -111,7 +112,7 @@ class TestWaitUntilReady:
             return original_time() + 200
 
         with patch(
-            "astrbot.core.computer.booters.shipyard_neo.asyncio.get_running_loop"
+            "astrbot.core.astr_agent_runtime.computer.booters.shipyard_neo.asyncio.get_running_loop"
         ) as mock_loop:
             mock_loop.return_value.time = _fake_time
 
@@ -142,7 +143,9 @@ class TestWaitUntilReady:
 
 class TestShutdown:
     def _make_booter(self):
-        from astrbot.core.computer.booters.shipyard_neo import ShipyardNeoBooter
+        from astrbot.core.astr_agent_runtime.computer.booters.shipyard_neo import (
+            ShipyardNeoBooter,
+        )
 
         return ShipyardNeoBooter(
             endpoint_url="http://localhost:8114",
@@ -251,8 +254,10 @@ class TestGetBooterRebuild:
     @pytest.mark.asyncio
     async def test_stale_neo_booter_calls_shutdown_with_delete(self, monkeypatch):
         """A stale ShipyardNeoBooter gets shutdown(delete_sandbox=True) on eviction."""
-        from astrbot.core.computer import computer_client
-        from astrbot.core.computer.booters.shipyard_neo import ShipyardNeoBooter
+        from astrbot.core.astr_agent_runtime.computer import computer_client
+        from astrbot.core.astr_agent_runtime.computer.booters.shipyard_neo import (
+            ShipyardNeoBooter,
+        )
 
         ctx = self._make_fake_context()
 
@@ -267,7 +272,7 @@ class TestGetBooterRebuild:
 
         monkeypatch.setitem(computer_client.session_booter, "session-1", stale)
 
-        from astrbot.core.computer.computer_client import get_booter
+        from astrbot.core.astr_agent_runtime.computer.computer_client import get_booter
 
         # get_booter should evict stale and rebuild.
         # We need to mock the entire rebuild path so it doesn't actually
@@ -284,11 +289,12 @@ class TestGetBooterRebuild:
             _self._fs = SimpleNamespace()  # type: ignore[assignment]
             _self._python = SimpleNamespace()  # type: ignore[assignment]
 
-        with patch.object(
-            ShipyardNeoBooter, "boot", _fake_boot
-        ), patch(
-            "astrbot.core.computer.computer_client._sync_skills_to_sandbox",
-            AsyncMock(),
+        with (
+            patch.object(ShipyardNeoBooter, "boot", _fake_boot),
+            patch(
+                "astrbot.core.astr_agent_runtime.computer.computer_client._sync_skills_to_sandbox",
+                AsyncMock(),
+            ),
         ):
             await get_booter(ctx, "session-1")
 
@@ -301,7 +307,7 @@ class TestGetBooterRebuild:
     @pytest.mark.asyncio
     async def test_stale_non_neo_booter_calls_plain_shutdown(self, monkeypatch):
         """Non-neo booter (e.g. shipyard) → plain shutdown() without delete_sandbox."""
-        from astrbot.core.computer import computer_client
+        from astrbot.core.astr_agent_runtime.computer import computer_client
 
         ctx = self._make_fake_context(booter_type="shipyard")
 
@@ -327,14 +333,19 @@ class TestGetBooterRebuild:
             async def shutdown(self, **kwargs):
                 pass
 
-        with patch(
-            "astrbot.core.computer.booters.shipyard.ShipyardBooter",
-            _FakeShipyardBooter,
-        ), patch(
-            "astrbot.core.computer.computer_client._sync_skills_to_sandbox",
-            AsyncMock(),
+        with (
+            patch(
+                "astrbot.core.astr_agent_runtime.computer.booters.shipyard.ShipyardBooter",
+                _FakeShipyardBooter,
+            ),
+            patch(
+                "astrbot.core.astr_agent_runtime.computer.computer_client._sync_skills_to_sandbox",
+                AsyncMock(),
+            ),
         ):
-            from astrbot.core.computer.computer_client import get_booter
+            from astrbot.core.astr_agent_runtime.computer.computer_client import (
+                get_booter,
+            )
 
             await get_booter(ctx, "session-1")
 

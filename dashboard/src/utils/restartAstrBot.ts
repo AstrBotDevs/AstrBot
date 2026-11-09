@@ -1,4 +1,4 @@
-import axios from 'axios'
+import { statsApi } from '@/api/v1'
 import { getDesktopRuntimeInfo } from '@/utils/desktopRuntime'
 
 type WaitingForRestartRef = {
@@ -16,7 +16,7 @@ async function triggerWaiting(
 
 async function fetchCurrentStartTime(): Promise<number | null> {
   try {
-    const response = await axios.get('/api/stat/start-time', { timeout: 1500 })
+    const response = await statsApi.startTime()
     const rawStartTime = response?.data?.data?.start_time
     const numericStartTime = Number(rawStartTime)
     return Number.isFinite(numericStartTime) ? numericStartTime : null
@@ -49,6 +49,6 @@ export async function restartAstrBot(
     return
   }
 
-  await axios.post('/api/stat/restart-core')
+  await statsApi.restart()
   await triggerWaiting(waitingRef)
 }

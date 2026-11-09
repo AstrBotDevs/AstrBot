@@ -1,17 +1,22 @@
 import abc
 import asyncio
 import os
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Mapping
 from typing import Literal, TypeAlias, Union
 
 from astrbot.core.agent.message import ContentPart, Message, is_checkpoint_message
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.provider.entities import (
+    DecisionAnswer,
+    DecisionBooleanQuestion,
+    DecisionQuestion,
+    DecisionState,
     LLMResponse,
     ProviderMeta,
     RerankResult,
     ToolCallsResult,
 )
+from astrbot.core.provider.headers import build_provider_headers
 from astrbot.core.provider.register import provider_cls_map
 from astrbot.core.utils.astrbot_path import get_astrbot_path
 
@@ -21,6 +26,7 @@ Providers: TypeAlias = Union[
     "TTSProvider",
     "EmbeddingProvider",
     "RerankProvider",
+    "DecisionProvider",
 ]
 
 
@@ -31,6 +37,9 @@ class AbstractProvider(abc.ABC):
         super().__init__()
         self.model_name = ""
         self.provider_config = provider_config
+        self.request_headers = build_provider_headers(
+            provider_config.get("custom_headers")
+        )
 
     def set_model(self, model_name: str) -> None:
         """Set the current model name"""
@@ -106,6 +115,7 @@ class Provider(AbstractProvider):
         model: str | None = None,
         extra_user_content_parts: list[ContentPart] | None = None,
         tool_choice: Literal["auto", "required"] = "auto",
+        request_max_retries: int | None = None,
         **kwargs,
     ) -> LLMResponse:
         """获得 LLM 的文本对话结果。会使用当前的模型进行对话。
@@ -120,6 +130,7 @@ class Provider(AbstractProvider):
             contexts: 上下文，和 prompt 二选一使用
             tool_calls_result: 回传给 LLM 的工具调用结果。参考: https://platform.openai.com/docs/guides/function-calling
             extra_user_content_parts: 额外的内容块列表，用于在用户消息后添加额外的文本块（如系统提醒、指令等）
+            request_max_retries: 可重试请求错误的最大尝试次数，包含首次请求。
             kwargs: 其他参数
 
         Notes:
@@ -142,6 +153,7 @@ class Provider(AbstractProvider):
         tool_calls_result: ToolCallsResult | list[ToolCallsResult] | None = None,
         model: str | None = None,
         tool_choice: Literal["auto", "required"] = "auto",
+        request_max_retries: int | None = None,
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         """获得 LLM 的流式文本对话结果。会使用当前的模型进行对话。在生成的最后会返回一次完整的结果。
@@ -155,6 +167,7 @@ class Provider(AbstractProvider):
             tool_choice: 工具调用策略，`auto` 表示由模型自行决定，`required` 表示要求模型必须调用工具
             contexts: 上下文，和 prompt 二选一使用
             tool_calls_result: 回传给 LLM 的工具调用结果。参考: https://platform.openai.com/docs/guides/function-calling
+            request_max_retries: 可重试请求错误的最大尝试次数，包含首次请求。
             kwargs: 其他参数
 
         Notes:
@@ -359,7 +372,7 @@ class EmbeddingProvider(AbstractProvider):
 
         """
         semaphore = asyncio.Semaphore(tasks_limit)
-        all_embeddings: list[list[float]] = []
+        batch_results: dict[int, list[list[float]]] = {}
         failed_batches: list[tuple[int, list[str]]] = []
         completed_count = 0
         total_count = len(texts)
@@ -370,7 +383,7 @@ class EmbeddingProvider(AbstractProvider):
                 for attempt in range(max_retries):
                     try:
                         batch_embeddings = await self.get_embeddings(batch_texts)
-                        all_embeddings.extend(batch_embeddings)
+                        batch_results[batch_idx] = batch_embeddings
                         completed_count += len(batch_texts)
                         if progress_callback:
                             await progress_callback(completed_count, total_count)
@@ -402,6 +415,9 @@ class EmbeddingProvider(AbstractProvider):
             )
             raise Exception(error_msg)
 
+        all_embeddings: list[list[float]] = []
+        for batch_idx in range(len(tasks)):
+            all_embeddings.extend(batch_results[batch_idx])
         return all_embeddings
 
 
@@ -425,3 +441,44 @@ class RerankProvider(AbstractProvider):
         result = await self.rerank("Apple", documents=["apple", "banana"])
         if not result:
             raise Exception("Rerank provider test failed, no results returned")
+
+
+class DecisionProvider(AbstractProvider):
+    """Provider for low-latency, structured decisions."""
+
+    def __init__(self, provider_config: dict, provider_settings: dict) -> None:
+        super().__init__(provider_config)
+        self.provider_config = provider_config
+        self.provider_settings = provider_settings
+
+    @abc.abstractmethod
+    async def ask(
+        self,
+        questions: Mapping[str, DecisionQuestion],
+        state: DecisionState | None = None,
+        *,
+        request_max_retries: int = 0,
+    ) -> Mapping[str, DecisionAnswer]:
+        """Answer multiple decision questions in one provider request.
+
+        Args:
+            questions: Question heads keyed by caller-defined identifiers.
+            state: Context evaluated by the model. Providers forward it as-is.
+            request_max_retries: Number of retries after the initial request.
+
+        Returns:
+            Answers keyed by the same identifiers as ``questions``.
+
+        Raises:
+            ValueError: The question or criteria are unusable.
+            DecisionError: The provider is unavailable, the request fails, or
+                the response violates the decision contract.
+        """
+        ...
+
+    async def test(self) -> None:
+        await self.ask(
+            {"test": DecisionBooleanQuestion("Is this provider available?")},
+            {},
+            request_max_retries=0,
+        )

@@ -1,18 +1,26 @@
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
 import pytest
 
 from astrbot.core.agent.message import (
+    AssistantMessageSegment,
     CheckpointData,
     CheckpointMessageSegment,
     Message,
     TextPart,
+    ToolCall,
+    ToolCallMessageSegment,
     bind_checkpoint_messages,
     dump_messages_with_checkpoints,
     get_checkpoint_id,
     strip_checkpoint_messages,
 )
-from astrbot.core.provider.entities import ProviderRequest
+from astrbot.core.astr_agent_runtime.history import save_agent_history
+from astrbot.core.db.po import Conversation
+from astrbot.core.provider.entities import LLMResponse, ProviderRequest, ToolCallsResult
 from astrbot.core.provider.provider import Provider
-from astrbot.dashboard.routes.chat import ChatRoute
+from astrbot.dashboard.services.chat_service import find_turn_range
 
 
 def test_checkpoint_message_segment_round_trip():
@@ -151,8 +159,7 @@ def test_provider_ensure_message_to_dicts_skips_checkpoints():
     ]
 
 
-def test_chat_route_find_turn_range():
-    route = ChatRoute.__new__(ChatRoute)
+def test_chat_service_find_turn_range():
     history = [
         {"role": "user", "content": "a"},
         {"role": "assistant", "content": "b"},
@@ -162,5 +169,236 @@ def test_chat_route_find_turn_range():
         {"role": "_checkpoint", "content": {"id": "cp-2"}},
     ]
 
-    assert route._find_turn_range(history, "cp-2") == (3, 5)
-    assert route._find_turn_range(history, "missing") is None
+    assert find_turn_range(history, "cp-2") == (3, 5)
+    assert find_turn_range(history, "missing") is None
+
+
+@pytest.mark.asyncio
+async def test_failed_llm_response_persists_checkpoint_for_retry():
+    conversation_manager = AsyncMock()
+    context = SimpleNamespace(conversation_manager=conversation_manager)
+    event = SimpleNamespace(
+        unified_msg_origin="webchat:FriendMessage:test",
+        get_extra=lambda key: {"llm_checkpoint_id": "cp-1"}.get(key),
+    )
+    request = ProviderRequest(
+        conversation=Conversation(
+            platform_id="webchat",
+            user_id="webchat:FriendMessage:test",
+            cid="conversation-1",
+        )
+    )
+
+    await save_agent_history(req=request, llm_response=LLMResponse(role="err", completion_text="upstream failed"), all_messages=[Message(role="user", content="hello")],
+        commit=lambda history, token_usage: context.conversation_manager.update_conversation(event.unified_msg_origin, request.conversation.cid, history=history, token_usage=token_usage),
+        checkpoint_id=event.get_extra("llm_checkpoint_id"), runner_stats=None)
+
+    conversation_manager.update_conversation.assert_awaited_once_with(
+        "webchat:FriendMessage:test",
+        "conversation-1",
+        history=[
+            {"role": "user", "content": "hello"},
+            {"role": "_checkpoint", "content": {"id": "cp-1"}},
+        ],
+        token_usage=None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_aborted_response_persists_synthetic_stop_turn():
+    conversation_manager = AsyncMock()
+    context = SimpleNamespace(conversation_manager=conversation_manager)
+    event = SimpleNamespace(
+        unified_msg_origin="webchat:FriendMessage:test",
+        get_extra=lambda _key: None,
+    )
+    request = ProviderRequest(
+        conversation=Conversation(
+            platform_id="webchat",
+            user_id="webchat:FriendMessage:test",
+            cid="conversation-1",
+        )
+    )
+
+    await save_agent_history(req=request, llm_response=LLMResponse(role="assistant", completion_text="Output stopped."), all_messages=[
+            Message(role="user", content="Explain the result."),
+            Message(role="user", content=[TextPart(text="Stop output.")]),
+            Message(role="assistant", content=[TextPart(text="Output stopped.")]),
+        ],
+        commit=lambda history, token_usage: context.conversation_manager.update_conversation(event.unified_msg_origin, request.conversation.cid, history=history, token_usage=token_usage),
+        checkpoint_id=event.get_extra("llm_checkpoint_id"), runner_stats=None, user_aborted=True)
+
+    conversation_manager.update_conversation.assert_awaited_once_with(
+        "webchat:FriendMessage:test",
+        "conversation-1",
+        history=[
+            {"role": "user", "content": "Explain the result."},
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": "Stop output."}],
+            },
+            {
+                "role": "assistant",
+                "content": [{"type": "text", "text": "Output stopped."}],
+            },
+        ],
+        token_usage=None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_terminal_tool_result_persists_history_without_checkpoint():
+    conversation_manager = AsyncMock()
+    context = SimpleNamespace(conversation_manager=conversation_manager)
+    event = SimpleNamespace(
+        unified_msg_origin="qq:GroupMessage:test",
+        get_extra=lambda _key: None,
+    )
+    tool_call = ToolCall(
+        id="call-1",
+        function=ToolCall.FunctionBody(name="stay_silent", arguments="{}"),
+    )
+    assistant_message = AssistantMessageSegment(tool_calls=[tool_call])
+    tool_message = ToolCallMessageSegment(
+        content="The tool has no return value.",
+        tool_call_id="call-1",
+    )
+    request = ProviderRequest(
+        conversation=Conversation(
+            platform_id="qq",
+            user_id="qq:GroupMessage:test",
+            cid="conversation-1",
+            token_usage=1234,
+        ),
+        tool_calls_result=ToolCallsResult(
+            tool_calls_info=assistant_message,
+            tool_calls_result=[tool_message],
+        ),
+    )
+
+    await save_agent_history(req=request, llm_response=None, all_messages=[
+            Message(role="user", content="latest group observation"),
+            assistant_message,
+            tool_message,
+        ],
+        commit=lambda history, token_usage: context.conversation_manager.update_conversation(event.unified_msg_origin, request.conversation.cid, history=history, token_usage=token_usage),
+        checkpoint_id=event.get_extra("llm_checkpoint_id"), runner_stats=None)
+
+    conversation_manager.update_conversation.assert_awaited_once_with(
+        "qq:GroupMessage:test",
+        "conversation-1",
+        history=[
+            {"role": "user", "content": "latest group observation"},
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "type": "function",
+                        "id": "call-1",
+                        "function": {
+                            "name": "stay_silent",
+                            "arguments": "{}",
+                        },
+                    }
+                ],
+            },
+            {
+                "role": "tool",
+                "content": "The tool has no return value.",
+                "tool_call_id": "call-1",
+            },
+        ],
+        token_usage=1234,
+    )
+
+
+@pytest.mark.asyncio
+async def test_terminal_tool_result_with_checkpoint_uses_none_token_usage():
+    conversation_manager = AsyncMock()
+    context = SimpleNamespace(conversation_manager=conversation_manager)
+    event = SimpleNamespace(
+        unified_msg_origin="qq:GroupMessage:test",
+        get_extra=lambda key: {"llm_checkpoint_id": "cp-1"}.get(key),
+    )
+    tool_call = ToolCall(
+        id="call-1",
+        function=ToolCall.FunctionBody(name="stay_silent", arguments="{}"),
+    )
+    assistant_message = AssistantMessageSegment(tool_calls=[tool_call])
+    tool_message = ToolCallMessageSegment(
+        content="The tool has no return value.",
+        tool_call_id="call-1",
+    )
+    request = ProviderRequest(
+        conversation=Conversation(
+            platform_id="qq",
+            user_id="qq:GroupMessage:test",
+            cid="conversation-1",
+            token_usage=1234,
+        ),
+        tool_calls_result=ToolCallsResult(
+            tool_calls_info=assistant_message,
+            tool_calls_result=[tool_message],
+        ),
+    )
+
+    await save_agent_history(req=request, llm_response=None, all_messages=[
+            Message(role="user", content="latest group observation"),
+            assistant_message,
+            tool_message,
+        ],
+        commit=lambda history, token_usage: context.conversation_manager.update_conversation(event.unified_msg_origin, request.conversation.cid, history=history, token_usage=token_usage),
+        checkpoint_id=event.get_extra("llm_checkpoint_id"), runner_stats=None)
+
+    conversation_manager.update_conversation.assert_awaited_once_with(
+        "qq:GroupMessage:test",
+        "conversation-1",
+        history=[
+            {"role": "user", "content": "latest group observation"},
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "type": "function",
+                        "id": "call-1",
+                        "function": {
+                            "name": "stay_silent",
+                            "arguments": "{}",
+                        },
+                    }
+                ],
+            },
+            {
+                "role": "tool",
+                "content": "The tool has no return value.",
+                "tool_call_id": "call-1",
+            },
+            {"role": "_checkpoint", "content": {"id": "cp-1"}},
+        ],
+        token_usage=None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_empty_response_without_tool_result_skips_history_save():
+    conversation_manager = AsyncMock()
+    context = SimpleNamespace(conversation_manager=conversation_manager)
+    event = SimpleNamespace(
+        unified_msg_origin="qq:GroupMessage:test",
+        get_extra=lambda _key: None,
+    )
+    request = ProviderRequest(
+        conversation=Conversation(
+            platform_id="qq",
+            user_id="qq:GroupMessage:test",
+            cid="conversation-1",
+        )
+    )
+
+    await save_agent_history(req=request, llm_response=None, all_messages=[Message(role="user", content="latest group observation")],
+        commit=lambda history, token_usage: context.conversation_manager.update_conversation(event.unified_msg_origin, request.conversation.cid, history=history, token_usage=token_usage),
+        checkpoint_id=event.get_extra("llm_checkpoint_id"), runner_stats=None)
+
+    conversation_manager.update_conversation.assert_not_awaited()

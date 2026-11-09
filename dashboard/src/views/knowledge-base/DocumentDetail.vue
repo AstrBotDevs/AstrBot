@@ -18,6 +18,14 @@
       <v-progress-circular indeterminate color="primary" size="64" />
     </div>
 
+    <div v-else-if="loadError" class="loading-container">
+      <v-icon size="72" color="error">mdi-alert-circle-outline</v-icon>
+      <p class="mt-4 text-medium-emphasis">{{ t('states.loadError') }}</p>
+      <v-btn class="mt-4" prepend-icon="mdi-refresh" color="primary" variant="tonal" @click="loadDocument">
+        {{ t('states.retry') }}
+      </v-btn>
+    </div>
+
     <!-- 主内容 -->
     <div v-else class="document-content">
       <!-- 文档信息卡片 -->
@@ -97,7 +105,16 @@
         </v-card-title>
 
         <v-card-text class="pa-0">
+          <v-alert v-if="chunksLoadError" type="error" variant="tonal" class="ma-4">
+            <div class="d-flex align-center justify-space-between ga-4">
+              <span>{{ t('states.chunksLoadError') }}</span>
+              <v-btn prepend-icon="mdi-refresh" variant="tonal" size="small" @click="loadChunks">
+                {{ t('states.retry') }}
+              </v-btn>
+            </div>
+          </v-alert>
           <v-data-table
+            v-else
             :headers="headers"
             :items="filteredChunks"
             :loading="loadingChunks"
@@ -150,7 +167,7 @@
           
 
           <!-- 自定义分页器 -->
-          <div v-if="!searchQuery && totalChunks > 0" class="pa-4 d-flex align-center justify-space-between">
+          <div v-if="!chunksLoadError && !searchQuery && totalChunks > 0" class="pa-4 d-flex align-center justify-space-between">
             <div class="text-caption text-medium-emphasis">
               {{ t('chunks.showing') }} {{ (page - 1) * pageSize + 1 }} - {{ Math.min(page * pageSize, totalChunks) }} / {{ totalChunks }}
             </div>
@@ -179,7 +196,7 @@
     <!-- 查看分块对话框 -->
     <v-dialog v-model="showViewDialog" max-width="800px" scrollable>
       <v-card>
-        <v-card-title class="pa-4">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
           <span>{{ t('view.title') }}</span>
           <v-spacer />
           <v-btn icon="mdi-close" variant="text" @click="showViewDialog = false" />
@@ -235,11 +252,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import axios from 'axios'
-import { useModuleI18n } from '@/i18n/composables'
+import { knowledgeApi } from '@/api/v1'
+import { useI18n, useModuleI18n } from '@/i18n/composables'
 import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog'
 
 const { tm: t } = useModuleI18n('features/knowledge-base/document')
+const { locale } = useI18n()
 const route = useRoute()
 
 const confirmDialog = useConfirmDialog()
@@ -250,6 +268,8 @@ const docId = ref(route.params.docId as string)
 // 状态
 const loading = ref(true)
 const loadingChunks = ref(false)
+const loadError = ref(false)
+const chunksLoadError = ref(false)
 const document = ref<any>({})
 const chunks = ref<any[]>([])
 const searchQuery = ref('')
@@ -293,16 +313,20 @@ const filteredChunks = computed(() => {
 // 加载文档详情
 const loadDocument = async () => {
   loading.value = true
+  loadError.value = false
   try {
-    const response = await axios.get('/api/kb/document/get', {
-      params: { doc_id: docId.value, kb_id: kbId.value }
-    })
+    const response = await knowledgeApi.document(kbId.value, docId.value)
     if (response.data.status === 'ok') {
       document.value = response.data.data
+      loadError.value = false
+    } else {
+      loadError.value = true
+      showSnackbar(response.data.message || t('states.loadError'), 'error')
     }
   } catch (error) {
     console.error('Failed to load document:', error)
-    showSnackbar('加载文档详情失败', 'error')
+    loadError.value = true
+    showSnackbar(t('states.loadError'), 'error')
   } finally {
     loading.value = false
   }
@@ -311,22 +335,25 @@ const loadDocument = async () => {
 // 加载分块列表
 const loadChunks = async () => {
   loadingChunks.value = true
+  chunksLoadError.value = false
   try {
-    const response = await axios.get('/api/kb/chunk/list', {
-      params: { 
-        doc_id: docId.value, 
-        kb_id: kbId.value,
+    const response = await knowledgeApi.chunks(kbId.value, {
+        document_id: docId.value, 
         page: page.value,
         page_size: pageSize.value
-      }
     })
     if (response.data.status === 'ok') {
       chunks.value = response.data.data.items || []
       totalChunks.value = response.data.data.total || 0
+      chunksLoadError.value = false
+    } else {
+      chunksLoadError.value = true
+      showSnackbar(response.data.message || t('states.chunksLoadError'), 'error')
     }
   } catch (error) {
     console.error('Failed to load chunks:', error)
-    showSnackbar('加载分块列表失败', 'error')
+    chunksLoadError.value = true
+    showSnackbar(t('states.chunksLoadError'), 'error')
   } finally {
     loadingChunks.value = false
   }
@@ -354,11 +381,7 @@ const viewChunk = (chunk: any) => {
 const deleteChunk = async (chunk: any) => {
   if (!(await askForConfirmation(t('chunks.deleteConfirm'), confirmDialog))) return
   try {
-    const response = await axios.post('/api/kb/chunk/delete', {
-      chunk_id: chunk.chunk_id,
-      doc_id: docId.value,
-      kb_id: kbId.value
-    })
+    const response = await knowledgeApi.deleteChunk(kbId.value, chunk.chunk_id, docId.value)
     if (response.data.status === 'ok') {
       showSnackbar(t('chunks.deleteSuccess'))
       loadChunks()
@@ -404,7 +427,7 @@ const formatFileSize = (bytes: number) => {
 
 const formatDate = (dateStr: string) => {
   if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleString('zh-CN', {
+  return new Date(dateStr).toLocaleString(locale.value, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',

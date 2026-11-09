@@ -132,7 +132,7 @@ class LarkWebhookServer:
         """处理 webhook 回调，可被统一 webhook 入口复用
 
         Args:
-            request: Quart 请求对象
+            request: webhook 请求对象
 
         Returns:
             响应数据

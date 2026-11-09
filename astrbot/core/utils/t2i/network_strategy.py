@@ -146,8 +146,14 @@ class NetworkRenderStrategy(RenderStrategy):
         tmpl_data: dict,
         return_url: bool = True,
         options: dict | None = None,
+        endpoint: str | None = None,
     ) -> str:
-        """使用自定义文转图模板"""
+        """使用自定义文转图模板
+
+        Args:
+            endpoint: Optional per-call render service URL. When given, only
+                this endpoint is used instead of the configured endpoint pool.
+        """
         default_options = {
             "full_page": True,
             "type": "jpeg",
@@ -156,9 +162,11 @@ class NetworkRenderStrategy(RenderStrategy):
         if options:
             default_options |= options
 
-        if SHIKI_RUNTIME_TEMPLATE_PATTERN.search(tmpl_str):
-            tmpl_data = {"shiki_runtime": get_shiki_runtime()} | tmpl_data
-        tmpl_str = inject_shiki_runtime(tmpl_str)
+        # 在线程池中执行 Shiki 注入，避免 1.2MB JS 处理阻塞事件循环
+        loop = asyncio.get_running_loop()
+        tmpl_str, tmpl_data = await loop.run_in_executor(
+            None, self._prepare_template_sync, tmpl_str, tmpl_data
+        )
         post_data = {
             "tmpl": tmpl_str,
             "json": return_url,
@@ -166,8 +174,13 @@ class NetworkRenderStrategy(RenderStrategy):
             "options": default_options,
         }
 
-        endpoints = self.endpoints.copy() if self.endpoints else [self.BASE_RENDER_URL]
-        random.shuffle(endpoints)
+        if endpoint:
+            endpoints = [self._clean_url(endpoint)]
+        else:
+            endpoints = (
+                self.endpoints.copy() if self.endpoints else [self.BASE_RENDER_URL]
+            )
+            random.shuffle(endpoints)
         last_exception = None
         for endpoint in endpoints:
             try:
@@ -206,6 +219,7 @@ class NetworkRenderStrategy(RenderStrategy):
         text: str,
         return_url: bool = False,
         template_name: str | None = "base",
+        endpoint: str | None = None,
     ) -> str:
         """返回图像的文件路径"""
         if not template_name:
@@ -218,4 +232,13 @@ class NetworkRenderStrategy(RenderStrategy):
                 "version": f"v{VERSION}",
             },
             return_url,
+            endpoint=endpoint,
         )
+
+    @staticmethod
+    def _prepare_template_sync(tmpl_str: str, tmpl_data: dict) -> tuple[str, dict]:
+        """在线程池中执行的同步模板预处理（避免阻塞事件循环）"""
+        if SHIKI_RUNTIME_TEMPLATE_PATTERN.search(tmpl_str):
+            tmpl_data = {"shiki_runtime": get_shiki_runtime()} | tmpl_data
+        tmpl_str = inject_shiki_runtime(tmpl_str)
+        return tmpl_str, tmpl_data

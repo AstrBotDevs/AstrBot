@@ -1,5 +1,6 @@
 import base64
-import uuid
+
+from astrbot.core.utils.datetime_utils import generate_timestamp_id
 
 from ..entities import ProviderType
 from ..provider import TTSProvider
@@ -88,19 +89,21 @@ class ProviderMiMoTTSAPI(TTSProvider):
             }
         )
 
+        audio_params = {"format": self.audio_format}
+        # voice design 模型不支持 audio.voice 参数
+        if "voicedesign" not in self.model_name:
+            audio_params["voice"] = self.voice
+
         return {
             "model": self.model_name,
             "messages": messages,
-            "audio": {
-                "format": self.audio_format,
-                "voice": self.voice,
-            },
+            "audio": audio_params,
         }
 
     async def get_audio(self, text: str) -> str:
         response = await self.client.post(
             build_api_url(self.api_base),
-            headers=build_headers(self.chosen_api_key),
+            headers={**build_headers(self.chosen_api_key), **self.request_headers},
             json=self._build_payload(text),
         )
 
@@ -121,7 +124,8 @@ class ProviderMiMoTTSAPI(TTSProvider):
             raise MiMoAPIError(f"MiMo TTS API returned no audio payload: {data}")
 
         output_path = (
-            get_temp_dir() / f"mimo_tts_api_{uuid.uuid4()}.{self.audio_format}"
+            get_temp_dir()
+            / f"mimo_tts_api_{generate_timestamp_id()}.{self.audio_format}"
         )
         output_path.write_bytes(base64.b64decode(audio_data))
         return str(output_path)

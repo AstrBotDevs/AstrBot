@@ -57,11 +57,17 @@ def _make_event(
 
 
 @pytest.mark.asyncio
-async def test_extract_quoted_message_text_from_reply_chain():
-    reply = Reply(id="1", chain=[Plain(text="quoted content")], message_str="")
+@pytest.mark.parametrize("with_chain", [True, False])
+async def test_extract_quoted_message_text_keeps_default_normalization(with_chain):
+    content = "    first()\n    second()\n"
+    reply = Reply(
+        id="1",
+        chain=[Plain(text=content)] if with_chain else [],
+        message_str="" if with_chain else content,
+    )
     event = _make_event(reply)
     text = await extract_quoted_message_text(event)
-    assert text == "quoted content"
+    assert text == content.strip()
 
 
 @pytest.mark.asyncio
@@ -333,6 +339,28 @@ async def test_extract_quoted_message_images_file_url_with_query_string():
 
     images = await extract_quoted_message_images(event)
     assert images == [url_with_query]
+
+
+@pytest.mark.asyncio
+async def test_extract_quoted_message_images_accepts_legacy_file_uri(tmp_path):
+    image_file = tmp_path / "quoted.png"
+    image_file.write_bytes(b"image")
+    file_uri = (
+        f"file:///{image_file.as_posix()}"
+        if image_file.as_posix().startswith("/")
+        else image_file.as_uri()
+    )
+    reply = Reply(id="placeholder", chain=[Image(file=file_uri)], message_str="")
+    object.__setattr__(reply, "id", None)
+    event = SimpleNamespace(
+        message_obj=SimpleNamespace(message=[reply]),
+        bot=SimpleNamespace(api=_FailIfCalledAPI()),
+        get_group_id=lambda: "",
+    )
+
+    images = await extract_quoted_message_images(event)
+
+    assert images == [str(image_file)]
 
 
 @pytest.mark.asyncio

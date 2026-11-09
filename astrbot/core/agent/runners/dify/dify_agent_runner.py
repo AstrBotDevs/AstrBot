@@ -1,5 +1,3 @@
-import base64
-import os
 import sys
 import typing as T
 
@@ -10,8 +8,7 @@ from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
 )
-from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.io import download_file
+from astrbot.core.utils.media_utils import MediaResolver
 
 from ...hooks import BaseAgentRunHooks
 from ...response import AgentResponseData
@@ -100,11 +97,47 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
 
     @override
     async def step_until_done(
-        self, max_step: int = 30
+        self, max_step: int = 128
     ) -> T.AsyncGenerator[AgentResponse, None]:
         while not self.done():
             async for resp in self.step():
                 yield resp
+
+    async def _upload_image_for_dify(
+        self,
+        image_url: str,
+        session_id: str,
+    ) -> dict[str, str] | None:
+        image_data = await MediaResolver(
+            image_url,
+            media_type="image",
+        ).to_base64_data(strict=True)
+        if image_data is None:
+            logger.warning("Dify 图片预处理结果为空，将忽略。")
+            return None
+
+        image_extension = image_data.mime_type.split("/", 1)[-1] or "png"
+        if image_extension == "jpeg":
+            image_extension = "jpg"
+
+        file_response = await self.api_client.file_upload(
+            file_data=image_data.to_bytes(),
+            user=session_id,
+            mime_type=image_data.mime_type,
+            file_name=f"image.{image_extension}",
+        )
+        logger.debug(f"Dify 上传图片响应：{file_response}")
+        if "id" not in file_response:
+            logger.warning(
+                f"上传图片后得到未知的 Dify 响应：{file_response}，图片将忽略。"
+            )
+            return None
+
+        return {
+            "type": "image",
+            "transfer_method": "local_file",
+            "upload_file_id": file_response["id"],
+        }
 
     async def _execute_dify_request(self):
         """执行 Dify 请求的核心逻辑"""
@@ -124,31 +157,13 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
         # 处理图片上传
         files_payload = []
         for image_url in image_urls:
-            # image_url is a base64 string
             try:
-                image_data = base64.b64decode(image_url)
-                file_response = await self.api_client.file_upload(
-                    file_data=image_data,
-                    user=session_id,
-                    mime_type="image/png",
-                    file_name="image.png",
-                )
-                logger.debug(f"Dify 上传图片响应：{file_response}")
-                if "id" not in file_response:
-                    logger.warning(
-                        f"上传图片后得到未知的 Dify 响应：{file_response}，图片将忽略。"
-                    )
-                    continue
-                files_payload.append(
-                    {
-                        "type": "image",
-                        "transfer_method": "local_file",
-                        "upload_file_id": file_response["id"],
-                    }
-                )
+                image_payload = await self._upload_image_for_dify(image_url, session_id)
             except Exception as e:
                 logger.warning(f"上传图片失败：{e}")
                 continue
+            if image_payload:
+                files_payload.append(image_payload)
 
         # 获得会话变量
         payload_vars = self.variables.copy()
@@ -220,6 +235,15 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
                 ):
                     logger.debug(f"dify workflow resp chunk: {chunk}")
                     match chunk["event"]:
+                        case "error":
+                            logger.error(
+                                f"Dify workflow error (status: {chunk.get('status')}, "
+                                f"code: {chunk.get('code')}): "
+                                f"{chunk.get('message') or 'No error details provided.'}"
+                            )
+                            raise Exception(
+                                "Dify workflow execution failed. Please contact the administrator."
+                            )
                         case "workflow_started":
                             logger.info(
                                 f"Dify 工作流(ID: {chunk['workflow_run_id']})开始运行。"
@@ -243,18 +267,27 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
                                 f"Dify 工作流(ID: {chunk['workflow_run_id']})运行结束"
                             )
                             logger.debug(f"Dify 工作流结果：{chunk}")
-                            if chunk["data"]["error"]:
+                            status = chunk["data"].get("status")
+                            if chunk["data"].get("error") or status not in (
+                                "succeeded",
+                                "partial-succeeded",
+                            ):
                                 logger.error(
-                                    f"Dify 工作流出现错误：{chunk['data']['error']}"
+                                    f"Dify workflow failed (status: {status}): "
+                                    f"{chunk['data'].get('error') or 'No error details provided.'}"
                                 )
                                 raise Exception(
-                                    f"Dify 工作流出现错误：{chunk['data']['error']}"
+                                    "Dify workflow execution failed. Please contact the administrator."
                                 )
                             if self.workflow_output_key not in chunk["data"]["outputs"]:
                                 raise Exception(
                                     f"Dify 工作流的输出不包含指定的键名：{self.workflow_output_key}"
                                 )
                             result = chunk
+                if not result:
+                    raise Exception(
+                        "Dify workflow stream ended without a successful workflow_finished event."
+                    )
             case _:
                 raise Exception(f"未知的 Dify API 类型：{self.api_type}")
 
@@ -268,6 +301,13 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
         self.final_llm_resp = LLMResponse(role="assistant", result_chain=chain)
         self._transition_state(AgentState.DONE)
 
+        if self.final_llm_resp.role == "assistant":
+            try:
+                await self.agent_hooks.on_llm_response(
+                    self.run_context, self.final_llm_resp
+                )
+            except Exception as e:
+                logger.error(f"Error in on_llm_response hook: {e}", exc_info=True)
         try:
             await self.agent_hooks.on_agent_done(self.run_context, self.final_llm_resp)
         except Exception as e:
@@ -290,11 +330,12 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
                 case "image":
                     return Comp.Image(file=item["url"], url=item["url"])
                 case "audio":
-                    # 仅支持 wav
-                    temp_dir = get_astrbot_temp_path()
-                    path = os.path.join(temp_dir, f"dify_{item['filename']}.wav")
-                    await download_file(item["url"], path)
-                    return Comp.Image(file=item["url"], url=item["url"])
+                    audio_path = await MediaResolver(
+                        item["url"],
+                        media_type="audio",
+                        default_suffix=".wav",
+                    ).to_path(target_format="wav")
+                    return Comp.Record(file=audio_path, url=audio_path)
                 case "video":
                     return Comp.Video(file=item["url"])
                 case _:

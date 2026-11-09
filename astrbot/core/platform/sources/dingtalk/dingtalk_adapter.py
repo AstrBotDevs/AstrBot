@@ -3,6 +3,7 @@ import json
 import threading
 import time
 import uuid
+from concurrent.futures import CancelledError as FutureCancelledError
 from pathlib import Path
 from typing import Literal, NoReturn, cast
 
@@ -12,7 +13,17 @@ from dingtalk_stream import AckMessage
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import At, File, Image, Plain, Record, Video
+from astrbot.api.message_components import (
+    ActionRow,
+    At,
+    Button,
+    ButtonInteraction,
+    File,
+    Image,
+    Plain,
+    Record,
+    Video,
+)
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
@@ -22,9 +33,14 @@ from astrbot.api.platform import (
 )
 from astrbot.core import sp
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.button_interaction import (
+    decode_button_callback,
+    encode_button_callback,
+)
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file
 from astrbot.core.utils.media_utils import (
+    MediaResolver,
     convert_audio_format,
     convert_video_format,
     extract_video_cover,
@@ -33,6 +49,20 @@ from astrbot.core.utils.media_utils import (
 
 from ...register import register_platform_adapter
 from .dingtalk_event import DingtalkMessageEvent
+
+DINGTALK_RECONNECT_INITIAL_DELAY = 10
+DINGTALK_RECONNECT_MAX_DELAY = 300
+DINGTALK_RECONNECT_STABLE_SECONDS = 300
+DINGTALK_BUTTON_CARD_TEMPLATE_ID = "382e4302-551d-4880-bf29-a30acfab2e71.schema"
+DINGTALK_CARD_CALLBACK_TOPIC = "/v1.0/card/instances/callback"
+
+
+def _dingtalk_reconnect_delay(retry_count: int) -> int:
+    safe_retry_count = max(retry_count, 1)
+    return min(
+        DINGTALK_RECONNECT_INITIAL_DELAY * 2 ** (safe_retry_count - 1),
+        DINGTALK_RECONNECT_MAX_DELAY,
+    )
 
 
 class MyEventHandler(dingtalk_stream.EventHandler):
@@ -73,7 +103,15 @@ class DingtalkPlatformAdapter(Platform):
 
                 return AckMessage.STATUS_OK, "OK"
 
+        class AstrCardCallbackClient(dingtalk_stream.CallbackHandler):
+            async def process(self, message: dingtalk_stream.CallbackMessage):
+                abm = outer_self.convert_card_callback(message)
+                if abm is not None:
+                    await outer_self.handle_msg(abm)
+                return AckMessage.STATUS_OK, "OK"
+
         self.client = AstrCallbackClient()
+        self.card_callback_client = AstrCardCallbackClient()
 
         credential = dingtalk_stream.Credential(self.client_id, self.client_secret)
         client = dingtalk_stream.DingTalkStreamClient(credential, logger=logger)
@@ -82,8 +120,13 @@ class DingtalkPlatformAdapter(Platform):
             dingtalk_stream.ChatbotMessage.TOPIC,
             self.client,
         )
+        client.register_callback_handler(
+            DINGTALK_CARD_CALLBACK_TOPIC,
+            self.card_callback_client,
+        )
         self.client_ = client  # 用于 websockets 的 client
-        self._shutdown_event: threading.Event | None = None
+        self._shutdown_event = threading.Event()
+        self._terminated_event = threading.Event()
 
     def _id_to_sid(self, dingtalk_id: str | None) -> str:
         if not dingtalk_id:
@@ -167,13 +210,18 @@ class DingtalkPlatformAdapter(Platform):
         abm.message_id = cast(str, message.message_id)
         abm.raw_message = message
 
+        leading_at_is_self = False
         if abm.type == MessageType.GROUP_MESSAGE:
             # 处理所有被 @ 的用户（包括机器人自己，因 at_users 已包含）
             if message.at_users:
-                for user in message.at_users:
+                for index, user in enumerate(message.at_users):
                     if id := self._id_to_sid(user.dingtalk_id):
                         abm.message.append(At(qq=id))
+                        if index == 0 and id == abm.self_id:
+                            leading_at_is_self = True
             abm.group_id = message.conversation_id
+            if abm.group:
+                abm.group.group_name = message.conversation_title
             abm.session_id = abm.group_id
         else:
             abm.session_id = abm.sender.user_id
@@ -217,10 +265,18 @@ class DingtalkPlatformAdapter(Platform):
                 )
                 contents: list[dict] = cast(list[dict], rtc.rich_text_list)
                 plain_parts: list[str] = []
-                for content in contents:
+                for index, content in enumerate(contents):
                     if "text" in content:
                         plain_text = cast(str, content.get("text") or "")
                         if plain_text:
+                            # HarmonyOS repeats the leading bot mention as a text
+                            # segment even though atUsers already represents it.
+                            if (
+                                index == 0
+                                and leading_at_is_self
+                                and plain_text.lstrip().startswith("@")
+                            ):
+                                continue
                             plain_parts.append(plain_text)
                             abm.message.append(Plain(plain_text))
                     elif "type" in content and content["type"] == "picture":
@@ -260,7 +316,12 @@ class DingtalkPlatformAdapter(Platform):
                         voice_ext,
                     )
                     if f_path:
-                        abm.message.append(Record.fromFileSystem(f_path))
+                        path_wav = await MediaResolver(
+                            f_path,
+                            media_type="audio",
+                            default_suffix=".wav",
+                        ).to_path(target_format="wav")
+                        abm.message.append(Record(file=path_wav, url=path_wav))
             case "file":
                 download_code = cast(str, raw_content.get("downloadCode") or "")
                 if not download_code:
@@ -286,6 +347,105 @@ class DingtalkPlatformAdapter(Platform):
 
         await self._remember_sender_binding(message, abm)
         return abm  # 别忘了返回转换后的消息对象
+
+    def convert_card_callback(
+        self,
+        callback: dingtalk_stream.CallbackMessage,
+    ) -> AstrBotMessage | None:
+        """Convert a DingTalk interactive-card callback into an AstrBot event.
+
+        Args:
+            callback: Callback frame received from DingTalk Stream mode.
+
+        Returns:
+            A normalized AstrBot button event, or ``None`` for foreign or malformed
+            card actions.
+        """
+        raw_data = callback.data
+        if not isinstance(raw_data, dict):
+            return None
+
+        content = raw_data.get("content", {})
+        if isinstance(content, str):
+            try:
+                content = json.loads(content)
+            except json.JSONDecodeError:
+                logger.debug("忽略无效的钉钉卡片回调 content")
+                return None
+        if not isinstance(content, dict):
+            return None
+
+        card_private_data = content.get("cardPrivateData", {})
+        if not isinstance(card_private_data, dict):
+            return None
+        action_ids = card_private_data.get("actionIds", [])
+        if not isinstance(action_ids, list) or not action_ids:
+            return None
+        params = card_private_data.get("params", {})
+        if not isinstance(params, dict):
+            params = {}
+
+        decoded_callback = None
+        for native_action_id in action_ids:
+            if not isinstance(native_action_id, str):
+                continue
+            for callback_payload in (
+                params.get("id"),
+                params.get(native_action_id),
+                native_action_id,
+            ):
+                if not isinstance(callback_payload, str):
+                    continue
+                try:
+                    decoded_callback = decode_button_callback(
+                        callback_payload, allow_expired=True
+                    )
+                    break
+                except ValueError:
+                    continue
+            if decoded_callback is not None:
+                break
+        if decoded_callback is None:
+            logger.debug(
+                "忽略非 AstrBot 生成的钉钉卡片回调: actionIds=%s, paramKeys=%s",
+                action_ids,
+                list(params),
+            )
+            return None
+        action_id, data = decoded_callback
+
+        interaction_id = cast(
+            str,
+            getattr(callback.headers, "message_id", None) or uuid.uuid4().hex,
+        )
+        user_id = cast(str, raw_data.get("userId") or "unknown")
+        space_type = cast(str, raw_data.get("spaceType") or "")
+        space_id = cast(str, raw_data.get("spaceId") or "")
+        is_group = space_type == "IM_GROUP"
+
+        abm = AstrBotMessage()
+        abm.type = MessageType.GROUP_MESSAGE if is_group else MessageType.FRIEND_MESSAGE
+        abm.self_id = self.client_id
+        abm.sender = MessageMember(user_id=user_id, nickname=user_id)
+        abm.session_id = space_id if is_group and space_id else user_id
+        if is_group:
+            abm.group_id = abm.session_id
+        abm.message_id = interaction_id
+        abm.message_str = action_id
+        abm.message = [
+            ButtonInteraction(
+                action_id=action_id,
+                data=data,
+                interaction_id=interaction_id,
+                source_message_id=cast(str | None, raw_data.get("outTrackId")),
+                callback_data=callback_payload,
+            )
+        ]
+        abm.raw_message = callback
+        callback_time = getattr(callback.headers, "time", None)
+        if isinstance(callback_time, int):
+            abm.timestamp = callback_time // 1000
+        return abm
 
     async def _remember_sender_binding(
         self,
@@ -470,6 +630,115 @@ class DingtalkPlatformAdapter(Platform):
                         f"钉钉私聊消息发送失败: {resp.status}, {await resp.text()}",
                     )
 
+    async def _send_button_card(
+        self,
+        target_type: Literal["group", "user"],
+        target_id: str,
+        robot_code: str,
+        content: str,
+        rows: list[ActionRow],
+    ) -> bool:
+        """Send portable buttons through DingTalk's built-in dynamic card.
+
+        Args:
+            target_type: Whether the destination is a group or a user.
+            target_id: Open conversation ID or staff ID.
+            robot_code: DingTalk robot code used for group delivery.
+            content: Markdown content displayed above the buttons.
+            rows: Portable action rows to flatten into DingTalk's button list.
+
+        Returns:
+            Whether DingTalk accepted the interactive card.
+        """
+        colors = {
+            Button.Style.DEFAULT: "gray",
+            Button.Style.PRIMARY: "blue",
+            Button.Style.SUCCESS: "green",
+            Button.Style.DANGER: "red",
+        }
+        buttons: list[dict] = []
+        for row in rows:
+            for button in row.buttons:
+                item = {
+                    "text": button.label,
+                    "color": colors[button.style],
+                    "id": button.id,
+                }
+                if isinstance(button.action, Button.CallbackAction):
+                    try:
+                        item["id"] = encode_button_callback(
+                            button.id,
+                            button.action.data,
+                            expires_at=row.action_expires_at,
+                        )
+                    except ValueError as exc:
+                        logger.warning(f"钉钉按钮卡片编码失败: {exc}")
+                        return False
+                    item["request"] = True
+                elif isinstance(button.action, Button.UrlAction):
+                    item["url"] = button.action.url
+                    item["iosUrl"] = button.action.url
+                buttons.append(item)
+        if not buttons:
+            return False
+
+        access_token = await self.get_access_token()
+        if not access_token:
+            logger.warning("钉钉按钮卡片发送失败: access_token 为空")
+            return False
+
+        card_instance_id = uuid.uuid4().hex
+        payload = {
+            "cardTemplateId": DINGTALK_BUTTON_CARD_TEMPLATE_ID,
+            "outTrackId": card_instance_id,
+            "cardData": {
+                "cardParamMap": {
+                    "flowStatus": "3",
+                    "staticMsgContent": content or " ",
+                    "sys_full_json_obj": json.dumps(
+                        {
+                            "order": ["staticMsgContent", "msgButtons"],
+                            "msgButtons": buttons,
+                        },
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    ),
+                }
+            },
+            "callbackType": "STREAM",
+            "imGroupOpenSpaceModel": {"supportForward": True},
+            "imRobotOpenSpaceModel": {"supportForward": True},
+        }
+        if target_type == "group":
+            payload["openSpaceId"] = f"dtv1.card//IM_GROUP.{target_id}"
+            payload["imGroupOpenDeliverModel"] = {"robotCode": robot_code}
+        else:
+            payload["openSpaceId"] = f"dtv1.card//IM_ROBOT.{target_id}"
+            payload["imRobotOpenDeliverModel"] = {"spaceType": "IM_ROBOT"}
+
+        headers = {
+            "Content-Type": "application/json",
+            "x-acs-dingtalk-access-token": access_token,
+        }
+        try:
+            async with (
+                aiohttp.ClientSession() as session,
+                session.post(
+                    "https://api.dingtalk.com/v1.0/card/instances/createAndDeliver",
+                    headers=headers,
+                    json=payload,
+                ) as resp,
+            ):
+                if 200 <= resp.status < 300:
+                    return True
+                logger.warning(
+                    f"钉钉按钮卡片发送失败: {resp.status}, {await resp.text()}"
+                )
+                return False
+        except (aiohttp.ClientError, TimeoutError) as exc:
+            logger.warning(f"钉钉按钮卡片发送失败: {exc}")
+            return False
+
     def _safe_remove_file(self, file_path: str | None) -> None:
         if not file_path:
             return
@@ -552,18 +821,64 @@ class DingtalkPlatformAdapter(Platform):
                     msg_param=msg_param,
                 )
 
+        action_rows = [
+            segment for segment in message_chain.chain if isinstance(segment, ActionRow)
+        ]
+        if action_rows:
+            card_content = "\n".join(
+                segment.text.strip()
+                for segment in message_chain.chain
+                if isinstance(segment, Plain) and segment.text.strip()
+            )
+            card_content = f"{at_str} {card_content}".strip()
+            if not card_content:
+                card_content = "\n".join(
+                    row.fallback_text for row in action_rows if row.fallback_text
+                )
+            card_sent = await self._send_button_card(
+                target_type=target_type,
+                target_id=target_id,
+                robot_code=robot_code,
+                content=card_content,
+                rows=action_rows,
+            )
+            if not card_sent:
+                fallback_parts = [card_content] if card_content else []
+                for row in action_rows:
+                    for button in row.buttons:
+                        if isinstance(button.action, Button.UrlAction):
+                            fallback_parts.append(
+                                f"[{button.label}]({button.action.url})"
+                            )
+                        else:
+                            fallback_parts.append(f"[{button.label}]")
+                fallback_text = "\n".join(fallback_parts)
+                if fallback_text:
+                    await send_message(
+                        msg_key="sampleMarkdown",
+                        msg_param={"title": "AstrBot", "text": fallback_text},
+                    )
+
         for segment in message_chain.chain:
+            if isinstance(segment, ActionRow):
+                continue
             if isinstance(segment, Plain):
+                if action_rows:
+                    continue
                 text = segment.text.strip()
                 if not text and not at_str:
                     continue
-                await send_message(
-                    msg_key="sampleMarkdown",
-                    msg_param={
-                        "title": "AstrBot",
-                        "text": f"{at_str} {text}".strip(),
-                    },
-                )
+                text = f"{at_str} {text}".strip()
+                if message_chain.use_markdown_ is False:
+                    await send_message(
+                        msg_key="sampleText",
+                        msg_param={"content": text},
+                    )
+                else:
+                    await send_message(
+                        msg_key="sampleMarkdown",
+                        msg_param={"title": "AstrBot", "text": text},
+                    )
             elif isinstance(segment, Image):
                 photo_url = segment.file or segment.url or ""
                 if photo_url.startswith(("http://", "https://")):
@@ -733,73 +1048,96 @@ class DingtalkPlatformAdapter(Platform):
                 # at_str=at_str,
             )
 
-    async def handle_msg(self, abm: AstrBotMessage) -> None:
-        event = DingtalkMessageEvent(
-            message_str=abm.message_str,
-            message_obj=abm,
+    def create_event(self, message: AstrBotMessage) -> DingtalkMessageEvent:
+        """Creates a Dingtalk message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created Dingtalk message event.
+        """
+        return DingtalkMessageEvent(
+            message_str=message.message_str,
+            message_obj=message,
             platform_meta=self.meta(),
-            session_id=abm.session_id,
+            session_id=message.session_id,
             client=self.client,
             adapter=self,
         )
 
-        self._event_queue.put_nowait(event)
+    async def handle_msg(self, abm: AstrBotMessage) -> None:
+        self.commit_event(self.create_event(abm))
 
     async def run(self) -> None:
         # await self.client_.start()
         # 钉钉的 SDK 并没有实现真正的异步，start() 里面有堵塞方法。
         # SDK 内部已有 while True 重连循环，但需要监控 task 状态，
         # 如果 task 意外退出则重新启动。
-        MAX_RETRIES = 5
-        RETRY_INTERVAL = 10
 
         def start_client(loop: asyncio.AbstractEventLoop) -> None:
             retry_count = 0
 
-            def handle_retry(error_msg: str) -> bool:
-                """处理重试逻辑，返回 True 表示需要继续重试，False 表示放弃。"""
+            def handle_retry(error_msg: str, run_seconds: float) -> None:
                 nonlocal retry_count
                 logger.error(error_msg)
+                if run_seconds >= DINGTALK_RECONNECT_STABLE_SECONDS:
+                    retry_count = 0
                 retry_count += 1
-                if retry_count < MAX_RETRIES:
-                    logger.info(f"钉钉适配器尝试重连 ({retry_count}/{MAX_RETRIES})...")
-                    time.sleep(RETRY_INTERVAL)
-                    return True
-                logger.error("钉钉适配器重连失败，已达最大重试次数")
-                return False
+                delay = _dingtalk_reconnect_delay(retry_count)
+                logger.info(
+                    f"钉钉适配器将在 {delay} 秒后重连 (第 {retry_count} 次)...",
+                )
+                self._terminated_event.wait(delay)
 
-            while retry_count < MAX_RETRIES:
+            while not self._terminated_event.is_set():
                 task = None
+                should_cancel_task = False
+                start_time = time.monotonic()
                 try:
-                    self._shutdown_event = threading.Event()
-                    task = loop.create_task(self.client_.start())
+                    self._shutdown_event.clear()
+                    if self._terminated_event.is_set():
+                        return
+                    task = asyncio.run_coroutine_threadsafe(self.client_.start(), loop)
                     # 当 task 完成时唤醒线程（无论是正常退出还是异常退出）
                     task.add_done_callback(lambda _: self._shutdown_event.set())
+                    if self._terminated_event.is_set():
+                        should_cancel_task = True
+                        self._shutdown_event.set()
                     self._shutdown_event.wait()
+                    if self._terminated_event.is_set():
+                        return
                     if task.done():
                         try:
                             exc = task.exception()
-                        except asyncio.CancelledError:
+                        except (asyncio.CancelledError, FutureCancelledError):
                             logger.info("钉钉适配器 task 已取消")
                             return
                         if exc:
                             if "Graceful shutdown" in str(exc):
                                 logger.info("钉钉适配器已被关闭")
                                 return
-                            if handle_retry(f"钉钉 SDK task 异常退出: {exc}"):
-                                continue
-                            return
+                            should_cancel_task = True
+                            handle_retry(
+                                f"钉钉 SDK task 异常退出: {exc}",
+                                time.monotonic() - start_time,
+                            )
+                            continue
                     # task 仍在运行，shutdown_event 被设置（正常关闭）
                     return
                 except Exception as e:
                     if "Graceful shutdown" in str(e):
                         logger.info("钉钉适配器已被关闭")
                         return
-                    if not handle_retry(f"钉钉机器人启动失败: {e}"):
-                        return
+                    should_cancel_task = True
+                    handle_retry(
+                        f"钉钉机器人启动失败: {e}",
+                        time.monotonic() - start_time,
+                    )
+                    continue
                 finally:
                     # 仅在重试/失败路径取消 task，正常关闭不取消
-                    if task is not None and not task.done() and retry_count > 0:
+                    if task is not None and not task.done() and should_cancel_task:
                         task.cancel()
 
         loop = asyncio.get_running_loop()
@@ -809,11 +1147,11 @@ class DingtalkPlatformAdapter(Platform):
         def monkey_patch_close() -> NoReturn:
             raise KeyboardInterrupt("Graceful shutdown")
 
+        self._terminated_event.set()
+        self._shutdown_event.set()
         if self.client_.websocket is not None:
             self.client_.open_connection = monkey_patch_close
             await self.client_.websocket.close(code=1000, reason="Graceful shutdown")
-        if self._shutdown_event is not None:
-            self._shutdown_event.set()
 
     def get_client(self):
         return self.client

@@ -1,4 +1,3 @@
-import base64
 import json
 import sys
 import typing as T
@@ -11,6 +10,7 @@ from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
 )
+from astrbot.core.utils.media_utils import MediaResolver, describe_media_ref
 
 from ...hooks import BaseAgentRunHooks
 from ...message import is_checkpoint_message
@@ -108,7 +108,7 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
 
     @override
     async def step_until_done(
-        self, max_step: int = 30
+        self, max_step: int = 128
     ) -> T.AsyncGenerator[AgentResponse, None]:
         while not self.done():
             async for resp in self.step():
@@ -210,10 +210,11 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
                     object_string_content.append({"type": "text", "text": prompt})
 
                 for url in image_urls:
-                    # the url is a base64 string
                     try:
-                        image_data = base64.b64decode(url)
-                        file_id = await self.api_client.upload_file(image_data)
+                        file_id = await self._download_and_upload_image(
+                            url,
+                            session_id,
+                        )
                         object_string_content.append(
                             {
                                 "type": "image",
@@ -221,7 +222,11 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
                             }
                         )
                     except Exception as e:
-                        logger.warning(f"处理图片失败 {url}: {e}")
+                        logger.warning(
+                            "处理图片失败 %s: %s",
+                            describe_media_ref(url),
+                            e,
+                        )
                         continue
 
                 if object_string_content:
@@ -246,6 +251,7 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
         # 执行 Coze API 请求
         accumulated_content = ""
         message_started = False
+        chat_completed = False
 
         async for chunk in self.api_client.chat_messages(
             bot_id=self.bot_id,
@@ -297,14 +303,19 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
             elif event_type == "conversation.chat.completed":
                 # 对话完成
                 logger.debug("Coze chat completed")
+                chat_completed = True
                 break
 
-            elif event_type == "error":
-                # 错误处理
-                error_msg = data.get("msg", "未知错误")
-                error_code = data.get("code", "UNKNOWN")
+            elif event_type in ("error", "conversation.chat.failed"):
+                # Chat failures may carry details in last_error.
+                error_data = data.get("last_error") or data
+                error_msg = error_data.get("msg", "未知错误")
+                error_code = error_data.get("code", "UNKNOWN")
                 logger.error(f"Coze 出现错误: {error_code} - {error_msg}")
                 raise Exception(f"Coze 出现错误: {error_code} - {error_msg}")
+
+        if not chat_completed:
+            raise Exception("Coze response stream ended before the chat completed")
 
         if not message_started and not accumulated_content:
             logger.warning("Coze 未返回任何内容")
@@ -315,6 +326,13 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
         self.final_llm_resp = LLMResponse(role="assistant", result_chain=chain)
         self._transition_state(AgentState.DONE)
 
+        if self.final_llm_resp.role == "assistant":
+            try:
+                await self.agent_hooks.on_llm_response(
+                    self.run_context, self.final_llm_resp
+                )
+            except Exception as e:
+                logger.error(f"Error in on_llm_response hook: {e}", exc_info=True)
         try:
             await self.agent_hooks.on_agent_done(self.run_context, self.final_llm_resp)
         except Exception as e:
@@ -347,8 +365,11 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
                 return file_id
 
         try:
-            image_data = await self.api_client.download_image(image_url)
-            file_id = await self.api_client.upload_file(image_data)
+            image_bytes = await MediaResolver(
+                image_url,
+                media_type="image",
+            ).to_bytes()
+            file_id = await self.api_client.upload_file(image_bytes)
 
             if session_id:
                 self.file_id_cache[session_id][cache_key] = file_id
@@ -357,8 +378,8 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
             return file_id
 
         except Exception as e:
-            logger.error(f"处理图片失败 {image_url}: {e!s}")
-            raise Exception(f"处理图片失败: {e!s}")
+            logger.error("处理图片失败 %s: %s", describe_media_ref(image_url), e)
+            raise Exception(f"处理图片失败: {e!s}") from e
 
     @override
     def done(self) -> bool:

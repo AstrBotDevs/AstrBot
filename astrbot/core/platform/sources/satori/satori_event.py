@@ -1,9 +1,12 @@
+import html
 from typing import TYPE_CHECKING
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import (
+    ActionRow,
     At,
+    Button,
     File,
     Forward,
     Image,
@@ -14,7 +17,9 @@ from astrbot.api.message_components import (
     Reply,
     Video,
 )
-from astrbot.api.platform import AstrBotMessage, PlatformMetadata
+from astrbot.api.platform import AstrBotMessage, Group, MessageMember, PlatformMetadata
+from astrbot.core.platform.button_interaction import encode_button_callback
+from astrbot.core.utils.media_utils import resolve_media_ref_to_base64_data
 
 if TYPE_CHECKING:
     from .satori_adapter import SatoriPlatformAdapter
@@ -51,6 +56,146 @@ class SatoriPlatformEvent(AstrMessageEvent):
             self.platform = login.get("platform")
             user = login.get("user", {})
             self.user_id = user.get("id") if user else None
+
+    async def get_group(
+        self,
+        group_id: str | None = None,
+        **kwargs,
+    ) -> Group | None:
+        """Get Satori guild information and all available members.
+
+        Args:
+            group_id: Guild ID to query. Defaults to the current message guild.
+            **kwargs: Reserved for compatibility with the common event interface.
+
+        Returns:
+            Enriched guild information, a basic guild when APIs are unavailable,
+            or None when no guild ID is available.
+        """
+        del kwargs
+        target_id = str(group_id or self.get_group_id())
+        if not target_id:
+            return None
+
+        current_group = self.message_obj.group
+        if current_group and current_group.group_id == target_id:
+            group = Group(
+                group_id=target_id,
+                group_name=current_group.group_name,
+                group_avatar=current_group.group_avatar,
+                group_owner=current_group.group_owner,
+                group_admins=current_group.group_admins,
+                members=current_group.members,
+                member_count=current_group.member_count,
+            )
+        else:
+            group = Group(group_id=target_id)
+
+        features = None
+        for login in getattr(self.adapter, "logins", []):
+            login_user = login.get("user") or {}
+            if (
+                login.get("platform") == self.platform
+                and login_user.get("id") == self.user_id
+            ):
+                features = login.get("features")
+                break
+
+        if features is None or "guild.get" in features:
+            try:
+                guild = await self.adapter.send_http_request(
+                    "POST",
+                    "/guild.get",
+                    {"guild_id": target_id},
+                    self.platform,
+                    self.user_id,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "[Satori] Failed to get guild %s: %s",
+                    target_id,
+                    exc,
+                )
+                guild = {}
+            if guild:
+                group.group_name = guild.get("name") or group.group_name
+                group.group_avatar = guild.get("avatar") or group.group_avatar
+
+        if features is not None and "guild.member.list" not in features:
+            return group
+
+        members: list[MessageMember] = []
+        member_count = 0
+        next_token = None
+        seen_tokens: set[str] = set()
+        while True:
+            data = {"guild_id": target_id}
+            if next_token:
+                data["next"] = next_token
+            try:
+                response = await self.adapter.send_http_request(
+                    "POST",
+                    "/guild.member.list",
+                    data,
+                    self.platform,
+                    self.user_id,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "[Satori] Failed to get members for guild %s: %s",
+                    target_id,
+                    exc,
+                )
+                break
+            if not response or not isinstance(response.get("data"), list):
+                break
+
+            member_count += len(response["data"])
+            for member in response["data"]:
+                user = member.get("user") or {}
+                user_id = user.get("id")
+                if not user_id:
+                    continue
+                members.append(
+                    MessageMember(
+                        user_id=str(user_id),
+                        nickname=member.get("nick")
+                        or user.get("nick")
+                        or user.get("name"),
+                    ),
+                )
+
+            next_token = response.get("next")
+            if not next_token:
+                group.members = members
+                group.member_count = member_count
+                break
+            if next_token in seen_tokens:
+                break
+            seen_tokens.add(next_token)
+
+        return group
+
+    @staticmethod
+    async def _image_to_data_url(component: Image) -> str | None:
+        """Resolve an image component to a MIME-aware data URL.
+
+        Args:
+            component: Image message component to resolve.
+
+        Returns:
+            A data URL preserving the detected image MIME type, or None when
+            the image cannot be resolved.
+        """
+
+        image_ref = component.url or component.file
+        if not image_ref:
+            return None
+        image_data = await resolve_media_ref_to_base64_data(
+            image_ref,
+            media_type="image",
+        )
+        return image_data.to_data_url() if image_data else None
 
     @classmethod
     async def send_with_adapter(
@@ -184,12 +329,14 @@ class SatoriPlatformEvent(AstrMessageEvent):
                                 await self.send(temp_chain)
                                 content_parts = []
                             try:
-                                image_base64 = await component.convert_to_base64()
-                                if image_base64:
+                                image_data_url = await self._image_to_data_url(
+                                    component
+                                )
+                                if image_data_url:
                                     img_chain = MessageChain(
                                         [
                                             Plain(
-                                                text=f'<img src="data:image/jpeg;base64,{image_base64}"/>',
+                                                text=f'<img src="{image_data_url}"/>',
                                             ),
                                         ],
                                     )
@@ -228,9 +375,9 @@ class SatoriPlatformEvent(AstrMessageEvent):
 
             elif isinstance(component, Image):
                 try:
-                    image_base64 = await component.convert_to_base64()
-                    if image_base64:
-                        return f'<img src="data:image/jpeg;base64,{image_base64}"/>'
+                    image_data_url = await self._image_to_data_url(component)
+                    if image_data_url:
+                        return f'<img src="{image_data_url}"/>'
                 except Exception as e:
                     logger.error(f"图片转换为base64失败: {e}")
 
@@ -260,6 +407,53 @@ class SatoriPlatformEvent(AstrMessageEvent):
 
             elif isinstance(component, Forward):
                 return f'<message id="{component.id}" forward/>'
+
+            elif isinstance(component, (ActionRow, Button)):
+                buttons = (
+                    component.buttons
+                    if isinstance(component, ActionRow)
+                    else [component]
+                )
+                if not buttons:
+                    fallback_text = (
+                        component.fallback_text
+                        if isinstance(component, ActionRow)
+                        else ""
+                    )
+                    return html.escape(fallback_text or "")
+
+                theme_map = {
+                    Button.Style.DEFAULT: "secondary",
+                    Button.Style.PRIMARY: "primary",
+                    Button.Style.SUCCESS: "success",
+                    Button.Style.DANGER: "danger",
+                }
+                button_elements = []
+                for button in buttons:
+                    label = html.escape(button.label)
+                    theme = theme_map[button.style]
+                    if isinstance(button.action, Button.CallbackAction):
+                        callback_id = html.escape(
+                            encode_button_callback(
+                                button.id,
+                                button.action.data,
+                                expires_at=component.action_expires_at
+                                if isinstance(component, ActionRow)
+                                else None,
+                            ),
+                            quote=True,
+                        )
+                        button_elements.append(
+                            f'<button id="{callback_id}" type="action" '
+                            f'theme="{theme}">{label}</button>'
+                        )
+                    elif isinstance(button.action, Button.UrlAction):
+                        href = html.escape(button.action.url, quote=True)
+                        button_elements.append(
+                            f'<button type="link" href="{href}" '
+                            f'theme="{theme}">{label}</button>'
+                        )
+                return "".join(button_elements)
 
             # 对于其他未处理的组件类型，返回空字符串
             return ""
@@ -321,9 +515,9 @@ class SatoriPlatformEvent(AstrMessageEvent):
 
             elif isinstance(component, Image):
                 try:
-                    image_base64 = await component.convert_to_base64()
-                    if image_base64:
-                        return f'<img src="data:image/jpeg;base64,{image_base64}"/>'
+                    image_data_url = await cls._image_to_data_url(component)
+                    if image_data_url:
+                        return f'<img src="{image_data_url}"/>'
                 except Exception as e:
                     logger.error(f"图片转换为base64失败: {e}")
 
@@ -353,6 +547,53 @@ class SatoriPlatformEvent(AstrMessageEvent):
 
             elif isinstance(component, Forward):
                 return f'<message id="{component.id}" forward/>'
+
+            elif isinstance(component, (ActionRow, Button)):
+                buttons = (
+                    component.buttons
+                    if isinstance(component, ActionRow)
+                    else [component]
+                )
+                if not buttons:
+                    fallback_text = (
+                        component.fallback_text
+                        if isinstance(component, ActionRow)
+                        else ""
+                    )
+                    return html.escape(fallback_text or "")
+
+                theme_map = {
+                    Button.Style.DEFAULT: "secondary",
+                    Button.Style.PRIMARY: "primary",
+                    Button.Style.SUCCESS: "success",
+                    Button.Style.DANGER: "danger",
+                }
+                button_elements = []
+                for button in buttons:
+                    label = html.escape(button.label)
+                    theme = theme_map[button.style]
+                    if isinstance(button.action, Button.CallbackAction):
+                        callback_id = html.escape(
+                            encode_button_callback(
+                                button.id,
+                                button.action.data,
+                                expires_at=component.action_expires_at
+                                if isinstance(component, ActionRow)
+                                else None,
+                            ),
+                            quote=True,
+                        )
+                        button_elements.append(
+                            f'<button id="{callback_id}" type="action" '
+                            f'theme="{theme}">{label}</button>'
+                        )
+                    elif isinstance(button.action, Button.UrlAction):
+                        href = html.escape(button.action.url, quote=True)
+                        button_elements.append(
+                            f'<button type="link" href="{href}" '
+                            f'theme="{theme}">{label}</button>'
+                        )
+                return "".join(button_elements)
 
             # 对于其他未处理的组件类型，返回空字符串
             return ""

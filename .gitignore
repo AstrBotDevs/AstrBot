@@ -9,6 +9,7 @@ uv.lock
 # IDE and editors
 .vscode
 .idea
+.zed/
 
 # Logs and temporary files
 botpy.log
@@ -45,6 +46,7 @@ astrbot/dashboard/dist/
 
 # AstrBot specific
 .astrbot
+.astrbot-tmp
 astrbot.lock
 
 # Other

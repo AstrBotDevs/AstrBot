@@ -7,7 +7,6 @@ from unittest.mock import patch
 
 import pytest
 
-
 # ═══════════════════════════════════════════════════════════════
 # ShipyardNeoBooter.capabilities
 # ═══════════════════════════════════════════════════════════════
@@ -17,7 +16,9 @@ class TestShipyardNeoBooterCapabilities:
     """Test capabilities property on ShipyardNeoBooter."""
 
     def _make_booter(self, sandbox_caps: list[str] | None = None):
-        from astrbot.core.computer.booters.shipyard_neo import ShipyardNeoBooter
+        from astrbot.core.astr_agent_runtime.computer.booters.shipyard_neo import (
+            ShipyardNeoBooter,
+        )
 
         booter = ShipyardNeoBooter(
             endpoint_url="http://localhost:8114",
@@ -71,7 +72,9 @@ def _make_req():
 def _import_apply_sandbox_tools():
     """Import _apply_sandbox_tools, skipping if circular-import fails."""
     try:
-        from astrbot.core.astr_main_agent import _apply_sandbox_tools
+        from astrbot.core.astr_agent_runtime.main_agent.computer_use import (
+            _apply_sandbox_tools,
+        )
 
         return _apply_sandbox_tools
     except ImportError:
@@ -93,9 +96,7 @@ class TestApplySandboxToolsConditional:
         config = _make_config("shipyard_neo")
         req = _make_req()
 
-        with patch(
-            "astrbot.core.computer.computer_client.session_booter", {}
-        ):
+        with patch("astrbot.core.astr_agent_runtime.computer.computer_client.session_booter", {}):
             fn(config, req, "session-1")
 
         names = self._tool_names(req)
@@ -113,7 +114,7 @@ class TestApplySandboxToolsConditional:
         )
 
         with patch(
-            "astrbot.core.computer.computer_client.session_booter",
+            "astrbot.core.astr_agent_runtime.computer.computer_client.session_booter",
             {"session-1": fake_booter},
         ):
             fn(config, req, "session-1")
@@ -126,12 +127,10 @@ class TestApplySandboxToolsConditional:
         fn = _import_apply_sandbox_tools()
         config = _make_config("shipyard_neo")
         req = _make_req()
-        fake_booter = SimpleNamespace(
-            capabilities=["python", "shell", "filesystem"]
-        )
+        fake_booter = SimpleNamespace(capabilities=["python", "shell", "filesystem"])
 
         with patch(
-            "astrbot.core.computer.computer_client.session_booter",
+            "astrbot.core.astr_agent_runtime.computer.computer_client.session_booter",
             {"session-1": fake_booter},
         ):
             fn(config, req, "session-1")
@@ -151,7 +150,7 @@ class TestApplySandboxToolsConditional:
         fake_booter = SimpleNamespace(capabilities=["python"])
 
         with patch(
-            "astrbot.core.computer.computer_client.session_booter",
+            "astrbot.core.astr_agent_runtime.computer.computer_client.session_booter",
             {"session-1": fake_booter},
         ):
             fn(config, req, "session-1")
@@ -169,8 +168,10 @@ class TestApplySandboxToolsConditional:
 class TestResolveProfile:
     """Test smart profile selection logic."""
 
-    def _make_booter(self, profile: str = "python-default"):
-        from astrbot.core.computer.booters.shipyard_neo import ShipyardNeoBooter
+    def _make_booter(self, profile: str = ""):
+        from astrbot.core.astr_agent_runtime.computer.booters.shipyard_neo import (
+            ShipyardNeoBooter,
+        )
 
         return ShipyardNeoBooter(
             endpoint_url="http://localhost:8114",
@@ -187,8 +188,16 @@ class TestResolveProfile:
         assert result == "browser-python"
 
     @pytest.mark.asyncio
+    async def test_user_specified_default_profile_honoured(self):
+        """User explicitly sets python-default → use it directly."""
+        booter = self._make_booter(profile="python-default")
+        client = SimpleNamespace()  # list_profiles should NOT be called
+        result = await booter._resolve_profile(client)
+        assert result == "python-default"
+
+    @pytest.mark.asyncio
     async def test_selects_browser_profile(self):
-        """When multiple profiles available, prefer one with browser."""
+        """When profile is empty, prefer an available profile with browser."""
 
         async def _mock_list_profiles():
             return SimpleNamespace(
@@ -275,13 +284,13 @@ class TestBaseComputerBooter:
     """Verify base class defaults."""
 
     def test_capabilities_default_none(self):
-        from astrbot.core.computer.booters.base import ComputerBooter
+        from astrbot.core.astr_agent_runtime.computer.booters.base import ComputerBooter
 
         booter = ComputerBooter()
         assert booter.capabilities is None
 
     def test_browser_default_none(self):
-        from astrbot.core.computer.booters.base import ComputerBooter
+        from astrbot.core.astr_agent_runtime.computer.booters.base import ComputerBooter
 
         booter = ComputerBooter()
         assert booter.browser is None

@@ -1,4 +1,3 @@
-
 # AI
 
 AstrBot provides built-in support for multiple Large Language Model (LLM) providers and offers a unified interface, making it convenient for plugin developers to access various LLM services.
@@ -25,11 +24,89 @@ provider_id = await self.context.get_current_chat_provider_id(umo=umo)
 
 ```py
 llm_resp = await self.context.llm_generate(
-    chat_provider_id=provider_id, # Chat model ID
+    chat_provider_id=provider_id,  # Chat model ID
     prompt="Hello, world!",
 )
 # print(llm_resp.completion_text) # Get the returned text
 ```
+
+## Structured Decisions
+
+A Decision Provider handles low-latency structured choices, such as whether to reply, which message to answer, or which branch to execute. Configure one under **Providers → Decision** in the WebUI, then call it from a plugin through `self.context.decision`. It is independent of the chat model.
+
+One request can answer multiple questions. `state` is passed to the decision model as-is and must be a `str`, `list`, or `dict`:
+
+```py
+from astrbot.api.provider import (
+    DecisionBooleanQuestion,
+    DecisionChoiceAnswer,
+    DecisionChoiceQuestion,
+    DecisionScoreQuestion,
+)
+
+
+recent_messages = [
+    {"role": "user", "content": "I cannot log in; every request returns 500."},
+]
+
+answers = await self.context.decision.ask(
+    {
+        "should_reply": DecisionChoiceQuestion(
+            instructions="Should the assistant reply to this message?",
+            criteria={"reply": "Reply now", "ignore": "Stay silent"},
+        ),
+        "target": DecisionChoiceQuestion(
+            instructions="Which message should the reply focus on?",
+            criteria={"latest": "Latest message", "previous": "Previous message"},
+        ),
+        "needs_tool": DecisionBooleanQuestion(
+            "Does this request require a tool call?"
+        ),
+        "severity": DecisionScoreQuestion(
+            instructions="How severe is the reported problem?",
+            criteria=[
+                "No impact on normal use",
+                "Some features fail, but a workaround exists",
+                "Core features are unavailable with no workaround",
+            ],
+        ),
+    },
+    state={"messages": recent_messages},
+)
+
+should_reply = answers["should_reply"]
+if (
+    isinstance(should_reply, DecisionChoiceAnswer)
+    and should_reply.choice == "reply"
+    and should_reply.probability >= 0.7
+):
+    target = answers["target"]
+    # Use target.choice and answers["needs_tool"].probability in later logic
+```
+
+`DecisionChoiceQuestion.criteria` maps option IDs to descriptions and corresponds to `criteria` in the System One request. For choice questions, `choice` is the selected option ID, `probabilities` contains the full distribution, and `confidence` is the model confidence. For boolean questions, `probability` is the probability that the statement is true. Business rules such as proactive-reply thresholds remain the caller's responsibility.
+
+Results use three independent frozen dataclasses: `DecisionChoiceAnswer`, `DecisionBooleanAnswer`, and `DecisionScoreAnswer`. `DecisionAnswer` is their union type. After calling `ask()`, use `isinstance()` to identify the result type before accessing its fields. `choose()` returns `DecisionChoiceAnswer`, while `yes_no()` returns `bool`.
+
+`DecisionScoreQuestion.criteria` is a list of 2–10 string levels, ordered from lowest to highest and numbered from 0. `DecisionScoreAnswer.score` is a probability-weighted rating, possibly fractional, from `0` to `len(criteria) - 1`. Both `legend` and `probabilities` use string level numbers such as `"0"` as keys, mapping to descriptions and probabilities; `confidence` reports certainty. A score answer contains only these four fields. All three question types can be mixed in one `ask()` call.
+
+Use the convenience methods for a single question:
+
+```py
+choice = await self.context.decision.choose(
+    question="Which reply strategy should be used?",
+    criteria={"short": "A brief reply", "detailed": "A detailed reply"},
+    state=recent_messages,
+)
+
+should_reply = await self.context.decision.yes_no(
+    question="Should the assistant reply now?",
+    state=recent_messages,
+    threshold=0.7,
+)
+```
+
+Pass `provider_id="provider_id"` to use a specific configured decision provider; otherwise the default one is used. `DecisionError` is raised for an unconfigured provider, timeout, connection failure, HTTP error, invalid JSON, or an answer outside the requested contract. Underlying details are written to the AstrBot log, so plugins can catch the exception and decide whether to skip or degrade this decision.
 
 ## Defining Tools
 
@@ -39,9 +116,12 @@ Tools enable large language models to invoke external capabilities.
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
-from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.agent.tool import FunctionTool, ToolExecResult
-from astrbot.core.astr_agent_context import AstrAgentContext
+# Before AstrBot v4.30.0:
+# from astrbot.core.agent.run_context import ContextWrapper
+# from astrbot.core.agent.tool import FunctionTool, ToolExecResult
+# from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.api import FunctionTool, ToolExecResult
+from astrbot.api.agents import AstrAgentContext, ContextWrapper
 
 
 @dataclass
@@ -67,6 +147,60 @@ class BilibiliTool(FunctionTool[AstrAgentContext]):
         return "1. Video Title: How to Use AstrBot\nVideo Link: xxxxxx"
 ```
 
+## Registering Tools with AstrBot
+
+Once a Tool is defined, if you want it to be automatically invoked during user conversations, register it in your plugin's `__init__` method:
+
+```py
+class MyPlugin(Star):
+    def __init__(self, context: Context):
+        super().__init__(context)
+        # >= v4.5.1:
+        self.context.add_llm_tools(BilibiliTool(), SecondTool(), ...)
+
+        # < v4.5.1:
+        tool_mgr = self.context.provider_manager.llm_tools
+        tool_mgr.func_list.append(BilibiliTool())
+```
+
+> [!WARNING]
+> `context.register_llm_tool()` is deprecated. Do not use it in new plugins.
+>
+> If you must use it for legacy compatibility, `func_args` must be a **list of dicts** in this format:
+> ```py
+> func_args = [{"type": "string", "name": "arg_name", "description": "..."}, ...]
+> ```
+> Passing a list of strings or any other format will raise `AttributeError: 'str' object has no attribute 'pop'`.
+
+### Registering Tools via Decorator
+
+Alternatively, you can use the `@filter.llm_tool` decorator to define and register a tool in one step. Make sure to follow the exact format below, including the docstring — AstrBot parses the docstring to generate the parameter schema:
+
+```py{3,4,5,6,7}
+@filter.llm_tool(name="get_weather")  # If name is omitted, the function name is used
+async def get_weather(
+    self, event: AstrMessageEvent, location: str
+) -> MessageEventResult:
+    """Get weather information.
+
+    Args:
+        location(string): The location to query
+    """
+    resp = self.get_weather_from_api(location)
+    yield event.plain_result("Weather: " + resp)
+```
+
+In `location(string): The location to query`, `location` is the parameter name, `string` is the type, and the remainder is the description.
+
+Supported types: `string`, `number`, `object`, `boolean`, `array`. Since v4.5.7, array subtypes are supported, e.g. `array[string]`.
+
+> [!WARNING]
+> **The `Args:` block is required and must be formatted correctly.**
+>
+> The `@filter.llm_tool` decorator generates the parameter schema by parsing the function's docstring — it does **not** read Python type annotations. If the docstring is missing an `Args:` block, or the format does not follow `param_name(type): description`, the generated schema will be empty. Any arguments passed by the LLM will be silently dropped, causing the function to fail with a missing-argument error.
+>
+> Additionally, passing `parameters=...` directly to the decorator is **not supported** and will be silently ignored. If you need manual control over the schema, use the `@dataclass` + `add_llm_tools()` approach above.
+
 ## Invoking Agents
 
 > [!TIP]
@@ -83,8 +217,8 @@ llm_resp = await self.context.tool_loop_agent(
     chat_provider_id=prov_id,
     prompt="Search for videos related to AstrBot on Bilibili.",
     tools=ToolSet([BilibiliTool()]),
-    max_steps=30, # Maximum agent execution steps
-    tool_call_timeout=120, # Tool invocation timeout
+    max_steps=30,  # Maximum agent execution steps
+    tool_call_timeout=120,  # Tool invocation timeout
 )
 # print(llm_resp.completion_text) # Get the returned text
 ```
@@ -106,13 +240,23 @@ In the example below, we define a Main Agent responsible for delegating tasks to
 Define Tools:
 
 ```py
+# Before AstrBot v4.30.0:
+# from astrbot.core.agent.run_context import ContextWrapper
+# from astrbot.core.agent.tool import FunctionTool, ToolExecResult, ToolSet
+# from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.api import FunctionTool, ToolExecResult, ToolSet, logger
+from astrbot.api.agents import AstrAgentContext, ContextWrapper
+from pydantic import Field
+from pydantic.dataclasses import dataclass
+
+
 @dataclass
 class AssignAgentTool(FunctionTool[AstrAgentContext]):
     """Main agent uses this tool to decide which sub-agent to delegate a task to."""
 
     name: str = "assign_agent"
     description: str = "Assign an agent to a task based on the given query"
-    parameters: dict = field(
+    parameters: dict = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -127,7 +271,7 @@ class AssignAgentTool(FunctionTool[AstrAgentContext]):
 
     async def call(
         self, context: ContextWrapper[AstrAgentContext], **kwargs
-    ) -> str | CallToolResult:
+    ) -> ToolExecResult:
         # Here you would implement the actual agent assignment logic.
         # For demonstration purposes, we'll return a dummy response.
         return "Based on the query, you should assign agent 1."
@@ -139,7 +283,7 @@ class WeatherTool(FunctionTool[AstrAgentContext]):
 
     name: str = "weather"
     description: str = "Get weather information for a location"
-    parameters: dict = field(
+    parameters: dict = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -154,7 +298,7 @@ class WeatherTool(FunctionTool[AstrAgentContext]):
 
     async def call(
         self, context: ContextWrapper[AstrAgentContext], **kwargs
-    ) -> str | CallToolResult:
+    ) -> ToolExecResult:
         city = kwargs["city"]
         # Here you would implement the actual weather fetching logic.
         # For demonstration purposes, we'll return a dummy response.
@@ -167,7 +311,7 @@ class SubAgent1(FunctionTool[AstrAgentContext]):
 
     name: str = "subagent1_name"
     description: str = "subagent1_description"
-    parameters: dict = field(
+    parameters: dict = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -182,7 +326,7 @@ class SubAgent1(FunctionTool[AstrAgentContext]):
 
     async def call(
         self, context: ContextWrapper[AstrAgentContext], **kwargs
-    ) -> str | CallToolResult:
+    ) -> ToolExecResult:
         ctx = context.context.context
         event = context.context.event
         logger.info(f"the llm context messages: {context.messages}")
@@ -204,7 +348,7 @@ class SubAgent2(FunctionTool[AstrAgentContext]):
 
     name: str = "subagent2_name"
     description: str = "subagent2_description"
-    parameters: dict = field(
+    parameters: dict = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -219,7 +363,7 @@ class SubAgent2(FunctionTool[AstrAgentContext]):
 
     async def call(
         self, context: ContextWrapper[AstrAgentContext], **kwargs
-    ) -> str | CallToolResult:
+    ) -> ToolExecResult:
         return "I am useless :(, you shouldn't call me :("
 ```
 
@@ -244,12 +388,84 @@ async def test(self, event: AstrMessageEvent):
     yield event.plain_result(llm_resp.completion_text)
 ```
 
+## Running an Agent in an Existing Conversation
+
+Use `self.context.agent.run_turn()` for programmatic inputs that inherit the target conversation's persona, history, tools, skills and Agent hooks. Plugins do not need to construct events or runners. The built-in Agent runtime is currently supported.
+
+```py
+from astrbot.api.agents import PlainInput
+
+run = await self.context.agent.run_turn(
+    umo=event.unified_msg_origin,
+    input_message=[PlainInput(text="Video analysis is complete. Explain the result briefly.")],
+)
+result = await run.result()
+```
+
+Submission returns after binding to a runtime turn, without waiting for model execution. Inputs in the same session execute serially and read fresh history when admitted. AstrBot sends replies through its normal output handling by default; do not send `result.text` again. `result()` waits for execution, history persistence and Core output handling. Cancelling a waiter leaves execution running; use `await run.cancel()` to stop the run.
+
+The returned `AgentRun` exposes turn identity, output, cancellation, steering, and follow-up. Its `session` property gives a read-only status snapshot.
+
+Core selects a registered implementation using the profile's `agent.runtime`. After `ctx.agent.register_runtime(name, runtime)`, an implementation can serve main turns or be called as a subagent by the built-in runtime. Unregistered names fail explicitly; existing Dify, Coze and other legacy paths retain their execution flow.
+
+`/stop` calls `turn.request_stop()` for submitted turns in the matching UMO. For a running turn, `AgentSession.request_stop_turn(turn)` returns `True` if the runtime accepts the request and will settle the turn, or `False` to fall back to `cancel_turn()` and local task cancellation. Queued turns are cancelled directly. `request_stop()` returns immediately, and `await turn.result()` waits for cleanup.
+
+Core supplies public `AgentInput`: the original `AstrMessageEvent`, permissions, optional plain/image/file content, authorized plugin tools/skills, and a streaming preference. Core matches and removes the AI trigger prefix before dispatch, passing the processed text in `content` without changing the original event. Platform inputs without a text override may retain `content=None`; source attachments remain available on the event. SDK inputs carry explicit content. Runtime configuration is passed through `open_session(..., options={"config": ...})` for the implementation to interpret. Core does not construct native `MainAgentInput`, `MainAgentBuildConfig`, or model requests.
+
+Reuse `AgentSession.run_turn()` when implementing a runtime. Core supplies admission through the scheduling argument `run_turn(input, admit=...)`, independently of `AgentInput`. It runs inside the session lock and the implementation's `_execution_scope()`, before `execute_turn()`. AI enablement, permissions and plugin contributions are refreshed after queued work; do not bypass admission by replacing scheduling. Additional locks belong to the runtime. Optional `active_turn(umo)` supports discovery for ordinary-message steering; its default is `None`, while the session still handles queued execution. The built-in runtime constructs `ProviderRequest`, resolves model configuration, and invokes existing model hooks in its own execution stage. External implementations need not import `astr_agent_runtime`.
+
+Set `send_to_user=False` to handle the model reply yourself:
+
+```py
+from astrbot.api.event import MessageChain
+
+run = await self.context.agent.run_turn(
+    umo=event.unified_msg_origin,
+    input_message=[PlainInput(text="Summarize the video analysis.")],
+    send_to_user=False,
+)
+result = await run.result()
+if result.text:
+    await self.context.send_message(
+        event.unified_msg_origin,
+        MessageChain().message(f"Video analysis: {result.text}"),
+    )
+```
+
+`send_to_user=False` skips Core's automatic output presentation, platform reply decoration and automatic TTS, while preserving execution history. Explicit tool or plugin calls to `event.send()`, `Context.send_message()` or `send_message_to_user` still send normally; the framework does not intercept them.
+
+Multiple independent `events()` observers can watch or replay runtime events such as `message.completed` and tool calls without intercepting output or duplicating delivery. The SDK's terminal `turn.finished` event follows automatic output completion.
+
+```py
+# Queue another turn in this exact conversation, inheriting the output policy.
+next_run = await run.follow_up(
+    input_message=[PlainInput(text="Now suggest three improvements.")],
+)
+
+# Submit steering while the current turn is still active.
+receipt = await run.steer(
+    input_message=[PlainInput(text="Also focus on safety concerns.")],
+)
+if receipt is not None:
+    consumed = await receipt
+```
+
+Follow-ups retain the original runtime and conversation even if the profile runtime or the UMO's current selection changes. Steering returns `None` when rejected, or an `InputReceipt` when accepted. Awaiting it confirms whether input was actually consumed and persisted. Rejected steering never silently becomes a queued turn. Images and files in steering currently become text references.
+
+`run.session.state` is `idle`, `queued`, `running`, or `closed`. The snapshot contains `ref`, `pending_turn_count`, and `active_turn_id`. Read the property again to refresh it.
+
+Core resolves permissions from `source_event` or the current active same-UMO event. Background calls without a source run as members. A source event from another UMO is rejected.
+
+A tool must not wait for another queued turn in its own session: that turn is waiting for the tool's current turn to finish. Submit and return, or use steering as appropriate.
+
 ## Conversation Manager
 
 ### Getting the Current LLM Conversation History for a Session
 
 ```py
-from astrbot.core.conversation_mgr import Conversation
+# Before AstrBot v4.30.0:
+# from astrbot.core.conversation_mgr import Conversation
+from astrbot.api.provider import Conversation
 
 uid = event.unified_msg_origin
 conv_mgr = self.context.conversation_manager
@@ -257,7 +473,7 @@ curr_cid = await conv_mgr.get_curr_conversation_id(uid)
 conversation = await conv_mgr.get_conversation(uid, curr_cid)  # Conversation
 ```
 
-::: details Conversation 类型定义
+::: details Conversation Type Definition
 
 ```py
 @dataclass
@@ -283,6 +499,36 @@ class Conversation:
 ```
 
 :::
+
+### Quickly Adding LLM Records to a Conversation `add_message_pair`
+
+```py
+# Before AstrBot v4.30.0:
+# from astrbot.core.agent.message import AssistantMessageSegment, UserMessageSegment, TextPart
+from astrbot.api.agents import (
+    AssistantMessageSegment,
+    UserMessageSegment,
+    TextPart,
+)
+
+conv_mgr = self.context.conversation_manager
+provider_id = await self.context.get_current_chat_provider_id(event.unified_msg_origin)
+curr_cid = await conv_mgr.get_curr_conversation_id(event.unified_msg_origin)
+user_msg = UserMessageSegment(content=[TextPart(text="hi")])
+llm_resp = await self.context.llm_generate(
+    chat_provider_id=provider_id,  # Chat model ID
+    contexts=[
+        user_msg
+    ],  # When prompt is not specified, contexts is used as input; if both prompt and contexts are provided, prompt is appended to the end of the LLM input
+)
+await conv_mgr.add_message_pair(
+    cid=curr_cid,
+    user_message=user_msg,
+    assistant_message=AssistantMessageSegment(
+        content=[TextPart(text=llm_resp.completion_text)]
+    ),
+)
+```
 
 ### Main Methods
 
@@ -438,10 +684,9 @@ persona_mgr = self.context.persona_manager
 - **Returns**  
   `Personality` – Default persona object in v3 format
 
-::: details Persona / Personality 类型定义
+::: details Persona / Personality Type Definition
 
 ```py
-
 class Persona(SQLModel, table=True):
     """Persona is a set of instructions for LLMs to follow.
 

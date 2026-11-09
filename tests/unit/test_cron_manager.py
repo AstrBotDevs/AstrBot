@@ -1,12 +1,20 @@
 """Tests for CronJobManager."""
 
+import asyncio
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
+from zoneinfo import ZoneInfo
 
 import pytest
 
-from astrbot.core.cron.manager import CronJobManager, CronJobSchedulingError
+from astrbot.core.cron.manager import (
+    CronJobManager,
+    CronJobSchedulingError,
+    _normalize_crontab_day_of_week,
+)
 from astrbot.core.db.po import CronJob
+from astrbot.core.platform.platform_metadata import PlatformMetadata
 
 
 @pytest.fixture
@@ -25,6 +33,11 @@ def mock_db():
 def mock_context():
     """Create a mock Context."""
     ctx = MagicMock()
+    ctx.get_platform_inst.return_value = SimpleNamespace(
+        meta=lambda: PlatformMetadata(
+            id="test", name="test_platform", description="Test"
+        )
+    )
     ctx.get_config = MagicMock(return_value={"admins_id": []})
     ctx.conversation_manager = MagicMock()
     return ctx
@@ -64,6 +77,8 @@ class TestCronJobManagerInit:
         assert manager.db == mock_db
         assert manager._basic_handlers == {}
         assert manager._started is False
+        assert manager._db_synced is False
+        assert manager._deleting_jobs == {}
 
 
 class TestCronJobManagerStart:
@@ -89,6 +104,52 @@ class TestCronJobManagerStart:
 
         # Should only sync once
         assert mock_db.list_cron_jobs.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_start_resyncs_after_shutdown(
+        self, cron_manager, mock_db, mock_context
+    ):
+        """Test that restarting the manager resyncs the database."""
+        mock_db.list_cron_jobs.return_value = []
+
+        await cron_manager.start(mock_context)
+        await cron_manager.shutdown()
+
+        assert cron_manager._started is False
+        assert cron_manager._db_synced is False
+
+        await cron_manager.start(mock_context)
+
+        assert mock_db.list_cron_jobs.call_count == 2
+        assert cron_manager._started is True
+        assert cron_manager._db_synced is True
+
+        await cron_manager.shutdown()
+
+    @pytest.mark.asyncio
+    async def test_start_syncs_after_scheduler_started_early(
+        self, cron_manager, mock_db, mock_context, sample_cron_job
+    ):
+        """Test that early scheduler startup does not skip database sync."""
+        mock_db.create_cron_job.return_value = sample_cron_job
+        mock_db.list_cron_jobs.return_value = [sample_cron_job]
+
+        await cron_manager.add_basic_job(
+            name="Early Job",
+            cron_expression="0 9 * * *",
+            handler=MagicMock(),
+            enabled=True,
+            persistent=False,
+        )
+
+        await cron_manager.start(mock_context)
+
+        assert cron_manager._started is True
+        assert cron_manager._db_synced is True
+        assert cron_manager.scheduler.get_job(sample_cron_job.job_id) is not None
+        assert mock_db.list_cron_jobs.call_count == 1
+
+        await cron_manager.shutdown()
 
 
 class TestCronJobManagerShutdown:
@@ -152,7 +213,9 @@ class TestAddBasicJob:
         assert sample_cron_job.job_id in cron_manager._basic_handlers
 
     @pytest.mark.asyncio
-    async def test_add_basic_job_with_timezone(self, cron_manager, mock_db, sample_cron_job):
+    async def test_add_basic_job_with_timezone(
+        self, cron_manager, mock_db, sample_cron_job
+    ):
         """Test adding a basic job with timezone."""
         mock_db.create_cron_job.return_value = sample_cron_job
 
@@ -189,7 +252,9 @@ class TestAddActiveJob:
         mock_db.create_cron_job.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_add_active_job_run_once(self, cron_manager, mock_db, sample_cron_job):
+    async def test_add_active_job_run_once(
+        self, cron_manager, mock_db, sample_cron_job
+    ):
         """Test adding a run-once active job with an invalid returned job."""
         sample_cron_job.job_type = "active_agent"
         sample_cron_job.run_once = True
@@ -225,6 +290,7 @@ class TestUpdateJob:
             enabled=False,  # Disabled to avoid scheduling
         )
         mock_db.update_cron_job.return_value = updated_job
+        mock_db.get_cron_job.return_value = sample_cron_job
 
         result = await cron_manager.update_job("test-job-id", name="Updated Job")
 
@@ -234,6 +300,7 @@ class TestUpdateJob:
     @pytest.mark.asyncio
     async def test_update_job_not_found(self, cron_manager, mock_db):
         """Test updating a non-existent job."""
+        mock_db.get_cron_job.return_value = None
         mock_db.update_cron_job.return_value = None
 
         result = await cron_manager.update_job("non-existent", name="Updated")
@@ -253,6 +320,113 @@ class TestDeleteJob:
 
         mock_db.delete_cron_job.assert_called_once_with("test-job-id")
         assert "test-job-id" not in cron_manager._basic_handlers
+
+    @pytest.mark.asyncio
+    async def test_delete_job_cancels_run_blocked_in_row_lookup(
+        self, cron_manager, mock_db, sample_cron_job
+    ):
+        """A run that fetched the row must not escape deletion before registering."""
+        lookup_started = asyncio.Event()
+        allow_lookup = asyncio.Event()
+
+        async def delayed_get(job_id):
+            lookup_started.set()
+            await allow_lookup.wait()
+            return sample_cron_job
+
+        mock_db.get_cron_job.side_effect = delayed_get
+        handler = MagicMock()
+        cron_manager._basic_handlers[sample_cron_job.job_id] = handler
+
+        run_task = asyncio.create_task(cron_manager._run_job(sample_cron_job.job_id))
+        await asyncio.wait_for(lookup_started.wait(), 2)
+        await asyncio.wait_for(cron_manager.delete_job(sample_cron_job.job_id), 2)
+
+        assert run_task.cancelled()
+        allow_lookup.set()
+        handler.assert_not_called()
+        mock_db.delete_cron_job.assert_awaited_once_with(sample_cron_job.job_id)
+        assert cron_manager._running_tasks == {}
+        assert cron_manager._deleting_jobs == {}
+
+    @pytest.mark.asyncio
+    async def test_delete_job_blocks_run_starting_after_deletion_begins(
+        self, cron_manager, mock_db, sample_cron_job
+    ):
+        """A run must not start once the job deletion marker is set."""
+        delete_started = asyncio.Event()
+        allow_delete = asyncio.Event()
+
+        async def delayed_delete(job_id):
+            delete_started.set()
+            await allow_delete.wait()
+
+        mock_db.delete_cron_job.side_effect = delayed_delete
+        mock_db.get_cron_job.return_value = sample_cron_job
+        handler = MagicMock()
+        cron_manager._basic_handlers[sample_cron_job.job_id] = handler
+
+        delete_task = asyncio.create_task(
+            cron_manager.delete_job(sample_cron_job.job_id)
+        )
+        await asyncio.wait_for(delete_started.wait(), 2)
+
+        await asyncio.wait_for(cron_manager._run_job(sample_cron_job.job_id), 2)
+
+        allow_delete.set()
+        await asyncio.wait_for(delete_task, 2)
+
+        handler.assert_not_called()
+        mock_db.get_cron_job.assert_not_awaited()
+        assert cron_manager._deleting_jobs == {}
+
+    @pytest.mark.asyncio
+    async def test_concurrent_deletes_keep_marker_until_last_finishes(
+        self, cron_manager, mock_db, sample_cron_job
+    ):
+        """One deletion finishing must not unblock runs while another is pending."""
+        first_delete_started = asyncio.Event()
+        second_delete_started = asyncio.Event()
+        allow_first_delete = asyncio.Event()
+        allow_second_delete = asyncio.Event()
+        delete_calls = 0
+
+        async def delayed_delete(job_id):
+            nonlocal delete_calls
+            delete_calls += 1
+            if delete_calls == 1:
+                first_delete_started.set()
+                await allow_first_delete.wait()
+            else:
+                second_delete_started.set()
+                await allow_second_delete.wait()
+
+        mock_db.delete_cron_job.side_effect = delayed_delete
+        mock_db.get_cron_job.return_value = sample_cron_job
+        handler = MagicMock()
+        cron_manager._basic_handlers[sample_cron_job.job_id] = handler
+
+        first_delete = asyncio.create_task(
+            cron_manager.delete_job(sample_cron_job.job_id)
+        )
+        second_delete = asyncio.create_task(
+            cron_manager.delete_job(sample_cron_job.job_id)
+        )
+        await asyncio.wait_for(first_delete_started.wait(), 2)
+        await asyncio.wait_for(second_delete_started.wait(), 2)
+
+        allow_first_delete.set()
+        await asyncio.wait_for(first_delete, 2)
+        assert cron_manager._deleting_jobs == {sample_cron_job.job_id: 1}
+
+        await asyncio.wait_for(cron_manager._run_job(sample_cron_job.job_id), 2)
+
+        allow_second_delete.set()
+        await asyncio.wait_for(second_delete, 2)
+
+        handler.assert_not_called()
+        mock_db.get_cron_job.assert_not_awaited()
+        assert cron_manager._deleting_jobs == {}
 
 
 class TestListJobs:
@@ -292,7 +466,9 @@ class TestSyncFromDb:
         mock_db.list_cron_jobs.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_sync_from_db_skips_disabled(self, cron_manager, mock_db, sample_cron_job):
+    async def test_sync_from_db_skips_disabled(
+        self, cron_manager, mock_db, sample_cron_job
+    ):
         """Test that sync skips disabled jobs."""
         sample_cron_job.enabled = False
         mock_db.list_cron_jobs.return_value = [sample_cron_job]
@@ -304,7 +480,9 @@ class TestSyncFromDb:
         mock_schedule.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_sync_from_db_skips_non_persistent(self, cron_manager, mock_db, sample_cron_job):
+    async def test_sync_from_db_skips_non_persistent(
+        self, cron_manager, mock_db, sample_cron_job
+    ):
         """Test that sync skips non-persistent jobs."""
         sample_cron_job.persistent = False
         mock_db.list_cron_jobs.return_value = [sample_cron_job]
@@ -361,8 +539,19 @@ class TestRemoveScheduled:
 class TestScheduleJob:
     """Tests for _schedule_job method."""
 
+    def test_normalize_crontab_day_of_week(self):
+        """Test standard crontab weekday numbers are normalized."""
+        assert _normalize_crontab_day_of_week("0") == "sun"
+        assert _normalize_crontab_day_of_week("7") == "sun"
+        assert _normalize_crontab_day_of_week("1-5") == "mon,tue,wed,thu,fri"
+        assert _normalize_crontab_day_of_week("*/2") == "sun,tue,thu,sat"
+        assert _normalize_crontab_day_of_week("0-6") == "*"
+        assert _normalize_crontab_day_of_week("mon-fri") == "mon-fri"
+
     @pytest.mark.asyncio
-    async def test_schedule_job_basic(self, cron_manager, sample_cron_job, mock_context):
+    async def test_schedule_job_basic(
+        self, cron_manager, sample_cron_job, mock_context
+    ):
         """Test scheduling a basic job."""
         mock_db = cron_manager.db
         mock_db.list_cron_jobs = AsyncMock(return_value=[])
@@ -374,7 +563,33 @@ class TestScheduleJob:
         assert cron_manager.scheduler.get_job("test-job-id") is not None
 
     @pytest.mark.asyncio
-    async def test_schedule_job_with_timezone(self, cron_manager, sample_cron_job, mock_context):
+    async def test_schedule_job_uses_standard_crontab_weekday_numbers(
+        self, cron_manager, sample_cron_job, mock_context
+    ):
+        """Test Sunday=0 crontab jobs are scheduled for Sunday."""
+        sample_cron_job.cron_expression = "0 9 * * 0"
+        sample_cron_job.timezone = "Asia/Shanghai"
+        mock_db = cron_manager.db
+        mock_db.list_cron_jobs = AsyncMock(return_value=[])
+        mock_db.update_cron_job = AsyncMock()
+
+        await cron_manager.start(mock_context)
+        cron_manager._schedule_job(sample_cron_job)
+
+        aps_job = cron_manager.scheduler.get_job("test-job-id")
+        assert aps_job is not None
+        next_fire_time = aps_job.trigger.get_next_fire_time(
+            None,
+            datetime(2026, 6, 22, tzinfo=ZoneInfo("Asia/Shanghai")),
+        )
+        assert next_fire_time == datetime(
+            2026, 6, 28, 9, 0, tzinfo=ZoneInfo("Asia/Shanghai")
+        )
+
+    @pytest.mark.asyncio
+    async def test_schedule_job_with_timezone(
+        self, cron_manager, sample_cron_job, mock_context
+    ):
         """Test scheduling a job with timezone."""
         sample_cron_job.timezone = "America/New_York"
         mock_db = cron_manager.db
@@ -386,7 +601,9 @@ class TestScheduleJob:
         assert cron_manager.scheduler.get_job("test-job-id") is not None
 
     @pytest.mark.asyncio
-    async def test_schedule_job_invalid_timezone(self, cron_manager, sample_cron_job, mock_context):
+    async def test_schedule_job_invalid_timezone(
+        self, cron_manager, sample_cron_job, mock_context
+    ):
         """Test scheduling a job with invalid timezone."""
         sample_cron_job.timezone = "Invalid/Timezone"
         mock_db = cron_manager.db
@@ -448,7 +665,69 @@ class TestRunJob:
         mock_db.update_cron_job.assert_not_called()
 
 
-class TestRunBasicJob:
+class TestRunActiveAgentJob:
+    """Tests for active agent cron job execution."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("session", [None, "", "   "])
+    async def test_job_requires_a_target_umo(
+        self, cron_manager, sample_cron_job, mock_context, monkeypatch, session
+    ):
+        """Reject missing targets without manufacturing a cron session.
+
+        Args:
+            cron_manager: Scheduler under test.
+            sample_cron_job: Job whose payload lacks a usable target.
+            mock_context: Agent services that must remain unused.
+            monkeypatch: Pytest patch manager.
+            session: Missing or blank target session value.
+        """
+        wake = AsyncMock()
+        monkeypatch.setattr("astrbot.core.agent_wakeup.wake_main_agent", wake)
+        cron_manager.ctx = mock_context
+        sample_cron_job.payload = {"session": session}
+        with pytest.raises(ValueError, match="has no target UMO"):
+            await cron_manager._run_active_agent_job(
+                sample_cron_job, datetime(2026, 11, 1, tzinfo=timezone.utc)
+            )
+        wake.assert_not_awaited()
+        mock_context.get_config.assert_not_called()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("origin", ["tool", "api"])
+    async def test_job_supplies_its_wakeup_source(
+        self, cron_manager, sample_cron_job, mock_context, mock_db, monkeypatch, origin
+    ):
+        """Keep job provenance separate from its delivery target and permissions.
+
+        Args:
+            cron_manager: Scheduler under test.
+            sample_cron_job: Job carrying the target conversation.
+            mock_context: Services resolving the caller's permissions.
+            monkeypatch: Pytest patch manager.
+            origin: Whether the task was created by an ordinary caller or the API.
+        """
+        wake = AsyncMock()
+        monkeypatch.setattr("astrbot.core.agent_wakeup.wake_main_agent", wake)
+        cron_manager.ctx = mock_context
+        sample_cron_job.payload = {
+            "session": "target:GroupMessage:group-id",
+            "note": "Continue the scheduled task.",
+            "origin": origin,
+        }
+        sample_cron_job.job_type = "active_agent"
+        mock_db.get_cron_job.return_value = sample_cron_job
+        await cron_manager._run_job(sample_cron_job.job_id)
+        assert mock_db.update_cron_job.await_args.kwargs["status"] == "dispatched"
+        kwargs = wake.await_args.kwargs
+        assert kwargs["umo"] == "target:GroupMessage:group-id"
+        assert kwargs["source"] == "cron"
+        assert kwargs["source_id"] == sample_cron_job.job_id
+        assert kwargs["role"] == ("admin" if origin == "api" else "member")
+        assert "Continue the scheduled task." in kwargs["user_prompt"]
+        assert kwargs["user_prompt"].startswith("<system_reminder>\n")
+        assert kwargs["user_prompt"].endswith("\n</system_reminder>")
+
     """Tests for _run_basic_job method."""
 
     @pytest.mark.asyncio
@@ -457,9 +736,7 @@ class TestRunBasicJob:
         handler = MagicMock(return_value=None)
         cron_manager._basic_handlers["test-job-id"] = handler
         sample_cron_job.payload = {"arg1": "value1"}
-
         await cron_manager._run_basic_job(sample_cron_job)
-
         handler.assert_called_once_with(arg1="value1")
 
     @pytest.mark.asyncio
@@ -468,16 +745,13 @@ class TestRunBasicJob:
         async_handler = AsyncMock()
         cron_manager._basic_handlers["test-job-id"] = async_handler
         sample_cron_job.payload = {}
-
         await cron_manager._run_basic_job(sample_cron_job)
-
         async_handler.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_run_basic_job_no_handler(self, cron_manager, sample_cron_job):
         """Test running a basic job without handler."""
         sample_cron_job.job_id = "no-handler-job"
-
         with pytest.raises(RuntimeError, match="handler not found"):
             await cron_manager._run_basic_job(sample_cron_job)
 
@@ -486,7 +760,9 @@ class TestGetNextRunTime:
     """Tests for _get_next_run_time method."""
 
     @pytest.mark.asyncio
-    async def test_get_next_run_time_existing_job(self, cron_manager, sample_cron_job, mock_context):
+    async def test_get_next_run_time_existing_job(
+        self, cron_manager, sample_cron_job, mock_context
+    ):
         """Test getting next run time for existing job."""
         mock_db = cron_manager.db
         mock_db.list_cron_jobs = AsyncMock(return_value=[])

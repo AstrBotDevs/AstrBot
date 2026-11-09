@@ -3,7 +3,11 @@ from __future__ import annotations
 import os
 from urllib.parse import urlsplit
 
-from astrbot.core.utils.image_ref_utils import ALLOWED_IMAGE_EXTENSIONS
+from astrbot.core.utils.image_ref_utils import (
+    ALLOWED_IMAGE_EXTENSIONS,
+    resolve_file_url_path,
+)
+from astrbot.core.utils.media_utils import is_file_uri
 
 IMAGE_EXTENSIONS = ALLOWED_IMAGE_EXTENSIONS
 
@@ -51,11 +55,8 @@ def convert_data_image_to_base64_ref(image_ref: str) -> str | None:
 
 
 def get_existing_local_path(value: str) -> str | None:
-    lower_value = value.lower()
-    if lower_value.startswith("file://"):
-        file_path = value[7:]
-        if file_path.startswith("/") and len(file_path) > 3 and file_path[2] == ":":
-            file_path = file_path[1:]
+    if is_file_uri(value):
+        file_path = resolve_file_url_path(value)
         if file_path and os.path.exists(file_path):
             return os.path.abspath(file_path)
         return None
