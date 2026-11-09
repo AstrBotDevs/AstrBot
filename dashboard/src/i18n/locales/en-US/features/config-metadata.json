@@ -1213,7 +1213,7 @@
           },
           "log_base": {
             "description": "Logarithm Base",
-            "hint": "Base for logarithmic intervals, defaults to 2.6. Value range: 1.0-10.0."
+            "hint": "Base for logarithmic intervals, defaults to 2.6. Value range: greater than 1.0 and at most 10.0."
           },
           "words_count_threshold": {
             "description": "Segmented Reply Word Count Threshold",
