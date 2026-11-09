@@ -711,3 +711,98 @@ async def test_list_prefers_dashboard_override_over_declared_default():
         assert target["permission_configured"] is True
     finally:
         await _clear_tool_permissions()
+
+
+def test_guarded_tool_mirrors_declared_permission():
+    mgr = FunctionToolManager()
+    tool = _dummy_tool("mirrored_declared_tool")
+    tool.declared_permission_type = "admin"
+    mgr.func_list.append(tool)
+
+    guarded = _PermissionGuardedTool(tool, mgr)
+
+    assert guarded.declared_permission_type == "admin"
+    assert mgr._default_permission("mirrored_declared_tool") == "admin"
+
+
+def test_guarded_tool_mirrors_enum_declaration():
+    mgr = FunctionToolManager()
+    tool = _dummy_tool("mirrored_enum_tool")
+    tool.declared_permission_type = PermissionType.ADMIN
+    mgr.func_list.append(tool)
+
+    guarded = _PermissionGuardedTool(tool, mgr)
+
+    assert guarded.declared_permission_type == "admin"
+
+
+def test_guarded_tool_drops_invalid_declaration_but_still_fails_closed():
+    mgr = FunctionToolManager()
+    tool = _dummy_tool("mirrored_invalid_tool")
+    tool.declared_permission_type = "admim"
+    mgr.func_list.append(tool)
+
+    guarded = _PermissionGuardedTool(tool, mgr)
+
+    assert guarded.declared_permission_type is None
+    assert mgr._default_permission("mirrored_invalid_tool") == "admin"
+
+
+@pytest.mark.asyncio
+async def test_check_permission_fails_closed_on_unknown_configured_value():
+    await sp.global_put(
+        "tool_permissions",
+        {"_default": {"dirty_configured_tool": "Admin"}},
+    )
+    try:
+        mgr = FunctionToolManager()
+
+        error = await mgr._check_tool_permission(
+            "dirty_configured_tool", _make_context(role="member")
+        )
+
+        assert error is not None
+        assert "requires admin" in error
+    finally:
+        await _clear_tool_permissions()
+
+
+@pytest.mark.asyncio
+async def test_list_mirrors_fail_closed_permission_for_unknown_value():
+    await sp.global_put(
+        "tool_permissions",
+        {"_default": {"dirty_listed_tool": "Admin"}},
+    )
+    try:
+        service = _make_tools_service()
+        tool = _dummy_tool("dirty_listed_tool")
+        service.tool_mgr.func_list.append(tool)
+
+        tools = await service.get_tool_list()
+
+        target = next(t for t in tools if t["name"] == "dirty_listed_tool")
+        assert target["permission"] == "admin"
+        assert target["permission_configured"] is True
+    finally:
+        await _clear_tool_permissions()
+
+
+@pytest.mark.asyncio
+async def test_list_falls_back_to_declared_value_for_explicit_null():
+    await sp.global_put(
+        "tool_permissions",
+        {"_default": {"null_configured_tool": None}},
+    )
+    try:
+        service = _make_tools_service()
+        tool = _dummy_tool("null_configured_tool")
+        tool.declared_permission_type = "member"
+        service.tool_mgr.func_list.append(tool)
+
+        tools = await service.get_tool_list()
+
+        target = next(t for t in tools if t["name"] == "null_configured_tool")
+        assert target["permission"] == "member"
+        assert target["permission_configured"] is True
+    finally:
+        await _clear_tool_permissions()

@@ -235,11 +235,22 @@ class _PermissionGuardedTool(FunctionTool):
     ) -> None:
         # Do NOT pass handler to the parent — keep self.handler = None
         # so the tool executor always routes through our call().
+        #
+        # Mirror the author-declared default so callers that read the tool set
+        # see the same value as the wrapped tool. Invalid declarations stay
+        # unset here: the permission check falls back to the wrapped tool and
+        # fails closed on them, and the pydantic field rejects invalid input.
+        declared = getattr(tool, "declared_permission_type", None)
+        if isinstance(declared, enum.Enum):
+            declared = declared.name.lower()
+        if declared not in ("admin", "member"):
+            declared = None
         super().__init__(
             name=tool.name,
             description=tool.description,
             parameters=getattr(tool, "parameters", {}),
             execution_timeout=tool.execution_timeout,
+            declared_permission_type=declared,
         )
         self._wrapped = tool
         self._mgr = manager
@@ -547,6 +558,16 @@ class FunctionToolManager:
         effective = defaults.get(tool_name)
         if effective is None:
             effective = self._default_permission(tool_name, tool)
+        elif effective not in ("admin", "member"):
+            # A hand-edited or legacy configuration must never weaken a tool:
+            # unknown values fall back to admin-only instead of passing.
+            logger.error(
+                "Tool %s has an unsupported configured permission %r; treating "
+                "it as admin-only (fail closed).",
+                tool_name,
+                effective,
+            )
+            effective = "admin"
 
         if effective != "admin":
             return None  # member or unknown → pass
