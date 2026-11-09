@@ -39,6 +39,7 @@ from astrbot.api.platform import (
     PlatformMetadata,
 )
 from astrbot.core.message.components import BaseMessageComponent
+from astrbot.core.message.mention_projection import self_mention_label
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.platform.button_interaction import decode_button_callback
 from astrbot.core.utils.media_utils import MediaResolver
@@ -50,6 +51,9 @@ from .qqofficial_message_event import QQOfficialMessageEvent
 # remove logger handler
 for handler in logging.root.handlers[:]:
     logging.root.removeHandler(handler)
+
+_SELF_MENTION_SENTINEL = "\x00"
+"""Placeholder left where the bot mention markup was removed from group text."""
 
 
 def _set_raw_message_fields(message: Any, data: dict[str, Any]) -> None:
@@ -883,12 +887,17 @@ class QQOfficialPlatformAdapter(Platform):
         return re.sub(r"<faceType=\d+[^>]*>", replace_face, content)
 
     @staticmethod
-    def _strip_bot_mention_markup(content: str | None, mention_id: str) -> str:
+    def _strip_bot_mention_markup(
+        content: str | None,
+        mention_id: str,
+        replacement: str = " ",
+    ) -> str:
         """Remove the current bot's QQ mention markup from incoming text.
 
         Args:
             content: Raw QQ message content.
             mention_id: OpenID of the mentioned bot.
+            replacement: Text substituted for the removed mention markup.
 
         Returns:
             Message content with current and legacy bot mention markup removed.
@@ -899,7 +908,11 @@ class QQOfficialPlatformAdapter(Platform):
         markup_pattern = (
             rf'(?:<qqbot-at-user\s+id="{escaped_id}"\s*/>|<@!?{escaped_id}>)'
         )
-        return re.sub(rf"(?:[ \t]*{markup_pattern}[ \t]*)+", " ", content or "")
+        return re.sub(
+            rf"(?:[ \t]*{markup_pattern}[ \t]*)+",
+            replacement,
+            content or "",
+        )
 
     @staticmethod
     async def _parse_from_qqofficial(
@@ -1005,23 +1018,54 @@ class QQOfficialPlatformAdapter(Platform):
                 ]
                 bot_mention_ids = [str(mention.id) for mention in bot_mentions]
                 group_mentioned = bool(bot_mention_ids) or force_group_mention
-                plain_content_raw = message.content or ""
+                marked_content = message.content or ""
                 for mention_id in bot_mention_ids:
-                    plain_content_raw = (
+                    marked_content = (
                         QQOfficialPlatformAdapter._strip_bot_mention_markup(
-                            plain_content_raw,
+                            marked_content,
                             mention_id,
+                            _SELF_MENTION_SENTINEL,
                         )
                     )
-                abm.message_str = QQOfficialPlatformAdapter._parse_face_message(
-                    plain_content_raw.strip()
+                parsed_content = QQOfficialPlatformAdapter._parse_face_message(
+                    marked_content
                 )
                 abm.self_id = bot_mention_ids[0] if bot_mention_ids else "qq_official"
-                if group_mentioned:
-                    mention_name = (
-                        getattr(bot_mentions[0], "username", "") if bot_mentions else ""
+                mention_name = (
+                    getattr(bot_mentions[0], "username", "") if bot_mentions else ""
+                )
+                spans: list[tuple[int, int, str]] = []
+                if bot_mentions:
+                    label = self_mention_label(At(qq=abm.self_id, name=mention_name))
+                    positions: list[int] = []
+                    position = parsed_content.find(_SELF_MENTION_SENTINEL)
+                    while position >= 0:
+                        positions.append(position)
+                        position = parsed_content.find(
+                            _SELF_MENTION_SENTINEL,
+                            position + 1,
+                        )
+                    plain_content_raw = parsed_content.replace(
+                        _SELF_MENTION_SENTINEL,
+                        " ",
                     )
+                    trim = len(plain_content_raw) - len(plain_content_raw.lstrip())
+                    for position in positions:
+                        start = max(position - trim, 0)
+                        spans.append((start, max(position + 1 - trim, start), label))
+                else:
+                    plain_content_raw = parsed_content
+                abm.message_str = plain_content_raw.strip()
+                if spans:
+                    text_length = len(abm.message_str)
+                    abm._self_mention_spans = [
+                        (min(start, text_length), min(end, text_length), label)
+                        for start, end, label in spans
+                    ]
+                if group_mentioned:
                     msg.append(At(qq=abm.self_id, name=mention_name))
+                    if not bot_mentions:
+                        abm._self_mention_position_unknown = True
             else:
                 abm.sender = MessageMember(
                     message.author.user_openid,

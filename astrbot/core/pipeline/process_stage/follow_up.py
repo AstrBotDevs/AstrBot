@@ -6,9 +6,8 @@ from dataclasses import dataclass
 from astrbot import logger
 from astrbot.core.agent.runners.tool_loop_agent_runner import FollowUpTicket
 from astrbot.core.astr_agent_run_util import AgentRunner
-from astrbot.core.message.components import At
+from astrbot.core.message.mention_projection import self_mention_view
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.platform.message_type import MessageType
 from astrbot.core.utils.active_event_registry import active_event_registry
 
 _ACTIVE_AGENT_RUNNERS: dict[str, AgentRunner] = {}
@@ -33,18 +32,9 @@ class FollowUpCapture:
 
 def _event_follow_up_text(event: AstrMessageEvent) -> str:
     text = (event.get_message_str() or "").strip()
-    if not text:
-        text = event.get_message_outline().strip()
-    if (
-        text
-        and event.get_message_type() == MessageType.GROUP_MESSAGE
-        and any(
-            isinstance(comp, At) and str(comp.qq) == str(event.get_self_id())
-            for comp in event.get_messages()
-        )
-    ):
-        return "⚠️[DIRECTED AT YOU]\n" + text
-    return text
+    if text:
+        return self_mention_view(event, text)
+    return event.get_message_outline(mark_self_mention=True).strip()
 
 
 def register_active_runner(umo: str, runner: AgentRunner) -> None:

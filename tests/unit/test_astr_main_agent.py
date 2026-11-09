@@ -30,6 +30,7 @@ from astrbot.core.astr_main_agent import workspace as workspace_build
 from astrbot.core.config.agent_runner import resolve_context_compression_config
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.message.components import File, Image, Plain, Record, Reply, Video
+from astrbot.core.message.mention_projection import SELF_MENTION_SPANS
 from astrbot.core.pipeline.process_stage.method.agent_sub_stages import (
     webchat as webchat_build,
 )
@@ -3811,3 +3812,89 @@ async def test_wakeup_collects_current_conversation_without_an_explicit_request(
     manager.get_conversation.assert_awaited_once_with(
         event.unified_msg_origin, "conversation"
     )
+
+
+def _bind_self_mention(event):
+    store = {SELF_MENTION_SPANS: [(0, 0, "清漪")]}
+    event.get_extra.side_effect = lambda key, default=None: store.get(key, default)
+    event.set_extra.side_effect = store.__setitem__
+
+
+@pytest.mark.asyncio
+async def test_prepare_request_projects_self_mention_after_wake_prefix(
+    mock_event, mock_context, mock_provider
+):
+    event = mock_event
+    event.message_str = "/llm 今天吃啥"
+    event.message_obj.message = [Plain(text="今天吃啥")]
+    _bind_self_mention(event)
+    _setup_conversation_for_build(mock_context.conversation_manager)
+
+    prepared = await request_build.prepare_request(
+        event,
+        mock_context,
+        ama.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            provider_wake_prefix="/llm ",
+            provider_settings={"prompt_prefix": "PREFIX {{prompt}}"},
+        ),
+        mock_provider,
+        None,
+    )
+
+    assert prepared is not None
+    assert prepared.request.prompt == "PREFIX @清漪（you） 今天吃啥"
+    assert event.message_str == "/llm 今天吃啥"
+
+
+@pytest.mark.asyncio
+async def test_prepare_request_projects_self_mention_with_image(
+    mock_event, mock_context, mock_provider, valid_image_path
+):
+    event = mock_event
+    event.message_str = ""
+    event.message_obj.message = [Image.fromFileSystem(valid_image_path)]
+    _bind_self_mention(event)
+    _setup_conversation_for_build(mock_context.conversation_manager)
+
+    prepared = await request_build.prepare_request(
+        event,
+        mock_context,
+        ama.MainAgentBuildConfig(tool_call_timeout=60),
+        mock_provider,
+        None,
+    )
+
+    assert prepared is not None
+    assert prepared.request.prompt == "@清漪（you）"
+    assert prepared.request.image_urls
+
+
+@pytest.mark.asyncio
+async def test_file_default_prompt_keeps_self_mention(
+    mock_event, mock_context, mock_provider, sample_config
+):
+    event = mock_event
+    event.message_str = ""
+    file = MagicMock(spec=File)
+    file.name = "notes.txt"
+    file.get_file = AsyncMock(return_value="/tmp/notes.txt")
+    event.message_obj.message = [file]
+    _bind_self_mention(event)
+    _setup_conversation_for_build(mock_context.conversation_manager)
+
+    with patch.object(
+        request_build,
+        "extract_file_moonshotai",
+        AsyncMock(return_value="file content"),
+    ):
+        prepared = await request_build.prepare_request(
+            event,
+            mock_context,
+            sample_config,
+            mock_provider,
+            None,
+        )
+
+    assert prepared is not None
+    assert prepared.request.prompt == "@清漪（you） 总结一下文件里面讲了什么？"

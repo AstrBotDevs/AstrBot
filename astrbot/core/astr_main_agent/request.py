@@ -15,6 +15,7 @@ from astrbot.core.agent.message import TextPart
 from astrbot.core.astr_main_agent_resources import LLM_ERROR_MESSAGE_EXTRA_KEY
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.message.components import File, Image, Record, Reply, Video
+from astrbot.core.message.mention_projection import SELF_MENTION_TRIM, self_mention_view
 from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider import Provider
@@ -271,6 +272,8 @@ async def collect_initial_request(
                 return None, None
 
             req.prompt = event.message_str
+            base_trim = int(event.get_extra(SELF_MENTION_TRIM, 0) or 0)
+            consumed = 0
             prefix_text = event.message_str
             if event.get_platform_name() == "lark":
                 prefix_text = prefix_text.lstrip()
@@ -280,6 +283,7 @@ async def collect_initial_request(
                 and prefix_text.startswith(provider_wake_prefix)
             ):
                 req.prompt = prefix_text[len(provider_wake_prefix) :]
+                consumed = len(provider_wake_prefix)
 
             # media files attachments
             for comp in event.message_obj.message:
@@ -459,6 +463,8 @@ async def collect_initial_request(
             conversation = await _get_session_conv(event, plugin_context)
             req.conversation = conversation
             req.contexts = json.loads(conversation.history)
+            event.set_extra(SELF_MENTION_TRIM, base_trim + consumed)
+            event.set_extra("_agent_prompt_from_event", True)
             event.set_extra("provider_request", req)
 
     req.image_urls = normalize_and_dedupe_strings(req.image_urls)
@@ -605,6 +611,10 @@ async def prepare_request(
         )
         if captioned_ref:
             captioned_refs.add(captioned_ref)
+    if event.get_extra("_agent_prompt_from_event"):
+        event.set_extra("_agent_prompt_from_event", False)
+        if (req.prompt or "").strip() or req.image_urls or req.audio_urls:
+            req.prompt = self_mention_view(event, req.prompt or "")
     apply_prompt_prefix(req, cfg)
     if (
         req.conversation

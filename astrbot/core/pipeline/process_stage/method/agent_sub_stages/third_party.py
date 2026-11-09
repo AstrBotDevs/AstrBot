@@ -326,14 +326,6 @@ class ThirdPartyAgentSubStage(Stage):
         if empty_prompt and not req.image_urls and not req.audio_urls:
             return
 
-        if (
-            self.runner_type == "dify"
-            and self.runner_config.get("dify_api_type", "chat")
-            in ("chat", "agent", "chatflow")
-            and not req.prompt
-        ):
-            req.prompt = "请描述这张图片。"
-
         custom_error_message = await self._resolve_persona_custom_error_message(event)
         set_persona_custom_error_message_on_event(event, custom_error_message)
 

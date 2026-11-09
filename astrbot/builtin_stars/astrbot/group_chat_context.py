@@ -25,6 +25,12 @@ from astrbot.api.platform import MessageType
 from astrbot.api.provider import Provider, ProviderRequest
 from astrbot.core.agent.message import TextPart
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+from astrbot.core.message.mention_projection import (
+    is_self_mention,
+    render_self_mention,
+    self_mention_label,
+    self_mention_view,
+)
 
 """
 Group chat context awareness.
@@ -199,10 +205,19 @@ class GroupChatContext:
     async def _format_message(self, event: AstrMessageEvent, cfg: dict) -> str:
         datetime_str = datetime.datetime.now().strftime("%H:%M:%S")
         parts = [f"[{event.message_obj.sender.nickname}/{datetime_str}]: "]
+        use_mention_spans = event.get_platform_name() in (
+            "qq_official",
+            "qq_official_webhook",
+        )
+        mention_projected = False
 
         for comp in event.get_messages():
             if isinstance(comp, Plain):
-                parts.append(f" {comp.text}")
+                text = comp.text
+                if use_mention_spans and not mention_projected:
+                    text = self_mention_view(event, text, trim=0)
+                    mention_projected = True
+                parts.append(f" {text}")
             elif isinstance(comp, Image):
                 if cfg["image_caption"]:
                     try:
@@ -251,13 +266,13 @@ class GroupChatContext:
                 suffix = f": {'; '.join(fields)}" if fields else ""
                 parts.append(f" [Shared Card{suffix}]")
             elif isinstance(comp, At):
-                is_at_self = str(comp.qq) in (
-                    event.get_self_id(),
-                    "all",
-                )
-                if is_at_self:
-                    parts.insert(1, "⚠️[DIRECTED AT YOU] ")
-                parts.append(f" [At: {comp.name}]")
+                if is_self_mention(comp, event.get_self_id()):
+                    if use_mention_spans:
+                        continue
+                    marker = render_self_mention(self_mention_label(comp)).strip()
+                    parts.append(f" {marker}")
+                else:
+                    parts.append(f" [At: {comp.name}]")
             elif isinstance(comp, Reply):
                 if comp.message_str:
                     parts.append(
