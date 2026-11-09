@@ -1,5 +1,7 @@
 import asyncio
+import ipaddress
 import json
+import socket
 import uuid
 from dataclasses import dataclass as std_dataclass
 from dataclasses import field
@@ -32,6 +34,8 @@ WEB_SEARCH_TOOL_NAMES = [
     "scholar_search_serpapi",
     "web_search_deepseek",
     "deepseek_fetch_web_page",
+    "web_search_keenable",
+    "keenable_extract_web_page",
 ]
 _TAVILY_WEB_SEARCH_TOOL_CONFIG = {
     "provider_settings.web_search": True,
@@ -68,6 +72,10 @@ _DEEPSEEK_WEB_SEARCH_TOOL_CONFIG = {
 _SERPAPI_WEB_SEARCH_TOOL_CONFIG = {
     "provider_settings.web_search": True,
     "provider_settings.websearch_provider": "serpapi",
+}
+_KEENABLE_WEB_SEARCH_TOOL_CONFIG = {
+    "provider_settings.web_search": True,
+    "provider_settings.websearch_provider": "keenable",
 }
 
 
@@ -139,6 +147,8 @@ _TAVILY_RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({401, 403, 429, 432,
 _FIRECRAWL_RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({401, 402, 403, 429})
 _EXA_RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({401, 402, 429})
 _DEEPSEEK_RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({401, 402, 429})
+# Keenable returns 402 when a key's organization has no credits left.
+_KEENABLE_RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({401, 402, 403, 429})
 
 _TAVILY_KEY_ROTATOR = _KeyRotator("websearch_tavily_key", "Tavily")
 _BOCHA_KEY_ROTATOR = _KeyRotator("websearch_bocha_key", "BoCha")
@@ -148,6 +158,7 @@ _EXA_KEY_ROTATOR = _KeyRotator("websearch_exa_key", "Exa")
 _ANYSEARCH_KEY_ROTATOR = _KeyRotator("websearch_anysearch_key", "AnySearch")
 _DEEPSEEK_KEY_ROTATOR = _KeyRotator("websearch_deepseek_key", "DeepSeek")
 _SERPAPI_KEY_ROTATOR = _KeyRotator("websearch_serpapi_key", "SerpApi")
+_KEENABLE_KEY_ROTATOR = _KeyRotator("websearch_keenable_key", "Keenable")
 
 
 def normalize_legacy_web_search_config(cfg) -> None:
@@ -174,6 +185,7 @@ def normalize_legacy_web_search_config(cfg) -> None:
         "websearch_exa_key",
         "websearch_anysearch_key",
         "websearch_serpapi_key",
+        "websearch_keenable_key",
     ):
         value = provider_settings.get(setting_name)
         if isinstance(value, str):
@@ -2325,6 +2337,343 @@ class DeepSeekFetchWebPageTool(FunctionTool[AstrAgentContext]):
         return f"URL: {url}\nTitle: {data.get('title', '')}\nContent: {data['content']}"
 
 
+_KEENABLE_API_BASE = "https://api.keenable.ai"
+# Identifies AstrBot to Keenable. Requests without an API key are rejected
+# unless this header is present.
+_KEENABLE_APP_TITLE = "astrbot"
+
+
+async def _keenable_request(
+    provider_settings: dict,
+    path: str,
+    action: str,
+    *,
+    payload: dict | None = None,
+    params: dict | None = None,
+) -> dict:
+    """Call a Keenable API endpoint with API key failover.
+
+    Keenable serves requests without an API key on `<path>/public` under a
+    free rate limit, so an empty key list is valid and results in a single
+    request there. Configured keys use `<path>` and raise that limit.
+
+    Args:
+        provider_settings: Provider settings containing Keenable API keys.
+        path: Endpoint path, for example "/v1/search".
+        action: Name used in error messages, for example "web search".
+        payload: JSON body; when given the request is a POST.
+        params: Query parameters; used for a GET when no payload is given.
+
+    Returns:
+        The decoded JSON response.
+
+    Raises:
+        Exception: If the request fails after all configured keys are exhausted,
+            or if a non-retryable HTTP error is returned.
+    """
+    keys = provider_settings.get("websearch_keenable_key") or []
+
+    last_error = None
+    tried_keys: set[str] = set()
+    for _ in range(len(set(keys)) or 1):
+        headers = {"X-Keenable-Title": _KEENABLE_APP_TITLE}
+        url = f"{_KEENABLE_API_BASE}{path}"
+        if keys:
+            headers["X-API-Key"] = await _KEENABLE_KEY_ROTATOR.get(
+                provider_settings, tried_keys
+            )
+        else:
+            url += "/public"
+
+        async with aiohttp.ClientSession(trust_env=True) as session:
+            if payload is not None:
+                request = session.post(url, json=payload, headers=headers)
+            else:
+                request = session.get(url, params=params, headers=headers)
+            async with request as response:
+                if response.status == 200:
+                    return await response.json()
+                reason = await response.text()
+                error = Exception(
+                    f"Keenable {action} failed: {reason}, status: {response.status}",
+                )
+                if keys and response.status in _KEENABLE_RETRYABLE_HTTP_STATUSES:
+                    last_error = error
+                    continue
+                raise error
+
+    if last_error is not None:
+        raise last_error
+    raise Exception(f"Keenable {action} failed with all configured keys.")
+
+
+async def _keenable_search(
+    provider_settings: dict,
+    payload: dict,
+) -> list[SearchResult]:
+    """Call the Keenable search endpoint and return normalized results."""
+    data = await _keenable_request(
+        provider_settings, "/v1/search", "web search", payload=payload
+    )
+    return [
+        SearchResult(
+            title=item.get("title") or "",
+            url=item["url"],
+            # `snippet` carries the page text; `description` is usually empty.
+            # The text keeps the page's line breaks, so collapse whitespace.
+            snippet=" ".join(
+                (item.get("snippet") or item.get("description") or "").split()
+            ),
+        )
+        for item in data.get("results") or []
+        if item.get("url")
+    ]
+
+
+_KEENABLE_NAT64_PREFIX = ipaddress.IPv6Network("64:ff9b::/96")
+
+
+def _keenable_extract_ip_is_blocked(
+    address: ipaddress.IPv4Address | ipaddress.IPv6Address,
+) -> bool:
+    """Return whether an IP must not be fetched via Keenable extract.
+
+    Only globally routable unicast addresses pass. An IPv6 address that carries
+    an IPv4 one (mapped, 6to4, Teredo, NAT64) is judged by that IPv4 address too.
+    """
+    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped:
+        address = address.ipv4_mapped
+    candidates: list[ipaddress.IPv4Address | ipaddress.IPv6Address] = [address]
+    if isinstance(address, ipaddress.IPv6Address):
+        if address.sixtofour:
+            candidates.append(address.sixtofour)
+        if address.teredo:
+            candidates.extend(address.teredo)
+        if address in _KEENABLE_NAT64_PREFIX:
+            candidates.append(ipaddress.IPv4Address(int(address) & 0xFFFFFFFF))
+    return any(not ip.is_global or ip.is_multicast for ip in candidates)
+
+
+def _keenable_extract_hostname_is_blocked(hostname: str) -> bool:
+    """Return whether a URL host must not be fetched via Keenable extract."""
+    host = hostname.rstrip(".").lower()
+    if host == "localhost" or host.endswith(".localhost") or host.endswith(".local"):
+        return True
+    try:
+        return _keenable_extract_ip_is_blocked(ipaddress.ip_address(host))
+    except ValueError:
+        return False
+
+
+def _keenable_extract_hostname_is_valid(hostname: str) -> bool:
+    """Return whether a URL host is a well-formed DNS name or IP literal."""
+    try:
+        ipaddress.ip_address(hostname)
+    except ValueError:
+        pass
+    else:
+        return True
+    if len(hostname.rstrip(".")) > 253:
+        return False
+    try:
+        # Rejects empty labels ("example..com") and labels over 63 characters.
+        hostname.rstrip(".").encode("idna")
+    except UnicodeError:
+        return False
+    return True
+
+
+async def _keenable_extract_url_resolves_to_blocked(hostname: str) -> bool:
+    """Return whether DNS resolution yields a blocked address for extract fetches.
+
+    A name that cannot be resolved fails closed, as if it were blocked.
+    """
+    try:
+        ipaddress.ip_address(hostname)
+    except ValueError:
+        pass
+    else:
+        return False
+
+    try:
+        addr_infos = await asyncio.to_thread(
+            socket.getaddrinfo,
+            hostname,
+            None,
+            type=socket.SOCK_STREAM,
+        )
+    except (OSError, UnicodeError):
+        return True
+
+    for addr_info in addr_infos:
+        sockaddr = addr_info[4]
+        if not sockaddr:
+            continue
+        host_ip = sockaddr[0]
+        try:
+            address = ipaddress.ip_address(host_ip)
+        except ValueError:
+            continue
+        if _keenable_extract_ip_is_blocked(address):
+            return True
+    return False
+
+
+async def _keenable_fetch(provider_settings: dict, params: dict) -> dict:
+    """Call the Keenable fetch endpoint and return the page as a dict."""
+    return await _keenable_request(
+        provider_settings, "/v1/fetch", "page fetch", params=params
+    )
+
+
+@builtin_tool(config=_KEENABLE_WEB_SEARCH_TOOL_CONFIG)
+@pydantic_dataclass
+class KeenableWebSearchTool(FunctionTool[AstrAgentContext]):
+    """Web search tool powered by the Keenable Search API."""
+
+    name: str = "web_search_keenable"
+    description: str = (
+        "A web search tool powered by Keenable. Returns relevant web pages "
+        "with a text excerpt of each, and can restrict results to one site "
+        "and to a publish or index date range."
+    )
+    parameters: dict = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Required. Search query."},
+                "max_results": {
+                    "type": "integer",
+                    "description": "Optional. The maximum number of results to return. Default is 10. Range is 1-50.",
+                },
+                "site": {
+                    "type": "string",
+                    "description": 'Optional. Restrict results to one domain, for example "github.com".',
+                },
+                "published_after": {
+                    "type": "string",
+                    "description": 'Optional. Only return pages published at or after this time: a date (YYYY-MM-DD), an ISO 8601 timestamp, or a time back from now such as "7d", "12h" or "1mo". Use this for recent results.',
+                },
+                "published_before": {
+                    "type": "string",
+                    "description": 'Optional. Only return pages published at or before this time: a date (YYYY-MM-DD), an ISO 8601 timestamp, or a time back from now such as "30d".',
+                },
+                "acquired_after": {
+                    "type": "string",
+                    "description": 'Optional. Only return pages Keenable indexed at or after this time: a date (YYYY-MM-DD), an ISO 8601 timestamp, or a time back from now such as "7d".',
+                },
+                "acquired_before": {
+                    "type": "string",
+                    "description": 'Optional. Only return pages Keenable indexed at or before this time: a date (YYYY-MM-DD), an ISO 8601 timestamp, or a time back from now such as "30d".',
+                },
+            },
+            "required": ["query"],
+        }
+    )
+
+    async def call(self, context, **kwargs) -> ToolExecResult:
+        _, provider_settings, _ = _get_runtime(context)
+
+        try:
+            max_results = int(kwargs.get("max_results", 10))
+        except (TypeError, ValueError):
+            max_results = 10
+        max_results = min(max(max_results, 1), 50)
+
+        payload: dict = {
+            "query": kwargs["query"],
+            "max_results": max_results,
+            "snippet_max_length": 500,
+        }
+
+        # Date values are passed through as given: the API accepts dates,
+        # timestamps and relative values such as "7d" and validates them.
+        for name in (
+            "site",
+            "published_after",
+            "published_before",
+            "acquired_after",
+            "acquired_before",
+        ):
+            value = str(kwargs.get(name) or "").strip()
+            if value:
+                payload[name] = value
+
+        results = await _keenable_search(provider_settings, payload)
+        if not results:
+            return "Error: Keenable web search does not return any results."
+        return _search_result_payload(results)
+
+
+@builtin_tool(config=_KEENABLE_WEB_SEARCH_TOOL_CONFIG)
+@pydantic_dataclass
+class KeenableExtractWebPageTool(FunctionTool[AstrAgentContext]):
+    """Extract page content from a URL using the Keenable Fetch API."""
+
+    name: str = "keenable_extract_web_page"
+    description: str = "Extract the content of a web page as Markdown using Keenable."
+    parameters: dict = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "Required. A URL to extract content from.",
+                },
+                "max_chars": {
+                    "type": "integer",
+                    "description": "Optional. Maximum number of characters of content to return.",
+                },
+            },
+            "required": ["url"],
+        }
+    )
+
+    async def call(self, context, **kwargs) -> ToolExecResult:
+        _, provider_settings, _ = _get_runtime(context)
+
+        url = str(kwargs.get("url", "")).strip()
+        if not url:
+            return "Error: url must be a non-empty string."
+        try:
+            # Raises ValueError for malformed hosts such as "https://[::1".
+            parsed = urlsplit(url)
+            # Port syntax and range are validated only when this property is read.
+            _ = parsed.port
+            valid_url = (
+                parsed.scheme.lower() in ("http", "https")
+                and bool(parsed.netloc)
+                and bool(parsed.hostname)
+                and parsed.username is None
+                and parsed.password is None
+                and _keenable_extract_hostname_is_valid(parsed.hostname)
+            )
+        except ValueError:
+            valid_url = False
+        if not valid_url:
+            return "Error: url must be an http or https URL with a valid host and no embedded credentials."
+
+        hostname = parsed.hostname
+        if _keenable_extract_hostname_is_blocked(hostname) or (
+            await _keenable_extract_url_resolves_to_blocked(hostname)
+        ):
+            return "Error: url must resolve to a public internet address."
+
+        params: dict = {"url": url}
+        try:
+            max_chars = int(kwargs.get("max_chars") or 0)
+        except (TypeError, ValueError):
+            max_chars = 0
+        if max_chars > 0:
+            params["max_chars"] = max_chars
+
+        result = await _keenable_fetch(provider_settings, params)
+        content = result.get("content")
+        if not content:
+            return "Error: Keenable page fetch does not return any content."
+        return f"URL: {result.get('url') or url}\nContent: {content}"
+
+
 __all__ = [
     "AnySearchWebSearchTool",
     "BaiduWebSearchTool",
@@ -2339,6 +2688,8 @@ __all__ = [
     "SerpApiNewsSearchTool",
     "SerpApiScholarSearchTool",
     "SerpApiWebSearchTool",
+    "KeenableExtractWebPageTool",
+    "KeenableWebSearchTool",
     "TavilyExtractWebPageTool",
     "TavilyWebSearchTool",
     "WEB_SEARCH_TOOL_NAMES",

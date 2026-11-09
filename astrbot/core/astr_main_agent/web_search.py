@@ -15,6 +15,8 @@ from astrbot.core.tools.web_search_tools import (
     ExaWebSearchTool,
     FirecrawlExtractWebPageTool,
     FirecrawlWebSearchTool,
+    KeenableExtractWebPageTool,
+    KeenableWebSearchTool,
     SerpApiFinanceSearchTool,
     SerpApiImageSearchTool,
     SerpApiNewsSearchTool,
@@ -38,6 +40,7 @@ WEB_SEARCH_CITATION_TOOL_NAMES = frozenset(
         "image_search_serpapi",
         "finance_search_serpapi",
         "scholar_search_serpapi",
+        "web_search_keenable",
     }
 )
 
@@ -102,6 +105,11 @@ def apply_web_search(
             req.func_tool.add_tool(tool_mgr.get_builtin_tool(SerpApiImageSearchTool))
             req.func_tool.add_tool(tool_mgr.get_builtin_tool(SerpApiFinanceSearchTool))
             req.func_tool.add_tool(tool_mgr.get_builtin_tool(SerpApiScholarSearchTool))
+        elif provider == "keenable":
+            req.func_tool.add_tool(tool_mgr.get_builtin_tool(KeenableWebSearchTool))
+            req.func_tool.add_tool(
+                tool_mgr.get_builtin_tool(KeenableExtractWebPageTool)
+            )
 
     return _get_citation_instructions(event, req)
 
