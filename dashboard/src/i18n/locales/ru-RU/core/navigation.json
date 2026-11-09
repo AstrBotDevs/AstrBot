@@ -12,7 +12,7 @@
         "logs": "Логи",
         "trace": "Трассировка"
     },
-    "subagent": "Субагенты",
+    "subagent": "Управление субагентами",
     "toolUse": "Инструменты MCP",
     "extension": "Плагины",
     "extensionTabs": {

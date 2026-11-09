@@ -60,9 +60,11 @@
         </div>
         <div v-else-if="!visibleEntries.length" class="workspace-state">
           {{
-            filterQuery
-              ? tm("workspaceFiles.noMatches")
-              : tm("workspaceFiles.empty")
+            needsSession
+              ? tm("workspaceFiles.selectSession")
+              : filterQuery
+                ? tm("workspaceFiles.noMatches")
+                : tm("workspaceFiles.empty")
           }}
         </div>
         <template v-else>
@@ -247,7 +249,8 @@ interface WorkspaceEntry {
 const props = defineProps<{
   modelValue: boolean;
   projectId: string;
-  projectTitle?: string;
+  workspaceType?: "session" | "project" | "custom";
+  sessionId?: string;
 }>();
 
 const emit = defineEmits<{
@@ -257,7 +260,6 @@ const emit = defineEmits<{
 const { tm } = useModuleI18n("features/chat");
 const theme = useTheme();
 const rootEntries = ref<WorkspaceEntry[]>([]);
-const loadedProjectId = ref("");
 const rootLoading = ref(false);
 const treeError = ref("");
 const filterQuery = ref("");
@@ -270,6 +272,9 @@ const fileDownloading = ref(false);
 const previewDialog = ref(false);
 const treeGeneration = ref(0);
 const fileGeneration = ref(0);
+const needsSession = computed(
+  () => (props.workspaceType || "session") === "session" && !props.sessionId,
+);
 
 const visibleEntries = computed(() => {
   const query = filterQuery.value.trim().toLocaleLowerCase();
@@ -295,15 +300,11 @@ const visibleEntries = computed(() => {
 });
 
 watch(
-  () => [props.modelValue, props.projectId] as const,
-  async ([open, projectId], previous) => {
-    if (!open || !projectId) return;
-    const previousProjectId = previous?.[1];
-    if (
-      projectId !== previousProjectId ||
-      loadedProjectId.value !== projectId
-    ) {
-      resetPanel();
+  () =>
+    [props.modelValue, props.projectId, props.sessionId, props.workspaceType] as const,
+  async ([open, projectId]) => {
+    resetPanel();
+    if (open && projectId) {
       await loadDirectory("");
     }
   },
@@ -350,8 +351,8 @@ function close() {
 function resetPanel() {
   treeGeneration.value += 1;
   rootEntries.value = [];
-  loadedProjectId.value = "";
   rootLoading.value = false;
+  fileDownloading.value = false;
   treeError.value = "";
   filterQuery.value = "";
   clearPreview();
@@ -374,8 +375,11 @@ async function refreshTree() {
 }
 
 async function loadDirectory(path: string, parent?: WorkspaceEntry) {
-  if (!props.projectId || rootLoading.value || parent?.loading) return;
+  if (!props.projectId || needsSession.value || rootLoading.value || parent?.loading) {
+    return;
+  }
   const projectId = props.projectId;
+  const sessionId = props.sessionId;
   const generation = treeGeneration.value;
   if (parent) {
     parent.loading = true;
@@ -384,7 +388,11 @@ async function loadDirectory(path: string, parent?: WorkspaceEntry) {
   }
   treeError.value = "";
   try {
-    const response = await chatApi.listProjectWorkspaceFiles(projectId, path);
+    const response = await chatApi.listProjectWorkspaceFiles(
+      projectId,
+      path,
+      sessionId,
+    );
     if (generation !== treeGeneration.value || projectId !== props.projectId) {
       return;
     }
@@ -400,7 +408,6 @@ async function loadDirectory(path: string, parent?: WorkspaceEntry) {
       parent.children = entries;
     } else {
       rootEntries.value = entries;
-      loadedProjectId.value = projectId;
     }
   } catch (error) {
     if (generation !== treeGeneration.value || projectId !== props.projectId) {
@@ -450,6 +457,7 @@ async function openEntry(entry: WorkspaceEntry) {
     const response = await chatApi.getProjectWorkspaceFile(
       projectId,
       entry.path,
+      props.sessionId,
     );
     if (generation !== fileGeneration.value || projectId !== props.projectId) {
       return;
@@ -480,23 +488,29 @@ async function downloadSelectedFile() {
     return;
   }
   fileDownloading.value = true;
+  const generation = treeGeneration.value;
+  const path = selectedFilePath.value;
   try {
     const response = await chatApi.downloadProjectWorkspaceFile(
       props.projectId,
-      selectedFilePath.value,
+      path,
+      props.sessionId,
     );
+    // Finish requested downloads even when the panel changes or closes.
     const url = URL.createObjectURL(response.data);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = selectedFilePath.value.split("/").pop() || "download";
+    anchor.download = path.split("/").pop() || "download";
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
     setTimeout(() => URL.revokeObjectURL(url), 0);
   } catch {
-    fileError.value = tm("workspaceFiles.downloadFailed");
+    if (generation === treeGeneration.value) {
+      fileError.value = tm("workspaceFiles.downloadFailed");
+    }
   } finally {
-    fileDownloading.value = false;
+    if (generation === treeGeneration.value) fileDownloading.value = false;
   }
 }
 

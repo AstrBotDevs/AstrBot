@@ -49,7 +49,7 @@
     "title": "AI",
     "enable": "启用 AI",
     "more": "更多操作",
-    "changeRunner": "更换执行方式",
+    "changeRunner": "切换 Agent Runtime",
     "localSettingsTitle": "AstrBot 内置 AI",
     "settingsSuffix": "设置",
     "tabs": {
@@ -85,7 +85,7 @@
       "confirm": "使用此方式"
     },
     "runners": {
-      "local": {
+      "astrbot": {
         "title": "内置 AI",
         "summary": "配置 AstrBot 的 AI 能力，包括模型、人格、知识库和工具。",
         "description": "使用 AstrBot 内置 AI，支持模型、人格、知识库和工具能力。"

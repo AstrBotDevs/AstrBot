@@ -121,24 +121,6 @@ def test_append_stream_delta_copies_plain_and_survives_source_mutation() -> None
     assert "".join(texts) == "不稀罕"
 
 
-def test_append_stream_delta_old_reference_style_loses_first_char() -> None:
-    """Document the broken pre-fix behavior (reference assign + extend)."""
-    event = _make_group_event()
-    shared = MessageChain(chain=[Plain("不")])
-
-    # Pre-fix group path:
-    #   if not send_buffer: send_buffer = chain
-    #   else: send_buffer.chain.extend(chain.chain)
-    event.send_buffer = shared
-    shared.chain[0].text = "稀"
-    event.send_buffer.chain.extend(shared.chain)
-
-    # After mutation + extend-on-self, leading "不" is gone.
-    joined = "".join(c.text for c in event.send_buffer.chain if isinstance(c, Plain))
-    assert "不" not in joined
-    assert joined.startswith("稀")
-
-
 @pytest.mark.asyncio
 async def test_group_stream_keeps_first_character_when_delta_reused() -> None:
     """End-to-end group send_streaming with reused/mutated MessageChain."""

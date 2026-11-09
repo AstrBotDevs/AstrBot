@@ -106,6 +106,12 @@ outline: deep
 
 | 方法 | 接口 | 条件性敏感子权限 |
 | --- | --- | --- |
+| `GET` | `/api/v1/agent-configs` | — |
+| `POST` | `/api/v1/agent-configs` | — |
+| `GET` | `/api/v1/agent-configs/{config_id}` | — |
+| `PUT` | `/api/v1/agent-configs/{config_id}` | — |
+| `DELETE` | `/api/v1/agent-configs/{config_id}` | — |
+| `GET` | `/api/v1/agent-runtimes` | — |
 | `POST` | `/api/v1/bot-types/{bot_type}/registration` | — |
 | `GET` | `/api/v1/config-profiles` | — |
 | `POST` | `/api/v1/config-profiles` | `config:edit_admin` |
@@ -118,9 +124,6 @@ outline: deep
 | `PUT` | `/api/v1/config-routes` | — |
 | `PUT` | `/api/v1/config-routes/{umo}` | — |
 | `DELETE` | `/api/v1/config-routes/{umo}` | — |
-| `GET` | `/api/v1/subagents/available-tools` | — |
-| `GET` | `/api/v1/subagents/config` | — |
-| `PUT` | `/api/v1/subagents/config` | — |
 | `GET` | `/api/v1/system-config` | — |
 | `PUT` | `/api/v1/system-config` | `config:edit_admin` |
 | `GET` | `/api/v1/system-config/runtime` | — |

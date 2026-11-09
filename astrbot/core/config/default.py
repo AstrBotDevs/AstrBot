@@ -3,10 +3,12 @@
 import os
 
 from astrbot import __version__
-from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
+from astrbot.core.astr_agent_runtime.computer.booters.cua_defaults import (
+    CUA_DEFAULT_CONFIG,
+)
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-from .agent_runner import get_agent_runner_config_default
+from .agent import get_runtime_config_default
 
 
 def get_local_permission_defaults(system: str | None = None) -> dict:
@@ -84,11 +86,12 @@ WEBHOOK_SUPPORTED_PLATFORMS = [
     "slack",
     "lark",
     "line",
+    "mattermost",
 ]
 
 # 默认配置
 DEFAULT_CONFIG = {
-    "config_version": 5,
+    "config_version": 6,
     "platform_settings": {
         "unique_session": False,
         "rate_limit": {
@@ -202,24 +205,9 @@ DEFAULT_CONFIG = {
             "max_size": 1280,
         },
     },
-    "agent_runner": {
-        "runner_type": "local",
-        "config": get_agent_runner_config_default("local"),
-    },
-    # SubAgent orchestrator mode:
-    # - main_enable = False: disabled; main LLM mounts tools normally (persona selection).
-    # - main_enable = True: enabled; main LLM keeps its own tools and includes handoff
-    #   tools (transfer_to_*). remove_main_duplicate_tools can remove tools that are
-    #   duplicated on subagents from the main LLM toolset.
-    "subagent_orchestrator": {
-        "main_enable": False,
-        "remove_main_duplicate_tools": False,
-        "router_system_prompt": (
-            "You are a task router. Your job is to chat naturally, recognize user intent, "
-            "and delegate work to the most suitable subagent using transfer_to_* tools. "
-            "Do not try to use domain tools yourself. If no subagent fits, respond directly."
-        ),
-        "agents": [],
+    "agent": {
+        "runtime": "astrbot",
+        "config": get_runtime_config_default("astrbot"),
     },
     "provider_stt_settings": {
         "enable": False,
@@ -553,6 +541,8 @@ CONFIG_METADATA_2 = {
                         "mattermost_url": "https://chat.example.com",
                         "mattermost_bot_token": "",
                         "mattermost_reconnect_delay": 5.0,
+                        "unified_webhook_mode": True,
+                        "webhook_uuid": "",
                     },
                     # "WebChat": {
                     #     "id": "webchat",
@@ -1948,7 +1938,7 @@ CONFIG_METADATA_2 = {
                         "gemini_tts_api_key": "",
                         "gemini_tts_api_base": "",
                         "gemini_tts_timeout": 20,
-                        "gemini_tts_model": "gemini-2.5-flash-preview-tts",
+                        "gemini_tts_model": "gemini-3.8-flash-tts",
                         "gemini_tts_prefix": "",
                         "gemini_tts_voice_name": "Leda",
                         "proxy": "",
@@ -2620,17 +2610,17 @@ CONFIG_METADATA_2 = {
                     "gm_native_search": {
                         "description": "启用原生搜索功能",
                         "type": "bool",
-                        "hint": "启用后所有函数工具将全部失效，免费次数限制请查阅官方文档",
+                        "hint": "仅 Gemini 3 及以上模型支持与函数工具同时使用；Gemini 3 及以上模型的原生搜索仅限付费层级，计费规则请查阅官方文档",
                     },
                     "gm_native_coderunner": {
                         "description": "启用原生代码执行器",
                         "type": "bool",
-                        "hint": "启用后所有函数工具将全部失效",
+                        "hint": "仅 Gemini 3 及以上模型支持与函数工具同时使用",
                     },
                     "gm_url_context": {
                         "description": "启用URL上下文功能",
                         "type": "bool",
-                        "hint": "启用后所有函数工具将全部失效",
+                        "hint": "仅 Gemini 3 及以上模型支持与函数工具同时使用",
                     },
                     "gm_safety_settings": {
                         "description": "安全过滤器",
@@ -3163,10 +3153,10 @@ CONFIG_METADATA_2 = {
                     },
                 },
             },
-            "agent_runner": {
+            "agent": {
                 "type": "object",
                 "items": {
-                    "runner_type": {"type": "string"},
+                    "runtime": {"type": "string"},
                     "config": {"type": "dict"},
                 },
             },
@@ -3355,7 +3345,7 @@ CONFIG_METADATA_3 = {
     "ai_group": {
         "name": "AI",
         "metadata": {
-            "agent_runner": {
+            "agent": {
                 "description": "Agent 执行方式",
                 "hint": "选择 AI 对话的执行器。切换执行器会使用新类型的默认配置，不保留上一类型的参数。",
                 "type": "object",
@@ -3365,10 +3355,10 @@ CONFIG_METADATA_3 = {
                         "type": "bool",
                         "hint": "AI 对话总开关",
                     },
-                    "agent_runner.runner_type": {
+                    "agent.runtime": {
                         "description": "执行器",
                         "type": "string",
-                        "options": ["local", "dify", "coze", "dashscope", "deerflow"],
+                        "options": ["astrbot", "dify", "coze", "dashscope", "deerflow"],
                         "labels": [
                             "内置 Agent",
                             "Dify",
@@ -3376,11 +3366,11 @@ CONFIG_METADATA_3 = {
                             "阿里云百炼应用",
                             "DeerFlow",
                         ],
-                        "_special": "agent_runner_type",
-                        "runner_defaults": {
-                            runner_type: get_agent_runner_config_default(runner_type)
+                        "_special": "agent_runtime",
+                        "runtime_defaults": {
+                            runner_type: get_runtime_config_default(runner_type)
                             for runner_type in (
-                                "local",
+                                "astrbot",
                                 "dify",
                                 "coze",
                                 "dashscope",
@@ -3398,40 +3388,40 @@ CONFIG_METADATA_3 = {
                 "type": "object",
                 "condition": {
                     "provider_settings.enable": True,
-                    "agent_runner.runner_type": "dify",
+                    "agent.runtime": "dify",
                 },
                 "items": {
-                    "agent_runner.config.dify_api_type": {
+                    "agent.config.dify_api_type": {
                         "description": "应用类型",
                         "type": "string",
                         "options": ["chat", "chatflow", "agent", "workflow"],
                     },
-                    "agent_runner.config.dify_api_key": {
+                    "agent.config.dify_api_key": {
                         "description": "API Key",
                         "type": "string",
                         "secret": True,
                     },
-                    "agent_runner.config.dify_api_base": {
+                    "agent.config.dify_api_base": {
                         "description": "API Base URL",
                         "type": "string",
                     },
-                    "agent_runner.config.dify_workflow_output_key": {
+                    "agent.config.dify_workflow_output_key": {
                         "description": "Workflow 输出变量名",
                         "type": "string",
                     },
-                    "agent_runner.config.dify_query_input_key": {
+                    "agent.config.dify_query_input_key": {
                         "description": "Prompt 输入变量名",
                         "type": "string",
                     },
-                    "agent_runner.config.variables": {
+                    "agent.config.variables": {
                         "description": "变量",
                         "type": "dict",
                     },
-                    "agent_runner.config.timeout": {
+                    "agent.config.timeout": {
                         "description": "超时时间（秒）",
                         "type": "int",
                     },
-                    "agent_runner.config.proxy": {
+                    "agent.config.proxy": {
                         "description": "代理地址",
                         "type": "string",
                     },
@@ -3442,31 +3432,31 @@ CONFIG_METADATA_3 = {
                 "type": "object",
                 "condition": {
                     "provider_settings.enable": True,
-                    "agent_runner.runner_type": "coze",
+                    "agent.runtime": "coze",
                 },
                 "items": {
-                    "agent_runner.config.coze_api_key": {
+                    "agent.config.coze_api_key": {
                         "description": "API Key",
                         "type": "string",
                         "secret": True,
                     },
-                    "agent_runner.config.bot_id": {
+                    "agent.config.bot_id": {
                         "description": "Bot ID",
                         "type": "string",
                     },
-                    "agent_runner.config.coze_api_base": {
+                    "agent.config.coze_api_base": {
                         "description": "API Base URL",
                         "type": "string",
                     },
-                    "agent_runner.config.auto_save_history": {
+                    "agent.config.auto_save_history": {
                         "description": "由 Coze 管理对话记录",
                         "type": "bool",
                     },
-                    "agent_runner.config.timeout": {
+                    "agent.config.timeout": {
                         "description": "超时时间（秒）",
                         "type": "int",
                     },
-                    "agent_runner.config.proxy": {
+                    "agent.config.proxy": {
                         "description": "代理地址",
                         "type": "string",
                     },
@@ -3477,46 +3467,46 @@ CONFIG_METADATA_3 = {
                 "type": "object",
                 "condition": {
                     "provider_settings.enable": True,
-                    "agent_runner.runner_type": "dashscope",
+                    "agent.runtime": "dashscope",
                 },
                 "items": {
-                    "agent_runner.config.dashscope_app_type": {
+                    "agent.config.dashscope_app_type": {
                         "description": "应用类型",
                         "type": "string",
                         "options": ["agent", "workflow"],
                     },
-                    "agent_runner.config.dashscope_api_key": {
+                    "agent.config.dashscope_api_key": {
                         "description": "API Key",
                         "type": "string",
                         "secret": True,
                     },
-                    "agent_runner.config.dashscope_app_id": {
+                    "agent.config.dashscope_app_id": {
                         "description": "应用 ID",
                         "type": "string",
                     },
-                    "agent_runner.config.rag_options.pipeline_ids": {
+                    "agent.config.rag_options.pipeline_ids": {
                         "description": "知识库 Pipeline ID",
                         "type": "list",
                         "items": {"type": "string"},
                     },
-                    "agent_runner.config.rag_options.file_ids": {
+                    "agent.config.rag_options.file_ids": {
                         "description": "文件 ID",
                         "type": "list",
                         "items": {"type": "string"},
                     },
-                    "agent_runner.config.rag_options.output_reference": {
+                    "agent.config.rag_options.output_reference": {
                         "description": "输出引用",
                         "type": "bool",
                     },
-                    "agent_runner.config.variables": {
+                    "agent.config.variables": {
                         "description": "变量",
                         "type": "dict",
                     },
-                    "agent_runner.config.timeout": {
+                    "agent.config.timeout": {
                         "description": "超时时间（秒）",
                         "type": "int",
                     },
-                    "agent_runner.config.proxy": {
+                    "agent.config.proxy": {
                         "description": "代理地址",
                         "type": "string",
                     },
@@ -3527,56 +3517,56 @@ CONFIG_METADATA_3 = {
                 "type": "object",
                 "condition": {
                     "provider_settings.enable": True,
-                    "agent_runner.runner_type": "deerflow",
+                    "agent.runtime": "deerflow",
                 },
                 "items": {
-                    "agent_runner.config.deerflow_api_base": {
+                    "agent.config.deerflow_api_base": {
                         "description": "API Base URL",
                         "type": "string",
                     },
-                    "agent_runner.config.deerflow_api_key": {
+                    "agent.config.deerflow_api_key": {
                         "description": "API Key",
                         "type": "string",
                         "secret": True,
                     },
-                    "agent_runner.config.deerflow_auth_header": {
+                    "agent.config.deerflow_auth_header": {
                         "description": "Authorization Header",
                         "type": "string",
                         "secret": True,
                     },
-                    "agent_runner.config.deerflow_assistant_id": {
+                    "agent.config.deerflow_assistant_id": {
                         "description": "Assistant ID",
                         "type": "string",
                     },
-                    "agent_runner.config.deerflow_model_name": {
+                    "agent.config.deerflow_model_name": {
                         "description": "模型名称覆盖",
                         "type": "string",
                     },
-                    "agent_runner.config.deerflow_thinking_enabled": {
+                    "agent.config.deerflow_thinking_enabled": {
                         "description": "启用思考模式",
                         "type": "bool",
                     },
-                    "agent_runner.config.deerflow_plan_mode": {
+                    "agent.config.deerflow_plan_mode": {
                         "description": "启用计划模式",
                         "type": "bool",
                     },
-                    "agent_runner.config.deerflow_subagent_enabled": {
+                    "agent.config.deerflow_subagent_enabled": {
                         "description": "启用子智能体",
                         "type": "bool",
                     },
-                    "agent_runner.config.deerflow_max_concurrent_subagents": {
+                    "agent.config.deerflow_max_concurrent_subagents": {
                         "description": "子智能体最大并发数",
                         "type": "int",
                     },
-                    "agent_runner.config.deerflow_recursion_limit": {
+                    "agent.config.deerflow_recursion_limit": {
                         "description": "递归深度上限",
                         "type": "int",
                     },
-                    "agent_runner.config.timeout": {
+                    "agent.config.timeout": {
                         "description": "超时时间（秒）",
                         "type": "int",
                     },
-                    "agent_runner.config.proxy": {
+                    "agent.config.proxy": {
                         "description": "代理地址",
                         "type": "string",
                     },
@@ -3587,31 +3577,31 @@ CONFIG_METADATA_3 = {
                 "hint": "配置内置 Agent 使用的对话模型，以及通用的图片转述、语音模型。",
                 "type": "object",
                 "items": {
-                    "agent_runner.config.model.provider_id": {
+                    "agent.config.model.provider_id": {
                         "description": "对话模型",
                         "type": "string",
                         "_special": "select_provider",
                         "hint": "留空时使用第一个模型",
                         "condition": {
-                            "agent_runner.runner_type": "local",
+                            "agent.runtime": "astrbot",
                         },
                     },
-                    "agent_runner.config.model.fallback_provider_ids": {
+                    "agent.config.model.fallback_provider_ids": {
                         "description": "回退对话模型",
                         "type": "list",
                         "items": {"type": "string"},
                         "_special": "select_providers",
                         "hint": "主聊天模型请求失败时，按顺序切换到这些模型。",
                         "condition": {
-                            "agent_runner.runner_type": "local",
+                            "agent.runtime": "astrbot",
                         },
                     },
-                    "agent_runner.config.model.request_max_retries": {
+                    "agent.config.model.request_max_retries": {
                         "description": "异常重试次数",
                         "type": "int",
                         "hint": "单次模型请求遇到可重试错误时的最大尝试次数。",
                         "condition": {
-                            "agent_runner.runner_type": "local",
+                            "agent.runtime": "astrbot",
                         },
                     },
                     "provider_settings.default_image_caption_provider_id": {
@@ -3673,29 +3663,29 @@ CONFIG_METADATA_3 = {
                 "hint": "",
                 "type": "object",
                 "items": {
-                    "agent_runner.config.persona.persona_id": {
+                    "agent.config.persona.persona_id": {
                         "description": "默认采用的人格",
                         "type": "string",
                         "_special": "select_persona",
                     },
-                    "agent_runner.config.persona.safety_mode": {
+                    "agent.config.persona.safety_mode": {
                         "description": "健康模式",
                         "type": "bool",
                         "hint": "引导模型输出健康、安全的内容，避免有害或敏感话题。",
                     },
-                    "agent_runner.config.persona.safety_mode_strategy": {
+                    "agent.config.persona.safety_mode_strategy": {
                         "description": "健康模式策略",
                         "type": "string",
                         "invisible": True,
                         "options": ["system_prompt"],
                         "hint": "选择健康模式的实现策略。",
                         "condition": {
-                            "agent_runner.config.persona.safety_mode": True,
+                            "agent.config.persona.safety_mode": True,
                         },
                     },
                 },
                 "condition": {
-                    "agent_runner.runner_type": "local",
+                    "agent.runtime": "astrbot",
                     "provider_settings.enable": True,
                 },
             },
@@ -3728,7 +3718,7 @@ CONFIG_METADATA_3 = {
                     },
                 },
                 "condition": {
-                    "agent_runner.runner_type": "local",
+                    "agent.runtime": "astrbot",
                     "provider_settings.enable": True,
                 },
             },
@@ -3887,7 +3877,7 @@ CONFIG_METADATA_3 = {
                     },
                 },
                 "condition": {
-                    "agent_runner.runner_type": "local",
+                    "agent.runtime": "astrbot",
                     "provider_settings.enable": True,
                 },
             },
@@ -4093,7 +4083,7 @@ CONFIG_METADATA_3 = {
                     },
                 },
                 "condition": {
-                    "agent_runner.runner_type": "local",
+                    "agent.runtime": "astrbot",
                     "provider_settings.enable": True,
                 },
             },
@@ -4123,10 +4113,42 @@ CONFIG_METADATA_3 = {
             #         },
             #     },
             #     "condition": {
-            #         "agent_runner.runner_type": "local",
+            #         "agent.runtime": "astrbot",
             #         "provider_settings.enable": True,
             #     },
             # },
+            "subagents": {
+                "description": "子代理",
+                "type": "object",
+                "condition": {"agent.runtime": "astrbot"},
+                "items": {
+                    "agent.config.subagents.enabled": {
+                        "description": "启用子代理",
+                        "hint": "允许 AstrBot 在合适的时机创建通用或专用子代理完成任务。",
+                        "type": "bool",
+                    },
+                    "agent.config.subagents.config_ids": {
+                        "description": "专用 Agent 配置",
+                        "hint": "配置专用子代理（可指定人格、工具集等配置）。即使不配置，AstrBot 也会在需要的时候动态生成通用子代理完成任务。",
+                        "type": "list",
+                        "_special": "select_agent_configs",
+                        "items": {"type": "string"},
+                        "condition": {"agent.config.subagents.enabled": True},
+                    },
+                    "agent.config.subagents.max_concurrent_agents": {
+                        "description": "每会话并发数",
+                        "type": "int",
+                        "hint": "其余任务排队，默认 3。",
+                        "condition": {"agent.config.subagents.enabled": True},
+                    },
+                    "agent.config.subagents.task_timeout": {
+                        "description": "任务超时（秒）",
+                        "type": "int",
+                        "hint": "包含排队时间，默认 600 秒。",
+                        "condition": {"agent.config.subagents.enabled": True},
+                    },
+                },
+            },
             "proactive_capability": {
                 "description": "主动型 Agent",
                 "hint": "https://docs.astrbot.app/use/proactive-agent.html",
@@ -4139,7 +4161,7 @@ CONFIG_METADATA_3 = {
                     },
                 },
                 "condition": {
-                    "agent_runner.runner_type": "local",
+                    "agent.runtime": "astrbot",
                     "provider_settings.enable": True,
                 },
             },
@@ -4148,77 +4170,77 @@ CONFIG_METADATA_3 = {
                 "description": "上下文管理策略",
                 "type": "object",
                 "items": {
-                    "agent_runner.config.compression.max_turns": {
+                    "agent.config.compression.max_turns": {
                         "description": "压缩前最多保留对话轮数",
                         "type": "int",
                         "collapsed": True,
                         "hint": "普通会话历史超过该轮数后，才会按下方策略进行持久化截断或 LLM 压缩；请求发送前也会先按该值约束上下文。-1 表示不按轮数限制。",
                         "condition": {
-                            "agent_runner.runner_type": "local",
+                            "agent.runtime": "astrbot",
                         },
                     },
-                    "agent_runner.config.compression.trim_turns": {
+                    "agent.config.compression.trim_turns": {
                         "description": "轮次超限时一次丢弃轮数",
                         "type": "int",
                         "collapsed": True,
                         "hint": "当超过“压缩前最多保留对话轮数”且无法使用 LLM 压缩时，一次丢弃多少轮旧对话；请求期截断也会复用该值。",
                         "condition": {
-                            "agent_runner.runner_type": "local",
+                            "agent.runtime": "astrbot",
                         },
                     },
-                    "agent_runner.config.compression.overflow_strategy": {
+                    "agent.config.compression.overflow_strategy": {
                         "description": "压缩策略",
                         "type": "string",
                         "options": ["truncate_by_turns", "llm_compress"],
                         "labels": ["按对话轮数截断", "由 LLM 压缩上下文"],
                         "condition": {
-                            "agent_runner.runner_type": "local",
+                            "agent.runtime": "astrbot",
                         },
                         "hint": "模型上下文超限时的处理策略。",
                     },
-                    "agent_runner.config.compression.instruction": {
+                    "agent.config.compression.instruction": {
                         "description": "上下文压缩提示词",
                         "type": "text",
                         "collapsed": True,
                         "hint": "如果为空则使用默认提示词。",
                         "condition": {
-                            "agent_runner.config.compression.overflow_strategy": "llm_compress",
-                            "agent_runner.runner_type": "local",
+                            "agent.config.compression.overflow_strategy": "llm_compress",
+                            "agent.runtime": "astrbot",
                         },
                     },
-                    "agent_runner.config.compression.keep_recent_ratio": {
+                    "agent.config.compression.keep_recent_ratio": {
                         "description": "压缩时保留最近上下文比例",
                         "type": "float",
                         "collapsed": True,
                         "slider": {"min": 0, "max": 0.3, "step": 0.01},
                         "hint": "按当前上下文 token 数保留最近内容，范围 0-0.3。0.15 表示保留 15%；比例大于 0 时至少保留最后一轮。",
                         "condition": {
-                            "agent_runner.config.compression.overflow_strategy": "llm_compress",
-                            "agent_runner.runner_type": "local",
+                            "agent.config.compression.overflow_strategy": "llm_compress",
+                            "agent.runtime": "astrbot",
                         },
                     },
-                    "agent_runner.config.compression.provider_id": {
+                    "agent.config.compression.provider_id": {
                         "description": "压缩模型",
                         "type": "string",
                         "_special": "select_provider",
                         "hint": "用于上下文压缩的模型。默认选择当前的对话模型。",
                         "condition": {
-                            "agent_runner.config.compression.overflow_strategy": "llm_compress",
-                            "agent_runner.runner_type": "local",
+                            "agent.config.compression.overflow_strategy": "llm_compress",
+                            "agent.runtime": "astrbot",
                         },
                     },
-                    "agent_runner.config.compression.fallback_max_tokens": {
+                    "agent.config.compression.fallback_max_tokens": {
                         "description": "上下文窗口兜底值",
                         "type": "int",
                         "collapsed": True,
                         "hint": "当 max_context_tokens 为 0 且模型不在内置元数据中时，使用此值作为上下文窗口大小。默认 128000。",
                         "condition": {
-                            "agent_runner.runner_type": "local",
+                            "agent.runtime": "astrbot",
                         },
                     },
                 },
                 "condition": {
-                    "agent_runner.runner_type": "local",
+                    "agent.runtime": "astrbot",
                     "provider_settings.enable": True,
                 },
             },
@@ -4231,7 +4253,7 @@ CONFIG_METADATA_3 = {
                         "hint": "显示模型的思维链信息到最终回复中。",
                         "type": "bool",
                         "condition": {
-                            "agent_runner.runner_type": "local",
+                            "agent.runtime": "astrbot",
                         },
                     },
                     "provider_settings.streaming_response": {
@@ -4264,7 +4286,7 @@ CONFIG_METADATA_3 = {
                         "type": "bool",
                         "hint": "在用户提示词中带上当前的时间信息。",
                         "condition": {
-                            "agent_runner.runner_type": "local",
+                            "agent.runtime": "astrbot",
                         },
                     },
                     "provider_settings.show_tool_use_status": {
@@ -4272,7 +4294,7 @@ CONFIG_METADATA_3 = {
                         "hint": "有工具调用时，同时发送带有工具调用名字的消息。",
                         "type": "bool",
                         "condition": {
-                            "agent_runner.runner_type": "local",
+                            "agent.runtime": "astrbot",
                         },
                     },
                     "provider_settings.show_tool_call_result": {
@@ -4280,7 +4302,7 @@ CONFIG_METADATA_3 = {
                         "type": "bool",
                         "hint": "仅在输出工具调用信息启用时生效，展示结果前 70 个字符。",
                         "condition": {
-                            "agent_runner.runner_type": "local",
+                            "agent.runtime": "astrbot",
                             "provider_settings.show_tool_use_status": True,
                         },
                     },
@@ -4289,40 +4311,40 @@ CONFIG_METADATA_3 = {
                         "type": "bool",
                         "hint": "开启后，非流式模式下多步工具调用过程中产生的中间文本将缓冲，待 Agent 完成后合并为一条回复发送。",
                         "condition": {
-                            "agent_runner.runner_type": "local",
+                            "agent.runtime": "astrbot",
                             "provider_settings.streaming_response": False,
                         },
                     },
-                    "agent_runner.config.misc.sanitize_context_by_modalities": {
+                    "agent.config.misc.sanitize_context_by_modalities": {
                         "description": "按模型能力清理历史上下文",
                         "type": "bool",
                         "hint": "开启后，在每次请求 LLM 前会按当前模型提供商中所选择的模型能力删除对话中不支持的图片/工具调用结构（会改变模型看到的历史）",
                         "condition": {
-                            "agent_runner.runner_type": "local",
+                            "agent.runtime": "astrbot",
                         },
                     },
-                    "agent_runner.config.misc.max_steps": {
+                    "agent.config.misc.max_steps": {
                         "description": "工具调用轮数上限",
                         "type": "int",
                         "condition": {
-                            "agent_runner.runner_type": "local",
+                            "agent.runtime": "astrbot",
                         },
                     },
-                    "agent_runner.config.misc.tool_call_timeout": {
+                    "agent.config.misc.tool_call_timeout": {
                         "description": "工具调用超时时间（秒）",
                         "type": "int",
                         "condition": {
-                            "agent_runner.runner_type": "local",
+                            "agent.runtime": "astrbot",
                         },
                     },
-                    "agent_runner.config.misc.tool_schema_mode": {
+                    "agent.config.misc.tool_schema_mode": {
                         "description": "工具调用模式",
                         "type": "string",
                         "options": ["skills_like", "full"],
                         "labels": ["Skills-like（两阶段）", "Full（完整参数）"],
                         "hint": "skills-like 先下发工具名称与描述，再下发参数；full 一次性下发完整参数。",
                         "condition": {
-                            "agent_runner.runner_type": "local",
+                            "agent.runtime": "astrbot",
                         },
                     },
                     "provider_settings.wake_prefix": {
@@ -4358,7 +4380,7 @@ CONFIG_METADATA_3 = {
                         "type": "int",
                         "hint": "引用/转发消息回退解析图片时的最大注入数量，超出会截断。",
                         "condition": {
-                            "agent_runner.runner_type": "local",
+                            "agent.runtime": "astrbot",
                         },
                         "collapsed": True,
                     },
@@ -4367,7 +4389,7 @@ CONFIG_METADATA_3 = {
                         "type": "int",
                         "hint": "解析 Reply 组件链时允许的最大递归深度。",
                         "condition": {
-                            "agent_runner.runner_type": "local",
+                            "agent.runtime": "astrbot",
                         },
                         "collapsed": True,
                     },
@@ -4376,7 +4398,7 @@ CONFIG_METADATA_3 = {
                         "type": "int",
                         "hint": "解析合并转发节点时允许的最大递归深度。",
                         "condition": {
-                            "agent_runner.runner_type": "local",
+                            "agent.runtime": "astrbot",
                         },
                         "collapsed": True,
                     },
@@ -4385,7 +4407,7 @@ CONFIG_METADATA_3 = {
                         "type": "int",
                         "hint": "递归拉取 get_forward_msg 的最大次数。",
                         "condition": {
-                            "agent_runner.runner_type": "local",
+                            "agent.runtime": "astrbot",
                         },
                         "collapsed": True,
                     },
@@ -4394,7 +4416,7 @@ CONFIG_METADATA_3 = {
                         "type": "bool",
                         "hint": "开启后，get_msg/get_forward_msg 全部尝试失败时输出 warning 日志。",
                         "condition": {
-                            "agent_runner.runner_type": "local",
+                            "agent.runtime": "astrbot",
                         },
                         "collapsed": True,
                     },
@@ -4419,7 +4441,7 @@ CONFIG_METADATA_3 = {
                     },
                     "wake_prefix": {
                         "description": "唤醒词",
-                        "hint": "唤醒机器人的消息前缀的列表。也可以通过 @ 机器人来唤醒。",
+                        "hint": "唤醒机器人的消息前缀的列表，也可以通过 @ 机器人来唤醒。\n\n内置指令（如 `/help`、`/sid`）也依赖唤醒词：群聊中不带唤醒词直接输入将无法触发；私聊在未启用「私聊消息需要唤醒词」时无需前缀，可直接输入指令触发。",
                         "type": "list",
                         "items": {"type": "string"},
                     },

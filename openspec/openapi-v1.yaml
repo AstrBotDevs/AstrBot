@@ -93,7 +93,7 @@ tags:
   - name: Cron
   - name: Logs
   - name: T2I
-  - name: Subagents
+  - name: Agent Configurations
   - name: Webhooks
 
 paths:
@@ -1589,6 +1589,12 @@ paths:
           schema:
             type: string
             default: ""
+        - name: session_id
+          in: query
+          required: false
+          description: Optional for per-session workspaces; must belong to this project and user when provided. Omitted or empty values use the legacy default workspace.
+          schema:
+            type: string
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -1610,6 +1616,12 @@ paths:
           required: true
           schema:
             type: string
+        - name: session_id
+          in: query
+          required: false
+          description: Optional for per-session workspaces; must belong to this project and user when provided. Omitted or empty values use the legacy default workspace.
+          schema:
+            type: string
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -1629,6 +1641,12 @@ paths:
         - name: path
           in: query
           required: true
+          schema:
+            type: string
+        - name: session_id
+          in: query
+          required: false
+          description: Optional for per-session workspaces; must belong to this project and user when provided. Omitted or empty values use the legacy default workspace.
           schema:
             type: string
       responses:
@@ -5440,35 +5458,73 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
-  /api/v1/subagents/config:
+  /api/v1/agent-configs:
     get:
-      tags: [Subagents]
-      summary: Get subagent orchestrator configuration
-      operationId: getSubagentConfig
+      tags: [Agent Configurations]
+      summary: List reusable agent configurations
+      operationId: listAgentConfigs
       x-astrbot-scope: config
       responses:
         "200":
           $ref: "#/components/responses/Ok"
-    put:
-      tags: [Subagents]
-      summary: Update subagent orchestrator configuration
-      operationId: updateSubagentConfig
+    post:
+      tags: [Agent Configurations]
+      summary: Create an agent configuration
+      operationId: createAgentConfig
       x-astrbot-scope: config
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/DynamicConfig"
+              $ref: "#/components/schemas/AgentConfigRequest"
       responses:
         "200":
           $ref: "#/components/responses/Ok"
 
-  /api/v1/subagents/available-tools:
+  /api/v1/agent-configs/{config_id}:
+    parameters:
+      - in: path
+        name: config_id
+        required: true
+        schema:
+          type: string
     get:
-      tags: [Subagents]
-      summary: List tools available to subagents
-      operationId: listSubagentAvailableTools
+      tags: [Agent Configurations]
+      summary: Get an agent configuration
+      operationId: getAgentConfig
+      x-astrbot-scope: config
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    put:
+      tags: [Agent Configurations]
+      summary: Update an agent configuration
+      operationId: updateAgentConfig
+      x-astrbot-scope: config
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentConfigRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [Agent Configurations]
+      summary: Delete an unreferenced agent configuration
+      operationId: deleteAgentConfig
+      x-astrbot-scope: config
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/agent-runtimes:
+    get:
+      tags: [Agent Configurations]
+      summary: List registered callable agent runtimes
+      operationId: listAgentRuntimes
       x-astrbot-scope: config
       responses:
         "200":
@@ -5755,7 +5811,7 @@ components:
           properties:
             backend:
               type: [string, "null"]
-              enum: [bubblewrap, seatbelt, null]
+              enum: [bubblewrap, seatbelt, appcontainer, null]
             status:
               type: string
               enum: [detected, missing, unavailable, unsupported]
@@ -5795,6 +5851,28 @@ components:
           type: string
           enum: [logs, cache, traces, all]
           default: all
+
+    AgentConfigRequest:
+      type: object
+      additionalProperties: false
+      required: [name, runtime]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        description:
+          type: string
+          default: ""
+        enabled:
+          type: boolean
+          default: true
+        runtime:
+          type: string
+          minLength: 1
+        config:
+          type: object
+          additionalProperties: true
 
     DynamicConfig:
       type: object
