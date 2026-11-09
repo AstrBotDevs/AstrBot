@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
 from astrbot.core.workspace import API_KEY_USERNAME_PREFIX
+from astrbot.dashboard.plugin_page_auth import PluginPageAuth
 from astrbot.dashboard.responses import ApiError
 from astrbot.dashboard.schemas import (
     AccountUpdateRequest,
@@ -123,6 +124,9 @@ async def require_dashboard_user(request: Request) -> str:
     except jwt.InvalidTokenError as exc:
         raise ApiError("Token 无效", status_code=401) from exc
 
+    # Resource tokens must never become dashboard sessions.
+    if PluginPageAuth.is_asset_token(payload):
+        raise ApiError("Token 无效", status_code=401)
     username = payload.get("username")
     if not isinstance(username, str) or not username.strip():
         raise ApiError("Token 无效", status_code=401)
@@ -191,6 +195,9 @@ async def require_scope(request: Request, scope: str) -> AuthContext:
 
     username = payload.get("username")
     if not isinstance(username, str) or not username.strip():
+        raise ApiError("Invalid token", status_code=401)
+    # A valid resource-token signature does not grant API scopes.
+    if PluginPageAuth.is_asset_token(payload):
         raise ApiError("Invalid token", status_code=401)
     return AuthContext(username=username, scopes=["*"], via="jwt")
 
