@@ -17,6 +17,7 @@ from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 
 if TYPE_CHECKING:
+    from astrbot.core.agent.runtime import AgentSessionRef
     from astrbot.core.star.context import Context
 
 WakeupSource = Literal["cron", "background_task", "plugin"]
@@ -38,6 +39,7 @@ class AgentWakeupEvent(AstrMessageEvent):
         source: WakeupSource,
         source_id: str | None = None,
         role: str = "member",
+        agent_session: AgentSessionRef | None = None,
     ) -> None:
         """Create a wakeup without changing the target session's identity.
 
@@ -49,6 +51,7 @@ class AgentWakeupEvent(AstrMessageEvent):
             source: Mechanism that triggered the turn, independent of its platform.
             source_id: Cron job ID, background task ID, or invoking plugin ID.
             role: Caller permission role already resolved by the framework.
+            agent_session: Explicit runtime conversation, independent of UMO selection.
 
         Raises:
             ValueError: If the source or target platform identity is invalid.
@@ -59,6 +62,7 @@ class AgentWakeupEvent(AstrMessageEvent):
             raise ValueError("Wakeup platform metadata must match the target session.")
         self.source = source
         self.source_id = source_id
+        self.agent_session = agent_session
 
         message = AstrBotMessage()
         message.type = session.message_type

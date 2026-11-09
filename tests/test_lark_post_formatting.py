@@ -5,8 +5,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 import pytest_asyncio
 
-from astrbot.core.astr_main_agent.media import append_quoted_content
-from astrbot.core.astr_main_agent.request import collect_initial_request
+from astrbot.core.agent_media import append_quoted_content
+from astrbot.core.astr_agent_runtime.main_agent.request import collect_initial_request
 from astrbot.core.message.components import Reply
 from astrbot.core.pipeline.process_stage.method.agent_sub_stages import third_party
 from astrbot.core.pipeline.waking_check import stage as waking
@@ -190,7 +190,7 @@ async def test_lark_post_preserves_formatting(
         waking_stage.ctx.astrbot_config["wake_prefix"] = [wake_prefix]
         main_agent_build_config.provider_wake_prefix = provider_prefix
         monkeypatch.setattr(
-            'astrbot.core.astr_main_agent.request._get_session_conv',
+            "astrbot.core.astr_agent_runtime.main_agent.request._get_session_conv",
             AsyncMock(return_value=SimpleNamespace(history="[]")),
         )
         await waking_stage.process(parsed_event)

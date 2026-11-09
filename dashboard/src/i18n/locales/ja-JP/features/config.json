@@ -105,7 +105,7 @@
       "confirm": "この方式を使用"
     },
     "runners": {
-      "local": {
+      "astrbot": {
         "title": "組み込み AI",
         "summary": "モデル、ペルソナ、ナレッジベース、ツールなど、AstrBot の AI 機能を設定します。",
         "description": "モデル、ペルソナ、ナレッジベース、ツールに対応した AstrBot 組み込み AI を使用します。"
