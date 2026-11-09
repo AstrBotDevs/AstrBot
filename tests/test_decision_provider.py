@@ -106,6 +106,50 @@ async def test_system_one_decisions_share_one_request_and_parse_all_heads():
 
 
 @pytest.mark.asyncio
+async def test_system_one_connection_test_accepts_endpoint_requiring_noul_criteria():
+    def handler(request: httpx.Request) -> httpx.Response:
+        question = json.loads(request.content)["questions"]["test"]
+        if set(question.get("criteria", {})) != {"true", "false"}:
+            return httpx.Response(400, json={"error": "Missing boolean criteria"})
+        return httpx.Response(
+            200, json={"answers": {"test": {"type": "noul", "noul": 0.9}}}
+        )
+
+    provider = _provider(handler)
+    try:
+        await provider.test()
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "criteria",
+    [
+        {"true": "", "false": ""},
+        {"false": "The user did not ask to cancel."},
+    ],
+)
+async def test_system_one_sends_caller_supplied_noul_criteria(criteria):
+    def handler(request: httpx.Request) -> httpx.Response:
+        question = json.loads(request.content)["questions"]["cancel"]
+        assert question["criteria"] == criteria
+        return httpx.Response(
+            200, json={"answers": {"cancel": {"type": "noul", "noul": 0.8}}}
+        )
+
+    provider = _provider(handler)
+    try:
+        answers = await provider.ask(
+            {"cancel": DecisionBooleanQuestion("Cancel?", criteria=criteria)}
+        )
+    finally:
+        await provider.terminate()
+
+    assert answers["cancel"] == DecisionBooleanAnswer(probability=0.8)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("api_base", "expected_url"),
     [

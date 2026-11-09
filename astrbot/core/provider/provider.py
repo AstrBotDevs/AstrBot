@@ -478,7 +478,11 @@ class DecisionProvider(AbstractProvider):
 
     async def test(self) -> None:
         await self.ask(
-            {"test": DecisionBooleanQuestion("Is this provider available?")},
+            {
+                "test": DecisionBooleanQuestion(
+                    "Is this provider available?", criteria={"true": "", "false": ""}
+                )
+            },
             {},
             request_max_retries=0,
         )
