@@ -1,3 +1,10 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from astrbot.core.platform.astr_message_event import AstrMessageEvent
+
 """Translations for built-in LLM request failures."""
 
 LLM_ERROR_MESSAGES = {
@@ -34,3 +41,21 @@ LLM_ERROR_MESSAGES = {
         "blockedProvider": "LLM リクエストに失敗しました：プロバイダーの API ベース URL `{api_base}` はセキュリティ上の理由でブロックされました。別の AI プロバイダーを使用してください。",
     },
 }
+
+
+LLM_ERROR_MESSAGE_EXTRA_KEY = "_llm_error_message"
+
+
+def set_llm_error_message(event: AstrMessageEvent, key: str, **params: str) -> None:
+    """Format an internal LLM error in the requesting client's language.
+
+    Args:
+        event: Message event carrying the optional UI locale.
+        key: Built-in error translation key.
+        **params: Values interpolated into the message.
+    """
+    locale = event.get_extra("locale")
+    if not isinstance(locale, str):
+        locale = "zh-CN"
+    messages = LLM_ERROR_MESSAGES.get(locale, LLM_ERROR_MESSAGES["zh-CN"])
+    event.set_extra(LLM_ERROR_MESSAGE_EXTRA_KEY, messages[key].format(**params))

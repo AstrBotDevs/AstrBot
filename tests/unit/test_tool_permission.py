@@ -21,7 +21,10 @@ from astrbot.dashboard.services.tools_service import ToolsService, ToolsServiceE
 def _make_context(role: str = "member", sender_id: str = "user_123"):
     """Return a mock context object suitable for tool permission checks."""
 
+    current_role = role
+
     class FakeEvent:
+        role = current_role
         unified_msg_origin = "aiocqhttp:GroupMessage:g1"
 
         def is_admin(self) -> bool:
@@ -573,7 +576,7 @@ async def test_guarded_tool_allows_admin_for_declared_admin_tool():
 
 @pytest.mark.asyncio
 async def test_executor_denies_member_for_declared_admin_tool():
-    from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+    from astrbot.core.astr_agent_runtime.tool_executor import FunctionToolExecutor
 
     await _clear_tool_permissions()
     tool = _dummy_tool("executor_declared_admin_tool")
@@ -654,7 +657,7 @@ def test_default_permission_normalizes_enum_from_stdlib_dataclass():
 
 @pytest.mark.asyncio
 async def test_executor_denies_member_for_stdlib_dataclass_declared_admin():
-    from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+    from astrbot.core.astr_agent_runtime.tool_executor import FunctionToolExecutor
 
     await _clear_tool_permissions()
     tool = _EnumDeclaredDataclassTool(

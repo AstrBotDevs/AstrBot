@@ -117,7 +117,7 @@ async def call_event_hook(
                 f"hook({hook_type.name}) -> {plugin_name} - {handler.handler_name}",
             )
             await handler.handler(event, *args, **kwargs)
-        except BaseException:
+        except BaseException as exc:
             logger.error(
                 traceback.format_exc(),
                 extra={"plugin_name": plugin_name},
@@ -134,6 +134,8 @@ async def call_event_hook(
                 handler_category=handler_category,
                 hook=hook_type.name,
             )
+            if not isinstance(exc, Exception):
+                raise
         else:
             event.trace.record(
                 "handler_end",
@@ -148,7 +150,7 @@ async def call_event_hook(
                 hook=hook_type.name,
             )
 
-        if event.is_stopped():
+        if event.is_stopped() and hook_type != EventType.OnAgentDoneEvent:
             logger.info(
                 f"{plugin_name} - {handler.handler_name} stopped event propagation.",
             )

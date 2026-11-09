@@ -100,6 +100,9 @@ class FunctionTool(ToolSchema, Generic[TContext]):
             )
         return value
 
+    execution_timeout: float | None = None
+    """Optional per-call timeout in seconds, overriding the runner's default."""
+
     def __repr__(self) -> str:
         return f"FuncTool(name={self.name}, parameters={self.parameters}, description={self.description})"
 

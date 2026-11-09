@@ -5,9 +5,11 @@ from typing import Any
 
 from astrbot.core import logger, sp
 from astrbot.core.agent.mcp_client import MCPTool, validate_mcp_stdio_config
+from astrbot.core.astr_agent_runtime.tools.registry import (
+    get_builtin_tool_config_statuses,
+)
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.star import star_map
-from astrbot.core.tools.registry import get_builtin_tool_config_statuses
 
 
 class ToolsServiceError(Exception):
