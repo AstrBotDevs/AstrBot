@@ -20,6 +20,45 @@ def _provider() -> ProviderAnthropic:
     return ProviderAnthropic.__new__(ProviderAnthropic)
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("custom_headers", "expected_key"),
+    [({}, "test-key"), ({"x-api-key": "override-key"}, "override-key")],
+)
+async def test_anthropic_request_sends_single_api_key_header(
+    monkeypatch, custom_headers, expected_key
+):
+    monkeypatch.delenv("ANTHROPIC_AUTH_TOKEN", raising=False)
+    monkeypatch.delenv("ANTHROPIC_CUSTOM_HEADERS", raising=False)
+
+    def handle(request):
+        assert request.headers.get_list("x-api-key") == [expected_key]
+        return sdk_httpx.Response(200, json={})
+
+    async with sdk_httpx.AsyncClient(
+        transport=sdk_httpx.MockTransport(handle)
+    ) as http_client:
+        monkeypatch.setattr(
+            ProviderAnthropic,
+            "_create_http_client",
+            lambda self, config: http_client,
+        )
+        provider = ProviderAnthropic(
+            provider_config={
+                "key": ["test-key"],
+                "api_base": "https://opencode.ai/zen/go",
+                "custom_headers": custom_headers,
+            },
+            provider_settings={},
+        )
+        provider.client.max_retries = 0
+        await provider.client.messages.with_raw_response.create(
+            model="claude-test",
+            max_tokens=16,
+            messages=[{"role": "user", "content": "hi"}],
+        )
+
+
 def test_anthropic_extract_usage_counts_cache_creation_input():
     provider = _provider()
 
@@ -466,3 +505,39 @@ async def test_malformed_custom_tools_reach_api_validation(
     assert captured[0]["tools"][0]["name"] == "get_time"
     assert captured[0]["tools"][1:] == custom_tools
     assert provider.provider_config["custom_extra_body"]["tools"] == custom_tools
+
+
+@pytest.mark.asyncio
+async def test_query_concatenates_multiple_text_blocks():
+    provider = ProviderAnthropic(
+        provider_config={
+            "id": "anthropic-test",
+            "type": "anthropic_chat_completion",
+            "model": "claude-test",
+            "key": ["test-key"],
+        },
+        provider_settings={},
+    )
+
+    class FakeMessages:
+        async def create(self, **kwargs):
+            return Message(
+                id="msg_1",
+                content=[
+                    TextBlock(text="Let me search. ", type="text"),
+                    TextBlock(text="The answer is ", type="text"),
+                    TextBlock(text="42.", type="text"),
+                ],
+                model="claude-test",
+                role="assistant",
+                stop_reason="end_turn",
+                stop_sequence=None,
+                type="message",
+                usage=Usage(input_tokens=1, output_tokens=1),
+            )
+
+    provider.client = SimpleNamespace(messages=FakeMessages())
+
+    response = await provider._query({"model": "claude-test", "messages": []}, None)
+
+    assert response.completion_text == "Let me search. The answer is 42."

@@ -112,11 +112,17 @@ class ProviderAnthropic(Provider):
         self.chosen_api_key: str = ""
         self.api_keys: list = super().get_keys()
         self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else ""
+        # SDK 2.x uses Bearer auth; compatible endpoints may require X-Api-Key.
+        default_headers = {"X-Api-Key": self.chosen_api_key}
+        for name, value in (self.custom_headers or {}).items():
+            # Match older SDK casing to avoid duplicate API key headers.
+            name = "X-Api-Key" if name.lower() == "x-api-key" else name
+            default_headers[name] = value
         self.client = AsyncAnthropic(
             api_key=self.chosen_api_key,
             timeout=self.timeout,
             base_url=self.base_url,
-            default_headers=self.custom_headers,
+            default_headers=default_headers,
             http_client=self._create_http_client(provider_config),
         )
 
@@ -582,10 +588,12 @@ class ProviderAnthropic(Provider):
 
         llm_response = LLMResponse(role="assistant")
 
+        text_parts: list[str] = []
         for content_block in completion.content:
             if content_block.type == "text":
-                completion_text = str(content_block.text).strip()
-                llm_response.completion_text = completion_text
+                # Responses with web search/citations carry several text blocks;
+                # concatenate them like the streaming path does.
+                text_parts.append(str(content_block.text))
 
             if content_block.type == "thinking":
                 reasoning_content = str(content_block.thinking).strip()
@@ -596,6 +604,9 @@ class ProviderAnthropic(Provider):
                 llm_response.tools_call_args.append(content_block.input)
                 llm_response.tools_call_name.append(content_block.name)
                 llm_response.tools_call_ids.append(content_block.id)
+
+        if text_parts:
+            llm_response.completion_text = "".join(text_parts).strip()
 
         llm_response.id = completion.id
         llm_response.usage = self._extract_usage(completion.usage)

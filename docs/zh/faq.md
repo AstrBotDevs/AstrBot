@@ -117,8 +117,8 @@ astrbot password
 
 ### 如何让 AstrBot 控制我的 Mac / Windows / Linux 电脑？
 
-1. 在 AstrBot WebUI 的 `配置文件` 中选择机器人使用的配置文件，进入 `AI 配置 → 能力 → 使用电脑能力`，将 `运行环境` 设为 `local`。此处需要使用 AstrBot 内置 AI。
-2. 在同一配置文件的 `平台配置 → 基本 → 管理员 ID` 中添加你的用户 ID（可以通过 `/sid` 指令获取）。
+1. 在 AstrBot WebUI 的 `配置文件` 中选择机器人使用的配置文件，进入 `AI → 能力 → 使用电脑能力`，将 `运行环境` 设为 `local`。此处需要使用 AstrBot 内置 AI。
+2. 在同一配置文件的 `访问控制 → 管理员 → 管理员 ID` 中添加你的用户 ID（可以通过 `/sid` 指令获取）。
 3. 点击右下角的 `保存配置` 按钮。
 
 > [!TIP]
@@ -147,7 +147,7 @@ astrbot password
 
 ### 没有权限操作管理员指令
 
-1. `/name, /provider, /dashboard_update, /op, /deop, /persona, /llm, /plugin, /model, /groupnew` 等是默认的管理员指令。可以通过 `/sid` 指令得到用户的 ID，然后在 `配置文件` 中选择机器人使用的配置文件，在 `平台配置 → 基本 → 管理员 ID` 中添加该 ID，并点击右下角的 `保存配置`。
+1. `/name, /provider, /dashboard_update, /op, /deop, /persona, /llm, /plugin, /model, /groupnew` 等是默认的管理员指令。可以通过 `/sid` 指令得到用户的 ID，然后在 `配置文件` 中选择机器人使用的配置文件，在 `访问控制 → 管理员 → 管理员 ID` 中添加该 ID，并点击右下角的 `保存配置`。
 
 ### 本地渲染 Markdown 图片（t2i）时中文乱码
 

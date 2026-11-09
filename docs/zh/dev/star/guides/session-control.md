@@ -16,11 +16,15 @@
 
 AstrBot 提供了开箱即用的会话控制功能：
 
+后续输入由核心消息管道分发，不再依赖内置插件原来的 `handle_session_control_agent` 处理器。匹配到有效等待会话的消息无需再次 @ 机器人或添加唤醒前缀；经过白名单、会话开关、限流、内容安全检查及预处理后，`ProcessStage` 会先将其交给等待回调。被接管的消息不会继续触发普通插件或 Agent，`@session_waiter` 的用法保持不变。
+
 导入：
 
 ```py
 import astrbot.api.message_components as Comp
-from astrbot.core.utils.session_waiter import (
+# AstrBot v4.30.0 之前的导入方式：
+# from astrbot.core.utils.session_waiter import session_waiter, SessionController
+from astrbot.api.util import (
     session_waiter,
     SessionController,
 )
@@ -103,7 +107,9 @@ async def handle_empty_mention(self, event: AstrMessageEvent):
 
 ```py
 import astrbot.api.message_components as Comp
-from astrbot.core.utils.session_waiter import (
+# AstrBot v4.30.0 之前的导入方式：
+# from astrbot.core.utils.session_waiter import session_waiter, SessionFilter, SessionController
+from astrbot.api.util import (
     session_waiter,
     SessionFilter,
     SessionController,

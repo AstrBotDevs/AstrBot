@@ -3,9 +3,9 @@
     "eyebrow": "サブエージェント"
   },
   "page": {
-    "title": "サブエージェント",
+    "title": "サブエージェント管理",
     "beta": "実験的機能",
-    "subtitle": "メインエージェントは自身のツールを直接使用するほか、一部のタスクを各サブエージェントへ委任できます。より複雑なタスクに対応し、メインエージェントのコンテキスト肥大化を防ぎます。"
+    "subtitle": "Delegate tasks from Built-in AI, retain worker context, and review results."
   },
   "actions": {
     "refresh": "再読み込み",
@@ -14,7 +14,12 @@
     "expand": "設定を展開",
     "collapse": "設定を折りたたむ",
     "delete": "削除",
-    "close": "閉じる"
+    "close": "閉じる",
+    "create": "Create Agent",
+    "cancel": "Cancel",
+    "more": "More",
+    "edit": "Edit Agent",
+    "remove": "Delete Agent"
   },
   "overview": {
     "totalAgents": "サブエージェント総数",
@@ -27,19 +32,19 @@
   },
   "switches": {
     "enable": "サブエージェントオーケストレーションを有効化",
-    "enableHint": "サブエージェント機能を有効にします",
-    "dedupe": "メイン LLM の重複ツールを除外（サブエージェントと重複するツールを非表示）",
-    "dedupeHint": "サブエージェントと重複するツールをメインエージェントから除外します"
+    "enableHint": "サブエージェント機能を有効にします"
   },
   "description": {
-    "disabled": "サブエージェントオーケストレーションは無効です。",
-    "enabled": "有効にすると、メインエージェントがこのサブエージェントを呼び出せます。"
+    "disabled": "Disabled. Main completes tasks with its own tools.",
+    "enabled": "Enabled. Main retains its tools and starts background workers through spawn_agent."
   },
   "section": {
     "title": "サブエージェント設定",
     "subtitle": "メインエージェントが委任できるサブエージェント、ペルソナ、説明を設定します",
     "globalSettings": "グローバル設定",
-    "agentSetup": "エージェント設定"
+    "agentSetup": "エージェント設定",
+    "empty": "Create an agent to get started.",
+    "noDescription": "No description"
   },
   "cards": {
     "statusEnabled": "有効",
@@ -54,15 +59,24 @@
     "previewHint": "現在選択中のペルソナを確認し、ハンドオフ先が正しいことを確かめられます。"
   },
   "form": {
-    "nameLabel": "エージェント名（transfer_to_{name} に使用）",
+    "nameLabel": "Expert name",
     "nameHint": "英小文字＋アンダースコアを推奨します。全体で一意にしてください",
-    "providerLabel": "チャットプロバイダー（任意）",
+    "providerLabel": "チャットモデル",
     "providerHint": "空欄の場合はグローバルの既定プロバイダーを使用します。",
-    "personaLabel": "ペルソナを選択",
-    "personaHint": "サブエージェントは選択したペルソナのシステム設定とツールを直接継承します。ペルソナ設定ページでペルソナを管理・作成できます。",
+    "personaLabel": "Persona",
+    "personaHint": "Select a persona or configure a custom prompt and tools.",
     "personaPreview": "ペルソナのプレビュー",
-    "descriptionLabel": "メイン LLM 向けの説明（ハンドオフの判断に使用）",
-    "descriptionHint": "メイン LLM には transfer_to_* ツールの説明として表示されます。短く明確に記述してください。"
+    "descriptionLabel": "説明",
+    "descriptionHint": "Describe when the main agent should delegate to this agent.",
+    "customPersona": "Use custom prompt and tools",
+    "runtime": "Agent Runtime",
+    "runtimeConfig": "Runtime Configuration (JSON)",
+    "followProvider": "Follow conversation model",
+    "externalRuntime": "External runtime configuration",
+    "inheritPersona": "Leave empty to use the main agent’s persona",
+    "inheritProvider": "Leave empty to use the main agent’s chat model",
+    "inheritSettings": "Other runtime settings follow the main agent.",
+    "followPersona": "Uses main agent persona"
   },
   "messages": {
     "loadConfigFailed": "設定の取得に失敗しました",
@@ -77,11 +91,27 @@
     "saveSuccess": "保存しました",
     "saveFailed": "保存に失敗しました",
     "nameRequired": "名前は必須です",
-    "namePattern": "英小文字、数字、アンダースコアのみ使用できます"
+    "namePattern": "英小文字、数字、アンダースコアのみ使用できます",
+    "deleteConfirm": "Delete {name}? Existing sessions retain their configuration and history.",
+    "jsonObject": "Enter a valid JSON object."
   },
   "empty": {
     "title": "サブエージェントが設定されていません",
     "subtitle": "右上の「サブエージェントを追加」から作成できます。",
     "action": "最初のエージェントを作成"
+  },
+  "limits": {
+    "concurrency": "Concurrent workers per session",
+    "timeout": "Task timeout (seconds, including queue time)",
+    "steps": "Maximum steps per turn"
+  },
+  "status": {
+    "disabled": "Disabled",
+    "unavailable": "Runtime unavailable",
+    "missing": "Missing configuration"
+  },
+  "selection": {
+    "label": "Specialized Agent Configurations",
+    "manage": "Configure Specialized Agents"
   }
 }

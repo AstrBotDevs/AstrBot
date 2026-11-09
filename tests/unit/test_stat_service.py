@@ -1,3 +1,4 @@
+import sys
 import time
 from datetime import datetime, timedelta
 from types import SimpleNamespace
@@ -6,8 +7,20 @@ from unittest.mock import MagicMock, Mock
 import pytest
 
 import astrbot.dashboard.services.stat_service as stat_service
-from astrbot.core.computer.process_sandbox import SandboxRunResult, SandboxTimeoutError
+from astrbot.core.astr_agent_runtime.computer import process_sandbox
+from astrbot.core.astr_agent_runtime.computer.process_sandbox import (
+    SandboxRunResult,
+    SandboxTimeoutError,
+)
 from astrbot.dashboard.services.stat_service import StatService
+
+
+@pytest.fixture(autouse=True)
+def reset_sandbox_probe():
+    """Keep cached sandbox capability checks independent across tests."""
+    process_sandbox.get_process_sandbox_status.cache_clear()
+    yield
+    process_sandbox.get_process_sandbox_status.cache_clear()
 
 
 def _make_service(db) -> StatService:
@@ -27,8 +40,9 @@ def _make_service(db) -> StatService:
         ("Darwin", "arm64", "/usr/bin/sandbox-exec", "seatbelt", "detected"),
         ("Darwin", "x86_64", None, "seatbelt", "missing"),
         ("Darwin", "arm64", "/opt/bin/sandbox-exec", "seatbelt", "missing"),
-        ("Windows", "AMD64", None, None, "unsupported"),
-        ("Windows", "ARM64", None, None, "unsupported"),
+        ("Windows", "AMD64", None, "appcontainer", "detected"),
+        ("Windows", "ARM64", None, "appcontainer", "detected"),
+        ("Windows", "AMD64", "/usr/bin/bwrap", "appcontainer", "detected"),
         ("FreeBSD", "", None, None, "unsupported"),
     ],
 )
@@ -41,13 +55,14 @@ def test_runtime_detects_platform_dependencies(
         "platform",
         SimpleNamespace(system=lambda: system, machine=lambda: arch),
     )
+    monkeypatch.setattr(process_sandbox, "platform", stat_service.platform)
     which = Mock(return_value=executable)
-    monkeypatch.setattr(stat_service, "shutil", SimpleNamespace(which=which))
+    monkeypatch.setattr(process_sandbox, "shutil", SimpleNamespace(which=which))
     sandbox = Mock()
     sandbox.run.return_value = SandboxRunResult(returncode=0)
     factory = Mock(return_value=sandbox)
-    monkeypatch.setattr(stat_service, "create_process_sandbox", factory)
-    monkeypatch.setattr(stat_service, "get_astrbot_temp_path", lambda: str(tmp_path))
+    monkeypatch.setattr(process_sandbox, "create_process_sandbox", factory)
+    monkeypatch.setattr(process_sandbox, "get_astrbot_temp_path", lambda: str(tmp_path))
 
     service = _make_service(MagicMock())
 
@@ -56,6 +71,7 @@ def test_runtime_detects_platform_dependencies(
         "arch": arch,
         "sandbox": {"backend": backend, "status": status},
     }
+    assert process_sandbox.get_process_sandbox_status() == service.runtime["sandbox"]
     if system == "Linux":
         which.assert_called_once_with("bwrap")
     elif system == "Darwin":
@@ -66,7 +82,11 @@ def test_runtime_detects_platform_dependencies(
         factory.assert_called_once_with()
         sandbox.run.assert_called_once()
         args, kwargs = sandbox.run.call_args
-        assert args[0] == ["/bin/sh", "-c", ":"]
+        assert args[0] == (
+            [sys.executable, "-I", "-c", "pass"]
+            if system == "Windows"
+            else ["/bin/sh", "-c", ":"]
+        )
         assert args[1].filesystem_scope == "workspace"
         assert args[1].allow_network is False
         assert not args[1].workspace.exists()
@@ -75,10 +95,17 @@ def test_runtime_detects_platform_dependencies(
         factory.assert_not_called()
 
 
-@pytest.mark.parametrize("system", ["Linux", "Darwin"])
+@pytest.mark.parametrize("system", ["Linux", "Darwin", "Windows"])
 @pytest.mark.parametrize(
     ("outcome", "error"),
     [
+        (
+            SandboxRunResult(
+                returncode=1,
+                stderr=b"bwrap: Creating new namespace failed: Operation not permitted\n",
+            ),
+            "bwrap: Creating new namespace failed: Operation not permitted",
+        ),
         (
             SandboxRunResult(
                 returncode=1, stderr=b"bwrap: setting up uid map: Permission denied\n"
@@ -95,6 +122,9 @@ def test_runtime_detects_platform_dependencies(
         (SandboxRunResult(returncode=2), "Sandbox probe exited with code 2."),
         (PermissionError("Operation not permitted"), "Operation not permitted"),
         (SandboxTimeoutError("Sandbox probe timed out."), "Sandbox probe timed out."),
+        (SandboxTimeoutError(), "SandboxTimeoutError"),
+        (TimeoutError("Sandbox probe timed out."), "Sandbox probe timed out."),
+        (TimeoutError(), "TimeoutError"),
         (RuntimeError("Sandbox launch failed."), "Sandbox launch failed."),
     ],
 )
@@ -104,7 +134,7 @@ def test_runtime_reports_sandbox_startup_failure(
     """Distinguish installed but unusable sandboxes without preventing startup."""
     monkeypatch.setattr(stat_service.platform, "system", lambda: system)
     monkeypatch.setattr(
-        stat_service,
+        process_sandbox,
         "shutil",
         SimpleNamespace(which=lambda name, **kwargs: f"/usr/bin/{name}"),
     )
@@ -113,16 +143,22 @@ def test_runtime_reports_sandbox_startup_failure(
         sandbox.run.side_effect = outcome
     else:
         sandbox.run.return_value = outcome
-    monkeypatch.setattr(stat_service, "create_process_sandbox", lambda: sandbox)
-    monkeypatch.setattr(stat_service, "get_astrbot_temp_path", lambda: str(tmp_path))
+    monkeypatch.setattr(process_sandbox, "create_process_sandbox", lambda: sandbox)
+    monkeypatch.setattr(process_sandbox, "get_astrbot_temp_path", lambda: str(tmp_path))
 
     service = _make_service(MagicMock())
 
     assert service.runtime["sandbox"] == {
-        "backend": "bubblewrap" if system == "Linux" else "seatbelt",
+        "backend": {
+            "Linux": "bubblewrap",
+            "Darwin": "seatbelt",
+            "Windows": "appcontainer",
+        }[system],
         "status": "unavailable",
         "error": error,
     }
+    assert process_sandbox.get_process_sandbox_status() == service.runtime["sandbox"]
+    sandbox.run.assert_called_once()
     assert not list(tmp_path.iterdir())
 
 

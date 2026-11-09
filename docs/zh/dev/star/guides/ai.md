@@ -29,6 +29,84 @@ llm_resp = await self.context.llm_generate(
 # print(llm_resp.completion_text) # 获取返回的文本
 ```
 
+## 结构化判断
+
+判断提供商（Decision Provider）用于低延迟的结构化选择，例如是否回复、回复哪条消息或选择执行分支。先在 WebUI 的「模型提供商」→「判断」中配置提供商，插件通过 `self.context.decision` 调用，它与聊天模型互不影响。
+
+一次请求可以同时回答多个问题。`state` 会原样传给判断模型，类型为 `str | list | dict`：
+
+```py
+from astrbot.api.provider import (
+    DecisionBooleanQuestion,
+    DecisionChoiceAnswer,
+    DecisionChoiceQuestion,
+    DecisionScoreQuestion,
+)
+
+
+recent_messages = [
+    {"role": "user", "content": "I cannot log in; every request returns 500."},
+]
+
+answers = await self.context.decision.ask(
+    {
+        "should_reply": DecisionChoiceQuestion(
+            instructions="Should the assistant reply to this message?",
+            criteria={"reply": "Reply now", "ignore": "Stay silent"},
+        ),
+        "target": DecisionChoiceQuestion(
+            instructions="Which message should the reply focus on?",
+            criteria={"latest": "Latest message", "previous": "Previous message"},
+        ),
+        "needs_tool": DecisionBooleanQuestion(
+            "Does this request require a tool call?"
+        ),
+        "severity": DecisionScoreQuestion(
+            instructions="How severe is the reported problem?",
+            criteria=[
+                "No impact on normal use",
+                "Some features fail, but a workaround exists",
+                "Core features are unavailable with no workaround",
+            ],
+        ),
+    },
+    state={"messages": recent_messages},
+)
+
+should_reply = answers["should_reply"]
+if (
+    isinstance(should_reply, DecisionChoiceAnswer)
+    and should_reply.choice == "reply"
+    and should_reply.probability >= 0.7
+):
+    target = answers["target"]
+    # 使用 target.choice 和 answers["needs_tool"].probability 执行后续业务逻辑
+```
+
+`DecisionChoiceQuestion.criteria` 是选项 ID 到选项描述的映射，与 System One 请求中的 `criteria` 对应。选择类结果的 `choice` 是选项 ID，`probabilities` 包含完整概率分布，`confidence` 是模型置信度；布尔类结果使用 `probability` 表示陈述为真的概率。主动回复阈值等业务规则由调用方决定。
+
+返回结果按题型分别是 `DecisionChoiceAnswer`、`DecisionBooleanAnswer` 和 `DecisionScoreAnswer`，它们是三个独立的冻结数据类。`DecisionAnswer` 是这三个类的联合类型。调用 `ask()` 后，可使用 `isinstance()` 确认结果类型再读取对应字段；`choose()` 明确返回 `DecisionChoiceAnswer`，`yes_no()` 返回 `bool`。
+
+评分类 `DecisionScoreQuestion.criteria` 是由低到高排列的 2～10 个字符串等级，等级从 0 编号。`DecisionScoreAnswer.score` 是概率加权评分，可以为小数，范围是 `0` 到 `len(criteria) - 1`；`legend` 和 `probabilities` 分别以字符串等级编号（如 `"0"`）映射到描述和概率，`confidence` 表示置信度。评分结果仅包含这四个字段。三种题型可以通过同一次 `ask()` 调用混合提交。
+
+对于单个问题，可以使用以下快捷方法：
+
+```py
+choice = await self.context.decision.choose(
+    question="Which reply strategy should be used?",
+    criteria={"short": "A brief reply", "detailed": "A detailed reply"},
+    state=recent_messages,
+)
+
+should_reply = await self.context.decision.yes_no(
+    question="Should the assistant reply now?",
+    state=recent_messages,
+    threshold=0.7,
+)
+```
+
+如需指定已配置的判断提供商，传入 `provider_id="provider_id"`；省略时使用默认判断提供商。提供商未配置、请求超时、连接失败、HTTP 错误、响应不是合法 JSON，或返回的选项与概率不符合请求契约时，统一抛出 `DecisionError`；底层异常详情会写入 AstrBot 日志。插件应捕获该异常并决定跳过本次判断或降级处理。
+
 ## 定义 Tool
 
 Tool 是大语言模型调用外部工具的能力。
@@ -37,9 +115,12 @@ Tool 是大语言模型调用外部工具的能力。
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
-from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.agent.tool import FunctionTool, ToolExecResult
-from astrbot.core.astr_agent_context import AstrAgentContext
+# AstrBot v4.30.0 之前的导入方式：
+# from astrbot.core.agent.run_context import ContextWrapper
+# from astrbot.core.agent.tool import FunctionTool, ToolExecResult
+# from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.api import FunctionTool, ToolExecResult
+from astrbot.api.agents import AstrAgentContext, ContextWrapper
 
 
 @dataclass
@@ -159,10 +240,12 @@ Multi-Agent（多智能体）系统将复杂应用分解为多个专业化智能
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
-from astrbot.api import logger
-from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.agent.tool import FunctionTool, ToolExecResult, ToolSet
-from astrbot.core.astr_agent_context import AstrAgentContext
+# AstrBot v4.30.0 之前的导入方式：
+# from astrbot.core.agent.run_context import ContextWrapper
+# from astrbot.core.agent.tool import FunctionTool, ToolExecResult, ToolSet
+# from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.api import FunctionTool, ToolExecResult, ToolSet, logger
+from astrbot.api.agents import AstrAgentContext, ContextWrapper
 
 
 @dataclass
@@ -303,12 +386,84 @@ async def test(self, event: AstrMessageEvent):
     yield event.plain_result(llm_resp.completion_text)
 ```
 
+## 在现有会话中运行 Agent
+
+通过 `self.context.agent.run_turn()` 提交程序触发的输入，可以沿用目标会话的人格、历史、工具、skills 和 Agent hooks，无需自行构造消息事件或 runner。目前支持内置 Agent runtime。
+
+```py
+from astrbot.api.agents import PlainInput
+
+run = await self.context.agent.run_turn(
+    umo=event.unified_msg_origin,
+    input_message=[PlainInput(text="视频分析已完成，请向用户简要说明结果。")],
+)
+result = await run.result()
+```
+
+`run_turn()` 在输入绑定到 runtime turn 后返回，不等待模型执行。同一 session 的输入串行排队，真正执行时读取最新历史。默认由 AstrBot 通过正常输出处理发送回复，插件无需再发送 `result.text`。`result()` 等待执行、历史保存和 Core 输出处理；取消一个等待者不会取消运行，停止运行请使用 `await run.cancel()`。
+
+`run` 提供 turn ID、输出、取消、steer 和 follow-up 操作。`run.session` 返回只读状态快照。
+
+Core 按当前配置档的 `agent.runtime` 选择已注册实现；使用 `ctx.agent.register_runtime(name, runtime)` 注册后，该实现可用于主代理，也可由内置 runtime 作为子代理调用。未注册的名称明确报错；Dify、Coze 等现有第三方路径继续沿用原执行方式。
+
+`/stop` 按 UMO 向已提交的 turn 调用 `turn.request_stop()`。运行中的 turn 会调用 `AgentSession.request_stop_turn(turn)`。runtime 接受请求并负责执行收尾时返回 `True`，返回 `False` 则使用 `cancel_turn()` 和本地任务取消。排队中的 turn 直接取消。`request_stop()` 提交请求后立即返回，用 `await turn.result()` 等待收尾。
+
+Core 传入公共 `AgentInput`：原始 `AstrMessageEvent`、权限、可选的 `plain/image/file` 内容、授权后的插件 tools/skills，以及流式输出偏好。Core 在投递前完成额外唤醒前缀的匹配和剥离，通过 `content` 传入处理后的文本，不修改原始 event。无需覆盖文本的普通平台消息可保留 `content=None`；来源附件仍保留在 event 上。SDK 调用提供显式内容。配置通过 `open_session(..., options={"config": ...})` 交给 runtime 自行解释，Core 不构造内置 `MainAgentInput`、`MainAgentBuildConfig` 或模型请求。
+
+实现 runtime 时复用 `AgentSession.run_turn()`：Core 通过调度参数 `run_turn(input, admit=...)` 传入准入检查，与 `AgentInput` 分离。它在会话串行锁及实现提供的 `_execution_scope()` 内执行，再进入 `execute_turn()`。排队后会重新检查 AI 启用状态、权限和插件能力；不要通过重写调度绕过准入。额外的锁由 runtime 提供。可选的 `active_turn(umo)` 支持普通消息的活跃 turn 发现；未实现时返回 `None`，session 仍负责排队。内置 runtime 在自己的执行阶段构造 `ProviderRequest`、解析模型配置并调用现有模型 hooks；外部实现不需要导入 `astr_agent_runtime`。
+
+如需自行处理模型回复，设置 `send_to_user=False`：
+
+```py
+from astrbot.api.event import MessageChain
+
+run = await self.context.agent.run_turn(
+    umo=event.unified_msg_origin,
+    input_message=[PlainInput(text="请生成视频分析摘要。")],
+    send_to_user=False,
+)
+result = await run.result()
+if result.text:
+    await self.context.send_message(
+        event.unified_msg_origin,
+        MessageChain().message(f"视频分析结果：\n{result.text}"),
+    )
+```
+
+`send_to_user=False` 只跳过 Core 的自动输出呈现及平台回复装饰、自动 TTS，执行历史照常保存。工具或插件显式调用 `event.send()`、`Context.send_message()`、`send_message_to_user` 时仍然正常发送；框架不会拦截这些调用。
+
+`events()` 支持多个独立观察者和事后重放，提供 `message.completed`、工具调用等 runtime 事件；监听不会截走平台输出或重复发送。SDK 的最终 `turn.finished` 事件在自动输出处理结束后发布。
+
+```py
+# Queue another turn in this exact conversation, inheriting the output policy.
+next_run = await run.follow_up(
+    input_message=[PlainInput(text="再给出三条改进建议。")],
+)
+
+# Add input to an active turn at the native runner's safe boundary.
+receipt = await run.steer(
+    input_message=[PlainInput(text="补充：请重点说明安全隐患。")],
+)
+if receipt is not None:
+    consumed = await receipt
+```
+
+`follow_up()` 固定提交给原 runtime 和 conversation，配置档切换 runtime 或 UMO 切换当前对话不会改变目标。`steer()` 无法接收时返回 `None`，已接收时返回 `InputReceipt`；等待回执得到的布尔值表示输入是否实际消费并保存，不会自动转成下一轮。目前 steer 中的图片、文件以文本引用传递。
+
+`run.session.state` 为 `idle`、`queued`、`running` 或 `closed`。快照包含 `ref`、`pending_turn_count` 和 `active_turn_id`，重新读取属性即可刷新。
+
+Core 根据 `source_event` 或当前活跃的同 UMO 事件解析权限。没有来源事件的后台调用使用 member 权限，来源事件与目标 UMO 不一致会报错。
+
+不要在当前 turn 的工具中等待同 session 的排队 turn 完成，这会形成互相等待。可以提交后返回，或按目的使用 steer。
+
 ## 对话管理器
 
 ### 获取会话当前的 LLM 对话历史 `get_conversation`
 
 ```py
-from astrbot.core.conversation_mgr import Conversation
+# AstrBot v4.30.0 之前的导入方式：
+# from astrbot.core.conversation_mgr import Conversation
+from astrbot.api.provider import Conversation
 
 uid = event.unified_msg_origin
 conv_mgr = self.context.conversation_manager
@@ -346,7 +501,9 @@ class Conversation:
 ### 快速添加 LLM 记录到对话 `add_message_pair`
 
 ```py
-from astrbot.core.agent.message import (
+# AstrBot v4.30.0 之前的导入方式：
+# from astrbot.core.agent.message import AssistantMessageSegment, UserMessageSegment, TextPart
+from astrbot.api.agents import (
     AssistantMessageSegment,
     UserMessageSegment,
     TextPart,

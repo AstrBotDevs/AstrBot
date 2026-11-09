@@ -13,8 +13,8 @@ from astrbot.core.agent.runners.deerflow.deerflow_agent_runner import (
     DeerFlowAgentRunner,
 )
 from astrbot.core.agent.runners.dify.dify_agent_runner import DifyAgentRunner
-from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
-from astrbot.core.astr_main_agent import _matches_provider_wake_prefix
+from astrbot.core.agent_input import matches_provider_wake_prefix
+from astrbot.core.astr_agent_runtime.hooks import MAIN_AGENT_HOOKS
 from astrbot.core.message.components import Image, Record
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -36,7 +36,9 @@ from astrbot.core.provider.entities import (
     ProviderRequest,
 )
 from astrbot.core.star.star_handler import EventType
+from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.config_number import coerce_int_config
+from astrbot.core.utils.media_utils import describe_media_ref
 from astrbot.core.utils.metrics import Metric
 
 from .....astr_agent_context import AgentContextWrapper, AstrAgentContext
@@ -157,8 +159,8 @@ class ThirdPartyAgentSubStage(Stage):
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
         self.conf = ctx.astrbot_config
-        agent_runner = self.conf["agent_runner"]
-        self.runner_type = agent_runner["runner_type"]
+        agent_runner = self.conf["agent"]
+        self.runner_type = agent_runner["runtime"]
         self.runner_config = agent_runner["config"]
         settings = ctx.astrbot_config["provider_settings"]
         self.streaming_response: bool = settings["streaming_response"]
@@ -281,7 +283,7 @@ class ThirdPartyAgentSubStage(Stage):
     ) -> AsyncGenerator[None, None]:
         req: ProviderRequest | None = None
 
-        if not _matches_provider_wake_prefix(
+        if not matches_provider_wake_prefix(
             event,
             provider_wake_prefix,
         ):
@@ -291,16 +293,20 @@ class ThirdPartyAgentSubStage(Stage):
         req = ProviderRequest()
         req.session_id = event.unified_msg_origin
         req.prompt = event.message_str
-        if provider_wake_prefix and event.message_str.startswith(provider_wake_prefix):
-            req.prompt = event.message_str[len(provider_wake_prefix) :]
+        prefix_text = event.message_str
+        if event.get_platform_name() == "lark":
+            prefix_text = prefix_text.lstrip()
+        if provider_wake_prefix and prefix_text.startswith(provider_wake_prefix):
+            req.prompt = prefix_text[len(provider_wake_prefix) :]
         for comp in event.message_obj.message:
             if isinstance(comp, Image):
                 try:
                     image_path = await comp.convert_to_base64()
                 except Exception as exc:  # noqa: BLE001
                     logger.warning(
-                        "Image attachment is unavailable (%s).",
+                        "Image attachment is unavailable (%s): %s",
                         type(exc).__name__,
+                        describe_media_ref(comp.url or comp.file),
                     )
                     continue
                 req.image_urls.append(image_path)
@@ -315,7 +321,10 @@ class ThirdPartyAgentSubStage(Stage):
                     continue
                 req.audio_urls.append(audio_path)
 
-        if not req.prompt and not req.image_urls and not req.audio_urls:
+        empty_prompt = not req.prompt or (
+            event.get_platform_name() == "lark" and not req.prompt.strip()
+        )
+        if empty_prompt and not req.image_urls and not req.audio_urls:
             return
 
         custom_error_message = await self._resolve_persona_custom_error_message(event)
@@ -370,7 +379,10 @@ class ThirdPartyAgentSubStage(Stage):
             if stream_watchdog_task and not stream_watchdog_task.done():
                 stream_watchdog_task.cancel()
 
+        active_event_registry.register_agent_stop_callback(event, event.stop_event)
         try:
+            if active_event_registry.get_background_stop_signal(event).is_set():
+                return
             await runner.reset(
                 request=req,
                 run_context=AgentContextWrapper(
@@ -405,6 +417,9 @@ class ThirdPartyAgentSubStage(Stage):
                 ):
                     yield
         finally:
+            active_event_registry.unregister_agent_stop_callback(
+                event, event.stop_event
+            )
             if (
                 stream_watchdog_task
                 and not stream_watchdog_task.done()

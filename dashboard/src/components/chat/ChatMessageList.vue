@@ -24,7 +24,12 @@
           <div
             v-if="isUserMessage(msg) && userAttachmentParts(msg).length"
             class="sent-attachments"
-            :class="{ 'images-only': hasImageOnlyAttachments(msg) }"
+            :class="{
+              'images-only': hasImageOnlyAttachments(msg),
+              'has-media': userAttachmentParts(msg).some(
+                (part) => part.type === 'record' || part.type === 'video',
+              ),
+            }"
           >
             <template
               v-for="(part, attachmentIndex) in userAttachmentParts(msg)"
@@ -39,7 +44,13 @@
                 <img :src="partUrl(part)" :alt="part.filename || 'image'" />
               </button>
 
-              <div v-else class="sent-attachment-card sent-file-card">
+              <div
+                v-else
+                class="sent-attachment-card sent-file-card"
+                :class="{
+                  'sent-media-card': part.type === 'record' || part.type === 'video',
+                }"
+              >
                 <div
                   class="sent-attachment-icon"
                   :style="{
@@ -59,10 +70,10 @@
                   {{ attachmentName(part) }}
                 </span>
                 <v-btn
-                  v-if="part.type === 'file'"
                   icon="mdi-download"
                   size="x-small"
                   variant="text"
+                  :aria-label="tm('workspaceFiles.download')"
                   :loading="
                     downloadingFiles.has(
                       part.attachment_id ||
@@ -72,6 +83,20 @@
                     )
                   "
                   @click="downloadPart(part)"
+                />
+                <audio
+                  v-if="part.type === 'record'"
+                  class="audio-part"
+                  controls
+                  preload="metadata"
+                  :src="partUrl(part)"
+                />
+                <video
+                  v-else-if="part.type === 'video'"
+                  class="video-part"
+                  controls
+                  preload="metadata"
+                  :src="partUrl(part)"
                 />
               </div>
             </template>
@@ -201,6 +226,17 @@
                           :alt="part.filename || 'image'"
                         />
                       </button>
+
+                      <ButtonActionRow
+                        v-else-if="part.type === 'actionrow'"
+                        :part="part"
+                        @callback="
+                          emit('buttonClick', {
+                            message: msg,
+                            callbackData: $event,
+                          })
+                        "
+                      />
 
                       <audio
                         v-else-if="part.type === 'record'"
@@ -463,6 +499,7 @@ import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue"
 import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
 import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
 import ActionRef from "@/components/chat/message_list_comps/ActionRef.vue";
+import ButtonActionRow from "@/components/chat/ButtonActionRow.vue";
 import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import {
@@ -531,6 +568,7 @@ const emit = defineEmits<{
   openThread: [thread: ChatThread];
   openReasoning: [payload: { message: ChatRecord; blockIndex: number }];
   openRefs: [refs: unknown];
+  buttonClick: [payload: { message: ChatRecord; callbackData: string }];
 }>();
 
 registerChatMarkdownComponents();
@@ -963,6 +1001,11 @@ function formatDuration(seconds: number) {
   scrollbar-width: thin;
 }
 
+.sent-attachments.has-media {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .sent-attachment-card {
   --attachment-color: #607d8b;
   position: relative;
@@ -1027,6 +1070,22 @@ function formatDuration(seconds: number) {
   justify-content: center;
   gap: 1px;
   color: var(--attachment-color);
+}
+
+.sent-file-card.sent-media-card {
+  display: grid;
+  align-self: flex-start;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  width: 320px;
+  max-width: 100%;
+  height: auto;
+}
+
+.sent-media-card .audio-part,
+.sent-media-card .video-part {
+  grid-column: 1 / -1;
+  width: 100%;
+  margin-top: 0;
 }
 
 .sent-attachment-icon-symbol {
