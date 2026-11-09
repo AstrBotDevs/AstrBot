@@ -96,6 +96,7 @@ async def test_third_party_runner_receives_inline_profile_config(
     assert runner.reset.await_args.kwargs["provider_config"] is inline_config
     assert runner_factory_calls == [True]
 
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("component", "patch_method", "request_attr"),

@@ -1,4 +1,4 @@
-"""Tests for astrbot/core/computer module.
+"""Tests for the built-in runtime computer module.
 
 This module tests the ComputerClient, Booter implementations (local, shipyard, boxlite),
 filesystem operations, Python execution, shell execution, and security restrictions.

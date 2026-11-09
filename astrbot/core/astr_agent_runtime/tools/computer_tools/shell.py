@@ -9,6 +9,7 @@ from typing import Any
 
 from astrbot.api import FunctionTool
 from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.runtime import get_agent_permissions
 from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_runtime.computer.booters.local import LocalShellComponent
 from astrbot.core.astr_agent_runtime.computer.computer_client import (
@@ -133,7 +134,7 @@ class ExecuteShellTool(FunctionTool):
                 creator_id = context.context.event.get_sender_id()
                 if not creator_id:
                     return "Error executing command: sender identity is unavailable."
-                creator_is_admin = context.context.event.role == "admin"
+                creator_is_admin = get_agent_permissions(context).role == "admin"
                 sandbox_roots = {}
                 if local_policy and local_policy.filesystem_scope == "workspace":
                     umo = context.context.event.unified_msg_origin
@@ -144,7 +145,7 @@ class ExecuteShellTool(FunctionTool):
                         "writable_roots": _write_allowed_roots(
                             umo,
                             current_workspace_root,
-                            include_installed_skills=context.context.event.role
+                            include_installed_skills=get_agent_permissions(context).role
                             == "admin",
                         ),
                     }
@@ -400,7 +401,7 @@ class ShellSessionTool(FunctionTool):
             requester_id = context.context.event.get_sender_id()
             if not requester_id:
                 return "Error managing shell session: sender identity is unavailable."
-            requester_is_admin = context.context.event.role == "admin"
+            requester_is_admin = get_agent_permissions(context).role == "admin"
             if action == "list":
                 result = await sb.shell.list_sessions(
                     owner_id=owner_id,

@@ -45,9 +45,6 @@ from astrbot.core.astr_agent_runtime.tools.computer_tools.util import (
     LOCAL_NETWORK_POLICY_NOTICE,
     get_local_permission_policy,
 )
-from astrbot.core.astr_main_agent_resources import (
-    SANDBOX_MODE_PROMPT,
-)
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.provider.register import llm_tools
@@ -56,6 +53,17 @@ from astrbot.core.utils.runtime_env import resolve_windows_shell
 
 from .config import MainAgentBuildConfig
 from .workspace import resolve_workspace_path
+
+SANDBOX_MODE_PROMPT = (
+    "You have access to a sandboxed environment and can execute shell commands and Python code securely."
+    # "Your have extended skills library, such as PDF processing, image generation, data analysis, etc. "
+    # "Before handling complex tasks, please retrieve and review the documentation in the in /app/skills/ directory. "
+    # "If the current task matches the description of a specific skill, prioritize following the workflow defined by that skill."
+    # "Use `ls /app/skills/` to list all available skills. "
+    # "Use `cat /app/skills/{skill_name}/SKILL.md` to read the documentation of a specific skill."
+    # "SKILL.md might be large, you can read the description first, which is located in the YAML frontmatter of the file."
+    # "Use shell commands such as grep, sed, awk to extract relevant information from the documentation as needed.\n"
+)
 
 
 def _apply_local_env_tools(

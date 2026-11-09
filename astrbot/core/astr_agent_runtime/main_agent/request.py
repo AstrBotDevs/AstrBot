@@ -1,218 +1,53 @@
-"""Conversation loading and preparation of message content and media."""
+"""Native conversation binding before Core-owned input preprocessing."""
 
-from __future__ import annotations
-
-import asyncio
 import copy
-import datetime
 import json
-import zoneinfo
-from dataclasses import dataclass, field
 from pathlib import Path
 
-from astrbot.core import agent_media as media
 from astrbot.core import logger
 from astrbot.core.agent.message import TextPart
-from astrbot.core.astr_main_agent_resources import LLM_ERROR_MESSAGE_EXTRA_KEY
+from astrbot.core.agent_input import (
+    CollectedInput,
+    InputProcessingSettings,
+    PreparedRequest,
+    prepare_input_content,
+)
+from astrbot.core.agent_input import (
+    append_system_reminders as append_system_reminders,
+)
+from astrbot.core.agent_input import (
+    apply_prompt_prefix as apply_prompt_prefix,
+)
+from astrbot.core.agent_input import (
+    matches_provider_wake_prefix as matches_provider_wake_prefix,
+)
 from astrbot.core.conversation_mgr import Conversation
+from astrbot.core.llm_error_messages import LLM_ERROR_MESSAGE_EXTRA_KEY
 from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.star.context import Context
-from astrbot.core.utils.file_extract import extract_file_moonshotai
-from astrbot.core.utils.image_input import prepare_request_images
 from astrbot.core.utils.media_utils import (
     describe_media_ref,
     is_file_uri,
     is_recoverable_image_error,
-    normalize_model_image_max_size,
 )
-from astrbot.core.utils.quoted_message_parser import (
-    extract_quoted_message_images,
-)
+from astrbot.core.utils.quoted_message_parser import extract_quoted_message_images
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
-from . import providers
 from .config import MainAgentBuildConfig
-
-WEEKDAY_NAMES = (
-    "Monday",
-    "Tuesday",
-    "Wednesday",
-    "Thursday",
-    "Friday",
-    "Saturday",
-    "Sunday",
-)
-
-
-def apply_prompt_prefix(req: ProviderRequest, cfg: dict) -> None:
-    """Apply the configured prefix or prompt template to the current input.
-
-    Args:
-        req: Request whose current prompt is updated in place.
-        cfg: Provider settings containing the optional prompt prefix.
-    """
-    prefix = cfg.get("prompt_prefix")
-    if not prefix:
-        return
-    if "{{prompt}}" in prefix:
-        req.prompt = prefix.replace("{{prompt}}", req.prompt)
-    else:
-        req.prompt = f"{prefix}{req.prompt}"
-
-
-def append_system_reminders(
-    event: AstrMessageEvent,
-    req: ProviderRequest,
-    cfg: dict,
-    timezone: str | None,
-) -> None:
-    """Append configured sender, group, and time information to the user content.
-
-    Args:
-        event: Event providing sender and group details.
-        req: Request receiving the additional user content.
-        cfg: Provider settings controlling which reminders are included.
-        timezone: Configured IANA timezone, or None for the local timezone.
-    """
-    system_parts: list[str] = []
-    if cfg.get("identifier"):
-        user_id = event.message_obj.sender.user_id
-        user_nickname = event.message_obj.sender.nickname
-        system_parts.append(f"User ID: {user_id}, Nickname: {user_nickname}")
-
-    if cfg.get("group_name_display") and event.message_obj.group_id:
-        if not event.message_obj.group:
-            logger.error(
-                "Group name display enabled but group object is None. Group ID: %s",
-                event.message_obj.group_id,
-            )
-        else:
-            group_name = event.message_obj.group.group_name
-            if group_name:
-                system_parts.append(f"Group name: {group_name}")
-
-    if cfg.get("datetime_system_prompt"):
-        now = None
-        if timezone:
-            try:
-                now = datetime.datetime.now(zoneinfo.ZoneInfo(timezone))
-            except Exception as exc:  # noqa: BLE001
-                logger.error("Invalid timezone: %s; using the local timezone.", exc)
-        if now is None:
-            now = datetime.datetime.now().astimezone()
-        current_time = now.strftime("%Y-%m-%d %H:%M (%Z)")
-        weekday = WEEKDAY_NAMES[now.weekday()]
-        system_parts.append(f"Current datetime: {current_time}, Weekday: {weekday}")
-
-    if system_parts:
-        system_content = (
-            "<system_reminder>" + "\n".join(system_parts) + "</system_reminder>"
-        )
-        req.extra_user_content_parts.append(TextPart(text=system_content))
-
-
-async def _get_session_conv(
-    event: AstrMessageEvent, plugin_context: Context
-) -> Conversation:
-    conv_mgr = plugin_context.conversation_manager
-    umo = event.unified_msg_origin
-    cid = await conv_mgr.get_curr_conversation_id(umo)
-    if not cid:
-        cid = await conv_mgr.new_conversation(umo, event.get_platform_id())
-    conversation = await conv_mgr.get_conversation(umo, cid)
-    if not conversation:
-        cid = await conv_mgr.new_conversation(umo, event.get_platform_id())
-        conversation = await conv_mgr.get_conversation(umo, cid)
-    if not conversation:
-        raise RuntimeError("无法创建新的对话。")
-    return conversation
-
-
-async def _apply_file_extract(
-    event: AstrMessageEvent,
-    req: ProviderRequest,
-    config: MainAgentBuildConfig,
-) -> None:
-    file_paths = []
-    file_names = []
-    for comp in event.message_obj.message:
-        if isinstance(comp, File):
-            file_paths.append(await comp.get_file())
-            file_names.append(comp.name)
-        elif isinstance(comp, Reply) and comp.chain:
-            for reply_comp in comp.chain:
-                if isinstance(reply_comp, File):
-                    file_paths.append(await reply_comp.get_file())
-                    file_names.append(reply_comp.name)
-    if not file_paths:
-        return
-    if not req.prompt:
-        req.prompt = "总结一下文件里面讲了什么？"
-    if config.file_extract_prov == "moonshotai":
-        if not config.file_extract_msh_api_key:
-            logger.error("Moonshot AI API key for file extract is not set")
-            return
-        file_contents = await asyncio.gather(
-            *[
-                extract_file_moonshotai(
-                    file_path,
-                    config.file_extract_msh_api_key,
-                )
-                for file_path in file_paths
-            ]
-        )
-    else:
-        logger.error("Unsupported file extract provider: %s", config.file_extract_prov)
-        return
-
-    for file_content, file_name in zip(file_contents, file_names):
-        req.contexts.append(
-            {
-                "role": "system",
-                "content": (
-                    "File Extract Results of user uploaded files:\n"
-                    f"{file_content}\nFile Name: {file_name or 'Unknown'}"
-                ),
-            },
-        )
-
-
-def matches_provider_wake_prefix(
-    event: AstrMessageEvent,
-    provider_wake_prefix: str,
-) -> bool:
-    """Return whether an event satisfies the provider wake prefix.
-
-    Args:
-        event: Incoming event whose message and platform should be inspected.
-        provider_wake_prefix: Prefix required by the provider, if any.
-
-    Returns:
-        True for programmatic wakeups, when no prefix is configured, when
-        WebChat is exempt, or when the message starts with the prefix.
-    """
-    message_str = event.message_str or ""
-    if event.get_platform_name() == "lark":
-        message_str = message_str.lstrip()
-    return (
-        isinstance(event, AgentWakeupEvent)
-        or not provider_wake_prefix
-        or event.get_platform_name() == "webchat"
-        or message_str.startswith(provider_wake_prefix)
-    )
 
 
 async def collect_initial_request(
     event: AstrMessageEvent,
     plugin_context: Context,
-    config: MainAgentBuildConfig,
+    config: InputProcessingSettings,
     req: ProviderRequest | None = None,
     *,
     quoted_image_refs: set[str] | None = None,
+    materialized_paths: list[str] | None = None,
 ) -> tuple[ProviderRequest | None, str | None]:
     """Collect raw attachments without applying model image policy.
 
@@ -223,11 +58,14 @@ async def collect_initial_request(
         req: Explicit request for direct callers; its attachments are already
             collected, so only its quote reference needs to be resolved.
         quoted_image_refs: Optional output set populated from quoted image components.
+        materialized_paths: Optional output list of temporary files adopted on success.
 
     Returns:
         The initial request and the first embedded quote image reference used by
         the dedicated quote caption branch. A rejected wake prefix returns None.
     """
+    from astrbot.core import agent_media as media
+
     if quoted_image_refs is None:
         quoted_image_refs = set()
     attachment_paths: list[str] = []
@@ -243,23 +81,6 @@ async def collect_initial_request(
             req.contexts = (
                 list(req.contexts) if isinstance(req.contexts, list) else req.contexts
             )
-            if req.conversation:
-                # Handler requests can be prepared before the pipeline acquires
-                # the session lock. Reload the bound conversation here so queued
-                # turns include replies saved while they were waiting.
-                conversation = (
-                    await plugin_context.conversation_manager.get_conversation(
-                        event.unified_msg_origin, req.conversation.cid
-                    )
-                )
-                if conversation is None:
-                    event.set_extra(
-                        LLM_ERROR_MESSAGE_EXTRA_KEY,
-                        "The requested conversation no longer exists. Please send a new message.",
-                    )
-                    return None, None
-                req.conversation = conversation
-                req.contexts = json.loads(conversation.history)
         else:
             req = ProviderRequest()
             req.prompt = ""
@@ -457,11 +278,6 @@ async def collect_initial_request(
                             exc_info=True,
                         )
 
-            conversation = await _get_session_conv(event, plugin_context)
-            req.conversation = conversation
-            req.contexts = json.loads(conversation.history)
-            event.set_extra("provider_request", req)
-
     req.image_urls = normalize_and_dedupe_strings(req.image_urls)
     quote_image_ref = None
     quote = next(
@@ -473,19 +289,26 @@ async def collect_initial_request(
             quote_image_ref = image.url or image.file
     # Keep adopted source paths usable after cleanup, but retain provisional
     # ownership until collection succeeds so errors and cancellation can clean up.
-    for image_path in attachment_paths:
-        event.untrack_temporary_local_file(image_path)
+    if materialized_paths is not None:
+        materialized_paths.extend(attachment_paths)
     return req, quote_image_ref
 
 
-@dataclass(slots=True)
-class PreparedRequest:
-    """Request content and the media state reused during finalization."""
-
-    request: ProviderRequest
-    images: dict[str, dict] = field(default_factory=dict)
-    captioned_refs: set[str] = field(default_factory=set)
-    image_max_size: int | None = None
+async def _get_session_conv(
+    event: AstrMessageEvent, plugin_context: Context
+) -> Conversation:
+    conv_mgr = plugin_context.conversation_manager
+    umo = event.unified_msg_origin
+    cid = await conv_mgr.get_curr_conversation_id(umo)
+    if not cid:
+        cid = await conv_mgr.new_conversation(umo, event.get_platform_id())
+    conversation = await conv_mgr.get_conversation(umo, cid)
+    if not conversation:
+        cid = await conv_mgr.new_conversation(umo, event.get_platform_id())
+        conversation = await conv_mgr.get_conversation(umo, cid)
+    if not conversation:
+        raise RuntimeError("无法创建新的对话。")
+    return conversation
 
 
 async def prepare_request(
@@ -494,135 +317,79 @@ async def prepare_request(
     config: MainAgentBuildConfig,
     provider: Provider,
     req: ProviderRequest | None,
+    collected_input: CollectedInput | None = None,
 ) -> PreparedRequest | None:
-    """Load input/history, prepare attachments and describe unsupported images.
+    """Bind fresh native history and ask Core to prepare this turn's content.
 
     Args:
-        event: Triggering event and attachment source.
-        plugin_context: Conversation, provider, and attachment services.
-        config: Resolved input settings.
-        provider: Initial model, used for the established caption policy.
-        req: Optional caller-supplied request; None collects the event's input.
+        event: Incoming message, wakeup, or explicit SDK event.
+        plugin_context: Native conversation storage and Core input services.
+        config: Resolved settings for this turn.
+        provider: Selected model used for image capability negotiation.
+        req: Optional explicit native request retaining its SDK semantics.
+        collected_input: Optional Core-collected input with reusable quote metadata.
 
     Returns:
-        Prepared content and image state, or None for a rejected, stopped, or empty input.
+        Input and media state, or None when Core rejects the input.
     """
-    collected_request = req is None or (
+    explicit = req is not None or collected_input is not None
+    collected = req is None or (
         any(isinstance(part, Reply) for part in event.message_obj.message)
         and not any(
             isinstance(part, TextPart) and part.text.startswith("<Quoted Message>\n")
             for part in req.extra_user_content_parts
         )
     )
-    quote_image_ref = None
-    quoted_image_refs: set[str] = set()
-    if collected_request:
-        req, quote_image_ref = await collect_initial_request(
-            event, plugin_context, config, req=req, quoted_image_refs=quoted_image_refs
+    quote_ref = None
+    quote_refs: set[str] = set()
+    sources: list[str] = []
+    if collected_input is not None:
+        req = collected_input.request
+        quote_ref = collected_input.quote_image_ref
+        quote_refs = collected_input.quoted_image_refs
+        collected = collected_input.parse_quoted
+        sources = collected_input.source_paths
+    elif collected:
+        req, quote_ref = await collect_initial_request(
+            event,
+            plugin_context,
+            config,
+            req=req,
+            quoted_image_refs=quote_refs,
+            materialized_paths=sources,
         )
         if req is None:
             return None
-
-    # A background task may be stopped while conversation loading is pending.
-    stop_signal = event.get_extra("_background_stop_signal")
-    if isinstance(stop_signal, asyncio.Event) and stop_signal.is_set():
+    if req is None:
         return None
-
-    cfg = config.provider_settings
-    options = cfg.get("image_compress_options", {})
-    max_size = normalize_model_image_max_size(
-        options.get("max_size") if isinstance(options, dict) else None
-    )
-    prepared_images: dict[str, dict] = {}
-    supports_image = providers.supports_modality(provider, "image")
-    caption_provider_id = cfg.get("default_image_caption_provider_id") or ""
-    if (
-        supports_image
-        or not caption_provider_id
-        or (req.conversation and req.image_urls)
-    ):
-        quote_image_ref = None
-    await prepare_request_images(
-        req,
-        event,
-        max_size=max_size,
-        prepared=prepared_images,
-        quote_image_ref=quote_image_ref,
-        quoted_refs=quoted_image_refs,
-        finalize=False,
-    )
-
-    if isinstance(req.contexts, str):
-        req.contexts = json.loads(req.contexts)
-    thread_selected_text = event.get_extra("thread_selected_text")
-    if isinstance(thread_selected_text, str) and thread_selected_text.strip():
-        req.extra_user_content_parts.append(
-            TextPart(
-                text=(
-                    "The user is asking in a side thread about this selected "
-                    "excerpt from the previous assistant answer:\n"
-                    f"<selected_excerpt>{thread_selected_text.strip()}</selected_excerpt>"
+    if not explicit:
+        if req.conversation is not None:
+            conversation = await plugin_context.conversation_manager.get_conversation(
+                event.unified_msg_origin,
+                req.conversation.cid,
+            )
+            if conversation is None:
+                event.set_extra(
+                    LLM_ERROR_MESSAGE_EXTRA_KEY,
+                    "The requested conversation no longer exists. Please send a new message.",
                 )
-            )
-        )
-    req.image_urls = normalize_and_dedupe_strings(req.image_urls)
-    req.audio_urls = normalize_and_dedupe_strings(req.audio_urls)
-
-    if config.file_extract_enabled:
-        try:
-            await _apply_file_extract(event, req, config)
-        except Exception as exc:  # noqa: BLE001
-            logger.error("Error occurred while applying file extract: %s", exc)
-
-    has_reply = any(isinstance(comp, Reply) for comp in event.message_obj.message)
-
-    if not req.prompt and not req.image_urls and not req.audio_urls:
-        if has_reply or req.extra_user_content_parts:
-            req.prompt = "<attachment>"
+                return None
         else:
-            return None
-
-    captioned_refs: set[str] = set()
-    montage_refs = {
-        result["path"]
-        for result in prepared_images.values()
-        if result["path"] and result["montage"]
-    }
-    if collected_request:
-        captioned_ref = await media.append_quoted_content(
-            event,
-            req,
-            cfg.get("default_image_caption_provider_id") or "",
-            plugin_context,
-            media.get_quoted_message_settings(cfg),
-            main_provider_supports_image=providers.supports_modality(provider, "image"),
-            skip_quote_image_caption=bool(req.conversation and req.image_urls),
-            image_ref=prepared_images[quote_image_ref]["path"]
-            if quote_image_ref
-            else None,
-            image_is_montage=bool(
-                quote_image_ref and prepared_images[quote_image_ref]["montage"]
-            ),
-        )
-        if captioned_ref:
-            captioned_refs.add(captioned_ref)
-    apply_prompt_prefix(req, cfg)
-    if (
-        req.conversation
-        and caption_provider_id
-        and req.image_urls
-        and not supports_image
-    ):
-        captioned_refs.update(
-            await media.caption_request_images(
-                event,
-                req,
-                cfg,
-                plugin_context,
-                caption_provider_id,
-                montage_refs=montage_refs,
-            )
-        )
-    if not req.session_id:
-        req.session_id = event.unified_msg_origin
-    return PreparedRequest(req, prepared_images, captioned_refs, max_size)
+            conversation = await _get_session_conv(event, plugin_context)
+        req.conversation = conversation
+        req.contexts = json.loads(conversation.history)
+        event.set_extra("provider_request", req)
+    prepared = await prepare_input_content(
+        event,
+        plugin_context,
+        config,
+        provider,
+        req,
+        collected_request=collected,
+        quote_image_ref=quote_ref,
+        quoted_image_refs=quote_refs,
+    )
+    if prepared is not None:
+        for path in sources:
+            event.untrack_temporary_local_file(path)
+    return prepared

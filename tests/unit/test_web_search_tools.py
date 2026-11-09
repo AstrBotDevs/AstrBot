@@ -1906,7 +1906,7 @@ class _BraveCycleSession(_CycleSession):
         ('{"error":{"code":"SUBSCRIPTION_TOKEN_INVALID"}}', True),
         ('{"error":{"code":"VALIDATION"}}', False),
         ('{"error":null}', False),
-        ('[]', False),
+        ("[]", False),
         ("not JSON", False),
     ],
 )

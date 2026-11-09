@@ -141,18 +141,14 @@ class ConversationCommands:
         )
 
     async def stop(self, message: AstrMessageEvent) -> None:
-        """停止当前会话正在运行的 Agent"""
-        cfg = self.context.get_config(umo=message.unified_msg_origin)
-        agent_runner_type = cfg["agent_runner"]["runner_type"]
-        umo = message.unified_msg_origin
+        """Request a stop for the current message origin's registered work.
 
-        if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
-            stopped_count = active_event_registry.stop_all(umo, exclude=message)
-        else:
-            stopped_count = active_event_registry.request_agent_stop_all(
-                umo,
-                exclude=message,
-            )
+        Args:
+            message: Stop command event, excluded from the request.
+        """
+        stopped_count = active_event_registry.request_agent_stop_all(
+            message.unified_msg_origin, exclude=message
+        )
 
         if stopped_count > 0:
             message.set_result(
