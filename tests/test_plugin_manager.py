@@ -1340,7 +1340,7 @@ async def test_migrate_legacy_plugin_tool_inactivation_state(
         name="user_disabled_builtin",
         description="user disabled builtin",
         parameters={"type": "object", "properties": {}},
-        handler_module_path="astrbot.core.tools.user_disabled_builtin",
+        handler_module_path="astrbot.core.astr_agent_runtime.tools.user_disabled_builtin",
     )
     active_tool.active = False
     inactive_tool.active = False

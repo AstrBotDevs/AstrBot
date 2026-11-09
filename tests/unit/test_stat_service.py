@@ -7,8 +7,11 @@ from unittest.mock import MagicMock, Mock
 import pytest
 
 import astrbot.dashboard.services.stat_service as stat_service
-from astrbot.core.computer import process_sandbox
-from astrbot.core.computer.process_sandbox import SandboxRunResult, SandboxTimeoutError
+from astrbot.core.astr_agent_runtime.computer import process_sandbox
+from astrbot.core.astr_agent_runtime.computer.process_sandbox import (
+    SandboxRunResult,
+    SandboxTimeoutError,
+)
 from astrbot.dashboard.services.stat_service import StatService
 
 

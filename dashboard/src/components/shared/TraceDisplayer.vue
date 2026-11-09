@@ -797,8 +797,8 @@ function recordSubtitle(record) {
     return "";
   }
   if (record.action === "agent_start") {
-    const runner = fields.runner_type || "local";
-    if (runner === "local") return configTm("aiSettings.localSettingsTitle");
+    const runner = fields.runtime || "astrbot";
+    if (runner === "astrbot") return configTm("aiSettings.localSettingsTitle");
     return ["dify", "coze", "dashscope", "deerflow"].includes(runner)
       ? configTm(`aiSettings.runners.${runner}.title`) : runner;
   }
