@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from astrbot.core.astr_agent_runtime.tools.cron_tools import FutureTaskTool
 from astrbot.core.platform.message_type import MessageType
-from astrbot.core.tools.cron_tools import FutureTaskTool
 
 
 def _context(

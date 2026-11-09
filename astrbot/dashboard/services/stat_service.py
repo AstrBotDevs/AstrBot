@@ -20,7 +20,9 @@ from packaging.version import InvalidVersion, Version
 from sqlmodel import col, func, select
 
 from astrbot.core import DEMO_MODE, logger
-from astrbot.core.computer.process_sandbox import get_process_sandbox_status
+from astrbot.core.astr_agent_runtime.computer.process_sandbox import (
+    get_process_sandbox_status,
+)
 from astrbot.core.config import VERSION
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle

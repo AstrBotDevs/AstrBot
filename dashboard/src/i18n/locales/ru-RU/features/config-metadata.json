@@ -1,7 +1,32 @@
 {
     "ai_group": {
         "name": "AI",
-        "agent_runner": {
+        "subagents": {
+  "description": "Subagents",
+  "agent": {
+    "config": {
+      "subagents": {
+        "enabled": {
+          "description": "Enable Subagents",
+          "hint": "Allow AstrBot to create generic or specialized subagents when appropriate to complete tasks."
+        },
+        "config_ids": {
+          "hint": "Configure specialized subagents with their own personas, toolsets, and other settings. Even without configuring any, AstrBot dynamically creates generic subagents when needed to complete tasks.",
+              "description": "Specialized Agent Configurations"
+        },
+        "max_concurrent_agents": {
+          "description": "Concurrent Agents per Conversation",
+          "hint": "Other tasks queue. Default: 3."
+        },
+        "task_timeout": {
+          "description": "Task Timeout (seconds)",
+          "hint": "Includes queue time. Default: 600 seconds."
+        }
+      }
+    }
+  }
+},
+    "agent": {
             "description": "Запуск агентов (Agent Runner)",
             "hint": "Выберите среду для работы AI-диалогов. По умолчанию используется встроенный агент AstrBot, поддерживающий базу знаний, персонализацию и вызов технических инструментов. Не изменяйте этот раздел, если не планируете использовать сторонние платформы, такие как Dify, Coze или DeerFlow.",
             "provider_settings": {
@@ -10,8 +35,8 @@
                     "hint": "Главный переключатель для AI-диалогов"
                 }
             },
-            "agent_runner": {
-                "runner_type": {
+            "agent": {
+                "runtime": {
                     "description": "Исполнитель",
                     "labels": [
                         "Встроенный Agent",
@@ -25,7 +50,7 @@
         },
         "dify_runner": {
             "description": "Настройки Dify",
-            "agent_runner": {
+            "agent": {
                 "config": {
                     "dify_api_type": {
                         "description": "Тип приложения"
@@ -56,7 +81,7 @@
         },
         "coze_runner": {
             "description": "Настройки Coze",
-            "agent_runner": {
+            "agent": {
                 "config": {
                     "coze_api_key": {
                         "description": "API-ключ"
@@ -81,7 +106,7 @@
         },
         "dashscope_runner": {
             "description": "Настройки приложения Alibaba Cloud Bailian",
-            "agent_runner": {
+            "agent": {
                 "config": {
                     "dashscope_app_type": {
                         "description": "Тип приложения"
@@ -117,7 +142,7 @@
         },
         "deerflow_runner": {
             "description": "Настройки DeerFlow",
-            "agent_runner": {
+            "agent": {
                 "config": {
                     "deerflow_api_base": {
                         "description": "Базовый URL API"
@@ -161,7 +186,7 @@
         "ai": {
             "description": "Модель",
             "hint": "При использовании сторонних сред запуска модель чата и модель описания изображений могут не работать напрямую, но некоторые плагины всё равно зависят от этих настроек.",
-            "agent_runner": {
+            "agent": {
                 "config": {
                     "model": {
                         "provider_id": {
@@ -217,7 +242,7 @@
         "persona": {
             "description": "Персонаж",
             "hint": "Установите персонажа по умолчанию для AI-диалогов. Управлять персонажами можно на вкладке «Персонажи».",
-            "agent_runner": {
+            "agent": {
                 "config": {
                     "persona": {
                         "persona_id": {
@@ -512,7 +537,7 @@
         "truncate_and_compress": {
             "hint": "[Управление контекстом](https://docs.astrbot.app/en/use/context-compress.html)",
             "description": "Стратегия управления контекстом",
-            "agent_runner": {
+            "agent": {
                 "config": {
                     "compression": {
                         "max_turns": {
@@ -553,7 +578,7 @@
         },
         "others": {
             "description": "Прочие настройки",
-            "agent_runner": {
+            "agent": {
                 "config": {
                     "misc": {
                         "max_steps": {

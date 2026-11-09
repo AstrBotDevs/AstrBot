@@ -13,14 +13,16 @@ from unittest.mock import Mock
 
 import pytest
 
-from astrbot.core.computer import process_sandbox
-from astrbot.core.computer.booters import local as local_booter
-from astrbot.core.computer.booters.local import (
+from astrbot.core.astr_agent_runtime.computer import process_sandbox
+from astrbot.core.astr_agent_runtime.computer.booters import local as local_booter
+from astrbot.core.astr_agent_runtime.computer.booters.local import (
     LocalFileSystemComponent,
     LocalPythonComponent,
     LocalShellComponent,
 )
-from astrbot.core.computer.process_sandbox.unix import UnixProcessSandbox
+from astrbot.core.astr_agent_runtime.computer.process_sandbox.unix import (
+    UnixProcessSandbox,
+)
 
 
 class _FakePopen:
