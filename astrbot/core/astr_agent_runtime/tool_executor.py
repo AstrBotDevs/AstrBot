@@ -380,7 +380,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         config = ctx.get_config(umo=umo)
         prov_settings: dict = config.get("provider_settings", {})
         agent_max_step = int(
-            config.get("agent_runner", {})
+            config.get("agent", {})
             .get("config", {})
             .get("misc", {})
             .get("max_steps", 128)

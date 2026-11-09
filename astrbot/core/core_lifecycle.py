@@ -19,8 +19,11 @@ from pathlib import Path
 
 from astrbot.api import logger, sp
 from astrbot.core import LogBroker, LogManager
+from astrbot.core.agent.config_store import AgentConfigStore
 from astrbot.core.agent.runtime import AgentRuntime
 from astrbot.core.astr_agent_runtime import AstrAgentRuntime
+from astrbot.core.astr_agent_runtime.subagents.service import SubAgentService
+from astrbot.core.astr_agent_runtime.subagents.store import SubAgentStore
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.config.default import VERSION
 from astrbot.core.conversation_mgr import ConversationManager
@@ -39,7 +42,6 @@ from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.star.context import Context
 from astrbot.core.star.star_handler import EventType, star_handlers_registry, star_map
 from astrbot.core.star.star_manager import PluginManager
-from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
 from astrbot.core.umop_config_router import UmopConfigRouter
 from astrbot.core.updater import AstrBotUpdater
 from astrbot.core.utils.event_loop_diagnostics import (
@@ -66,7 +68,8 @@ class AstrBotCoreLifecycle:
         self.astrbot_config = astrbot_config  # 初始化配置
         self.db = db  # 初始化数据库
 
-        self.subagent_orchestrator: SubAgentOrchestrator | None = None
+        self.subagents: SubAgentService | None = None
+        self.agent_configs = AgentConfigStore(db)
         self.agent_runtimes: dict[str, AgentRuntime] = {}
         self.cron_manager: CronJobManager | None = None
         self.temp_dir_cleaner: TempDirCleaner | None = None
@@ -123,7 +126,7 @@ class AstrBotCoreLifecycle:
                 return
             self._default_chat_provider_warning_emitted = True
             logger.warning(
-                "Detected %d enabled chat providers but `agent_runner.config.model.provider_id` is empty. "
+                "Detected %d enabled chat providers but `agent.config.model.provider_id` is empty. "
                 "AstrBot will use `%s` as the startup fallback chat provider. "
                 "Set a default chat model in the WebUI configuration page to avoid unexpected provider switching.",
                 len(providers),
@@ -141,24 +144,6 @@ class AstrBotCoreLifecycle:
                 default_id,
                 fallback_id,
             )
-
-    async def _init_or_reload_subagent_orchestrator(self) -> None:
-        """Create (if needed) and reload the subagent orchestrator from config.
-
-        This keeps lifecycle wiring in one place while allowing the orchestrator
-        to manage enable/disable and tool registration details.
-        """
-        try:
-            if self.subagent_orchestrator is None:
-                self.subagent_orchestrator = SubAgentOrchestrator(
-                    self.provider_manager.llm_tools,
-                    self.persona_mgr,
-                )
-            await self.subagent_orchestrator.reload_from_config(
-                self.astrbot_config.get("subagent_orchestrator", {}),
-            )
-        except Exception as e:
-            logger.error(f"Subagent orchestrator init failed: {e}", exc_info=True)
 
     async def initialize(self) -> None:
         """初始化 AstrBot 核心生命周期管理类.
@@ -243,7 +228,7 @@ class AstrBotCoreLifecycle:
         self.cron_manager = CronJobManager(self.db)
 
         # 初始化提供给插件的上下文
-        await self._init_or_reload_subagent_orchestrator()
+        self.subagents = SubAgentService(SubAgentStore(self.db), self.agent_runtimes)
         self.star_context = Context(
             self.event_queue,
             self.astrbot_config,
@@ -256,10 +241,13 @@ class AstrBotCoreLifecycle:
             self.astrbot_config_mgr,
             self.kb_manager,
             self.cron_manager,
-            subagent_orchestrator=self.subagent_orchestrator,
             agent_runtimes=self.agent_runtimes,
         )
-        runtime = AstrAgentRuntime(self.star_context)
+        runtime = AstrAgentRuntime(
+            self.star_context,
+            agent_configs=self.agent_configs,
+            subagents=self.subagents,
+        )
         self.star_context.agent.register_runtime("astrbot", runtime)
         await runtime.initialize()
         self.star_context.html_renderer = html_renderer
@@ -298,6 +286,8 @@ class AstrBotCoreLifecycle:
 
         # 根据配置实例化各个平台适配器
         await self.platform_manager.initialize()
+
+        await self.subagents.start(self.star_context)
 
         # 初始化关闭控制面板的事件
         self.dashboard_shutdown_event = asyncio.Event()
@@ -404,6 +394,8 @@ class AstrBotCoreLifecycle:
         context = getattr(self, "star_context", None)
         if isinstance(context, Context):
             await context.agent.close()
+        if self.subagents is not None:
+            await self.subagents.close()
 
         for plugin in self.plugin_manager.context.get_all_stars():
             try:
@@ -444,6 +436,8 @@ class AstrBotCoreLifecycle:
         context = getattr(self, "star_context", None)
         if isinstance(context, Context):
             await context.agent.close()
+        if self.subagents is not None:
+            await self.subagents.close()
         await self.provider_manager.terminate()
         await self.platform_manager.terminate()
         await self.kb_manager.terminate()

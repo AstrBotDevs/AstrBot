@@ -36,8 +36,8 @@ async def _cleanup_deerflow_thread_if_present(
             return
 
         cfg = context.get_config(umo=umo)
-        agent_runner = cfg.get("agent_runner", {})
-        if agent_runner.get("runner_type") != DEERFLOW_PROVIDER_TYPE:
+        agent_runner = cfg.get("agent", {})
+        if agent_runner.get("runtime") != DEERFLOW_PROVIDER_TYPE:
             return
         runner_config = agent_runner.get("config", {})
         if not isinstance(runner_config, dict):
@@ -115,7 +115,7 @@ class ConversationCommands:
         """
         umo = message.unified_msg_origin
         cfg = self.context.get_config(umo=umo)
-        agent_runner_type = cfg["agent_runner"]["runner_type"]
+        agent_runner_type = cfg["agent"]["runtime"]
 
         active_event_registry.stop_all(umo, exclude=message)
         cid = await self.context.conversation_manager.get_curr_conversation_id(umo)
@@ -169,7 +169,7 @@ class ConversationCommands:
             message: Command event identifying the session and sender.
         """
         cfg = self.context.get_config(umo=message.unified_msg_origin)
-        agent_runner_type = cfg["agent_runner"]["runner_type"]
+        agent_runner_type = cfg["agent"]["runtime"]
         active_event_registry.stop_all(message.unified_msg_origin, exclude=message)
         if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
             await _clear_third_party_agent_runner_state(

@@ -106,6 +106,7 @@ class NativeAgentSession(AgentSession):
         runner.run_context.context.permissions = turn.input.permissions
         runner.run_context.context.agent_session = AgentSessionRef("astrbot", self.id)
         self._runner = runner
+        runner.run_context.context._runtime = self.runtime
         if self.is_main:
             self.runtime._active_main[self.umo] = turn
         metadata = {

@@ -1012,12 +1012,15 @@ def fake_core_lifecycle():
             reload=reload_plugin,
             _validate_astrbot_version_specifier=validate_astrbot_version_specifier,
         ),
+        agent_configs=SimpleNamespace(lock=asyncio.Lock()),
+        agent_runtimes={},
         star_context=SimpleNamespace(
             registered_web_apis=[
                 ("/<path:plugin_path>", plugin_extension, ["GET", "POST"], "demo")
             ]
         ),
         kb_manager=None,
+        subagents=None,
     )
 
 
@@ -1911,7 +1914,7 @@ async def test_config_update_revokes_only_affected_shell_sessions(
 
     config = fake_core_lifecycle.astrbot_config
     config["admins_id"] = ["creator", "other-admin"]
-    config["agent_runner"] = {"runner_type": "local"}
+    config["agent"] = {"runtime": "astrbot"}
     config["provider_settings"] = {
         "computer_use_runtime": "local",
         "computer_use_local_permissions": {
@@ -2036,7 +2039,7 @@ async def test_config_api_saves_local_permissions_without_isolation(
         runtime["sandbox"]["error"] = reason
     original = copy.deepcopy(fake_core_lifecycle.astrbot_config)
     payload = copy.deepcopy(original)
-    payload["agent_runner"] = {"runner_type": "local"}
+    payload["agent"] = {"runtime": "astrbot"}
     payload["provider_settings"] = {
         "computer_use_runtime": "local",
         "computer_use_local_permissions": {
@@ -2079,7 +2082,7 @@ async def test_welcome_page_can_enable_local_computer_access_without_isolation(
     runtime = asgi_app.state.services.stats.runtime
     runtime.update({"os": "linux", "sandbox": {"status": status}})
     config = fake_core_lifecycle.astrbot_config
-    config["agent_runner"] = {"runner_type": "local"}
+    config["agent"] = {"runtime": "astrbot"}
     config["provider_settings"] = {
         "computer_use_runtime": "none",
         "computer_use_local_permissions": get_local_permission_defaults("Linux"),
@@ -3443,6 +3446,26 @@ async def test_v1_plugin_extension_supports_astrbot_web_api(
         "username": "fastapi-v1-test",
         "plugin_name": "web",
     }
+
+
+@pytest.mark.asyncio
+async def test_agent_runtimes_require_config_scope(
+    asgi_client,
+    fake_core_lifecycle,
+    fake_db,
+):
+    fake_core_lifecycle.subagents = None
+    fake_db.add_api_key("plugin-test", ["plugin"])
+    response = await asgi_client.get(
+        "/api/v1/agent-runtimes",
+        headers={"Authorization": "ApiKey plugin-test"},
+    )
+    assert response.status_code == 403
+    response = await asgi_client.get(
+        "/api/v1/agent-runtimes", headers=_jwt_headers()
+    )
+    assert response.status_code == 200
+    assert response.json()["data"] == []
 
 
 @pytest.mark.asyncio

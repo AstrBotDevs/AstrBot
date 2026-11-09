@@ -45,7 +45,7 @@ class TestAstrBotCoreLifecycleInit:
 
         assert lifecycle.log_broker == mock_log_broker
         assert lifecycle.db == mock_db
-        assert lifecycle.subagent_orchestrator is None
+        assert lifecycle.subagents is None
         assert lifecycle.cron_manager is None
         assert lifecycle.temp_dir_cleaner is None
 

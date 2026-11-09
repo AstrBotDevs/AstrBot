@@ -1,5 +1,6 @@
 """Public agent contexts, messages, tools, and conversation types for plugins."""
 
+from astrbot.core.agent.config import AgentConfig, StoredAgentConfig
 from astrbot.core.agent.events import (
     ContextUsage,
     ExecutionMetrics,
@@ -104,6 +105,8 @@ __all__ = [
     "VideoOutput",
     "ExtensionOutput",
     "OutputComponent",
+    "AgentConfig",
+    "StoredAgentConfig",
     "AgentContextWrapper",
     "AgentPermissions",
     "AgentSessionRef",

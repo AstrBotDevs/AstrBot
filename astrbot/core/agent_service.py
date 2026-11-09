@@ -372,7 +372,7 @@ class AgentService:
                 and current.unified_msg_origin == umo
             ):
                 source_event = current
-        config = self.context.get_config(umo=umo).get("agent_runner", {})
+        config = self.context.get_config(umo=umo).get("agent", {})
         target = (
             source_event.agent_session
             if isinstance(source_event, AgentWakeupEvent)
@@ -385,8 +385,7 @@ class AgentService:
         ):
             runtime_name = target.runtime
         else:
-            runner_type = config.get("runner_type", "local")
-            runtime_name = "astrbot" if runner_type == "local" else runner_type
+            runtime_name = config.get("runtime", "astrbot")
         if runtime_name not in self._runtimes:
             raise RuntimeError(f"Agent runtime unavailable: {runtime_name}")
         options = (

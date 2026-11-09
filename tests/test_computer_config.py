@@ -45,7 +45,7 @@ def test_saving_local_permissions_enforces_linked_permissions(
             }
         }
     }
-    payload["agent_runner"] = {"runner_type": "local"}
+    payload["agent"] = {"runtime": "astrbot"}
     config = Mock(keys=lambda: [])
 
     save_config(payload, config, is_core=True)

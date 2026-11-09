@@ -1,4 +1,4 @@
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from mcp.types import CallToolResult
 
@@ -9,11 +9,31 @@ from astrbot.core.astr_agent_runtime.context import AstrAgentContext
 from astrbot.core.pipeline.context_utils import call_event_hook
 from astrbot.core.star.star_handler import EventType
 
+if TYPE_CHECKING:
+    from astrbot.core.provider.entities import ProviderRequest
+
 
 class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
+    def __init__(self, request: "ProviderRequest | None" = None) -> None:
+        """Bind hooks to the prepared native request when one is available.
+
+        Args:
+            request: Native request with conversation and tool settings.
+        """
+        self._request = request
+
     async def on_agent_begin(
         self, run_context: ContextWrapper[AstrAgentContext]
     ) -> None:
+        if self._request is not None:
+            from astrbot.core.astr_agent_runtime.main_agent import subagent
+
+            conversation = self._request.conversation
+            await subagent.begin_main_agent(
+                run_context,
+                conversation_id=conversation.cid if conversation is not None else None,
+                tools=self._request.func_tool,
+            )
         await call_event_hook(
             run_context.context.event,
             EventType.OnAgentBeginEvent,
