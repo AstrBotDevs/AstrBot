@@ -56,11 +56,15 @@ param_schema = {
 async def handle_result(
     result: dict, event: AstrMessageEvent
 ) -> mcp.types.CallToolResult:
-    data = result.get("data", {})
+    data = result.get("data") if isinstance(result.get("data"), dict) else {}
+    if not data and ("output" in result or "error" in result):
+        data = result
     output = data.get("output", {})
+    if isinstance(output, str):
+        output = {"text": output, "images": []}
     error = data.get("error", "")
-    images: list[dict] = output.get("images", [])
-    text: str = output.get("text", "")
+    images: list[dict] = output.get("images", []) if isinstance(output, dict) else []
+    text: str = output.get("text", "") if isinstance(output, dict) else str(output)
 
     resp = mcp.types.CallToolResult(content=[])
 

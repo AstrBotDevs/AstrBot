@@ -4,6 +4,8 @@ This module tests the ComputerClient, Booter implementations (local, shipyard, b
 filesystem operations, Python execution, shell execution, and security restrictions.
 """
 
+import asyncio
+import json
 import os
 import shlex
 import sys
@@ -775,13 +777,89 @@ class TestShipyardBooter:
             assert result is False
 
 
+class _MockResponse:
+    def __init__(self, status=200, text_data="", json_data=None, chunks=None):
+        self.status = status
+        self._text = text_data
+        self._json = json_data or {}
+        self._chunks = chunks or []
+
+        class _Content:
+            def __init__(self, chunks):
+                self._chunks = chunks
+
+            def iter_chunked(self, size=65536):
+                async def _gen():
+                    for chunk in self._chunks:
+                        yield chunk
+
+                return _gen()
+
+        self.content = _Content(self._chunks)
+
+    async def text(self):
+        return self._text
+
+    async def json(self):
+        return self._json
+
+
+class _MockClientSession:
+    def __init__(self, response=None, get_resp=None, post_resp=None, side_effect=None):
+        self._resp = response or _MockResponse()
+        self._get_resp = get_resp or self._resp
+        self._post_resp = post_resp or self._resp
+        self._side_effect = side_effect
+        self.last_get = None
+        self.last_post = None
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        return None
+
+    def get(self, url, **kwargs):
+        if self._side_effect:
+            raise self._side_effect
+        self.last_get = (url, kwargs)
+
+        class _RequestContext:
+            def __init__(self, resp):
+                self.resp = resp
+
+            async def __aenter__(self):
+                return self.resp
+
+            async def __aexit__(self, exc_type, exc_val, exc_tb):
+                return None
+
+        return _RequestContext(self._get_resp)
+
+    def post(self, url, **kwargs):
+        if self._side_effect:
+            raise self._side_effect
+        self.last_post = (url, kwargs)
+
+        class _RequestContext:
+            def __init__(self, resp):
+                self.resp = resp
+
+            async def __aenter__(self):
+                return self.resp
+
+            async def __aexit__(self, exc_type, exc_val, exc_tb):
+                return None
+
+        return _RequestContext(self._post_resp)
+
+
 class TestBoxliteBooter:
-    """Tests for BoxliteBooter."""
+    """Tests for BoxliteBooter and related helper classes."""
 
     @pytest.mark.asyncio
     async def test_boxlite_booter_init(self):
-        """Test BoxliteBooter can be instantiated via __new__."""
-        # Need to mock boxlite module before importing
+        """Test BoxliteBooter can be instantiated and has initial state."""
         mock_boxlite = MagicMock()
         mock_boxlite.SimpleBox = MagicMock()
 
@@ -790,9 +868,536 @@ class TestBoxliteBooter:
                 BoxliteBooter,
             )
 
-            # Just verify class exists and can be instantiated (boot is async)
-            booter = BoxliteBooter.__new__(BoxliteBooter)
+            booter = BoxliteBooter()
             assert booter is not None
+            assert booter._closed is False
+            assert booter.box is None
+            assert booter.mocked is None
+            assert booter._python is None
+            assert booter._shell is None
+            assert booter._fs is None
+            assert booter.capabilities is None
+
+            with pytest.raises(RuntimeError, match="not initialized"):
+                _ = booter.fs
+            with pytest.raises(RuntimeError, match="not initialized"):
+                _ = booter.python
+            with pytest.raises(RuntimeError, match="not initialized"):
+                _ = booter.shell
+
+    def test_normalize_sandbox_path_valid(self):
+        """Test _normalize_sandbox_path converts legitimate paths to workspace-relative."""
+        mock_boxlite = MagicMock()
+        with patch.dict(sys.modules, {"boxlite": mock_boxlite}):
+            from astrbot.core.astr_agent_runtime.computer.booters.boxlite import (
+                _normalize_sandbox_path,
+            )
+
+            assert (
+                _normalize_sandbox_path("/workspace/skills/skills.zip")
+                == "skills/skills.zip"
+            )
+            assert (
+                _normalize_sandbox_path("/home/ship_123/workspace/data/test.csv")
+                == "data/test.csv"
+            )
+            assert _normalize_sandbox_path("workspace/foo.txt") == "foo.txt"
+            assert (
+                _normalize_sandbox_path("relative/path/file.py")
+                == "relative/path/file.py"
+            )
+            assert (
+                _normalize_sandbox_path("\\workspace\\nested\\file.py")
+                == "nested/file.py"
+            )
+            assert (
+                _normalize_sandbox_path("\\home\\ship_abc\\workspace\\report.xlsx")
+                == "report.xlsx"
+            )
+            assert (
+                _normalize_sandbox_path("   /workspace/trimmed.txt   ")
+                == "trimmed.txt"
+            )
+            assert (
+                _normalize_sandbox_path("nested/dir/../file.txt")
+                == "nested/file.txt"
+            )
+
+    def test_normalize_sandbox_path_rejections(self):
+        """Test _normalize_sandbox_path rejects traversal, external paths, and empty targets."""
+        mock_boxlite = MagicMock()
+        with patch.dict(sys.modules, {"boxlite": mock_boxlite}):
+            from astrbot.core.astr_agent_runtime.computer.booters.boxlite import (
+                _normalize_sandbox_path,
+            )
+
+            # 1. Empty and whitespace paths
+            with pytest.raises(ValueError, match="cannot be empty"):
+                _normalize_sandbox_path("")
+            with pytest.raises(ValueError, match="cannot be empty"):
+                _normalize_sandbox_path("   ")
+
+            # 2. Workspace root targets without filename
+            with pytest.raises(ValueError, match="Invalid target path"):
+                _normalize_sandbox_path("/workspace")
+            with pytest.raises(ValueError, match="Invalid target path"):
+                _normalize_sandbox_path("workspace")
+            with pytest.raises(ValueError, match="Invalid target path"):
+                _normalize_sandbox_path("/workspace/")
+
+            # 3. POSIX directory traversal attempts
+            with pytest.raises(ValueError, match="Path traversal attempt detected"):
+                _normalize_sandbox_path("../../etc/passwd")
+            with pytest.raises(ValueError, match="Path traversal attempt detected"):
+                _normalize_sandbox_path("/workspace/../../etc/shadow")
+            with pytest.raises(ValueError, match="Path traversal attempt detected"):
+                _normalize_sandbox_path("sub/../../escape")
+
+            # 4. Windows-style directory traversal attempts
+            with pytest.raises(ValueError, match="Path traversal attempt detected"):
+                _normalize_sandbox_path("..\\..\\windows\\system32")
+            with pytest.raises(ValueError, match="Path traversal attempt detected"):
+                _normalize_sandbox_path("\\workspace\\..\\..\\secret")
+
+            # 5. External absolute paths outside workspace
+            with pytest.raises(ValueError, match="Path outside workspace"):
+                _normalize_sandbox_path("/etc/passwd")
+            with pytest.raises(ValueError, match="Path outside workspace"):
+                _normalize_sandbox_path("/var/log/syslog")
+            with pytest.raises(ValueError, match="Path outside workspace"):
+                _normalize_sandbox_path("/root/.bashrc")
+
+    @pytest.mark.asyncio
+    async def test_upload_file_url_and_headers_and_path(self, tmp_path):
+        """Test upload_file fixes URL scheme, adds X-SESSION-ID, and normalizes path."""
+        mock_boxlite = MagicMock()
+        with patch.dict(sys.modules, {"boxlite": mock_boxlite}):
+            from astrbot.core.astr_agent_runtime.computer.booters.boxlite import (
+                MockShipyardSandboxClient,
+            )
+
+            client = MockShipyardSandboxClient(
+                sb_url="http://127.0.0.1:25000",
+                session_id="session-42",
+            )
+            test_file = tmp_path / "sample.txt"
+            test_file.write_text("sample content")
+
+            mock_session = _MockClientSession(response=_MockResponse(status=200))
+            with patch("aiohttp.ClientSession", return_value=mock_session):
+                result = await client.upload_file(
+                    str(test_file), "/workspace/nested/dest.txt"
+                )
+
+                assert result["success"] is True
+                assert result["file_path"] == "nested/dest.txt"
+
+                assert mock_session.last_post is not None
+                url, kwargs = mock_session.last_post
+                assert url == "http://127.0.0.1:25000/upload"
+                assert not url.startswith("http://http://")
+
+                headers = kwargs.get("headers", {})
+                assert headers.get("X-SESSION-ID") == "session-42"
+                assert kwargs.get("data") is not None
+
+    @pytest.mark.asyncio
+    async def test_upload_file_url_normalization(self):
+        """Test MockShipyardSandboxClient normalizes url without scheme."""
+        mock_boxlite = MagicMock()
+        with patch.dict(sys.modules, {"boxlite": mock_boxlite}):
+            from astrbot.core.astr_agent_runtime.computer.booters.boxlite import (
+                MockShipyardSandboxClient,
+            )
+
+            client = MockShipyardSandboxClient(
+                sb_url="127.0.0.1:25000/",
+                session_id="session-1",
+            )
+            assert client.sb_url == "http://127.0.0.1:25000"
+
+    @pytest.mark.asyncio
+    async def test_upload_file_error_handling(self, tmp_path):
+        """Test upload_file catches non-200 responses, timeouts, traversal, and missing files."""
+        mock_boxlite = MagicMock()
+        with patch.dict(sys.modules, {"boxlite": mock_boxlite}):
+            from astrbot.core.astr_agent_runtime.computer.booters.boxlite import (
+                MockShipyardSandboxClient,
+            )
+
+            client = MockShipyardSandboxClient("http://127.0.0.1:25000")
+            test_file = tmp_path / "sample.txt"
+            test_file.write_text("sample")
+
+            # 1. Non-200 response
+            mock_session_500 = _MockClientSession(
+                response=_MockResponse(status=500, text_data="Internal Server Error")
+            )
+            with patch("aiohttp.ClientSession", return_value=mock_session_500):
+                res = await client.upload_file(str(test_file), "sample.txt")
+                assert res["success"] is False
+                assert "500" in res["error"]
+
+            # 2. Timeout error
+            mock_session_timeout = _MockClientSession(
+                side_effect=asyncio.TimeoutError()
+            )
+            with patch("aiohttp.ClientSession", return_value=mock_session_timeout):
+                res = await client.upload_file(str(test_file), "sample.txt")
+                assert res["success"] is False
+                assert "timeout" in res["error"]
+
+            # 3. File not found
+            res = await client.upload_file(
+                str(tmp_path / "non_existent.txt"), "sample.txt"
+            )
+            assert res["success"] is False
+            assert "File not found" in res["error"]
+
+            # 4. Traversal attempt rejected
+            res = await client.upload_file(str(test_file), "../../secret.txt")
+            assert res["success"] is False
+            assert "traversal" in res["error"].lower()
+
+    @pytest.mark.asyncio
+    async def test_boxlite_available(self):
+        """Test BoxliteBooter available method under various states."""
+        mock_boxlite = MagicMock()
+        with patch.dict(sys.modules, {"boxlite": mock_boxlite}):
+            from astrbot.core.astr_agent_runtime.computer.booters.boxlite import (
+                BoxliteBooter,
+                MockShipyardSandboxClient,
+            )
+
+            booter = BoxliteBooter()
+
+            # 1. Before boot: returns False
+            assert await booter.available() is False
+
+            # 2. After shutdown: returns False
+            await booter.shutdown()
+            assert await booter.available() is False
+
+            # 3. Healthy sandbox
+            booter._closed = False
+            booter.mocked = MockShipyardSandboxClient("http://127.0.0.1:25000")
+            mock_box = MagicMock()
+            mock_box.id = "ship-123"
+            mock_box.info = AsyncMock(
+                return_value={"status": "running", "running": True}
+            )
+            booter.box = mock_box
+
+            mock_session_200 = _MockClientSession(response=_MockResponse(status=200))
+            with patch("aiohttp.ClientSession", return_value=mock_session_200):
+                assert await booter.available() is True
+
+            # 4. Box stopped
+            mock_box.info = AsyncMock(
+                return_value={"status": "stopped", "running": False}
+            )
+            assert await booter.available() is False
+
+            # 5. Box info exception
+            mock_box.info = AsyncMock(side_effect=RuntimeError("VM crashed"))
+            assert await booter.available() is False
+
+            # 6. Health endpoint returns 500
+            mock_box.info = AsyncMock(
+                return_value={"status": "running", "running": True}
+            )
+            mock_session_500 = _MockClientSession(response=_MockResponse(status=500))
+            with patch("aiohttp.ClientSession", return_value=mock_session_500):
+                assert await booter.available() is False
+
+            # 7. Connection error / timeout
+            mock_session_err = _MockClientSession(
+                side_effect=Exception("Connection refused")
+            )
+            with patch("aiohttp.ClientSession", return_value=mock_session_err):
+                assert await booter.available() is False
+
+    @pytest.mark.asyncio
+    async def test_download_file_atomic_and_binary(self, tmp_path):
+        """Test download_file streams binary content atomically and cleans temporary files."""
+        mock_boxlite = MagicMock()
+        with patch.dict(sys.modules, {"boxlite": mock_boxlite}):
+            from astrbot.core.astr_agent_runtime.computer.booters.boxlite import (
+                BoxliteBooter,
+                MockShipyardSandboxClient,
+            )
+
+            client = MockShipyardSandboxClient(
+                sb_url="http://127.0.0.1:25000",
+                session_id="sess-dl",
+            )
+            booter = BoxliteBooter()
+            booter.mocked = client
+
+            binary_payload = b"magic_header\x00\xff\xfe\x01\x02binary_bytes"
+            dest_dir = tmp_path / "downloads"
+            dest_file = dest_dir / "output.bin"
+
+            mock_session = _MockClientSession(
+                response=_MockResponse(status=200, chunks=[binary_payload])
+            )
+            with patch("aiohttp.ClientSession", return_value=mock_session):
+                await booter.download_file("/workspace/sub/remote.bin", str(dest_file))
+
+                assert mock_session.last_get is not None
+                url, kwargs = mock_session.last_get
+                assert url == "http://127.0.0.1:25000/download"
+                assert kwargs["params"] == {"file_path": "sub/remote.bin"}
+                assert kwargs["headers"] == {"X-SESSION-ID": "sess-dl"}
+
+                assert dest_file.is_file()
+                assert dest_file.read_bytes() == binary_payload
+
+                # Ensure no temporary staging files remain
+                tmp_files = list(dest_dir.glob(".tmp_*"))
+                assert len(tmp_files) == 0
+
+    @pytest.mark.asyncio
+    async def test_download_file_failure_cleans_temp_and_preserves_existing(
+        self, tmp_path
+    ):
+        """Test failed download cleans temporary files and preserves existing destination file."""
+        mock_boxlite = MagicMock()
+        with patch.dict(sys.modules, {"boxlite": mock_boxlite}):
+            from astrbot.core.astr_agent_runtime.computer.booters.boxlite import (
+                BoxliteBooter,
+                MockShipyardSandboxClient,
+            )
+
+            client = MockShipyardSandboxClient("http://127.0.0.1:25000")
+            booter = BoxliteBooter()
+            booter.mocked = client
+
+            dest_dir = tmp_path / "downloads"
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            dest_file = dest_dir / "target.txt"
+            original_data = b"original untouched content"
+            dest_file.write_bytes(original_data)
+
+            # Non-200 download response
+            mock_session_500 = _MockClientSession(
+                response=_MockResponse(status=500, text_data="Internal error")
+            )
+            with patch("aiohttp.ClientSession", return_value=mock_session_500):
+                with pytest.raises(RuntimeError, match="HTTP 500"):
+                    await booter.download_file("remote.txt", str(dest_file))
+
+                # Verify existing destination was preserved untouched
+                assert dest_file.read_bytes() == original_data
+                # Verify no temporary files remain
+                assert len(list(dest_dir.glob(".tmp_*"))) == 0
+
+    @pytest.mark.asyncio
+    async def test_download_file_errors(self, tmp_path):
+        """Test download_file error handling for uninitialized booter, traversal, and 404."""
+        mock_boxlite = MagicMock()
+        with patch.dict(sys.modules, {"boxlite": mock_boxlite}):
+            from astrbot.core.astr_agent_runtime.computer.booters.boxlite import (
+                BoxliteBooter,
+                MockShipyardSandboxClient,
+            )
+
+            booter = BoxliteBooter()
+            # 1. Uninitialized booter raises
+            with pytest.raises(RuntimeError, match="not initialized"):
+                await booter.download_file("file.txt", str(tmp_path / "out.txt"))
+
+            booter.mocked = MockShipyardSandboxClient("http://127.0.0.1:25000")
+
+            # 2. Empty local_path raises ValueError
+            with pytest.raises(ValueError, match="local_path cannot be empty"):
+                await booter.download_file("file.txt", "")
+
+            # 3. Path traversal remote path raises ValueError
+            with pytest.raises(ValueError, match="Path traversal attempt detected"):
+                await booter.download_file(
+                    "../../etc/passwd", str(tmp_path / "out.txt")
+                )
+
+            # 4. Remote path outside workspace raises ValueError
+            with pytest.raises(ValueError, match="Path outside workspace"):
+                await booter.download_file("/etc/shadow", str(tmp_path / "out.txt"))
+
+            # 5. HTTP 404 raises RuntimeError
+            mock_session_404 = _MockClientSession(
+                response=_MockResponse(status=404, text_data="File not found")
+            )
+            with patch("aiohttp.ClientSession", return_value=mock_session_404):
+                with pytest.raises(RuntimeError, match="HTTP 404"):
+                    await booter.download_file(
+                        "missing.txt", str(tmp_path / "out.txt")
+                    )
+
+    @pytest.mark.asyncio
+    async def test_shipyard_python_wrapper(self):
+        """Test ShipyardPythonWrapper wraps flat output into standard data format."""
+        mock_boxlite = MagicMock()
+        with patch.dict(sys.modules, {"boxlite": mock_boxlite}):
+            from astrbot.core.astr_agent_runtime.computer.booters.boxlite import (
+                ShipyardPythonWrapper,
+            )
+
+            raw_python = MagicMock()
+
+            # 1. Flat dictionary output from direct Ship microVM
+            raw_python.exec = AsyncMock(
+                return_value={
+                    "success": True,
+                    "output": {"text": "Hello Boxlite\n", "images": []},
+                    "error": None,
+                }
+            )
+            wrapper = ShipyardPythonWrapper(raw_python)
+            res = await wrapper.exec("print('Hello Boxlite')")
+
+            assert res["success"] is True
+            assert res["data"]["output"]["text"] == "Hello Boxlite\n"
+            assert res["data"]["error"] == ""
+            assert res["output"] == "Hello Boxlite\n"
+
+            # 2. Flat scalar output
+            raw_python.exec = AsyncMock(
+                return_value={
+                    "success": True,
+                    "output": "Scalar Result",
+                    "error": "",
+                }
+            )
+            res = await wrapper.exec("42")
+            assert res["data"]["output"]["text"] == "Scalar Result"
+
+            # 3. Silent execution suppresses output text
+            res = await wrapper.exec("42", silent=True)
+            assert res["data"]["output"]["text"] == ""
+
+            # 4. Already wrapped response passed through
+            wrapped_data = {"data": {"output": {"text": "prewrapped"}, "error": ""}}
+            raw_python.exec = AsyncMock(return_value=wrapped_data)
+            res = await wrapper.exec("test")
+            assert res == wrapped_data
+
+    @pytest.mark.asyncio
+    async def test_python_tool_handle_result_flat_and_nested(self):
+        """Test python computer tool handle_result accepts flat and nested formats."""
+        from astrbot.core.astr_agent_runtime.tools.computer_tools.python import (
+            handle_result,
+        )
+
+        event = MagicMock()
+        event.get_platform_name.return_value = "terminal"
+
+        # 1. Flat response format
+        flat_res = {
+            "output": {"text": "computed: 100", "images": []},
+            "error": "",
+        }
+        tool_result = await handle_result(flat_res, event)
+        assert len(tool_result.content) == 1
+        assert tool_result.content[0].text == "computed: 100"
+
+        # 2. Nested response format
+        nested_res = {
+            "data": {
+                "output": {"text": "computed: 200", "images": []},
+                "error": "",
+            }
+        }
+        tool_result = await handle_result(nested_res, event)
+        assert len(tool_result.content) == 1
+        assert tool_result.content[0].text == "computed: 200"
+
+        # 3. Empty output fallback
+        empty_res = {"output": {"text": "", "images": []}, "error": ""}
+        tool_result = await handle_result(empty_res, event)
+        assert len(tool_result.content) == 1
+        assert tool_result.content[0].text == "No output."
+
+        # 4. Error response
+        err_res = {"error": "NameError: name 'x' is not defined"}
+        tool_result = await handle_result(err_res, event)
+        assert any("error:" in c.text for c in tool_result.content)
+
+    @pytest.mark.asyncio
+    async def test_file_read_utils_exec_python_json_flat_and_nested(self):
+        """Test _exec_python_json in file_read_utils accepts flat and nested responses."""
+        from astrbot.core.astr_agent_runtime.computer.file_read_utils import (
+            _exec_python_json,
+        )
+
+        mock_booter = MagicMock()
+
+        # 1. Flat response
+        mock_booter.python.exec = AsyncMock(
+            return_value={
+                "output": {"text": json.dumps({"status": "ok", "value": 123})},
+                "error": "",
+            }
+        )
+        res = await _exec_python_json(mock_booter, "script", action="probe")
+        assert res == {"status": "ok", "value": 123}
+
+        # 2. Nested response
+        mock_booter.python.exec = AsyncMock(
+            return_value={
+                "data": {
+                    "output": {"text": json.dumps({"status": "ok", "value": 456})},
+                    "error": "",
+                }
+            }
+        )
+        res = await _exec_python_json(mock_booter, "script", action="probe")
+        assert res == {"status": "ok", "value": 456}
+
+        # 3. Empty output raises RuntimeError
+        mock_booter.python.exec = AsyncMock(
+            return_value={"output": {"text": ""}, "error": ""}
+        )
+        with pytest.raises(RuntimeError, match="empty output"):
+            await _exec_python_json(mock_booter, "script", action="probe")
+
+    @pytest.mark.asyncio
+    async def test_boxlite_lifecycle_capabilities_and_repeated_shutdown(self):
+        """Test shutdown signature compatibility, capabilities lifecycle, and idempotent shutdown."""
+        mock_boxlite = MagicMock()
+        with patch.dict(sys.modules, {"boxlite": mock_boxlite}):
+            from astrbot.core.astr_agent_runtime.computer.booters.boxlite import (
+                BoxliteBooter,
+                MockShipyardSandboxClient,
+            )
+
+            booter = BoxliteBooter()
+
+            # 1. Capabilities before boot
+            assert booter.capabilities is None
+
+            # 2. Capabilities after boot (active mocked client)
+            booter.mocked = MockShipyardSandboxClient("http://127.0.0.1:25000")
+            assert booter.capabilities == ("python", "shell", "filesystem")
+
+            # 3. Shutdown with arbitrary kwargs
+            mock_box = MagicMock()
+            mock_box.id = "ship-456"
+            mock_box.shutdown = MagicMock()
+            booter.box = mock_box
+
+            await booter.shutdown(delete_sandbox=True, extra_param="ignored")
+            assert booter._closed is True
+            assert booter.box is None
+            assert booter.mocked is None
+            assert booter._python is None
+            assert booter._shell is None
+            assert booter._fs is None
+            assert booter.capabilities is None
+            mock_box.shutdown.assert_called_once()
+
+            # 4. Repeated shutdown is safe and idempotent
+            await booter.shutdown(delete_sandbox=True)
+            assert booter._closed is True
 
 
 class TestComputerClient:
