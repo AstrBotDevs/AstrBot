@@ -1,10 +1,7 @@
 """Web search services, retrieval tools, and result citation instructions."""
 
 from astrbot.core.agent.tool import ToolSet
-from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.provider.entities import ProviderRequest
-from astrbot.core.star.context import Context
-from astrbot.core.tools.web_search_tools import (
+from astrbot.core.astr_agent_runtime.tools.web_search_tools import (
     AnySearchWebSearchTool,
     BaiduWebSearchTool,
     BochaWebSearchTool,
@@ -23,6 +20,9 @@ from astrbot.core.tools.web_search_tools import (
     TavilyExtractWebPageTool,
     TavilyWebSearchTool,
 )
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.provider.entities import ProviderRequest
+from astrbot.core.star.context import Context
 
 WEB_SEARCH_CITATION_TOOL_NAMES = frozenset(
     {

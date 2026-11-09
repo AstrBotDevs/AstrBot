@@ -27,7 +27,7 @@ class SubAgentOrchestrator:
         self.handoffs: list[HandoffTool] = []
 
     async def reload_from_config(self, cfg: dict[str, Any]) -> None:
-        from astrbot.core.astr_agent_context import AstrAgentContext
+        from astrbot.core.astr_agent_runtime.context import AstrAgentContext
 
         agents = cfg.get("agents", [])
         if not isinstance(agents, list):

@@ -12,10 +12,10 @@ from opentelemetry.trace import format_trace_id, get_current_span
 
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.astr_agent_run_util import AgentRunner
-from astrbot.core.astr_agent_wakeup import wake_main_agent
-from astrbot.core.astr_main_agent import MainAgentBuildResult
-from astrbot.core.astr_main_agent.request import prepare_request
+from astrbot.core.agent_wakeup import wake_main_agent
+from astrbot.core.astr_agent_runtime.main_agent import MainAgentBuildResult
+from astrbot.core.astr_agent_runtime.main_agent.request import prepare_request
+from astrbot.core.astr_agent_runtime.runner import AgentRunner
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.event_bus import EventBus
 from astrbot.core.log import _log_context

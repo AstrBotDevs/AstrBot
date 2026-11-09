@@ -10,23 +10,27 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from astrbot.core import astr_main_agent as ama
 from astrbot.core import astr_main_agent_resources as agent_resources
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import Message, dump_messages_with_checkpoints
 from astrbot.core.agent.runners.base import AgentState
 from astrbot.core.agent.tool import FunctionTool, ToolSet
-from astrbot.core.astr_agent_wakeup import wake_main_agent
-from astrbot.core.astr_main_agent import builder as builder_build
-from astrbot.core.astr_main_agent import computer_use as computer_use_build
-from astrbot.core.astr_main_agent import knowledge_base as knowledge_base_build
-from astrbot.core.astr_main_agent import persona as persona_build
-from astrbot.core.astr_main_agent import plugins as plugins_build
-from astrbot.core.astr_main_agent import providers as providers_build
-from astrbot.core.astr_main_agent import request as request_build
-from astrbot.core.astr_main_agent import subagent as subagent_build
-from astrbot.core.astr_main_agent import web_search as web_search_build
-from astrbot.core.astr_main_agent import workspace as workspace_build
+from astrbot.core.agent_wakeup import wake_main_agent
+from astrbot.core.astr_agent_runtime import main_agent as ama
+from astrbot.core.astr_agent_runtime.main_agent import builder as builder_build
+from astrbot.core.astr_agent_runtime.main_agent import (
+    computer_use as computer_use_build,
+)
+from astrbot.core.astr_agent_runtime.main_agent import (
+    knowledge_base as knowledge_base_build,
+)
+from astrbot.core.astr_agent_runtime.main_agent import persona as persona_build
+from astrbot.core.astr_agent_runtime.main_agent import plugins as plugins_build
+from astrbot.core.astr_agent_runtime.main_agent import providers as providers_build
+from astrbot.core.astr_agent_runtime.main_agent import request as request_build
+from astrbot.core.astr_agent_runtime.main_agent import subagent as subagent_build
+from astrbot.core.astr_agent_runtime.main_agent import web_search as web_search_build
+from astrbot.core.astr_agent_runtime.main_agent import workspace as workspace_build
 from astrbot.core.config.agent_runner import resolve_context_compression_config
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.message.components import File, Image, Plain, Record, Reply, Video
@@ -203,7 +207,7 @@ def test_append_system_reminders_includes_weekday(mock_event):
                 return fixed_now.astimezone(tz)
             return fixed_now
 
-    with patch("astrbot.core.astr_main_agent.request.datetime.datetime", FixedDateTime):
+    with patch("astrbot.core.astr_agent_runtime.main_agent.request.datetime.datetime", FixedDateTime):
         request_build.append_system_reminders(
             mock_event,
             req,
@@ -220,7 +224,7 @@ def test_append_system_reminders_includes_weekday(mock_event):
 def test_local_mode_prompt_uses_windows_powershell_51():
     with (
         patch(
-            "astrbot.core.astr_main_agent.computer_use.platform.system",
+            "astrbot.core.astr_agent_runtime.main_agent.computer_use.platform.system",
             return_value="Windows",
         ),
         patch.object(
@@ -241,7 +245,7 @@ def test_local_mode_prompt_uses_windows_powershell_51():
 def test_local_mode_prompt_hints_pwsh_when_resolved():
     with (
         patch(
-            "astrbot.core.astr_main_agent.computer_use.platform.system",
+            "astrbot.core.astr_agent_runtime.main_agent.computer_use.platform.system",
             return_value="Windows",
         ),
         patch.object(
@@ -261,7 +265,7 @@ def test_local_mode_prompt_hints_pwsh_when_resolved():
 def test_local_mode_prompt_ignores_pwsh_on_non_windows():
     with (
         patch(
-            "astrbot.core.astr_main_agent.computer_use.platform.system",
+            "astrbot.core.astr_agent_runtime.main_agent.computer_use.platform.system",
             return_value="Linux",
         ),
         patch.object(
@@ -280,7 +284,7 @@ def test_local_mode_prompt_ignores_pwsh_on_non_windows():
 
 def test_local_mode_prompt_keeps_posix_shell_guidance():
     with patch(
-        "astrbot.core.astr_main_agent.computer_use.platform.system",
+        "astrbot.core.astr_agent_runtime.main_agent.computer_use.platform.system",
         return_value="Linux",
     ):
         prompt = computer_use_build._build_local_mode_prompt()
@@ -1600,7 +1604,7 @@ class TestEnsurePersonaAndSkills:
         isolation_status,
     ):
         monkeypatch.setattr(
-            "astrbot.core.tools.computer_tools.util.get_process_sandbox_status",
+            "astrbot.core.astr_agent_runtime.tools.computer_tools.util.get_process_sandbox_status",
             lambda: {"status": isolation_status},
         )
         persona = {"name": "locked", "prompt": "No tools.", "tools": []}
@@ -2590,7 +2594,7 @@ class TestBuildMainAgent:
                 "AstrAgentContext",
                 side_effect=lambda **kwargs: SimpleNamespace(**kwargs),
             ),
-            patch("astrbot.core.astr_main_agent.media.logger") as mock_logger,
+            patch("astrbot.core.agent_media.logger") as mock_logger,
             patch.object(
                 Video,
                 "convert_to_file_path",

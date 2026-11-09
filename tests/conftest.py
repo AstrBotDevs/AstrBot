@@ -268,7 +268,7 @@ def astrbot_config(temp_config_file: Path):
 @pytest.fixture
 def main_agent_build_config():
     """创建 MainAgentBuildConfig 实例。"""
-    from astrbot.core.astr_main_agent import MainAgentBuildConfig
+    from astrbot.core.astr_agent_runtime.main_agent import MainAgentBuildConfig
 
     return MainAgentBuildConfig(
         tool_call_timeout=60,

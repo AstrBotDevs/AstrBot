@@ -506,7 +506,7 @@ def register_on_agent_begin(**kwargs):
     Examples:
     ```py
     from astrbot.core.agent.run_context import ContextWrapper
-    from astrbot.core.astr_agent_context import AstrAgentContext
+    from astrbot.core.astr_agent_runtime.context import AstrAgentContext
 
     @on_agent_begin()
     async def test(
@@ -534,7 +534,7 @@ def register_on_agent_done(**kwargs):
     Examples:
     ```py
     from astrbot.core.agent.run_context import ContextWrapper
-    from astrbot.core.astr_agent_context import AstrAgentContext
+    from astrbot.core.astr_agent_runtime.context import AstrAgentContext
     from astrbot.api.provider import LLMResponse
 
     @on_agent_done()

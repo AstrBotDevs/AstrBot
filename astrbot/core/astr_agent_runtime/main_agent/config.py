@@ -6,8 +6,10 @@ import copy
 from dataclasses import dataclass, field
 
 from astrbot.core import logger
+from astrbot.core.astr_agent_runtime.tools.web_search_tools import (
+    normalize_legacy_web_search_config,
+)
 from astrbot.core.config.agent_runner import resolve_context_compression_config
-from astrbot.core.tools.web_search_tools import normalize_legacy_web_search_config
 
 
 @dataclass(slots=True)

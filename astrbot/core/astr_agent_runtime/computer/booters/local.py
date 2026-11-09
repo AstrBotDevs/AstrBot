@@ -23,17 +23,17 @@ if sys.version_info < (3, 14):
     from python_ripgrep import search
 
 from astrbot.api import logger
-from astrbot.core.computer.file_read_utils import (
+from astrbot.core.astr_agent_runtime.computer.file_read_utils import (
     detect_text_encoding,
     read_local_text_range_sync,
 )
-from astrbot.core.computer.process_sandbox import (
+from astrbot.core.astr_agent_runtime.computer.process_sandbox import (
     SandboxProcess,
     SandboxSpec,
     SandboxTimeoutError,
     create_process_sandbox,
 )
-from astrbot.core.computer.windows_job import WindowsProcessJob
+from astrbot.core.astr_agent_runtime.computer.windows_job import WindowsProcessJob
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_root,
     get_astrbot_system_tmp_path,

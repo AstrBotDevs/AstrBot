@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from astrbot import logger
 from astrbot.core.agent.runners.tool_loop_agent_runner import FollowUpTicket
-from astrbot.core.astr_agent_run_util import AgentRunner
+from astrbot.core.astr_agent_runtime.runner import AgentRunner
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.utils.active_event_registry import active_event_registry
 

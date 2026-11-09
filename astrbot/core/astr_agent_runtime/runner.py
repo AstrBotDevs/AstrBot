@@ -7,7 +7,7 @@ from collections.abc import AsyncGenerator
 from astrbot.core import logger
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
-from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.core.astr_agent_runtime.context import AstrAgentContext
 from astrbot.core.message.components import BaseMessageComponent, Json, Plain
 from astrbot.core.message.message_event_result import (
     MessageChain,

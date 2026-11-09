@@ -447,7 +447,7 @@ class CronJobManager:
             "cron_payload": payload,
         }
 
-        from astrbot.core.astr_agent_wakeup import wake_main_agent
+        from astrbot.core.agent_wakeup import wake_main_agent
         from astrbot.core.astr_main_agent_resources import (
             PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT,
         )

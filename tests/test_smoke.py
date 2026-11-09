@@ -37,7 +37,7 @@ def test_smoke_critical_imports_in_fresh_interpreter() -> None:
         "import importlib;"
         "mods=["
         "'astrbot.core.core_lifecycle',"
-        "'astrbot.core.astr_main_agent',"
+        "'astrbot.core.astr_agent_runtime.main_agent',"
         "'astrbot.core.pipeline.scheduler',"
         "'astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal',"
         "'astrbot.core.pipeline.process_stage.method.agent_sub_stages.third_party'"

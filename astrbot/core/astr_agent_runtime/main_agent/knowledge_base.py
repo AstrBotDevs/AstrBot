@@ -3,13 +3,13 @@
 from astrbot.core import logger
 from astrbot.core.agent.message import TextPart
 from astrbot.core.agent.tool import ToolSet
-from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.provider.entities import ProviderRequest
-from astrbot.core.star.context import Context
-from astrbot.core.tools.knowledge_base_tools import (
+from astrbot.core.astr_agent_runtime.tools.knowledge_base_tools import (
     KnowledgeBaseQueryTool,
     retrieve_knowledge_base,
 )
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.provider.entities import ProviderRequest
+from astrbot.core.star.context import Context
 
 from .config import MainAgentBuildConfig
 

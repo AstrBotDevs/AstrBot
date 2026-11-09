@@ -13,8 +13,10 @@ from astrbot.core.agent.runners.deerflow.deerflow_agent_runner import (
     DeerFlowAgentRunner,
 )
 from astrbot.core.agent.runners.dify.dify_agent_runner import DifyAgentRunner
-from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
-from astrbot.core.astr_main_agent.request import matches_provider_wake_prefix
+from astrbot.core.astr_agent_runtime.hooks import MAIN_AGENT_HOOKS
+from astrbot.core.astr_agent_runtime.main_agent.request import (
+    matches_provider_wake_prefix,
+)
 from astrbot.core.message.components import Image, Record
 from astrbot.core.message.message_event_result import (
     MessageChain,

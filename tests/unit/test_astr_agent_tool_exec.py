@@ -11,13 +11,13 @@ from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool
-from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+from astrbot.core.astr_agent_runtime.tool_executor import FunctionToolExecutor
+from astrbot.core.astr_agent_runtime.tools.computer_tools.shell import ShellSessionTool
 from astrbot.core.message.components import Image
 from astrbot.core.provider.func_tool_manager import (
     FunctionToolManager,
     _PermissionGuardedTool,
 )
-from astrbot.core.tools.computer_tools.shell import ShellSessionTool
 from astrbot.core.utils.active_event_registry import (
     ActiveEventRegistry,
 )
@@ -58,7 +58,7 @@ def _build_run_context(message_components: list[object] | None = None):
 async def test_shell_session_wait_fits_inside_tool_timeout(
     monkeypatch, action, yield_time_ms, configured_timeout, expected_timeout
 ):
-    from astrbot.core import astr_agent_tool_exec as tool_exec
+    from astrbot.core.astr_agent_runtime import tool_executor as tool_exec
 
     tool = ShellSessionTool()
     monkeypatch.setattr(tool, "call", AsyncMock(return_value="output"))
@@ -244,7 +244,7 @@ async def test_do_handoff_background_reports_prepared_image_urls(
         classmethod(_fake_execute_handoff),
     )
     run_context = _build_run_context()
-    monkeypatch.setattr("astrbot.core.astr_agent_tool_exec.wake_main_agent", _fake_wake)
+    monkeypatch.setattr("astrbot.core.astr_agent_runtime.tool_executor.wake_main_agent", _fake_wake)
     await FunctionToolExecutor._do_handoff_background(
         tool=_DummyTool(),
         run_context=run_context,
@@ -298,7 +298,7 @@ async def test_execute_handoff_skips_renormalize_when_image_urls_prepared(
     )
 
     monkeypatch.setattr(
-        "astrbot.core.astr_agent_tool_exec.normalize_and_dedupe_strings", _boom
+        "astrbot.core.astr_agent_runtime.tool_executor.normalize_and_dedupe_strings", _boom
     )
 
     results = []
@@ -324,7 +324,7 @@ async def test_collect_handoff_image_urls_keeps_extensionless_existing_event_fil
 
     monkeypatch.setattr(Image, "convert_to_file_path", _fake_convert_to_file_path)
     monkeypatch.setattr(
-        "astrbot.core.astr_agent_tool_exec.get_astrbot_temp_path", lambda: "/tmp"
+        "astrbot.core.astr_agent_runtime.tool_executor.get_astrbot_temp_path", lambda: "/tmp"
     )
     monkeypatch.setattr(
         "astrbot.core.utils.image_ref_utils.os.path.exists", lambda _: True
@@ -348,7 +348,7 @@ async def test_collect_handoff_image_urls_filters_extensionless_missing_event_fi
 
     monkeypatch.setattr(Image, "convert_to_file_path", _fake_convert_to_file_path)
     monkeypatch.setattr(
-        "astrbot.core.astr_agent_tool_exec.get_astrbot_temp_path", lambda: "/tmp"
+        "astrbot.core.astr_agent_runtime.tool_executor.get_astrbot_temp_path", lambda: "/tmp"
     )
     monkeypatch.setattr(
         "astrbot.core.utils.image_ref_utils.os.path.exists", lambda _: False
@@ -421,7 +421,7 @@ async def test_collect_handoff_image_urls_filters_extensionless_file_outside_tem
 
     monkeypatch.setattr(Image, "convert_to_file_path", _fake_convert_to_file_path)
     monkeypatch.setattr(
-        "astrbot.core.astr_agent_tool_exec.get_astrbot_temp_path", lambda: "/tmp"
+        "astrbot.core.astr_agent_runtime.tool_executor.get_astrbot_temp_path", lambda: "/tmp"
     )
     monkeypatch.setattr(
         "astrbot.core.utils.image_ref_utils.os.path.exists", lambda _: True
@@ -445,7 +445,7 @@ async def test_background_execution_lifecycle(
 ):
     registry = ActiveEventRegistry()
     monkeypatch.setattr(
-        "astrbot.core.astr_agent_tool_exec.active_event_registry", registry
+        "astrbot.core.astr_agent_runtime.tool_executor.active_event_registry", registry
     )
     run_context = _build_run_context()
     event = run_context.context.event
@@ -467,7 +467,7 @@ async def test_background_execution_lifecycle(
         delivered.set()
 
     wakeup = AsyncMock(side_effect=wake)
-    monkeypatch.setattr("astrbot.core.astr_agent_tool_exec.wake_main_agent", wakeup)
+    monkeypatch.setattr("astrbot.core.astr_agent_runtime.tool_executor.wake_main_agent", wakeup)
     monkeypatch.setattr(
         FunctionToolExecutor,
         "_execute_local" if kind == "tool" else "_execute_handoff",

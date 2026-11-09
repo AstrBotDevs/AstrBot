@@ -4,10 +4,18 @@ from dataclasses import dataclass
 
 from astrbot.core import logger
 from astrbot.core.agent.tool import ToolSet
-from astrbot.core.astr_agent_context import AgentContextWrapper, AstrAgentContext
-from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
-from astrbot.core.astr_agent_run_util import AgentRunner
-from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+from astrbot.core.astr_agent_runtime.context import (
+    AgentContextWrapper,
+    AstrAgentContext,
+)
+from astrbot.core.astr_agent_runtime.hooks import MAIN_AGENT_HOOKS
+from astrbot.core.astr_agent_runtime.runner import AgentRunner
+from astrbot.core.astr_agent_runtime.tool_executor import FunctionToolExecutor
+from astrbot.core.astr_agent_runtime.tools.cron_tools import FutureTaskTool
+from astrbot.core.astr_agent_runtime.tools.message_tools import (
+    GetGroupMessageHistoryTool,
+    SendMessageToUserTool,
+)
 from astrbot.core.astr_main_agent_resources import (
     LIVE_MODE_SYSTEM_PROMPT,
     LLM_ERROR_MESSAGE_EXTRA_KEY,
@@ -22,11 +30,6 @@ from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.star.context import Context
 from astrbot.core.star.star_handler import EventType
-from astrbot.core.tools.cron_tools import FutureTaskTool
-from astrbot.core.tools.message_tools import (
-    GetGroupMessageHistoryTool,
-    SendMessageToUserTool,
-)
 from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
 from astrbot.core.utils.image_input import prepare_request_images
 from astrbot.core.utils.llm_metadata import LLM_METADATAS

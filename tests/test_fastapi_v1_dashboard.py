@@ -1066,7 +1066,7 @@ async def test_version_routes_return_startup_runtime_snapshot(
     platform = SimpleNamespace(
         system=Mock(return_value="Linux"), machine=Mock(return_value="aarch64")
     )
-    from astrbot.core.computer import process_sandbox
+    from astrbot.core.astr_agent_runtime.computer import process_sandbox
 
     process_sandbox.get_process_sandbox_status.cache_clear()
     monkeypatch.setattr(process_sandbox, "platform", platform)
@@ -1903,9 +1903,11 @@ async def test_v1_system_config_update_preserves_independent_bot_provider_sectio
 async def test_config_update_revokes_only_affected_shell_sessions(
     asgi_app, fake_core_lifecycle, monkeypatch, tmp_path, change
 ):
-    from astrbot.core.computer import computer_client
-    from astrbot.core.computer.booters.local import LocalBooter
-    from astrbot.core.tools.computer_tools import shell as shell_tools
+    from astrbot.core.astr_agent_runtime.computer import computer_client
+    from astrbot.core.astr_agent_runtime.computer.booters.local import LocalBooter
+    from astrbot.core.astr_agent_runtime.tools.computer_tools import (
+        shell as shell_tools,
+    )
 
     config = fake_core_lifecycle.astrbot_config
     config["admins_id"] = ["creator", "other-admin"]

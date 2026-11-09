@@ -5,8 +5,8 @@ import pytest
 
 from astrbot.core.message.components import Image, Record
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.pipeline.process_stage.method.agent_sub_stages import third_party
+from astrbot.core.provider.entities import LLMResponse
 
 
 @pytest.mark.asyncio

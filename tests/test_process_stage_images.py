@@ -14,7 +14,6 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from PIL import Image as PILImage
 
-from astrbot.core import astr_main_agent as main
 from astrbot.core.agent.message import (
     ImageURLPart,
     Message,
@@ -23,10 +22,13 @@ from astrbot.core.agent.message import (
     dump_messages_with_checkpoints,
 )
 from astrbot.core.agent.tool import FunctionTool, ToolSet
-from astrbot.core.astr_main_agent import builder as builder_build
-from astrbot.core.astr_main_agent import knowledge_base as knowledge_base_build
-from astrbot.core.astr_main_agent import providers as providers_build
-from astrbot.core.astr_main_agent import request as request_build
+from astrbot.core.astr_agent_runtime import main_agent as main
+from astrbot.core.astr_agent_runtime.main_agent import builder as builder_build
+from astrbot.core.astr_agent_runtime.main_agent import (
+    knowledge_base as knowledge_base_build,
+)
+from astrbot.core.astr_agent_runtime.main_agent import providers as providers_build
+from astrbot.core.astr_agent_runtime.main_agent import request as request_build
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.message.components import Image, Plain, Reply
 from astrbot.core.pipeline.preprocess_stage import stage as preprocess
@@ -1034,7 +1036,8 @@ async def test_non_image_and_disabled_ai_do_not_prepare(harness, tmp_path, monke
 
 def test_image_preparation_stays_outside_agent_runner_and_providers():
     root = Path(__file__).parents[1] / "astrbot" / "core"
-    paths = list((root / "astr_main_agent").glob("*.py")) + [root / "astr_agent_tool_exec.py"]
+    runtime = root / "astr_agent_runtime"
+    paths = list((runtime / "main_agent").glob("*.py")) + [runtime / "tool_executor.py"]
     paths += list((root / "agent").rglob("*.py")) + list(
         (root / "provider").rglob("*.py")
     )
@@ -1045,7 +1048,9 @@ def test_image_preparation_stays_outside_agent_runner_and_providers():
             and "resolve_image_ref_to_images" not in source
         )
         assert "image_settings" not in source
-    from astrbot.core.tools.computer_tools.cua import CuaMouseClickTool
+    from astrbot.core.astr_agent_runtime.tools.computer_tools.cua import (
+        CuaMouseClickTool,
+    )
 
     assert (
         "coordinate_space" not in inspect.signature(CuaMouseClickTool.call).parameters

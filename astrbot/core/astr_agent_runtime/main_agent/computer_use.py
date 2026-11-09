@@ -7,15 +7,11 @@ import platform
 
 from astrbot.core import logger
 from astrbot.core.agent.tool import ToolSet
-from astrbot.core.astr_agent_context import AgentContextWrapper, AstrAgentContext
-from astrbot.core.astr_main_agent_resources import (
-    SANDBOX_MODE_PROMPT,
+from astrbot.core.astr_agent_runtime.context import (
+    AgentContextWrapper,
+    AstrAgentContext,
 )
-from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.provider.entities import ProviderRequest
-from astrbot.core.provider.register import llm_tools
-from astrbot.core.star.context import Context
-from astrbot.core.tools.computer_tools import (
+from astrbot.core.astr_agent_runtime.tools.computer_tools import (
     AnnotateExecutionTool,
     BrowserBatchExecTool,
     BrowserExecTool,
@@ -45,10 +41,17 @@ from astrbot.core.tools.computer_tools import (
     ShellSessionTool,
     SyncSkillReleaseTool,
 )
-from astrbot.core.tools.computer_tools.util import (
+from astrbot.core.astr_agent_runtime.tools.computer_tools.util import (
     LOCAL_NETWORK_POLICY_NOTICE,
     get_local_permission_policy,
 )
+from astrbot.core.astr_main_agent_resources import (
+    SANDBOX_MODE_PROMPT,
+)
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.provider.entities import ProviderRequest
+from astrbot.core.provider.register import llm_tools
+from astrbot.core.star.context import Context
 from astrbot.core.utils.runtime_env import resolve_windows_shell
 
 from .config import MainAgentBuildConfig
@@ -199,7 +202,9 @@ def _apply_sandbox_tools(
         # Determine sandbox capabilities from an already-booted session.
         # If no session exists yet (first request), capabilities is None
         # and we register all tools conservatively.
-        from astrbot.core.computer.computer_client import session_booter
+        from astrbot.core.astr_agent_runtime.computer.computer_client import (
+            session_booter,
+        )
 
         sandbox_capabilities: list[str] | None = None
         existing_booter = session_booter.get(session_id)

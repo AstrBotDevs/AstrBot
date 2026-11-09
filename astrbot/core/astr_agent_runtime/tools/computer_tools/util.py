@@ -4,8 +4,10 @@ from pathlib import Path
 from typing import Literal
 
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.astr_agent_context import AstrAgentContext
-from astrbot.core.computer.process_sandbox import get_process_sandbox_status
+from astrbot.core.astr_agent_runtime.computer.process_sandbox import (
+    get_process_sandbox_status,
+)
+from astrbot.core.astr_agent_runtime.context import AstrAgentContext
 from astrbot.core.config.default import get_local_permission_defaults
 from astrbot.core.db import BaseDatabase
 from astrbot.core.utils.astrbot_path import get_astrbot_workspaces_path

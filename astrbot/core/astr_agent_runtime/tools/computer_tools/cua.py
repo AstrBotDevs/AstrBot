@@ -12,11 +12,13 @@ from mcp.types import ContentBlock
 from astrbot.api import FunctionTool
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import ToolExecResult
-from astrbot.core.astr_agent_context import AstrAgentContext
-from astrbot.core.computer.computer_client import get_booter
+from astrbot.core.astr_agent_runtime.computer.computer_client import get_booter
+from astrbot.core.astr_agent_runtime.context import AstrAgentContext
+from astrbot.core.astr_agent_runtime.tools.computer_tools.util import (
+    check_admin_permission,
+)
+from astrbot.core.astr_agent_runtime.tools.registry import builtin_tool
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.tools.computer_tools.util import check_admin_permission
-from astrbot.core.tools.registry import builtin_tool
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 _CUA_TOOL_CONFIG = {

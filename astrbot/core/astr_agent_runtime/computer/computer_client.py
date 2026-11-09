@@ -12,6 +12,7 @@ from astrbot.api import logger
 from astrbot.core.skills.skill_manager import SANDBOX_SKILLS_ROOT, SkillManager
 from astrbot.core.star.context import Context
 from astrbot.core.utils.astrbot_path import (
+    get_astrbot_path,
     get_astrbot_skills_path,
     get_astrbot_temp_path,
 )
@@ -161,7 +162,7 @@ def _discover_bay_credentials(endpoint: str) -> str:
         candidates.append(Path(bay_data_dir) / "credentials.json")
 
     # 2. Mono-repo layout: AstrBot/../pkgs/bay/credentials.json
-    astrbot_root = Path(__file__).resolve().parents[3]  # astrbot/core/computer/ → root
+    astrbot_root = Path(get_astrbot_path())
     candidates.append(astrbot_root.parent / "pkgs" / "bay" / "credentials.json")
 
     # 3. Current working directory
