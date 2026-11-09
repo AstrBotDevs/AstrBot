@@ -113,7 +113,7 @@ AstrBot uses bubblewrap's `--size` option to limit the size of the temporary fil
 ```bash
 command -v bwrap
 bwrap --version
-bwrap --unshare-all --dir /tmp --size 268435456 --tmpfs /tmp --ro-bind / / --proc /proc --dev /dev /bin/sh -c 'echo "AstrBot is good to go!"'
+bwrap --unshare-all --ro-bind / / --dir /tmp --size 268435456 --tmpfs /tmp --proc /proc --dev /dev /bin/sh -c 'echo "AstrBot is good to go!"'
 ```
 
 If the command prints `AstrBot is good to go!`, bubblewrap is installed, the version meets the requirement, and it passes this basic startup check.

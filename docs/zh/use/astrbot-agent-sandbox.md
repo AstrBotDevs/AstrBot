@@ -105,7 +105,7 @@ AstrBot 使用 bubblewrap 的 `--size` 参数限制沙盒内的临时文件系�
 ```bash
 command -v bwrap
 bwrap --version
-bwrap --unshare-all --dir /tmp --size 268435456 --tmpfs /tmp --ro-bind / / --proc /proc --dev /dev /bin/sh -c 'echo "AstrBot is good to go!"'
+bwrap --unshare-all --ro-bind / / --dir /tmp --size 268435456 --tmpfs /tmp --proc /proc --dev /dev /bin/sh -c 'echo "AstrBot is good to go!"'
 ```
 
 如果正常输出 `AstrBot is good to go!`，说明 bubblewrap 安装成功、版本满足要求且可用。
