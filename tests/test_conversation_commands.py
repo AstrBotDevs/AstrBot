@@ -32,8 +32,8 @@ async def test_clear_third_party_agent_runner_state_deletes_deerflow_thread_befo
 
     context = SimpleNamespace(
         get_config=lambda **kwargs: {
-            "agent_runner": {
-                "runner_type": "deerflow",
+            "agent": {
+                "runtime": "deerflow",
                 "config": {
                     "deerflow_api_base": "http://127.0.0.1:2026",
                     "deerflow_api_key": "token",
@@ -92,8 +92,8 @@ async def test_clear_third_party_agent_runner_state_removes_local_state_when_dee
 
     context = SimpleNamespace(
         get_config=lambda **kwargs: {
-            "agent_runner": {
-                "runner_type": "deerflow",
+            "agent": {
+                "runtime": "deerflow",
                 "config": {
                     "deerflow_api_base": "http://127.0.0.1:2026",
                     "deerflow_api_key": "",
@@ -142,8 +142,8 @@ async def test_clear_third_party_agent_runner_state_removes_local_state_when_dee
 
     context = SimpleNamespace(
         get_config=lambda **kwargs: {
-            "agent_runner": {
-                "runner_type": "deerflow",
+            "agent": {
+                "runtime": "deerflow",
                 "config": {
                     "deerflow_api_base": "http://127.0.0.1:2026",
                     "deerflow_api_key": "",

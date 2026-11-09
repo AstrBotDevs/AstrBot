@@ -5,10 +5,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from astrbot.core.astr_agent_runtime.tools.message_tools import SendMessageToUserTool
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.pipeline.respond.stage import RespondStage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.tools.message_tools import SendMessageToUserTool
 
 
 def _make_context(
@@ -319,7 +319,7 @@ async def test_send_message_missing_image_path_stops_before_send(tmp_path, monke
         raise RuntimeError("sandbox unavailable")
 
     monkeypatch.setattr(
-        "astrbot.core.tools.message_tools.get_booter",
+        "astrbot.core.astr_agent_runtime.tools.message_tools.get_booter",
         mock_get_booter,
     )
 
@@ -411,7 +411,7 @@ async def test_non_admin_can_send_workspace_file(tmp_path, monkeypatch, scope):
     workspace_file.parent.mkdir(parents=True)
     workspace_file.write_text("result", encoding="utf-8")
     monkeypatch.setattr(
-        "astrbot.core.tools.computer_tools.util.get_astrbot_workspaces_path",
+        "astrbot.core.astr_agent_runtime.tools.computer_tools.util.get_astrbot_workspaces_path",
         lambda: str(workspace_root),
     )
 
@@ -437,7 +437,7 @@ async def test_non_admin_can_send_temp_file(tmp_path, monkeypatch, scope):
     output_path = temp_root / "output.txt"
     output_path.write_text("output", encoding="utf-8")
     monkeypatch.setattr(
-        "astrbot.core.tools.message_tools.get_astrbot_temp_path",
+        "astrbot.core.astr_agent_runtime.tools.message_tools.get_astrbot_temp_path",
         lambda: str(temp_root),
     )
 
@@ -460,7 +460,7 @@ async def test_send_message_downloads_windows_sandbox_file_with_original_name(
     temp_root = tmp_path / "temp"
     temp_root.mkdir()
     monkeypatch.setattr(
-        "astrbot.core.tools.message_tools.get_astrbot_temp_path",
+        "astrbot.core.astr_agent_runtime.tools.message_tools.get_astrbot_temp_path",
         lambda: str(temp_root),
     )
 
@@ -484,7 +484,7 @@ async def test_send_message_downloads_windows_sandbox_file_with_original_name(
         return booter
 
     monkeypatch.setattr(
-        "astrbot.core.tools.message_tools.get_booter",
+        "astrbot.core.astr_agent_runtime.tools.message_tools.get_booter",
         mock_get_booter,
     )
 
@@ -508,7 +508,7 @@ async def test_send_message_downloads_trailing_slash_sandbox_file_with_basename(
     temp_root = tmp_path / "temp"
     temp_root.mkdir()
     monkeypatch.setattr(
-        "astrbot.core.tools.message_tools.get_astrbot_temp_path",
+        "astrbot.core.astr_agent_runtime.tools.message_tools.get_astrbot_temp_path",
         lambda: str(temp_root),
     )
 
@@ -530,7 +530,7 @@ async def test_send_message_downloads_trailing_slash_sandbox_file_with_basename(
         return booter
 
     monkeypatch.setattr(
-        "astrbot.core.tools.message_tools.get_booter",
+        "astrbot.core.astr_agent_runtime.tools.message_tools.get_booter",
         mock_get_booter,
     )
 
@@ -569,11 +569,11 @@ async def test_send_message_local_runtime_skips_sandbox_file_probe(
         raise AssertionError("local runtime must not query a sandbox booter")
 
     monkeypatch.setattr(
-        "astrbot.core.tools.message_tools.workspace_root_for_context",
+        "astrbot.core.astr_agent_runtime.tools.message_tools.workspace_root_for_context",
         mock_workspace_root_for_context,
     )
     monkeypatch.setattr(
-        "astrbot.core.tools.message_tools.get_booter",
+        "astrbot.core.astr_agent_runtime.tools.message_tools.get_booter",
         mock_get_booter,
     )
 

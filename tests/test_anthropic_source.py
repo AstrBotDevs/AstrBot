@@ -505,3 +505,39 @@ async def test_malformed_custom_tools_reach_api_validation(
     assert captured[0]["tools"][0]["name"] == "get_time"
     assert captured[0]["tools"][1:] == custom_tools
     assert provider.provider_config["custom_extra_body"]["tools"] == custom_tools
+
+
+@pytest.mark.asyncio
+async def test_query_concatenates_multiple_text_blocks():
+    provider = ProviderAnthropic(
+        provider_config={
+            "id": "anthropic-test",
+            "type": "anthropic_chat_completion",
+            "model": "claude-test",
+            "key": ["test-key"],
+        },
+        provider_settings={},
+    )
+
+    class FakeMessages:
+        async def create(self, **kwargs):
+            return Message(
+                id="msg_1",
+                content=[
+                    TextBlock(text="Let me search. ", type="text"),
+                    TextBlock(text="The answer is ", type="text"),
+                    TextBlock(text="42.", type="text"),
+                ],
+                model="claude-test",
+                role="assistant",
+                stop_reason="end_turn",
+                stop_sequence=None,
+                type="message",
+                usage=Usage(input_tokens=1, output_tokens=1),
+            )
+
+    provider.client = SimpleNamespace(messages=FakeMessages())
+
+    response = await provider._query({"model": "claude-test", "messages": []}, None)
+
+    assert response.completion_text == "Let me search. The answer is 42."

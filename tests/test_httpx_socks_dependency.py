@@ -60,4 +60,3 @@ def test_httpx_socks_dependency_spec_matches_between_dependency_files() -> None:
         "Expected httpx[socks] dependency spec to match between requirements.txt "
         "and pyproject.toml for SOCKS proxy support"
     )
-
