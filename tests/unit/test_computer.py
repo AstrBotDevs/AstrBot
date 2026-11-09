@@ -7,10 +7,12 @@ filesystem operations, Python execution, shell execution, and security restricti
 import asyncio
 import json
 import os
+import re
 import shlex
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import aiohttp
 import pytest
 
 from astrbot.core.astr_agent_runtime.computer.booters.base import ComputerBooter
@@ -824,6 +826,16 @@ class _MockClientSession:
             raise self._side_effect
         self.last_get = (url, kwargs)
 
+        if callable(self._get_resp):
+            resp = self._get_resp(url, **kwargs)
+        elif isinstance(self._get_resp, list):
+            resp = self._get_resp.pop(0) if self._get_resp else self._resp
+        else:
+            resp = self._get_resp
+
+        if isinstance(resp, Exception):
+            raise resp
+
         class _RequestContext:
             def __init__(self, resp):
                 self.resp = resp
@@ -834,7 +846,7 @@ class _MockClientSession:
             async def __aexit__(self, exc_type, exc_val, exc_tb):
                 return None
 
-        return _RequestContext(self._get_resp)
+        return _RequestContext(resp)
 
     def post(self, url, **kwargs):
         if self._side_effect:
@@ -1118,6 +1130,46 @@ class TestBoxliteBooter:
                 assert await booter.available() is False
 
     @pytest.mark.asyncio
+    async def test_boxlite_available_shutdown_race(self):
+        """Test available() returns False if shutdown occurs while health probe is in flight."""
+        mock_boxlite = MagicMock()
+        with patch.dict(sys.modules, {"boxlite": mock_boxlite}):
+            from astrbot.core.astr_agent_runtime.computer.booters.boxlite import (
+                BoxliteBooter,
+                MockShipyardSandboxClient,
+            )
+
+            booter = BoxliteBooter()
+            mock_box = MagicMock()
+            mock_box.id = "ship-race"
+            mock_box.info.return_value = {"status": "running", "running": True}
+            mock_box.shutdown = MagicMock()
+            booter.box = mock_box
+            booter.mocked = MockShipyardSandboxClient("http://127.0.0.1:25000")
+
+            class _RaceClientSession:
+                async def __aenter__(self):
+                    return self
+
+                async def __aexit__(self, exc_type, exc_val, exc_tb):
+                    return None
+
+                def get(self, url, **kwargs):
+                    class _ReqContext:
+                        async def __aenter__(ctx_self):
+                            # Trigger shutdown while health request is suspended
+                            await booter.shutdown()
+                            return _MockResponse(status=200)
+
+                        async def __aexit__(ctx_self, exc_type, exc_val, exc_tb):
+                            return None
+
+                    return _ReqContext()
+
+            with patch("aiohttp.ClientSession", return_value=_RaceClientSession()):
+                assert await booter.available() is False
+
+    @pytest.mark.asyncio
     async def test_download_file_atomic_and_binary(self, tmp_path):
         """Test download_file streams binary content atomically and cleans temporary files."""
         mock_boxlite = MagicMock()
@@ -1138,10 +1190,24 @@ class TestBoxliteBooter:
             dest_dir = tmp_path / "downloads"
             dest_file = dest_dir / "output.bin"
 
+            # Intercept open to verify uuid-based temp filename
+            recorded_temp_paths = []
+            import builtins
+
+            real_open = builtins.open
+
+            def _inspect_open(file, *args, **kwargs):
+                if ".tmp_" in str(file):
+                    recorded_temp_paths.append(str(file))
+                return real_open(file, *args, **kwargs)
+
             mock_session = _MockClientSession(
                 response=_MockResponse(status=200, chunks=[binary_payload])
             )
-            with patch("aiohttp.ClientSession", return_value=mock_session):
+            with (
+                patch("aiohttp.ClientSession", return_value=mock_session),
+                patch("builtins.open", side_effect=_inspect_open),
+            ):
                 await booter.download_file("/workspace/sub/remote.bin", str(dest_file))
 
                 assert mock_session.last_get is not None
@@ -1152,6 +1218,10 @@ class TestBoxliteBooter:
 
                 assert dest_file.is_file()
                 assert dest_file.read_bytes() == binary_payload
+
+                # Verify temporary staging file used a 32-hex UUID
+                assert len(recorded_temp_paths) == 1
+                assert re.search(r"\.tmp_output\.bin_[0-9a-f]{32}$", recorded_temp_paths[0]) is not None
 
                 # Ensure no temporary staging files remain
                 tmp_files = list(dest_dir.glob(".tmp_*"))
@@ -1233,6 +1303,27 @@ class TestBoxliteBooter:
                         "missing.txt", str(tmp_path / "out.txt")
                     )
 
+            # 6. Transport / client error is normalized to RuntimeError preserving cause
+            conn_err = aiohttp.ClientConnectionError("Connection refused")
+            mock_session_err = _MockClientSession(side_effect=conn_err)
+            with patch("aiohttp.ClientSession", return_value=mock_session_err):
+                with pytest.raises(RuntimeError, match="Failed to download file from sandbox") as exc_info:
+                    await booter.download_file("file.txt", str(tmp_path / "out.txt"))
+                assert exc_info.value.__cause__ is conn_err
+
+            # 7. asyncio.TimeoutError is normalized to RuntimeError preserving cause
+            timeout_err = asyncio.TimeoutError("Download timed out")
+            mock_session_timeout = _MockClientSession(side_effect=timeout_err)
+            with patch("aiohttp.ClientSession", return_value=mock_session_timeout):
+                with pytest.raises(RuntimeError, match="Failed to download file from sandbox") as exc_info:
+                    await booter.download_file("file.txt", str(tmp_path / "out.txt"))
+                assert exc_info.value.__cause__ is timeout_err
+
+            # 8. Unrelated programming error is not caught or converted
+            with patch("aiohttp.ClientSession", side_effect=TypeError("programming error")):
+                with pytest.raises(TypeError, match="programming error"):
+                    await booter.download_file("file.txt", str(tmp_path / "out.txt"))
+
     @pytest.mark.asyncio
     async def test_shipyard_python_wrapper(self):
         """Test ShipyardPythonWrapper wraps flat output into standard data format."""
@@ -1281,6 +1372,46 @@ class TestBoxliteBooter:
             res = await wrapper.exec("test")
             assert res == wrapped_data
 
+            # 5. Already wrapped response with silent=True suppresses text
+            wrapped_with_text = {
+                "success": True,
+                "data": {"output": {"text": "should be suppressed", "images": []}, "error": ""},
+                "output": "should be suppressed",
+            }
+            raw_python.exec = AsyncMock(return_value=wrapped_with_text)
+            res_silent = await wrapper.exec("test", silent=True)
+            assert res_silent["data"]["output"]["text"] == ""
+            assert res_silent["output"] == ""
+
+            # 6. Forward cwd parameter to underlying component
+            raw_python.exec = AsyncMock(
+                return_value={"success": True, "output": {"text": "ok", "images": []}}
+            )
+            await wrapper.exec("import os", cwd="/workspace/my_project")
+            raw_python.exec.assert_awaited_with(
+                code="import os",
+                kernel_id=None,
+                timeout=30,
+                silent=False,
+                cwd="/workspace/my_project",
+            )
+
+            # 7. Fallback when underlying component does not accept cwd
+            async def _legacy_exec(code, kernel_id=None, timeout=30, silent=False):
+                return {"success": True, "output": {"text": f"legacy: {code}"}}
+
+            raw_python.exec = AsyncMock(side_effect=_legacy_exec)
+            res_legacy = await wrapper.exec("test_legacy", cwd="/workspace/dir")
+            assert res_legacy["data"]["output"]["text"] == "legacy: test_legacy"
+
+            # 8. Unrelated TypeError is propagated immediately and called exactly once
+            raw_python.exec = AsyncMock(
+                side_effect=TypeError("unsupported operand type(s) for +: 'int' and 'str'")
+            )
+            with pytest.raises(TypeError, match="unsupported operand type"):
+                await wrapper.exec("1 + '2'", cwd="/workspace/dir")
+            assert raw_python.exec.call_count == 1
+
     @pytest.mark.asyncio
     async def test_python_tool_handle_result_flat_and_nested(self):
         """Test python computer tool handle_result accepts flat and nested formats."""
@@ -1321,6 +1452,18 @@ class TestBoxliteBooter:
         err_res = {"error": "NameError: name 'x' is not defined"}
         tool_result = await handle_result(err_res, event)
         assert any("error:" in c.text for c in tool_result.content)
+
+        # 5. Top-level error preserved when data is populated without nested error
+        mixed_res = {
+            "success": False,
+            "error": "Kernel terminated unexpectedly",
+            "data": {
+                "output": {"text": "partial calculations", "images": []},
+            },
+        }
+        tool_result = await handle_result(mixed_res, event)
+        assert any("error: Kernel terminated unexpectedly" in c.text for c in tool_result.content)
+        assert any("partial calculations" in c.text for c in tool_result.content)
 
     @pytest.mark.asyncio
     async def test_file_read_utils_exec_python_json_flat_and_nested(self):
@@ -1398,6 +1541,110 @@ class TestBoxliteBooter:
             # 4. Repeated shutdown is safe and idempotent
             await booter.shutdown(delete_sandbox=True)
             assert booter._closed is True
+
+            # 5. Boot after shutdown resets _closed and restores capabilities and availability
+            reboot_box = MagicMock()
+            reboot_box.id = "ship-reboot"
+            reboot_box.start = AsyncMock()
+            reboot_box.info.return_value = {"status": "running"}
+            mock_boxlite.SimpleBox.return_value = reboot_box
+
+            health_session = _MockClientSession(response=_MockResponse(status=200))
+            with (
+                patch("aiohttp.ClientSession", return_value=health_session),
+                patch("asyncio.sleep", new_callable=AsyncMock),
+            ):
+                await booter.boot("reboot-sess")
+                assert booter._closed is False
+                assert booter.box is reboot_box
+                assert booter.capabilities == ("python", "shell", "filesystem")
+                assert await booter.available() is True
+
+    @pytest.mark.asyncio
+    async def test_boxlite_shutdown_failure_retains_references_and_retries(self):
+        """Test shutdown failure raises RuntimeError, retains box reference, and allows retry."""
+        mock_boxlite = MagicMock()
+        with patch.dict(sys.modules, {"boxlite": mock_boxlite}):
+            from astrbot.core.astr_agent_runtime.computer.booters.boxlite import (
+                BoxliteBooter,
+                MockShipyardSandboxClient,
+            )
+
+            booter = BoxliteBooter()
+            mock_box = MagicMock()
+            mock_box.id = "ship-fail"
+            # 1. First shutdown attempt fails with an exception
+            mock_box.shutdown.side_effect = RuntimeError("VM process stuck")
+            booter.box = mock_box
+            mocked_client = MockShipyardSandboxClient("http://127.0.0.1:25000")
+            booter.mocked = mocked_client
+            booter._python = MagicMock()
+            booter._shell = MagicMock()
+            booter._fs = MagicMock()
+
+            with pytest.raises(
+                RuntimeError, match="Failed to shutdown Boxlite sandbox ship-fail"
+            ) as exc_info:
+                await booter.shutdown()
+
+            assert exc_info.value.__cause__ is not None
+            # Crucially, references are retained when shutdown fails so cleanup can be retried
+            assert booter.box is mock_box
+            assert booter.mocked is mocked_client
+            assert booter._python is not None
+            assert booter._shell is not None
+            assert booter._fs is not None
+
+            # 2. Subsequent retry succeeds
+            mock_box.shutdown.side_effect = None
+            await booter.shutdown()
+
+            assert booter._closed is True
+            assert booter.box is None
+            assert booter.mocked is None
+            assert booter._python is None
+            assert booter._shell is None
+            assert booter._fs is None
+            assert booter.capabilities is None
+
+            # 3. Repeated call after successful shutdown is idempotent no-op
+            await booter.shutdown()
+            assert booter._closed is True
+
+    @pytest.mark.asyncio
+    async def test_boxlite_wait_healthy_retries_and_timeout(self):
+        """Test wait_healthy succeeds on 200 after retries and raises TimeoutError on exhaustion."""
+        mock_boxlite = MagicMock()
+        with patch.dict(sys.modules, {"boxlite": mock_boxlite}):
+            from astrbot.core.astr_agent_runtime.computer.booters.boxlite import (
+                MockShipyardSandboxClient,
+            )
+
+            client = MockShipyardSandboxClient("http://127.0.0.1:25000", session_id="test-sess")
+
+            # 1. Non-200 responses retry until status 200 arrives
+            responses = [
+                _MockResponse(status=503),
+                _MockResponse(status=500),
+                _MockResponse(status=200),
+            ]
+            mock_session = _MockClientSession(get_resp=responses)
+            with (
+                patch("aiohttp.ClientSession", return_value=mock_session),
+                patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep,
+            ):
+                await client.wait_healthy("ship-1", "sess-1")
+                assert mock_sleep.await_count == 2
+
+            # 2. Continual failure exhausts loop and raises TimeoutError
+            fail_session = _MockClientSession(response=_MockResponse(status=500))
+            with (
+                patch("aiohttp.ClientSession", return_value=fail_session),
+                patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep,
+            ):
+                with pytest.raises(TimeoutError, match="failed to become healthy"):
+                    await client.wait_healthy("ship-2", "sess-2")
+                assert mock_sleep.await_count == 60
 
 
 class TestComputerClient:

@@ -62,7 +62,7 @@ async def handle_result(
     output = data.get("output", {})
     if isinstance(output, str):
         output = {"text": output, "images": []}
-    error = data.get("error", "")
+    error = data.get("error") or result.get("error") or ""
     images: list[dict] = output.get("images", []) if isinstance(output, dict) else []
     text: str = output.get("text", "") if isinstance(output, dict) else str(output)
 
