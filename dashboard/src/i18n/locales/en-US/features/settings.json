@@ -279,6 +279,7 @@
     "scopes": "Scopes",
     "sensitiveSubscope": "Sensitive sub-scope",
     "chatAdminWarning": "chat:admin lets this API key use configured administrator IDs and perform administrator actions. Grant it only to fully trusted callers.",
+    "kbWarning": "The kb scope allows reading, importing, modifying, and deleting all knowledge bases, documents, and chunks. Grant it only to trusted callers. Revoking the key cannot undo prior access or deletion.",
     "createConfirm": "Create an API key with the following scopes?\n\n{scopes}",
     "sensitiveCreateConfirm": "You are about to create an API key with these high-risk scopes:\n\n{scopes}\n\nThe holder may gain administrator capabilities. Continue?",
     "scopeDescriptions": {
@@ -292,6 +293,7 @@
       "chatAdmin": "Allow username to use configured administrator IDs and receive their administrator privileges.",
       "data": "Access statistics and runtime data.",
       "file": "Upload and access API files.",
+      "kb": "Manage knowledge bases, documents, chunks, imports, and retrieval.",
       "plugin": "Read and manage plugins.",
       "mcp": "Read and manage MCP servers.",
       "skill": "Read and manage skills."
