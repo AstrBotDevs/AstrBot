@@ -1,18 +1,43 @@
 {
   "ai_group": {
     "name": "AI",
-    "agent_runner": {
-      "description": "Agent Runner",
-      "hint": "Select the runner for AI conversations. Switching runners resets the configuration to the new type's defaults.",
+    "subagents": {
+      "description": "Subagents",
+      "agent": {
+        "config": {
+          "subagents": {
+            "enabled": {
+              "description": "Enable Subagents",
+              "hint": "Allow AstrBot to create generic or specialized subagents when appropriate to complete tasks."
+            },
+            "config_ids": {
+              "hint": "Configure specialized subagents with their own personas, toolsets, and other settings. Even without configuring any, AstrBot dynamically creates generic subagents when needed to complete tasks.",
+              "description": "Specialized Agent Configurations"
+            },
+            "max_concurrent_agents": {
+              "description": "Concurrent Agents per Conversation",
+              "hint": "Other tasks queue. Default: 3."
+            },
+            "task_timeout": {
+              "description": "Task Timeout (seconds)",
+              "hint": "Includes queue time. Default: 600 seconds."
+            }
+          }
+        }
+      }
+    },
+    "agent": {
+      "description": "Agent Configuration",
+      "hint": "Choose an Agent Runtime. Switching runtimes resets its configuration to the new defaults.",
       "provider_settings": {
         "enable": {
           "description": "Enable",
           "hint": "Master switch for AI conversations"
         }
       },
-      "agent_runner": {
-        "runner_type": {
-          "description": "Runner",
+      "agent": {
+        "runtime": {
+          "description": "Agent Runtime",
           "labels": [
             "Built-in Agent",
             "Dify",
@@ -25,7 +50,7 @@
     },
     "dify_runner": {
       "description": "Dify Configuration",
-      "agent_runner": { "config": {
+      "agent": { "config": {
         "dify_api_type": { "description": "Application Type" },
         "dify_api_key": { "description": "API Key" },
         "dify_api_base": { "description": "API Base URL" },
@@ -38,7 +63,7 @@
     },
     "coze_runner": {
       "description": "Coze Configuration",
-      "agent_runner": { "config": {
+      "agent": { "config": {
         "coze_api_key": { "description": "API Key" },
         "bot_id": { "description": "Bot ID" },
         "coze_api_base": { "description": "API Base URL" },
@@ -49,7 +74,7 @@
     },
     "dashscope_runner": {
       "description": "Alibaba Cloud Bailian Application Configuration",
-      "agent_runner": { "config": {
+      "agent": { "config": {
         "dashscope_app_type": { "description": "Application Type" },
         "dashscope_api_key": { "description": "API Key" },
         "dashscope_app_id": { "description": "Application ID" },
@@ -65,7 +90,7 @@
     },
     "deerflow_runner": {
       "description": "DeerFlow Configuration",
-      "agent_runner": { "config": {
+      "agent": { "config": {
         "deerflow_api_base": { "description": "API Base URL" },
         "deerflow_api_key": { "description": "API Key" },
         "deerflow_auth_header": { "description": "Authorization Header" },
@@ -83,7 +108,7 @@
     "ai": {
       "description": "Model",
       "hint": "Configure the built-in Agent's chat models and shared image caption and speech models.",
-      "agent_runner": { "config": { "model": {
+      "agent": { "config": { "model": {
         "provider_id": {
           "description": "Chat Model",
           "hint": "Uses the first model when left empty"
@@ -135,7 +160,7 @@
     "persona": {
       "description": "Persona",
       "hint": "Set the default persona for AI conversations. Personas can be managed in the Persona tab.",
-      "agent_runner": { "config": { "persona": {
+      "agent": { "config": { "persona": {
         "persona_id": { "description": "Default Persona" },
         "safety_mode": {
           "description": "Safety Mode",
@@ -420,7 +445,7 @@
     "truncate_and_compress": {
       "hint": "[Context Management](https://docs.astrbot.app/en/use/context-compress.html)",
       "description": "Context Management Strategy",
-      "agent_runner": { "config": { "compression": {
+      "agent": { "config": { "compression": {
         "max_turns": {
           "description": "Max Turns Before Compression",
           "hint": "Persistent conversation history is truncated or LLM-compressed by the strategy below only after it exceeds this many turns. Request-time contexts are also constrained by this value before sending. -1 means no turn-based limit."
@@ -457,7 +482,7 @@
     },
     "others": {
       "description": "Other Settings",
-      "agent_runner": { "config": { "misc": {
+      "agent": { "config": { "misc": {
         "max_steps": { "description": "Maximum Tool Call Rounds" },
         "tool_schema_mode": {
           "description": "Tool Schema Mode",

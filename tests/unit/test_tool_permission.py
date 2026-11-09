@@ -18,7 +18,10 @@ from astrbot.dashboard.services.tools_service import ToolsService, ToolsServiceE
 def _make_context(role: str = "member", sender_id: str = "user_123"):
     """Return a mock context object suitable for tool permission checks."""
 
+    current_role = role
+
     class FakeEvent:
+        role = current_role
         unified_msg_origin = "aiocqhttp:GroupMessage:g1"
 
         def is_admin(self) -> bool:
