@@ -429,6 +429,7 @@ const updateDialogPluginLogo = computed(() => {
           :pluginName="curr_namespace"
           :pluginI18n="extension_config.i18n"
           enable-default-reset
+          foldable
         />
         <p v-else>{{ tm("dialogs.config.noConfig") }}</p>
       </v-card-text>
@@ -1275,6 +1276,12 @@ const updateDialogPluginLogo = computed(() => {
 </template>
 
 <style scoped>
+.plugin-config-form {
+  /* v-card-text padding, published for the fold headers so their hover highlight
+     reaches the card edges. */
+  --config-group-inset: 16px;
+}
+
 .plugin-config-form > :deep(.config-section) {
   display: none;
 }
