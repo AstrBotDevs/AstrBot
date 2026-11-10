@@ -109,6 +109,7 @@
     "contents": "プラグインハンドラー",
     "noContents": "ハンドラーがありません",
     "notFound": "プラグインが見つかりません",
+    "logsTitle": "プラグインのログ",
     "docsTitle": "ドキュメント",
     "docsEmpty": "ドキュメントはありません",
     "changelogTitle": "変更履歴",
