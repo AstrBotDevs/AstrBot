@@ -114,10 +114,12 @@ export function useSessions(chatboxMode: boolean = false) {
             if (currSessionId.value === sessionId) {
                 currSessionId.value = '';
                 selectedSessions.value = [];
+                return true;
             }
         } catch (err) {
             console.error(err);
         }
+        return false;
     }
 
     interface BatchDeleteFailedItem {

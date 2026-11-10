@@ -1443,9 +1443,8 @@ async function deleteSidebarSession(session: Session) {
   const message = tm("conversation.confirmDelete", { name: title });
   if (!(await askForConfirmation(message, confirmDialog))) return;
 
-  const wasCurrent = currSessionId.value === session.session_id;
-  await deleteSession(session.session_id);
-  if (wasCurrent) {
+  const clearedCurrentSession = await deleteSession(session.session_id);
+  if (clearedCurrentSession && !currSessionId.value) {
     selectedProjectId.value = null;
     await router.push(basePath());
   }
