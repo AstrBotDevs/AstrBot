@@ -10,6 +10,7 @@ from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.umo_alias import build_umo_alias_map, parse_umo, serialize_umo_alias
+from astrbot.core.utils.session_lock import session_lock_manager
 
 
 class ConversationServiceError(Exception):
@@ -190,18 +191,57 @@ class ConversationService:
         return {"message": "对话信息更新成功"}
 
     async def delete_conversation(self, data: object) -> dict:
+        """Delete conversations after pending native history commits have settled.
+
+        Args:
+            data: A conversation's user ID and ID, or a batch of conversations.
+
+        Returns:
+            Deletion status, including per-item failures for a batch.
+
+        Raises:
+            ConversationServiceError: If required identifiers are missing.
+        """
         payload = self._payload(data)
         if "conversations" in payload:
             return await self._delete_conversations(payload.get("conversations", []))
 
         user_id, cid = self._require_user_and_cid(payload)
-        await self.conv_mgr.delete_conversation(
-            unified_msg_origin=user_id,
-            conversation_id=cid,
-        )
+        async with session_lock_manager.acquire_lock(user_id):
+            current_cid = await self.conv_mgr.get_curr_conversation_id(user_id)
+            await self.conv_mgr.delete_conversation(
+                unified_msg_origin=user_id,
+                conversation_id=cid,
+            )
+            if current_cid == cid:
+                # Pending group observations belong to the deleted conversation.
+                plugin_manager = getattr(self.core_lifecycle, "plugin_manager", None)
+                core_plugin = (
+                    plugin_manager.context.get_registered_star("astrbot")
+                    if plugin_manager
+                    else None
+                )
+                group_context = (
+                    getattr(core_plugin.star_cls, "group_chat_context", None)
+                    if core_plugin
+                    else None
+                )
+                if group_context is not None:
+                    await group_context.remove_session(user_id)
         return {"message": "对话删除成功"}
 
     async def update_history(self, data: object) -> dict:
+        """Replace history without a running native turn overwriting the edit.
+
+        Args:
+            data: Conversation identifiers and the replacement history.
+
+        Returns:
+            History update status.
+
+        Raises:
+            ConversationServiceError: If input is invalid or the conversation is missing.
+        """
         payload = self._payload(data)
         user_id, cid = self._require_user_and_cid(payload)
         history = payload.get("history")
@@ -211,18 +251,21 @@ class ConversationService:
 
         history = self._normalize_history(history)
 
-        conversation = await self.conv_mgr.get_conversation(
-            unified_msg_origin=user_id,
-            conversation_id=cid,
-        )
-        if not conversation:
-            raise ConversationServiceError("对话不存在")
+        # Native turns hold this lock through their final history commit. Apply
+        # the edit afterwards so a running turn cannot restore deleted messages.
+        async with session_lock_manager.acquire_lock(user_id):
+            conversation = await self.conv_mgr.get_conversation(
+                unified_msg_origin=user_id,
+                conversation_id=cid,
+            )
+            if not conversation:
+                raise ConversationServiceError("对话不存在")
 
-        await self.conv_mgr.update_conversation(
-            unified_msg_origin=user_id,
-            conversation_id=cid,
-            history=history,
-        )
+            await self.conv_mgr.update_conversation(
+                unified_msg_origin=user_id,
+                conversation_id=cid,
+                history=history,
+            )
 
         return {"message": "对话历史更新成功"}
 
@@ -309,10 +352,7 @@ class ConversationService:
                 continue
 
             try:
-                await self.conv_mgr.delete_conversation(
-                    unified_msg_origin=user_id,
-                    conversation_id=cid,
-                )
+                await self.delete_conversation({"user_id": user_id, "cid": cid})
                 deleted_count += 1
             except Exception as exc:
                 failed_items.append(f"user_id:{user_id}, cid:{cid} - {exc!s}")

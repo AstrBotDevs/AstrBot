@@ -129,8 +129,16 @@ class GroupChatContext:
                 return random.random() < cfg["ar_possibility"]
         return False
 
-    async def remove_session(self, event: AstrMessageEvent) -> int:
-        umo = event.unified_msg_origin
+    async def remove_session(self, event: AstrMessageEvent | str) -> int:
+        """Discard pending observations for a command or dashboard deletion.
+
+        Args:
+            event: Message event or unified message origin to clear.
+
+        Returns:
+            Number of discarded observations.
+        """
+        umo = event if isinstance(event, str) else event.unified_msg_origin
         lock = self._get_lock(umo)
         async with lock:
             cnt = len(self.raw_records.get(umo, deque()))
@@ -140,16 +148,25 @@ class GroupChatContext:
         return cnt
 
     async def handle_message(self, event: AstrMessageEvent) -> None:
+        """Buffer a group message unless its context is cleared while formatting.
+
+        Args:
+            event: Incoming group message to format and retain.
+        """
         if event.get_message_type() != MessageType.GROUP_MESSAGE:
             return
 
         umo = event.unified_msg_origin
         cfg = self.cfg(event)
+        records = self.raw_records[umo]
+        record_ids = self._record_ids[umo]
         final_message = await self._format_message(event, cfg)
 
         async with self._get_lock(umo):
-            records = self.raw_records[umo]
-            record_ids = self._record_ids[umo]
+            # Clearing a session invalidates formatting already in progress,
+            # such as an image caption that completes after dashboard deletion.
+            if self.raw_records.get(umo) is not records:
+                return
             record_id = uuid.uuid4().hex
             records.append(final_message)
             record_ids.append(record_id)
