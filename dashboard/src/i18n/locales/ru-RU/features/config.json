@@ -170,6 +170,10 @@
         "title": "Редактирование файла"
     },
     "fileUpload": {
+    "previewImage": "Просмотр изображения: {name}",
+    "closePreview": "Закрыть просмотр изображения",
+    "loadingPreview": "Загрузка изображения",
+    "previewUnavailable": "Предпросмотр изображения недоступен",
         "button": "Файлы",
         "dialogTitle": "Загруженные файлы",
         "dropzone": "Загрузить файлы",

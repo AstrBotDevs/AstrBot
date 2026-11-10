@@ -170,6 +170,10 @@
     "title": "编辑配置文件"
   },
   "fileUpload": {
+    "previewImage": "预览图片：{name}",
+    "closePreview": "关闭图片预览",
+    "loadingPreview": "正在加载图片预览",
+    "previewUnavailable": "图片无法预览",
     "button": "管理文件",
     "dialogTitle": "已上传文件",
     "dropzone": "上传新文件",

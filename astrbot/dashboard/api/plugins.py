@@ -794,6 +794,24 @@ async def list_plugin_config_files_by_id(
     )
 
 
+@router.get("/plugins/config-files/preview")
+def preview_plugin_config_image_by_id(
+    plugin_id: str = Query(...),
+    config_key: str = Query(...),
+    path: str = Query(...),
+    _auth: AuthContext = Depends(require_plugin_scope),
+    service: ConfigFileService = Depends(get_config_file_service),
+):
+    # A synchronous route keeps image decoding off the ASGI event loop.
+    return Response(
+        service.preview_config_image(
+            name=plugin_id, key_path=config_key, rel_path=path
+        ),
+        media_type="image/png",
+        headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+    )
+
+
 @router.post("/plugins/config-files")
 async def upload_plugin_config_files_by_id(
     request: Request,
