@@ -712,6 +712,13 @@ class Context:
                     event is not None
                     and event._execution_active
                     and message_chain.chain
+                    and str(session) == event.unified_msg_origin
+                ):
+                    event.mark_sent_to_user()
+                if (
+                    event is not None
+                    and event._execution_active
+                    and message_chain.chain
                     and streaming_response_event.get() is not event
                 ):
                     event.trace.record(
