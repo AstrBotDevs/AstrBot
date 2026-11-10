@@ -770,6 +770,51 @@ async def test_handle_api_error_invalid_attachment_after_fallback_raises():
 
 
 @pytest.mark.asyncio
+async def test_handle_api_error_context_length_keeps_tool_calls_paired():
+    """#7225: the context-length retry must not leave an orphaned tool record."""
+    provider = _make_provider()
+    try:
+        payloads = {
+            "messages": [
+                {"role": "system", "content": "sys"},
+                {"role": "user", "content": "hi"},
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "call_1",
+                            "type": "function",
+                            "function": {"name": "demo", "arguments": "{}"},
+                        }
+                    ],
+                },
+                {"role": "tool", "tool_call_id": "call_1", "content": "ok"},
+                {"role": "user", "content": "again"},
+            ]
+        }
+        context_query = payloads["messages"]
+
+        success, *_rest = await provider._handle_api_error(
+            Exception("This model's maximum context length is 8192 tokens"),
+            payloads=payloads,
+            context_query=context_query,
+            func_tool=None,
+            chosen_key="test-key",
+            available_api_keys=["test-key"],
+            retry_cnt=0,
+            max_retries=10,
+        )
+
+        assert success is False
+        updated_context = payloads["messages"]
+        # The popped assistant(tool_calls) must take its tool record with it.
+        assert [record["role"] for record in updated_context] == ["system", "user"]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_prepare_chat_payload_materializes_context_http_image_urls(monkeypatch):
     provider = _make_provider()
     try:
