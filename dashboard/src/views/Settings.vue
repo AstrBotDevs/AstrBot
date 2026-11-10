@@ -601,6 +601,7 @@ const apiKeyExpiryOptions = computed(() => [
 ]);
 
 const availableScopes = [
+    { value: 'stats', label: 'stats', descriptionKey: 'apiKey.scopeDescriptions.stats' },
     { value: 'bot', label: 'bot', descriptionKey: 'apiKey.scopeDescriptions.bot' },
     { value: 'provider', label: 'provider', descriptionKey: 'apiKey.scopeDescriptions.provider' },
     { value: 'persona', label: 'persona', descriptionKey: 'apiKey.scopeDescriptions.persona' },

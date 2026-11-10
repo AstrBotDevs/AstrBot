@@ -26,6 +26,7 @@ PUBLIC_OPEN_API_SCOPES = (
     "plugin",
     "mcp",
     "skill",
+    "stats",
 )
 PUBLIC_OPEN_API_EXCLUDED_PATHS = {
     "/api/v1/live-chat/ws",

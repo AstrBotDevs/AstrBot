@@ -5280,3 +5280,72 @@ async def test_bot_delete_cleanup_query_is_validated(asgi_app, asgi_client, rout
     invalid = await asgi_client.delete(route, params={"bot_id": "bot", "cleanup": "unknown"}, headers=_jwt_headers())
     assert invalid.status_code == 422
     assert delete_bot.await_count == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("path", "method"),
+    [
+        ("/api/v1/stats", "get_stat"),
+        ("/api/v1/stats/provider-tokens", "get_provider_token_stats"),
+    ],
+)
+async def test_v1_stats_scope(
+    asgi_client: httpx.AsyncClient,
+    fake_db: FakeDb,
+    monkeypatch: pytest.MonkeyPatch,
+    path: str,
+    method: str,
+):
+    from astrbot.dashboard.services.stat_service import StatService
+
+    operation = AsyncMock(return_value={"sample": 42})
+    monkeypatch.setattr(StatService, method, operation)
+    fake_db.add_api_key("abk_stats_only", scopes=["stats"])
+    fake_db.add_api_key("abk_without_stats", scopes=["bot"])
+
+    for headers, expected in [
+        ({}, 401),
+        ({"X-API-Key": "invalid"}, 401),
+        ({"X-API-Key": "abk_without_stats"}, 403),
+        ({"X-API-Key": "abk_stats_only"}, 200),
+        (_jwt_headers(), 200),
+    ]:
+        response = await asgi_client.get(path, headers=headers)
+        assert response.status_code == expected
+        if expected == 200:
+            assert response.json()["data"] == {"sample": 42}
+    assert operation.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_v1_stats_scope_cannot_perform_admin_actions(
+    asgi_client: httpx.AsyncClient,
+    fake_db: FakeDb,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.dashboard.services.stat_service import StatService
+
+    restart = AsyncMock()
+    cleanup = AsyncMock()
+    monkeypatch.setattr(StatService, "restart_core", restart)
+    monkeypatch.setattr(StatService, "cleanup_storage", cleanup)
+    fake_db.add_api_key("abk_stats_only", scopes=["stats"])
+    for path, payload in [
+        ("/api/v1/system/restart", {}),
+        ("/api/v1/stats/storage/cleanup", {"target": "traces"}),
+    ]:
+        response = await asgi_client.post(
+            path, json=payload, headers={"X-API-Key": "abk_stats_only"}
+        )
+        assert response.status_code == 403
+    restart.assert_not_awaited()
+    cleanup.assert_not_awaited()
+
+
+def test_stats_scope_is_explicitly_opt_in():
+    from astrbot.dashboard.services.auth_service import DEFAULT_OPEN_API_SCOPES
+
+    assert ApiKeyService._normalize_scopes(["stats"]) == ["stats"]
+    assert "stats" not in ApiKeyService._normalize_scopes(None)
+    assert "stats" not in DEFAULT_OPEN_API_SCOPES

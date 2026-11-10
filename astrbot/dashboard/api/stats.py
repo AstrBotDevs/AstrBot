@@ -11,7 +11,7 @@ from astrbot.dashboard.schemas import (
 )
 from astrbot.dashboard.services.stat_service import StatService, StatServiceError
 
-from .auth import AuthContext, require_dashboard_user, require_scope
+from .auth import AuthContext, ScopeDependency, require_dashboard_user, require_scope
 
 router = APIRouter(tags=["System Stats"])
 legacy_router = APIRouter(
@@ -55,7 +55,7 @@ def _parse_int(value: object, default: int, name: str) -> int:
 @router.get("/stats")
 async def get_stats(
     offset_sec: int = Query(default=86400),
-    _auth: AuthContext = Depends(require_system_scope),
+    _auth: AuthContext = Depends(ScopeDependency("stats")),
     service: StatService = Depends(get_service),
 ):
     return await _run(service.get_stat(offset_sec))
@@ -64,7 +64,7 @@ async def get_stats(
 @router.get("/stats/provider-tokens")
 async def get_provider_token_stats(
     days: int = Query(default=1),
-    _auth: AuthContext = Depends(require_system_scope),
+    _auth: AuthContext = Depends(ScopeDependency("stats")),
     service: StatService = Depends(get_service),
 ):
     return await _run(service.get_provider_token_stats(days))

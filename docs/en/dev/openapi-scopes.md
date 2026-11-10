@@ -334,3 +334,12 @@ Manage Skills, archives, files, and Shipyard Neo Skill workflows.
 | `GET` | `/api/v1/skills/{skill_name}/files` | — |
 | `GET` | `/api/v1/skills/{skill_name}/files/{file_path}` | — |
 | `PUT` | `/api/v1/skills/{skill_name}/files/{file_path}` | — |
+
+## `stats`
+
+Read runtime and token usage statistics.
+
+| Method | Endpoint | Conditional sensitive sub-scope |
+| --- | --- | --- |
+| `GET` | `/api/v1/stats` | — |
+| `GET` | `/api/v1/stats/provider-tokens` | — |
