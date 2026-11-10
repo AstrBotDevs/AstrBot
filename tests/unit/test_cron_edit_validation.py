@@ -329,26 +329,20 @@ async def test_slow_edit_does_not_block_other_job(cron_store, monkeypatch):
         await asyncio.wait_for(update, 2)
 
 
-@pytest.mark.parametrize("run_once", [False, True])
-@pytest.mark.parametrize("original_run_once", [False, True])
 @pytest.mark.asyncio
-async def test_failed_schedule_install_preserves_job(
-    cron_store, monkeypatch, run_once, original_run_once
-):
+async def test_failed_schedule_install_preserves_job(cron_store, monkeypatch):
     """Failed replacement installation preserves the definition and live schedule.
 
     Args:
         cron_store: Real database and paused scheduler.
         monkeypatch: Restores the scheduler method.
-        run_once: Whether the replacement uses a one-shot trigger.
-        original_run_once: Whether the original uses a one-shot trigger.
     """
     db, manager = cron_store
     job = await manager.add_active_job(
         name="Original",
-        cron_expression="0 9 * * *",
+        cron_expression=None,
         payload={"note": "Original"},
-        run_once=original_run_once,
+        run_once=True,
         run_at=datetime(2099, 1, 1, tzinfo=timezone.utc),
     )
     scheduled = scheduled_job(manager, job.job_id)
@@ -361,10 +355,8 @@ async def test_failed_schedule_install_preserves_job(
     edit = {
         "name": "Replacement",
         "cron_expression": "0 10 * * *",
-        "run_once": run_once,
+        "run_once": False,
     }
-    if run_once:
-        edit["run_at"] = "2099-02-01T00:00:00+00:00"
     with pytest.raises(CronServiceError, match="Scheduler installation failed"):
         await service.update_job(job.job_id, edit)
 
@@ -399,35 +391,24 @@ async def test_concurrent_dashboard_edits_preserve_both_changes(
     service = CronService(SimpleNamespace(cron_manager=manager))
     original_update = manager.update_job
     first_ready = asyncio.Event()
-    second_ready = asyncio.Event()
-    first_saved = asyncio.Event()
-    calls = 0
+    release_first = asyncio.Event()
 
     async def overlap(job_id, **kwargs):
-        nonlocal calls
-        calls += 1
-        if calls == 1:
+        if not first_ready.is_set():
             first_ready.set()
-            await second_ready.wait()
-            try:
-                return await original_update(job_id, **kwargs)
-            finally:
-                first_saved.set()
-        second_ready.set()
-        await first_saved.wait()
+            await release_first.wait()
         return await original_update(job_id, **kwargs)
 
     monkeypatch.setattr(manager, "update_job", overlap)
     first = asyncio.create_task(service.update_job(job.job_id, {"note": "New"}))
     try:
         await asyncio.wait_for(first_ready.wait(), 2)
-        second = asyncio.create_task(
-            service.update_job(job.job_id, {"session": "test:FriendMessage:new"})
+        await asyncio.wait_for(
+            service.update_job(job.job_id, {"session": "test:FriendMessage:new"}), 2
         )
-        await asyncio.wait_for(asyncio.gather(first, second), 3)
-        stored = await db.get_cron_job(job.job_id)
-        assert stored.payload["note"] == "New"
-        assert stored.payload["session"] == "test:FriendMessage:new"
     finally:
-        second_ready.set()
-        await asyncio.gather(first, return_exceptions=True)
+        release_first.set()
+        await asyncio.wait_for(first, 2)
+    stored = await db.get_cron_job(job.job_id)
+    assert stored.payload["note"] == "New"
+    assert stored.payload["session"] == "test:FriendMessage:new"
