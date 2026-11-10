@@ -12,6 +12,33 @@ from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.sources.gemini_source import ProviderGoogleGenAI
 
 
+def _gemini_config_provider(
+    model: str, provider_config: dict | None = None
+) -> ProviderGoogleGenAI:
+    """Build a provider stub that can build request configs without network I/O."""
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.provider_config = provider_config or {}
+    provider.provider_settings = {}
+    provider.model_name = model
+    provider.safety_settings = []
+    return provider
+
+
+def _gemini_func_toolset() -> SimpleNamespace:
+    """Minimal ToolSet stand-in exposing one function declaration."""
+    return SimpleNamespace(
+        get_func_desc_google_genai_style=lambda: {
+            "function_declarations": [
+                {
+                    "name": "generate_image",
+                    "description": "Generate an image",
+                    "parameters": {"type": "object", "properties": {}},
+                }
+            ]
+        }
+    )
+
+
 @pytest.mark.asyncio
 async def test_gemini_thinking_level_is_serialized_on_every_request():
     model = "gemini-3.7-flash"
@@ -49,6 +76,135 @@ async def test_gemini_37_minimal_thinking_level_falls_back_to_medium():
     assert config.thinking_config.model_dump(exclude_none=True) == {
         "thinking_level": types.ThinkingLevel.MEDIUM,
     }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "provider_config",
+    [
+        {"gm_native_search": True},
+        {"gm_url_context": True},
+        {"gm_native_coderunner": True},
+    ],
+)
+async def test_gemini_enables_server_side_tool_invocations_for_tool_combination(
+    provider_config,
+):
+    """Built-in tools + function calling on Gemini 3+ must opt into circulation.
+
+    Regression test for the 400 INVALID_ARGUMENT error
+    "Please enable tool_config.include_server_side_tool_invocations to use
+    Built-in tools with Function calling."
+    """
+    model = "gemini-3.8-flash"
+    provider = _gemini_config_provider(model, provider_config)
+
+    config = await provider._prepare_query_config(
+        {"model": model}, tools=_gemini_func_toolset()
+    )
+
+    assert config.tool_config is not None
+    assert config.tool_config.include_server_side_tool_invocations is True
+    assert config.tool_config.function_calling_config is not None
+    # AUTO mode is not supported together with the flag.
+    assert (
+        config.tool_config.function_calling_config.mode
+        == types.FunctionCallingConfigMode.VALIDATED
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "model",
+    [
+        "gateway/gemini-3.8-flash-high",
+        "Gateway/Gemini-3.8-Flash-High",
+        "gemini-4-flash-preview",
+    ],
+)
+async def test_gemini_enables_tool_combination_for_aliased_and_future_models(model):
+    """Model names can carry gateway prefixes; Gemini 4 is supported as well."""
+    provider = _gemini_config_provider(model, {"gm_native_search": True})
+
+    config = await provider._prepare_query_config(
+        {"model": model}, tools=_gemini_func_toolset()
+    )
+
+    assert config.tool_config is not None
+    assert config.tool_config.include_server_side_tool_invocations is True
+    assert config.tool_config.function_calling_config is not None
+    assert (
+        config.tool_config.function_calling_config.mode
+        == types.FunctionCallingConfigMode.VALIDATED
+    )
+
+
+@pytest.mark.asyncio
+async def test_gemini_required_tool_choice_keeps_any_mode_for_tool_combination():
+    model = "gemini-3.8-flash"
+    provider = _gemini_config_provider(model, {"gm_native_search": True})
+
+    config = await provider._prepare_query_config(
+        {"model": model},
+        tools=_gemini_func_toolset(),
+        tool_choice="required",
+    )
+
+    assert config.tool_config is not None
+    assert config.tool_config.include_server_side_tool_invocations is True
+    assert config.tool_config.function_calling_config is not None
+    assert (
+        config.tool_config.function_calling_config.mode
+        == types.FunctionCallingConfigMode.ANY
+    )
+
+
+@pytest.mark.asyncio
+async def test_gemini_function_only_requests_keep_auto_mode():
+    model = "gemini-3.8-flash"
+    provider = _gemini_config_provider(model)
+
+    config = await provider._prepare_query_config(
+        {"model": model}, tools=_gemini_func_toolset()
+    )
+
+    assert config.tool_config is not None
+    assert config.tool_config.include_server_side_tool_invocations is None
+    assert config.tool_config.function_calling_config is not None
+    assert (
+        config.tool_config.function_calling_config.mode
+        == types.FunctionCallingConfigMode.AUTO
+    )
+
+
+@pytest.mark.asyncio
+async def test_gemini_builtin_only_requests_keep_tool_config_unset():
+    model = "gemini-3.8-flash"
+    provider = _gemini_config_provider(model, {"gm_native_search": True})
+
+    config = await provider._prepare_query_config({"model": model})
+
+    assert config.tool_config is None
+    assert config.tools is not None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model", ["gemini-2.5-flash", "gateway/gemini-2.5-flash"])
+async def test_gemini_legacy_models_do_not_opt_in_server_side_tool_invocations(model):
+    """Gemini 1.x/2.x must not receive the preview-only opt-in flag."""
+    provider = _gemini_config_provider(model, {"gm_native_search": True})
+
+    config = await provider._prepare_query_config(
+        {"model": model}, tools=_gemini_func_toolset()
+    )
+
+    assert config.tool_config is not None
+    assert config.tool_config.include_server_side_tool_invocations is None
+    assert config.tool_config.function_calling_config is not None
+    assert (
+        config.tool_config.function_calling_config.mode
+        == types.FunctionCallingConfigMode.AUTO
+    )
 
 
 @pytest.mark.asyncio

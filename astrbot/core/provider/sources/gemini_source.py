@@ -260,20 +260,38 @@ class ProviderGoogleGenAI(Provider):
                 types.Tool(function_declarations=func_desc["function_declarations"]),
             )
 
+        has_builtin_tool = bool(tool_list) and any(
+            getattr(t, "google_search", None)
+            or getattr(t, "code_execution", None)
+            or getattr(t, "url_context", None)
+            for t in tool_list
+        )
+
         if not tool_list:
             tool_list = None
 
         tool_config = None
         has_func_decl = tool_list and any(t.function_declarations for t in tool_list)
         if has_func_decl:
+            # Built-in tools can be combined with function calling only on
+            # Gemini 3+ models. The API requires opting into server-side tool
+            # invocations for that combination, and AUTO mode is not supported
+            # once the flag is enabled, so switch to VALIDATED mode.
+            # Match by substring (case-insensitively) because deployments may
+            # prefix model names, e.g. gateway aliases such as
+            # "gateway/gemini-3.8-flash-high".
+            combines_tools = has_builtin_tool and any(
+                marker in model_name.lower() for marker in ("gemini-3", "gemini-4")
+            )
+            if tool_choice == "required":
+                mode = types.FunctionCallingConfigMode.ANY
+            elif combines_tools:
+                mode = types.FunctionCallingConfigMode.VALIDATED
+            else:
+                mode = types.FunctionCallingConfigMode.AUTO
             tool_config = types.ToolConfig(
-                function_calling_config=types.FunctionCallingConfig(
-                    mode=(
-                        types.FunctionCallingConfigMode.ANY
-                        if tool_choice == "required"
-                        else types.FunctionCallingConfigMode.AUTO
-                    )
-                )
+                function_calling_config=types.FunctionCallingConfig(mode=mode),
+                include_server_side_tool_invocations=True if combines_tools else None,
             )
 
         # oper thinking config
