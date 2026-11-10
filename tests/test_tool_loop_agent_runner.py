@@ -1019,6 +1019,76 @@ async def test_async_generator_tool_results_share_one_tool_call_id(
 
 
 @pytest.mark.asyncio
+async def test_none_tool_result_is_appended_once(
+    runner, mock_provider, provider_request, mock_hooks
+):
+    class NoneToolExecutor:
+        @classmethod
+        def execute(cls, tool, run_context, **tool_args):
+            async def generator():
+                yield None
+
+            return generator()
+
+    mock_provider.should_call_tools = True
+    mock_provider.max_calls_before_normal_response = 1
+
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=NoneToolExecutor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(3):
+        pass
+
+    tool_messages = [
+        m for m in runner.run_context.messages if getattr(m, "role", None) == "tool"
+    ]
+    assert len(tool_messages) == 1
+    assert tool_messages[0].tool_call_id == "call_123"
+    assert "The tool has no return value" in str(tool_messages[0].content)
+
+
+@pytest.mark.asyncio
+async def test_unsupported_tool_result_type_is_appended_once(
+    runner, mock_provider, provider_request, mock_hooks
+):
+    class UnsupportedToolExecutor:
+        @classmethod
+        def execute(cls, tool, run_context, **tool_args):
+            async def generator():
+                yield object()
+
+            return generator()
+
+    mock_provider.should_call_tools = True
+    mock_provider.max_calls_before_normal_response = 1
+
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=UnsupportedToolExecutor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(3):
+        pass
+
+    tool_messages = [
+        m for m in runner.run_context.messages if getattr(m, "role", None) == "tool"
+    ]
+    assert len(tool_messages) == 1
+    assert tool_messages[0].tool_call_id == "call_123"
+    assert "The tool has returned an unsupported type" in str(tool_messages[0].content)
+
+
+@pytest.mark.asyncio
 async def test_runner_replaces_runtime_image_context_before_provider_call(
     runner, provider_request, mock_hooks
 ):
