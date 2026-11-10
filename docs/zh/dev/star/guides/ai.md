@@ -107,6 +107,40 @@ should_reply = await self.context.decision.yes_no(
 
 如需指定已配置的判断提供商，传入 `provider_id="provider_id"`；省略时使用默认判断提供商。提供商未配置、请求超时、连接失败、HTTP 错误、响应不是合法 JSON，或返回的选项与概率不符合请求契约时，统一抛出 `DecisionError`；底层异常详情会写入 AstrBot 日志。插件应捕获该异常并决定跳过本次判断或降级处理。
 
+### 使用 OpenAI Decisions
+
+除 System One 外，判断提供商也可以接入 OpenAI Decisions API（`POST /v1/decisions`）。在 WebUI「模型提供商」→「判断」中新增「OpenAI Decisions」模板，填写 API Key（支持 `$ENV_NAME` 引用环境变量）、接口地址（默认 `https://api.openai.com/v1`，自动补全 `/decisions`）和模型（模板默认 `gpt-6-luna`）。超时、总超时、最大并发、代理与自定义请求头的含义与 System One 相同。
+
+它是独立的判断提供商，与聊天模型互不影响：配置后不会被主对话 Agent 自动调用，只有插件通过 `self.context.decision` 或 `provider_id` 显式请求时才会发送决策请求。插件代码无需改动：
+
+```py
+answers = await self.context.decision.ask(
+    {
+        "should_reply": DecisionChoiceQuestion(
+            instructions="Should the assistant reply to this message?",
+            criteria={"reply": "Reply now", "ignore": "Stay silent"},
+        ),
+        "severity": DecisionScoreQuestion(
+            instructions="How severe is the reported problem?",
+            criteria=["No impact", "Degraded", "Unavailable"],
+        ),
+    },
+    state={"messages": recent_messages},
+    provider_id="openai_decision",
+)
+```
+
+请求映射：布尔题对应 `predicate`；选择题对应 `choice`，`criteria` 的选项 ID 作为 `value`、描述作为 `description`；评分题对应 `score`，等级按顺序以 `"0"`、`"1"`… 作为 `label`，与返回的 `legend` 一致。返回的 `score` 保留小数，`probabilities` 包含完整分布，`confidence` 与选中项概率相互独立。答案按问题名称匹配，与返回顺序无关。
+
+`state` 的处理：
+
+- `str` 或省略：作为文本输入。
+- `dict`，或元素全部为 `dict` 的 `list`：作为 `input_json` 数据发送。其中的 `role`、`content`、`image_url` 等键只是普通数据，不会被解释为消息历史或图片。
+- 包含其他类型元素的 `list`（如字符串列表）：序列化为 JSON 后作为文本输入发送。
+- 不支持的类型、含 `NaN`/`Infinity` 或无法 JSON 序列化的值：在发送前抛出 `ValueError`。
+
+首版不支持图片输入、消息/工具调用历史、问题内的多模态指令、提示缓存控制与 `safety_identifier`。模型对任一问题拒答（`refusal`）时，整批 `ask()` 抛出 `DecisionError`，不会当作否定、零分或空结果；`yes_no(default=...)` 的降级行为保持不变。
+
 ## 定义 Tool
 
 Tool 是大语言模型调用外部工具的能力。

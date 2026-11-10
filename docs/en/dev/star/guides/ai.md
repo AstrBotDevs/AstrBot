@@ -108,6 +108,40 @@ should_reply = await self.context.decision.yes_no(
 
 Pass `provider_id="provider_id"` to use a specific configured decision provider; otherwise the default one is used. `DecisionError` is raised for an unconfigured provider, timeout, connection failure, HTTP error, invalid JSON, or an answer outside the requested contract. Underlying details are written to the AstrBot log, so plugins can catch the exception and decide whether to skip or degrade this decision.
 
+### Using OpenAI Decisions
+
+Besides System One, a decision provider can use the OpenAI Decisions API (`POST /v1/decisions`). In the WebUI, open **Model Providers → Decision** and add the **OpenAI Decisions** template. Fill in the API key (`$ENV_NAME` references an environment variable), the endpoint (default `https://api.openai.com/v1`; `/decisions` is appended), and the model (the template defaults to `gpt-6-luna`). Timeout, total timeout, max concurrency, proxy, and custom headers work as they do for System One.
+
+It is an independent decision provider and does not affect chat models: once configured, the main agent never calls it automatically. Requests are sent only when a plugin calls `self.context.decision` explicitly or passes its `provider_id`. Plugin code does not change:
+
+```py
+answers = await self.context.decision.ask(
+    {
+        "should_reply": DecisionChoiceQuestion(
+            instructions="Should the assistant reply to this message?",
+            criteria={"reply": "Reply now", "ignore": "Stay silent"},
+        ),
+        "severity": DecisionScoreQuestion(
+            instructions="How severe is the reported problem?",
+            criteria=["No impact", "Degraded", "Unavailable"],
+        ),
+    },
+    state={"messages": recent_messages},
+    provider_id="openai_decision",
+)
+```
+
+Request mapping: boolean questions become `predicate`; choice questions become `choice`, with option IDs as `value` and descriptions as `description`; score questions become `score`, with levels labeled `"0"`, `"1"`, ... in order, matching the returned `legend`. The returned `score` keeps its fractional value, `probabilities` holds the full distribution, and `confidence` is separate from the selected option's probability. Answers are matched by question name, not by their order in the response.
+
+How `state` is sent:
+
+- `str` or omitted: sent as text input.
+- `dict`, or a `list` whose items are all `dict`: sent as `input_json` data. Keys such as `role`, `content`, or `image_url` stay plain data and are never treated as message history or images.
+- A `list` with other item types, such as a list of strings: serialized as JSON and sent as text input.
+- Unsupported types, `NaN`/`Infinity`, or values that are not JSON serializable: `ValueError` is raised before sending.
+
+The first version does not support image input, message or tool-call history, multimodal question instructions, prompt-cache controls, or `safety_identifier`. If the model refuses any question (`refusal`), the whole `ask()` call raises `DecisionError`; a refusal is never reported as false, a zero score, or an empty result. `yes_no(default=...)` keeps its fallback behavior.
+
 ## Defining Tools
 
 Tools enable large language models to invoke external capabilities.
