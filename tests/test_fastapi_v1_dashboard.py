@@ -3366,19 +3366,51 @@ async def test_v1_plugin_update_reports_reload_result(
     asgi_app: FastAPI,
     asgi_client: httpx.AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
     batch: bool,
     reload_success: bool,
 ):
     """Report the manager's reload outcome without reloading a second time."""
+    from astrbot.core.astr_agent_runtime.computer import computer_client
+    from astrbot.core.skills.skill_manager import SkillManager
+    from astrbot.core.star import star as star_module
+
     plugin_name = "astrbot_plugin_demo"
-    plugin = SimpleNamespace(name=plugin_name, root_dir_name=None, reserved=False)
+    plugin = SimpleNamespace(
+        name=plugin_name, root_dir_name=plugin_name, reserved=False, activated=True
+    )
+    loaded_plugins = [plugin]
+    plugin_store = tmp_path / "plugins"
+    skill_dir = plugin_store / plugin_name / "skills" / "demo-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("# Demo skill\n", encoding="utf-8")
+    skill_manager = SkillManager(
+        skills_root=str(tmp_path / "skills"), plugins_root=str(plugin_store)
+    )
+    skill_manager.config_path = str(tmp_path / "skills.json")
+    skill_manager.sandbox_skills_cache_path = str(tmp_path / "sandbox-skills.json")
+    monkeypatch.setattr(star_module, "star_registry", loaded_plugins)
+    monkeypatch.setattr(computer_client, "SkillManager", lambda **kwargs: skill_manager)
+    assert computer_client._collect_sync_skill_dirs() == [("demo-skill", skill_dir)]
+
     reload_error = "Plugin initialization failed"
+
+    async def reload_plugin(name):
+        assert name == plugin_name
+        if not reload_success:
+            loaded_plugins.clear()
+        return reload_success, None if reload_success else reload_error
+
     manager = SimpleNamespace(
-        context=SimpleNamespace(get_registered_star=Mock(return_value=plugin)),
-        _updater=SimpleNamespace(update=AsyncMock()),
-        reload=AsyncMock(
-            return_value=(reload_success, None if reload_success else reload_error)
+        context=SimpleNamespace(
+            get_registered_star=Mock(
+                side_effect=lambda name: plugin if plugin in loaded_plugins else None
+            )
         ),
+        plugin_store_path=str(plugin_store),
+        _updater=SimpleNamespace(update=AsyncMock()),
+        _ensure_plugin_requirements=AsyncMock(),
+        reload=AsyncMock(side_effect=reload_plugin),
     )
 
     async def update_plugin(*args, **kwargs):
@@ -3388,7 +3420,12 @@ async def test_v1_plugin_update_reports_reload_result(
     service = asgi_app.state.services.plugins
     update_info = {"repo": "https://github.com/example/plugin", "download_url": ""}
     refresh_source = AsyncMock()
-    sync_skills = AsyncMock()
+    synced_skills = []
+    sync_skills = AsyncMock(
+        side_effect=lambda: synced_skills.append(
+            computer_client._collect_sync_skill_dirs()
+        )
+    )
     monkeypatch.setattr(service, "plugin_manager", manager)
     monkeypatch.setattr(
         service, "resolve_market_update_info", AsyncMock(return_value=update_info)
@@ -3417,13 +3454,55 @@ async def test_v1_plugin_update_reports_reload_result(
     manager._updater.update.assert_awaited_once_with(
         plugin, proxy="", download_url="", repo_url=update_info["repo"]
     )
+    sync_skills.assert_awaited_once_with()
+    assert synced_skills == [[("demo-skill", skill_dir)] if reload_success else []]
     if reload_success:
         refresh_source.assert_awaited_once_with(plugin_name, update_info)
-        sync_skills.assert_awaited_once_with()
     else:
         assert reload_error not in result["message"]
         refresh_source.assert_not_awaited()
-        sync_skills.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("batch", [False, True])
+async def test_v1_plugin_update_source_failure_skips_skill_sync(
+    asgi_app: FastAPI,
+    asgi_client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    batch: bool,
+):
+    """Avoid syncing unchanged plugins when update source resolution fails."""
+    plugin_name = "astrbot_plugin_demo"
+    service = asgi_app.state.services.plugins
+    update_plugin = AsyncMock()
+    sync_skills = AsyncMock()
+    monkeypatch.setattr(
+        service.plugin_manager, "update_plugin", update_plugin, raising=False
+    )
+    monkeypatch.setattr(
+        service,
+        "resolve_market_update_info",
+        AsyncMock(side_effect=PluginServiceError("Update source is unavailable")),
+    )
+    monkeypatch.setattr(service, "sync_skills_after_plugin_change", sync_skills)
+
+    response = await asgi_client.post(
+        "/api/v1/plugins/update",
+        json={"plugin_ids": [plugin_name]} if batch else {"plugin_id": plugin_name},
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    if batch:
+        assert data["status"] == "ok"
+        result = data["data"]["results"][0]
+    else:
+        result = data
+    assert result["status"] == "error"
+    assert result["message"] == "Update source is unavailable"
+    update_plugin.assert_not_awaited()
+    sync_skills.assert_not_awaited()
 
 
 @pytest.mark.asyncio

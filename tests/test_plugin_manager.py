@@ -1604,6 +1604,106 @@ async def test_targeted_load_accepts_supported_entry_modules(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("initial_entry", ["main", TEST_PLUGIN_DIR])
+@pytest.mark.parametrize("disabled", [False, True])
+@pytest.mark.parametrize("reserved", [False, True], ids=["user", "builtin"])
+async def test_plugin_reload_follows_entry_changes_and_preserves_identity(
+    isolated_plugin_loader: PluginManager,
+    tmp_path: Path,
+    monkeypatch,
+    initial_entry: str,
+    disabled: bool,
+    reserved: bool,
+):
+    user_root = Path(isolated_plugin_loader.plugin_store_path)
+    builtin_root = tmp_path / "reserved"
+    target_root = builtin_root if reserved else user_root
+    other_root = user_root if reserved else builtin_root
+    plugin_path = target_root / TEST_PLUGIN_DIR
+    other_plugin_path = other_root / TEST_PLUGIN_DIR
+    _write_local_test_plugin(plugin_path, TEST_PLUGIN_REPO)
+    _write_local_test_plugin(other_plugin_path, TEST_PLUGIN_REPO)
+    (other_plugin_path / "main.py").write_text(
+        "raise AssertionError('Plugin in the other namespace must not be imported')\n",
+        encoding="utf-8",
+    )
+    namespace = "astrbot.builtin_stars" if reserved else "data.plugins"
+    next_entry = TEST_PLUGIN_DIR if initial_entry == "main" else "main"
+    old_module_path = f"{namespace}.{TEST_PLUGIN_DIR}.{initial_entry}"
+    new_module_path = f"{namespace}.{TEST_PLUGIN_DIR}.{next_entry}"
+    source = (
+        "from astrbot.api.star import Star\n"
+        "class Main(Star):\n"
+        "    async def initialize(self):\n"
+        "        self.context.initializations.append(__name__)\n"
+    )
+    (plugin_path / "main.py").unlink()
+    (plugin_path / f"{initial_entry}.py").write_text(source, encoding="utf-8")
+    for name, path in (
+        ("data", user_root.parent),
+        ("data.plugins", user_root),
+        ("astrbot.builtin_stars", builtin_root),
+    ):
+        package = ModuleType(name)
+        package.__path__ = [str(path)]
+        monkeypatch.setitem(sys.modules, name, package)
+    preferences = {"inactivated_plugins": [old_module_path] if disabled else []}
+
+    async def global_get(key, default=None):
+        return preferences.get(key, default)
+
+    async def global_put(key, value):
+        preferences[key] = value
+
+    def replace_entry(*args, **kwargs):
+        (plugin_path / f"{initial_entry}.py").unlink()
+        (plugin_path / f"{next_entry}.py").write_text(source, encoding="utf-8")
+
+    monkeypatch.setattr(star_manager_module.sp, "global_get", global_get)
+    monkeypatch.setattr(star_manager_module.sp, "global_put", global_put)
+    monkeypatch.setattr(
+        isolated_plugin_loader.context, "initializations", [], raising=False
+    )
+    monkeypatch.setattr(
+        isolated_plugin_loader._updater, "update", AsyncMock(side_effect=replace_entry)
+    )
+    try:
+        success, error = await isolated_plugin_loader.load(
+            specified_module_path=old_module_path
+        )
+        assert success, error
+
+        if reserved:
+            replace_entry()
+            success, error = await isolated_plugin_loader.reload(TEST_PLUGIN_NAME)
+            assert success, error
+        else:
+            await isolated_plugin_loader.update_plugin(TEST_PLUGIN_NAME)
+
+        plugin = isolated_plugin_loader.context.get_registered_star(TEST_PLUGIN_NAME)
+        assert plugin is not None
+        assert plugin.module_path == new_module_path
+        assert plugin.reserved is reserved
+        assert plugin.activated is (not disabled)
+        assert (plugin.star_cls is None) is disabled
+        assert len(star_manager_module.star_registry) == 1
+        assert old_module_path not in star_manager_module.star_map
+        assert old_module_path not in sys.modules
+        assert isolated_plugin_loader.failed_plugin_dict == {}
+        assert isolated_plugin_loader.context.initializations == (
+            [] if disabled else [old_module_path, new_module_path]
+        )
+        assert preferences["inactivated_plugins"] == (
+            [new_module_path] if disabled else []
+        )
+    finally:
+        prefix = f"{namespace}.{TEST_PLUGIN_DIR}"
+        for module_name in list(sys.modules):
+            if module_name == prefix or module_name.startswith(prefix + "."):
+                sys.modules.pop(module_name)
+
+
+@pytest.mark.asyncio
 async def test_load_reports_unregistered_plugin_without_index_error(
     plugin_manager_pm: PluginManager, monkeypatch
 ):

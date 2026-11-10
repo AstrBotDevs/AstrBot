@@ -1036,6 +1036,8 @@ class PluginManager:
                         specified_module_path = smd.module_path
                         break
 
+            load_module_path = specified_module_path
+
             # 终止插件
             if not specified_module_path:
                 # 重载所有插件
@@ -1058,6 +1060,17 @@ class PluginManager:
                 # 只重载指定插件
                 smd = star_map.get(specified_module_path)
                 if smd:
+                    # Updates may change the entry filename within this plugin.
+                    for plugin_module in self._get_plugin_modules():
+                        if (
+                            plugin_module["pname"] == smd.root_dir_name
+                            and plugin_module.get("reserved", False) == smd.reserved
+                        ):
+                            module_prefix = specified_module_path.rsplit(".", 1)[0]
+                            load_module_path = (
+                                f"{module_prefix}.{plugin_module['module']}"
+                            )
+                            break
                     try:
                         await self._terminate_plugin(smd)
                     except Exception as e:
@@ -1066,10 +1079,27 @@ class PluginManager:
                             f"Plugin {smd.name} did not terminate cleanly: {e!s}. "
                             "The plugin may not work correctly.",
                         )
-                    if smd.name and smd.activated:
+                    if smd.name and (
+                        smd.activated or load_module_path != specified_module_path
+                    ):
                         await self._unbind_plugin(smd.name, specified_module_path)
+                    if load_module_path != specified_module_path:
+                        # Disabled state is persisted under the entry module path.
+                        inactivated_plugins = await sp.global_get(
+                            "inactivated_plugins", []
+                        )
+                        if specified_module_path in inactivated_plugins:
+                            await sp.global_put(
+                                "inactivated_plugins",
+                                [
+                                    load_module_path
+                                    if path == specified_module_path
+                                    else path
+                                    for path in inactivated_plugins
+                                ],
+                            )
 
-            result = await self.load(specified_module_path)
+            result = await self.load(load_module_path)
 
             return result
 
