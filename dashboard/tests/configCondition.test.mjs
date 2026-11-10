@@ -1,0 +1,153 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import {
+  isConfigValueEmpty,
+  conditionRuleMatches,
+  evaluateCondition,
+} from '../src/utils/configCondition.mjs';
+
+// ---- 向后兼容：原始值严格相等 ----
+
+test("原始值按严格相等判定（向后兼容）", () => {
+  assert.equal(conditionRuleMatches("a", "a"), true);
+  assert.equal(conditionRuleMatches("a", "b"), false);
+  assert.equal(conditionRuleMatches(true, true), true);
+  assert.equal(conditionRuleMatches(false, true), false);
+  assert.equal(conditionRuleMatches(0, 0), true);
+  // 缺路径时 getValueBySelector 返回 undefined
+  assert.equal(conditionRuleMatches(undefined, true), false);
+  assert.equal(conditionRuleMatches(undefined, undefined), true);
+});
+
+// ---- empty 运算符 ----
+
+test("empty: true 仅当值为空时成立", () => {
+  assert.equal(conditionRuleMatches(undefined, { empty: true }), true);
+  assert.equal(conditionRuleMatches(null, { empty: true }), true);
+  assert.equal(conditionRuleMatches("", { empty: true }), true);
+  assert.equal(conditionRuleMatches([], { empty: true }), true);
+  assert.equal(conditionRuleMatches({}, { empty: true }), true);
+  // 非空情形
+  assert.equal(conditionRuleMatches("x", { empty: true }), false);
+  assert.equal(conditionRuleMatches(0, { empty: true }), false);
+  assert.equal(conditionRuleMatches(false, { empty: true }), false);
+  assert.equal(conditionRuleMatches([1], { empty: true }), false);
+});
+
+test("empty: false 等价于 notEmpty: true", () => {
+  assert.equal(conditionRuleMatches("", { empty: false }), false);
+  assert.equal(conditionRuleMatches("x", { empty: false }), true);
+  assert.equal(conditionRuleMatches([], { empty: false }), false);
+  assert.equal(conditionRuleMatches([1], { empty: false }), true);
+});
+
+// ---- notEmpty 运算符 ----
+
+test("notEmpty: true 仅当值非空时成立", () => {
+  assert.equal(conditionRuleMatches("x", { notEmpty: true }), true);
+  assert.equal(conditionRuleMatches([1], { notEmpty: true }), true);
+  assert.equal(conditionRuleMatches("", { notEmpty: true }), false);
+  assert.equal(conditionRuleMatches([], { notEmpty: true }), false);
+  assert.equal(conditionRuleMatches({}, { notEmpty: true }), false);
+  assert.equal(conditionRuleMatches(undefined, { notEmpty: true }), false);
+});
+
+test("notEmpty: false 等价于 empty: true", () => {
+  assert.equal(conditionRuleMatches("", { notEmpty: false }), true);
+  assert.equal(conditionRuleMatches("x", { notEmpty: false }), false);
+});
+
+// ---- 未知运算符对象退回深度相等（对象顺序无关、数组顺序有意义）----
+
+test("未知运算符对象退回深度相等，对象键顺序无关、数组顺序有意义", () => {
+  assert.equal(conditionRuleMatches({ a: 1 }, { a: 1 }), true);
+  assert.equal(conditionRuleMatches({ a: 1 }, { a: 2 }), false);
+  // 键顺序不同但内容相同 → 应判定相等（修复 JSON.stringify 对键顺序敏感）
+  assert.equal(conditionRuleMatches({ b: 2, a: 1 }, { a: 1, b: 2 }), true);
+  assert.equal(conditionRuleMatches({ a: 1, b: 2 }, { b: 2, a: 1 }), true);
+  // 数组顺序有意义 → 顺序不同判定不等（这是正确的）
+  assert.equal(conditionRuleMatches([1, 2], [2, 1]), false);
+  assert.equal(conditionRuleMatches([1, 2], [1, 2]), true);
+  assert.equal(conditionRuleMatches("x", {}), false);
+});
+
+// ---- 运算符对象 vs 字面对象：含 empty/notEmpty 键但非纯运算符形状时按字面深度相等 ----
+
+test("含 empty/notEmpty 键但非运算符形状的对象按字面深度相等", () => {
+  // 多键对象：即便含 empty 键，也应作为字面对象比较，而非被当作运算符误判
+  assert.equal(conditionRuleMatches({ empty: true, other: 1 }, { empty: true, other: 1 }), true);
+  assert.equal(conditionRuleMatches({ empty: true, other: 1 }, { empty: true }), false);
+  // 运算符值非布尔：{ empty: "yes" } 视为字面对象（深度相等）
+  assert.equal(conditionRuleMatches({ empty: "yes" }, { empty: "yes" }), true);
+  // 纯运算符形状（单一布尔键）仍按运算符求值 —— 回归保护
+  assert.equal(conditionRuleMatches("", { empty: true }), true);
+  assert.equal(conditionRuleMatches("x", { notEmpty: true }), true);
+});
+
+// ---- isConfigValueEmpty ----
+
+test("isConfigValueEmpty 的边界", () => {
+  assert.equal(isConfigValueEmpty(""), true);
+  assert.equal(isConfigValueEmpty(undefined), true);
+  assert.equal(isConfigValueEmpty(null), true);
+  assert.equal(isConfigValueEmpty([]), true);
+  assert.equal(isConfigValueEmpty({}), true);
+  assert.equal(isConfigValueEmpty(0), false);
+  assert.equal(isConfigValueEmpty(false), false);
+  assert.equal(isConfigValueEmpty(" "), false);
+});
+
+// ---- evaluateCondition：多键 AND + 解析回调 ----
+
+test("evaluateCondition 多键全满足才显示，并按键解析实际值", () => {
+  const iterable = {
+    enabled: true,
+    background: "",
+    nested: { on: false },
+  };
+  const resolve = (key) => {
+    const keys = key.split(".");
+    let cur = iterable;
+    for (const k of keys) {
+      if (cur && typeof cur === 'object' && k in cur) cur = cur[k];
+      else return undefined;
+    }
+    return cur;
+  };
+
+  // 旧语义 + 新语义混合，多键 AND
+  assert.equal(
+    evaluateCondition({ enabled: true, background: { notEmpty: true } }, resolve),
+    false,
+  );
+  assert.equal(
+    evaluateCondition({ enabled: true, background: { empty: true } }, resolve),
+    true,
+  );
+  // 嵌套键解析
+  assert.equal(
+    evaluateCondition({ "nested.on": false }, resolve),
+    true,
+  );
+  // 缺条件直接通过
+  assert.equal(evaluateCondition(undefined, resolve), true);
+  assert.equal(evaluateCondition(null, resolve), true);
+});
+
+// ---- 真实场景：可选字段留空时隐藏其依赖项 ----
+
+test("真实场景：可选字段为空时 notEmpty 条件隐藏依赖项", () => {
+  const resolve = (key) => (key === "webhook_url" ? "" : undefined);
+  assert.equal(
+    evaluateCondition({ webhook_url: { notEmpty: true } }, resolve),
+    false,
+  );
+
+  const resolveSet = (key) =>
+    key === "webhook_url" ? "https://example.com/hook" : undefined;
+  assert.equal(
+    evaluateCondition({ webhook_url: { notEmpty: true } }, resolveSet),
+    true,
+  );
+});
