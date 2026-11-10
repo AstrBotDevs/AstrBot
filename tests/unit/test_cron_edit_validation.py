@@ -23,7 +23,9 @@ def scheduled_job(manager, job_id):
     Returns:
         The matching scheduler entry, or None.
     """
-    return next((job for job in manager.scheduler.get_jobs() if job.args == (job_id,)), None)
+    return next(
+        (job for job in manager.scheduler.get_jobs() if job.args == (job_id,)), None
+    )
 
 
 @pytest_asyncio.fixture
@@ -43,7 +45,9 @@ async def cron_store(tmp_path):
 
 @pytest.mark.parametrize("expression", ["not a cron", "60 9 * * *", "0 9 * * 8"])
 @pytest.mark.asyncio
-async def test_invalid_dashboard_edit_preserves_job_and_schedule(cron_store, expression):
+async def test_invalid_dashboard_edit_preserves_job_and_schedule(
+    cron_store, expression
+):
     """A rejected edit must not stop a previously working reminder.
 
     Args:
@@ -147,7 +151,9 @@ async def test_valid_edit_and_disable_remain_supported(cron_store):
     assert scheduled_job(manager, job.job_id) is None
 
 
-@pytest.mark.parametrize("edit", ["reschedule", "recurring", "disable", "rename", "invalid", "none"])
+@pytest.mark.parametrize(
+    "edit", ["reschedule", "recurring", "disable", "rename", "invalid", "none"]
+)
 @pytest.mark.asyncio
 async def test_running_one_shot_edit_preserves_saved_job(cron_store, edit):
     """Only an unchanged one-shot definition may delete itself after execution.
@@ -211,7 +217,8 @@ async def test_running_one_shot_edit_preserves_saved_job(cron_store, edit):
             if edit == "disable":
                 assert stored.status == "dispatched"
                 assert stored.next_run_time is None
-            if new_schedule is not None:
+            else:
+                assert new_schedule is not None
                 manager._run_active_agent_job = AsyncMock()
                 await new_schedule.func(*new_schedule.args, **new_schedule.kwargs)
                 manager._run_active_agent_job.assert_awaited_once()
@@ -320,3 +327,107 @@ async def test_slow_edit_does_not_block_other_job(cron_store, monkeypatch):
     finally:
         release.set()
         await asyncio.wait_for(update, 2)
+
+
+@pytest.mark.parametrize("run_once", [False, True])
+@pytest.mark.parametrize("original_run_once", [False, True])
+@pytest.mark.asyncio
+async def test_failed_schedule_install_preserves_job(
+    cron_store, monkeypatch, run_once, original_run_once
+):
+    """Failed replacement installation preserves the definition and live schedule.
+
+    Args:
+        cron_store: Real database and paused scheduler.
+        monkeypatch: Restores the scheduler method.
+        run_once: Whether the replacement uses a one-shot trigger.
+        original_run_once: Whether the original uses a one-shot trigger.
+    """
+    db, manager = cron_store
+    job = await manager.add_active_job(
+        name="Original",
+        cron_expression="0 9 * * *",
+        payload={"note": "Original"},
+        run_once=original_run_once,
+        run_at=datetime(2099, 1, 1, tzinfo=timezone.utc),
+    )
+    scheduled = scheduled_job(manager, job.job_id)
+
+    def reject(*args, **kwargs):
+        raise RuntimeError("Scheduler installation failed")
+
+    monkeypatch.setattr(manager.scheduler, "add_job", reject)
+    service = CronService(SimpleNamespace(cron_manager=manager))
+    edit = {
+        "name": "Replacement",
+        "cron_expression": "0 10 * * *",
+        "run_once": run_once,
+    }
+    if run_once:
+        edit["run_at"] = "2099-02-01T00:00:00+00:00"
+    with pytest.raises(CronServiceError, match="Scheduler installation failed"):
+        await service.update_job(job.job_id, edit)
+
+    stored = await db.get_cron_job(job.job_id)
+    assert scheduled_job(manager, job.job_id) is scheduled
+    assert stored.name == job.name
+    assert stored.payload == job.payload
+    assert stored.cron_expression == job.cron_expression
+    assert stored.run_once == job.run_once
+    agent = AsyncMock()
+    monkeypatch.setattr(manager, "_run_active_agent_job", agent)
+    await scheduled.func(*scheduled.args, **scheduled.kwargs)
+    assert agent.await_args.args[0].name == "Original"
+
+
+@pytest.mark.asyncio
+async def test_concurrent_dashboard_edits_preserve_both_changes(
+    cron_store, monkeypatch
+):
+    """Independent payload edits merge with the latest durable definition.
+
+    Args:
+        cron_store: Real database and paused scheduler.
+        monkeypatch: Restores the manager method.
+    """
+    db, manager = cron_store
+    job = await manager.add_active_job(
+        name="Reminder",
+        cron_expression="0 9 * * *",
+        payload={"note": "Old", "session": "test:FriendMessage:old"},
+    )
+    service = CronService(SimpleNamespace(cron_manager=manager))
+    original_update = manager.update_job
+    first_ready = asyncio.Event()
+    second_ready = asyncio.Event()
+    first_saved = asyncio.Event()
+    calls = 0
+
+    async def overlap(job_id, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            first_ready.set()
+            await second_ready.wait()
+            try:
+                return await original_update(job_id, **kwargs)
+            finally:
+                first_saved.set()
+        second_ready.set()
+        await first_saved.wait()
+        return await original_update(job_id, **kwargs)
+
+    monkeypatch.setattr(manager, "update_job", overlap)
+    first = asyncio.create_task(service.update_job(job.job_id, {"note": "New"}))
+    try:
+        await asyncio.wait_for(first_ready.wait(), 2)
+        second = asyncio.create_task(
+            service.update_job(job.job_id, {"session": "test:FriendMessage:new"})
+        )
+        await asyncio.wait_for(asyncio.gather(first, second), 3)
+        stored = await db.get_cron_job(job.job_id)
+        assert stored.payload["note"] == "New"
+        assert stored.payload["session"] == "test:FriendMessage:new"
+    finally:
+        second_ready.set()
+        await asyncio.gather(first, return_exceptions=True)
