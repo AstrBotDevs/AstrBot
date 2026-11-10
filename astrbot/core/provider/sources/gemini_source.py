@@ -437,6 +437,9 @@ class ProviderGoogleGenAI(Provider):
                 contents.append(content_cls(parts=part))
 
         gemini_contents: list[types.Content] = []
+        # Map custom tool call IDs to function names so tool result messages
+        # (which only carry the call ID) can be matched to the original call.
+        tool_id_to_name: dict[str, str] = {}
         for message in payloads["messages"]:
             role, content = message["role"], message.get("content")
 
@@ -478,21 +481,30 @@ class ProviderGoogleGenAI(Provider):
                             )
                             thinking_signature = None
 
-                    if (
-                        not text
-                        and thinking_signature
-                        and "tool_calls" in message
-                        and any(
-                            isinstance(tool, dict)
-                            and isinstance(tool.get("extra_content"), dict)
-                            and isinstance(tool["extra_content"].get("google"), dict)
-                            and tool["extra_content"]["google"].get("thought_signature")
-                            for tool in message["tool_calls"]
+                    has_tool_thought_signature = any(
+                        isinstance(tool, dict)
+                        and isinstance(tool.get("extra_content"), dict)
+                        and isinstance(tool["extra_content"].get("google"), dict)
+                        and (
+                            tool["extra_content"]["google"].get("thought_signature")
+                            or any(
+                                isinstance(server_side_part, dict)
+                                and server_side_part.get("thought_signature")
+                                for server_side_part in (
+                                    tool["extra_content"]["google"].get("server_parts")
+                                    or []
+                                )
+                            )
                         )
-                    ):
-                        # If the main content is empty but tool calls have thought signatures,
-                        # skip adding an empty text part to deduplicate the thinking signature in the main content and tool calls.
-                        pass
+                        for tool in message.get("tool_calls") or []
+                    )
+                    if thinking_signature and has_tool_thought_signature:
+                        # Tool calls and replayed server-side tool parts already
+                        # carry their own thought signatures. Attaching the same
+                        # signature to the narration part would send it twice, so
+                        # leave the narration part unsigned and skip it when empty.
+                        if text:
+                            parts.append(types.Part(text=text))
                     else:
                         parts.append(
                             types.Part(
@@ -503,21 +515,36 @@ class ProviderGoogleGenAI(Provider):
 
                 if "tool_calls" in message:
                     for tool in message["tool_calls"]:
+                        extra_content = tool.get("extra_content") or {}
+                        google_extra = extra_content.get("google") or {}
+                        function_name = tool["function"]["name"]
+                        if tool.get("id"):
+                            tool_id_to_name[tool["id"]] = function_name
+                        # Replay server-side tool parts (tool_call/tool_response)
+                        # captured from a previous response. When server-side
+                        # invocations are enabled, the API requires them to be
+                        # sent back unchanged, including their thought signatures.
+                        for server_side_part in google_extra.get("server_parts") or []:
+                            try:
+                                parts.append(
+                                    types.Part.model_validate(server_side_part)
+                                )
+                            except Exception as e:
+                                logger.warning(
+                                    "Failed to restore Gemini server-side tool part: %s",
+                                    e,
+                                    exc_info=True,
+                                )
                         part = types.Part.from_function_call(
-                            name=tool["function"]["name"],
+                            name=function_name,
                             args=json.loads(tool["function"]["arguments"]),
                         )
                         # we should set thought_signature back to part if exists
                         # for more info about thought_signature, see:
                         # https://ai.google.dev/gemini-api/docs/thought-signatures
-                        if "extra_content" in tool and tool["extra_content"]:
-                            ts_bs64 = (
-                                tool["extra_content"]
-                                .get("google", {})
-                                .get("thought_signature")
-                            )
-                            if ts_bs64:
-                                part.thought_signature = base64.b64decode(ts_bs64)
+                        ts_bs64 = google_extra.get("thought_signature")
+                        if ts_bs64:
+                            part.thought_signature = base64.b64decode(ts_bs64)
                         parts.append(part)
 
                 if not parts:
@@ -526,7 +553,12 @@ class ProviderGoogleGenAI(Provider):
                 append_or_extend(gemini_contents, parts, types.ModelContent)
 
             elif role == "tool":
-                func_name = message.get("name", message["tool_call_id"])
+                tool_call_id = message["tool_call_id"]
+                # Tool result messages only carry the call ID, so resolve the
+                # function name from the preceding assistant message.
+                func_name = message.get("name") or tool_id_to_name.get(
+                    tool_call_id, tool_call_id
+                )
                 part = types.Part.from_function_response(
                     name=func_name,
                     response={
@@ -686,6 +718,28 @@ class ProviderGoogleGenAI(Provider):
             if ts := part.thought_signature:
                 # only keep the last thinking signature
                 llm_response.reasoning_signature = base64.b64encode(ts).decode("utf-8")
+
+        # Keep server-side tool parts (tool_call/tool_response and code
+        # execution parts) so they can be replayed unchanged, with their thought
+        # signatures, in the next tool-loop request. The agent tool loop only
+        # keeps OpenAI-style tool call messages between steps, so the parts are
+        # stored on the first custom tool call's extra_content.
+        server_side_parts = [
+            part.model_dump(exclude_none=True, mode="json")
+            for part in result_parts
+            if getattr(part, "tool_call", None)
+            or getattr(part, "tool_response", None)
+            or getattr(part, "executable_code", None)
+            or getattr(part, "code_execution_result", None)
+        ]
+        if server_side_parts and llm_response.tools_call_ids:
+            google_extra = llm_response.tools_call_extra_content.setdefault(
+                llm_response.tools_call_ids[0], {}
+            ).setdefault("google", {})
+            google_extra["server_parts"] = [
+                *server_side_parts,
+                *(google_extra.get("server_parts") or []),
+            ]
         chain_result = MessageChain(chain=chain)
         llm_response.result_chain = chain_result
         if validate_output:
@@ -856,6 +910,10 @@ class ProviderGoogleGenAI(Provider):
         accumulated_text = ""
         accumulated_reasoning = ""
         final_response = None
+        # Server-side tool parts (tool_call/tool_response) may stream in their own
+        # chunks before the custom tool call chunk. Keep them so they can be
+        # replayed to the API in the next tool-loop request.
+        pending_server_side_parts: list[dict] = []
 
         async with self._conversation_header(conversation_id):
             async for chunk in result:
@@ -868,9 +926,9 @@ class ProviderGoogleGenAI(Provider):
                     logger.warning(f"Gemini stream chunk has empty content: {chunk}")
                     continue
 
-                if chunk.candidates[0].content.parts and any(
-                    part.function_call for part in chunk.candidates[0].content.parts
-                ):
+                chunk_parts = chunk.candidates[0].content.parts or []
+
+                if chunk_parts and any(part.function_call for part in chunk_parts):
                     llm_response = LLMResponse("assistant", is_chunk=False)
                     llm_response.raw_completion = chunk
                     llm_response.result_chain = self._process_content_parts(
@@ -878,6 +936,16 @@ class ProviderGoogleGenAI(Provider):
                         llm_response,
                         validate_output=False,
                     )
+                    # Server-side tool parts may arrive in earlier chunks; prepend
+                    # them so the replayed parts keep their response order.
+                    if pending_server_side_parts and llm_response.tools_call_ids:
+                        google_extra = llm_response.tools_call_extra_content.setdefault(
+                            llm_response.tools_call_ids[0], {}
+                        ).setdefault("google", {})
+                        google_extra["server_parts"] = [
+                            *pending_server_side_parts,
+                            *(google_extra.get("server_parts") or []),
+                        ]
                     # This response replaces the whole turn in conversation
                     # history, so keep the narration and reasoning that were
                     # already streamed before the tool call. Dropping them made
@@ -900,6 +968,14 @@ class ProviderGoogleGenAI(Provider):
                     yield llm_response
                     return
 
+                pending_server_side_parts.extend(
+                    part.model_dump(exclude_none=True, mode="json")
+                    for part in chunk_parts
+                    if getattr(part, "tool_call", None)
+                    or getattr(part, "tool_response", None)
+                    or getattr(part, "executable_code", None)
+                    or getattr(part, "code_execution_result", None)
+                )
                 _f = False
 
                 # 提取 reasoning content

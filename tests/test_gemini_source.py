@@ -1,3 +1,5 @@
+import base64
+import json
 from types import SimpleNamespace
 
 import httpx
@@ -411,11 +413,12 @@ def _gemini_stream_chunk(
     text=None,
     thought=None,
     function_call=None,
+    server_side_parts=None,
     finish_reason=None,
     response_id="resp-1",
 ):
     """Build a minimal stand-in for a google-genai streaming chunk."""
-    parts = []
+    parts = list(server_side_parts or [])
     if text is not None:
         parts.append(_gemini_part(text=text))
     if thought is not None:
@@ -563,3 +566,245 @@ async def test_gemini_stream_keeps_reasoning_from_tool_call_chunk(monkeypatch):
 
     final = responses[-1]
     assert final.reasoning_content == "weighing optionsdeciding to call"
+
+
+def _gemini_server_side_response_parts() -> list[types.Part]:
+    """Build the server-side tool parts returned by a combined tool turn."""
+    signature = b"\x01\x02"
+    return [
+        types.Part(
+            tool_call=types.ToolCall(
+                tool_type="GOOGLE_SEARCH_WEB",
+                args={"queries": ["Castorice character setting"]},
+                id="search-1",
+            ),
+            thought_signature=signature,
+        ),
+        types.Part(
+            tool_response=types.ToolResponse(
+                tool_type="GOOGLE_SEARCH_WEB",
+                response={"search_suggestions": "Castorice is an undertaker."},
+                id="search-1",
+            ),
+            thought_signature=signature,
+        ),
+    ]
+
+
+def test_gemini_process_content_parts_keeps_server_side_tool_parts():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    function_call_part = types.Part(
+        function_call=types.FunctionCall(
+            name="generate_image", args={"prompt": "Castorice"}, id="call-1"
+        ),
+        thought_signature=b"\x03",
+    )
+    candidate = SimpleNamespace(
+        content=types.Content(
+            role="model",
+            parts=[*_gemini_server_side_response_parts(), function_call_part],
+        ),
+        finish_reason=None,
+    )
+    llm_response = LLMResponse(role="assistant")
+
+    ProviderGoogleGenAI._process_content_parts(
+        provider, candidate, llm_response, validate_output=False
+    )
+
+    assert llm_response.tools_call_ids == ["call-1"]
+    google_extra = llm_response.tools_call_extra_content["call-1"]["google"]
+    assert google_extra["thought_signature"] == base64.b64encode(b"\x03").decode()
+    stored = google_extra["server_parts"]
+    assert ["tool_call" in part for part in stored] == [True, False]
+    assert ["tool_response" in part for part in stored] == [False, True]
+    assert stored[0]["thought_signature"] == base64.b64encode(b"\x01\x02").decode()
+    # The payload is persisted in conversation history and must stay JSON-safe.
+    json.dumps(stored)
+    # It must also survive the OpenAI-style tool call model used by the agent loop.
+    tool_call_model = llm_response.to_openai_tool_calls_model()[0]
+    assert (
+        tool_call_model.model_dump()["extra_content"]["google"]["server_parts"]
+        == stored
+    )
+
+
+@pytest.mark.asyncio
+async def test_gemini_prepare_conversation_replays_server_side_tool_parts():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    server_side_parts = [
+        part.model_dump(exclude_none=True, mode="json")
+        for part in _gemini_server_side_response_parts()
+    ]
+
+    contents = await provider._prepare_conversation(
+        {
+            "messages": [
+                {"role": "user", "content": "search then draw Castorice"},
+                {
+                    "role": "assistant",
+                    "tool_calls": [
+                        {
+                            "id": "call-1",
+                            "type": "function",
+                            "function": {
+                                "name": "generate_image",
+                                "arguments": '{"prompt": "Castorice"}',
+                            },
+                            "extra_content": {
+                                "google": {
+                                    "thought_signature": base64.b64encode(
+                                        b"\x03"
+                                    ).decode(),
+                                    "server_parts": server_side_parts,
+                                }
+                            },
+                        }
+                    ],
+                },
+            ]
+        }
+    )
+
+    model_content = contents[1]
+    assert model_content.parts is not None
+    parts = model_content.parts
+    assert len(parts) == 3
+    assert parts[0].tool_call is not None
+    assert parts[0].tool_call.id == "search-1"
+    assert parts[0].thought_signature == b"\x01\x02"
+    assert parts[1].tool_response is not None
+    assert parts[2].function_call is not None
+    assert parts[2].function_call.name == "generate_image"
+    assert parts[2].thought_signature == b"\x03"
+
+
+@pytest.mark.asyncio
+async def test_gemini_stream_keeps_server_side_tool_parts_for_next_turn(monkeypatch):
+    provider = _gemini_stream_provider()
+    server_side_parts = _gemini_server_side_response_parts()
+    tool_call = SimpleNamespace(
+        name="generate_image",
+        args={"prompt": "Castorice"},
+        id="call-1",
+        thought_signature=None,
+    )
+
+    responses = await _drain_gemini_stream(
+        provider,
+        monkeypatch,
+        [
+            _gemini_stream_chunk(server_side_parts=server_side_parts[:1]),
+            _gemini_stream_chunk(
+                server_side_parts=server_side_parts[1:], function_call=tool_call
+            ),
+        ],
+    )
+
+    final = responses[-1]
+    stored = final.tools_call_extra_content["call-1"]["google"]["server_parts"]
+    # Earlier chunks are prepended so response order is preserved.
+    assert ["tool_call" in part for part in stored] == [True, False]
+    assert ["tool_response" in part for part in stored] == [False, True]
+    json.dumps(stored)
+
+
+@pytest.mark.asyncio
+async def test_gemini_prepare_conversation_maps_tool_result_to_function_name():
+    """Tool results only carry tool_call_id, but Gemini needs the function name."""
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+
+    contents = await provider._prepare_conversation(
+        {
+            "messages": [
+                {"role": "user", "content": "search then draw Castorice"},
+                {
+                    "role": "assistant",
+                    "tool_calls": [
+                        {
+                            "id": "call-1",
+                            "type": "function",
+                            "function": {
+                                "name": "generate_image",
+                                "arguments": '{"prompt": "Castorice"}',
+                            },
+                        }
+                    ],
+                },
+                {"role": "tool", "tool_call_id": "call-1", "content": "image sent"},
+            ]
+        }
+    )
+
+    assert [content.role for content in contents] == ["user", "model", "user"]
+    function_call = contents[1].parts[0].function_call
+    function_response = contents[2].parts[0].function_response
+    assert function_call is not None and function_call.name == "generate_image"
+    assert function_response is not None
+    # Regression: this used to echo the raw call ID ("call-1") as the name,
+    # which made the next Gemini request fail with INVALID_ARGUMENT.
+    assert function_response.name == "generate_image"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("narration", ["", "let me search first"])
+async def test_gemini_prepare_conversation_does_not_duplicate_server_side_signature(
+    narration,
+):
+    """A signature already carried by a server-side part must not be reattached."""
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    signature = b"\x01\x02"
+    server_side_part = types.Part(
+        tool_call=types.ToolCall(
+            tool_type="GOOGLE_SEARCH_WEB", args={"queries": ["x"]}, id="search-1"
+        ),
+        thought_signature=signature,
+    ).model_dump(exclude_none=True, mode="json")
+    content = [
+        {
+            "type": "think",
+            "think": "",
+            "encrypted": base64.b64encode(signature).decode(),
+        }
+    ]
+    if narration:
+        content.append({"type": "text", "text": narration})
+
+    contents = await provider._prepare_conversation(
+        {
+            "messages": [
+                {"role": "user", "content": "search then draw"},
+                {
+                    "role": "assistant",
+                    "content": content,
+                    "tool_calls": [
+                        {
+                            "id": "call-1",
+                            "type": "function",
+                            "function": {
+                                "name": "generate_image",
+                                "arguments": "{}",
+                            },
+                            "extra_content": {
+                                "google": {"server_parts": [server_side_part]}
+                            },
+                        }
+                    ],
+                },
+            ]
+        }
+    )
+
+    model_parts = contents[1].parts
+    text_parts = [part for part in model_parts if part.text is not None]
+    if narration:
+        assert [part.text for part in text_parts] == [narration]
+        assert text_parts[0].thought_signature is None
+    else:
+        assert text_parts == []
+    function_call = next(part for part in model_parts if part.function_call)
+    assert function_call.thought_signature is None
+    # The signature is only present on the replayed server-side tool part.
+    assert [part.thought_signature for part in model_parts if part.tool_call] == [
+        signature
+    ]
