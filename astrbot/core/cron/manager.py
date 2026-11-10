@@ -119,7 +119,8 @@ class CronJobManager:
         self._started = False
         # The scheduler may start early via _schedule_job; track DB sync separately.
         self._db_synced = False
-        self._running_tasks: dict[str, dict[asyncio.Task, str | None]] = {}
+        # Each task records its schedule revision and whether it is a manual run.
+        self._running_tasks: dict[str, dict[asyncio.Task, tuple[str | None, bool]]] = {}
         self._schedules: dict[str, Job] = {}
         # Ref-counted deletion markers. A run must not register after deletion
         # has started, and nested/concurrent deletes must not clear the marker
@@ -163,12 +164,12 @@ class CronJobManager:
                     self.scheduler.get_job(scheduled.id) is not None
                     or (
                         job.run_once
-                        and scheduled.kwargs["revision"]
+                        and (scheduled.kwargs["revision"], False)
                         in self._running_tasks.get(job.job_id, {}).values()
                     )
                 ):
-                    # Keep live schedules and executing one-shots so startup
-                    # does not revoke their callbacks' status and cleanup ownership.
+                    # Keep live schedules and scheduled one-shot callbacks that
+                    # own cleanup. Manual runs still need their schedule restored.
                     continue
                 if job.job_type == "basic" and job.job_id not in self._basic_handlers:
                     logger.warning(
@@ -311,7 +312,7 @@ class CronJobManager:
         try:
             tasks = [
                 task
-                for task, schedule in self._running_tasks.get(job_id, {}).items()
+                for task, (schedule, _) in self._running_tasks.get(job_id, {}).items()
                 if task is not asyncio.current_task()
                 and not task.done()
                 and (expected_schedule is None or schedule == expected_schedule)
@@ -469,7 +470,7 @@ class CronJobManager:
         # that has passed the deletion-marker check.
         if revision is None:
             revision = self._get_schedule_revision(job_id)
-        self._running_tasks.setdefault(job_id, {})[task] = revision
+        self._running_tasks.setdefault(job_id, {})[task] = (revision, manual)
         try:
             job = await self.db.get_cron_job(job_id)
             async with self._job_lock(job_id):
@@ -482,7 +483,7 @@ class CronJobManager:
                     # A manual run follows the latest saved definition.
                     job = await self.db.get_cron_job(job_id)
                     revision = current_schedule
-                    self._running_tasks[job_id][task] = revision
+                    self._running_tasks[job_id][task] = (revision, manual)
                 elif job is not None and job.run_once:
                     # Same-deadline edits keep the revision but may change the
                     # payload after the initial lookup, so refresh under the lock.
@@ -515,11 +516,11 @@ class CronJobManager:
                     owns_status = revision == self._get_schedule_revision(job_id)
                     if not owns_status and job_id not in self._deleting_jobs:
                         current = await self.db.get_cron_job(job_id)
-                        # Disabling removes the schedule, but the last run can
-                        # still finish unless another run has replaced its status.
+                        # Restarting or disabling may replace/remove the schedule.
+                        # An edit marks it scheduled; a newer run changes last_run_at.
                         owns_status = (
                             current is not None
-                            and not current.enabled
+                            and current.status == "running"
                             and current.last_run_at is not None
                             and current.last_run_at.replace(tzinfo=timezone.utc)
                             == start_time

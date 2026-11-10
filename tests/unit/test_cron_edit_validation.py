@@ -86,11 +86,15 @@ async def test_invalid_dashboard_edit_preserves_job_and_schedule(
 
     # Reload from SQLite, as on restart; the failed edit must not poison startup.
     await manager.shutdown()
-    await manager.start(SimpleNamespace())
-    manager.scheduler.pause()
-    restored = scheduled_job(manager, job.job_id)
-    assert restored is not None
-    assert str(restored.trigger) == str(scheduled.trigger)
+    restored_manager = CronJobManager(db)
+    try:
+        await restored_manager.start(SimpleNamespace())
+        restored_manager.scheduler.pause()
+        restored = scheduled_job(restored_manager, job.job_id)
+        assert restored is not None
+        assert str(restored.trigger) == str(scheduled.trigger)
+    finally:
+        await restored_manager.shutdown()
 
 
 @pytest.mark.asyncio
