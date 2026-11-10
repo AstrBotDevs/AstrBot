@@ -234,6 +234,8 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
                     "edit it. Only whoever created it can edit it."
                 )
 
+            payload = dict(job.payload) if isinstance(job.payload, dict) else {}
+
             updates: dict[str, Any] = {}
             if "name" in kwargs:
                 name = str(kwargs.get("name") or "").strip()
@@ -245,75 +247,47 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
                 note = str(kwargs.get("note") or "").strip()
                 if not note:
                     return "error: note cannot be empty when action=edit."
+                payload["note"] = note
                 updates["description"] = note
 
-            def build_updates(current_job):
-                # Merge and recheck ownership against the row held by the job lock.
-                if not _job_belongs_to_current_sender(
-                    current_job, current_umo, current_sender_id
-                ):
-                    raise ValueError(
-                        f"error: cron job {job_id} was not created by you, so you cannot "
-                        "edit it. Only whoever created it can edit it."
-                    )
-                payload = (
-                    dict(current_job.payload)
-                    if isinstance(current_job.payload, dict)
-                    else {}
-                )
-                if "description" in updates:
-                    payload["note"] = updates["description"]
-                run_once = (
-                    bool(kwargs["run_once"])
-                    if "run_once" in kwargs
-                    else bool(current_job.run_once)
-                )
-                cron_expression = (
-                    str(kwargs.get("cron_expression") or "").strip()
-                    if "cron_expression" in kwargs
-                    else current_job.cron_expression
-                ) or None
-
-                try:
-                    run_at_dt = _parse_run_at(
-                        kwargs.get("run_at")
-                        if "run_at" in kwargs
-                        else payload.get("run_at")
-                    )
-                except Exception as exc:
-                    raise ValueError(
-                        "error: run_at must be ISO datetime, e.g., 2026-02-02T08:00:00+08:00"
-                    ) from exc
-
-                if run_once:
-                    if run_at_dt is None:
-                        raise ValueError(
-                            "error: run_at is required when run_once=true."
-                        )
-                    cron_expression = None
-                    payload["run_at"] = run_at_dt.isoformat()
-                else:
-                    if not cron_expression:
-                        raise ValueError(
-                            "error: cron_expression is required when run_once=false."
-                        )
-                    payload.pop("run_at", None)
-
-                return {
-                    **updates,
-                    "run_once": run_once,
-                    "cron_expression": cron_expression,
-                    "payload": payload,
-                }
+            current_run_at = payload.get("run_at")
+            run_once = (
+                bool(kwargs["run_once"]) if "run_once" in kwargs else bool(job.run_once)
+            )
+            cron_expression = (
+                str(kwargs.get("cron_expression") or "").strip()
+                if "cron_expression" in kwargs
+                else job.cron_expression
+            )
+            cron_expression = cron_expression or None
 
             try:
-                job = await cron_mgr.update_job(
-                    str(job_id), build_updates=build_updates
+                run_at_dt = (
+                    _parse_run_at(kwargs.get("run_at"))
+                    if "run_at" in kwargs
+                    else _parse_run_at(current_run_at)
                 )
+            except Exception:
+                return "error: run_at must be ISO datetime, e.g., 2026-02-02T08:00:00+08:00"
+
+            if run_once:
+                if run_at_dt is None:
+                    return "error: run_at is required when run_once=true."
+                cron_expression = None
+                payload["run_at"] = run_at_dt.isoformat()
+            else:
+                if not cron_expression:
+                    return "error: cron_expression is required when run_once=false."
+                payload.pop("run_at", None)
+
+            updates["run_once"] = run_once
+            updates["cron_expression"] = cron_expression
+            updates["payload"] = payload
+
+            try:
+                job = await cron_mgr.update_job(str(job_id), **updates)
             except CronJobSchedulingError:
                 return "error: failed to update task due to invalid configuration."
-            except ValueError as exc:
-                return str(exc)
             if not job:
                 return f"error: cron job {job_id} not found."
             return f"Updated future task {job.job_id} ({job.name})."

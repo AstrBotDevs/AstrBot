@@ -117,6 +117,10 @@ class CronService:
             if not isinstance(payload, dict):
                 raise CronServiceError("Invalid payload")
 
+            job = await cron_mgr.db.get_cron_job(job_id)
+            if not job:
+                raise CronServiceError("Job not found")
+
             updates = {}
             if "name" in payload:
                 name = str(payload.get("name") or "").strip()
@@ -131,15 +135,12 @@ class CronService:
                 timezone_name = payload.get("timezone")
                 updates["timezone"] = str(timezone_name).strip() or None
 
-            def build_updates(job):
-                # Read-dependent merging must use the row protected by the job lock.
-                if job.job_type == "active_agent":
-                    self._merge_active_agent_updates(job, payload, updates)
-                else:
-                    self._merge_generic_updates(payload, updates)
-                return updates
+            if job.job_type == "active_agent":
+                self._merge_active_agent_updates(job, payload, updates)
+            else:
+                self._merge_generic_updates(payload, updates)
 
-            updated_job = await cron_mgr.update_job(job_id, build_updates=build_updates)
+            updated_job = await cron_mgr.update_job(job_id, **updates)
             if not updated_job:
                 raise CronServiceError("Job not found")
             return self.serialize_job(updated_job)

@@ -154,22 +154,20 @@ async def test_future_task_edit_updates_existing_job():
         run_at="2026-02-02T08:00:00+08:00",
     )
 
-    cron_mgr.update_job.assert_awaited_once()
-    assert cron_mgr.update_job.await_args.args == ("job-1",)
-    build_updates = cron_mgr.update_job.await_args.kwargs["build_updates"]
-    assert build_updates(existing_job) == {
-        "name": "new name",
-        "description": "new note",
-        "run_once": True,
-        "cron_expression": None,
-        "payload": {
+    cron_mgr.update_job.assert_awaited_once_with(
+        "job-1",
+        name="new name",
+        description="new note",
+        run_once=True,
+        cron_expression=None,
+        payload={
             "session": "test:private:session",
             "sender_id": "user-1",
             "note": "new note",
             "origin": "tool",
             "run_at": "2026-02-02T08:00:00+08:00",
         },
-    }
+    )
     assert result == "Updated future task job-1 (new name)."
 
 

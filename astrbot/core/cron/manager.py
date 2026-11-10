@@ -159,15 +159,16 @@ class CronJobManager:
                 if not job or not job.enabled or not job.persistent:
                     continue
                 scheduled = self._schedules.get(job.job_id)
-                if (
-                    job.run_once
-                    and scheduled is not None
-                    and self.scheduler.get_job(scheduled.id) is None
-                    and scheduled.kwargs["revision"]
-                    in self._running_tasks.get(job.job_id, {}).values()
+                if scheduled is not None and (
+                    self.scheduler.get_job(scheduled.id) is not None
+                    or (
+                        job.run_once
+                        and scheduled.kwargs["revision"]
+                        in self._running_tasks.get(job.job_id, {}).values()
+                    )
                 ):
-                    # Startup must not register a consumed one-shot again while
-                    # its original callback still owns execution and cleanup.
+                    # Keep live schedules and executing one-shots so startup
+                    # does not revoke their callbacks' status and cleanup ownership.
                     continue
                 if job.job_type == "basic" and job.job_id not in self._basic_handlers:
                     logger.warning(
@@ -245,31 +246,13 @@ class CronJobManager:
             lock = self._job_locks[job_id] = asyncio.Lock()
         return lock
 
-    async def update_job(
-        self,
-        job_id: str,
-        *,
-        build_updates: Callable[[CronJob], dict] | None = None,
-        **kwargs,
-    ) -> CronJob | None:
-        """Validate and save an edit while holding the job's lock.
-
-        Args:
-            job_id: Job to edit.
-            build_updates: Merge an edit with the latest row under the lock.
-            **kwargs: Fields to update, overridden by build_updates when provided.
-
-        Returns:
-            The updated job, or None if it is missing or being deleted.
-        """
+    async def update_job(self, job_id: str, **kwargs) -> CronJob | None:
         async with self._job_lock(job_id):
             if job_id in self._deleting_jobs:
                 return None
             current_job = await self.db.get_cron_job(job_id)
             if not current_job:
                 return None
-            if build_updates is not None:
-                kwargs.update(build_updates(current_job))
             candidate = current_job.model_copy(update=kwargs)
             keep_trigger = False
             if candidate.enabled:
@@ -301,27 +284,7 @@ class CronJobManager:
             if not job.enabled:
                 self._remove_scheduled(job_id)
             elif not keep_trigger:
-                try:
-                    self._schedule_job(job)
-                except Exception:
-                    # Failed installation leaves the old schedule in place.
-                    try:
-                        await self.db.update_cron_job(
-                            job_id,
-                            **{
-                                key: value
-                                for key, value in current_job.model_dump().items()
-                                if key in kwargs
-                            },
-                        )
-                    except Exception:
-                        # The old deadline no longer matches the durable row.
-                        self._remove_scheduled(job_id)
-                        logger.exception(
-                            "Removed cron job %s schedule after rollback failed", job_id
-                        )
-                        raise
-                    raise
+                self._schedule_job(job)
             return job
 
     async def delete_job(
@@ -437,7 +400,7 @@ class CronJobManager:
             self._started = True
         try:
             trigger = self._build_trigger(job)
-            previous = self._schedules.get(job.job_id)
+            self._remove_scheduled(job.job_id)
             revision = uuid4().hex
             # Replacement one-shots get their own executor slot. Recurring
             # jobs keep their normal limit across edits.
@@ -448,14 +411,7 @@ class CronJobManager:
                 args=[job.job_id],
                 kwargs={"revision": revision},
                 misfire_grace_time=300,
-                replace_existing=True,
             )
-            if (
-                previous is not None
-                and previous.id != self._schedules[job.job_id].id
-                and self.scheduler.get_job(previous.id) is not None
-            ):
-                self.scheduler.remove_job(previous.id)
             asyncio.create_task(self._store_next_run_time(job.job_id, revision))
         except (ValueError, TypeError) as e:
             logger.exception("Failed to schedule cron job %s", job.job_id)
