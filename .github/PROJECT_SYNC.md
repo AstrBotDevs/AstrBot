@@ -46,7 +46,11 @@ or deletes source Issues/PRs.
   skip unchanged values and clear stale text. Paginate every GraphQL connection,
   reject stalled cursors, and serialize runs. Apply mode prints the plan first;
   on failure it reports confirmed, outcome-unknown and unattempted mutation counts,
-  with affected item/field, so partial writes can be reconciled.
+  with affected item/field, so partial writes can be reconciled. Apply uses four
+  workers across distinct Project items; mutations within each item stay ordered.
+  This is bounded concurrency, not a guarantee against GitHub rate limits.
+  The synchronization job has a 120-minute total execution budget, including
+  checkout, scanning and writes; advancing to another step does not reset it.
 - Full scans log phase/page and candidate progress to the Actions log. Stable
   release membership is determined with one `git tag --contains` graph walk per
   distinct merge commit instead of one `git merge-base` process per commit/tag

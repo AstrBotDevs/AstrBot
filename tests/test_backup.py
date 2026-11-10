@@ -30,6 +30,7 @@ from astrbot.core.backup.importer import (
 from astrbot.core.config.default import VERSION
 from astrbot.core.db import po
 from astrbot.core.db.po import (
+    AgentConfigRecord,
     ApiKey,
     ConversationV2,
     DashboardTrustedDevice,
@@ -1078,6 +1079,20 @@ class TestBackupIntegration:
         ("model", "data"),
         [
             (
+                AgentConfigRecord,
+                {
+                    "config_id": "c584220d-a53c-4499-89ad-0724d6f8ab2e",
+                    "name": "Researcher",
+                    "description": "Research delegated tasks",
+                    "enabled": False,
+                    "runtime": "astrbot",
+                    "config": {
+                        "persona": {"persona_id": "researcher"},
+                        "model": {"provider_id": "chat-provider"},
+                    },
+                },
+            ),
+            (
                 UmoAlias,
                 {
                     "umo": "qq:GroupMessage:123",
@@ -1136,7 +1151,10 @@ class TestBackupIntegration:
                 },
             ),
         ],
-        ids=["umo-alias", "umo-sender", "provider-stats", "api-key", "revoked-api-key"],
+        ids=[
+            "agent-config", "umo-alias", "umo-sender", "provider-stats",
+            "api-key", "revoked-api-key",
+        ],
     )
     async def test_persistent_models_roundtrip(
         self, tmp_path, monkeypatch, model, data
@@ -1163,7 +1181,10 @@ class TestBackupIntegration:
             async with target.get_db() as session:
                 async with session.begin():
                     primary_key = next(iter(model.__table__.primary_key)).name
-                    session.add(model(**(data | {primary_key: 999})))
+                    stale_key = (
+                        "stale-record" if isinstance(data.get(primary_key), str) else 999
+                    )
+                    session.add(model(**(data | {primary_key: stale_key})))
             exporter = AstrBotExporter(
                 main_db=source, config_path=str(tmp_path / "missing-config.json")
             )

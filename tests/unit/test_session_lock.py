@@ -6,13 +6,17 @@ import time
 import weakref
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from astrbot.core.pipeline.process_stage.method.agent_sub_stages import internal
-from astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal import (
-    InternalAgentSubStage,
+from astrbot.core.agent.runtime import AgentPermissions
+from astrbot.core.astr_agent_runtime import AstrAgentRuntime
+from astrbot.core.astr_agent_runtime import session as native_session
+from astrbot.core.astr_agent_runtime.main_agent import MainAgentBuildConfig, builder
+from astrbot.core.astr_agent_runtime.main_session import (
+    MainAgentInput,
+    MainAgentSession,
 )
 from astrbot.core.star.session_llm_manager import SessionServiceManager
 from astrbot.core.utils.session_lock import SessionLockManager
@@ -166,53 +170,47 @@ class TestConcurrency:
         """A queued request must honor LLM status changes made while waiting."""
         session_id = "disabled-while-waiting"
         manager = SessionLockManager()
-        typing_started = asyncio.Event()
         config = {"provider_settings": {"enable": True}}
         build_main_agent = AsyncMock(return_value=None)
-
-        async def send_typing():
-            typing_started.set()
-
         event = SimpleNamespace(
             unified_msg_origin=session_id,
-            message_str="hello",
-            message_obj=SimpleNamespace(message=[]),
             get_extra=lambda _key: None,
-            get_sender_id=lambda: "user-1",
-            send_typing=send_typing,
-            send=AsyncMock(),
-            stop_typing=AsyncMock(),
+            set_extra=lambda *args: None,
+            is_stopped=lambda: False,
         )
-        stage = InternalAgentSubStage()
-        stage.streaming_response = False
-        stage.show_reasoning = False
-        stage.main_agent_cfg = internal.MainAgentBuildConfig(tool_call_timeout=1)
-        stage.ctx = SimpleNamespace(
-            plugin_manager=SimpleNamespace(
-                context=SimpleNamespace(get_config=lambda **_kwargs: config)
-            )
+        runtime = AstrAgentRuntime(
+            SimpleNamespace(get_config=lambda **_: config),
+            agent_configs=MagicMock(),
+            subagents=MagicMock(),
         )
-
-        monkeypatch.setattr(internal, "session_lock_manager", manager)
-        monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
-        monkeypatch.setattr(internal, "build_main_agent", build_main_agent)
+        session = MainAgentSession(runtime, "conversation", session_id)
+        monkeypatch.setattr(native_session, "session_lock_manager", manager)
+        monkeypatch.setattr(builder, "build_main_agent", build_main_agent)
         monkeypatch.setattr(
             SessionServiceManager,
             "should_process_llm_request",
             AsyncMock(return_value=session_enabled),
         )
 
-        async def process_request():
-            async for _ in stage.process(event, ""):
-                pass
+        async def admit():
+            return config["provider_settings"]["enable"] and (
+                await SessionServiceManager.should_process_llm_request(event)
+            )
 
+        input = MainAgentInput(
+            event,
+            AgentPermissions(),
+            build_config=MainAgentBuildConfig(tool_call_timeout=1),
+        )
         async with manager.acquire_lock(session_id):
-            task = asyncio.create_task(process_request())
-            await asyncio.wait_for(typing_started.wait(), timeout=5)
+            turn = await session.run_turn(input, admit=admit)
+            events = turn.events()
+            assert (await anext(events)).type == "turn.started"
             config["provider_settings"]["enable"] = provider_enabled
-
-        await task
-
+        result = await turn.result()
+        await events.aclose()
+        await session.close()
+        assert result.reason == "skipped"
         build_main_agent.assert_not_awaited()
 
     @pytest.mark.asyncio
