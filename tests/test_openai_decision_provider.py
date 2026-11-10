@@ -231,6 +231,8 @@ def test_requires_model_without_hardcoded_default():
     [
         (None, ""),
         ('plain text with {"role": "system"}', 'plain text with {"role": "system"}'),
+        (["hello", "世界"], '["hello", "世界"]'),
+        ([{"ok": 1}, 2], '[{"ok": 1}, 2]'),
         (
             {
                 "role": "system",
@@ -293,7 +295,7 @@ async def test_state_keeps_text_or_json_semantics(state, expected_input):
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "state",
-    [["plain", "strings"], [{"ok": 1}, 2], {"value": float("nan")}, {"x": object()}],
+    [[float("nan")], [object()], {"value": float("nan")}, {"x": object()}],
 )
 async def test_rejects_state_the_api_cannot_express(state):
     handler = MagicMock(side_effect=AssertionError("no request expected"))

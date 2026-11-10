@@ -120,7 +120,8 @@ class OpenAIDecisionProvider(DecisionProvider):
 
         String state is sent as text input. Dict state, and list state made of
         objects, is sent as an ``input_json`` part so that keys such as
-        ``role`` or ``image_url`` stay plain business data.
+        ``role`` or ``image_url`` stay plain business data. Other lists are
+        serialized as JSON text input.
 
         Args:
             questions: Question heads keyed by caller-defined identifiers.
@@ -208,23 +209,25 @@ class OpenAIDecisionProvider(DecisionProvider):
                     {"type": "predicate", "name": name, "instructions": instructions}
                 )
 
-        if state is None or isinstance(state, str):
-            request_input: Any = state or ""
-        elif isinstance(state, dict) or (
-            isinstance(state, list) and all(isinstance(item, dict) for item in state)
-        ):
-            request_input = [
-                {
-                    "type": "message",
-                    "role": "user",
-                    "content": [{"type": "input_json", "data": state}],
-                }
-            ]
-        else:
+        if state is not None and not isinstance(state, (str, dict, list)):
             raise ValueError(
-                "OpenAI decision state must be a string, a dict, or a list of dicts"
+                "OpenAI decision state must be a string, a dict, or a list"
             )
         try:
+            if state is None or isinstance(state, str):
+                request_input: Any = state or ""
+            elif isinstance(state, dict) or all(
+                isinstance(item, dict) for item in state
+            ):
+                request_input = [
+                    {
+                        "type": "message",
+                        "role": "user",
+                        "content": [{"type": "input_json", "data": state}],
+                    }
+                ]
+            else:
+                request_input = json.dumps(state, ensure_ascii=False, allow_nan=False)
             request_body = json.dumps(
                 {
                     "model": self.model,

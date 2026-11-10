@@ -137,7 +137,8 @@ How `state` is sent:
 
 - `str` or omitted: sent as text input.
 - `dict`, or a `list` whose items are all `dict`: sent as `input_json` data. Keys such as `role`, `content`, or `image_url` stay plain data and are never treated as message history or images.
-- Anything else (such as a list of strings), `NaN`/`Infinity`, or values that are not JSON serializable: `ValueError` is raised before sending.
+- A `list` with other item types, such as a list of strings: serialized as JSON and sent as text input.
+- Unsupported types, `NaN`/`Infinity`, or values that are not JSON serializable: `ValueError` is raised before sending.
 
 The first version does not support image input, message or tool-call history, multimodal question instructions, prompt-cache controls, or `safety_identifier`. If the model refuses any question (`refusal`), the whole `ask()` call raises `DecisionError`; a refusal is never reported as false, a zero score, or an empty result. `yes_no(default=...)` keeps its fallback behavior.
 
