@@ -637,7 +637,7 @@ class TestScheduleJob:
         await cron_manager.start(mock_context)
         cron_manager._schedule_job(job)
 
-        assert cron_manager.scheduler.get_job("run-once-job") is not None
+        assert cron_manager._get_scheduled_job("run-once-job") is not None
 
 
 class TestRunJob:
@@ -757,7 +757,7 @@ class TestRunActiveAgentJob:
 
 
 class TestGetNextRunTime:
-    """Tests for _get_next_run_time method."""
+    """Tests for the live next-run time."""
 
     @pytest.mark.asyncio
     async def test_get_next_run_time_existing_job(
@@ -770,12 +770,12 @@ class TestGetNextRunTime:
         await cron_manager.start(mock_context)
         cron_manager._schedule_job(sample_cron_job)
 
-        next_run = cron_manager._get_next_run_time("test-job-id")
+        next_run = cron_manager.get_next_run_time("test-job-id")
 
         assert next_run is not None
 
     def test_get_next_run_time_nonexistent(self, cron_manager):
         """Test getting next run time for non-existent job."""
-        next_run = cron_manager._get_next_run_time("non-existent")
+        next_run = cron_manager.get_next_run_time("non-existent")
 
         assert next_run is None
