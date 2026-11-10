@@ -47,6 +47,7 @@ import {
   type PluginValidateRepoRequest,
   type PluginConfigFileDeleteRequest,
   type ProviderConfigRequest,
+  type PypiIndexTestRequest,
   type RuntimeInfo,
   type BatchSessionProviderRequest,
   type BatchSessionServiceRequest,
@@ -157,7 +158,7 @@ export interface BotListParams {
 }
 
 export interface ProviderListParams {
-  capability?: 'chat' | 'stt' | 'tts' | 'embedding' | 'rerank';
+  capability?: 'chat' | 'stt' | 'tts' | 'embedding' | 'rerank' | 'decision';
   source_id?: string;
   enabled?: boolean;
 }
@@ -214,6 +215,7 @@ const PROVIDER_TYPE_TO_CAPABILITY: Record<string, ProviderCapability> = {
   text_to_speech: 'tts',
   embedding: 'embedding',
   rerank: 'rerank',
+  decision: 'decision',
 };
 
 type V1Response<T> = Promise<
@@ -954,26 +956,26 @@ export const chatApi = {
       openApiV1.listChatProjectSessions({ path: { project_id: projectId } }),
     );
   },
-  listProjectWorkspaceFiles(projectId: string, path = '') {
+  listProjectWorkspaceFiles(projectId: string, path = '', sessionId?: string) {
     return typed<any>(
       openApiV1.listChatProjectWorkspaceFiles({
         path: { project_id: projectId },
-        query: path ? { path } : undefined,
+        query: { path, session_id: sessionId },
       }),
     );
   },
-  getProjectWorkspaceFile(projectId: string, path: string) {
+  getProjectWorkspaceFile(projectId: string, path: string, sessionId?: string) {
     return typed<any>(
       openApiV1.getChatProjectWorkspaceFile({
         path: { project_id: projectId },
-        query: { path },
+        query: { path, session_id: sessionId },
       }),
     );
   },
-  downloadProjectWorkspaceFile(projectId: string, path: string) {
+  downloadProjectWorkspaceFile(projectId: string, path: string, sessionId?: string) {
     return openApiV1.downloadChatProjectWorkspaceFile({
       path: { project_id: projectId },
-      query: { path },
+      query: { path, session_id: sessionId },
       responseType: 'blob',
     }) as Promise<AxiosResponse<Blob>>;
   },
@@ -1109,17 +1111,26 @@ export const cronApi = {
   },
 };
 
-export const subagentApi = {
-  getConfig() {
-    return typed<OpenConfig>(openApiV1.getSubagentConfig());
+export type AgentConfig = {
+  config_id: string;
+  name: string;
+  description: string;
+  enabled: boolean;
+  runtime: string;
+  config: Record<string, any>;
+};
+export type AgentConfigInput = Omit<AgentConfig, 'config_id'>;
+export type AgentRuntimeInfo = { runtime: string; config: Record<string, any> };
+
+export const agentConfigApi = {
+  list() { return typed<AgentConfig[]>(openApiV1.listAgentConfigs()); },
+  runtimes() { return typed<AgentRuntimeInfo[]>(openApiV1.listAgentRuntimes()); },
+  create(body: AgentConfigInput) { return typed<AgentConfig>(openApiV1.createAgentConfig({ body })); },
+  update(configId: string, body: AgentConfigInput) {
+    return typed<AgentConfig>(openApiV1.updateAgentConfig({ path: { config_id: configId }, body }));
   },
-  updateConfig(config: OpenConfig) {
-    return typed<OpenConfig>(
-      openApiV1.updateSubagentConfig({ body: config }),
-    );
-  },
-  availableTools() {
-    return typed<any>(openApiV1.listSubagentAvailableTools());
+  delete(configId: string) {
+    return typed<unknown>(openApiV1.deleteAgentConfig({ path: { config_id: configId } }));
   },
 };
 
@@ -1861,6 +1872,21 @@ export const statsApi = {
           '/api/stat/test-ghproxy-connection',
           payload,
         ),
+    );
+  },
+  testPypiIndex(payload: PypiIndexTestRequest) {
+    return typed<{ latency?: number }>(
+      openApiV1.testPypiIndexConnection({ body: payload }),
+    );
+  },
+  measureGhproxySpeed(payload: GhproxyTestRequest) {
+    return typed<{ speed?: number; bytes?: number; duration?: number }>(
+      openApiV1.measureGhproxySpeed({ body: payload }),
+    );
+  },
+  measurePypiIndexSpeed(payload: PypiIndexTestRequest) {
+    return typed<{ speed?: number; bytes?: number; duration?: number }>(
+      openApiV1.measurePypiIndexSpeed({ body: payload }),
     );
   },
   startTime() {

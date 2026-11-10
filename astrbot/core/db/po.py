@@ -21,6 +21,19 @@ class TimestampMixin(SQLModel):
     )
 
 
+class AgentConfigRecord(TimestampMixin, SQLModel, table=True):
+    """Reusable agent configuration; session state is stored by its runtime."""
+
+    __tablename__: str = "agent_configs"
+
+    config_id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
+    name: str = Field(max_length=128, nullable=False)
+    description: str = Field(default="", sa_type=Text)
+    enabled: bool = True
+    runtime: str = Field(nullable=False)
+    config: dict = Field(default_factory=dict, sa_type=JSON)
+
+
 class PlatformStat(SQLModel, table=True):
     """This class represents the statistics of bot usage across different platforms.
 

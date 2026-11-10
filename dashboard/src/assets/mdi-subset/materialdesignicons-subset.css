@@ -868,10 +868,6 @@
   content: "\F06A9";
 }
 
-.mdi-robot-off::before {
-  content: "\F16A7";
-}
-
 .mdi-robot-off-outline::before {
   content: "\F167B";
 }
@@ -882,6 +878,10 @@
 
 .mdi-routes::before {
   content: "\F046A";
+}
+
+.mdi-scale-balance::before {
+  content: "\F05D1";
 }
 
 .mdi-select-multiple::before {

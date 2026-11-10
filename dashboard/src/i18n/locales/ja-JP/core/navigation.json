@@ -12,7 +12,7 @@
     "logs": "ログ",
     "trace": "トレース"
   },
-  "subagent": "サブエージェント編成",
+  "subagent": "サブエージェント管理",
   "toolUse": "MCP",
   "extension": "プラグイン",
   "extensionTabs": {

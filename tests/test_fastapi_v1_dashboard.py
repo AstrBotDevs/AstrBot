@@ -1012,12 +1012,15 @@ def fake_core_lifecycle():
             reload=reload_plugin,
             _validate_astrbot_version_specifier=validate_astrbot_version_specifier,
         ),
+        agent_configs=SimpleNamespace(lock=asyncio.Lock()),
+        agent_runtimes={},
         star_context=SimpleNamespace(
             registered_web_apis=[
                 ("/<path:plugin_path>", plugin_extension, ["GET", "POST"], "demo")
             ]
         ),
         kb_manager=None,
+        subagents=None,
     )
 
 
@@ -1066,7 +1069,7 @@ async def test_version_routes_return_startup_runtime_snapshot(
     platform = SimpleNamespace(
         system=Mock(return_value="Linux"), machine=Mock(return_value="aarch64")
     )
-    from astrbot.core.computer import process_sandbox
+    from astrbot.core.astr_agent_runtime.computer import process_sandbox
 
     process_sandbox.get_process_sandbox_status.cache_clear()
     monkeypatch.setattr(process_sandbox, "platform", platform)
@@ -1903,13 +1906,15 @@ async def test_v1_system_config_update_preserves_independent_bot_provider_sectio
 async def test_config_update_revokes_only_affected_shell_sessions(
     asgi_app, fake_core_lifecycle, monkeypatch, tmp_path, change
 ):
-    from astrbot.core.computer import computer_client
-    from astrbot.core.computer.booters.local import LocalBooter
-    from astrbot.core.tools.computer_tools import shell as shell_tools
+    from astrbot.core.astr_agent_runtime.computer import computer_client
+    from astrbot.core.astr_agent_runtime.computer.booters.local import LocalBooter
+    from astrbot.core.astr_agent_runtime.tools.computer_tools import (
+        shell as shell_tools,
+    )
 
     config = fake_core_lifecycle.astrbot_config
     config["admins_id"] = ["creator", "other-admin"]
-    config["agent_runner"] = {"runner_type": "local"}
+    config["agent"] = {"runtime": "astrbot"}
     config["provider_settings"] = {
         "computer_use_runtime": "local",
         "computer_use_local_permissions": {
@@ -2034,7 +2039,7 @@ async def test_config_api_saves_local_permissions_without_isolation(
         runtime["sandbox"]["error"] = reason
     original = copy.deepcopy(fake_core_lifecycle.astrbot_config)
     payload = copy.deepcopy(original)
-    payload["agent_runner"] = {"runner_type": "local"}
+    payload["agent"] = {"runtime": "astrbot"}
     payload["provider_settings"] = {
         "computer_use_runtime": "local",
         "computer_use_local_permissions": {
@@ -2077,7 +2082,7 @@ async def test_welcome_page_can_enable_local_computer_access_without_isolation(
     runtime = asgi_app.state.services.stats.runtime
     runtime.update({"os": "linux", "sandbox": {"status": status}})
     config = fake_core_lifecycle.astrbot_config
-    config["agent_runner"] = {"runner_type": "local"}
+    config["agent"] = {"runtime": "astrbot"}
     config["provider_settings"] = {
         "computer_use_runtime": "none",
         "computer_use_local_permissions": get_local_permission_defaults("Linux"),
@@ -2292,6 +2297,40 @@ async def test_v1_create_standalone_provider_matches_dashboard_alias_capability(
         "enable": True,
         "reasoning": True,
     }
+
+
+@pytest.mark.asyncio
+async def test_v1_decision_provider_capability_maps_and_filters(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    response = await asgi_client.post(
+        "/api/v1/providers",
+        json={
+            "capability": "decision",
+            "config": {
+                "id": "decision-main",
+                "type": "system_one_decision",
+                "api_base": "https://api.example.test/v1/systemone",
+                "model": "jev-latest",
+                "enable": True,
+            },
+        },
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+    provider = fake_core_lifecycle.astrbot_config["provider"][-1]
+    assert provider["provider_type"] == "decision"
+
+    list_response = await asgi_client.get(
+        "/api/v1/providers?capability=decision",
+        headers=_jwt_headers(),
+    )
+    assert list_response.status_code == 200
+    providers = list_response.json()["data"]["providers"]
+    assert [item["id"] for item in providers] == ["decision-main"]
 
 
 @pytest.mark.asyncio
@@ -3410,6 +3449,26 @@ async def test_v1_plugin_extension_supports_astrbot_web_api(
 
 
 @pytest.mark.asyncio
+async def test_agent_runtimes_require_config_scope(
+    asgi_client,
+    fake_core_lifecycle,
+    fake_db,
+):
+    fake_core_lifecycle.subagents = None
+    fake_db.add_api_key("plugin-test", ["plugin"])
+    response = await asgi_client.get(
+        "/api/v1/agent-runtimes",
+        headers={"Authorization": "ApiKey plugin-test"},
+    )
+    assert response.status_code == 403
+    response = await asgi_client.get(
+        "/api/v1/agent-runtimes", headers=_jwt_headers()
+    )
+    assert response.status_code == 200
+    assert response.json()["data"] == []
+
+
+@pytest.mark.asyncio
 async def test_v1_plugin_extension_astrbot_web_api_reads_form_and_files(
     asgi_client: httpx.AsyncClient,
     fake_core_lifecycle,
@@ -3541,6 +3600,70 @@ async def test_multipart_parts_preserves_duplicate_form_values():
 
     assert form.getlist("tag") == ["one", "two"]
     assert not files
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("reload_result", "expected_status", "expected_detail"),
+    [
+        ((True, None), 200, None),
+        ((False, "Invalid endpoint"), 400, "Invalid endpoint"),
+        ((False, None), 400, "未知错误"),
+        (RuntimeError("Initialization failed"), 400, "Initialization failed"),
+        (TimeoutError(), 400, "未知错误，请查看日志"),
+    ],
+)
+async def test_v1_plugin_config_save_reports_reload_failure(
+    asgi_client,
+    fake_core_lifecycle,
+    monkeypatch,
+    tmp_path,
+    reload_result,
+    expected_status,
+    expected_detail,
+):
+    """Report reload failures without claiming the saved configuration was reverted."""
+    config_path = tmp_path / "plugin.json"
+    plugin_config = config_service.AstrBotConfig(
+        str(config_path),
+        schema={"endpoint": {"type": "string", "default": "old"}},
+    )
+    monkeypatch.setattr(
+        config_service,
+        "star_registry",
+        [SimpleNamespace(name="demo", config=plugin_config)],
+    )
+
+    async def reload_plugin(plugin_name):
+        assert plugin_name == "demo"
+        assert json.loads(config_path.read_text(encoding="utf-8-sig")) == {
+            "endpoint": "new"
+        }
+        if isinstance(reload_result, Exception):
+            raise reload_result
+        return reload_result
+
+    monkeypatch.setattr(fake_core_lifecycle.plugin_manager, "reload", reload_plugin)
+    response = await asgi_client.put(
+        "/api/v1/plugins/demo/config",
+        json={"config": {"endpoint": "new"}},
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == expected_status
+    payload = response.json()
+    assert json.loads(config_path.read_text(encoding="utf-8-sig")) == {
+        "endpoint": "new"
+    }
+    if expected_status == 200:
+        assert payload["status"] == "ok"
+    else:
+        assert payload["status"] == "error"
+        assert "demo" in payload["message"]
+        assert "配置已保存" in payload["message"]
+        assert "重载失败" in payload["message"]
+        if expected_detail:
+            assert expected_detail in payload["message"]
 
 
 @pytest.mark.asyncio
@@ -4418,6 +4541,51 @@ async def test_v1_platform_webhook_preserves_tuple_response(
     assert response.status_code == 202
     assert response.headers["content-type"] == "text/plain"
     assert response.text == "accepted"
+
+
+@pytest.mark.asyncio
+async def test_v1_log_export_reports_blocked_console(
+    monkeypatch, tmp_path: Path, asgi_app, asgi_client: httpx.AsyncClient
+):
+    """Export drop counters even while the console cannot write its warning."""
+    import threading
+
+    from astrbot.core.log import LogManager
+    from astrbot.core.utils.console_sink import BoundedConsoleSink
+
+    monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
+    entered = threading.Event()
+    release = threading.Event()
+
+    class BlockedStream(io.StringIO):
+        def write(self, text):
+            entered.set()
+            release.wait(10)
+            return super().write(text)
+
+    sink = BoundedConsoleSink(BlockedStream(), capacity=2)
+    monkeypatch.setattr(LogManager, "_console_output", sink)
+    try:
+        sink.write("first\n")
+        assert await asyncio.to_thread(entered.wait, 1)
+        for index in range(3):
+            sink.write(f"record {index}\n")
+        response = await asgi_client.get("/api/v1/logs/export", headers=_jwt_headers())
+        assert response.status_code == 200
+        assert not release.is_set()
+        with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+            environment = json.loads(archive.read("environment.json"))
+        assert environment["console_logging"] == {
+            "capacity": 2,
+            "queued_records": 2,
+            "unfinished_records": 3,
+            "dropped_records": 1,
+            "closed": False,
+            "writer_alive": True,
+        }
+    finally:
+        release.set()
+        await asyncio.to_thread(sink.close)
 
 
 @pytest.mark.asyncio

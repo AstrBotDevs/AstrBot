@@ -19,7 +19,7 @@ from fastapi.responses import JSONResponse
 from astrbot.core.cron.manager import CronJobManager
 from astrbot.core.db.po import CronJob
 from astrbot.core.db.sqlite import SQLiteDatabase
-from astrbot.core.tools.cron_tools import FutureTaskTool
+from astrbot.core.astr_agent_runtime.tools.cron_tools import FutureTaskTool
 from astrbot.dashboard.api import cron
 from astrbot.dashboard.responses import ApiError
 from astrbot.dashboard.services.cron_service import CronService, CronServiceError

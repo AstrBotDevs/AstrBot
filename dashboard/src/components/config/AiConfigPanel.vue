@@ -47,7 +47,7 @@
             <h3 class="ai-config-panel__section-title">
               <span>{{ runnerSettingsTitle }}</span>
               <AstrBotLogo
-                v-if="runnerType === 'local'"
+                v-if="runnerType === 'astrbot'"
                 class="ai-config-panel__brand-logo"
               />
             </h3>
@@ -57,7 +57,7 @@
           </div>
         </div>
 
-        <template v-if="runnerType === 'local'">
+        <template v-if="runnerType === 'astrbot'">
           <div class="ai-config-tabs" role="tablist" :aria-label="runnerSettingsTitle">
             <button
               v-for="item in localTabs"
@@ -222,7 +222,7 @@ const props = defineProps({
 const { tm } = useModuleI18n('features/config');
 
 const runnerDialog = ref(false);
-const pendingRunnerType = ref('local');
+const pendingRunnerType = ref('astrbot');
 const runnerChangeAcknowledged = ref(false);
 const activeLocalTab = ref('model');
 
@@ -238,14 +238,14 @@ const aiEnabled = computed({
   }
 });
 
-const runnerType = computed(() => props.configData?.agent_runner?.runner_type || 'local');
+const runnerType = computed(() => props.configData?.agent?.runtime || 'astrbot');
 const runnerTypeMetadata = computed(() => (
-  props.metadata?.agent_runner?.items?.['agent_runner.runner_type'] || {}
+  props.metadata?.agent?.items?.['agent.runtime'] || {}
 ));
 
 const runnerOptions = computed(() => {
   const availableTypes = runnerTypeMetadata.value.options || [
-    'local',
+    'astrbot',
     'dify',
     'coze',
     'dashscope',
@@ -262,11 +262,11 @@ const runnerOptions = computed(() => {
 const currentRunner = computed(() => (
   runnerOptions.value.find((runner) => runner.value === runnerType.value)
   || runnerOptions.value[0]
-  || { value: 'local', title: 'AI', description: '', summary: '' }
+  || { value: 'astrbot', title: 'AI', description: '', summary: '' }
 ));
 
 const runnerSettingsTitle = computed(() => (
-  runnerType.value === 'local'
+  runnerType.value === 'astrbot'
     ? tm('aiSettings.localSettingsTitle')
     : `${currentRunner.value.title} ${tm('aiSettings.settingsSuffix')}`
 ));
@@ -300,7 +300,7 @@ function filterMetadataGroup(groupKey, itemFilter, overrides = {}) {
 const localTabGroups = computed(() => {
   const modelGroup = filterMetadataGroup(
     'ai',
-    (itemKey) => itemKey.startsWith('agent_runner.config.model.'),
+    (itemKey) => itemKey.startsWith('agent.config.model.'),
     {
       description: tm('aiSettings.groups.model'),
       hint: tm('aiSettings.groups.modelHint')
@@ -308,7 +308,7 @@ const localTabGroups = computed(() => {
   );
   const executionGroup = filterMetadataGroup(
     'others',
-    (itemKey) => itemKey.startsWith('agent_runner.config.misc.'),
+    (itemKey) => itemKey.startsWith('agent.config.misc.'),
     {
       description: tm('aiSettings.groups.execution'),
       hint: tm('aiSettings.groups.executionHint')
@@ -324,7 +324,8 @@ const localTabGroups = computed(() => {
       'knowledgebase',
       'websearch',
       'agent_computer_use',
-      'proactive_capability'
+      'proactive_capability',
+      'subagents'
     ].filter((key) => props.metadata?.[key]).map((key) => ({
       key,
       metadata: props.metadata[key]
@@ -352,7 +353,7 @@ const thirdPartyRunnerGroup = computed(() => {
 const commonGroups = computed(() => [
   filterMetadataGroup(
     'ai',
-    (itemKey) => !itemKey.startsWith('agent_runner.config.'),
+    (itemKey) => !itemKey.startsWith('agent.config.'),
     {
       description: tm('aiSettings.groups.media'),
       hint: tm('aiSettings.groups.mediaHint')
@@ -360,7 +361,7 @@ const commonGroups = computed(() => [
   ),
   filterMetadataGroup(
     'others',
-    (itemKey) => !itemKey.startsWith('agent_runner.config.'),
+    (itemKey) => !itemKey.startsWith('agent.config.'),
     {
       description: tm('aiSettings.groups.behavior'),
       hint: tm('aiSettings.groups.behaviorHint')
@@ -385,12 +386,12 @@ function openRunnerDialog() {
 function confirmRunnerChange() {
   const nextRunnerType = pendingRunnerType.value;
   if (nextRunnerType !== runnerType.value) {
-    const defaults = runnerTypeMetadata.value.runner_defaults?.[nextRunnerType] || {};
-    if (!props.configData.agent_runner) {
-      props.configData.agent_runner = {};
+    const defaults = runnerTypeMetadata.value.runtime_defaults?.[nextRunnerType] || {};
+    if (!props.configData.agent) {
+      props.configData.agent = {};
     }
-    props.configData.agent_runner.runner_type = nextRunnerType;
-    props.configData.agent_runner.config = JSON.parse(JSON.stringify(defaults));
+    props.configData.agent.runtime = nextRunnerType;
+    props.configData.agent.config = JSON.parse(JSON.stringify(defaults));
   }
   runnerChangeAcknowledged.value = false;
   runnerDialog.value = false;

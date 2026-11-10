@@ -1,7 +1,32 @@
 {
   "ai_group": {
     "name": "AI",
-    "agent_runner": {
+    "subagents": {
+      "description": "Subagents",
+      "agent": {
+        "config": {
+          "subagents": {
+            "enabled": {
+              "description": "Enable Subagents",
+              "hint": "Allow AstrBot to create generic or specialized subagents when appropriate to complete tasks."
+            },
+            "config_ids": {
+              "hint": "Configure specialized subagents with their own personas, toolsets, and other settings. Even without configuring any, AstrBot dynamically creates generic subagents when needed to complete tasks.",
+              "description": "Specialized Agent Configurations"
+            },
+            "max_concurrent_agents": {
+              "description": "Concurrent Agents per Conversation",
+              "hint": "Other tasks queue. Default: 3."
+            },
+            "task_timeout": {
+              "description": "Task Timeout (seconds)",
+              "hint": "Includes queue time. Default: 600 seconds."
+            }
+          }
+        }
+      }
+    },
+    "agent": {
       "description": "エージェントの実行方式",
       "hint": "AI 会話のランナーを選択します。ランナーを切り替えると、新しい種類のデフォルト設定が適用され、以前の種類のパラメーターは引き継がれません。",
       "provider_settings": {
@@ -10,8 +35,8 @@
           "hint": "AI 会話のマスタースイッチ"
         }
       },
-      "agent_runner": {
-        "runner_type": {
+      "agent": {
+        "runtime": {
           "description": "ランナー",
           "labels": [
             "組み込みエージェント",
@@ -25,7 +50,7 @@
     },
     "dify_runner": {
       "description": "Dify 設定",
-      "agent_runner": {
+      "agent": {
         "config": {
           "dify_api_type": {
             "description": "アプリケーションの種類"
@@ -56,7 +81,7 @@
     },
     "coze_runner": {
       "description": "Coze 設定",
-      "agent_runner": {
+      "agent": {
         "config": {
           "coze_api_key": {
             "description": "API Key"
@@ -81,7 +106,7 @@
     },
     "dashscope_runner": {
       "description": "Alibaba Cloud Bailianアプリケーション設定",
-      "agent_runner": {
+      "agent": {
         "config": {
           "dashscope_app_type": {
             "description": "アプリケーションの種類"
@@ -117,7 +142,7 @@
     },
     "deerflow_runner": {
       "description": "DeerFlow 設定",
-      "agent_runner": {
+      "agent": {
         "config": {
           "deerflow_api_base": {
             "description": "API Base URL"
@@ -161,7 +186,7 @@
     "ai": {
       "description": "モデル",
       "hint": "組み込みエージェントが使用する会話モデルと、共通の画像説明モデル・音声モデルを設定します。",
-      "agent_runner": {
+      "agent": {
         "config": {
           "model": {
             "provider_id": {
@@ -217,7 +242,7 @@
     "persona": {
       "description": "ペルソナ",
       "hint": "AstrBot にペルソナを設定します。",
-      "agent_runner": {
+      "agent": {
         "config": {
           "persona": {
             "persona_id": {
@@ -276,7 +301,7 @@
             "AnySearch"
           ],
           "subtitles": [
-            "Google のウェブ・画像・学術・金融検索",
+            "Google のウェブ・ニュース・画像・学術・金融検索",
             "DeepSeek 公式検索 API",
             "",
             "",
@@ -320,7 +345,7 @@
         },
         "websearch_serpapi_key": {
           "description": "SerpApi API Key",
-          "hint": "Google のウェブ・画像・学術・金融検索に対応。複数の Key を追加してローテーションできます。Key の取得：[https://serpapi.com/manage-api-key](https://serpapi.com/manage-api-key)"
+          "hint": "Google のウェブ・ニュース・画像・学術・金融検索に対応。複数の Key を追加してローテーションできます。Key の取得：[https://serpapi.com/manage-api-key](https://serpapi.com/manage-api-key)"
         },
         "websearch_deepseek_key": {
           "description": "DeepSeek API Key",
@@ -351,7 +376,11 @@
         "computer_use_runtime": {
           "description": "実行環境",
           "hint": "エージェントにアクセスを許可する環境です。",
-          "labels": ["環境を使用しない", "ローカルコンピューター", "外部サンドボックス"]
+          "labels": [
+            "環境を使用しない",
+            "ローカルコンピューター",
+            "外部サンドボックス"
+          ]
         },
         "computer_use_local_permissions": {
           "description": "ローカル権限ポリシー"
@@ -448,6 +477,8 @@
         "modes": {
           "none": "無効"
         },
+        "networkAlwaysOn": "常に有効",
+        "windowsHostNetworkHint": "Windows では「環境全体」でコードを実行する場合、通信だけを無効にはできません。「ワークスペース」に切り替えると無効にできます。",
         "runtimeUnknown": "実行環境の情報を取得できません。",
         "memberWarning": "一般メンバーにネットワーク接続または環境全体へのアクセスが許可されています。",
         "executionInactive": "未適用",
@@ -457,6 +488,9 @@
           "os": "OS",
           "arch": "アーキテクチャ",
           "sandbox": "ローカル隔離",
+          "windowsUnavailable": "{backend} · 準備未完了",
+          "windowsSetupHint": "設定を保存して AstrBot を再起動してください。管理者の承認を求められた場合は、サンドボックスの初期化を許可してください。",
+          "errorDetails": "診断の詳細を表示",
           "unavailableHint": "サンドボックスの起動に失敗したため、制限付きの Shell/Python 実行とワークスペース内のファイル検索に影響があります。以下のエラーを参考に、システムのセキュリティポリシー（Linux の AppArmor やユーザー名前空間の制限など）またはコンテナの制限を確認し、修正後に AstrBot を再起動して再検査してください。",
           "dialog": {
             "intro": "macOS の Seatbelt または Linux の bubblewrap（bwrap）を利用して、AstrBot Agent の実行環境を安全に隔離し、AstrBot Agent を利用する各ユーザーのファイルアクセス範囲とネットワーク権限を制限することで、安全性を高めます。",
@@ -503,7 +537,7 @@
     "truncate_and_compress": {
       "hint": "AstrBot が作業メモリを管理する方法を設定します。詳細：[コンテキスト管理方式](https://docs.astrbot.app/en/use/context-compress.html)。",
       "description": "コンテキスト管理方式",
-      "agent_runner": {
+      "agent": {
         "config": {
           "compression": {
             "max_turns": {
@@ -544,7 +578,7 @@
     },
     "others": {
       "description": "その他の設定",
-      "agent_runner": {
+      "agent": {
         "config": {
           "misc": {
             "max_steps": {
@@ -1113,7 +1147,7 @@
       },
       "wake_prefix": {
         "description": "ウェイクワード",
-        "hint": "ボットを起動するメッセージ接頭辞の一覧です。ボットへのメンションでも起動できます。"
+        "hint": "ボットを起動するメッセージ接頭辞の一覧です。ボットへのメンションでも起動できます。\n\n`/help` や `/sid` などの組み込みコマンドもウェイクワードに依存します。グループチャットではウェイクワードで始まらない限り実行されません。プライベートチャットでは、「ダイレクトメッセージでウェイクワードを必須にする」が無効なら、接頭辞なしでコマンドを直接入力して実行できます。"
       },
       "disable_builtin_commands": {
         "description": "組み込みコマンドを無効化",
@@ -1428,7 +1462,7 @@
       },
       "pip_install_arg": {
         "description": "pip インストールの追加引数",
-        "hint": "プラグインの依存関係をインストールする際は、Python の pip を使用します。`--break-system-package` などの追加引数を指定できます。"
+        "hint": "プラグインの依存関係をインストールする際は、Python の pip を使用します。`--break-system-package` などの追加引数を指定できます。PyPI インデックスの TLS 証明書は既定で検証されます。自己署名/プライベート CA のミラーを使用する場合は、`--cert <CA バンドルのパス>` を指定する(推奨)か、明示的に `--trusted-host <ホスト名>` を追加してください。"
       },
       "pypi_index_url": {
         "description": "PyPI リポジトリアドレス",
@@ -1632,10 +1666,9 @@
           "ツール使用"
         ]
       },
-
       "custom_headers": {
         "description": "カスタムリクエストヘッダー",
-        "hint": "ここで追加したキーと値のペアは、カスタム HTTP リクエストヘッダーとして OpenAI SDK の default_headers に統合されます。値は文字列である必要があります。"
+        "hint": "ここで追加したキーと値のペアは、AstrBot からプロバイダーへの HTTP リクエストにカスタムヘッダーとして付加されます。値は文字列である必要があります。"
       },
       "ollama_disable_thinking": {
         "description": "思考モードを無効化",
@@ -1659,6 +1692,11 @@
             "description": "最大トークン数",
             "hint": "生成する最大トークン数です。",
             "name": "Max Tokens"
+          },
+          "max_output_tokens": {
+            "description": "最大出力トークン数",
+            "hint": "生成する最大トークン数です。",
+            "name": "Max Output Tokens"
           },
           "reasoning_effort": {
             "description": "推論強度",
@@ -1835,15 +1873,15 @@
       },
       "gm_native_search": {
         "description": "ネイティブ検索を有効化",
-        "hint": "有効にすると、すべての関数ツールが無効になります。無料利用枠の制限は公式ドキュメントを参照してください。"
+        "hint": "関数ツールとの併用は Gemini 3 以降のモデルのみ対応しています。Gemini 3 以降のネイティブ検索は有料枠でのみ利用できます。料金は公式ドキュメントを参照してください。"
       },
       "gm_native_coderunner": {
         "description": "ネイティブコードランナーを有効化",
-        "hint": "有効にすると、すべての関数ツールが無効になります。"
+        "hint": "関数ツールとの併用は Gemini 3 以降のモデルのみ対応しています。"
       },
       "gm_url_context": {
         "description": "URL コンテキスト機能を有効化",
-        "hint": "有効にすると、すべての関数ツールが無効になります。"
+        "hint": "関数ツールとの併用は Gemini 3 以降のモデルのみ対応しています。"
       },
       "gm_safety_settings": {
         "description": "セーフティフィルター",
@@ -2056,6 +2094,14 @@
       },
       "api_base": {
         "description": "API Base URL"
+      },
+      "total_timeout": {
+        "description": "総タイムアウト",
+        "hint": "1 回の判定リクエストの総タイムアウト（秒）です。同時実行枠の待機、再試行、バックオフを含みます。既定値は 5 秒です。"
+      },
+      "max_concurrency": {
+        "description": "最大同時実行数",
+        "hint": "このプロバイダーで同時に実行する判定リクエストの上限です。既定値は 4 です。"
       },
       "proxy": {
         "description": "プロキシアドレス",

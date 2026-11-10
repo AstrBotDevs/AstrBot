@@ -380,10 +380,10 @@ async function syncDefaultConfigProviderIfNeeded() {
   if (!targetProviderId) return;
 
   const configData = await fetchDefaultConfig();
-  if (configData?.agent_runner?.runner_type !== 'local') {
+  if (configData?.agent?.runtime !== 'astrbot') {
     return;
   }
-  const modelConfig = configData.agent_runner.config?.model;
+  const modelConfig = configData.agent.config?.model;
   if (!modelConfig) return;
 
   if (modelConfig.provider_id === targetProviderId) return;
