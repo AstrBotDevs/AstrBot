@@ -1101,6 +1101,7 @@ class PluginManager:
             return False, "未找到任何插件模块"
 
         has_load_error = False
+        found_plugin = False
 
         # 导入插件模块，并尝试实例化插件类
         for plugin_module in plugin_modules:
@@ -1128,6 +1129,8 @@ class PluginManager:
                     continue
                 if specified_dir_name and root_dir_name != specified_dir_name:
                     continue
+
+                found_plugin = True
 
                 # Use the directory name until plugin metadata is available.
                 plugin_logger = logging.LoggerAdapter(
@@ -1504,6 +1507,9 @@ class PluginManager:
         self._rebuild_failed_plugin_info()
         if has_load_error:
             return False, self.failed_plugin_info
+        if (specified_module_path or specified_dir_name) and not found_plugin:
+            target = specified_dir_name or specified_module_path
+            return False, f"No entry module found for plugin {target}."
         return True, None
 
     async def _cleanup_failed_plugin_install(
@@ -1925,7 +1931,11 @@ class PluginManager:
                 plugin_dir_path,
                 plugin_name,
             )
-        await self.reload(plugin_name)
+        success, error = await self.reload(plugin_name)
+        if not success:
+            raise Exception(
+                error or f"Failed to reload plugin {plugin_name} after update."
+            )
 
     async def turn_off_plugin(self, plugin_name: str) -> None:
         """禁用一个插件。

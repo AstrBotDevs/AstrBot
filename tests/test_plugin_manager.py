@@ -422,6 +422,30 @@ def local_updater(plugin_manager_pm):
     return path
 
 
+@pytest.fixture
+def isolated_plugin_loader(plugin_manager_pm, tmp_path, monkeypatch):
+    """Keep real plugin discovery and loading isolated from persistent state."""
+    _clear_star_runtime_state()
+    monkeypatch.setattr(
+        plugin_manager_pm, "reserved_plugin_path", str(tmp_path / "reserved")
+    )
+    monkeypatch.setattr(
+        plugin_manager_pm, "plugin_config_path", str(tmp_path / "config")
+    )
+    monkeypatch.setattr(
+        plugin_manager_pm.context, "stars", star_manager_module.star_registry
+    )
+    monkeypatch.setattr(
+        star_manager_module.sp,
+        "global_get",
+        AsyncMock(side_effect=lambda key, default=None: default),
+    )
+    monkeypatch.setattr(star_manager_module, "sync_command_configs", AsyncMock())
+    yield plugin_manager_pm
+    _clear_star_runtime_state()
+    _clear_module_cache()
+
+
 # --- Tests ---
 
 
@@ -1475,6 +1499,111 @@ async def test_load_applies_manual_inactivation_to_non_plugin_tools(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("selector", ["specified_dir_name", "specified_module_path"])
+@pytest.mark.parametrize("layout", ["absent", "wrong_entry"])
+async def test_targeted_load_rejects_missing_entry_module(
+    isolated_plugin_loader: PluginManager, selector: str, layout: str
+):
+    plugin_path = Path(isolated_plugin_loader.plugin_store_path) / TEST_PLUGIN_DIR
+    if layout == "wrong_entry":
+        _write_local_test_plugin(plugin_path, TEST_PLUGIN_REPO)
+        (plugin_path / "main.py").rename(plugin_path / "plugin.py")
+    else:
+        other_plugin = plugin_path.with_name("unrelated_plugin")
+        other_plugin.mkdir()
+        (other_plugin / "main.py").write_text(
+            "raise AssertionError('Unrelated plugin must not be imported')\n",
+            encoding="utf-8",
+        )
+    target = (
+        TEST_PLUGIN_DIR
+        if selector == "specified_dir_name"
+        else f"data.plugins.{TEST_PLUGIN_DIR}.main"
+    )
+
+    success, error = await isolated_plugin_loader.load(**{selector: target})
+
+    assert success is False
+    assert error is not None and TEST_PLUGIN_DIR in error
+    assert star_manager_module.star_registry == []
+    star_manager_module.sync_command_configs.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_install_uploaded_plugin_rejects_missing_entry_module(
+    isolated_plugin_loader: PluginManager, tmp_path: Path
+):
+    source_path = tmp_path / "source"
+    _write_local_test_plugin(source_path, TEST_PLUGIN_REPO)
+    archive_path = tmp_path / "plugin.zip"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.write(source_path / "metadata.yaml", "metadata.yaml")
+        archive.writestr("plugin.py", "VALUE = 1\n")
+
+    with pytest.raises(Exception, match=TEST_PLUGIN_DIR):
+        await isolated_plugin_loader.install_plugin_from_file(str(archive_path))
+
+    failed_plugin = isolated_plugin_loader.failed_plugin_dict[TEST_PLUGIN_DIR]
+    assert TEST_PLUGIN_DIR in failed_plugin["error"]
+    assert star_manager_module.star_registry == []
+
+
+@pytest.mark.asyncio
+async def test_reload_failed_plugin_preserves_failure_when_directory_is_missing(
+    isolated_plugin_loader: PluginManager,
+):
+    original_failure = {"error": "Original import failure", "reserved": False}
+    isolated_plugin_loader.failed_plugin_dict[TEST_PLUGIN_DIR] = original_failure
+    isolated_plugin_loader._rebuild_failed_plugin_info()
+
+    success, error = await isolated_plugin_loader.reload_failed_plugin(TEST_PLUGIN_DIR)
+
+    assert success is False
+    assert error is not None and TEST_PLUGIN_DIR in error
+    assert (
+        isolated_plugin_loader.failed_plugin_dict[TEST_PLUGIN_DIR] == original_failure
+    )
+    assert "Original import failure" in isolated_plugin_loader.failed_plugin_info
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("entry_name", ["main", TEST_PLUGIN_DIR])
+@pytest.mark.parametrize("selector", ["specified_dir_name", "specified_module_path"])
+async def test_targeted_load_accepts_supported_entry_modules(
+    isolated_plugin_loader: PluginManager,
+    monkeypatch,
+    entry_name: str,
+    selector: str,
+):
+    plugin_store = Path(isolated_plugin_loader.plugin_store_path)
+    plugin_path = plugin_store / TEST_PLUGIN_DIR
+    _write_local_test_plugin(plugin_path, TEST_PLUGIN_REPO)
+    (plugin_path / "main.py").unlink()
+    (plugin_path / f"{entry_name}.py").write_text(
+        "from astrbot.api.star import Star\n"
+        "class Main(Star):\n"
+        "    async def initialize(self):\n"
+        "        self.initialized = True\n",
+        encoding="utf-8",
+    )
+    for name, path in (("data", plugin_store.parent), ("data.plugins", plugin_store)):
+        package = ModuleType(name)
+        package.__path__ = [str(path)]
+        monkeypatch.setitem(sys.modules, name, package)
+    module_path = f"data.plugins.{TEST_PLUGIN_DIR}.{entry_name}"
+    target = TEST_PLUGIN_DIR if selector == "specified_dir_name" else module_path
+
+    success, error = await isolated_plugin_loader.load(**{selector: target})
+
+    assert success is True, error
+    plugin = isolated_plugin_loader.context.get_registered_star(TEST_PLUGIN_NAME)
+    assert plugin is not None
+    assert plugin.module_path == module_path
+    assert plugin.star_cls.initialized is True
+    assert isolated_plugin_loader.failed_plugin_dict == {}
+
+
+@pytest.mark.asyncio
 async def test_load_reports_unregistered_plugin_without_index_error(
     plugin_manager_pm: PluginManager, monkeypatch
 ):
@@ -2035,6 +2164,33 @@ async def test_import_plugin_surfaces_unexpected_recovery_errors(
         ("import", "data.plugins.helloworld.main", ("main",)),
         ("prefer", str(requirements_path)),
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "reload_result",
+    [(True, None), (False, "Updated plugin import failed"), (False, None)],
+    ids=["success", "failure-with-detail", "failure-without-detail"],
+)
+async def test_update_plugin_propagates_reload_result(
+    plugin_manager_pm: PluginManager, monkeypatch, reload_result
+):
+    plugin = MockStar()
+    cast(Any, plugin_manager_pm.context).stars.append(plugin)
+    update = AsyncMock()
+    reload = AsyncMock(return_value=reload_result)
+    monkeypatch.setattr(plugin_manager_pm._updater, "update", update)
+    monkeypatch.setattr(plugin_manager_pm, "_ensure_plugin_requirements", AsyncMock())
+    monkeypatch.setattr(plugin_manager_pm, "reload", reload)
+
+    if reload_result[0]:
+        await plugin_manager_pm.update_plugin(TEST_PLUGIN_NAME)
+    else:
+        with pytest.raises(Exception, match=reload_result[1] or TEST_PLUGIN_NAME):
+            await plugin_manager_pm.update_plugin(TEST_PLUGIN_NAME)
+
+    update.assert_awaited_once_with(plugin, proxy="", download_url="", repo_url="")
+    reload.assert_awaited_once_with(TEST_PLUGIN_NAME)
 
 
 @pytest.mark.asyncio
