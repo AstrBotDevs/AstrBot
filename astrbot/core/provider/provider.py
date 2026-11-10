@@ -1,17 +1,22 @@
 import abc
 import asyncio
 import os
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Mapping
 from typing import Literal, TypeAlias, Union
 
 from astrbot.core.agent.message import ContentPart, Message, is_checkpoint_message
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.provider.entities import (
+    DecisionAnswer,
+    DecisionBooleanQuestion,
+    DecisionQuestion,
+    DecisionState,
     LLMResponse,
     ProviderMeta,
     RerankResult,
     ToolCallsResult,
 )
+from astrbot.core.provider.headers import build_provider_headers
 from astrbot.core.provider.register import provider_cls_map
 from astrbot.core.utils.astrbot_path import get_astrbot_path
 
@@ -21,6 +26,7 @@ Providers: TypeAlias = Union[
     "TTSProvider",
     "EmbeddingProvider",
     "RerankProvider",
+    "DecisionProvider",
 ]
 
 
@@ -31,6 +37,9 @@ class AbstractProvider(abc.ABC):
         super().__init__()
         self.model_name = ""
         self.provider_config = provider_config
+        self.request_headers = build_provider_headers(
+            provider_config.get("custom_headers")
+        )
 
     def set_model(self, model_name: str) -> None:
         """Set the current model name"""
@@ -432,3 +441,44 @@ class RerankProvider(AbstractProvider):
         result = await self.rerank("Apple", documents=["apple", "banana"])
         if not result:
             raise Exception("Rerank provider test failed, no results returned")
+
+
+class DecisionProvider(AbstractProvider):
+    """Provider for low-latency, structured decisions."""
+
+    def __init__(self, provider_config: dict, provider_settings: dict) -> None:
+        super().__init__(provider_config)
+        self.provider_config = provider_config
+        self.provider_settings = provider_settings
+
+    @abc.abstractmethod
+    async def ask(
+        self,
+        questions: Mapping[str, DecisionQuestion],
+        state: DecisionState | None = None,
+        *,
+        request_max_retries: int = 0,
+    ) -> Mapping[str, DecisionAnswer]:
+        """Answer multiple decision questions in one provider request.
+
+        Args:
+            questions: Question heads keyed by caller-defined identifiers.
+            state: Context evaluated by the model. Providers forward it as-is.
+            request_max_retries: Number of retries after the initial request.
+
+        Returns:
+            Answers keyed by the same identifiers as ``questions``.
+
+        Raises:
+            ValueError: The question or criteria are unusable.
+            DecisionError: The provider is unavailable, the request fails, or
+                the response violates the decision contract.
+        """
+        ...
+
+    async def test(self) -> None:
+        await self.ask(
+            {"test": DecisionBooleanQuestion("Is this provider available?")},
+            {},
+            request_max_retries=0,
+        )

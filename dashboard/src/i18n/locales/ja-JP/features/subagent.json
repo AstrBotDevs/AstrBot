@@ -1,0 +1,117 @@
+{
+  "header": {
+    "eyebrow": "サブエージェント"
+  },
+  "page": {
+    "title": "サブエージェント管理",
+    "beta": "実験的機能",
+    "subtitle": "Delegate tasks from Built-in AI, retain worker context, and review results."
+  },
+  "actions": {
+    "refresh": "再読み込み",
+    "save": "保存",
+    "add": "サブエージェントを追加",
+    "expand": "設定を展開",
+    "collapse": "設定を折りたたむ",
+    "delete": "削除",
+    "close": "閉じる",
+    "create": "Create Agent",
+    "cancel": "Cancel",
+    "more": "More",
+    "edit": "Edit Agent",
+    "remove": "Delete Agent"
+  },
+  "overview": {
+    "totalAgents": "サブエージェント総数",
+    "totalAgentsNote": "設定済みのサブエージェント数",
+    "enabledAgents": "有効なエージェント",
+    "enabledAgentsNote": "AstrBot から呼び出せるサブエージェント",
+    "mainOrchestration": "メインオーケストレーションの状態",
+    "boundPersonas": "関連付け済みペルソナ",
+    "boundPersonasNote": "ペルソナを関連付けたサブエージェント数"
+  },
+  "switches": {
+    "enable": "サブエージェントオーケストレーションを有効化",
+    "enableHint": "サブエージェント機能を有効にします"
+  },
+  "description": {
+    "disabled": "Disabled. Main completes tasks with its own tools.",
+    "enabled": "Enabled. Main retains its tools and starts background workers through spawn_agent."
+  },
+  "section": {
+    "title": "サブエージェント設定",
+    "subtitle": "メインエージェントが委任できるサブエージェント、ペルソナ、説明を設定します",
+    "globalSettings": "グローバル設定",
+    "agentSetup": "エージェント設定",
+    "empty": "Create an agent to get started.",
+    "noDescription": "No description"
+  },
+  "cards": {
+    "statusEnabled": "有効",
+    "statusDisabled": "無効",
+    "unnamed": "名前のないサブエージェント",
+    "transferPrefix": "transfer_to_{name}",
+    "switchLabel": "有効",
+    "previewTitle": "プレビュー：メイン LLM に表示されるハンドオフツール",
+    "personaChip": "ペルソナ：{id}",
+    "noDescription": "説明がありません",
+    "personaPreview": "ペルソナのプレビュー",
+    "previewHint": "現在選択中のペルソナを確認し、ハンドオフ先が正しいことを確かめられます。"
+  },
+  "form": {
+    "nameLabel": "Expert name",
+    "nameHint": "英小文字＋アンダースコアを推奨します。全体で一意にしてください",
+    "providerLabel": "チャットモデル",
+    "providerHint": "空欄の場合はグローバルの既定プロバイダーを使用します。",
+    "personaLabel": "Persona",
+    "personaHint": "Select a persona or configure a custom prompt and tools.",
+    "personaPreview": "ペルソナのプレビュー",
+    "descriptionLabel": "説明",
+    "descriptionHint": "Describe when the main agent should delegate to this agent.",
+    "customPersona": "Use custom prompt and tools",
+    "runtime": "Agent Runtime",
+    "runtimeConfig": "Runtime Configuration (JSON)",
+    "followProvider": "Follow conversation model",
+    "externalRuntime": "External runtime configuration",
+    "inheritPersona": "Leave empty to use the main agent’s persona",
+    "inheritProvider": "Leave empty to use the main agent’s chat model",
+    "inheritSettings": "Other runtime settings follow the main agent.",
+    "followPersona": "Uses main agent persona"
+  },
+  "messages": {
+    "loadConfigFailed": "設定の取得に失敗しました",
+    "loadPersonaFailed": "ペルソナ一覧の取得に失敗しました",
+    "unsavedChangesNotice": "このページには未保存の変更があります。移動する前に保存してください。",
+    "unsavedChangesLeaveConfirm": "このページには未保存の変更があります。移動すると変更は破棄されます。移動しますか？",
+    "unsavedChangesReloadConfirm": "このページには未保存の変更があります。設定を再読み込みすると変更は破棄されます。再読み込みしますか？",
+    "nameMissing": "名前が入力されていないサブエージェントがあります",
+    "nameInvalid": "サブエージェント名が無効です。英小文字、数字、アンダースコアのみ使用でき、先頭は英字にしてください",
+    "nameDuplicate": "サブエージェント名が重複しています：{name}",
+    "personaMissing": "サブエージェント {name} のペルソナが選択されていません",
+    "saveSuccess": "保存しました",
+    "saveFailed": "保存に失敗しました",
+    "nameRequired": "名前は必須です",
+    "namePattern": "英小文字、数字、アンダースコアのみ使用できます",
+    "deleteConfirm": "Delete {name}? Existing sessions retain their configuration and history.",
+    "jsonObject": "Enter a valid JSON object."
+  },
+  "empty": {
+    "title": "サブエージェントが設定されていません",
+    "subtitle": "右上の「サブエージェントを追加」から作成できます。",
+    "action": "最初のエージェントを作成"
+  },
+  "limits": {
+    "concurrency": "Concurrent workers per session",
+    "timeout": "Task timeout (seconds, including queue time)",
+    "steps": "Maximum steps per turn"
+  },
+  "status": {
+    "disabled": "Disabled",
+    "unavailable": "Runtime unavailable",
+    "missing": "Missing configuration"
+  },
+  "selection": {
+    "label": "Specialized Agent Configurations",
+    "manage": "Configure Specialized Agents"
+  }
+}

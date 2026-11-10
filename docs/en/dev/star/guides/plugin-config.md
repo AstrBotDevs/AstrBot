@@ -1,4 +1,3 @@
-
 # Plugin Configuration
 
 As plugin functionality grows, you may need to define configurations to allow users to customize plugin behavior.
@@ -15,7 +14,8 @@ The file content is a `Schema` that represents the configuration. The Schema is 
 {
   "token": {
     "description": "Bot Token",
-    "type": "string"
+    "type": "string",
+    "secret": true
   },
   "sub_config": {
     "description": "Test nested configuration",
@@ -50,15 +50,42 @@ The file content is a `Schema` that represents the configuration. The Schema is 
 - `default`: Optional. The default value of the configuration. If the user hasn't configured it, the default value will be used. Default values: int is 0, float is 0.0, bool is False, string is "", object is {}, list is [].
 - `items`: Optional. If the configuration type is `object`, the `items` field needs to be added. The content of `items` is the sub-Schema of this configuration item. Theoretically, it can be nested infinitely, but excessive nesting is not recommended.
 - `invisible`: Optional. Whether the configuration is hidden. Default is `false`. If set to `true`, it will not be displayed in the management panel.
+- `secret`: Optional. Applies to `string` and string `list` fields. When set to `true`, the dashboard displays a password input and lets the user temporarily reveal its value. This only masks the value in the UI; it does not encrypt the value in the configuration file.
 - `options`: Optional. A list, such as `"options": ["chat", "agent", "workflow"]`. Provides dropdown list options.
+- `labels`: Optional. Display labels aligned with `options` by index; stored values remain unchanged.
+- `subtitles`: Optional. Short descriptions aligned with `options` by index, displayed beneath each dropdown item label. Use an empty string or omit trailing entries for options without a subtitle. Supported by single-select and multi-select dropdowns; plain checkboxes do not display subtitles.
+- `slider`: Optional. Applies to `int` and `float` fields. A dict，such as `"slider": {"min": 1, "max": 100, "step": 1}`. Displays a slider with configurable minimum, maximum, and step values.
 - `editor_mode`: Optional. Whether to enable code editor mode. Requires AstrBot >= `v3.5.10`. Versions below this won't report errors but won't take effect. Default is false.
 - `editor_language`: Optional. The code language for the code editor, defaults to `json`.
 - `editor_theme`: Optional. The theme for the code editor. Options are `vs-light` (default) and `vs-dark`.
 - `_special`: Optional. Used to call AstrBot's visualization features for provider selection, persona selection, knowledge base selection, etc. See details below.
 
+### Sensitive configuration fields
+
+Sensitive strings such as API keys, access tokens, and passwords should set `"secret": true`. The dashboard masks their contents by default and provides a control to temporarily reveal or hide them. String lists also support this field, which is useful when a plugin accepts multiple API keys:
+
+```json
+{
+  "api_key": {
+    "description": "API Key",
+    "type": "string",
+    "default": "",
+    "secret": true
+  },
+  "backup_api_keys": {
+    "description": "Backup API keys",
+    "type": "list",
+    "default": [],
+    "secret": true
+  }
+}
+```
+
+`secret` does not change the value or data type received by the plugin. It only masks the value in the dashboard; the original value is still stored in the plugin configuration file. Plugins should avoid logging, echoing, or otherwise exposing these values.
+
 ### Configuration Internationalization (Optional)
 
-Configuration `description`, `hint`, and select `labels` can follow the WebUI language. See [Plugin Internationalization](./plugin-i18n).
+Configuration `description`, `hint`, and select `labels` and `subtitles` can follow the WebUI language. See [Plugin Internationalization](./plugin-i18n).
 
 When the code editor is enabled, it looks like this:
 
@@ -70,6 +97,29 @@ The **_special** field is only available after v4.0.0. Common values include `se
 
 - `select_provider`, `select_provider_tts`, `select_provider_stt`, and `select_persona` return strings.
 - `select_knowledgebase` returns a `list` and supports multiple selection, so the corresponding config item should use `type: list` with a default value of `[]`.
+- `sender_id` opens the Select users dialog with search by nickname, ID or source session, saving only user IDs. Use `type: list` with a default value of `[]`. The list shows 50 results per page, supports previous/next navigation and selections across pages, and returns to the first page when searching or refreshing. Only recorded users are searched; historical messages are not backfilled. Hidden copy icons take no layout space. Hover over an entry and use its copy icon to copy the raw user ID.
+- `umo` opens the Select session sources dialog with search by group name, nickname, alias or UMO. Use `type: string` with a default of `""` for a single UMO string, or `type: list` with a default of `[]` for multiple UMOs. Each entry shows the full UMO in gray parentheses after its name, with the bot ID below; group-chat badges are blue and private-chat badges are green. All entries use the interface font. Candidate titles stay on one line and selected titles use up to two lines, with an ellipsis when truncated; hover to view the full name and UMO. Hidden copy icons take no layout space. Hover over an entry and use its copy icon to copy the full UMO.
+
+For example, add the following to `_conf_schema.json`:
+
+```json
+{
+  "users": {
+    "description": "Selected users",
+    "type": "list",
+    "default": [],
+    "_special": "sender_id"
+  },
+  "sources": {
+    "description": "Session sources",
+    "type": "list",
+    "default": [],
+    "_special": "umo"
+  }
+}
+```
+
+User suggestions are deduplicated by platform instance and sender ID, retaining the newest matching record; identical IDs on different platforms remain separate. Session sources are sorted by the latest existing conversation, alias or sender `updated_at`, descending. User suggestions are recorded when a message wakes the bot; an unrecorded ID can be added directly when no search results match. Session sources also support entering unrecorded UMOs manually. Both selectors support `readonly`. The bot page restricts platform instances through the component's `platformId` prop; plugin configuration schemas do not currently expose this filter.
 
 > [!NOTE]
 > For reference, AstrBot Core also uses other internal `_special` values, such as `select_providers`, `provider_pool`, `persona_pool`, `select_plugin_set`, `t2i_template`, `get_embedding_dim`, and `select_agent_runner_provider:*` (where `*` is a placeholder for the runner type). These are internal implementations and may change at any time — please avoid using them in plugins.
@@ -213,7 +263,6 @@ Templates also support these optional fields:
 
 <img width="1000" alt="image" src="https://github.com/user-attachments/assets/74876d30-11a4-491b-a7a0-8ebe8d603782" />
 
-
 ## Using Configuration in Plugins
 
 When loading plugins, AstrBot will check if there's a `_conf_schema.json` file in the plugin directory. If it exists, it will automatically parse the configuration and save it under `data/config/<plugin_name>_config.json` (a configuration file entity created according to the Schema), and pass it to `__init__()` when instantiating the plugin class.
@@ -221,8 +270,11 @@ When loading plugins, AstrBot will check if there's a `_conf_schema.json` file i
 ```py
 from astrbot.api import AstrBotConfig
 
+
 class ConfigPlugin(Star):
-    def __init__(self, context: Context, config: AstrBotConfig): # AstrBotConfig inherits from Dict and has all dictionary methods
+    def __init__(
+        self, context: Context, config: AstrBotConfig
+    ):  # AstrBotConfig inherits from Dict and has all dictionary methods
         super().__init__(context)
         self.config = config
         print(self.config)

@@ -5,7 +5,12 @@ from collections.abc import Callable
 from typing import Any, cast
 
 import telegramify_markdown
-from telegram import ReactionTypeCustomEmoji, ReactionTypeEmoji
+from telegram import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    ReactionTypeCustomEmoji,
+    ReactionTypeEmoji,
+)
 from telegram.constants import ChatAction
 from telegram.error import BadRequest
 from telegram.ext import ExtBot
@@ -13,7 +18,9 @@ from telegram.ext import ExtBot
 from astrbot import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import (
+    ActionRow,
     At,
+    Button,
     File,
     Image,
     Plain,
@@ -21,7 +28,8 @@ from astrbot.api.message_components import (
     Reply,
     Video,
 )
-from astrbot.api.platform import AstrBotMessage, MessageType, PlatformMetadata
+from astrbot.api.platform import AstrBotMessage, Group, MessageType, PlatformMetadata
+from astrbot.core.platform.button_interaction import encode_button_callback
 from astrbot.core.utils.metrics import Metric
 
 
@@ -113,7 +121,11 @@ class TelegramPlatformEvent(AstrMessageEvent):
         payload: dict[str, Any],
     ) -> None:
         """按 Telegram 限制切分文本后逐段发送。"""
-        for chunk in cls._split_message(text):
+        chunks = cls._split_message(text)
+        for index, chunk in enumerate(chunks):
+            chunk_payload = dict(payload)
+            if index < len(chunks) - 1:
+                chunk_payload.pop("reply_markup", None)
             try:
                 markdown_text = telegramify_markdown.markdownify(
                     chunk,
@@ -121,13 +133,59 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 await client.send_message(
                     text=markdown_text,
                     parse_mode="MarkdownV2",
-                    **cast(Any, payload),
+                    **cast(Any, chunk_payload),
                 )
             except (ValueError, BadRequest) as e:
                 logger.warning(
                     f"Failed to convert message to Markdown，using normal text: {e!s}"
                 )
-                await client.send_message(text=chunk, **cast(Any, payload))
+                await client.send_message(text=chunk, **cast(Any, chunk_payload))
+
+    @classmethod
+    def _build_inline_keyboard(
+        cls,
+        rows: list[ActionRow],
+    ) -> InlineKeyboardMarkup | None:
+        """Render common button rows as a Telegram inline keyboard.
+
+        Args:
+            rows: Common action rows to render.
+
+        Returns:
+            Telegram markup, or ``None`` when no valid buttons remain.
+        """
+        keyboard: list[list[InlineKeyboardButton]] = []
+        for row in rows:
+            telegram_row: list[InlineKeyboardButton] = []
+            for button in row.buttons:
+                if isinstance(button.action, Button.UrlAction):
+                    telegram_row.append(
+                        InlineKeyboardButton(button.label, url=button.action.url)
+                    )
+                    continue
+
+                if not isinstance(button.action, Button.CallbackAction):
+                    continue
+                callback_data = encode_button_callback(
+                    button.id, button.action.data, expires_at=row.action_expires_at
+                )
+                if len(callback_data.encode("utf-8")) > 64:
+                    logger.warning(
+                        "Skipping Telegram button %r because its callback token "
+                        "exceeds 64 bytes.",
+                        button.id,
+                    )
+                    continue
+                telegram_row.append(
+                    InlineKeyboardButton(
+                        button.label,
+                        callback_data=callback_data,
+                    )
+                )
+            if telegram_row:
+                keyboard.append(telegram_row)
+
+        return InlineKeyboardMarkup(keyboard) if keyboard else None
 
     @classmethod
     async def _send_chat_action(
@@ -274,6 +332,15 @@ class TelegramPlatformEvent(AstrMessageEvent):
     ) -> None:
         image_path = None
 
+        action_rows = [i for i in message.chain if isinstance(i, ActionRow)]
+        reply_markup = cls._build_inline_keyboard(action_rows)
+        renderable_indexes = [
+            index
+            for index, component in enumerate(message.chain)
+            if isinstance(component, (Plain, Image, File, Record, Video))
+        ]
+        last_renderable_index = renderable_indexes[-1] if renderable_indexes else None
+
         has_reply = False
         reply_message_id = None
         at_user_id = None
@@ -294,7 +361,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
         action = cls._get_chat_action_for_chain(message.chain)
         await cls._send_chat_action(client, user_name, action, message_thread_id)
 
-        for i in message.chain:
+        for index, i in enumerate(message.chain):
             payload = {
                 "chat_id": user_name,
             }
@@ -302,6 +369,8 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 payload["reply_to_message_id"] = str(reply_message_id)
             if message_thread_id:
                 payload["message_thread_id"] = message_thread_id
+            if reply_markup is not None and index == last_renderable_index:
+                payload["reply_markup"] = reply_markup
 
             if isinstance(i, Plain):
                 if at_user_id and not at_flag:
@@ -340,12 +409,122 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     **cast(Any, payload),
                 )
 
+        if action_rows and last_renderable_index is None:
+            fallback_text = next(
+                (row.fallback_text for row in action_rows if row.fallback_text),
+                "Choose an option:",
+            )
+            payload = {"chat_id": user_name}
+            if reply_markup is not None:
+                payload["reply_markup"] = reply_markup
+            if has_reply:
+                payload["reply_to_message_id"] = str(reply_message_id)
+            if message_thread_id:
+                payload["message_thread_id"] = message_thread_id
+            await cls._send_text_chunks(client, fallback_text, payload)
+
     async def send(self, message: MessageChain) -> None:
         if self.get_message_type() == MessageType.GROUP_MESSAGE:
             await self.send_with_client(self.client, message, self.message_obj.group_id)
         else:
             await self.send_with_client(self.client, message, self.get_sender_id())
         await super().send(message)
+
+    async def get_group(
+        self, group_id: str | None = None, **kwargs: Any
+    ) -> Group | None:
+        """Get Telegram group metadata available to the bot.
+
+        Telegram topics use ``<chat_id>#<thread_id>`` inside AstrBot. The Bot API
+        calls target the parent chat while the returned group keeps the topic-aware ID.
+
+        Args:
+            group_id: AstrBot group ID to query. Defaults to the current group.
+            **kwargs: Reserved for compatibility with the platform event interface.
+
+        Returns:
+            Enriched group metadata, or ``None`` when no group ID is available.
+        """
+        requested_group_id = str(group_id or self.get_group_id())
+        if not requested_group_id:
+            return None
+
+        current_group = self.message_obj.group
+        group = Group(
+            group_id=requested_group_id,
+            group_name=(
+                current_group.group_name
+                if current_group and current_group.group_id == requested_group_id
+                else None
+            ),
+        )
+        topic_name = (
+            getattr(self.message_obj, "_telegram_topic_name", None)
+            if current_group and current_group.group_id == requested_group_id
+            else None
+        )
+        chat_id = requested_group_id.split("#", 1)[0]
+        api_chat_id: str | int = (
+            int(chat_id) if chat_id.lstrip("-").isdigit() else chat_id
+        )
+
+        try:
+            chat = await self.client.get_chat(chat_id=api_chat_id)
+            title = getattr(chat, "title", None)
+            if isinstance(title, str):
+                group.group_name = (
+                    f"{title}-{topic_name}"
+                    if isinstance(topic_name, str) and topic_name
+                    else title
+                )
+
+            photo = getattr(chat, "photo", None)
+            file_id = getattr(photo, "big_file_id", None) if photo else None
+            if file_id:
+                try:
+                    photo_file = await self.client.get_file(file_id=file_id)
+                    file_path = getattr(photo_file, "file_path", None)
+                    if file_path:
+                        group.group_avatar = str(file_path)
+                except Exception as exc:
+                    logger.warning(
+                        f"[Telegram] Failed to get group photo for {chat_id}: {exc}"
+                    )
+        except Exception as exc:
+            logger.warning(
+                f"[Telegram] Failed to get group information for {chat_id}: {exc}"
+            )
+
+        try:
+            group.member_count = await self.client.get_chat_member_count(
+                chat_id=api_chat_id
+            )
+        except Exception as exc:
+            logger.warning(
+                f"[Telegram] Failed to get group member count for {chat_id}: {exc}"
+            )
+
+        try:
+            administrators = await self.client.get_chat_administrators(
+                chat_id=api_chat_id
+            )
+            group.group_admins = []
+            for administrator in administrators:
+                status = getattr(administrator, "status", None)
+                user = getattr(administrator, "user", None)
+                user_id = getattr(user, "id", None)
+                if user_id is None:
+                    continue
+                if status == "creator":
+                    group.group_owner = str(user_id)
+                elif status == "administrator":
+                    group.group_admins.append(str(user_id))
+        except Exception as exc:
+            logger.warning(
+                f"[Telegram] Failed to get group administrators for {chat_id}: {exc}"
+            )
+
+        return group
 
     async def react(self, emoji: str | None, big: bool = False) -> None:
         """给原消息添加 Telegram 反应：

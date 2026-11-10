@@ -199,9 +199,9 @@
       background: inherit;
       display: flex;
       flex-direction: column;
-      align-items: center;
+      align-items: stretch;
       font-size: 13px;
-      text-align: center;
+      text-align: left;
       flex-shrink: 0;
       
       .v-btn {

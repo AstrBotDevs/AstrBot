@@ -5,9 +5,20 @@ import threading
 import time
 import weakref
 from concurrent.futures import ThreadPoolExecutor
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from astrbot.core.agent.runtime import AgentPermissions
+from astrbot.core.astr_agent_runtime import AstrAgentRuntime
+from astrbot.core.astr_agent_runtime import session as native_session
+from astrbot.core.astr_agent_runtime.main_agent import MainAgentBuildConfig, builder
+from astrbot.core.astr_agent_runtime.main_session import (
+    MainAgentInput,
+    MainAgentSession,
+)
+from astrbot.core.star.session_llm_manager import SessionServiceManager
 from astrbot.core.utils.session_lock import SessionLockManager
 
 
@@ -144,6 +155,63 @@ class TestCrossLoopIsolation:
 
 class TestConcurrency:
     """Tests for concurrent access."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("provider_enabled", "session_enabled"),
+        [(False, True), (True, False)],
+    )
+    async def test_waiting_llm_request_rechecks_enabled_status(
+        self,
+        monkeypatch,
+        provider_enabled,
+        session_enabled,
+    ):
+        """A queued request must honor LLM status changes made while waiting."""
+        session_id = "disabled-while-waiting"
+        manager = SessionLockManager()
+        config = {"provider_settings": {"enable": True}}
+        build_main_agent = AsyncMock(return_value=None)
+        event = SimpleNamespace(
+            unified_msg_origin=session_id,
+            get_extra=lambda _key: None,
+            set_extra=lambda *args: None,
+            is_stopped=lambda: False,
+        )
+        runtime = AstrAgentRuntime(
+            SimpleNamespace(get_config=lambda **_: config),
+            agent_configs=MagicMock(),
+            subagents=MagicMock(),
+        )
+        session = MainAgentSession(runtime, "conversation", session_id)
+        monkeypatch.setattr(native_session, "session_lock_manager", manager)
+        monkeypatch.setattr(builder, "build_main_agent", build_main_agent)
+        monkeypatch.setattr(
+            SessionServiceManager,
+            "should_process_llm_request",
+            AsyncMock(return_value=session_enabled),
+        )
+
+        async def admit():
+            return config["provider_settings"]["enable"] and (
+                await SessionServiceManager.should_process_llm_request(event)
+            )
+
+        input = MainAgentInput(
+            event,
+            AgentPermissions(),
+            build_config=MainAgentBuildConfig(tool_call_timeout=1),
+        )
+        async with manager.acquire_lock(session_id):
+            turn = await session.run_turn(input, admit=admit)
+            events = turn.events()
+            assert (await anext(events)).type == "turn.started"
+            config["provider_settings"]["enable"] = provider_enabled
+        result = await turn.result()
+        await events.aclose()
+        await session.close()
+        assert result.reason == "skipped"
+        build_main_agent.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_concurrent_acquisitions_same_loop(self):

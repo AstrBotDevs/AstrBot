@@ -75,7 +75,7 @@ class ProviderVolcengineTTS(TTSProvider):
 
         try:
             async with (
-                aiohttp.ClientSession() as session,
+                aiohttp.ClientSession(headers=self.request_headers) as session,
                 session.post(
                     self.api_base,
                     data=json.dumps(payload),

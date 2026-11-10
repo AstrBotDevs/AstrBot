@@ -5,12 +5,14 @@ from types import SimpleNamespace
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.middleware.gzip import GZipMiddleware
 
 from astrbot.core import DEMO_MODE, LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.log import LogManager
 from astrbot.dashboard.responses import ApiError, error
+from astrbot.dashboard.services.agent_config_service import AgentConfigService
 from astrbot.dashboard.services.api_key_service import ApiKeyService
 from astrbot.dashboard.services.auth_service import AuthService
 from astrbot.dashboard.services.backup_service import BackupService
@@ -41,7 +43,6 @@ from astrbot.dashboard.services.session_management_service import (
 )
 from astrbot.dashboard.services.skills_service import SkillsService
 from astrbot.dashboard.services.stat_service import StatService
-from astrbot.dashboard.services.subagent_service import SubAgentService
 from astrbot.dashboard.services.t2i_service import T2iService
 from astrbot.dashboard.services.tools_service import ToolsService
 from astrbot.dashboard.services.update_service import (
@@ -73,7 +74,6 @@ from .sessions import legacy_router as legacy_sessions_router
 from .skills import legacy_router as legacy_skills_router
 from .static_files import router as static_files_router
 from .stats import legacy_router as legacy_stats_router
-from .subagents import legacy_router as legacy_subagents_router
 from .t2i import legacy_router as legacy_t2i_router
 from .tools import legacy_router as legacy_tools_router
 from .updates import legacy_router as legacy_updates_router
@@ -95,13 +95,22 @@ def create_dashboard_asgi_app(
         docs_url=f"{API_V1_PREFIX}/docs",
         redoc_url=f"{API_V1_PREFIX}/redoc",
     )
+    # Compress JS/CSS and other sizable responses; Starlette's GZipMiddleware
+    # skips text/event-stream, so SSE endpoints are unaffected.
+    app.add_middleware(GZipMiddleware, minimum_size=1024)
     app.state.core_lifecycle = core_lifecycle
     app.state.db = db
     app.state.jwt_secret = jwt_secret
     app.state.dashboard_static_folder = static_folder
     log_broker = getattr(core_lifecycle, "log_broker", None) or LogBroker()
+    stats = StatService(
+        db,
+        core_lifecycle,
+        core_lifecycle.astrbot_config,
+        dashboard_static_folder=static_folder,
+    )
     app.state.services = SimpleNamespace(
-        config_profiles=ConfigProfileService(core_lifecycle, db),
+        config_profiles=ConfigProfileService(core_lifecycle, db, runtime=stats.runtime),
         config_display=ConfigDisplayService(core_lifecycle),
         config_files=ConfigFileService(core_lifecycle),
         config_routes=ConfigRoutingService(core_lifecycle),
@@ -116,7 +125,12 @@ def create_dashboard_asgi_app(
         files=FileService(),
         knowledge_bases=KnowledgeBaseService(core_lifecycle),
         live_chat=LiveChatService(db, core_lifecycle),
-        logs=LogService(log_broker, core_lifecycle.astrbot_config),
+        logs=LogService(
+            log_broker,
+            core_lifecycle.astrbot_config,
+            core=core_lifecycle,
+            dashboard_static_folder=static_folder,
+        ),
         bots=BotConfigService(core_lifecycle),
         platforms=PlatformService(core_lifecycle),
         providers=ProviderConfigService(core_lifecycle),
@@ -129,8 +143,12 @@ def create_dashboard_asgi_app(
         open_api=OpenApiService(db, core_lifecycle),
         sessions=SessionManagementService(core_lifecycle, db),
         skills=SkillsService(core_lifecycle),
-        stats=StatService(db, core_lifecycle, core_lifecycle.astrbot_config),
-        subagents=SubAgentService(core_lifecycle),
+        stats=stats,
+        agent_configs=AgentConfigService(
+            core_lifecycle.agent_configs,
+            core_lifecycle.agent_runtimes,
+            core_lifecycle.astrbot_config_mgr,
+        ),
         t2i=T2iService(core_lifecycle),
         tools=ToolsService(core_lifecycle),
         updates=UpdateService(
@@ -140,6 +158,7 @@ def create_dashboard_asgi_app(
             pip_install_func=call_pip_install,
             demo_mode=DEMO_MODE,
             clear_site_data_headers=CLEAR_SITE_DATA_HEADERS,
+            dashboard_static_folder=static_folder,
         ),
     )
 
@@ -198,7 +217,6 @@ def create_dashboard_asgi_app(
     app.include_router(legacy_sessions_router)
     app.include_router(legacy_skills_router)
     app.include_router(legacy_stats_router)
-    app.include_router(legacy_subagents_router)
     app.include_router(legacy_tools_router)
     app.include_router(legacy_platform_router)
     app.include_router(legacy_plugins_router)

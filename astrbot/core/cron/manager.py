@@ -11,14 +11,8 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
 
 from astrbot import logger
-from astrbot.core.agent.tool import ToolSet
-from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import CronJob
-from astrbot.core.platform.message_session import MessageSession
-from astrbot.core.platform.message_type import MessageType
-from astrbot.core.provider.entites import ProviderRequest
-from astrbot.core.utils.history_saver import persist_agent_history
 
 if TYPE_CHECKING:
     from astrbot.core.star.context import Context
@@ -26,6 +20,22 @@ if TYPE_CHECKING:
 
 _CRONTAB_WEEKDAY_NAMES = ("sun", "mon", "tue", "wed", "thu", "fri", "sat")
 _CRONTAB_WEEKDAY_PATTERN = re.compile(r"^(?:(\*)|(\d+)(?:-(\d+))?)(?:/(\d+))?$")
+
+
+PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT = (
+    "<system_reminder>\n"
+    "# CRON JOB CONTEXT\n"
+    "The following object describes the scheduled task that triggered you:\n"
+    "{cron_job}\n\n"
+    "You are now responding to a scheduled task. "
+    "Do not greet the user or ask questions unless strictly necessary. "
+    "Use the existing conversation and available tools to complete the task. "
+    "If contacting the user, explain why and refer to the task naturally. "
+    "Proceed according to your system instructions. "
+    "Output using same language as previous conversation. "
+    "After completing your task, summarize and output your actions and results."
+    "\n</system_reminder>"
+)
 
 
 def _normalize_crontab_day_of_week(day_of_week: str) -> str:
@@ -105,6 +115,11 @@ class CronJobManager:
         self._started = False
         # The scheduler may start early via _schedule_job; track DB sync separately.
         self._db_synced = False
+        self._running_tasks: dict[str, set[asyncio.Task]] = {}
+        # Ref-counted deletion markers. A run must not register after deletion
+        # has started, and nested/concurrent deletes must not clear the marker
+        # before the last deletion finishes.
+        self._deleting_jobs: dict[str, int] = {}
 
     async def start(self, ctx: "Context") -> None:
         self.ctx: Context = ctx  # star context
@@ -201,6 +216,14 @@ class CronJobManager:
         return job
 
     async def update_job(self, job_id: str, **kwargs) -> CronJob | None:
+        current_job = await self.db.get_cron_job(job_id)
+        if not current_job:
+            return None
+        candidate = current_job.model_copy(update=kwargs)
+        if candidate.enabled:
+            # Invalid edits must not overwrite the durable job or remove its
+            # working schedule. Disabled legacy jobs can still be corrected.
+            self._build_trigger(candidate)
         job = await self.db.update_cron_job(job_id, **kwargs)
         if not job:
             return None
@@ -210,9 +233,33 @@ class CronJobManager:
         return job
 
     async def delete_job(self, job_id: str) -> None:
-        self._remove_scheduled(job_id)
-        self._basic_handlers.pop(job_id, None)
-        await self.db.delete_cron_job(job_id)
+        """Remove a schedule and drain its active runs before deleting its row.
+
+        Runs that have already started are cancelled and drained. Runs that
+        start after deletion begins return without executing.
+
+        Args:
+            job_id: Job to delete, including any currently executing run.
+        """
+        self._deleting_jobs[job_id] = self._deleting_jobs.get(job_id, 0) + 1
+        try:
+            self._remove_scheduled(job_id)
+            self._basic_handlers.pop(job_id, None)
+            tasks = [
+                task
+                for task in self._running_tasks.get(job_id, set())
+                if task is not asyncio.current_task() and not task.done()
+            ]
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            await self.db.delete_cron_job(job_id)
+        finally:
+            remaining = self._deleting_jobs.get(job_id, 0) - 1
+            if remaining > 0:
+                self._deleting_jobs[job_id] = remaining
+            else:
+                self._deleting_jobs.pop(job_id, None)
 
     async def list_jobs(self, job_type: str | None = None) -> list[CronJob]:
         return await self.db.list_cron_jobs(job_type)
@@ -221,10 +268,18 @@ class CronJobManager:
         if self.scheduler.get_job(job_id):
             self.scheduler.remove_job(job_id)
 
-    def _schedule_job(self, job: CronJob) -> None:
-        if not self._started:
-            self.scheduler.start()
-            self._started = True
+    def _build_trigger(self, job: CronJob) -> CronTrigger | DateTrigger:
+        """Validate a job's timing without modifying stored or scheduled jobs.
+
+        Args:
+            job: Candidate job definition, including one-shot payload fields.
+
+        Returns:
+            A trigger using the same timezone and weekday rules as scheduling.
+
+        Raises:
+            CronJobSchedulingError: If the schedule cannot be parsed.
+        """
         try:
             tzinfo = None
             if job.timezone:
@@ -263,13 +318,24 @@ class CronJobManager:
                 trigger = CronTrigger.from_crontab(
                     normalized_cron_expression, timezone=tzinfo
                 )
+            return trigger
+        except (ValueError, TypeError) as e:
+            logger.exception("Failed to build trigger for cron job %s", job.job_id)
+            raise CronJobSchedulingError(str(e)) from e
+
+    def _schedule_job(self, job: CronJob) -> None:
+        if not self._started:
+            self.scheduler.start()
+            self._started = True
+        try:
+            trigger = self._build_trigger(job)
             self.scheduler.add_job(
                 self._run_job,
                 id=job.job_id,
                 trigger=trigger,
                 args=[job.job_id],
                 replace_existing=True,
-                misfire_grace_time=30,
+                misfire_grace_time=300,
             )
             asyncio.create_task(
                 self.db.update_cron_job(
@@ -314,38 +380,55 @@ class CronJobManager:
         ignore_enabled: bool = False,
         delete_run_once: bool = True,
     ) -> None:
-        job = await self.db.get_cron_job(job_id)
-        if not job or (not job.enabled and not ignore_enabled):
+        task = asyncio.current_task()
+        if task is None or job_id in self._deleting_jobs:
             return
-        start_time = datetime.now(timezone.utc)
-        await self.db.update_cron_job(
-            job_id, status="running", last_run_at=start_time, last_error=None
-        )
-        status = "completed"
-        last_error = None
+        # Register before the first await so delete_job always snapshots a run
+        # that has passed the deletion-marker check.
+        self._running_tasks.setdefault(job_id, set()).add(task)
         try:
-            if job.job_type == "basic":
-                await self._run_basic_job(job)
-            elif job.job_type == "active_agent":
-                await self._run_active_agent_job(job, start_time=start_time)
-            else:
-                raise ValueError(f"Unknown cron job type: {job.job_type}")
-        except Exception as e:  # noqa: BLE001
-            status = "failed"
-            last_error = str(e)
-            logger.error(f"Cron job {job_id} failed: {e!s}", exc_info=True)
-        finally:
-            next_run = self._get_next_run_time(job_id)
+            job = await self.db.get_cron_job(job_id)
+            if not job or (not job.enabled and not ignore_enabled):
+                return
+            start_time = datetime.now(timezone.utc)
             await self.db.update_cron_job(
-                job_id,
-                status=status,
-                last_run_at=start_time,
-                last_error=last_error,
-                next_run_time=next_run,
+                job_id, status="running", last_run_at=start_time, last_error=None
             )
-            if job.run_once and delete_run_once:
-                # one-shot: remove after execution regardless of success
-                await self.delete_job(job_id)
+            status = "completed"
+            last_error = None
+            try:
+                if job.job_type == "basic":
+                    await self._run_basic_job(job)
+                elif job.job_type == "active_agent":
+                    await self._run_active_agent_job(job, start_time=start_time)
+                    status = "dispatched"
+                else:
+                    raise ValueError(f"Unknown cron job type: {job.job_type}")
+            except asyncio.CancelledError:
+                status = "cancelled"
+                raise
+            except Exception as e:  # noqa: BLE001
+                status = "failed"
+                last_error = str(e)
+                logger.error(f"Cron job {job_id} failed: {e!s}", exc_info=True)
+            finally:
+                next_run = self._get_next_run_time(job_id)
+                await self.db.update_cron_job(
+                    job_id,
+                    status=status,
+                    last_run_at=start_time,
+                    last_error=last_error,
+                    next_run_time=next_run,
+                )
+                if job.run_once and delete_run_once and status != "cancelled":
+                    # One-shot runs remove themselves, excluding their own task.
+                    await self.delete_job(job_id)
+        finally:
+            running = self._running_tasks.get(job_id)
+            if running is not None:
+                running.discard(task)
+                if not running:
+                    del self._running_tasks[job_id]
 
     async def _run_basic_job(self, job: CronJob) -> None:
         handler = self._basic_handlers.get(job.job_id)
@@ -358,14 +441,9 @@ class CronJobManager:
 
     async def _run_active_agent_job(self, job: CronJob, start_time: datetime) -> None:
         payload = job.payload or {}
-        delivery_session_str = str(payload.get("session") or "").strip()
-        session_str = delivery_session_str or str(
-            MessageSession(
-                platform_name="cron",
-                message_type=MessageType.OTHER_MESSAGE,
-                session_id=job.job_id,
-            )
-        )
+        umo = str(payload.get("session") or "").strip()
+        if not umo:
+            raise ValueError(f"Cron job {job.job_id!r} has no target UMO.")
         note = payload.get("note") or job.description or job.name
 
         extras = {
@@ -380,137 +458,32 @@ class CronJobManager:
                 "run_at": (
                     job.payload.get("run_at") if isinstance(job.payload, dict) else None
                 ),
-                "session": delivery_session_str,
+                "session": umo,
             },
             "cron_payload": payload,
         }
 
-        await self._woke_main_agent(
-            message=note,
-            session_str=session_str,
-            extras=extras,
-            delivery_session_str=delivery_session_str,
-        )
+        from astrbot.core.agent_wakeup import wake_main_agent
 
-    async def _woke_main_agent(
-        self,
-        *,
-        message: str,
-        session_str: str,
-        extras: dict,
-        delivery_session_str: str = "",
-    ) -> None:
-        """Woke the main agent to handle the cron job message."""
-        from astrbot.core.astr_main_agent import (
-            MainAgentBuildConfig,
-            _get_session_conv,
-            build_main_agent,
-        )
-        from astrbot.core.astr_main_agent_resources import (
-            PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT,
-        )
-        from astrbot.core.tools.message_tools import SendMessageToUserTool
-
-        try:
-            session = (
-                session_str
-                if isinstance(session_str, MessageSession)
-                else MessageSession.from_str(session_str)
-            )
-        except Exception as e:  # noqa: BLE001
-            logger.error(f"Invalid session for cron job: {e}")
-            return
-
-        cron_event = CronMessageEvent(
-            context=self.ctx,
-            session=session,
-            message=message,
-            extras=extras or {},
-            message_type=session.message_type,
-        )
-
-        # judge user's role
-        umo = cron_event.unified_msg_origin
         cfg = self.ctx.get_config(umo=umo)
-        cron_payload = extras.get("cron_payload", {}) if extras else {}
-        sender_id = cron_payload.get("sender_id")
-        admin_ids = cfg.get("admins_id", [])
-        if admin_ids:
-            cron_event.role = "admin" if sender_id in admin_ids else "member"
-        if cron_payload.get("origin", "tool") == "api":
-            cron_event.role = "admin"
-
-        provider_settings = cfg.get("provider_settings", {}) or {}
-        tool_call_timeout = provider_settings.get("tool_call_timeout", 120)
-        config = MainAgentBuildConfig(
-            tool_call_timeout=tool_call_timeout,
-            llm_safety_mode=False,
-            streaming_response=False,
-            provider_settings=provider_settings,
-        )
-        req = ProviderRequest()
-        conv = await _get_session_conv(event=cron_event, plugin_context=self.ctx)
-        req.conversation = conv
-        # finetine the messages
-        context = json.loads(conv.history)
-        if context:
-            req.contexts = context
-            context_dump = req._print_friendly_context()
-            req.contexts = []
-            req.system_prompt += (
-                "\n\nBellow is you and user previous conversation history:\n"
-                f"---\n"
-                f"{context_dump}\n"
-                f"---\n"
+        role = (
+            "admin"
+            if (
+                payload.get("origin", "tool") == "api"
+                or payload.get("sender_id") in (cfg.get("admins_id") or [])
             )
-        cron_job_str = json.dumps(extras.get("cron_job", {}), ensure_ascii=False)
-        req.system_prompt += PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT.format(
-            cron_job=cron_job_str
+            else "member"
         )
-        req.prompt = (
-            "You are now responding to a scheduled task. "
-            "Proceed according to your system instructions. "
-            "Output using same language as previous conversation. "
-            "After completing your task, summarize and output your actions and results."
+        await wake_main_agent(
+            self.ctx,
+            umo=umo,
+            source="cron",
+            source_id=job.job_id,
+            user_prompt=PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
+                cron_job=json.dumps(extras["cron_job"], ensure_ascii=False)
+            ),
+            role=role,
         )
-        if delivery_session_str:
-            if not req.func_tool:
-                req.func_tool = ToolSet()
-            req.func_tool.add_tool(
-                self.ctx.get_llm_tool_manager().get_builtin_tool(SendMessageToUserTool)
-            )
-
-        result = await build_main_agent(
-            event=cron_event, plugin_context=self.ctx, config=config, req=req
-        )
-        if not result:
-            logger.error("Failed to build main agent for cron job.")
-            return
-
-        runner = result.agent_runner
-        async for _ in runner.step_until_done(30):
-            # agent will send message to user via using tools
-            pass
-        llm_resp = runner.get_final_llm_resp()
-        cron_meta = extras.get("cron_job", {}) if extras else {}
-        summary_note = (
-            f"[CronJob] {cron_meta.get('name') or cron_meta.get('id', 'unknown')}: {cron_meta.get('description', '')} "
-            f" triggered at {cron_meta.get('run_started_at', 'unknown time')}, "
-        )
-        if llm_resp and llm_resp.role == "assistant":
-            summary_note += (
-                f"I finished this job, here is the result: {llm_resp.completion_text}"
-            )
-
-        await persist_agent_history(
-            self.ctx.conversation_manager,
-            event=cron_event,
-            req=req,
-            summary_note=summary_note,
-        )
-        if not llm_resp:
-            logger.warning("Cron job agent got no response")
-            return
 
 
 __all__ = ["CronJobManager"]

@@ -97,7 +97,7 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
 
     @override
     async def step_until_done(
-        self, max_step: int = 30
+        self, max_step: int = 128
     ) -> T.AsyncGenerator[AgentResponse, None]:
         while not self.done():
             async for resp in self.step():
@@ -235,6 +235,15 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
                 ):
                     logger.debug(f"dify workflow resp chunk: {chunk}")
                     match chunk["event"]:
+                        case "error":
+                            logger.error(
+                                f"Dify workflow error (status: {chunk.get('status')}, "
+                                f"code: {chunk.get('code')}): "
+                                f"{chunk.get('message') or 'No error details provided.'}"
+                            )
+                            raise Exception(
+                                "Dify workflow execution failed. Please contact the administrator."
+                            )
                         case "workflow_started":
                             logger.info(
                                 f"Dify 工作流(ID: {chunk['workflow_run_id']})开始运行。"
@@ -258,18 +267,27 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
                                 f"Dify 工作流(ID: {chunk['workflow_run_id']})运行结束"
                             )
                             logger.debug(f"Dify 工作流结果：{chunk}")
-                            if chunk["data"]["error"]:
+                            status = chunk["data"].get("status")
+                            if chunk["data"].get("error") or status not in (
+                                "succeeded",
+                                "partial-succeeded",
+                            ):
                                 logger.error(
-                                    f"Dify 工作流出现错误：{chunk['data']['error']}"
+                                    f"Dify workflow failed (status: {status}): "
+                                    f"{chunk['data'].get('error') or 'No error details provided.'}"
                                 )
                                 raise Exception(
-                                    f"Dify 工作流出现错误：{chunk['data']['error']}"
+                                    "Dify workflow execution failed. Please contact the administrator."
                                 )
                             if self.workflow_output_key not in chunk["data"]["outputs"]:
                                 raise Exception(
                                     f"Dify 工作流的输出不包含指定的键名：{self.workflow_output_key}"
                                 )
                             result = chunk
+                if not result:
+                    raise Exception(
+                        "Dify workflow stream ended without a successful workflow_finished event."
+                    )
             case _:
                 raise Exception(f"未知的 Dify API 类型：{self.api_type}")
 
@@ -283,6 +301,13 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
         self.final_llm_resp = LLMResponse(role="assistant", result_chain=chain)
         self._transition_state(AgentState.DONE)
 
+        if self.final_llm_resp.role == "assistant":
+            try:
+                await self.agent_hooks.on_llm_response(
+                    self.run_context, self.final_llm_resp
+                )
+            except Exception as e:
+                logger.error(f"Error in on_llm_response hook: {e}", exc_info=True)
         try:
             await self.agent_hooks.on_agent_done(self.run_context, self.final_llm_resp)
         except Exception as e:

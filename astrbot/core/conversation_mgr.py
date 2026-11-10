@@ -149,7 +149,7 @@ class ConversationManager:
 
         """
         if not conversation_id:
-            conversation_id = self.session_conversations.get(unified_msg_origin)
+            conversation_id = await self.get_curr_conversation_id(unified_msg_origin)
         if conversation_id:
             await self.db.delete_conversation(cid=conversation_id)
             curr_cid = await self.get_curr_conversation_id(unified_msg_origin)

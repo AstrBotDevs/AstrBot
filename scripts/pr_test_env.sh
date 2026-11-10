@@ -9,7 +9,8 @@ PROFILE="neo"
 RUN_SYNC=true
 RUN_LINT=true
 RUN_SMOKE=true
-RUN_DASHBOARD=false
+# Empty means follow the profile default; flags set an explicit choice.
+RUN_DASHBOARD=""
 
 usage() {
   cat <<'EOF'
@@ -72,8 +73,12 @@ while (($# > 0)); do
   esac
 done
 
-if [[ "$PROFILE" == "full" && "$RUN_DASHBOARD" == false ]]; then
-  RUN_DASHBOARD=true
+if [[ -z "$RUN_DASHBOARD" ]]; then
+  if [[ "$PROFILE" == "full" ]]; then
+    RUN_DASHBOARD=true
+  else
+    RUN_DASHBOARD=false
+  fi
 fi
 
 echo "==> Profile: $PROFILE"
@@ -110,7 +115,7 @@ if [[ "$PROFILE" == "neo" ]]; then
   )
   uv run pytest -q "${NEO_TESTS[@]}" ${PYTEST_ARGS:-}
 else
-  uv run pytest --cov=. -v -o log_cli=true -o log_level=DEBUG ${PYTEST_ARGS:-}
+  uv run pytest ./tests --cov=astrbot -v -o log_cli=true -o log_level=DEBUG ${PYTEST_ARGS:-}
 fi
 
 run_smoke_test() {

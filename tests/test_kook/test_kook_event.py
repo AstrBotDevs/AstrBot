@@ -1,18 +1,28 @@
 import json
+from unittest.mock import AsyncMock
 
 import pytest
 
-from astrbot.api.platform import PlatformMetadata, Unknown
+from astrbot.api.platform import (
+    AstrBotMessage,
+    Group,
+    MessageType,
+    PlatformMetadata,
+    Unknown,
+)
 from astrbot.core.message.components import (
+    ActionRow,
     At,
     AtAll,
     BaseMessageComponent,
+    Button,
     Image,
     Json,
     Plain,
     Reply,
     Video,
 )
+from astrbot.core.platform.button_interaction import decode_button_callback
 from astrbot.core.platform.sources.kook.kook_event import KookEvent
 from astrbot.core.platform.sources.kook.kook_types import KookMessageType, OrderMessage
 from tests.test_kook.shared import (
@@ -172,3 +182,181 @@ async def test_kook_event_warp_message(
     assert result.index == expected_output.index
     assert result.type == expected_output.type
     assert result.reply_id == expected_output.reply_id
+
+
+@pytest.mark.asyncio
+async def test_kook_event_renders_portable_buttons():
+    client = mock_kook_client("", "")
+    event = KookEvent(
+        "",
+        mock_astrbot_message(),
+        PlatformMetadata(name="test", id="test", description="test"),
+        "",
+        client,
+    )
+    row = ActionRow(
+        buttons=[
+            Button(
+                id="approve",
+                label="Approve",
+                style=Button.Style.SUCCESS,
+                action=Button.CallbackAction(data={"request_id": 42}),
+            ),
+            Button(
+                id="docs",
+                label="Documentation",
+                style=Button.Style.DANGER,
+                action=Button.UrlAction(url="https://example.com/docs"),
+            ),
+        ]
+    )
+
+    result = await event._wrap_message(0, row)
+
+    assert result.type == KookMessageType.CARD
+    card = json.loads(result.text)[0]
+    callback_button, url_button = card["modules"][0]["elements"]
+    assert callback_button["click"] == "return-val"
+    assert callback_button["theme"] == "success"
+    assert decode_button_callback(callback_button["value"]) == (
+        "approve",
+        {"request_id": 42},
+    )
+    assert url_button == {
+        "type": "button",
+        "text": "Documentation",
+        "theme": "danger",
+        "value": "https://example.com/docs",
+        "click": "link",
+    }
+
+
+@pytest.mark.asyncio
+async def test_kook_event_splits_action_rows_at_four_buttons():
+    client = mock_kook_client("", "")
+    event = KookEvent(
+        "",
+        mock_astrbot_message(),
+        PlatformMetadata(name="test", id="test", description="test"),
+        "",
+        client,
+    )
+    row = ActionRow(
+        buttons=[
+            Button(
+                id=f"button-{index}", label=str(index), action=Button.CallbackAction()
+            )
+            for index in range(5)
+        ]
+    )
+
+    result = await event._wrap_message(0, row)
+
+    modules = json.loads(result.text)[0]["modules"]
+    assert [len(module["elements"]) for module in modules] == [4, 1]
+
+
+@pytest.mark.asyncio
+async def test_kook_get_group_enriches_channel_with_guild_members():
+    client = mock_kook_client("", "")
+    client.get_channel = AsyncMock(
+        return_value={"id": "channel-1", "name": "general", "guild_id": "guild-1"},
+    )
+    client.get_guild = AsyncMock(
+        return_value={
+            "id": "guild-1",
+            "icon": "https://example.com/icon.png",
+            "user_id": "owner-1",
+        },
+    )
+    client.get_guild_roles = AsyncMock(
+        return_value={
+            "items": [
+                {"role_id": 1, "permissions": 1},
+                {"role_id": 2, "permissions": 0},
+            ],
+            "meta": {"page_total": 1, "total": 2},
+        },
+    )
+    client.get_guild_users = AsyncMock(
+        side_effect=[
+            {
+                "items": [
+                    {"id": "owner-1", "nickname": "Owner", "roles": [1]},
+                    {"id": "user-1", "username": "Alice", "roles": [2]},
+                ],
+                "meta": {"page_total": 2, "total": 3},
+                "user_count": 99,
+            },
+            {
+                "items": [{"id": "user-2", "username": "Bob", "roles": [1]}],
+                "meta": {"page_total": 2, "total": 3},
+                "user_count": 99,
+            },
+        ],
+    )
+    message = AstrBotMessage()
+    message.type = MessageType.GROUP_MESSAGE
+    message.group = Group(group_id="channel-1", group_name="cached-channel")
+    message.session_id = "channel-1"
+    message.message_id = "message-1"
+    message.message = []
+    message.message_str = "hello"
+    message.raw_message = {"extra": {"guild_id": "guild-1"}}
+    event = KookEvent(
+        "hello",
+        message,
+        PlatformMetadata(name="kook", id="kook", description="KOOK"),
+        "channel-1",
+        client,
+    )
+
+    group = await event.get_group()
+
+    assert group.group_name == "general"
+    assert group.group_avatar == "https://example.com/icon.png"
+    assert group.group_owner == "owner-1"
+    assert group.member_count == 3
+    assert [member.user_id for member in group.members] == [
+        "owner-1",
+        "user-1",
+        "user-2",
+    ]
+    assert group.group_admins == ["owner-1", "user-2"]
+    assert client.get_guild_users.await_count == 2
+    client.get_guild_users.assert_any_await(
+        "guild-1",
+        channel_id="channel-1",
+        page=1,
+        page_size=50,
+    )
+    client.get_guild_roles.assert_awaited_once_with(
+        "guild-1",
+        page=1,
+        page_size=50,
+    )
+
+
+@pytest.mark.asyncio
+async def test_kook_get_group_returns_basic_group_when_lookup_fails():
+    client = mock_kook_client("", "")
+    client.get_channel = AsyncMock(side_effect=RuntimeError("forbidden"))
+    message = AstrBotMessage()
+    message.type = MessageType.GROUP_MESSAGE
+    message.group = Group(group_id="channel-1", group_name="cached-channel")
+    message.session_id = "channel-1"
+    message.message_id = "message-1"
+    message.message = []
+    message.message_str = "hello"
+    message.raw_message = {}
+    event = KookEvent(
+        "hello",
+        message,
+        PlatformMetadata(name="kook", id="kook", description="KOOK"),
+        "channel-1",
+        client,
+    )
+
+    group = await event.get_group()
+
+    assert group == Group(group_id="channel-1", group_name="cached-channel")

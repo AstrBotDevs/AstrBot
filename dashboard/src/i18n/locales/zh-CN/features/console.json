@@ -1,12 +1,34 @@
 {
   "title": "平台日志",
-  "autoScroll": {
-    "enabled": "自动滚动已开启",
-    "disabled": "自动滚动已关闭"
-  },
   "hideUserChat": {
+    "label": "排除用户对话",
     "enabled": "已排除用户对话",
     "disabled": "排除用户对话"
+  },
+  "search": {
+    "label": "搜索日志",
+    "placeholder": "搜索日志"
+  },
+  "fontSize": {
+    "label": "日志字号",
+    "decrease": "减小字号",
+    "increase": "增大字号"
+  },
+  "filters": {
+    "title": "筛选",
+    "button": "过滤器",
+    "reset": "重置",
+    "level": "日志级别",
+    "source": "来源",
+    "allSources": "全部来源",
+    "core": "系统",
+    "plugins": "插件",
+    "plugin": "插件",
+    "pluginsInLogs": "当前日志中的插件",
+    "pluginsInLogsHint": "此列表来自当前日志，不是已安装插件列表",
+    "platform": "机器人平台",
+    "allPlatforms": "全部平台",
+    "unscopedPlatform": "系统 / 无平台"
   },
   "pipInstall": {
     "button": "安装 pip 库",
@@ -14,10 +36,34 @@
     "packageLabel": "*库名，如 llmtuner",
     "mirrorLabel": "强制 PyPI 软件仓库链接（可选）",
     "mirrorHint": "强制 PyPI 软件仓库链接 > 配置项 `PyPI 软件仓库地址`",
+    "cancelButton": "取消",
     "installButton": "安装",
     "installSuccess": "安装成功。",
     "installFailed": "安装失败。",
     "requestFailed": "请求失败。"
+  },
+  "exportLogs": {
+    "button": "导出诊断包",
+    "hint": "导出排障所需的日志、Trace、配置、插件状态和运行环境。",
+    "failed": "诊断包导出失败，请稍后重试。",
+    "contents": "导出 AstrBot 运行日志、追踪日志、配置文件、插件状态和运行环境，用于故障诊断。",
+    "privacy": "将遮盖经过识别的密码、密钥、公网 IP 地址等敏感信息。但仍可能包含聊天内容等信息。分享前请检查，不要发给不可信的人。",
+    "cancel": "取消",
+    "redact": "脱敏导出（推荐）",
+    "rawPrivacy": "已关闭脱敏，诊断包将保留密码、密钥、Token、公网 IP 等敏感信息。请不要分享至公开 Issue 或群聊。",
+    "download": "下载诊断包",
+    "startTime": "开始时间",
+    "endTime": "结束时间",
+    "timeRangeHint": "按浏览器本地时间选择起止时间。",
+    "invalidTimeRange": "请选择有效的起止时间，开始时间不得晚于结束时间。",
+    "timeRange": "日志时间范围",
+    "lastHour": "近 1 小时",
+    "last12Hours": "近 12 小时",
+    "lastDay": "近 1 天",
+    "last3Days": "近 3 天",
+    "customRange": "自定义",
+    "stillExporting": "仍在导出中。",
+    "largeExport": "日志量大，导出仍在进行，请稍等。"
   },
   "debugHint": {
     "text": "Debug 日志需要在「配置文件 → 系统 → 控制台日志级别」中开启"
