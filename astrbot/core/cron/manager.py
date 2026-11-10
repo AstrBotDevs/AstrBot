@@ -5,6 +5,7 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
+from weakref import WeakValueDictionary
 from zoneinfo import ZoneInfo
 
 from apscheduler.job import Job
@@ -114,6 +115,7 @@ class CronJobManager:
         self.scheduler = AsyncIOScheduler()
         self._basic_handlers: dict[str, Callable[..., Any]] = {}
         self._lock = asyncio.Lock()
+        self._job_locks: WeakValueDictionary[str, asyncio.Lock] = WeakValueDictionary()
         self._started = False
         # The scheduler may start early via _schedule_job; track DB sync separately.
         self._db_synced = False
@@ -146,19 +148,26 @@ class CronJobManager:
 
     async def sync_from_db(self) -> None:
         jobs = await self.db.list_cron_jobs()
-        for job in jobs:
-            if not job.enabled or not job.persistent:
+        for snapshot in jobs:
+            if not snapshot.enabled or not snapshot.persistent:
                 continue
-            if job.job_type == "basic" and job.job_id not in self._basic_handlers:
-                logger.warning(
-                    "Skip scheduling basic cron job %s due to missing handler.",
-                    job.job_id,
-                )
-                continue
-            try:
-                self._schedule_job(job)
-            except CronJobSchedulingError:
-                continue  # Error already logged in _schedule_job
+            async with self._job_lock(snapshot.job_id):
+                # The list can predate an edit or deletion of this job.
+                if snapshot.job_id in self._deleting_jobs:
+                    continue
+                job = await self.db.get_cron_job(snapshot.job_id)
+                if not job or not job.enabled or not job.persistent:
+                    continue
+                if job.job_type == "basic" and job.job_id not in self._basic_handlers:
+                    logger.warning(
+                        "Skip scheduling basic cron job %s due to missing handler.",
+                        job.job_id,
+                    )
+                    continue
+                try:
+                    self._schedule_job(job)
+                except CronJobSchedulingError:
+                    continue  # Error already logged in _schedule_job
 
     async def add_basic_job(
         self,
@@ -218,29 +227,52 @@ class CronJobManager:
             self._schedule_job(job)
         return job
 
+    def _job_lock(self, job_id: str) -> asyncio.Lock:
+        # Waiters and holders keep the lock alive without retaining idle entries.
+        lock = self._job_locks.get(job_id)
+        if lock is None:
+            lock = self._job_locks[job_id] = asyncio.Lock()
+        return lock
+
     async def update_job(self, job_id: str, **kwargs) -> CronJob | None:
-        async with self._lock:
+        async with self._job_lock(job_id):
             if job_id in self._deleting_jobs:
                 return None
             current_job = await self.db.get_cron_job(job_id)
             if not current_job:
                 return None
             candidate = current_job.model_copy(update=kwargs)
+            keep_trigger = False
             if candidate.enabled:
                 # Invalid edits must not overwrite the durable job or remove its
                 # working schedule. Disabled legacy jobs can still be corrected.
-                self._build_trigger(candidate)
+                trigger = self._build_trigger(candidate)
+                scheduled = self._schedules.get(job_id)
+                # A consumed date trigger must not be registered again at the
+                # same deadline. Its current run still owns cleanup.
+                keep_trigger = (
+                    self._started
+                    and isinstance(trigger, DateTrigger)
+                    and scheduled is not None
+                    and isinstance(scheduled.trigger, DateTrigger)
+                    and trigger.run_date == scheduled.trigger.run_date
+                    and self.scheduler.get_job(scheduled.id) is None
+                )
             if not candidate.enabled:
                 kwargs["next_run_time"] = None
-            if current_job.status == "running":
+            if (
+                candidate.enabled
+                and not keep_trigger
+                and current_job.status == "running"
+            ):
                 kwargs["status"] = "scheduled"
             job = await self.db.update_cron_job(job_id, **kwargs)
             if not job:
                 return None
-            if job.enabled:
-                self._schedule_job(job)
-            else:
+            if not job.enabled:
                 self._remove_scheduled(job_id)
+            elif not keep_trigger:
+                self._schedule_job(job)
             return job
 
     async def delete_job(
@@ -255,7 +287,7 @@ class CronJobManager:
             job_id: Job to delete, including any currently executing run.
             expected_schedule: Restrict automatic cleanup to the triggering schedule.
         """
-        async with self._lock:
+        async with self._job_lock(job_id):
             if expected_schedule is not None and (
                 self._get_schedule_revision(job_id) != expected_schedule
                 or job_id in self._deleting_jobs
@@ -287,14 +319,9 @@ class CronJobManager:
         return await self.db.list_cron_jobs(job_type)
 
     def _remove_scheduled(self, job_id: str) -> None:
-        scheduled = self._get_scheduled_job(job_id)
-        self._schedules.pop(job_id, None)
-        if scheduled is not None:
+        scheduled = self._schedules.pop(job_id, None)
+        if scheduled is not None and self.scheduler.get_job(scheduled.id):
             self.scheduler.remove_job(scheduled.id)
-
-    def _get_scheduled_job(self, job_id: str) -> Job | None:
-        scheduled = self._schedules.get(job_id)
-        return self.scheduler.get_job(scheduled.id) if scheduled else None
 
     def _get_schedule_revision(self, job_id: str) -> str | None:
         scheduled = self._schedules.get(job_id)
@@ -385,7 +412,7 @@ class CronJobManager:
             job_id: Task whose next deadline is being stored.
             revision: Scheduler entry created for this task definition.
         """
-        async with self._lock:
+        async with self._job_lock(job_id):
             if self._get_schedule_revision(job_id) == revision:
                 await self.db.update_cron_job(
                     job_id, next_run_time=self.get_next_run_time(job_id)
@@ -407,7 +434,8 @@ class CronJobManager:
             The job's next scheduled run time in UTC, or None if the job
             is not currently scheduled.
         """
-        aps_job = self._get_scheduled_job(job_id)
+        scheduled = self._schedules.get(job_id)
+        aps_job = self.scheduler.get_job(scheduled.id) if scheduled else None
         if not aps_job or aps_job.next_run_time is None:
             return None
         return aps_job.next_run_time.astimezone(timezone.utc)
@@ -432,7 +460,7 @@ class CronJobManager:
         self._running_tasks.setdefault(job_id, {})[task] = revision
         try:
             job = await self.db.get_cron_job(job_id)
-            async with self._lock:
+            async with self._job_lock(job_id):
                 if job_id in self._deleting_jobs:
                     return
                 current_schedule = self._get_schedule_revision(job_id)
@@ -467,8 +495,20 @@ class CronJobManager:
                 last_error = str(e)
                 logger.error(f"Cron job {job_id} failed: {e!s}", exc_info=True)
             finally:
-                async with self._lock:
-                    if revision == self._get_schedule_revision(job_id):
+                async with self._job_lock(job_id):
+                    owns_status = revision == self._get_schedule_revision(job_id)
+                    if not owns_status and job_id not in self._deleting_jobs:
+                        current = await self.db.get_cron_job(job_id)
+                        # Disabling removes the schedule, but the last run can
+                        # still finish unless another run has replaced its status.
+                        owns_status = (
+                            current is not None
+                            and not current.enabled
+                            and current.last_run_at is not None
+                            and current.last_run_at.replace(tzinfo=timezone.utc)
+                            == start_time
+                        )
+                    if owns_status:
                         await self.db.update_cron_job(
                             job_id,
                             status=status,

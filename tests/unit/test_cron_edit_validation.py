@@ -1,4 +1,4 @@
-"""Verify rejected cron edits preserve durable jobs and their live schedules."""
+"""Verify cron edits preserve durable jobs and their live schedules."""
 
 import asyncio
 from datetime import datetime, timezone
@@ -11,6 +11,19 @@ import pytest_asyncio
 from astrbot.core.cron.manager import CronJobManager, CronJobSchedulingError
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.dashboard.services.cron_service import CronService, CronServiceError
+
+
+def scheduled_job(manager, job_id):
+    """Find the live scheduler entry for a logical task ID.
+
+    Args:
+        manager: Cron manager under test.
+        job_id: Logical task ID passed to the callback.
+
+    Returns:
+        The matching scheduler entry, or None.
+    """
+    return next((job for job in manager.scheduler.get_jobs() if job.args == (job_id,)), None)
 
 
 @pytest_asyncio.fixture
@@ -44,7 +57,7 @@ async def test_invalid_dashboard_edit_preserves_job_and_schedule(cron_store, exp
         timezone="UTC",
         payload={"note": "Send the report", "session": "test:FriendMessage:user"},
     )
-    scheduled = manager._get_scheduled_job(job.job_id)
+    scheduled = scheduled_job(manager, job.job_id)
     next_run = scheduled.next_run_time
     service = CronService(SimpleNamespace(cron_manager=manager))
 
@@ -57,7 +70,7 @@ async def test_invalid_dashboard_edit_preserves_job_and_schedule(cron_store, exp
     assert stored.name == job.name
     assert stored.cron_expression == job.cron_expression
     assert stored.payload == job.payload
-    assert manager._get_scheduled_job(job.job_id) is scheduled
+    assert scheduled_job(manager, job.job_id) is scheduled
     assert scheduled.next_run_time == next_run
 
     # The original scheduled callback still dispatches the original payload.
@@ -71,7 +84,7 @@ async def test_invalid_dashboard_edit_preserves_job_and_schedule(cron_store, exp
     await manager.shutdown()
     await manager.start(SimpleNamespace())
     manager.scheduler.pause()
-    restored = manager._get_scheduled_job(job.job_id)
+    restored = scheduled_job(manager, job.job_id)
     assert restored is not None
     assert str(restored.trigger) == str(scheduled.trigger)
 
@@ -88,12 +101,12 @@ async def test_invalid_one_shot_edit_preserves_original_deadline(cron_store):
         run_once=True,
         run_at=deadline,
     )
-    scheduled = manager._get_scheduled_job(job.job_id)
+    scheduled = scheduled_job(manager, job.job_id)
     with pytest.raises(CronJobSchedulingError):
         await manager.update_job(job.job_id, payload={"run_at": "not-a-date"})
 
     assert (await db.get_cron_job(job.job_id)).payload == job.payload
-    assert manager._get_scheduled_job(job.job_id) is scheduled
+    assert scheduled_job(manager, job.job_id) is scheduled
     assert scheduled.next_run_time == deadline
 
 
@@ -111,7 +124,7 @@ async def test_invalid_enable_keeps_legacy_job_disabled(cron_store):
         await manager.update_job(job.job_id, enabled=True)
 
     assert (await db.get_cron_job(job.job_id)).enabled is False
-    assert manager._get_scheduled_job(job.job_id) is None
+    assert scheduled_job(manager, job.job_id) is None
 
 
 @pytest.mark.asyncio
@@ -123,7 +136,7 @@ async def test_valid_edit_and_disable_remain_supported(cron_store):
     )
     updated = await manager.update_job(job.job_id, cron_expression="0 10 * * 0")
     assert updated.cron_expression == "0 10 * * 0"
-    scheduled = manager._get_scheduled_job(job.job_id)
+    scheduled = scheduled_job(manager, job.job_id)
     assert scheduled.next_run_time.hour == 10
     assert scheduled.next_run_time.weekday() == 6
 
@@ -131,10 +144,10 @@ async def test_valid_edit_and_disable_remain_supported(cron_store):
     await db.update_cron_job(job.job_id, cron_expression="invalid")
     disabled = await manager.update_job(job.job_id, enabled=False)
     assert disabled.enabled is False
-    assert manager._get_scheduled_job(job.job_id) is None
+    assert scheduled_job(manager, job.job_id) is None
 
 
-@pytest.mark.parametrize("edit", ["reschedule", "recurring", "disable", "invalid", "none"])
+@pytest.mark.parametrize("edit", ["reschedule", "recurring", "disable", "rename", "invalid", "none"])
 @pytest.mark.asyncio
 async def test_running_one_shot_edit_preserves_saved_job(cron_store, edit):
     """Only an unchanged one-shot definition may delete itself after execution.
@@ -159,7 +172,7 @@ async def test_running_one_shot_edit_preserves_saved_job(cron_store, edit):
         await release.wait()
 
     manager._run_active_agent_job = run_agent
-    scheduled = manager._get_scheduled_job(job.job_id)
+    scheduled = scheduled_job(manager, job.job_id)
     # APScheduler removes a date job when submitting its only execution.
     manager.scheduler.remove_job(scheduled.id)
     run = asyncio.create_task(scheduled.func(*scheduled.args, **scheduled.kwargs))
@@ -174,23 +187,30 @@ async def test_running_one_shot_edit_preserves_saved_job(cron_store, edit):
                 "reschedule": {"run_at": "2099-02-01T00:00:00+00:00"},
                 "recurring": {"run_once": False, "cron_expression": "0 9 * * *"},
                 "disable": {"enabled": False},
+                "rename": {"name": "Renamed reminder"},
             }[edit]
             await service.update_job(job.job_id, payload)
         saved = await db.get_cron_job(job.job_id)
-        new_schedule = manager._get_scheduled_job(job.job_id)
+        new_schedule = scheduled_job(manager, job.job_id)
+        if edit == "rename":
+            assert saved.name == "Renamed reminder"
+            assert new_schedule is None
         release.set()
         await asyncio.wait_for(run, 2)
 
         stored = await db.get_cron_job(job.job_id)
-        if edit in ("none", "invalid"):
+        if edit in ("none", "invalid", "rename"):
             assert stored is None
-            assert manager._get_scheduled_job(job.job_id) is None
+            assert scheduled_job(manager, job.job_id) is None
         else:
             assert stored is not None
             assert stored.payload == saved.payload
             assert stored.run_once == saved.run_once
             assert stored.enabled == saved.enabled
-            assert manager._get_scheduled_job(job.job_id) is new_schedule
+            assert scheduled_job(manager, job.job_id) is new_schedule
+            if edit == "disable":
+                assert stored.status == "dispatched"
+                assert stored.next_run_time is None
             if new_schedule is not None:
                 manager._run_active_agent_job = AsyncMock()
                 await new_schedule.func(*new_schedule.args, **new_schedule.kwargs)
@@ -236,7 +256,7 @@ async def test_one_shot_finishing_during_edit_keeps_new_schedule(cron_store):
 
     manager._run_active_agent_job = run_agent
     db.update_cron_job = delayed_update
-    scheduled = manager._get_scheduled_job(job.job_id)
+    scheduled = scheduled_job(manager, job.job_id)
     manager.scheduler.remove_job(scheduled.id)
     run = asyncio.create_task(scheduled.func(*scheduled.args, **scheduled.kwargs))
     try:
@@ -261,3 +281,42 @@ async def test_one_shot_finishing_during_edit_keeps_new_schedule(cron_store):
         if not run.done():
             run.cancel()
         await asyncio.gather(run, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_slow_edit_does_not_block_other_job(cron_store, monkeypatch):
+    """An edit waiting for storage must leave unrelated callbacks free to run.
+
+    Args:
+        cron_store: Real database and paused scheduler.
+        monkeypatch: Fixture that restores the database method.
+    """
+    db, manager = cron_store
+    edited = await manager.add_active_job(
+        name="Edited", cron_expression="0 9 * * *", payload={}
+    )
+    other = await manager.add_active_job(
+        name="Other", cron_expression="0 10 * * *", payload={}
+    )
+    blocked = asyncio.Event()
+    release = asyncio.Event()
+    original_update = db.update_cron_job
+
+    async def slow_update(job_id, **kwargs):
+        if job_id == edited.job_id and kwargs.get("name") == "Renamed":
+            blocked.set()
+            await release.wait()
+        return await original_update(job_id, **kwargs)
+
+    monkeypatch.setattr(db, "update_cron_job", slow_update)
+    agent = AsyncMock()
+    monkeypatch.setattr(manager, "_run_active_agent_job", agent)
+    update = asyncio.create_task(manager.update_job(edited.job_id, name="Renamed"))
+    try:
+        await asyncio.wait_for(blocked.wait(), 2)
+        scheduled = scheduled_job(manager, other.job_id)
+        await asyncio.wait_for(scheduled.func(*scheduled.args, **scheduled.kwargs), 2)
+        assert agent.await_args.args[0].job_id == other.job_id
+    finally:
+        release.set()
+        await asyncio.wait_for(update, 2)
