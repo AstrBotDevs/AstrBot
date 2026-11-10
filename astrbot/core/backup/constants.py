@@ -6,6 +6,7 @@
 from sqlmodel import SQLModel
 
 from astrbot.core.db.po import (
+    AgentConfigRecord,
     ApiKey,
     Attachment,
     ChatUIProject,
@@ -52,6 +53,7 @@ MAIN_DB_MODELS: dict[str, type[SQLModel]] = {
     "conversations_v3": ConversationV3,
     "conversation_events": ConversationEvent,
     "provider_stats": ProviderStat,
+    "agent_configs": AgentConfigRecord,
     "cron_jobs": CronJob,
     "personas": Persona,
     "persona_folders": PersonaFolder,

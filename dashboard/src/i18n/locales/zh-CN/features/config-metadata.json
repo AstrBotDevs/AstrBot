@@ -1,18 +1,43 @@
 {
   "ai_group": {
     "name": "AI",
-    "agent_runner": {
-      "description": "Agent 执行方式",
-      "hint": "选择 AI 对话的执行器。切换执行器会使用新类型的默认配置，不保留上一类型的参数。",
+    "subagents": {
+      "description": "子代理",
+      "agent": {
+        "config": {
+          "subagents": {
+            "enabled": {
+              "description": "启用子代理",
+              "hint": "允许 AstrBot 在合适的时机创建通用或专用子代理完成任务。"
+            },
+            "config_ids": {
+              "hint": "配置专用子代理（可指定人格、工具集等配置）。即使不配置，AstrBot 也会在需要的时候动态生成通用子代理完成任务。",
+              "description": "专用 Agent 配置"
+            },
+            "max_concurrent_agents": {
+              "description": "每会话并发数",
+              "hint": "其余任务排队，默认 3。"
+            },
+            "task_timeout": {
+              "description": "任务超时（秒）",
+              "hint": "包含排队时间，默认 600 秒。"
+            }
+          }
+        }
+      }
+    },
+    "agent": {
+      "description": "Agent 配置",
+      "hint": "选择 Agent Runtime。切换后使用对应运行环境的默认配置。",
       "provider_settings": {
         "enable": {
           "description": "启用",
           "hint": "AI 对话总开关"
         }
       },
-      "agent_runner": {
-        "runner_type": {
-          "description": "执行器",
+      "agent": {
+        "runtime": {
+          "description": "Agent Runtime",
           "labels": [
             "内置 Agent",
             "Dify",
@@ -25,7 +50,7 @@
     },
     "dify_runner": {
       "description": "Dify 配置",
-      "agent_runner": {
+      "agent": {
         "config": {
           "dify_api_type": { "description": "应用类型" },
           "dify_api_key": { "description": "API Key" },
@@ -40,7 +65,7 @@
     },
     "coze_runner": {
       "description": "Coze 配置",
-      "agent_runner": {
+      "agent": {
         "config": {
           "coze_api_key": { "description": "API Key" },
           "bot_id": { "description": "Bot ID" },
@@ -53,7 +78,7 @@
     },
     "dashscope_runner": {
       "description": "阿里云百炼应用配置",
-      "agent_runner": {
+      "agent": {
         "config": {
           "dashscope_app_type": { "description": "应用类型" },
           "dashscope_api_key": { "description": "API Key" },
@@ -71,7 +96,7 @@
     },
     "deerflow_runner": {
       "description": "DeerFlow 配置",
-      "agent_runner": {
+      "agent": {
         "config": {
           "deerflow_api_base": { "description": "API Base URL" },
           "deerflow_api_key": { "description": "API Key" },
@@ -91,7 +116,7 @@
     "ai": {
       "description": "模型",
       "hint": "配置内置 Agent 使用的对话模型，以及通用的图片转述、语音模型。",
-      "agent_runner": {
+      "agent": {
         "config": {
           "model": {
             "provider_id": {
@@ -147,7 +172,7 @@
     "persona": {
       "description": "人格",
       "hint": "赋予 AstrBot 人格。",
-      "agent_runner": {
+      "agent": {
         "config": {
           "persona": {
             "persona_id": { "description": "默认采用的人格" },
@@ -376,6 +401,8 @@
         "modes": {
           "none": "关闭"
         },
+        "networkAlwaysOn": "始终开启",
+        "windowsHostNetworkHint": "Windows 暂不支持在“整个环境”执行代码时单独禁网。切换到“工作区”后可关闭联网。",
         "runtimeUnknown": "运行环境信息不可用。",
         "memberWarning": "普通成员已获得联网或整个环境访问权限。",
         "executionInactive": "未生效",
@@ -385,6 +412,9 @@
           "os": "操作系统",
           "arch": "架构",
           "sandbox": "本地隔离",
+          "windowsUnavailable": "{backend} · 尚未就绪",
+          "windowsSetupHint": "请保存配置并重启 AstrBot；如出现管理员授权提示，请允许以完成沙盒初始化。",
+          "errorDetails": "查看诊断详情",
           "unavailableHint": "沙箱启动失败，受限 Shell/Python 执行及工作区文件搜索会受到影响。请根据下方错误检查系统安全策略（如 Linux 的 AppArmor、用户命名空间限制）或容器限制，修复后重启 AstrBot 重新检测。",
           "dialog": {
             "intro": "利用 macOS 的 Seatbelt 或 Linux 的 bubblewrap（bwrap）技术，为 AstrBot Agent 的执行提供安全隔离，以限制不同用户使用 AstrBot Agent 时的文件访问范围和联网权限，获得更高的安全性。",
@@ -431,7 +461,7 @@
     "truncate_and_compress": {
       "hint": "AstrBot 如何管理工作记忆。详见: [上下文管理策略](https://docs.astrbot.app/use/context-compress.html)。",
       "description": "上下文管理策略",
-      "agent_runner": {
+      "agent": {
         "config": {
           "compression": {
             "max_turns": {
@@ -469,7 +499,7 @@
     },
     "others": {
       "description": "其他配置",
-      "agent_runner": {
+      "agent": {
         "config": {
           "misc": {
             "max_steps": { "description": "工具调用轮数上限" },
@@ -1033,7 +1063,7 @@
       },
       "wake_prefix": {
         "description": "唤醒词",
-        "hint": "唤醒机器人的消息前缀的列表。也可以通过 @ 机器人来唤醒。"
+        "hint": "唤醒机器人的消息前缀的列表，也可以通过 @ 机器人来唤醒。\n\n内置指令（如 `/help`、`/sid`）也依赖唤醒词：群聊中不带唤醒词直接输入将无法触发；私聊在未启用「私聊消息需要唤醒词」时无需前缀，可直接输入指令触发。"
       },
       "disable_builtin_commands": {
         "description": "禁用自带指令",
@@ -1760,15 +1790,15 @@
       },
       "gm_native_search": {
         "description": "启用原生搜索功能",
-        "hint": "启用后所有函数工具将全部失效，免费次数限制请查阅官方文档"
+        "hint": "仅 Gemini 3 及以上模型支持与函数工具同时使用；Gemini 3 及以上模型的原生搜索仅限付费层级，计费规则请查阅官方文档"
       },
       "gm_native_coderunner": {
         "description": "启用原生代码执行器",
-        "hint": "启用后所有函数工具将全部失效"
+        "hint": "仅 Gemini 3 及以上模型支持与函数工具同时使用"
       },
       "gm_url_context": {
         "description": "启用URL上下文功能",
-        "hint": "启用后所有函数工具将全部失效"
+        "hint": "仅 Gemini 3 及以上模型支持与函数工具同时使用"
       },
       "gm_safety_settings": {
         "description": "安全过滤器",

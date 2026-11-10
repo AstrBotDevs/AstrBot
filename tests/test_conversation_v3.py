@@ -536,12 +536,14 @@ async def test_declared_read_revision_rejects_context_changes(database, change):
 
 
 @pytest.mark.asyncio
-async def test_autonomous_summary_uses_the_same_writer_after_execution_events(database):
+async def test_native_history_uses_the_same_writer_after_execution_events(database):
     from types import SimpleNamespace
+    from unittest.mock import AsyncMock
 
+    from astrbot.core.agent.message import Message
     from astrbot.core.agent.response import AgentResponse
-    from astrbot.core.provider.entities import ProviderRequest
-    from astrbot.core.utils.history_saver import persist_agent_history
+    from astrbot.core.astr_agent_runtime.history import save_agent_history
+    from astrbot.core.provider.entities import LLMResponse, ProviderRequest
 
     conv = await database.create_conversation("umo", "p")
     store = database.conversation_store
@@ -553,13 +555,22 @@ async def test_autonomous_summary_uses_the_same_writer_after_execution_events(da
     }))
     req = ProviderRequest()
     req.conversation = SimpleNamespace(history="[]", cid=conv.conversation_id)
-    await persist_agent_history(
-        None, event=SimpleNamespace(unified_msg_origin="umo"), req=req,
-        summary_note="Task completed", conversation_events=writer,
+    commit = AsyncMock()
+    assert await save_agent_history(
+        req=req,
+        llm_response=LLMResponse(role="assistant", completion_text="Task completed"),
+        all_messages=[
+            Message(role="user", content="Run the task"),
+            Message(role="assistant", content="Task completed"),
+        ],
+        runner_stats=None,
+        commit=commit,
+        writer=writer,
     )
+    commit.assert_not_awaited()
     await writer.finish_turn("completed")
     assert (await store.read(conv.conversation_id)).messages == [
-        {"role": "user", "content": "Output your last task result below."},
+        {"role": "user", "content": "Run the task"},
         {"role": "assistant", "content": "Task completed"},
     ]
     events = await store.events(conv.conversation_id)

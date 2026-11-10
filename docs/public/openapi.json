@@ -137,7 +137,7 @@
       "name": "T2I"
     },
     {
-      "name": "Subagents"
+      "name": "Agent Configurations"
     }
   ],
   "paths": {
@@ -6906,13 +6906,13 @@
         "description": "**Required scope:** `config`"
       }
     },
-    "/api/v1/subagents/config": {
+    "/api/v1/agent-configs": {
       "get": {
         "tags": [
-          "Subagents"
+          "Agent Configurations"
         ],
-        "summary": "Get subagent orchestrator configuration",
-        "operationId": "getSubagentConfig",
+        "summary": "List reusable agent configurations",
+        "operationId": "listAgentConfigs",
         "x-astrbot-scope": "config",
         "responses": {
           "200": {
@@ -6921,19 +6921,19 @@
         },
         "description": "**Required scope:** `config`"
       },
-      "put": {
+      "post": {
         "tags": [
-          "Subagents"
+          "Agent Configurations"
         ],
-        "summary": "Update subagent orchestrator configuration",
-        "operationId": "updateSubagentConfig",
+        "summary": "Create an agent configuration",
+        "operationId": "createAgentConfig",
         "x-astrbot-scope": "config",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/DynamicConfig"
+                "$ref": "#/components/schemas/AgentConfigRequest"
               }
             }
           }
@@ -6946,13 +6946,67 @@
         "description": "**Required scope:** `config`"
       }
     },
-    "/api/v1/subagents/available-tools": {
+    "/api/v1/agent-configs/{config_id}": {
       "get": {
         "tags": [
-          "Subagents"
+          "Agent Configurations"
         ],
-        "summary": "List tools available to subagents",
-        "operationId": "listSubagentAvailableTools",
+        "summary": "Get an agent configuration",
+        "operationId": "getAgentConfig",
+        "x-astrbot-scope": "config",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `config`"
+      },
+      "put": {
+        "tags": [
+          "Agent Configurations"
+        ],
+        "summary": "Update an agent configuration",
+        "operationId": "updateAgentConfig",
+        "x-astrbot-scope": "config",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentConfigRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `config`"
+      },
+      "delete": {
+        "tags": [
+          "Agent Configurations"
+        ],
+        "summary": "Delete an unreferenced agent configuration",
+        "operationId": "deleteAgentConfig",
+        "x-astrbot-scope": "config",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `config`"
+      }
+    },
+    "/api/v1/agent-runtimes": {
+      "get": {
+        "tags": [
+          "Agent Configurations"
+        ],
+        "summary": "List registered callable agent runtimes",
+        "operationId": "listAgentRuntimes",
         "x-astrbot-scope": "config",
         "responses": {
           "200": {
@@ -7217,6 +7271,37 @@
           "data": {}
         },
         "additionalProperties": false
+      },
+      "AgentConfigRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "runtime"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "description": {
+            "type": "string",
+            "default": ""
+          },
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          },
+          "runtime": {
+            "type": "string",
+            "minLength": 1
+          },
+          "config": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
       },
       "DynamicConfig": {
         "type": "object",

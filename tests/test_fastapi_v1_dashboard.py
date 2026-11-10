@@ -1012,12 +1012,15 @@ def fake_core_lifecycle():
             reload=reload_plugin,
             _validate_astrbot_version_specifier=validate_astrbot_version_specifier,
         ),
+        agent_configs=SimpleNamespace(lock=asyncio.Lock()),
+        agent_runtimes={},
         star_context=SimpleNamespace(
             registered_web_apis=[
                 ("/<path:plugin_path>", plugin_extension, ["GET", "POST"], "demo")
             ]
         ),
         kb_manager=None,
+        subagents=None,
     )
 
 
@@ -1066,7 +1069,7 @@ async def test_version_routes_return_startup_runtime_snapshot(
     platform = SimpleNamespace(
         system=Mock(return_value="Linux"), machine=Mock(return_value="aarch64")
     )
-    from astrbot.core.computer import process_sandbox
+    from astrbot.core.astr_agent_runtime.computer import process_sandbox
 
     process_sandbox.get_process_sandbox_status.cache_clear()
     monkeypatch.setattr(process_sandbox, "platform", platform)
@@ -1903,13 +1906,15 @@ async def test_v1_system_config_update_preserves_independent_bot_provider_sectio
 async def test_config_update_revokes_only_affected_shell_sessions(
     asgi_app, fake_core_lifecycle, monkeypatch, tmp_path, change
 ):
-    from astrbot.core.computer import computer_client
-    from astrbot.core.computer.booters.local import LocalBooter
-    from astrbot.core.tools.computer_tools import shell as shell_tools
+    from astrbot.core.astr_agent_runtime.computer import computer_client
+    from astrbot.core.astr_agent_runtime.computer.booters.local import LocalBooter
+    from astrbot.core.astr_agent_runtime.tools.computer_tools import (
+        shell as shell_tools,
+    )
 
     config = fake_core_lifecycle.astrbot_config
     config["admins_id"] = ["creator", "other-admin"]
-    config["agent_runner"] = {"runner_type": "local"}
+    config["agent"] = {"runtime": "astrbot"}
     config["provider_settings"] = {
         "computer_use_runtime": "local",
         "computer_use_local_permissions": {
@@ -2034,7 +2039,7 @@ async def test_config_api_saves_local_permissions_without_isolation(
         runtime["sandbox"]["error"] = reason
     original = copy.deepcopy(fake_core_lifecycle.astrbot_config)
     payload = copy.deepcopy(original)
-    payload["agent_runner"] = {"runner_type": "local"}
+    payload["agent"] = {"runtime": "astrbot"}
     payload["provider_settings"] = {
         "computer_use_runtime": "local",
         "computer_use_local_permissions": {
@@ -2077,7 +2082,7 @@ async def test_welcome_page_can_enable_local_computer_access_without_isolation(
     runtime = asgi_app.state.services.stats.runtime
     runtime.update({"os": "linux", "sandbox": {"status": status}})
     config = fake_core_lifecycle.astrbot_config
-    config["agent_runner"] = {"runner_type": "local"}
+    config["agent"] = {"runtime": "astrbot"}
     config["provider_settings"] = {
         "computer_use_runtime": "none",
         "computer_use_local_permissions": get_local_permission_defaults("Linux"),
@@ -3444,6 +3449,26 @@ async def test_v1_plugin_extension_supports_astrbot_web_api(
 
 
 @pytest.mark.asyncio
+async def test_agent_runtimes_require_config_scope(
+    asgi_client,
+    fake_core_lifecycle,
+    fake_db,
+):
+    fake_core_lifecycle.subagents = None
+    fake_db.add_api_key("plugin-test", ["plugin"])
+    response = await asgi_client.get(
+        "/api/v1/agent-runtimes",
+        headers={"Authorization": "ApiKey plugin-test"},
+    )
+    assert response.status_code == 403
+    response = await asgi_client.get(
+        "/api/v1/agent-runtimes", headers=_jwt_headers()
+    )
+    assert response.status_code == 200
+    assert response.json()["data"] == []
+
+
+@pytest.mark.asyncio
 async def test_v1_plugin_extension_astrbot_web_api_reads_form_and_files(
     asgi_client: httpx.AsyncClient,
     fake_core_lifecycle,
@@ -4516,6 +4541,51 @@ async def test_v1_platform_webhook_preserves_tuple_response(
     assert response.status_code == 202
     assert response.headers["content-type"] == "text/plain"
     assert response.text == "accepted"
+
+
+@pytest.mark.asyncio
+async def test_v1_log_export_reports_blocked_console(
+    monkeypatch, tmp_path: Path, asgi_app, asgi_client: httpx.AsyncClient
+):
+    """Export drop counters even while the console cannot write its warning."""
+    import threading
+
+    from astrbot.core.log import LogManager
+    from astrbot.core.utils.console_sink import BoundedConsoleSink
+
+    monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
+    entered = threading.Event()
+    release = threading.Event()
+
+    class BlockedStream(io.StringIO):
+        def write(self, text):
+            entered.set()
+            release.wait(10)
+            return super().write(text)
+
+    sink = BoundedConsoleSink(BlockedStream(), capacity=2)
+    monkeypatch.setattr(LogManager, "_console_output", sink)
+    try:
+        sink.write("first\n")
+        assert await asyncio.to_thread(entered.wait, 1)
+        for index in range(3):
+            sink.write(f"record {index}\n")
+        response = await asgi_client.get("/api/v1/logs/export", headers=_jwt_headers())
+        assert response.status_code == 200
+        assert not release.is_set()
+        with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+            environment = json.loads(archive.read("environment.json"))
+        assert environment["console_logging"] == {
+            "capacity": 2,
+            "queued_records": 2,
+            "unfinished_records": 3,
+            "dropped_records": 1,
+            "closed": False,
+            "writer_alive": True,
+        }
+    finally:
+        release.set()
+        await asyncio.to_thread(sink.close)
 
 
 @pytest.mark.asyncio

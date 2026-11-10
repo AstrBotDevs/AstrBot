@@ -1,12 +1,13 @@
 <script setup>
 import { LazyMonacoEditor as VueMonacoEditor } from '@/components/shared/LazyMonacoEditor';
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import ConfigItemRenderer from './ConfigItemRenderer.vue'
 import ConfigDefaultReset from './ConfigDefaultReset.vue'
 import TemplateListEditor from './TemplateListEditor.vue'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
 import { useConfigTextResolver } from '@/composables/useConfigTextResolver'
 import { useToast } from '@/utils/toast'
+import { FOLD_STATE_PREFIX, readFoldState, writeFoldState } from '@/utils/configFoldState.mjs'
 import { providerApi } from '@/api/v1'
 
 const props = defineProps({
@@ -45,6 +46,12 @@ const props = defineProps({
   fieldLinks: {
     type: Object,
     default: () => ({})
+  },
+  // Opt-in: only the plugin config editor turns group folding on. Provider and
+  // platform editors share this component and keep their flat rendering.
+  foldable: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -183,21 +190,86 @@ function hasVisibleItemsAfter(items, currentIndex) {
 
   return false
 }
+
+// Object groups are foldable only when the caller opts in via `foldable` (the plugin
+// config editor); provider and platform editors keep their flat rendering. The root
+// config object never folds, so the dialog title keeps behaving as before. The schema's
+// `collapsed: true` only decides the initial state, and toggling is remembered for
+// this page instance only, so reopening the page follows the schema.
+const isFoldable = computed(
+  () =>
+    props.foldable
+    && Boolean(props.pathPrefix)
+    && props.metadata?.[props.metadataKey]?.type === 'object'
+)
+const foldStateKey = computed(
+  () => `${FOLD_STATE_PREFIX}${props.pluginName}:${currentConfigPath.value}`
+)
+
+// The schema default only seeds the state; a remembered toggle always wins.
+const isFolded = ref(
+  readFoldState(foldStateKey.value)
+    ?? props.metadata?.[props.metadataKey]?.collapsed === true
+)
+const isSectionCollapsed = computed(() => isFoldable.value && isFolded.value)
+
+// This instance is reused when another config is rendered (switching providers, platforms
+// or plugins) and when a reloaded plugin ships a new schema, so both the group identity
+// and its declared default have to re-seed the state.
+watch(
+  () => [
+    foldStateKey.value,
+    props.metadata?.[props.metadataKey]?.collapsed === true,
+  ],
+  ([key, collapsed]) => {
+    isFolded.value = readFoldState(key) ?? collapsed
+  },
+)
+
+function toggleSection() {
+  if (!isFoldable.value) {
+    return
+  }
+  isFolded.value = !isFolded.value
+  writeFoldState(foldStateKey.value, isFolded.value)
+}
 </script>
 
 <template>
-  <div class="config-section" v-if="iterable && metadata[metadataKey]?.type === 'object'">
-    <v-list-item-title class="config-title">
-      {{ resolveConfigText(currentConfigPath, 'description', metadata[metadataKey]?.description) }}
-      <span v-if="metadata[metadataKey]?.show_key" class="metadata-key">({{ metadataKey }})</span>
-    </v-list-item-title>
-    <v-list-item-subtitle class="config-hint">
-      <span v-if="metadata[metadataKey]?.obvious_hint && metadata[metadataKey]?.hint" class="important-hint">‼️</span>
-      {{ resolveConfigText(currentConfigPath, 'hint', metadata[metadataKey]?.hint) }}
-    </v-list-item-subtitle>
+  <div
+    class="config-section"
+    :class="{ 'config-section--folded': isSectionCollapsed }"
+    v-if="iterable && metadata[metadataKey]?.type === 'object'"
+  >
+    <div
+      class="config-section-head"
+      :class="{ 'config-section-head--foldable': isFoldable }"
+      :role="isFoldable ? 'button' : undefined"
+      :tabindex="isFoldable ? 0 : undefined"
+      :aria-expanded="isFoldable ? !isSectionCollapsed : undefined"
+      :title="isFoldable ? (isSectionCollapsed ? t('core.common.expand') : t('core.common.collapse')) : undefined"
+      @click="toggleSection"
+      @keydown.enter.prevent="toggleSection"
+      @keydown.space.prevent="toggleSection"
+    >
+      <v-icon v-if="isFoldable" size="18" class="config-section-head__chevron">
+        {{ isSectionCollapsed ? 'mdi-chevron-right' : 'mdi-chevron-down' }}
+      </v-icon>
+      <div class="config-section-head__text">
+        <v-list-item-title class="config-title">
+          {{ resolveConfigText(currentConfigPath, 'description', metadata[metadataKey]?.description) }}
+          <span v-if="metadata[metadataKey]?.show_key" class="metadata-key">({{ metadataKey }})</span>
+        </v-list-item-title>
+        <v-list-item-subtitle class="config-hint">
+          <span v-if="metadata[metadataKey]?.obvious_hint && metadata[metadataKey]?.hint" class="important-hint">‼️</span>
+          {{ resolveConfigText(currentConfigPath, 'hint', metadata[metadataKey]?.hint) }}
+        </v-list-item-subtitle>
+      </div>
+    </div>
   </div>
 
-  <v-card-text class="px-0 py-1">
+  <v-expand-transition>
+    <v-card-text class="px-0 py-1" v-show="!isSectionCollapsed">
     <!-- Object Type Configuration -->
     <div v-if="metadata[metadataKey]?.type === 'object' || metadata[metadataKey]?.config_template" class="object-config">
       <!-- Provider-level hint -->
@@ -225,6 +297,7 @@ function hasVisibleItemsAfter(items, currentIndex) {
                 :pluginI18n="pluginI18n"
                 :pathPrefix="getItemPath(key)"
                 :enable-default-reset="enableDefaultReset"
+                :foldable="foldable"
               >
               </AstrBotConfig>
             </v-expand-transition>
@@ -374,6 +447,7 @@ function hasVisibleItemsAfter(items, currentIndex) {
       <v-divider class="my-2 config-divider"></v-divider>
     </div>
   </v-card-text>
+  </v-expand-transition>
 
   <!-- Full Screen Editor Dialog -->
   <v-dialog v-model="dialog" fullscreen transition="dialog-bottom-transition" scrollable>
@@ -406,12 +480,76 @@ function hasVisibleItemsAfter(items, currentIndex) {
 <style scoped>
 .config-section {
   margin-bottom: 12px;
+  transition: margin-bottom 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .config-title {
   font-weight: 600;
   font-size: 1rem;
   color: var(--v-theme-primaryText);
+}
+
+.config-section-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+/* The hover highlight is painted by a pseudo-element, so the header keeps its natural
+   layout. The block reaches into the padding of its container, which publishes it as
+   --config-group-inset, and follows the container's inner corner radius published as
+   --config-group-radius, so the clipped edge and the rounded corners never leave a
+   hairline. */
+.config-section-head--foldable {
+  position: relative;
+  isolation: isolate;
+  cursor: pointer;
+  user-select: none;
+}
+
+.config-section-head--foldable::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  /* The same block in both states: it starts at the container padding and ends a few px
+     past it, which is the empty space above the first row of an expanded group. */
+  inset: calc(-1 * var(--config-group-inset, 0px)) calc(-1 * var(--config-group-inset, 0px))
+    calc(-1 * (var(--config-group-inset, 0px) + 4px));
+  border-radius: var(--config-group-radius, 0px) var(--config-group-radius, 0px) 0 0;
+  background-color: transparent;
+  pointer-events: none;
+  transition: background-color 0.2s ease;
+}
+
+.config-section-head--foldable:hover::before {
+  background-color: rgba(var(--v-theme-on-surface), 0.045);
+}
+
+/* A folded group has no body, so its wrapper must not leave a strip below it. */
+.config-section--folded {
+  margin-bottom: 0;
+}
+
+/* A folded group has no body, so the container clips the block's overshoot and rounds its
+   corners instead of the block doing it itself. */
+.config-section--folded .config-section-head--foldable::before {
+  border-radius: 0;
+}
+
+.config-section-head--foldable:focus-visible {
+  outline: 2px solid rgb(var(--v-theme-primary));
+  outline-offset: 2px;
+}
+
+.config-section-head__chevron {
+  margin-top: 4px;
+  color: var(--v-theme-secondaryText);
+  flex-shrink: 0;
+}
+
+.config-section-head__text {
+  flex: 1;
+  min-width: 0;
 }
 
 .config-hint {
@@ -451,6 +589,12 @@ function hasVisibleItemsAfter(items, currentIndex) {
   margin: 12px 0;
   background-color: rgba(0, 0, 0, 0.02);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  /* Publish the padding so nested fold headers can make their hover highlight reach
+     the border, and clip that highlight to the rounded corners. */
+  --config-group-inset: 12px;
+  /* Inner radius: the 8px outer radius minus the 1px border. */
+  --config-group-radius: 7px;
+  overflow: hidden;
 }
 
 .config-row {

@@ -48,11 +48,11 @@ class ProviderManager:
         self.providers_config: list = config["provider"]
         self.provider_sources_config: list = config.get("provider_sources", [])
         self.provider_settings: dict = config["provider_settings"]
-        agent_runner = config.get("agent_runner", {})
+        agent_runner = config.get("agent", {})
         agent_runner_config = agent_runner.get("config", {})
         self.default_chat_provider_id = (
             agent_runner_config.get("model", {}).get("provider_id", "")
-            if agent_runner.get("runner_type") == "local"
+            if agent_runner.get("runtime") == "astrbot"
             else ""
         )
         self.provider_stt_settings: dict = config.get("provider_stt_settings", {})
@@ -266,10 +266,10 @@ class ProviderManager:
             # default setting
             config = self.acm.get_conf(umo)
             if provider_type == ProviderType.CHAT_COMPLETION:
-                agent_runner = config.get("agent_runner", {})
+                agent_runner = config.get("agent", {})
                 provider_id = (
                     agent_runner.get("config", {}).get("model", {}).get("provider_id")
-                    if agent_runner.get("runner_type") == "local"
+                    if agent_runner.get("runtime") == "astrbot"
                     else None
                 )
                 provider = self.inst_map.get(provider_id)
@@ -632,6 +632,10 @@ class ProviderManager:
             case "system_one_decision":
                 from .sources.system_one_decision_source import (
                     SystemOneDecisionProvider as SystemOneDecisionProvider,
+                )
+            case "openai_decision":
+                from .sources.openai_decision_source import (
+                    OpenAIDecisionProvider as OpenAIDecisionProvider,
                 )
 
     def get_merged_provider_config(self, provider_config: dict) -> dict:

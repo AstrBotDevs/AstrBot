@@ -3,7 +3,9 @@ import subprocess
 
 import pytest
 
-from astrbot.core.computer.local_file_security import open_file_in_allowed_roots
+from astrbot.core.astr_agent_runtime.computer.local_file_security import (
+    open_file_in_allowed_roots,
+)
 
 
 @pytest.mark.parametrize("access", ["read", "write", "edit"])

@@ -24,14 +24,28 @@
       <div class="provider-workbench__main">
         <div v-if="selectedProviderSource" class="provider-config-shell">
           <div class="provider-config-header">
-            <div class="provider-config-headline">
-              <div class="provider-config-title">{{ getSourceDisplayName(selectedProviderSource) }}</div>
-              <ProviderSourceSubtitle
-                class="provider-config-subtitle"
-                :api-base="selectedProviderSource.api_base"
-                :sponsor="selectedSponsor"
-                :tm="tm"
-              />
+            <div class="provider-config-identity">
+              <v-avatar size="42" rounded="lg" class="provider-config-avatar">
+                <v-img
+                  v-if="selectedProviderSource.provider"
+                  :src="resolveSourceIcon(selectedProviderSource)"
+                  :class="{ 'provider-icon--monochrome': isMonochromeSourceIcon(selectedProviderSource) }"
+                  alt=""
+                  width="28"
+                  height="28"
+                />
+                <v-icon v-else size="24">mdi-creation</v-icon>
+              </v-avatar>
+              <div class="provider-config-headline">
+                <div class="provider-config-title">{{ getSourceDisplayName(selectedProviderSource) }}</div>
+                <ProviderSourceSubtitle
+                  class="provider-config-subtitle"
+                  :title="selectedProviderSource.api_base"
+                  :api-base="selectedProviderSource.api_base"
+                  :sponsor="selectedSponsor"
+                  :tm="tm"
+                />
+              </div>
             </div>
 
             <div class="provider-config-actions">
@@ -40,8 +54,10 @@
                 prepend-icon="mdi-content-save-outline"
                 :loading="savingSource"
                 :disabled="!isSourceModified"
+                :aria-label="tm('providerSources.save')"
+                :title="tm('providerSources.save')"
                 variant="tonal"
-                rounded="xl"
+                rounded="lg"
                 @click="saveProviderSource"
               >
                 {{ tm('providerSources.save') }}
@@ -331,11 +347,13 @@ async function confirmManualModel() {
 
 <style scoped>
 .provider-chat-panel {
+  container: provider-workbench / inline-size;
   flex: 1;
   height: 100%;
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
   overflow: hidden;
 }
 
@@ -345,7 +363,7 @@ async function confirmManualModel() {
   border-radius: 24px;
   background: rgb(var(--v-theme-surface));
   display: grid;
-  grid-template-columns: minmax(280px, 320px) 1px minmax(0, 1fr);
+  grid-template-columns: 264px 1px minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
 }
@@ -368,28 +386,51 @@ async function confirmManualModel() {
   height: 100%;
 }
 
+.provider-workbench__sidebar {
+  background: rgba(var(--v-theme-on-surface), 0.025);
+}
+
 .provider-workbench__divider {
   background: rgba(var(--v-theme-on-surface), 0.08);
 }
 
 .provider-workbench__main {
   display: flex;
-  overflow: hidden;
+  overflow: auto;
 }
 
 .provider-config-shell {
+  container: provider-config / inline-size;
   flex: 1;
   min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
 }
 
 .provider-config-header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: 16px;
-  padding: 18px 22px 14px;
+  padding: 22px 28px;
+  flex: 0 0 auto;
+}
+
+.provider-config-identity {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1;
+  min-width: 0;
+}
+
+.provider-config-avatar {
+  flex-shrink: 0;
+  padding: 9px;
+  background: rgba(var(--v-theme-on-surface), 0.05);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.06);
 }
 
 .provider-config-headline {
@@ -397,16 +438,16 @@ async function confirmManualModel() {
 }
 
 .provider-config-title {
-  font-size: 21px;
-  line-height: 1.1;
-  font-weight: 680;
-  letter-spacing: -0.03em;
+  font-size: 22px;
+  line-height: 1.25;
+  font-weight: 650;
+  letter-spacing: -0.02em;
   overflow-wrap: anywhere;
 }
 
 .provider-config-subtitle {
-  margin-top: 6px;
-  color: rgba(var(--v-theme-on-surface), 0.62);
+  margin-top: 4px;
+  color: rgba(var(--v-theme-on-surface), 0.55);
   font-size: 13px;
   line-height: 1.6;
   overflow-wrap: anywhere;
@@ -416,28 +457,61 @@ async function confirmManualModel() {
   flex-shrink: 0;
 }
 
+.provider-config-actions :deep(.v-btn--disabled) {
+  color: rgba(var(--v-theme-on-surface), 0.5) !important;
+  opacity: 1;
+}
+
 .provider-config-body {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(var(--v-theme-on-surface), 0.2) transparent;
 }
 
 .provider-section {
-  padding: 18px 22px;
+  padding: 24px 28px;
 }
 
 .provider-section--models {
-  padding-top: 16px;
+  padding-top: 24px;
 }
 
 .provider-section-head {
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .provider-section-title {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 650;
   line-height: 1.4;
+}
+
+.provider-section.config-form :deep(.config-row) {
+  padding: 14px 0;
+}
+
+.provider-section.config-form :deep(.property-name) {
+  font-weight: 600;
+}
+
+.provider-section.config-form :deep(.property-hint) {
+  color: rgba(var(--v-theme-on-surface), 0.55) !important;
+}
+
+.provider-section.config-form :deep(.config-input > :not(.config-field--full-width)) {
+  max-width: 360px;
+}
+
+.provider-section.config-form :deep(.v-field) {
+  background: rgba(var(--v-theme-on-surface), 0.025);
+  --v-field-border-opacity: 0.2;
+}
+
+.provider-section--advanced {
+  padding-block: 16px;
+  background: rgba(var(--v-theme-on-surface), 0.015);
 }
 
 .provider-section--advanced > summary {
@@ -446,6 +520,17 @@ async function confirmManualModel() {
   gap: 4px;
   cursor: pointer;
   list-style: none;
+}
+
+.provider-section--advanced > summary:focus-visible {
+  outline: 2px solid rgb(var(--v-theme-primary));
+  outline-offset: 6px;
+  border-radius: 4px;
+}
+
+.provider-section-chevron {
+  margin-left: auto;
+  color: rgba(var(--v-theme-on-surface), 0.45);
 }
 
 .provider-section--advanced > summary::-webkit-details-marker {
@@ -475,9 +560,9 @@ async function confirmManualModel() {
   color: rgba(var(--v-theme-on-surface), 0.56);
 }
 
-@media (max-width: 960px) {
+@container provider-workbench (max-width: 960px) {
   .provider-workbench {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto 1px minmax(0, 1fr);
   }
 
@@ -492,45 +577,69 @@ async function confirmManualModel() {
   }
 
   .provider-config-header {
-    align-items: stretch;
-    flex-direction: column;
     gap: 12px;
-    padding: 16px;
-  }
-
-  .provider-config-actions :deep(.v-btn) {
-    width: 100%;
+    padding: 20px 24px;
   }
 
   .provider-section {
-    padding: 16px;
+    padding: 20px 24px;
+  }
+
+  .provider-section--advanced {
+    padding-block: 16px;
   }
 }
 
-@media (max-width: 600px) {
-  .provider-chat-panel {
-    overflow: auto;
-  }
-
+@container provider-workbench (max-width: 600px) {
   .provider-workbench {
     border-radius: 16px;
-    overflow: visible;
   }
 
   .provider-workbench--borderless {
     border-radius: 0;
   }
 
-  .provider-workbench__main {
-    overflow: visible;
-  }
-
-  .provider-config-body {
-    overflow-y: visible;
-  }
-
   .provider-config-title {
     font-size: 18px;
+  }
+
+  .provider-config-header,
+  .provider-section {
+    padding: 16px 20px;
+  }
+
+  .provider-config-identity {
+    gap: 10px;
+  }
+
+  .provider-config-subtitle :deep(span) {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .provider-section.config-form :deep(.config-row) {
+    padding: 10px 0;
+  }
+
+  .provider-section.config-form :deep(.config-input > :not(.config-field--full-width)) {
+    max-width: none;
+  }
+
+  .provider-config-actions :deep(.v-btn) {
+    min-width: 40px;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+  }
+
+  .provider-config-actions :deep(.v-btn__prepend) {
+    margin: 0;
+  }
+
+  .provider-config-actions :deep(.v-btn__content) {
+    display: none;
   }
 
   .provider-empty-state {

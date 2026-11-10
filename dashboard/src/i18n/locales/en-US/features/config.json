@@ -49,7 +49,7 @@
     "title": "AI",
     "enable": "Enable AI",
     "more": "More actions",
-    "changeRunner": "Change execution mode",
+    "changeRunner": "Change Agent Runtime",
     "localSettingsTitle": "AstrBot Built-in AI",
     "settingsSuffix": "Settings",
     "tabs": {
@@ -85,7 +85,7 @@
       "confirm": "Use This Mode"
     },
     "runners": {
-      "local": {
+      "astrbot": {
         "title": "Built-in AI",
         "summary": "Configure AstrBot's AI capabilities, including models, personas, knowledge bases, and tools.",
         "description": "Use AstrBot's built-in AI with models, personas, knowledge bases, and tools."

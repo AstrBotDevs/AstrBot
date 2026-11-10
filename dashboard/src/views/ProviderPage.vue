@@ -406,9 +406,15 @@ const {
   showMessage
 })
 
+const decisionHintKeys = {
+  system_one_decision: 'decisionHints',
+  openai_decision: 'openaiDecisionHints'
+}
+
 const legacyConfigSchema = computed(() => {
   const schema = JSON.parse(JSON.stringify(configSchema.value || {}))
-  if (selectedLegacyProvider.value?.type !== 'system_one_decision') return schema
+  const hintKey = decisionHintKeys[selectedLegacyProvider.value?.type]
+  if (!hintKey) return schema
 
   const items = schema.provider?.items
   if (!items) return schema
@@ -416,8 +422,16 @@ const legacyConfigSchema = computed(() => {
     items.key.type = 'string'
     delete items.key.items
   }
-  if (items.api_base) items.api_base.hint = tm('providers.decisionHints.apiBase')
-  if (items.model) items.model.hint = tm('providers.decisionHints.model')
+  // The schema only shows these fields for System One; every decision type uses them.
+  for (const field of ['total_timeout', 'max_concurrency']) {
+    if (items[field]) delete items[field].condition
+  }
+  if (items.api_base) items.api_base.hint = tm(`providers.${hintKey}.apiBase`)
+  if (items.model && selectedLegacyProvider.value?.type === 'openai_decision') {
+    items.model.hint = tm('providers.openaiDecisionHints.model')
+  } else if (items.model) {
+    items.model.hint = tm('providers.decisionHints.model')
+  }
   if (items.custom_headers) {
     items.custom_headers.hint = tm('providers.decisionHints.customHeaders')
   }
@@ -434,7 +448,7 @@ const loading = ref(false)
 const isLegacyProviderModified = ref(false)
 const legacyConfigSections = computed(() => {
   const config = newSelectedProviderConfig.value
-  if (config.type !== 'system_one_decision') return { basic: config, advanced: null }
+  if (!decisionHintKeys[config.type]) return { basic: config, advanced: null }
 
   const advancedFields = new Set([
     'timeout', 'total_timeout', 'max_concurrency',
@@ -791,6 +805,7 @@ async function testSingleProvider(provider) {
 }
 
 .provider-content {
+  container: provider-workbench / inline-size;
   display: flex;
   flex: 1;
   margin: 0 auto;
@@ -825,19 +840,22 @@ async function testSingleProvider(provider) {
 
 .provider-workbench__main {
   display: flex;
+  overflow: auto;
 }
 
 .provider-config-shell {
+  container: provider-config / inline-size;
   flex: 1;
   min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
 }
 
 .provider-config-header {
   background: var(--provider-surface);
   display: flex;
+  flex-wrap: wrap;
   flex: 0 0 auto;
   justify-content: space-between;
   align-items: flex-start;
@@ -879,7 +897,7 @@ async function testSingleProvider(provider) {
   flex: 1;
   min-height: 0;
   overscroll-behavior: contain;
-  overflow-y: auto;
+  overflow: auto;
   scrollbar-gutter: stable;
 }
 
@@ -941,9 +959,9 @@ async function testSingleProvider(provider) {
   color: rgba(var(--v-theme-on-surface), 0.56);
 }
 
-@media (max-width: 960px) {
+@container provider-workbench (max-width: 960px) {
   .provider-workbench {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto 1px minmax(0, 1fr);
   }
 

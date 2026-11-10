@@ -135,7 +135,6 @@ class LLMSummaryCompressor:
         compression_threshold: float = 0.82,
         token_counter: TokenCounter | None = None,
         request_event_emitter: Callable[[AgentResponse], Awaitable[None]] | None = None,
-        turn_id: str | None = None,
     ) -> None:
         """Initialize the LLM summary compressor.
 
@@ -147,11 +146,9 @@ class LLMSummaryCompressor:
             compression_threshold: The compression trigger threshold (default: 0.82).
             token_counter: Optional context token estimator.
             request_event_emitter: Optional acknowledged runner event sink.
-            turn_id: Runner turn identity attached to request events.
         """
         self.provider = provider
         self.request_event_emitter = request_event_emitter
-        self.turn_id = turn_id
         self.keep_recent_ratio = min(max(float(keep_recent_ratio), 0.0), 0.3)
         self.compression_threshold = compression_threshold
         self.token_counter = token_counter or EstimateTokenCounter()
@@ -301,7 +298,6 @@ class LLMSummaryCompressor:
                 recorder = RequestEventRecorder(
                     self.request_event_emitter,
                     {
-                        "turn_id": self.turn_id,
                         "purpose": "compaction",
                         "provider_id": self.provider.provider_config.get("id", ""),
                         "model": self.provider.get_model(),

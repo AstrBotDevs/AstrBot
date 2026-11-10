@@ -203,11 +203,14 @@ class CommandPermissionRequest(BaseModel):
     permission: str
 
 
-class SubAgentConfigRequest(OpenModel):
-    main_enable: bool | None = None
-    enable: bool | None = None
-    remove_main_duplicate_tools: bool | None = None
-    agents: list[dict[str, Any]] | None = None
+class AgentConfigRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    name: str = Field(min_length=1, max_length=128)
+    description: str = ""
+    enabled: bool = True
+    runtime: str = Field(min_length=1)
+    config: dict[str, Any] = Field(default_factory=dict)
 
 
 class TraceSettingsRequest(BaseModel):

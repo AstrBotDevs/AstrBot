@@ -38,7 +38,6 @@ class ContextManager:
                 instruction_text=config.llm_compress_instruction,
                 token_counter=self.token_counter,
                 request_event_emitter=config.request_event_emitter,
-                turn_id=config.turn_id,
             )
         else:
             self.compressor = TruncateByTurnsCompressor(

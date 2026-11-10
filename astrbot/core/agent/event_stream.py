@@ -4,24 +4,27 @@ import asyncio
 import inspect
 import uuid
 from collections.abc import AsyncGenerator, Awaitable, Callable
+from typing import Generic, TypeVar
 
 from .response import AgentResponse
 
+TEvent = TypeVar("TEvent")
 
-class AgentEventStream:
+
+class AgentEventStream(Generic[TEvent]):
     """Expose nested async operations through one backpressured response stream.
 
     The producer resumes only after the consumer requests the next response.
     Closing the stream cancels pending work before acknowledging another event.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.active = False
-        self._queue: asyncio.Queue[tuple[AgentResponse, asyncio.Future[None]]] = (
-            asyncio.Queue(maxsize=1)
+        self._queue: asyncio.Queue[tuple[TEvent, asyncio.Future[None]]] = asyncio.Queue(
+            maxsize=1
         )
 
-    async def emit(self, response: AgentResponse) -> None:
+    async def emit(self, response: TEvent) -> None:
         """Wait until the host has handled a response.
 
         Args:
@@ -33,7 +36,9 @@ class AgentEventStream:
         await self._queue.put((response, acknowledged))
         await acknowledged
 
-    async def run(self, source: AsyncGenerator[AgentResponse, None]):
+    async def run(
+        self, source: AsyncGenerator[TEvent, None]
+    ) -> AsyncGenerator[TEvent, None]:
         """Drive one step and join its producer even when consumption stops early.
 
         Args:
@@ -46,7 +51,7 @@ class AgentEventStream:
             raise RuntimeError("A runner step is already being consumed")
         self.active = True
 
-        async def produce():
+        async def produce() -> None:
             try:
                 async for response in source:
                     await self.emit(response)

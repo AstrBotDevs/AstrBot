@@ -78,13 +78,27 @@ def event_context(event: "AstrMessageEvent") -> Iterator[None]:
 
 
 class AstrMessageEvent(abc.ABC):
+    event_kind: str = "message"
+    trace_name: str = "AstrMessageEvent"
+
     def __init__(
         self,
         message_str: str,
         message_obj: AstrBotMessage,
         platform_meta: PlatformMetadata,
         session_id: str,
+        *,
+        event_metadata: dict[str, str] | None = None,
     ) -> None:
+        """Initialize shared event state and its initial trace record.
+
+        Args:
+            message_str: Text input associated with the event.
+            message_obj: Message components and sender information.
+            platform_meta: Metadata of the target platform.
+            session_id: Target session identifier within the platform.
+            event_metadata: Additional attributes for the initial trace record.
+        """
         self.message_str = message_str
         """纯文本的消息"""
         self.message_obj = message_obj
@@ -123,7 +137,7 @@ class AstrMessageEvent(abc.ABC):
         self.created_at = time()
         """事件创建时间(Unix timestamp)"""
         self.trace = TraceSpan(
-            name="AstrMessageEvent",
+            name=self.trace_name,
             umo=self.unified_msg_origin,
             sender_name=self.get_sender_name(),
             message_outline=self.get_message_outline(),
@@ -133,11 +147,14 @@ class AstrMessageEvent(abc.ABC):
         """事件级 TraceSpan(别名: span)"""
         self.trace.record(
             "event_received",
-            kind="message",
-            platform_id=platform_meta.id,
-            platform_name=platform_meta.name,
-            message_type=self.get_message_type().value,
-            message=self.get_message_outline(),
+            **{
+                **(event_metadata or {}),
+                "kind": self.event_kind,
+                "platform_id": platform_meta.id,
+                "platform_name": platform_meta.name,
+                "message_type": self.get_message_type().value,
+                "message": self.get_message_outline(),
+            },
         )
 
         self._has_send_oper = False

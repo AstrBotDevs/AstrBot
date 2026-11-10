@@ -37,5 +37,3 @@ class ContextConfig:
     """Custom context compression method. If None, the default method is used."""
     request_event_emitter: Callable[[AgentResponse], Awaitable[None]] | None = None
     """Optional runtime event sink for summary model requests."""
-    turn_id: str | None = None
-    """Runner turn identity for summary request events."""
