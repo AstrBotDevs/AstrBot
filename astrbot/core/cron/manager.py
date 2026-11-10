@@ -158,6 +158,17 @@ class CronJobManager:
                 job = await self.db.get_cron_job(snapshot.job_id)
                 if not job or not job.enabled or not job.persistent:
                     continue
+                scheduled = self._schedules.get(job.job_id)
+                if (
+                    job.run_once
+                    and scheduled is not None
+                    and self.scheduler.get_job(scheduled.id) is None
+                    and scheduled.kwargs["revision"]
+                    in self._running_tasks.get(job.job_id, {}).values()
+                ):
+                    # Startup must not register a consumed one-shot again while
+                    # its original callback still owns execution and cleanup.
+                    continue
                 if job.job_type == "basic" and job.job_id not in self._basic_handlers:
                     logger.warning(
                         "Skip scheduling basic cron job %s due to missing handler.",
@@ -294,14 +305,22 @@ class CronJobManager:
                     self._schedule_job(job)
                 except Exception:
                     # Failed installation leaves the old schedule in place.
-                    await self.db.update_cron_job(
-                        job_id,
-                        **{
-                            key: value
-                            for key, value in current_job.model_dump().items()
-                            if key in kwargs
-                        },
-                    )
+                    try:
+                        await self.db.update_cron_job(
+                            job_id,
+                            **{
+                                key: value
+                                for key, value in current_job.model_dump().items()
+                                if key in kwargs
+                            },
+                        )
+                    except Exception:
+                        # The old deadline no longer matches the durable row.
+                        self._remove_scheduled(job_id)
+                        logger.exception(
+                            "Removed cron job %s schedule after rollback failed", job_id
+                        )
+                        raise
                     raise
             return job
 
@@ -508,6 +527,10 @@ class CronJobManager:
                     job = await self.db.get_cron_job(job_id)
                     revision = current_schedule
                     self._running_tasks[job_id][task] = revision
+                elif job is not None and job.run_once:
+                    # Same-deadline edits keep the revision but may change the
+                    # payload after the initial lookup, so refresh under the lock.
+                    job = await self.db.get_cron_job(job_id)
                 if not job or (not job.enabled and not manual):
                     return
                 start_time = datetime.now(timezone.utc)
