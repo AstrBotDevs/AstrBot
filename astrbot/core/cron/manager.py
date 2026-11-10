@@ -2,6 +2,7 @@ import asyncio
 import json
 import re
 from collections.abc import Awaitable, Callable
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
@@ -20,6 +21,11 @@ if TYPE_CHECKING:
 
 _CRONTAB_WEEKDAY_NAMES = ("sun", "mon", "tue", "wed", "thu", "fri", "sat")
 _CRONTAB_WEEKDAY_PATTERN = re.compile(r"^(?:(\*)|(\d+)(?:-(\d+))?)(?:/(\d+))?$")
+
+# The task that owns the currently executing cron run. Tool generators are
+# advanced in child tasks (astrbot.core.utils.async_generator.iterate_in_task),
+# so asyncio.current_task() inside a tool is not the task registered by _run_job.
+_ACTIVE_JOB_TASK = ContextVar("active_cron_job_task", default=None)
 
 
 PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT = (
@@ -245,10 +251,14 @@ class CronJobManager:
         try:
             self._remove_scheduled(job_id)
             self._basic_handlers.pop(job_id, None)
+            # A tool runs in a child task; cancelling the run we are inside
+            # and awaiting it here deadlocks, so exclude its owning task too.
+            owner = _ACTIVE_JOB_TASK.get()
+            current = asyncio.current_task()
             tasks = [
                 task
                 for task in self._running_tasks.get(job_id, set())
-                if task is not asyncio.current_task() and not task.done()
+                if task is not current and task is not owner and not task.done()
             ]
             for task in tasks:
                 task.cancel()
@@ -386,6 +396,7 @@ class CronJobManager:
         # Register before the first await so delete_job always snapshots a run
         # that has passed the deletion-marker check.
         self._running_tasks.setdefault(job_id, set()).add(task)
+        owner_token = _ACTIVE_JOB_TASK.set(task)
         try:
             job = await self.db.get_cron_job(job_id)
             if not job or (not job.enabled and not ignore_enabled):
@@ -424,6 +435,7 @@ class CronJobManager:
                     # One-shot runs remove themselves, excluding their own task.
                     await self.delete_job(job_id)
         finally:
+            _ACTIVE_JOB_TASK.reset(owner_token)
             running = self._running_tasks.get(job_id)
             if running is not None:
                 running.discard(task)
