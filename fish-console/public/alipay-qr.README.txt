@@ -1,0 +1,4 @@
+把你的支付宝收款码保存为同目录下的 alipay-qr.png（方形即可）。
+也可用图床 URL，写在 fish-console/.env 的 VITE_ALIPAY_QR_URL 或 fish-api 的 FISH_ALIPAY_QR_URL。
+
+【仅运营自用】备注码前 3 位编码应付整数元，后 4 位随机。支付宝应付对照实收；确认后发放「实际 APIKEY 额度」= 应付 × FISH_TOPUP_CREDIT_RATIO。

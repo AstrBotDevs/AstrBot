@@ -1,6 +1,8 @@
+**Product:** 大肥鱼鱼咖（本仓魔改 SaaS）。对外文档与端口一览见根目录 [README.md](README.md)、[PRD.md](PRD.md)、[技术方案.md](技术方案.md)。底层对话能力基于 AstrBot（上游说明见 [docs/UPSTREAM-AstrBot-README.md](docs/UPSTREAM-AstrBot-README.md)）。
+
 ## Setup commands
 
-### Core
+### Core（对话引擎 · 6185）
 
 ```
 uv sync
@@ -18,6 +20,15 @@ pnpm dev
 ```
 
 Runs on `http://localhost:3000` by default.
+
+### Fish 客户站（fish-console · 5173 + fish-api · 8800）
+
+```
+cd fish-api && uv sync && uv run uvicorn app.main:app --reload --port 8800
+cd fish-console && pnpm install && pnpm dev
+```
+
+见根目录 [README.md](README.md)「服务与端口」。
 
 ## Pre-commit setup
 
