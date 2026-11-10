@@ -108,14 +108,15 @@ If AstrBot runs in Docker on a Mac, follow [Docker users](#local-docker) below. 
 
 [bubblewrap](https://github.com/containers/bubblewrap) is a userspace sandboxing tool for Linux.
 
-Check whether bubblewrap is installed and can start:
+AstrBot uses bubblewrap's `--size` option to limit the size of the temporary filesystem `/tmp` inside the sandbox. This option requires bubblewrap **0.7.0 or later**. Check whether bubblewrap is installed, whether the version meets the requirement, and whether it can start:
 
 ```bash
 command -v bwrap
-bwrap --unshare-all --ro-bind / / --proc /proc --dev /dev /bin/sh -c 'echo "AstrBot is good to go!"'
+bwrap --version
+bwrap --unshare-all --ro-bind / / --dir /tmp --size 268435456 --tmpfs /tmp --proc /proc --dev /dev /bin/sh -c 'echo "AstrBot is good to go!"'
 ```
 
-If the command prints `AstrBot is good to go!`, bubblewrap is installed and passes this basic startup check.
+If the command prints `AstrBot is good to go!`, bubblewrap is installed, the version meets the requirement, and it passes this basic startup check.
 
 If bubblewrap is not installed, use your distribution's package manager:
 
@@ -139,6 +140,7 @@ sudo pacman -S bubblewrap
 If startup fails:
 
 - **`bwrap` not found**: check that it is installed in the environment running AstrBot and is on the process's startup `PATH`.
+- **`Unknown option --size` or similar errors**: the bubblewrap version is older than **0.7.0** and does not support the `--size` option that AstrBot uses; upgrade to 0.7.0 or later. Running a generic bwrap check without `--size` may pass even though bubblewrap is not usable by AstrBot.
 - **`Operation not permitted` or user namespace errors**: inspect user namespace limits, AppArmor, and other system security policies. Use `sysctl user.max_user_namespaces` to check the namespace limit and `sudo journalctl -k` for relevant kernel logs.
 - **AppArmor denial**: follow your distribution's instructions to permit user namespace creation for the actual runtime. Do not disable security policies across the entire machine merely to pass the check.
 - **Container deployment**: follow [Docker users](#local-docker). Installing `bwrap` on the host does not install it inside the container.

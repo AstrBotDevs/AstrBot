@@ -3,8 +3,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from astrbot.core.tools import web_search_tools as tools
-from astrbot.core.tools.web_search_tools import (
+from astrbot.core.astr_agent_runtime.tools import web_search_tools as tools
+from astrbot.core.astr_agent_runtime.tools.web_search_tools import (
     AnySearchWebSearchTool,
     _anysearch_search,
     normalize_legacy_web_search_config,
@@ -1906,7 +1906,7 @@ class _BraveCycleSession(_CycleSession):
         ('{"error":{"code":"SUBSCRIPTION_TOKEN_INVALID"}}', True),
         ('{"error":{"code":"VALIDATION"}}', False),
         ('{"error":null}', False),
-        ('[]', False),
+        ("[]", False),
         ("not JSON", False),
     ],
 )

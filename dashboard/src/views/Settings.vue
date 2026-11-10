@@ -23,7 +23,7 @@
                 </button>
             </nav>
 
-            <main class="settings-main">
+            <main class="settings-main pe-3">
                 <v-slide-y-reverse-transition>
                     <div v-if="systemConfigRestartRequired" class="system-config-restart-bar" role="status">
                         <div class="system-config-restart-bar__inner">

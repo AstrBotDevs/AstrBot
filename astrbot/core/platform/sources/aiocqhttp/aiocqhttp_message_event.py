@@ -241,21 +241,37 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             await self.send(buffer)
             return await super().send_streaming(generator, use_fallback)
 
-        buffer = ""
-        pattern = re.compile(r"[^。？！~…]+[。？！~…]+")
+        text_parts: list[str] = []
+        leading_punctuation: list[str] = []
+        pattern = re.compile(r"[。？！~…]+")
 
         async for chain in generator:
             if isinstance(chain, MessageChain):
                 for comp in chain.chain:
                     if isinstance(comp, Plain):
-                        buffer += comp.text
-                        if any(p in buffer for p in "。？！~…"):
-                            buffer = await self.process_buffer(buffer, pattern)
+                        # Scan new text only; join unfinished fragments when sending.
+                        text = comp.text
+                        start = 0
+                        for match in pattern.finditer(text):
+                            if match.start() > start:
+                                text_parts.append(text[start : match.start()])
+                            if text_parts:
+                                sentence = ("".join(text_parts) + match.group()).strip()
+                                await self.send(MessageChain([Plain(sentence)]))
+                                await asyncio.sleep(1.5)  # Rate limit.
+                                text_parts.clear()
+                                leading_punctuation.clear()
+                            else:
+                                # Preserve unmatched prefixes until a sentence completes.
+                                leading_punctuation.append(match.group())
+                            start = match.end()
+                        if start < len(text):
+                            text_parts.append(text[start:])
                     else:
                         await self.send(MessageChain(chain=[comp]))
                         await asyncio.sleep(1.5)  # 限速
 
-        buffer = buffer.strip()
+        buffer = "".join(leading_punctuation + text_parts).strip()
         if buffer:
             await self.send(MessageChain([Plain(buffer)]))
         return await super().send_streaming(generator, use_fallback)
