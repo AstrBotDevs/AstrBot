@@ -25,7 +25,9 @@ _CRONTAB_WEEKDAY_PATTERN = re.compile(r"^(?:(\*)|(\d+)(?:-(\d+))?)(?:/(\d+))?$")
 # The task that owns the currently executing cron run. Tool generators are
 # advanced in child tasks (astrbot.core.utils.async_generator.iterate_in_task),
 # so asyncio.current_task() inside a tool is not the task registered by _run_job.
-_ACTIVE_JOB_TASK = ContextVar("active_cron_job_task", default=None)
+_ACTIVE_JOB_TASK: ContextVar[asyncio.Task | None] = ContextVar(
+    "active_cron_job_task", default=None
+)
 
 
 PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT = (
@@ -241,8 +243,11 @@ class CronJobManager:
     async def delete_job(self, job_id: str) -> None:
         """Remove a schedule and drain its active runs before deleting its row.
 
-        Runs that have already started are cancelled and drained. Runs that
-        start after deletion begins return without executing.
+        Runs that have already started are cancelled and drained, except the
+        run that owns the current call chain: that run is excluded so a tool
+        deleting its own job does not cancel and await itself, and it may
+        still be executing when this method returns. Runs that start after
+        deletion begins return without executing.
 
         Args:
             job_id: Job to delete, including any currently executing run.
