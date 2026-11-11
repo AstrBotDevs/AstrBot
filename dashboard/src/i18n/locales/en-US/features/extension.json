@@ -157,6 +157,7 @@
       "ai_image": "AI Image",
       "ai_speech": "AI Speech",
       "ai_agent": "Agents & Orchestration",
+      "ai_context": "AI Conversation",
       "platform_adapter": "Platform Adapter",
       "media_processing": "Media Processing",
       "automation": "Automation & Scheduling",
@@ -164,7 +165,8 @@
       "long_term_memory": "Long-term Memory",
       "knowledge_base": "Knowledge Base",
       "tools": "Tools",
-      "group_games": "Group Games"
+      "group_games": "Group Games",
+      "game_integration": "Game Integration"
     },
     "showFullName": "Full Name",
     "devDocs": "Extension Development Docs",

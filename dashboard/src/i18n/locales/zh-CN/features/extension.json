@@ -157,6 +157,7 @@
       "ai_image": "AI 绘图",
       "ai_speech": "AI 语音",
       "ai_agent": "智能体与编排",
+      "ai_context": "AI 对话",
       "platform_adapter": "平台适配器",
       "media_processing": "媒体处理",
       "automation": "自动化与定时",
@@ -164,7 +165,8 @@
       "long_term_memory": "长期记忆",
       "knowledge_base": "知识库",
       "tools": "工具",
-      "group_games": "群游戏"
+      "group_games": "群游戏",
+      "game_integration": "游戏接入"
     },
     "showFullName": "完整名称",
     "devDocs": "插件开发文档",

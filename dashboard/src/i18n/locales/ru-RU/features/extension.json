@@ -157,6 +157,7 @@
             "ai_image": "AI-изображения",
             "ai_speech": "AI-речь",
             "ai_agent": "Агенты и оркестрация",
+            "ai_context": "AI-диалог",
             "platform_adapter": "Адаптер платформы",
             "media_processing": "Обработка медиа",
             "automation": "Автоматизация и расписание",
@@ -164,7 +165,8 @@
             "long_term_memory": "Долговременная память",
             "knowledge_base": "База знаний",
             "tools": "Инструменты",
-            "group_games": "Групповые игры"
+            "group_games": "Групповые игры",
+            "game_integration": "Игровые интеграции"
         },
         "showFullName": "Полное имя",
         "devDocs": "Документация для разработчиков",
