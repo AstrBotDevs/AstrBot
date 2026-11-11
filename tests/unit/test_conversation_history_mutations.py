@@ -12,9 +12,19 @@ from astrbot.core.agent.message import Message
 from astrbot.core.astr_agent_runtime.history import save_agent_history
 from astrbot.core.astr_agent_runtime.main_session import MainAgentSession
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest
 from astrbot.core.utils.shared_preferences import SharedPreferences
-from astrbot.dashboard.services.conversation_service import ConversationService
+from astrbot.dashboard.services import chat_service, conversation_service
+from astrbot.dashboard.services.chat_service import (
+    ChatService,
+    ChatServiceError,
+    build_webchat_unified_msg_origin,
+)
+from astrbot.dashboard.services.conversation_service import (
+    ConversationService,
+    ConversationServiceError,
+)
 
 
 @pytest_asyncio.fixture
@@ -221,3 +231,239 @@ async def test_delete_discards_group_message_still_being_formatted(
     finally:
         resume.set()
         await asyncio.gather(pending, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["delete", "batch_delete", "edit"])
+async def test_mutation_rejects_conversation_from_another_session(
+    history_service, operation
+):
+    service, manager, group = history_service
+    owner = "qq:GroupMessage:owner"
+    other = "qq:GroupMessage:other"
+    original = [{"role": "user", "content": "keep this history"}]
+    cid = await manager.new_conversation(owner, content=original)
+    other_cid = await manager.new_conversation(other)
+    group.raw_records[owner].append("owner observation")
+    group.raw_records[other].append("other observation")
+    payload = {"user_id": other, "cid": cid, "history": []}
+
+    if operation == "batch_delete":
+        result = await service.delete_conversation({"conversations": [payload]})
+        assert result["deleted_count"] == 0
+        assert result["failed_count"] == 1
+    else:
+        with pytest.raises(ConversationServiceError):
+            if operation == "delete":
+                await service.delete_conversation(payload)
+            else:
+                await service.update_history(payload)
+
+    conversation = await manager.get_conversation(owner, cid)
+    assert json.loads(conversation.history) == original
+    assert await manager.get_curr_conversation_id(owner) == cid
+    assert await manager.get_curr_conversation_id(other) == other_cid
+    assert list(group.raw_records[owner]) == ["owner observation"]
+    assert list(group.raw_records[other]) == ["other observation"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("old_index", [0, 1])
+async def test_cleared_event_cannot_consume_new_group_observations(
+    history_service, old_index
+):
+    service, manager, group = history_service
+    umo = "qq:GroupMessage:stale-event"
+    cid = await manager.new_conversation(umo)
+    group.raw_records[umo].extend(["old observation"] * old_index)
+    group._record_ids[umo].extend(["old-id"] * old_index)
+    extras = {}
+    old_event = SimpleNamespace(
+        unified_msg_origin=umo,
+        text="old trigger",
+        get_message_type=lambda: MessageType.GROUP_MESSAGE,
+        set_extra=extras.__setitem__,
+        get_extra=extras.get,
+    )
+    await group.handle_message(old_event)
+    await service.delete_conversation({"user_id": umo, "cid": cid})
+    group.raw_records[umo].extend(["new observation", "new trigger"])
+    group._record_ids[umo].extend(["new-id", "new-trigger-id"])
+
+    request = ProviderRequest(prompt=old_event.text)
+    await group.on_req_llm(old_event, request)
+
+    assert request.extra_user_content_parts == []
+    assert list(group.raw_records[umo]) == ["new observation", "new trigger"]
+    assert list(group._record_ids[umo]) == ["new-id", "new-trigger-id"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["new", "switch"])
+async def test_deletion_preserves_observations_after_conversation_selection(
+    history_service, monkeypatch, operation
+):
+    service, manager, group = history_service
+    umo = "qq:GroupMessage:selection-race"
+    archived = await manager.new_conversation(umo)
+    current = await manager.new_conversation(umo)
+    group.raw_records[umo].append("old observation")
+    group._record_ids[umo].append("old-id")
+    deleting = asyncio.Event()
+    resume = asyncio.Event()
+    original_delete = manager.db.delete_conversation
+
+    async def delayed_delete(*args, **kwargs):
+        deleting.set()
+        await resume.wait()
+        await original_delete(*args, **kwargs)
+
+    monkeypatch.setattr(manager.db, "delete_conversation", delayed_delete)
+
+    async def select_and_receive():
+        if operation == "new":
+            selected = await manager.new_conversation(umo)
+        else:
+            await manager.switch_conversation(umo, archived)
+            selected = archived
+        await group.handle_message(
+            SimpleNamespace(
+                unified_msg_origin=umo,
+                text="new conversation observation",
+                get_message_type=lambda: MessageType.GROUP_MESSAGE,
+                set_extra=Mock(),
+            )
+        )
+        return selected
+
+    deletion = asyncio.create_task(
+        service.delete_conversation({"user_id": umo, "cid": current})
+    )
+    selection = None
+    try:
+        await asyncio.wait_for(deleting.wait(), timeout=5)
+        selection = asyncio.create_task(select_and_receive())
+        # A correct implementation queues selection until deletion and cleanup finish.
+        try:
+            await asyncio.wait_for(asyncio.shield(selection), timeout=0.1)
+        except TimeoutError:
+            pass
+        resume.set()
+        await asyncio.wait_for(deletion, timeout=5)
+        selected = await asyncio.wait_for(selection, timeout=5)
+        assert await manager.get_curr_conversation_id(umo) == selected
+        assert list(group.raw_records[umo]) == ["new conversation observation"]
+    finally:
+        resume.set()
+        tasks = [deletion, *([selection] if selection is not None else [])]
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["delete", "edit"])
+async def test_busy_conversation_mutation_times_out_without_changes(
+    history_service, monkeypatch, operation
+):
+    service, manager, group = history_service
+    monkeypatch.setattr(
+        conversation_service, "HISTORY_MUTATION_TIMEOUT", 0.01, raising=False
+    )
+    umo = "qq:GroupMessage:busy-mutation"
+    original = [{"role": "user", "content": "unchanged"}]
+    cid = await manager.new_conversation(umo, content=original)
+    group.raw_records[umo].append("pending observation")
+    session = MainAgentSession(
+        SimpleNamespace(context=SimpleNamespace(conversation_manager=manager)), cid, umo
+    )
+    payload = {"user_id": umo, "cid": cid, "history": []}
+    mutate = (
+        service.delete_conversation if operation == "delete" else service.update_history
+    )
+    async with session._execution_scope():
+        with pytest.raises(ConversationServiceError, match="busy.*retry"):
+            await asyncio.wait_for(mutate(payload), timeout=1)
+        conversation = await manager.get_conversation(umo, cid)
+        assert json.loads(conversation.history) == original
+        assert list(group.raw_records[umo]) == ["pending observation"]
+    # A timed-out waiter must neither run later nor leave the session locked.
+    await asyncio.wait_for(mutate(payload), timeout=1)
+    conversation = await manager.get_conversation(umo, cid)
+    if operation == "delete":
+        assert conversation is None
+    else:
+        assert json.loads(conversation.history) == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("timeout", [False, True])
+async def test_webchat_edit_coordinates_with_native_history_commit(
+    history_service, monkeypatch, tmp_path, timeout
+):
+    service, manager, _ = history_service
+    db = service.db_helper
+    monkeypatch.setattr(chat_service, "get_astrbot_data_path", lambda: str(tmp_path))
+    if timeout:
+        monkeypatch.setattr(
+            chat_service, "HISTORY_MUTATION_TIMEOUT", 0.01, raising=False
+        )
+    chat = ChatService(
+        db,
+        SimpleNamespace(
+            conversation_manager=manager,
+            platform_message_history_manager=PlatformMessageHistoryManager(db),
+            umop_config_router=None,
+        ),
+    )
+    platform_session = await db.create_platform_session(creator="alice")
+    umo = build_webchat_unified_msg_origin(platform_session)
+    original = [
+        {"role": "user", "content": "old message"},
+        {"role": "assistant", "content": "old reply"},
+        {"role": "_checkpoint", "content": {"id": "checkpoint"}},
+    ]
+    cid = await manager.new_conversation(umo, content=original)
+    content = {"type": "user", "message": [{"type": "plain", "text": "old message"}]}
+    record = await db.insert_platform_message_history(
+        "webchat", platform_session.session_id, content, llm_checkpoint_id="checkpoint"
+    )
+    native = MainAgentSession(
+        SimpleNamespace(context=SimpleNamespace(conversation_manager=manager)), cid, umo
+    )
+    payload = {
+        "session_id": platform_session.session_id,
+        "message_id": record.id,
+        "content": {"type": "user", "message": [{"type": "plain", "text": "edited"}]},
+    }
+    edit = None
+    try:
+        async with native._execution_scope():
+            edit = asyncio.create_task(chat.update_message("alice", payload))
+            if timeout:
+                with pytest.raises(ChatServiceError, match="busy.*retry"):
+                    await asyncio.wait_for(edit, timeout=1)
+                untouched = await db.get_platform_message_history_by_id(record.id)
+                assert untouched.content == content
+                assert untouched.llm_checkpoint_id == "checkpoint"
+            else:
+                with pytest.raises(TimeoutError):
+                    await asyncio.wait_for(asyncio.shield(edit), timeout=0.1)
+            await native._commit_history(original, None)
+        if timeout:
+            updated = await manager.get_conversation(umo, cid)
+            assert json.loads(updated.history) == original
+            result = await asyncio.wait_for(chat.update_message("alice", payload), 5)
+        else:
+            result = await asyncio.wait_for(edit, timeout=5)
+        updated = await manager.get_conversation(umo, cid)
+        assert json.loads(updated.history) == []
+        assert result["needs_regenerate"] is True
+        updated_record = await db.get_platform_message_history_by_id(record.id)
+        assert updated_record.content["message"] == payload["content"]["message"]
+        assert updated_record.llm_checkpoint_id != "checkpoint"
+    finally:
+        if edit is not None and not edit.done():
+            edit.cancel()
+            await asyncio.gather(edit, return_exceptions=True)

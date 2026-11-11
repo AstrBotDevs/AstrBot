@@ -10,7 +10,12 @@ from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.umo_alias import build_umo_alias_map, parse_umo, serialize_umo_alias
-from astrbot.core.utils.session_lock import session_lock_manager
+from astrbot.core.utils.session_lock import (
+    SessionLockTimeoutError,
+    session_lock_manager,
+)
+
+HISTORY_MUTATION_TIMEOUT = 10.0
 
 
 class ConversationServiceError(Exception):
@@ -200,21 +205,22 @@ class ConversationService:
             Deletion status, including per-item failures for a batch.
 
         Raises:
-            ConversationServiceError: If required identifiers are missing.
+            ConversationServiceError: If the conversation is missing, belongs to
+                another origin, or remains busy until the lock deadline.
         """
         payload = self._payload(data)
         if "conversations" in payload:
             return await self._delete_conversations(payload.get("conversations", []))
 
         user_id, cid = self._require_user_and_cid(payload)
-        async with session_lock_manager.acquire_lock(user_id):
-            current_cid = await self.conv_mgr.get_curr_conversation_id(user_id)
-            await self.conv_mgr.delete_conversation(
-                unified_msg_origin=user_id,
-                conversation_id=cid,
-            )
-            if current_cid == cid:
-                # Pending group observations belong to the deleted conversation.
+        try:
+            async with session_lock_manager.acquire_lock(
+                user_id, timeout=HISTORY_MUTATION_TIMEOUT
+            ):
+                conversation = await self.conv_mgr.get_conversation(user_id, cid)
+                if not conversation or conversation.user_id != user_id:
+                    raise ConversationServiceError("对话不存在")
+
                 plugin_manager = getattr(self.core_lifecycle, "plugin_manager", None)
                 core_plugin = (
                     plugin_manager.context.get_registered_star("astrbot")
@@ -226,8 +232,21 @@ class ConversationService:
                     if core_plugin
                     else None
                 )
-                if group_context is not None:
-                    await group_context.remove_session(user_id)
+                # Cleanup runs under the manager's selection lock, so a concurrent
+                # creation or switch cannot lose the new conversation's observations.
+                await self.conv_mgr.delete_conversation(
+                    unified_msg_origin=user_id,
+                    conversation_id=cid,
+                    on_current_deleted=(
+                        group_context.remove_session
+                        if group_context is not None
+                        else None
+                    ),
+                )
+        except SessionLockTimeoutError as exc:
+            raise ConversationServiceError(
+                "Conversation is busy; please retry after the current reply finishes."
+            ) from exc
         return {"message": "对话删除成功"}
 
     async def update_history(self, data: object) -> dict:
@@ -240,7 +259,8 @@ class ConversationService:
             History update status.
 
         Raises:
-            ConversationServiceError: If input is invalid or the conversation is missing.
+            ConversationServiceError: If input is invalid, the conversation is missing
+                or belongs to another origin, or the lock deadline is exceeded.
         """
         payload = self._payload(data)
         user_id, cid = self._require_user_and_cid(payload)
@@ -253,19 +273,26 @@ class ConversationService:
 
         # Native turns hold this lock through their final history commit. Apply
         # the edit afterwards so a running turn cannot restore deleted messages.
-        async with session_lock_manager.acquire_lock(user_id):
-            conversation = await self.conv_mgr.get_conversation(
-                unified_msg_origin=user_id,
-                conversation_id=cid,
-            )
-            if not conversation:
-                raise ConversationServiceError("对话不存在")
+        try:
+            async with session_lock_manager.acquire_lock(
+                user_id, timeout=HISTORY_MUTATION_TIMEOUT
+            ):
+                conversation = await self.conv_mgr.get_conversation(
+                    unified_msg_origin=user_id,
+                    conversation_id=cid,
+                )
+                if not conversation or conversation.user_id != user_id:
+                    raise ConversationServiceError("对话不存在")
 
-            await self.conv_mgr.update_conversation(
-                unified_msg_origin=user_id,
-                conversation_id=cid,
-                history=history,
-            )
+                await self.conv_mgr.update_conversation(
+                    unified_msg_origin=user_id,
+                    conversation_id=cid,
+                    history=history,
+                )
+        except SessionLockTimeoutError as exc:
+            raise ConversationServiceError(
+                "Conversation is busy; please retry after the current reply finishes."
+            ) from exc
 
         return {"message": "对话历史更新成功"}
 

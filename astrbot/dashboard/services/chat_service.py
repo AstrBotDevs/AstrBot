@@ -33,6 +33,10 @@ from astrbot.core.utils.media_utils import (
     MEDIA_MIME_EXTENSIONS,
     detect_image_mime_type_async,
 )
+from astrbot.core.utils.session_lock import (
+    SessionLockTimeoutError,
+    session_lock_manager,
+)
 from astrbot.core.utils.upload import UploadTooLargeError
 from astrbot.dashboard.services.chunked_upload_service import (
     ChunkedUploadError,
@@ -41,6 +45,7 @@ from astrbot.dashboard.services.chunked_upload_service import (
 
 SSE_HEARTBEAT = ": heartbeat\n\n"
 CHAT_RUN_SUBSCRIBER_QUEUE_SIZE = 256
+HISTORY_MUTATION_TIMEOUT = 10.0
 # Uploaded chat attachments larger than this are rejected.
 MAX_UPLOAD_FILE_SIZE_MB = 512
 MAX_UPLOAD_FILE_SIZE_BYTES = MAX_UPLOAD_FILE_SIZE_MB * 1024 * 1024
@@ -1858,6 +1863,18 @@ class ChatService:
         return await self.delete_thread(username, thread_id)
 
     async def update_message(self, username: str, data: dict) -> dict:
+        """Edit the latest WebChat turn after any native history commit finishes.
+
+        Args:
+            username: Authenticated owner of the WebChat session.
+            data: Session ID, message ID, and replacement user message content.
+
+        Returns:
+            Updated message and flags requesting regeneration.
+
+        Raises:
+            ChatServiceError: If validation fails or the session remains busy.
+        """
         session_id = data.get("session_id")
         message_id = data.get("message_id")
         content = data.get("content")
@@ -1880,70 +1897,86 @@ class ChatService:
         if session.creator != username:
             raise ChatServiceError("Permission denied")
 
-        record = await self.db.get_platform_message_history_by_id(message_id)
-        if not record:
-            raise ChatServiceError(f"Message {message_id} not found")
-        if record.platform_id != session.platform_id or record.user_id != session_id:
-            raise ChatServiceError("Message does not belong to the session")
-        if not isinstance(record.content, dict):
-            raise ChatServiceError("Invalid message content")
-        if record.content.get("type") != content.get("type"):
-            raise ChatServiceError("Message type cannot be changed")
-        if content.get("type") != "user":
-            raise ChatServiceError("Only user messages can be edited")
+        umo = build_webchat_unified_msg_origin(session)
+        try:
+            async with session_lock_manager.acquire_lock(
+                umo, timeout=HISTORY_MUTATION_TIMEOUT
+            ):
+                # Re-read both histories after waiting for the native turn to commit.
+                record = await self.db.get_platform_message_history_by_id(message_id)
+                if not record:
+                    raise ChatServiceError(f"Message {message_id} not found")
+                if (
+                    record.platform_id != session.platform_id
+                    or record.user_id != session_id
+                ):
+                    raise ChatServiceError("Message does not belong to the session")
+                if not isinstance(record.content, dict):
+                    raise ChatServiceError("Invalid message content")
+                if record.content.get("type") != content.get("type"):
+                    raise ChatServiceError("Message type cannot be changed")
+                if content.get("type") != "user":
+                    raise ChatServiceError("Only user messages can be edited")
 
-        platform_history = await self.get_sorted_platform_history(session)
-        latest_user_record = next(
-            (
-                item
-                for item in reversed(platform_history)
-                if isinstance(item.content, dict) and item.content.get("type") == "user"
-            ),
-            None,
-        )
-        if not latest_user_record or latest_user_record.id != message_id:
-            raise ChatServiceError("Only the latest user message can be edited")
+                platform_history = await self.get_sorted_platform_history(session)
+                latest_user_record = next(
+                    (
+                        item
+                        for item in reversed(platform_history)
+                        if isinstance(item.content, dict)
+                        and item.content.get("type") == "user"
+                    ),
+                    None,
+                )
+                if not latest_user_record or latest_user_record.id != message_id:
+                    raise ChatServiceError("Only the latest user message can be edited")
 
-        checkpoint_id = record.llm_checkpoint_id
-        if not checkpoint_id:
+                checkpoint_id = record.llm_checkpoint_id
+                if not checkpoint_id:
+                    raise ChatServiceError(
+                        "This message is not linked to LLM history and cannot be edited"
+                    )
+
+                conversation_id, history = await self.load_current_conversation_history(
+                    session
+                )
+                turn_range = find_turn_range(history, checkpoint_id)
+                if not conversation_id or not turn_range:
+                    raise ChatServiceError("Linked checkpoint not found")
+                if not is_latest_checkpoint(history, checkpoint_id):
+                    raise ChatServiceError("Only the latest turn can be edited")
+
+                start, end = turn_range
+                target_index = find_turn_user_index(history, start, end)
+                if target_index is None:
+                    raise ChatServiceError("Linked user message not found")
+
+                new_checkpoint_id = str(uuid.uuid4())
+                truncated_history = history[:start]
+                await self.platform_history_mgr.update(
+                    message_id=message_id,
+                    content=content,
+                    llm_checkpoint_id=new_checkpoint_id,
+                )
+                deleted_message_ids = await self.delete_platform_history_after(
+                    session, message_id
+                )
+                thread_ids = await self.db.delete_webchat_threads_by_parent_message_ids(
+                    session_id,
+                    deleted_message_ids,
+                )
+                await self.delete_threads_by_ids(thread_ids, username)
+                await self.conv_mgr.update_conversation(
+                    unified_msg_origin=umo,
+                    conversation_id=conversation_id,
+                    history=truncated_history,
+                )
+                await self.db.update_platform_session(session_id=session_id)
+                updated = await self.db.get_platform_message_history_by_id(message_id)
+        except SessionLockTimeoutError as exc:
             raise ChatServiceError(
-                "This message is not linked to LLM history and cannot be edited"
-            )
-
-        conversation_id, history = await self.load_current_conversation_history(session)
-        turn_range = find_turn_range(history, checkpoint_id)
-        if not conversation_id or not turn_range:
-            raise ChatServiceError("Linked checkpoint not found")
-        if not is_latest_checkpoint(history, checkpoint_id):
-            raise ChatServiceError("Only the latest turn can be edited")
-
-        start, end = turn_range
-        target_index = find_turn_user_index(history, start, end)
-        if target_index is None:
-            raise ChatServiceError("Linked user message not found")
-
-        new_checkpoint_id = str(uuid.uuid4())
-        truncated_history = history[:start]
-        await self.platform_history_mgr.update(
-            message_id=message_id,
-            content=content,
-            llm_checkpoint_id=new_checkpoint_id,
-        )
-        deleted_message_ids = await self.delete_platform_history_after(
-            session, message_id
-        )
-        thread_ids = await self.db.delete_webchat_threads_by_parent_message_ids(
-            session_id,
-            deleted_message_ids,
-        )
-        await self.delete_threads_by_ids(thread_ids, username)
-        await self.conv_mgr.update_conversation(
-            unified_msg_origin=build_webchat_unified_msg_origin(session),
-            conversation_id=conversation_id,
-            history=truncated_history,
-        )
-        await self.db.update_platform_session(session_id=session_id)
-        updated = await self.db.get_platform_message_history_by_id(message_id)
+                "Conversation is busy; please retry after the current reply finishes."
+            ) from exc
         return {
             "message": serialize_history_entry(updated) if updated else None,
             "needs_regenerate": True,

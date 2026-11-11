@@ -192,7 +192,10 @@ class GroupChatContext:
 
             raw_list = list(records)
             id_list = list(self._record_ids.get(umo, deque()))
-            if isinstance(record_id, str) and record_id in id_list:
+            if isinstance(record_id, str):
+                # A cleared or trimmed event cannot consume a newer buffer by index.
+                if record_id not in id_list:
+                    return
                 prompt_idx = id_list.index(record_id)
 
             if prompt_idx >= len(raw_list):
