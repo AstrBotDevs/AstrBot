@@ -370,6 +370,7 @@ function toggleSidebar() {
 }
 
 .sidebar-page-navigation .dashboard-sidebar-list {
+  margin-top: 8px;
   animation: sidebar-page-back 180ms ease-out;
 }
 

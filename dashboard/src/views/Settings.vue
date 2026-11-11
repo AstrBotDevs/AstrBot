@@ -109,6 +109,7 @@
                                         @update:model-value="customizer.SET_CHAT_NAVIGATION_IN_SIDEBAR(Boolean($event))"
                                         :aria-label="tm('chatNavigation.title')"
                                         color="primary"
+                                        inset
                                         hide-details
                                         density="compact"
                                     />

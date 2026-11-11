@@ -2474,6 +2474,11 @@ async function stopCurrentSession() {
   font-weight: 500;
 }
 
+.sidebar-back-btn {
+  margin-top: 8px;
+  margin-bottom: 2px;
+}
+
 .sidebar-provider-btn {
   margin-bottom: 2px;
 }
